@@ -262,7 +262,8 @@ function DetailBody({
   );
   // A block of its own, 16 px under the description (the stack's gap). Its
   // "+" tile shows once the task has files, or while files are dragged over
-  // it (MOD-115); dropping and pasting work anywhere on the task as before.
+  // it (MOD-115); with none, ⋯ → Attach files… opens the same picker, and
+  // dropping and pasting work anywhere on the task as before.
   const attachments = <AttachmentsSection state={files} addTile="with-files" />;
   const collections = (
     <div className="flex flex-col gap-3">
@@ -323,6 +324,8 @@ function DetailBody({
       onCloseFullPage={onCloseFullPage}
       claimSlot={claimSlot}
       onSaveAsTemplate={onSaveAsTemplate ? () => onSaveAsTemplate(task) : undefined}
+      // The way to pick files while the strip is hidden (no files yet, MOD-115).
+      onAttachFiles={files.openPicker}
     />
   );
 

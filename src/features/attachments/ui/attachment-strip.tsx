@@ -48,6 +48,11 @@ export type AttachmentStripProps = {
   addTile?: "always" | "with-files";
   /** A file drag is over the drop zone: the "+" shows where files land. */
   dropping?: boolean;
+  /**
+   * The "+" opens the caller's picker instead of its own (AttachmentsSection
+   * keeps one that ⋯ → Attach files… opens too, strip or no strip).
+   */
+  onPickFiles?: () => void;
   className?: string;
 };
 
@@ -70,6 +75,7 @@ export function AttachmentStrip({
   onFreeUpSpace,
   addTile = "always",
   dropping = false,
+  onPickFiles,
   className,
 }: AttachmentStripProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -116,7 +122,7 @@ export function AttachmentStrip({
                   <button
                     type="button"
                     aria-label="Add files"
-                    onClick={() => inputRef.current?.click()}
+                    onClick={() => (onPickFiles ? onPickFiles() : inputRef.current?.click())}
                     className={cn(
                       TILE,
                       "flex size-11 items-center justify-center text-muted-foreground hover:bg-state-hover hover:text-foreground",
@@ -129,19 +135,21 @@ export function AttachmentStrip({
                   Add files, or paste or drop them anywhere on the task
                 </TooltipContent>
               </Tooltip>
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                hidden
-                tabIndex={-1}
-                aria-hidden
-                onChange={(e) => {
-                  const files = Array.from(e.target.files ?? []);
-                  e.target.value = "";
-                  if (files.length > 0) onAddFiles(files);
-                }}
-              />
+              {onPickFiles ? null : (
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (files.length > 0) onAddFiles(files);
+                  }}
+                />
+              )}
             </li>
           ) : null}
         </ul>

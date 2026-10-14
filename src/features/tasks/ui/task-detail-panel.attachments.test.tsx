@@ -193,7 +193,7 @@ function fakeRuntime(records: AttachmentRecord[]) {
   return { runtime: runtime as unknown as ModuoRuntime, attachments };
 }
 
-function renderPanel(runtime: ModuoRuntime, canEdit = true) {
+function renderPanel(runtime: ModuoRuntime, canEdit = true, layout: "panel" | "page" = "panel") {
   const t = task();
   return render(
     <TooltipProvider>
@@ -207,6 +207,7 @@ function renderPanel(runtime: ModuoRuntime, canEdit = true) {
         api={api(t)}
         runtime={runtime}
         workspaceId="w"
+        layout={layout}
       />
     </TooltipProvider>,
   );
@@ -307,6 +308,38 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
     const file = png("picked.png");
     fireEvent.change(input, { target: { files: [file] } });
     expect(fakeQueue.add).toHaveBeenCalledWith([file], expect.anything(), "u1");
+  });
+
+  for (const layout of ["panel", "page"] as const) {
+    it(`with no files, ⋯ → Attach files… opens the picker (MOD-115, ${layout})`, async () => {
+      const { runtime, attachments } = fakeRuntime([]);
+      const { container } = renderPanel(runtime, true, layout);
+      await filesRead(attachments);
+      expect(screen.queryByRole("button", { name: "Add files" })).toBeNull();
+      const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+      const click = rs.spyOn(input, "click").mockImplementation(() => {});
+      fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
+        button: 0,
+        pointerType: "mouse",
+      });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Attach files…" }));
+      expect(click).toHaveBeenCalledOnce();
+      const file = png("picked.png");
+      fireEvent.change(input, { target: { files: [file] } });
+      expect(fakeQueue.add).toHaveBeenCalledWith([file], expect.anything(), "u1");
+    });
+  }
+
+  it("view-only: no Attach files… in ⋯", async () => {
+    const { runtime, attachments } = fakeRuntime([]);
+    renderPanel(runtime, false);
+    await filesRead(attachments);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
+      button: 0,
+      pointerType: "mouse",
+    });
+    await screen.findByRole("menuitem", { name: /Copy link/ });
+    expect(screen.queryByRole("menuitem", { name: "Attach files…" })).toBeNull();
   });
 
   it("with no files, no strip and no + until files are dragged over (MOD-115)", async () => {

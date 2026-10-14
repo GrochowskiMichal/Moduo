@@ -2,7 +2,7 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
-## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118)
+## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
 
 The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([round-2b](../../.design/tasks-v3/prototypes/round-2b.html), the detail frames). Screen-only, no migration.
 
@@ -16,6 +16,11 @@ The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([rou
   - Decision: "+ Energy · Scheduled · … +n" names whole properties then "+n" (call 42) and opens one menu of every hidden property; the project and section names cut with an ellipsis (full name on hover) and the handle sits at the line's end, outside the crumbs.
   - Why: prototype round-2b (`.addprop`, `.dcrumb .hdl`); a wrapped breadcrumb or "+" line pushed the title and the properties down in a 280 px panel.
   - Rejected: AC1.16's "nothing truncates in the panel" for these two lines (values still wrap).
+- **MOD-115 · With no files the strip is hidden; Attach files… in ⋯** → `attachment-strip.tsx` `addTile`, `attachments-section.tsx` `openPicker`, `task-detail-header.tsx`; [specs/attachments.md](../../specs/attachments.md)
+  - Who: agent's choice, flagged for Maciej, 2026-10-14 (dogfood MOD-115 asked for the tile on hover too).
+  - Decision: with no files the strip is hidden, as prototyped; Attach files… in the panel's ⋯ opens the picker, and dragging or pasting adds files anywhere on the task. The "+" tile shows once there are files, or while files are dragged over. The description reads as plain text; editing is a soft fill with the padding inside, no ring.
+  - Why: the prototypes have no empty tile; showing it on hover either reflows the properties under the pointer (R6) or holds an empty 60 px row.
+  - Rejected: the tile on hover (reflow), a reserved row for it (an empty band), and no picker at all for a task without files.
 
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 

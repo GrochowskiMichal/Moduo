@@ -3,8 +3,9 @@
 // moves the task; a subtask goes on to "↳ parent"), the handle at the line's
 // end (click to copy), a slot for who "is on this" (claims, TV-F7), the
 // Focus toggle and ▶ "Focus on this" (call 31), ⤢ full page, and ⋯ (Copy
-// branch name, Copy link, where an import brought it from (TV-U18),
-// Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
+// branch name, Copy link, where an import brought it from (TV-U18), Attach
+// files… (MOD-115), Duplicate, Save as template…, Make it a task, Won't do /
+// Reopen, Delete).
 
 import {
   Ban,
@@ -21,6 +22,7 @@ import {
   Lock,
   Maximize2,
   Minimize2,
+  Paperclip,
   Play,
   RotateCcw,
   Trash2,
@@ -84,6 +86,8 @@ type Props = {
   claimSlot?: ReactNode;
   /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
   onSaveAsTemplate?: () => void;
+  /** ⋯ → Attach files…: the strip's file picker, there even with no files yet (MOD-115). */
+  onAttachFiles?: () => void;
 };
 
 const crumb =
@@ -102,6 +106,7 @@ export function TaskDetailHeader({
   onCloseFullPage,
   claimSlot,
   onSaveAsTemplate,
+  onAttachFiles,
 }: Props) {
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
@@ -251,6 +256,12 @@ export function TaskDetailHeader({
           {canEdit ? (
             <>
               <DropdownMenuSeparator />
+              {onAttachFiles ? (
+                <DropdownMenuItem onSelect={onAttachFiles}>
+                  <Paperclip aria-hidden />
+                  Attach files…
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={duplicate}>
                 <Copy aria-hidden />
                 Duplicate
