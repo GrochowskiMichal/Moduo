@@ -99,6 +99,9 @@
 
 - On prod, read-only, before the train: no v1 body holds U+0001/U+0002; no body grows past 8,000 characters through `chat__v1_to_v2`; record the counts the conversion would change (re-run `check_v1_to_v2.ts` over prod's v1 messages).
 - `unaccent` is in prod's `pg_available_extensions`.
+- `spine__visible_to` comes from Tasks v3's `20261013110000_notifications_v3.sql` (on prod since the v3 release, owned by `postgres` there); the foundation migration redefines it, so check the redefinition applies as prod's migration role.
+- Typing becomes members-only for every conversation (AC12.4), a behaviour change against the live privacy rules: it ships with the v2 client in the same release. *(orchestrator)*
+- AC13.7 is complete only when CV-11 draws converted bell excerpts with the stored-form parser. *(orchestrator)*
 - The release applies foundation → convert_v1 → CV-2a's ops back to back, and the v2 client ships with them (v1's notes-to-self can't open a converted, deleted DM).
 - The deploy-time Realtime burst: the backfill touches every message and membership row, so v1 subscribers receive one UPDATE event per row.
 - The foundation's table rewrite (`search_tsv`) and backfill at prod's row count fit inside `lock_timeout`'s quiet hour (0.8 s per 100,000 rows locally).
