@@ -297,6 +297,25 @@ describe("a restored draft", () => {
     expect(loadDraft(ME, WS, "refused")).toBeNull();
   });
 
+  it("reopened (after Esc, or a reload), its date words are read as a date again, like freshly typed ones", async () => {
+    // The first Esc after "tomorrow 3pm" keeps it as words while the capture is
+    // open; the draft it leaves must not carry that into the next open.
+    saveDraft(ME, WS, {
+      segments: [{ text: "Call the printer tomorrow 3pm" }],
+      keep: ["tomorrow 3pm"],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody();
+    await screen.findByText(/Draft restored/);
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    const [task] = fake.saved;
+    expect(task.title).toBe("Call the printer");
+    expect(task.scheduledAt).toBeTruthy();
+  });
+
   it("a second person on this device never sees it", async () => {
     saveDraft(ME, WS, {
       segments: [{ text: "Book the dentist" }],

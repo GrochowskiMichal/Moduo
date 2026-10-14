@@ -509,6 +509,8 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 **Deferred** (one line each, with a recommendation): [docs/testing/tasks-v3-polish-deferred.md](../docs/testing/tasks-v3-polish-deferred.md). **Records:** choices PL-1…PL-8 in decisions/tasks.md; gotchas: build-ci.md (the serial e2e rule), supabase.md (SQL tests on a shared stack); checklist [docs/testing/t-maciej-tv-polish.md](../docs/testing/t-maciej-tv-polish.md).
 
+- [x] **TV-FIX capture draft dates** · orchestrator follow-up (no spec row) · _done 2026-10-14 · `t/maciej/tv-fix-capture-draft` → `t/maciej/tasks-v3-build` (local; no migration)._ A reopened capture draft (after Esc or a reload) reads its date words afresh: the draft no longer stores date phrases kept as words (the first Esc after "tomorrow 3pm"), and older drafts heal on load, so Create sets the date and leaves the words out of the title. Tests: `task-capture.test.tsx` (+1, failed before), `capture-draft.test.ts` (+1).
+
 ## Transactional email — every email Moduo sends · [`specs/transactional-email.md`](./transactional-email.md)
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)
