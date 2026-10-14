@@ -2,6 +2,21 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118)
+
+The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([round-2b](../../.design/tasks-v3/prototypes/round-2b.html), the detail frames). Screen-only, no migration.
+
+- **MOD-116 · The description and its files sit above the properties** → `task-detail-panel.tsx` (panel and full page); supersedes U13-5's order
+  - Who: Maciej, 2026-10-14 (dogfood MOD-116, and his yes to this batch).
+  - Decision: breadcrumb · status toggle + title (the agent line under it) · description · files · the Done / Won't do line with the properties · Subtasks, Waiting on, Blocked by, Blocks, Linked · the feed; on the wide full page the properties keep their own column. The breadcrumb and the "+" line stay on one line and shorten (see MOD-114/118); every other value in the panel still wraps (AC1.16 amended).
+  - Why: every approved prototype frame has it this way; the order had been changed while writing the spec, without his call.
+  - Rejected: U13-5's properties-first order.
+- **MOD-114 / MOD-118 · The "+" line and the breadcrumb stay on one line** → `task-detail-properties.tsx` `AddPropertyLine`, `task-detail-header.tsx`; AC1.16 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-14 (dogfood MOD-114 and MOD-118, his yes to this batch).
+  - Decision: "+ Energy · Scheduled · … +n" names whole properties then "+n" (call 42) and opens one menu of every hidden property; the project and section names cut with an ellipsis (full name on hover) and the handle sits at the line's end, outside the crumbs.
+  - Why: prototype round-2b (`.addprop`, `.dcrumb .hdl`); a wrapped breadcrumb or "+" line pushed the title and the properties down in a 280 px panel.
+  - Rejected: AC1.16's "nothing truncates in the panel" for these two lines (values still wrap).
+
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 
 Screen-only, no migration: the seven Tasks gaps the local walkthrough found (`docs/testing/tasks-v3-local.md` §3) and the quick no-migration lines of [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md) whose recommendation held. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
@@ -1459,7 +1474,7 @@ Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC
   - Decision: one person's changes within 10 minutes of the first merge ("changed due, priority and 2 more", click to see each); a run of more than two change lines between comments folds into "Show n earlier changes", and the run after the last comment shows its latest five. The All · Comments switch is remembered per person in local storage.
   - Why: research §9; the switch is a reading habit, not a setting worth syncing yet.
   - Rejected: tabs (Jira's All · Comments · History · Work log) and a synced preference.
-- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
+- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** (the order is superseded by MOD-116, 2026-10-14: description first) → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: header (project › section pickers, handle, the claims slot, queue, ⤢, ⋯) · status toggle + title · the agent session line's slot (52's placement, not the spec list's) · Done/Won't do line · properties (Status, Assignee + Team, Priority, Due + time, Tags; "+ Energy · Scheduled · Reminder · Estimate · Repeat · Waiting on") · description · Subtasks · Waiting on · Blocked by · Blocks · Linked (reference cards, five then "Show n more") · the feed. Copy link moved into ⋯ beside Copy branch name; ⋯ shows for viewers too (copying only).
   - Why: the spec's order with REPLAN 52's decided spot for the agent line.
