@@ -240,7 +240,7 @@ const OPTIONAL_NAMES = ["Energy", "Scheduled", "Reminder", "Estimate", "Repeat",
 
 /** The quiet "+" line: one control naming what isn't shown yet (MOD-114). */
 function addLine(): HTMLElement {
-  return screen.getByRole("button", { name: "Add a property" });
+  return screen.getByRole("button", { name: /^Add a property/ });
 }
 
 async function openAddMenu(): Promise<HTMLElement> {
@@ -253,6 +253,10 @@ describe("the comp layout and property rule C (U3-1)", () => {
     renderPanel(task(), api(task()));
     expect(shownRows()).toEqual(["Status", "Assignee", "Priority", "Due", "Tags"]);
     for (const name of OPTIONAL_NAMES) expect(addLine().textContent).toContain(name);
+    // Its name holds the words it shows (label in name).
+    expect(addLine().getAttribute("aria-label")).toBe(
+      `Add a property: ${OPTIONAL_NAMES.join(", ")}`,
+    );
     // Checkbox beside a wrapping title, no chevrons on the values.
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Task title" }).tagName).toBe("TEXTAREA");
@@ -310,7 +314,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
 
   it("view-only members see the values but no quiet line, and ⋯ only copies", async () => {
     renderPanel(task(), api(task()), null, false);
-    expect(screen.queryByRole("button", { name: "Add a property" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add a property/ })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -373,12 +377,12 @@ describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () =>
     renderPanel(task(), api(task()));
     addLine().focus();
     fireEvent.keyDown(addLine(), { key: "Enter" });
-    const menu = await screen.findByRole("menu", { name: "Add a property" });
+    const menu = await screen.findByRole("menu", { name: /^Add a property/ });
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Energy" }));
     await waitFor(() => expect(shownRows()).toContain("Energy"));
     // The new row's picker is open (a modal menu, so the rest reads as hidden).
     expect(await screen.findByRole("menu", { name: "Energy: none" })).toBeTruthy();
-    const line = screen.getByRole("button", { name: "Add a property", hidden: true });
+    const line = screen.getByRole("button", { name: /^Add a property/, hidden: true });
     expect(line.textContent).not.toContain("Energy");
   });
 });

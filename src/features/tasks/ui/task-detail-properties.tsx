@@ -326,6 +326,10 @@ function AddPropertyLine({
 
   const shown = properties.slice(0, Math.min(fit, properties.length));
   const rest = properties.length - shown.length;
+  // The name holds the words on the line (label in name, WCAG 2.5.3).
+  const label = `Add a property: ${shown.map((p) => OPTIONAL_PROPERTY_LABELS[p]).join(", ")}${
+    rest > 0 ? `, +${rest}` : ""
+  }`;
   const names = (list: OptionalProperty[], measuring: boolean) =>
     list.map((p, i) => (
       <span key={p} data-name={measuring ? p : undefined} className="shrink-0">
@@ -345,7 +349,7 @@ function AddPropertyLine({
           <button
             ref={buttonRef}
             type="button"
-            aria-label="Add a property"
+            aria-label={label}
             className={cn(
               // PropertyValue's quiet control on the sm rung (round-2b `.addprop`).
               // It pulls out 4 px, not 6: the panel's scroll box pads 4, and
