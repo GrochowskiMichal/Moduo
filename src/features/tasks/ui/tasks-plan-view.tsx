@@ -254,10 +254,15 @@ export function TasksPlanView({
   // Provisional selection (last-opened place); the default is resolved once the
   // bundle has loaded (see effect below). A device left in the retired "Plan ·
   // Focus" switch's Focus mode opens Focus, which is now the sidebar's (TV-F7).
+  // A `?place=` link (Home's Upcoming "+n more") is the first selection
+  // itself: set later, a remembered project still loading would read as gone
+  // in the same flush and send it to the Inbox.
   const [selection, setSelection] = useState<string>(() =>
-    readLS(workspaceId, "mode") === "execute"
-      ? "today"
-      : (readLS(workspaceId, "lastBucket") ?? "inbox"),
+    urlPlace === "upcoming"
+      ? UPCOMING_SELECTION
+      : readLS(workspaceId, "mode") === "execute"
+        ? "today"
+        : (readLS(workspaceId, "lastBucket") ?? "inbox"),
   );
   useEffect(() => {
     removeLS(workspaceId, "mode");
@@ -414,7 +419,7 @@ export function TasksPlanView({
   // you left it, else the Inbox (REPLAN 30; "Open at" is retired). A place
   // picked in the sidebar before the bundle answered wins.
   const resolvedForRef = useRef<string | null>(null);
-  const pickedForRef = useRef<string | null>(null);
+  const pickedForRef = useRef<string | null>(urlPlace ? workspaceId : null);
   const pickSelection = useCallback(
     (next: string) => {
       pickedForRef.current = workspaceId;
@@ -435,7 +440,8 @@ export function TasksPlanView({
   }, [pickSelection]);
 
   // `?place=upcoming` (Home's Upcoming "+n more"): open it like a sidebar pick
-  // (it wins over "where you left it"), then take it off the URL.
+  // (it wins over "where you left it"), then take it off the URL. On a fresh
+  // mount the selection already starts there (see `selection`).
   useEffect(() => {
     if (urlPlace !== "upcoming") return;
     setFullPageId(null);
