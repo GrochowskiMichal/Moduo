@@ -1021,7 +1021,14 @@ export function parseChatNotifyLevel(input: unknown): SafeParseResult<ChatNotify
   return parseOrError(chatNotifyLevelSchema, input);
 }
 
-/** Plans whose workspaces get chat (mirrors public.chat_workspace_enabled: rank ≥ duo). */
+/**
+ * The plan tiers that include chat: rank ≥ duo in public.plan_tier_rank (drift-gated).
+ * public.chat_workspace_enabled turns chat on for a workspace when its owner's tier is
+ * one of these OR a dated grant gives it one (TX-9b's plan_grant_effective_tier, CV-4).
+ * A grant is not a tier of its own and the client never sees it: `planHasChat` answers
+ * for one tier (a person's own plan); whether a workspace has chat is the server's
+ * answer (`ChatRuntime.isEnabled`).
+ */
 export const CHAT_PLAN_TIERS = ["duo", "team", "founder"] as const satisfies readonly PlanTier[];
 export function planHasChat(tier: unknown): boolean {
   return (CHAT_PLAN_TIERS as readonly string[]).includes(normalizePlanTier(tier));
