@@ -1943,7 +1943,7 @@ Built in tasks-v3 block 18 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10–
 
 ## 2026-10-10 · TV-D8 server ops, registry, handles, recurrence, tolerance — the agent's choices (deferred to by Maciej)
 
-Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #1, #2, #5, #6, #9; migrations `20261010160000_tasks_ops_registry_handles`, `20261010161000_tasks_recurrence_server`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #1, #2, #5, #6, #9; migrations `20261010160001_tasks_ops_registry_handles`, `20261010161000_tasks_recurrence_server`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
 - **D8-1 · The registry follows every task through a trigger, not only the ops** → TV-D8 (`tasks__registry_sync`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-10.

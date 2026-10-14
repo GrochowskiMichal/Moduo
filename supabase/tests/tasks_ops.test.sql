@@ -1,5 +1,5 @@
 -- TV-D8 · Server ops, registry, handles, one dependency store
--- (supabase/migrations/20261010160000_tasks_ops_registry_handles.sql).
+-- (supabase/migrations/20261010160001_tasks_ops_registry_handles.sql).
 -- specs/tasks-v3.md AC map: "create registers, numbers and logs" (AC12.1,
 -- AC1.1, AC3.1) and "a blocks link blocks" (AC1.14).
 --

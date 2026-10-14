@@ -3,7 +3,7 @@
 // by the module registry (src/lib/module-registry.ts) and, from Session 9 on,
 // by the Moduo MCP connector. Keep in sync with the tasks_op_* RPCs
 // (supabase/migrations/20260612150000_module_activity_intent_ops.sql; every
-// create and field edit since TV-D8: 20261010160000_tasks_ops_registry_handles.sql).
+// create and field edit since TV-D8: 20261010160001_tasks_ops_registry_handles.sql).
 
 import type { ModuleManifest } from "../../lib/module-manifest";
 

@@ -62,38 +62,6 @@ CREATE POLICY comment_reactions_read ON public.comment_reactions
 
 -- ── 3. Ops ────────────────────────────────────────────────────────────────────
 
--- Whether the caller can see the item a comment is on (a key acts as its
--- creator): the comments read policy asks this, row by row, so it never
--- pays for the Full check below.
-CREATE OR REPLACE FUNCTION public.comments__item_seen(p_workspace_id uuid, p_type text, p_id uuid)
-RETURNS boolean
-LANGUAGE sql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-  SELECT public.comments__item_visible_to(p_workspace_id, p_type, p_id, public.perm_actor_id())
-$$;
-
--- How far the caller reaches the item a comment is on: 'full', 'view' (sees
--- it, without Full) or 'none'. Full exists only on a task proper and a note
--- ('task_project' names a task under an older registry type and stays
--- 'view'); other known items are seen or not; an unknown type is nobody's.
--- Workspace membership is the callers' own check (the spine guard,
--- comments__find).
-CREATE OR REPLACE FUNCTION public.comments__item_level(p_workspace_id uuid, p_type text, p_id uuid)
-RETURNS text
-LANGUAGE plpgsql
-STABLE SECURITY DEFINER
-SET search_path TO 'public'
-AS $$
-BEGIN
-  IF NOT public.comments__item_seen(p_workspace_id, p_type, p_id) THEN RETURN 'none'; END IF;
-  IF p_type = 'task' AND public.can_access('task', p_id, 'full') THEN RETURN 'full'; END IF;
-  IF p_type = 'note' AND public.can_access('note', p_id, 'full') THEN RETURN 'full'; END IF;
-  RETURN 'view';
-END;
-$$;
-
 -- Whether a given person can see the item a comment is on: who a mention or
 -- a participant notice may reach. The same rules as comments__item_level,
 -- asked for someone else (can_access takes the person; owner-only items are
@@ -126,6 +94,38 @@ BEGIN
     RETURN EXISTS (SELECT 1 FROM public.calendar_accounts a WHERE a.id = p_id AND a.owner_id = p_user AND a.workspace_id = p_workspace_id);
   END IF;
   RETURN false;
+END;
+$$;
+
+-- Whether the caller can see the item a comment is on (a key acts as its
+-- creator): the comments read policy asks this, row by row, so it never
+-- pays for the Full check below.
+CREATE OR REPLACE FUNCTION public.comments__item_seen(p_workspace_id uuid, p_type text, p_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT public.comments__item_visible_to(p_workspace_id, p_type, p_id, public.perm_actor_id())
+$$;
+
+-- How far the caller reaches the item a comment is on: 'full', 'view' (sees
+-- it, without Full) or 'none'. Full exists only on a task proper and a note
+-- ('task_project' names a task under an older registry type and stays
+-- 'view'); other known items are seen or not; an unknown type is nobody's.
+-- Workspace membership is the callers' own check (the spine guard,
+-- comments__find).
+CREATE OR REPLACE FUNCTION public.comments__item_level(p_workspace_id uuid, p_type text, p_id uuid)
+RETURNS text
+LANGUAGE plpgsql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+BEGIN
+  IF NOT public.comments__item_seen(p_workspace_id, p_type, p_id) THEN RETURN 'none'; END IF;
+  IF p_type = 'task' AND public.can_access('task', p_id, 'full') THEN RETURN 'full'; END IF;
+  IF p_type = 'note' AND public.can_access('note', p_id, 'full') THEN RETURN 'full'; END IF;
+  RETURN 'view';
 END;
 $$;
 
