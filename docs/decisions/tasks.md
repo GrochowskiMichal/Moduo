@@ -246,6 +246,24 @@ Built in tasks-v3 block 24 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC
   - Decision: without a session, the Now card *is* the head of Up next shown big, so "new at the top of Up next" landing on the card is what the key promises; with a session it lands right after Now (Up next reorders around Now since F7). Nothing is plumbed into capture.
   - Why: the alternative (insert after Now) needs the Now id through the capture context for no visible difference.
   - Rejected: plumbing the Now id into `capture-create.ts`.
+## 2026-10-13 · TV-SEC1 The access check answers only for the caller unless called from a server function — the agent's choices (deferred to by Maciej)
+
+Built as a follow-up data block (migration `20261013260000_access_check_caller`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **SEC1-1 · Two forms of `can_access`: the caller's (three arguments) and the rules (four, server only)** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (shape proposed by the orchestrator).
+  - Decision: `can_access(type, id, min)` is what clients, row-level security policies and any code asking about the caller use; it always answers for `perm_actor_id()` (the signed-in person or a key's person) and takes no person. `can_access(type, id, min, user)` holds the rules; only SECURITY DEFINER functions (as their owner) and the service role call it. It has no default, so a three-argument call always means the caller's form. Policies keep their text and call the three-argument form.
+  - Why: the client surface takes no person at all, so nothing depends on telling a client's request from a server function's; every server helper keeps its call unchanged.
+  - Rejected: one function that decides from `current_user` whether to answer about someone else (an invoker layer over a definer; correct, but every reader has to know who `current_user` is in each context); renaming the server form (about 80 callers re-cut).
+- **SEC1-2 · The caller's form answers false for an item that doesn't exist or isn't theirs; the rules' form refuses a client outright** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the three-argument form returns a boolean (policies and `coalesce(…, false)` callers expect one); a client calling the four-argument form gets 42501.
+  - Rejected: answering false on the four-argument form (it would look like a working call).
+- **SEC1-3 · Helpers that answer about a named person are for server functions; the assign warning is for people who can assign** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: only server functions and the service role call `share_direct_rank`, `perm_ceiling_rank` and `chat_is_workspace_member` (no policy, view or app code does). `share_assign_preview` names a person by design, so it answers to someone with Edit on the project or on a live task in it, about someone who works in the project's workspace.
+  - Why: the same rule as the access check wherever a helper takes a person.
+  - Rejected: removing the assign warning; a caller's form for each helper (no client needs them).
 
 ## 2026-10-13 · TV-TL2 Timeline interactions — the agent's choices (deferred to by Maciej)
 
