@@ -12,6 +12,7 @@ import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
 beforeAll(() => applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null));
 
 import {
+  agentViaOf,
   declineComment,
   declineMode,
   duplicateComment,
@@ -102,6 +103,25 @@ describe("Inbox triage", () => {
       "from Mike",
     );
     expect(inboxSourceLabel({ creatorId: "me", creatorUnknown: false }, "me", first)).toBeNull();
+  });
+
+  it("an agent's capture reads “via Claude Desktop”, someone else's agent “from Mike via …” (TV-U13b)", () => {
+    const first = (id: string) => (id === "mike" ? "Mike" : null);
+    const mine = { creatorId: "me", creatorUnknown: false };
+    expect(inboxSourceLabel(mine, "me", first, "Claude Desktop")).toBe("via Claude Desktop");
+    expect(
+      inboxSourceLabel({ creatorId: "mike", creatorUnknown: false }, "me", first, "Cursor"),
+    ).toBe("from Mike via Cursor");
+    expect(
+      inboxSourceLabel({ creatorId: "gone", creatorUnknown: true }, "me", first, "Cursor"),
+    ).toBe("via Cursor");
+  });
+
+  it("the key's name comes from the trail's label, whoever the person is (TV-U13b)", () => {
+    expect(agentViaOf("Alex · via Claude Desktop")).toBe("Claude Desktop");
+    expect(agentViaOf("Claude Desktop")).toBe("Claude Desktop");
+    expect(agentViaOf("  ")).toBeNull();
+    expect(agentViaOf(null)).toBeNull();
   });
 
   it("Duplicate copies the duplicate's comments, with who wrote each", () => {

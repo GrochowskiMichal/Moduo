@@ -1,7 +1,7 @@
 # Manual test checklist — TV-D8 server ops, registry, handles, recurrence, tolerance
 
 > Generated 2026-10-10 · branch `t/maciej/tv-d8-server-ops` → `t/maciej/tasks-v3-build` (local build mode) · **Live-verified:** yes, on the local stack (web, `dev:web` on :8093, signed in as `dev@moduo.local`): time zone saved at sign-in, create through the op (number, registry, trail), ⌘K by handle and by an old-key handle, rename re-registers, Settings → Workspace → Task key (invalid key refused, MW → MOD with the alias kept and every handle refreshed), the handle in the panel header, completing a repeat (server pointer = the app's preview, one completion row), the "Update Moduo" banner with a refused save. Not verified: copying the handle (the preview pane refuses clipboard writes: "Couldn't copy MW-2." — same as Copy link there).
-> Migrations: `20261010160000_tasks_ops_registry_handles.sql`, `20261010161000_tasks_recurrence_server.sql` (local only). SQL tests: `bun run db:test` (189 checks in `supabase/tests/`). The server's repeat engine was also swept against rrule.js on 2,300 random rules (no difference).
+> Migrations: `20261010160001_tasks_ops_registry_handles.sql`, `20261010161000_tasks_recurrence_server.sql` (local only). SQL tests: `bun run db:test` (189 checks in `supabase/tests/`). The server's repeat engine was also swept against rrule.js on 2,300 random rules (no difference).
 
 ## Handles and the registry
 - [ ] **Do:** open any task → **Expect:** its handle (e.g. `MOD-142`) at the end of the header breadcrumb ("Inbox › MOD-142"); hover says "Copy MOD-142" _(both)_
@@ -47,7 +47,7 @@
 - [ ] **Do:** through MCP, `tasks_update` a task you can't see, or set a parent you can't see → **Expect:** "Task not found in this workspace." / "That parent task isn't in this workspace." _(MCP)_
 
 ## Migrations / data
-- [ ] **Do:** on the release train, apply `20261010160000` then `20261010161000` in that order (re-running only the first redefines `tasks__apply_status` without the server pointer: always apply both) → **Expect:** every task numbered per workspace in creation order, every task registered (deleted ones tombstoned), every workspace with a key; `cron.job` has `tasks-roll-over` every 15 minutes _(prod)_
+- [ ] **Do:** on the release train, apply `20261010160001` then `20261010161000` in that order (re-running only the first redefines `tasks__apply_status` without the server pointer: always apply both) → **Expect:** every task numbered per workspace in creation order, every task registered (deleted ones tombstoned), every workspace with a key; `cron.job` has `tasks-roll-over` every 15 minutes _(prod)_
 - [ ] **Do:** watch an open app while the number backfill runs on prod → **Expect:** one Realtime update per task arrives (the backfill disables the stamping triggers, not the publication); schedule the apply when few apps are open _(prod)_
 - [ ] **Do:** before applying, run `select count(*) from tasks where public.tasks__recurrence_problem(recurrence) is not null` on prod (after creating that function, or with its body inline) → **Expect:** 0. The CHECK is NOT VALID, so old rows aren't checked at apply time, but any such row couldn't be edited or completed afterwards; fix those rules first _(prod)_
 

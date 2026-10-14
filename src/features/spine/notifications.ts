@@ -62,6 +62,8 @@ export type NotificationGroup = {
 
 function groupKey(item: NotificationItem): string {
   // Reminders all hang on your Inbox (TV-D12): one card per task they name.
+  // An agent's state (TV-D16) hangs on your Inbox too: one card per notice.
+  if (item.op === "tasks.agent_status") return `agent:${item.id}`;
   if (item.op === "tasks.reminder") {
     const taskId = item.payload.task_id;
     return `reminder:${typeof taskId === "string" && taskId ? taskId : item.id}`;
@@ -195,29 +197,45 @@ function newestItem(group: NotificationGroup): NotificationItem {
   return group.items.reduce((a, b) => (a.createdAt >= b.createdAt ? a : b));
 }
 
+/** Notices that hang on your own Inbox but are about one task they name by id. */
+const INBOX_TASK_NOTICES = new Set(["tasks.reminder", "tasks.routed", "tasks.agent_status"]);
+
+/**
+ * The one task an Inbox notice is about (its payload's `task_id`): a reminder
+ * (TV-D12), a team notice about one task (TV-D13; several are counted, not
+ * named) or an agent's state (TV-D16). Null for any other card.
+ */
+function inboxNoticeTask(group: NotificationGroup): string | null {
+  if (!INBOX_TASK_NOTICES.has(group.op)) return null;
+  const latest = newestItem(group);
+  if (group.op === "tasks.routed") {
+    const count = typeof latest.payload.count === "number" ? latest.payload.count : 1;
+    if (count > 1) return null;
+  }
+  const taskId = latest.payload.task_id;
+  return typeof taskId === "string" && taskId ? taskId : null;
+}
+
 /**
  * The task a card is about, by name (TV-P0, tasks-v3 AC1.7): the title its
  * event carried (the assigned / completed / unblocked notices store it), else a
- * label the caller resolved for the target (`labels`, keyed by target id — a
- * comment's notice carries only an excerpt). Null when neither is known, or
- * when the card isn't about a task.
+ * label the caller resolved (`labels`): for the target (a comment's notice
+ * carries only an excerpt), or for the task an Inbox notice names (reminders,
+ * team notices and agents carry only its id, so the name comes from the
+ * registry, which answers only while the reader can see the task). Null when
+ * neither is known, or when the card isn't about one task.
  */
 export function notificationSubject(
   group: NotificationGroup,
   labels?: ReadonlyMap<string, string>,
 ): string | null {
-  // A reminder hangs on your Inbox but is about the task it names (TV-D12);
-  // so does a team notice about one task (TV-D13; several are counted).
-  const latest = newestItem(group);
-  if (group.op === "tasks.routed") {
-    const count = typeof latest.payload.count === "number" ? latest.payload.count : 1;
-    if (count > 1) return null;
-  } else if (group.targetType !== "task" && group.op !== "tasks.reminder") {
-    return null;
-  }
-  const title = latest.payload.title;
+  const inboxTask = inboxNoticeTask(group);
+  if (INBOX_TASK_NOTICES.has(group.op) ? !inboxTask : group.targetType !== "task") return null;
+  // Notices written before their payloads went ids-only still carry a title.
+  const title = newestItem(group).payload.title;
   if (typeof title === "string" && title.trim()) return title.trim();
-  const label = group.targetId ? labels?.get(group.targetId)?.trim() : "";
+  const about = inboxTask ?? group.targetId;
+  const label = about ? labels?.get(about)?.trim() : "";
   return label || null;
 }
 
@@ -286,19 +304,105 @@ export function notificationReferences(groups: NotificationGroup[]): ReferenceRe
 }
 
 /**
- * Target ids whose card needs a resolved name: task cards whose event carried
- * no title (comments). The caller looks them up in the entity registry.
+ * Task ids whose card needs a resolved name: task cards whose event carried
+ * no title (every notice since 20261013269000 names its task by id), the
+ * task an Inbox notice names (reminders, team notices, agents), and the task
+ * whose finishing unblocked yours (`blocker_id`). The caller looks them up in
+ * the entity registry, which answers only for what the reader can see.
  */
 export function unnamedTaskTargets(groups: NotificationGroup[]): string[] {
   const ids = new Set<string>();
   for (const g of groups) {
-    if (g.targetType === "task" && g.targetId && !notificationSubject(g)) ids.add(g.targetId);
+    const blocker = unblockedBy(newestItem(g));
+    if (blocker) ids.add(blocker);
+    if (notificationSubject(g)) continue;
+    const inboxTask = inboxNoticeTask(g);
+    if (inboxTask) ids.add(inboxTask);
+    else if (!INBOX_TASK_NOTICES.has(g.op) && g.targetType === "task" && g.targetId) {
+      ids.add(g.targetId);
+    }
   }
   return [...ids];
 }
 
+/** Notices that name a comment by id; its text is read per reader. */
+const COMMENT_NOTICES = new Set(["comments.add", "comments.edit", "comments.team_mention"]);
+
+/** The comment a notice names whose text it doesn't carry. */
+function unreadComment(item: NotificationItem): string | null {
+  if (!COMMENT_NOTICES.has(item.op) || typeof item.payload.excerpt === "string") return null;
+  const id = item.payload.comment_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** The task whose finishing unblocked this one, when the notice names it by id only. */
+function unblockedBy(item: NotificationItem): string | null {
+  if (item.op !== "tasks.unblocked" || typeof item.payload.blocker_title === "string") return null;
+  const id = item.payload.blocker_id;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** Comment ids whose text the cards would quote (the newest item of each card). */
+export function noticeCommentIds(groups: NotificationGroup[]): string[] {
+  const ids = new Set<string>();
+  for (const g of groups) {
+    const id = unreadComment(newestItem(g));
+    if (id) ids.add(id);
+  }
+  return [...ids];
+}
+
+/** What a reader may see of the items notices name, looked up per reader. */
+export type NoticeDetails = {
+  /** Task (and note) names from the entity registry, by id. */
+  labels: ReadonlyMap<string, string>;
+  /** A comment's opening words, by comment id (only comments the reader can read). */
+  excerpts: ReadonlyMap<string, string>;
+};
+
+/**
+ * The cards with what this reader may see filled in (TV-D16): a comment's
+ * text where the notice names the comment, the name of the task that
+ * unblocked yours. Notices carry ids only, so anything the reader can't (or
+ * can no longer) see stays out: "left a comment", "unblocked this".
+ */
+export function withNoticeDetails(
+  groups: NotificationGroup[],
+  details: NoticeDetails,
+): NotificationGroup[] {
+  return groups.map((g) => {
+    let changed = false;
+    const items = g.items.map((item) => {
+      const comment = unreadComment(item);
+      const excerpt = comment ? details.excerpts.get(comment) : undefined;
+      if (excerpt) {
+        changed = true;
+        return { ...item, payload: { ...item.payload, excerpt } };
+      }
+      const blocker = unblockedBy(item);
+      const name = blocker ? details.labels.get(blocker)?.trim() : undefined;
+      if (name) {
+        changed = true;
+        return { ...item, payload: { ...item.payload, blocker_title: name } };
+      }
+      return item;
+    });
+    return changed ? { ...g, items } : g;
+  });
+}
+
 /** A deep-link target for a card, or null when the type isn't routable yet. */
-export type NotificationDeepLink = { route: string; entityType: string; entityId: string };
+export type NotificationDeepLink = {
+  route: string;
+  entityType: string;
+  entityId: string;
+  /**
+   * The workspace to open it in, when that matters (a storage alert opens
+   * Settings → Storage in the workspace that raised it, whose owner's pool
+   * it is: AT-3). Absent: the one you're in.
+   */
+  workspaceId?: string;
+};
 
 const ROUTE_BY_TYPE: Record<string, string> = {
   task: "/tasks",
@@ -326,6 +430,7 @@ const DEEP_LINK_NOUN: Record<string, string> = {
   email_thread: "email",
   chat_channel: "conversation",
   bucket: "project",
+  settings: "Storage settings",
 };
 
 export function notificationDeepLinkNoun(entityType: string): string {
@@ -334,9 +439,26 @@ export function notificationDeepLinkNoun(entityType: string): string {
 
 /** Resolve where clicking a card should navigate (best-effort by entity type). */
 export function notificationDeepLink(group: NotificationGroup): NotificationDeepLink | null {
+  // The storage alerts (AT-1, 80% / 95%) open Settings → Storage, where the
+  // largest files can be deleted (AT-3). They hang on the workspace, which no
+  // page opens: `entityType: "settings"` names the section instead (the
+  // entity-open host in app-chrome.tsx opens Settings there).
+  if (group.op === "attachments.storage_80" || group.op === "attachments.storage_95") {
+    const workspaceId = newestItem(group).workspaceId ?? group.targetId;
+    return {
+      route: "/settings",
+      entityType: "settings",
+      entityId: "storage",
+      ...(workspaceId ? { workspaceId } : {}),
+    };
+  }
   // A reminder or a team notice opens its task, not the Inbox it hangs on
   // (TV-D12, TV-D13; several routed tasks open the first).
-  if (group.op === "tasks.reminder" || group.op === "tasks.routed") {
+  if (
+    group.op === "tasks.reminder" ||
+    group.op === "tasks.routed" ||
+    group.op === "tasks.agent_status"
+  ) {
     const taskId = newestItem(group).payload.task_id;
     if (typeof taskId === "string" && taskId) {
       return { route: "/tasks", entityType: "task", entityId: taskId };

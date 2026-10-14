@@ -6,6 +6,7 @@
 // one person's edit could put back a field a teammate had just changed.
 
 import {
+  agentSessionRowSchema,
   areaRowSchema,
   bucketRowSchema,
   projectStatusRowSchema,
@@ -28,6 +29,7 @@ import {
 } from "@contracts/rows";
 import {
   legacyTaskStatus,
+  normalizeAgentSessionState,
   normalizeProjectState,
   normalizeTaskReminderKind,
   normalizeTaskStatus,
@@ -36,6 +38,11 @@ import {
   type TaskStatusCategory,
   taskStatusWord,
 } from "@contracts/vocabularies";
+import type {
+  AgentSession,
+  AgentSessionLine,
+  AgentSessionLink,
+} from "../features/spine/agent-session";
 import type {
   Area,
   Bucket,
@@ -58,7 +65,7 @@ import type {
   TimeReportRow,
   TrackTimeInput,
 } from "../features/tasks/model";
-import type { CommentMark } from "./sync/types";
+import type { AttachmentMark, CommentMark } from "./sync/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -619,6 +626,8 @@ export function bucketRowToModel(raw: unknown): Bucket {
     // TV-U6: the sidebar colour and archiving (absent before its migration).
     color: r.color ?? null,
     archivedAt: r.archived_at ?? null,
+    // TV-U16 (absent before its migration).
+    ...(r.description !== undefined ? { description: r.description ?? "" } : {}),
   };
 }
 
@@ -754,6 +763,54 @@ export function taskWaitingRowToModel(raw: unknown): TaskWaitingEntry {
   };
 }
 
+/** An agent session (TV-D16): its links and earlier lines read leniently. */
+export function agentSessionRowToModel(raw: unknown): AgentSession {
+  const r = requireRow(agentSessionRowSchema, raw, "agent session");
+  const links: AgentSessionLink[] = Array.isArray(r.links)
+    ? (r.links as unknown[]).flatMap((l) => {
+        const v = l as { url?: unknown; label?: unknown } | null;
+        if (!v || typeof v.url !== "string" || !/^https?:\/\//i.test(v.url)) return [];
+        return [
+          typeof v.label === "string" && v.label ? { url: v.url, label: v.label } : { url: v.url },
+        ];
+      })
+    : [];
+  const earlier: AgentSessionLine[] = Array.isArray(r.earlier)
+    ? (r.earlier as unknown[]).flatMap((e) => {
+        const v = e as Record<string, unknown> | null;
+        if (!v || typeof v.at !== "string") return [];
+        return [
+          {
+            at: v.at,
+            state: normalizeAgentSessionState(v.state),
+            note: typeof v.note === "string" ? v.note : null,
+            step: typeof v.step === "number" ? v.step : null,
+            steps: typeof v.steps === "number" ? v.steps : null,
+          },
+        ];
+      })
+    : [];
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    userId: r.user_id,
+    agent: r.agent,
+    state: normalizeAgentSessionState(r.state),
+    note: r.note ?? null,
+    step: r.step ?? null,
+    steps: r.steps ?? null,
+    links,
+    earlier,
+    summaryAt: r.summary_at ?? null,
+    summaryPostedAt: r.summary_posted_at ?? null,
+    startedAt: r.started_at,
+    updatedAt: r.updated_at,
+    stoppedAt: r.stopped_at ?? null,
+    ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
+  };
+}
+
 export function tagRowToModel(raw: unknown): Tag {
   const r = requireRow(tagRowSchema, raw, "tag");
   return {
@@ -794,6 +851,27 @@ export function commentMarkRowToModel(raw: unknown): CommentMark {
   return {
     id: r.id,
     taskId: r.entity_id,
+    updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
+    deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
+  };
+}
+
+/** An attachment row → what the shared store's 📎 counts need (AT-3). */
+export function attachmentMarkRowToModel(raw: unknown): AttachmentMark {
+  const r = raw as {
+    id?: unknown;
+    entity_id?: unknown;
+    status?: unknown;
+    updated_at?: unknown;
+    deleted_at?: unknown;
+  };
+  if (typeof r?.id !== "string" || typeof r.entity_id !== "string") {
+    throw new Error("Malformed attachment payload");
+  }
+  return {
+    id: r.id,
+    taskId: r.entity_id,
+    status: typeof r.status === "string" ? r.status : "",
     updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
     deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
   };

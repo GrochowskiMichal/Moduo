@@ -2,6 +2,7 @@ import {
   Building2,
   CreditCard,
   Globe,
+  HardDrive,
   Info,
   KeyRound,
   type LucideIcon,
@@ -32,6 +33,7 @@ import { BillingSection } from "./sections/billing-section";
 import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
+import { StorageSection } from "./sections/storage-section";
 import { TimeRegionSection } from "./sections/time-region-section";
 import { WorkspaceSection } from "./sections/workspace-section";
 import {
@@ -57,6 +59,7 @@ const SECTIONS: SectionEntry[] = [
   { id: "billing", label: "Billing", icon: CreditCard, Component: BillingSection },
   { id: "workspace", label: "Workspace", icon: Building2, Component: WorkspaceSection },
   { id: "access", label: "Members and access", icon: Users, Component: AccessSection },
+  { id: "storage", label: "Storage", icon: HardDrive, Component: StorageSection },
   { id: "integrations", label: "Integrations", icon: Plug, Component: IntegrationsSection },
   { id: "apikeys", label: "API keys", icon: KeyRound, Component: ApiKeysSection },
   {

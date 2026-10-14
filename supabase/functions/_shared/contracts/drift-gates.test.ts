@@ -10,6 +10,10 @@ import { ATTACHMENTS_BUCKET } from "./attachments.ts";
 import { TOOL_ARG_SCHEMAS } from "./mcp-tool-args.ts";
 import {
   ACCESS_CHANGE_RESOURCES,
+  AGENT_LOUD_STATES,
+  AGENT_SESSION_STATES,
+  IMPORT_ENTITY_TYPES,
+  IMPORT_ROW_ACTIONS,
   ATTACHMENT_DELETED_REASONS,
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
@@ -49,6 +53,9 @@ import {
   TASK_TIME_ADJUSTMENT_REASONS,
   TASK_TIME_ENTRY_KINDS,
   TASK_TIME_STATUSES,
+  TASK_VIEW_ID_DIMENSIONS,
+  TASK_VIEW_SCOPES,
+  TASK_VIEW_WORD_DIMENSIONS,
   TASK_WAITING_KINDS,
   TEMPLATE_KINDS,
   TEMPLATE_LINK_TYPES,
@@ -86,7 +93,7 @@ describe("cross-runtime drift guards", () => {
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
     const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
     const join = read("20261001170000_waitlist_footer_source.sql");
-    const gate = read("20261010150000_tx4_invite_only_gate.sql");
+    const gate = read("20261010155652_tx4_invite_only_gate.sql");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     // The landing joins with a CTA source only; the row CHECK also allows `manual`.
     expect(join).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
@@ -95,7 +102,7 @@ describe("cross-runtime drift guards", () => {
   });
 
   it("email_subscriptions CHECKs list the canonical subscription vocabularies (TX-4)", () => {
-    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010150000_tx4_invite_only_gate.sql"), "utf8");
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010155652_tx4_invite_only_gate.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`topic IN (${inList(EMAIL_SUBSCRIPTION_TOPICS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_SUBSCRIPTION_STATUSES)})`);
@@ -185,7 +192,7 @@ describe("cross-runtime drift guards", () => {
 
   it("grant origins match the resource_grants CHECK", () => {
     const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261010120000_tighten_write_checks.sql"),
+      resolve(MIGRATIONS_DIR, "20261010141712_tighten_write_checks.sql"),
       "utf8",
     );
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
@@ -265,6 +272,18 @@ describe("cross-runtime drift guards", () => {
     for (const key of STARTER_TEMPLATES) expect(sql).toContain(`p_key = '${key}'`);
   });
 
+  it("saved view scopes match TV-U8's CHECK and op guard", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_task_views.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file as string), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`CHECK (scope IN (${inList(TASK_VIEW_SCOPES)}))`);
+    expect(sql).toContain(`v_scope NOT IN (${opList(TASK_VIEW_SCOPES)})`);
+    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_ID_DIMENSIONS)})`);
+    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_WORD_DIMENSIONS)})`);
+  });
+
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261011110000_task_sessions_access.sql"), "utf8");
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
@@ -273,12 +292,25 @@ describe("cross-runtime drift guards", () => {
 
   it("repeat modes and notice delivery kinds match the server's checks (TV-D8, TV-D12)", () => {
     const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
-    const ops = read("20261010160000_tasks_ops_registry_handles.sql");
+    const ops = read("20261010160001_tasks_ops_registry_handles.sql");
     expect(RECURRENCE_MODES).toEqual(["after_completion"]);
     expect(ops).toContain(`p_rec ->> 'mode' <> '${RECURRENCE_MODES[0]}'`);
-    const notices = read("20261013110000_notifications_v3.sql");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    expect(notices).toContain(`kind text NOT NULL CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`);
+    // TV-D16 re-states the CHECK with the agent's kind.
+    const agents = read("20261013220000_agents_imports_mcp.sql");
+    expect(agents).toContain(
+      `ADD CONSTRAINT notice_deliveries_kind_check CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`,
+    );
+  });
+
+  it("agent session states and import rows match the server's checks (TV-D16)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261013220000_agents_imports_mcp.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`state text NOT NULL CHECK (state IN (${inList(AGENT_SESSION_STATES)}))`);
+    expect(sql).toContain(`v_state NOT IN (${inList(AGENT_SESSION_STATES)})`);
+    expect(sql).toContain(`v_state IN (${inList(AGENT_LOUD_STATES)})`);
+    expect(sql).toContain(`entity_type text NOT NULL CHECK (entity_type IN (${inList(IMPORT_ENTITY_TYPES)}))`);
+    expect(sql).toContain(`action text NOT NULL CHECK (action IN (${inList(IMPORT_ROW_ACTIONS)}))`);
   });
 
   it("every MCP module tool name has a TOOL_ARG_SCHEMAS parser and vice versa", () => {

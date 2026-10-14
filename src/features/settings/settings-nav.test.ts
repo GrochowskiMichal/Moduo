@@ -17,7 +17,14 @@ describe("SETTINGS_GROUPS (grouped nav — DF-19a)", () => {
       "timeregion",
       "focus",
     ]);
-    expect(byLabel.Workspace).toEqual(["workspace", "access", "integrations", "apikeys"]);
+    // Storage (AT-3) sits with the workspace's own settings, after access.
+    expect(byLabel.Workspace).toEqual([
+      "workspace",
+      "access",
+      "storage",
+      "integrations",
+      "apikeys",
+    ]);
     expect(byLabel.App).toEqual(["advanced", "about"]);
   });
 

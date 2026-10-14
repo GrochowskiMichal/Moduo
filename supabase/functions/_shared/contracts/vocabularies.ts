@@ -367,8 +367,9 @@ export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefi
   return isRecurrenceMode(input) ? input : undefined;
 }
 
-/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`). */
-export const NOTICE_DELIVERY_KINDS = ["reminder"] as const;
+/** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`):
+ *  a reminder, or an agent's needs you · ready for review · failed (TV-D16). */
+export const NOTICE_DELIVERY_KINDS = ["reminder", "agent"] as const;
 export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
 export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
 export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
@@ -377,9 +378,57 @@ export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKin
 export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeDeliveryKind> {
   return parseOrError(noticeDeliveryKindSchema, input);
 }
-/** Lax read: an unknown kind reads as a reminder (the only kind so far). */
+/** Lax read: an unknown kind reads as a reminder (a plain notice about a task). */
 export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
   return isNoticeDeliveryKind(input) ? input : "reminder";
+}
+
+/** An agent session's state (TV-D16, spec §12, §Assumptions #15): working,
+ *  waiting on its person, ready for review, or failed. Postgres:
+ *  `agent_sessions.state` CHECK and `tasks_op_agent_report`. */
+export const AGENT_SESSION_STATES = ["working", "needs_you", "ready", "failed"] as const;
+export type AgentSessionState = (typeof AGENT_SESSION_STATES)[number];
+export const agentSessionStateSchema = z.enum(AGENT_SESSION_STATES);
+export function isAgentSessionState(value: unknown): value is AgentSessionState {
+  return typeof value === "string" && (AGENT_SESSION_STATES as readonly string[]).includes(value);
+}
+export function parseAgentSessionState(input: unknown): SafeParseResult<AgentSessionState> {
+  return parseOrError(agentSessionStateSchema, input);
+}
+/** Lax read: a state this build doesn't know reads as working. */
+export function normalizeAgentSessionState(input: unknown): AgentSessionState {
+  return isAgentSessionState(input) ? input : "working";
+}
+/** The states that notify the person who started the agent (spec §13). */
+export const AGENT_LOUD_STATES = ["needs_you", "ready", "failed"] as const satisfies readonly AgentSessionState[];
+
+/** What an import run records for "Undo this import" (TV-D16, `import_rows`). */
+export const IMPORT_ENTITY_TYPES = ["task", "bucket", "section"] as const;
+export type ImportEntityType = (typeof IMPORT_ENTITY_TYPES)[number];
+export const importEntityTypeSchema = z.enum(IMPORT_ENTITY_TYPES);
+export function isImportEntityType(value: unknown): value is ImportEntityType {
+  return typeof value === "string" && (IMPORT_ENTITY_TYPES as readonly string[]).includes(value);
+}
+export function parseImportEntityType(input: unknown): SafeParseResult<ImportEntityType> {
+  return parseOrError(importEntityTypeSchema, input);
+}
+/** Lax read: a type this build doesn't know reads as null (the row is skipped). */
+export function normalizeImportEntityType(input: unknown): ImportEntityType | null {
+  return isImportEntityType(input) ? input : null;
+}
+/** What a run did to a row: made it, or updated it by its "imported from" key. */
+export const IMPORT_ROW_ACTIONS = ["created", "updated"] as const;
+export type ImportRowAction = (typeof IMPORT_ROW_ACTIONS)[number];
+export const importRowActionSchema = z.enum(IMPORT_ROW_ACTIONS);
+export function isImportRowAction(value: unknown): value is ImportRowAction {
+  return typeof value === "string" && (IMPORT_ROW_ACTIONS as readonly string[]).includes(value);
+}
+export function parseImportRowAction(input: unknown): SafeParseResult<ImportRowAction> {
+  return parseOrError(importRowActionSchema, input);
+}
+/** Lax read: an action this build doesn't know reads as "updated" (never undone). */
+export function normalizeImportRowAction(input: unknown): ImportRowAction {
+  return isImportRowAction(input) ? input : "updated";
 }
 
 /** What a Waiting on… entry waits on (default q): a person, an email thread,
@@ -607,7 +656,7 @@ export type GrantSubjectType = (typeof GRANT_SUBJECT_TYPES)[number];
 
 /**
  * Where a grant came from (`resource_grants.origin`, CHECK in
- * 20261010120000_tighten_write_checks.sql). `assign` grants come and go with a
+ * 20261010141712_tighten_write_checks.sql). `assign` grants come and go with a
  * task's assignee; `manual` ones are shares set by hand and are never revoked
  * by reassigning.
  */
@@ -710,7 +759,7 @@ export const inviteStatusSchema = z.enum(INVITE_STATUSES);
 
 // ---------------------------------------------------------------------------
 // Landing waitlist — public.waitlist.source / .status (CHECKs in
-// 20261010150000_tx4_invite_only_gate.sql; the join function's source list in
+// 20261010155652_tx4_invite_only_gate.sql; the join function's source list in
 // 20261001170000_waitlist_footer_source.sql).
 // ---------------------------------------------------------------------------
 
@@ -826,7 +875,7 @@ export function isEmailSuppressionReason(input: unknown): input is EmailSuppress
  * Build-updates subscriptions (T21), public.email_subscriptions. TX-4 creates
  * the table so a waitlist person's build-updates request survives their
  * sign-up (AC22); TX-8 and TX-10 add confirming, Settings and unsubscribing.
- * CHECKs in 20261010150000_tx4_invite_only_gate.sql.
+ * CHECKs in 20261010155652_tx4_invite_only_gate.sql.
  */
 export const EMAIL_SUBSCRIPTION_TOPICS = ["build_updates"] as const;
 export type EmailSubscriptionTopic = (typeof EMAIL_SUBSCRIPTION_TOPICS)[number];
@@ -1074,6 +1123,53 @@ export function parseStarterTemplate(input: unknown): SafeParseResult<StarterTem
 export function normalizeStarterTemplate(input: unknown): StarterTemplate | null {
   return isStarterTemplate(input) ? input : null;
 }
+
+// ---------------------------------------------------------------------------
+// Saved views (TV-U8, REPLAN 29d) — mirrors the CHECK on task_views.scope and
+// task_views_op_create's guard in <stamp>_task_views. A view keeps one base
+// scope: All, My tasks, Upcoming (each reader's own) or one project. Focus
+// has no Filter or Display, and the Inbox is each person's own place.
+// ---------------------------------------------------------------------------
+
+export const TASK_VIEW_SCOPES = ["all", "mine", "upcoming", "project"] as const;
+export type TaskViewScope = (typeof TASK_VIEW_SCOPES)[number];
+export const taskViewScopeSchema = z.enum(TASK_VIEW_SCOPES);
+export function isTaskViewScope(value: unknown): value is TaskViewScope {
+  return typeof value === "string" && (TASK_VIEW_SCOPES as readonly string[]).includes(value);
+}
+export function parseTaskViewScope(input: unknown): SafeParseResult<TaskViewScope> {
+  return parseOrError(taskViewScopeSchema, input);
+}
+/** Lax read: a scope this build doesn't know drops the view (null). */
+export function normalizeTaskViewScope(input: unknown): TaskViewScope | null {
+  return isTaskViewScope(input) ? input : null;
+}
+
+/**
+ * The Filter dimensions a saved view may keep (mirrors
+ * task_views__check_filters). An id dimension holds "none" or the id of a
+ * person, team or tag of the same workspace; a word dimension holds short
+ * words. The app's Filter offers exactly these (TASK_FILTER_DIMENSIONS in
+ * features/tasks/filters.ts, held to them by a test).
+ */
+export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag"] as const;
+export const TASK_VIEW_WORD_DIMENSIONS = [
+  "status",
+  "completed",
+  "priority",
+  "energy",
+  "due",
+  "scheduled",
+  "queued",
+  "blocked",
+  "waiting",
+  "recurring",
+  "subtasks",
+  "attachments",
+] as const;
+export type TaskViewFilterDimension =
+  | (typeof TASK_VIEW_ID_DIMENSIONS)[number]
+  | (typeof TASK_VIEW_WORD_DIMENSIONS)[number];
 
 // ---------------------------------------------------------------------------
 // Attachments (AT-1, specs/attachments.md) — mirrors the CHECKs on

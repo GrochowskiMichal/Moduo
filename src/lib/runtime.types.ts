@@ -70,8 +70,10 @@ import type {
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TasksAgentsApi } from "./runtime.web.agents";
 import type { TasksStructureApi } from "./runtime.web.structure";
 import type { TasksTemplatesApi } from "./runtime.web.templates";
+import type { TasksViewsApi } from "./runtime.web.views";
 import type {
   SyncAccessResult,
   SyncIdsResult,
@@ -98,6 +100,20 @@ export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "s
  * row it made. Optional: a runtime without them offers neither.
  */
 export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
+
+/**
+ * TV-U8's saved views (runtime.web.views.ts): the store reads `task_views`
+ * through `syncRead`; these are the ops. Optional: a runtime without them
+ * offers no views.
+ */
+export type TasksViewsRuntime = Partial<TasksViewsApi>;
+
+/**
+ * TV-D16's agent work and import runs (runtime.web.agents.ts): a session's
+ * summary, posting or clearing it, the share switch, and your import runs.
+ * Optional: a runtime without them shows no agent work.
+ */
+export type TasksAgentsRuntime = Partial<TasksAgentsApi>;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -267,6 +283,21 @@ export type StorageStatus = {
   isOwner: boolean;
   /** Only told to the owner. */
   ownedWorkspaces: number | null;
+};
+
+/** One row of Settings → Storage's largest-files list (`attachments_largest`, AT-3). */
+export type LargestAttachment = {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  /** Null once the uploader's account is deleted. */
+  uploaderId: string | null;
+  createdAt: string;
+  /** The reader has edit access to the task. */
+  canDelete: boolean;
 };
 
 export type AttachmentBeginInput = {
@@ -686,7 +717,18 @@ export type ModuoRuntime = {
     /** To the trash: the space is free at once, restorable for 30 days. */
     remove(id: string): Promise<AttachmentRecord>;
     restore(id: string): Promise<AttachmentRecord>;
+    /**
+     * Let go of one's own upload that never finished (dismissed, or begun
+     * again): its space is free at once (AT-3). A finished file is left as it
+     * is. Quiet on a database without the op.
+     */
+    abandon(id: string): Promise<void>;
     status(workspaceId: string): Promise<StorageStatus>;
+    /**
+     * Settings → Storage (AT-3): the biggest finished files in a workspace
+     * whose task the reader can see, with whether the reader may delete each.
+     */
+    largest(workspaceId: string, limit?: number): Promise<LargestAttachment[]>;
     /** Signed links by path (missing paths are left out). */
     signedUrls(paths: string[], ttlSeconds: number): Promise<Map<string, string>>;
   };
@@ -1251,6 +1293,16 @@ export type ModuoRuntime = {
     }): Promise<Task>;
     /** A repeat's cycles, done and skipped, with your own tracked time (TV-D12). */
     taskHistory(input: { workspaceId: string; taskId: string }): Promise<TaskCycle[]>;
+    /**
+     * Which of these tasks an API key made, with the trail's label for it
+     * ("Alex · via Claude Desktop"; TV-U13b, the Inbox's agent chip). Read from
+     * the tasks' `tasks.create` trail rows, so only tasks the caller can see
+     * answer. Batched; tasks no key made are left out.
+     */
+    listAgentCaptures(input: {
+      workspaceId: string;
+      taskIds: readonly string[];
+    }): Promise<Array<{ taskId: string; label: string }>>;
     /** Notify the people picked by `@` in a task's description (TV-D12). */
     mentionInTask(input: {
       workspaceId: string;
@@ -1275,7 +1327,9 @@ export type ModuoRuntime = {
       module?: string;
     }): Promise<ActivityEntry[]>;
   } & TasksStructureRuntime &
-    TasksTemplatesRuntime;
+    TasksTemplatesRuntime &
+    TasksViewsRuntime &
+    TasksAgentsRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md
@@ -1369,6 +1423,16 @@ export type ModuoRuntime = {
       entityLabel?: string;
       entityIcon?: string | null;
     }): Promise<SpineComment>;
+    /**
+     * The opening words (140 characters) of comments a bell notice names by
+     * id (TV-D16: notices carry no comment text). Read through the comments'
+     * own policy, so only comments on items the reader can still see answer;
+     * a deleted comment doesn't.
+     */
+    getCommentExcerpts?(input: {
+      workspaceId: string;
+      commentIds: string[];
+    }): Promise<Array<{ id: string; excerpt: string }>>;
     /** Read an entity's comment thread (oldest first, tombstones excluded) —
      * the Comments rail (NO-7 AC9). Direct member-read SELECT (RLS-guarded). */
     listComments(input: {

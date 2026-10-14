@@ -44,6 +44,7 @@ import { feedTime } from "../feed";
 import { useTaskTimeShare } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { ActivityEntry, Bucket, Task } from "../model";
+import { AgentSessionLines } from "./task-agent-session";
 import { TaskDescription } from "./task-description";
 import {
   BlockedBySection,
@@ -150,6 +151,8 @@ function DetailBody({
     entity: { type: "task", id: task.id },
     userId: api.currentUserId ?? null,
     canEdit,
+    // Live (AT-3): a teammate's upload or delete shows without reopening.
+    refreshStamp: api.attachmentStamps?.get(task.id) ?? null,
   });
   const dropScroll = cn(
     "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
@@ -331,7 +334,13 @@ function DetailBody({
             <div className="flex min-w-0 max-w-180 flex-1 flex-col gap-5">
               <div className="flex flex-col gap-1.5">
                 {title}
-                <AgentSessionSlot task={task} />
+                <AgentSessionLines
+                  taskId={task.id}
+                  workspaceId={task.workspaceId}
+                  sessions={api.agentSessions}
+                  userId={api.currentUserId}
+                  runtime={runtime}
+                />
               </div>
               <div className="flex flex-col gap-3 @4xl:hidden">
                 {closedLine}
@@ -373,7 +382,13 @@ function DetailBody({
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
             {title}
-            <AgentSessionSlot task={task} />
+            <AgentSessionLines
+              taskId={task.id}
+              workspaceId={task.workspaceId}
+              sessions={api.agentSessions}
+              userId={api.currentUserId}
+              runtime={runtime}
+            />
           </div>
           {closedLine}
           {properties}
@@ -385,15 +400,6 @@ function DetailBody({
       </div>
     </section>
   );
-}
-
-/**
- * The agent session line (call 52) goes directly under the title: "Claude ·
- * Writing tests · step 3 of 5 · 2m ago · PR #42 ↗". TV-D16 brings agent
- * sessions; until then there is nothing to show, and this slot keeps its place.
- */
-function AgentSessionSlot(_props: { task: Task }) {
-  return null;
 }
 
 // ── title ─────────────────────────────────────────────────────────────────────

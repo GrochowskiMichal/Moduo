@@ -65,6 +65,7 @@ export const DEFAULT_KEY_SCOPES: Readonly<McpKeyScopes> = {
 const NEED_NOTES: Readonly<Record<string, string>> = {
   "calendar>tasks": "Moving scheduled tasks also needs Tasks: Edit.",
   "notes>links": "Linking notes also needs Links: Edit.",
+  "tasks>links": "Commenting on tasks also needs Links: Edit.",
 };
 
 /**

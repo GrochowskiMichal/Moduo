@@ -44,6 +44,15 @@ CREATE FUNCTION test.remind(p_who text, p_task text, p_at timestamptz) RETURNS t
     test.id('W'), test.id(p_task), p_at))
 $$;
 
+-- Only this file's reminders and deliveries count. The sender and the push
+-- claim read the whole database, and the local stack is shared (someone's
+-- real reminder, an e2e run's): set everything else aside, inside this
+-- rolled-back run.
+UPDATE public.task_reminders SET suspended_at = now()
+WHERE workspace_id <> test.id('W') AND fired_at IS NULL AND suspended_at IS NULL;
+UPDATE public.notice_deliveries SET push_attempts = 5
+WHERE workspace_id IS DISTINCT FROM test.id('W') AND pushed_at IS NULL;
+
 -- ── Grants, policies, the Realtime publication ──────────────────────────────
 DO $$
 DECLARE
@@ -152,8 +161,9 @@ BEGIN
                    AND suspended_at IS NOT NULL AND deleted_at IS NULL) = 3,
     'moving a task to Backlog suspends everyone''s reminders on it (AC1.7)');
   v_n := public.tasks__fire_reminders(now() + interval '3 hours', 500);
-  PERFORM test.ok(v_n = 0 AND NOT EXISTS (SELECT 1 FROM public.task_reminders
-                                          WHERE task_id = test.id('Parked') AND fired_at IS NOT NULL),
+  -- Scoped to this task: the count also holds whatever else in W is due by then.
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.task_reminders
+                              WHERE task_id = test.id('Parked') AND fired_at IS NOT NULL),
     'a suspended reminder never fires', v_n::text);
   r := test.try('E', format($q$SELECT * FROM public.tasks_op_reminders_restore(%L, %L)$q$, test.id('W'), test.id('Parked')));
   PERFORM test.ok(r LIKE '%once the task is To do or In progress%', 'restoring waits for the task to be open again', r);

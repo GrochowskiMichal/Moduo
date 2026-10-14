@@ -26,6 +26,15 @@ describe("validateTasksSearch", () => {
   it("drops unknown params", () => {
     expect(validateTasksSearch({ id: "t1", junk: "x" })).toEqual({ id: "t1" });
   });
+
+  it("keeps a saved view's id (TV-U8), and only an id", () => {
+    const id = "0b6a7c64-1111-4222-8333-944455556666";
+    expect(validateTasksSearch({ view: id })).toEqual({ view: id });
+    expect(validateTasksSearch({ id: "t1", view: id })).toEqual({ id: "t1", view: id });
+    expect(validateTasksSearch({ view: "all" })).toEqual({});
+    expect(validateTasksSearch({ view: `${id}'` })).toEqual({});
+    expect(validateTasksSearch({ view: 7 })).toEqual({});
+  });
 });
 
 describe("resolveTasksDeepLink", () => {
@@ -98,6 +107,13 @@ describe("taskMatchesQuery", () => {
   it("needs every word, wherever it is", () => {
     expect(taskMatchesQuery(task, "modal big")).toBe(true);
     expect(taskMatchesQuery(task, "modal small")).toBe(false);
+  });
+
+  it("finds a task by the key it was imported under (TV-D16, AC3.6)", () => {
+    const imported = { ...task, importedFrom: { source: "linear", key: "ENG-123" } };
+    expect(taskMatchesQuery(imported, "eng-123")).toBe(true);
+    expect(taskMatchesQuery(imported, "ENG-123 capture")).toBe(true);
+    expect(taskMatchesQuery(task, "ENG-123")).toBe(false);
   });
 
   it("an empty query matches everything", () => {

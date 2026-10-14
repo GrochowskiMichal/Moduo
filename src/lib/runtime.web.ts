@@ -81,6 +81,7 @@ import {
   type TimeBlockMap,
   type TrackTimeInput,
 } from "../features/tasks/model";
+import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import type { EntityLink, EntityRecord } from "./entity-links";
@@ -110,6 +111,7 @@ import type {
   EmailThreadRef,
   HabitRow,
   IntegrationStatusItem,
+  LargestAttachment,
   LocalAuthState,
   ModuoRuntime,
   OtpSendError,
@@ -118,9 +120,11 @@ import type {
   SpineComment,
   UserPreferences,
 } from "./runtime.types";
+import { createTasksAgents } from "./runtime.web.agents";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
+import { createTasksViews } from "./runtime.web.views";
 import { deltaCursor } from "./sync/delta-cursor";
 import type {
   AccessChange,
@@ -134,7 +138,9 @@ import type {
 } from "./sync/types";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
+  agentSessionRowToModel,
   areaRowToModel,
+  attachmentMarkRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
   editableTaskFields,
@@ -394,6 +400,25 @@ function mapAttachmentRow(raw: unknown): AttachmentRecord {
 const ATTACHMENT_COLUMNS =
   "id, entity_type, entity_id, uploader_id, file_name, mime, size_bytes, width, height, status, deleted_at, created_at, object_path, preview_path, preview_mime";
 
+/** One row of `attachments_largest` (AT-3, 20261013272000) → the model. */
+function mapLargestAttachmentRow(raw: unknown): LargestAttachment {
+  const r = raw as Record<string, unknown> | null;
+  if (typeof r?.id !== "string" || typeof r.task_id !== "string") {
+    throw new Error("Malformed largest-files row");
+  }
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    taskTitle: typeof r.task_title === "string" ? r.task_title : "",
+    fileName: typeof r.file_name === "string" ? r.file_name : "file",
+    mime: typeof r.mime === "string" ? r.mime : "application/octet-stream",
+    sizeBytes: Number.isFinite(Number(r.size_bytes)) ? Number(r.size_bytes) : 0,
+    uploaderId: typeof r.uploader_id === "string" ? r.uploader_id : null,
+    createdAt: typeof r.created_at === "string" ? r.created_at : "",
+    canDelete: r.can_delete === true,
+  };
+}
+
 /** An attachments op's answer → the record, or AT-1's refusal as a typed error
  *  (machine code in the message, numbers as JSON in `details`). */
 function attachmentOpResult(
@@ -438,10 +463,18 @@ const tasksStructure = createTasksStructure(supabaseClient, {
   setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
 });
 
+/** TV-D16's agent work and import runs (runtime.web.agents.ts). */
+const tasksAgents = createTasksAgents(supabaseClient, {
+  userId: async () => (await getAuthedUser())?.id ?? null,
+});
+
 /** TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts). */
 const tasksTemplates = createTasksTemplates(supabaseClient, {
   mapAnswer: (raw) => templateAnswerToModels(raw),
 });
+
+/** TV-U8's saved views (runtime.web.views.ts). */
+const tasksViews = createTasksViews(supabaseClient);
 
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
@@ -1702,6 +1735,27 @@ export const webRuntime: ModuoRuntime = {
       return attachmentOpResult(data, error);
     },
 
+    async abandon(id) {
+      const { error } = await supabaseClient.rpc("attachments_op_abandon", { p_id: id });
+      // A database before AT-3 has no such op: the 24 h sweep frees it there.
+      if (!error || isMissingFunctionError(error, "attachments_op_abandon")) return;
+      const code = (error.message ?? "").trim();
+      if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
+      throw new Error(error.message ?? "Couldn't let the upload go.");
+    },
+
+    async largest(workspaceId, limit = 50) {
+      const { data, error } = await supabaseClient.rpc("attachments_largest", {
+        p_workspace_id: workspaceId,
+        p_limit: limit,
+      });
+      if (error) {
+        if (isMissingFunctionError(error, "attachments_largest")) return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows((data ?? []) as unknown[], mapLargestAttachmentRow);
+    },
+
     async status(workspaceId) {
       const { data, error } = await supabaseClient.rpc("storage_status", {
         p_workspace_id: workspaceId,
@@ -2291,6 +2345,9 @@ export const webRuntime: ModuoRuntime = {
     ...tasksStructure,
     // TV-D15: templates and "Duplicate project…".
     ...tasksTemplates,
+    // TV-U8: saved views.
+    ...tasksViews,
+    ...tasksAgents,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -3011,6 +3068,32 @@ export const webRuntime: ModuoRuntime = {
       return taskCyclesFromJson(data);
     },
 
+    async listAgentCaptures({ workspaceId, taskIds }) {
+      // The trail's own read policy answers only tasks the caller can see, so a
+      // key's name never reaches anyone else (TV-U13b). 100 ids per request
+      // keeps the URL short.
+      const out: Array<{ taskId: string; label: string }> = [];
+      for (let i = 0; i < taskIds.length; i += 100) {
+        const { data, error } = await supabaseClient
+          .from("module_activity")
+          .select("entity_id, actor_label")
+          .eq("workspace_id", workspaceId)
+          .eq("module", "tasks")
+          .eq("entity_type", "task")
+          .eq("op", "tasks.create")
+          .eq("actor_type", "api_key")
+          .in("entity_id", taskIds.slice(i, i + 100));
+        if (error) throw new Error(error.message);
+        for (const row of (data ?? []) as Array<{
+          entity_id: string;
+          actor_label: string | null;
+        }>) {
+          if (row.actor_label?.trim()) out.push({ taskId: row.entity_id, label: row.actor_label });
+        }
+      }
+      return out;
+    },
+
     async mentionInTask({ workspaceId, taskId, userIds }) {
       if (userIds.length === 0) return 0;
       const { data, error } = await supabaseClient.rpc("tasks_op_mention", {
@@ -3213,6 +3296,23 @@ export const webRuntime: ModuoRuntime = {
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async getCommentExcerpts({ workspaceId, commentIds }) {
+      const ids = [...new Set(commentIds)].slice(0, 200);
+      if (ids.length === 0) return [];
+      // RLS: only comments on items the reader can still see.
+      const { data, error } = await supabaseClient
+        .from("comments")
+        .select("id, body")
+        .eq("workspace_id", workspaceId)
+        .in("id", ids)
+        .is("deleted_at", null);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({
+        id: String(r.id),
+        excerpt: String(r.body ?? "").slice(0, 140),
+      }));
     },
 
     async listComments({ workspaceId, entityType, entityId }) {
@@ -4073,6 +4173,13 @@ type SyncSource = {
   order?: (q: any) => any;
 };
 
+/** A saved view row, or a throw the reader drops (TV-U8). */
+function taskViewRowToModel(raw: unknown): TaskView {
+  const view = taskViewFromRow(raw);
+  if (!view) throw new Error("An unreadable saved view.");
+  return view;
+}
+
 const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
   tasks: {
     table: "tasks",
@@ -4207,6 +4314,38 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     cap: READ_CAPS.taskWaiting,
     delta: true,
     scope: "waiting entries",
+  },
+  // TV-U8: read whole every sync (SYNC_TABLES); RLS returns your views and
+  // the shared ones you may see, never a deleted one.
+  views: {
+    table: "task_views",
+    select: "*",
+    map: taskViewRowToModel,
+    cap: READ_CAPS.taskViews,
+    delta: true,
+    scope: "saved views",
+  },
+  // TV-D16: agent sessions, under RLS (yours, and teammates' they share).
+  agentSessions: {
+    table: "agent_sessions",
+    select: "*",
+    map: agentSessionRowToModel,
+    cap: READ_CAPS.agentSessions,
+    delta: true,
+    scope: "agent sessions",
+  },
+  // AT-3: finished files on tasks, for the 📎 counts and an open strip's
+  // refresh. Under RLS (the item gate: a file shows only to people who can see
+  // its task); never a name, path or size. A finished file never goes back to
+  // pending, and a trashed one keeps `ready`, so the delta sees every change.
+  attachments: {
+    table: "attachments",
+    select: "id,entity_id,status,updated_at,deleted_at",
+    map: attachmentMarkRowToModel,
+    cap: READ_CAPS.attachmentMarks,
+    delta: true,
+    scope: "attachments",
+    filter: (q) => q.eq("entity_type", "task").eq("status", "ready"),
   },
 };
 

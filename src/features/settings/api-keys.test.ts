@@ -104,6 +104,8 @@ function latestSqlFunctionBodies(): Map<string, string> {
 const PEOPLE_ONLY =
   /if\s+(?:public\.)?module_api_key_id\(\)\s+is\s+null\s+then([\s\S]*?)end\s+if\s*;/g;
 const LANE_CHECK = /\b(\w+?)_(?:op__guard\w*|module_permission|key_scope)\s*\(/g;
+const BEST_EFFORT =
+  /\bbegin\s+perform\s[^;]*;\s*exception\s+when\s+insufficient_privilege\s+or\s+raise_exception\s+then\s+null\s*;\s*end\s*;/g;
 
 /**
  * The key-scope lanes a call into `fn` is checked against, following its calls:
@@ -120,13 +122,25 @@ function keyLanes(fn: string, bodies: Map<string, string>, seen = new Set<string
   const raw = bodies.get(fn);
   if (raw === undefined || seen.has(fn)) return lanes;
   seen.add(fn);
-  const body = raw.toLowerCase().replace(PEOPLE_ONLY, (_block, inner: string) => {
-    expect(inner, `${fn}: a people-only block must be a plain IF`).not.toMatch(
-      /\b(?:else|elsif|if)\b/,
-    );
-    return "";
-  });
-  for (const [, owner] of body.matchAll(LANE_CHECK)) lanes.add(owner === "spine" ? "links" : owner);
+  const body = raw
+    .toLowerCase()
+    .replace(PEOPLE_ONLY, (_block, inner: string) => {
+      expect(inner, `${fn}: a people-only block must be a plain IF`).not.toMatch(
+        /\b(?:else|elsif|if)\b/,
+      );
+      return "";
+    })
+    // A best-effort call whose refusal the op swallows (a template's links,
+    // TV-D15) needs nothing: without that lane the key just gets less.
+    .replace(BEST_EFFORT, "");
+  for (const m of body.matchAll(LANE_CHECK)) {
+    const owner = m[1] === "spine" ? "links" : (m[1] as string);
+    // A permission read that lets View through (`… NOT IN ('view', 'edit',
+    // 'admin')`, TV-D12/D16 reads) is a View lane, not an Edit one.
+    const tail = body.slice((m.index ?? 0) + m[0].length).split(/;|\bthen\b/)[0] ?? "";
+    const viewLevel = /_module_permission\s*\($/.test(m[0]) && /'view'/.test(tail);
+    lanes.add(viewLevel ? `${owner}@view` : owner);
+  }
   if (/\b\w+_can_access_workspace\s*\(/.test(body)) lanes.add("no-key");
   for (const [, callee] of body.matchAll(/\b(\w+)\s*\(/g)) {
     if (callee === fn || !bodies.has(callee)) continue;
@@ -223,7 +237,8 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
         if (lanes.has(id ?? "") && tool.access === "view") {
           throw new Error(`${tool.name} is listed at View but its RPC needs ${id} Edit`);
         }
-        const needs = [...lanes].filter((lane) => lane !== id).sort();
+        // The tool's own module at View is what any key that lists it holds.
+        const needs = [...lanes].filter((lane) => lane !== id && lane !== `${id}@view`).sort();
         expect(needs, `${file}: ${tool.name}`).toEqual([...mcpToolNeeds(tool.name)].sort());
       }
       // Helpers above the tools (chat's plan check) must not hit a key lane.
@@ -243,6 +258,9 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       "perm_actor_id", // defines the fallback itself
       "module_activity_log", // `IF auth.uid() IS NOT NULL` → the user branch; keys go to the api_key branch
       "perm_can_view_entity", // reached only for types without a module (true for everyone)
+      // `IF auth.uid() IS NOT NULL OR module_api_key_id() IS NOT NULL` → module_activity_log
+      // for a person or a key alike; only system work (cron) writes as "Moduo".
+      "tasks__notice",
     ]);
     const bodies = latestSqlFunctionBodies();
     const roots = new Set<string>();
@@ -274,7 +292,7 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
   it("gives every need a row note, and the notes come from the needs", () => {
     expect(
       KEY_SCOPE_NEEDS.map(({ module, when, needs }) => `${module}@${when}>${needs}`).sort(),
-    ).toEqual(["calendar@edit>tasks", "notes@edit>links"]);
+    ).toEqual(["calendar@edit>tasks", "notes@edit>links", "tasks@edit>links"]);
     for (const need of KEY_SCOPE_NEEDS) expect(need.note.length).toBeGreaterThan(0);
   });
 });

@@ -323,4 +323,27 @@ describe("getting a list out (default f)", () => {
       ["Acme", "Active · Oct 1 → Oct 31", "3 of 5 done · 2 open", "", "- [ ] Open one"].join("\n"),
     );
   });
+
+  it("with its description and Done this month (TV-U16)", () => {
+    const text = projectOverviewText(
+      { name: "Acme", status: "done" },
+      { done: 5, total: 5, open: 0 },
+      [],
+      ctx,
+      {
+        description: "Rebrand for the spring launch.\n",
+        doneThisMonth: "Done this month · 14 · 22h",
+      },
+    );
+    expect(text).toBe(
+      [
+        "Acme",
+        "Done",
+        "5 of 5 done · 0 open",
+        "Done this month · 14 · 22h",
+        "",
+        "Rebrand for the spring launch.",
+      ].join("\n"),
+    );
+  });
 });

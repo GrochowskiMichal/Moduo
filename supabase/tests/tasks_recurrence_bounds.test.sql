@@ -1,5 +1,5 @@
 -- TV-D8 · Repeat rules stay bounded
--- (20261010160000_tasks_ops_registry_handles.sql: tasks__recurrence_problem and
+-- (20261010160001_tasks_ops_registry_handles.sql: tasks__recurrence_problem and
 -- the tasks_recurrence_bounded CHECK; 20261010161000_tasks_recurrence_server.sql:
 -- the engine's horizon and step cap, the roll-over's batch and time budget).
 --

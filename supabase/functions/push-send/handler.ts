@@ -19,6 +19,8 @@ export type ClaimedDelivery = {
   id: string;
   /** Whose it is: the browser shows the words only while they're signed in there. */
   user_id: string;
+  /** What it is (TV-D16: "reminder" or "agent"); absent from a database before it. */
+  kind?: string | null;
   title: string;
   body: string | null;
   url: string | null;
@@ -52,12 +54,18 @@ const BATCH = 100;
  * it only while its person is signed in there; anyone else sees a plain line.
  */
 export function pushMessage(delivery: ClaimedDelivery): Record<string, unknown> {
+  // A reminder carries only the task's title; an agent's notice (TV-D16)
+  // carries its own line ("Claude is ready for review") and the task's title
+  // as its body. A database from before TV-D16 sends no kind: a reminder.
+  const agent = delivery.kind === "agent";
   return {
     uid: delivery.user_id,
-    title: "Reminder",
-    body: delivery.title.slice(0, 80),
+    title: agent ? delivery.title.slice(0, 80) : "Reminder",
+    body: (agent ? (delivery.body ?? "") : delivery.title).slice(0, 80),
     url: delivery.url && /^\/(?!\/)/.test(delivery.url) ? delivery.url : "/",
-    tag: delivery.task_id ? `reminder-${delivery.task_id}` : `notice-${delivery.id}`,
+    tag: delivery.task_id
+      ? `${agent ? "agent" : "reminder"}-${delivery.task_id}`
+      : `notice-${delivery.id}`,
   };
 }
 

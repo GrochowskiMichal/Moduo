@@ -10,6 +10,7 @@ import {
   ListChecks,
   ListTree,
   MessageSquare,
+  Paperclip,
   Repeat,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -17,6 +18,7 @@ import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
+import { filesLabel } from "../../attachments/files";
 import { completedLabel } from "../completed";
 import type { Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
@@ -57,19 +59,20 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
 
 /**
  * The counts right after a title, in their fixed order (tasks-v3 §4): tags ·
- * comments · subtasks done/total · blocked · waiting · repeats · waiting to
- * sync. Muted, each hidden at zero. Tags are a count, never chips (U1-2), with
- * their names in the tooltip; Detailed rows name up to two (`tagNames`).
- * Attachments (📎) join after the tags with AT-3. The facts are the row's own
- * (row-facts.ts, TV-D11b).
+ * files (📎, AT-3) · comments · subtasks done/total · blocked · waiting ·
+ * repeats · waiting to sync. Muted, each hidden at zero. Tags are a count,
+ * never chips (U1-2), with their names in the tooltip; Detailed rows name up
+ * to two (`tagNames`). Rows and cards never show thumbnails. The facts are the
+ * row's own (row-facts.ts, TV-D11b).
  */
 type CountsFacts = Pick<TaskFacts, "tags" | "progress" | "blockedLabel"> &
-  Partial<Pick<TaskFacts, "comments" | "waiting" | "pending">>;
+  Partial<Pick<TaskFacts, "comments" | "attachments" | "waiting" | "pending">>;
 
 /** Whether `TaskCounts` has anything to show for this task. */
 export function hasTaskCounts(task: Task, facts: CountsFacts, opts: CountsOptions = {}): boolean {
   return (
     facts.tags.length > 0 ||
+    (facts.attachments ?? 0) > 0 ||
     (facts.comments ?? 0) > 0 ||
     (facts.progress?.total ?? 0) > 0 ||
     facts.blockedLabel !== null ||
@@ -100,7 +103,7 @@ export function TaskCounts({
   className?: string;
 } & CountsOptions) {
   if (!hasTaskCounts(task, facts, opts)) return null;
-  const { tags, progress, blockedLabel, comments = 0, waiting, pending } = facts;
+  const { tags, progress, blockedLabel, comments = 0, attachments = 0, waiting, pending } = facts;
   const tagList = tags.map((t) => `#${t.name}`).join(" ");
   return (
     <MetaCounts className={className}>
@@ -127,6 +130,7 @@ export function TaskCounts({
           />
         </Tip>
       ) : null}
+      <MetaCount icon={Paperclip} count={attachments} label={filesLabel} />
       <MetaCount
         icon={MessageSquare}
         count={comments}

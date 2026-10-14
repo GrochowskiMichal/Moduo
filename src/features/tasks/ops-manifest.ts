@@ -3,7 +3,7 @@
 // by the module registry (src/lib/module-registry.ts) and, from Session 9 on,
 // by the Moduo MCP connector. Keep in sync with the tasks_op_* RPCs
 // (supabase/migrations/20260612150000_module_activity_intent_ops.sql; every
-// create and field edit since TV-D8: 20261010160000_tasks_ops_registry_handles.sql).
+// create and field edit since TV-D8: 20261010160001_tasks_ops_registry_handles.sql).
 
 import type { ModuleManifest } from "../../lib/module-manifest";
 
@@ -106,6 +106,7 @@ export const tasksModuleManifest: ModuleManifest = {
     {
       op: "tasks.commit",
       rpc: "tasks_op_commit",
+      deprecated: { until: "TV-D7", use: "tasks.queue_add" },
       summary:
         "Legacy (until TV-D7): commit a task for a day; since TV-D2 it also goes to the end of your queue, and recommitting moves it there.",
       args: {
@@ -117,6 +118,7 @@ export const tasksModuleManifest: ModuleManifest = {
     {
       op: "tasks.uncommit",
       rpc: "tasks_op_uncommit",
+      deprecated: { until: "TV-D7", use: "tasks.queue_remove" },
       summary:
         "Legacy (until TV-D7): clear the day's commit and take the task out of your queue. Idempotent.",
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
@@ -124,6 +126,7 @@ export const tasksModuleManifest: ModuleManifest = {
     {
       op: "tasks.skip_today",
       rpc: "tasks_op_skip_today",
+      deprecated: { until: "TV-D7", use: "tasks.queue_remove" },
       summary:
         "Legacy (until TV-D7): skip a task out of the day's commit and your queue. No longer counts as a reschedule (TV-D2).",
       args: { p_workspace_id: "workspace uuid", p_task_id: "task uuid" },
@@ -194,12 +197,144 @@ export const tasksModuleManifest: ModuleManifest = {
         p_items: "[] (builds before TV-D8 send their engine's results; the server ignores them)",
       },
     },
+    // ── TV-D16: Agents and MCP v3 (specs/tasks-v3.md §12, §Assumptions #14) ──
+    {
+      op: "tasks.create_with",
+      rpc: "tasks_op_create_with",
+      summary:
+        "Create a task with its tags, reminders and work sessions in one go (nothing written if a part is refused); an imported_from key you already used on a live task of yours updates that task instead (a re-run), and inside an import run the row is recorded for Undo.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task:
+          "as tasks_op_create's p_task (status by category word, name or id; imported_from {source, key})",
+        p_with:
+          "{import_id?, tags?: [name], reminders?: [{kind, at?}], sessions?: [{starts_at, ends_at}]}",
+      },
+    },
+    {
+      op: "tasks.update_with",
+      rpc: "tasks_op_update_with",
+      summary: "Edit a task and add or take off tags by name, in one go.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_patch: "as tasks_op_update's p_patch",
+        p_with: "{tags_add?: [name], tags_remove?: [name]}",
+      },
+    },
+    {
+      op: "tasks.tag",
+      rpc: "tasks_op_tag",
+      summary:
+        "Add and take off a task's tags by name (any case); a name the workspace doesn't have becomes a tag. Needs edit access to the task. Logged.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_add: "tag names",
+        p_remove: "tag names",
+      },
+    },
+    {
+      op: "tasks.agent_report",
+      rpc: "tasks_op_agent_report",
+      summary:
+        "An agent's session status on a task (keys only): state (working · needs_you · ready · failed), note, step n of m, links, a hand-back summary. Private to the key's person unless they show their agent work; needs you · ready · failed notify them once.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_task_id: "task uuid",
+        p_report: "{state, note?, step?, steps?, links?, summary?, agent?}",
+      },
+    },
+    {
+      op: "tasks.agent_session_post",
+      rpc: "tasks_op_agent_session_post",
+      summary: "Post your agent session's hand-back summary as your comment (its person only).",
+      args: { p_workspace_id: "workspace uuid", p_session_id: "session uuid" },
+    },
+    {
+      op: "tasks.agent_session_dismiss",
+      rpc: "tasks_op_agent_session_dismiss",
+      summary: "Clear your agent session's line from the task.",
+      args: { p_workspace_id: "workspace uuid", p_session_id: "session uuid" },
+    },
+    {
+      op: "tasks.comment",
+      rpc: "comments_op_add",
+      summary:
+        "Add a comment to a task when a person asked for it (MCP tasks_comment). A key's comment reads as its app. A spine op: a key needs Links: Edit too.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_entity_type: "'task'",
+        p_entity_id: "task uuid",
+        p_body: "the comment",
+        p_mentioned_user_ids: "members to notify",
+      },
+      alsoNeeds: ["links"],
+    },
+    {
+      op: "imports.begin",
+      rpc: "imports_op_begin",
+      summary:
+        'Begin an import run ("through your AI" or a native importer): its source and a label.',
+      args: { p_workspace_id: "workspace uuid", p_source: "e.g. todoist", p_label: "optional" },
+    },
+    {
+      op: "imports.project_create",
+      rpc: "imports_op_project_create",
+      summary:
+        "Make a project inside an import run and record it for Undo, in one go (a refused run makes nothing).",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_import_id: "the run",
+        p_project: "as projects_op_create's p_project",
+      },
+    },
+    {
+      op: "imports.section_create",
+      rpc: "imports_op_section_create",
+      summary: "Add a section inside an import run and record it for Undo, in one go.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_import_id: "the run",
+        p_project_id: "project uuid",
+        p_section: "as sections_op_create's p_section",
+      },
+    },
+    {
+      op: "imports.finish",
+      rpc: "imports_op_finish",
+      summary: "Finish an import run: answers what it made and updated.",
+      args: { p_workspace_id: "workspace uuid", p_import_id: "the run" },
+    },
+    {
+      op: "imports.undo",
+      rpc: "imports_op_undo",
+      summary:
+        '"Undo this import": what the run made and nobody touched since goes to Recently deleted (tasks, then its empty sections and projects); anything edited since stays.',
+      args: { p_workspace_id: "workspace uuid", p_import_id: "the run" },
+    },
   ],
   resources: [
-    { name: "buckets", summary: "The workspace's buckets (rail sections, Inbox)." },
+    {
+      name: "buckets",
+      summary: "Deprecated (until TV-D7; MCP tasks_list_buckets): the projects. Use projects.",
+    },
+    {
+      name: "projects",
+      summary: "The projects you can see: Inbox, status, area, dates, lead (TV-D16).",
+    },
+    { name: "areas", summary: "The areas the sidebar groups projects under (TV-D16)." },
+    { name: "sections", summary: "A project's sections, with their dates (TV-D16)." },
+    {
+      name: "statuses",
+      summary: "A project's statuses by category, or the workspace default (TV-D16).",
+    },
+    { name: "teams", summary: "The workspace's teams and their members (TV-D16)." },
+    { name: "templates", summary: "Your task and project templates and the shared ones (TV-D16)." },
+    { name: "history", summary: "A repeating task's past cycles (TV-D16)." },
     { name: "tasks", summary: "Tasks with computed drift/blocked state, subtasks, recurrence." },
     { name: "queue", summary: "Your own queue, in order (TV-D2)." },
-    { name: "today", summary: "Legacy alias of the queue (until TV-D7)." },
+    { name: "today", summary: "Deprecated (until TV-D7; MCP tasks_today): the queue. Use queue." },
     { name: "drift", summary: "Open tasks whose scheduled time has passed (ambient, per bucket)." },
     { name: "tags", summary: "Workspace-level tags and their task links." },
     { name: "relations", summary: "Blocker → blocked dependency edges (DAG)." },

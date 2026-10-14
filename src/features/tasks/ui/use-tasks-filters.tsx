@@ -6,6 +6,7 @@
 
 import {
   Ban,
+  CalendarCheck,
   CalendarDays,
   Circle,
   CircleCheck,
@@ -14,6 +15,7 @@ import {
   Clock,
   Flag,
   Hash,
+  Hourglass,
   ListChecks,
   ListTree,
   Paperclip,
@@ -43,6 +45,7 @@ import {
   type TaskFilterContext,
   type TaskFilterDimension,
   taskFilterShape,
+  WAITING_ANY,
 } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Tag, Task, Team } from "../model";
@@ -59,12 +62,14 @@ const DIMENSION_ICONS: Record<TaskFilterDimension, FilterDimension["icon"]> = {
   creator: UserPen,
   tag: Hash,
   status: CircleDot,
+  completed: CalendarCheck,
   priority: Flag,
   energy: Zap,
   due: CalendarDays,
   scheduled: Clock,
   queued: ListChecks,
   blocked: CircleDashed,
+  waiting: Hourglass,
   recurring: Repeat,
   subtasks: ListTree,
   attachments: Paperclip,
@@ -121,6 +126,23 @@ const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
     { value: "week", label: "This week" },
     { value: "drifted", label: "Drifted", keywords: ["passed"] },
     { value: NONE_VALUE, label: "Not scheduled" },
+  ],
+  // When a task was finished (TV-U8; the week follows Time & region).
+  completed: [
+    { value: "today", label: "Today" },
+    { value: "week", label: "This week" },
+    { value: "last_week", label: "Last week" },
+    { value: "month", label: "This month" },
+    { value: NONE_VALUE, label: "Not completed" },
+  ],
+  // Who or what a task waits on (TV-U8): any entry, or one kind.
+  waiting: [
+    { value: WAITING_ANY, label: "Anything", keywords: ["waiting"] },
+    { value: "person", label: "A teammate", keywords: ["person", "people"] },
+    { value: "email", label: "An email reply", keywords: ["client", "reply"] },
+    { value: "agent", label: "An agent" },
+    { value: "text", label: "Something else", keywords: ["client"] },
+    { value: NONE_VALUE, label: "Not waiting" },
   ],
   queued: YES_NO,
   blocked: YES_NO,
@@ -226,44 +248,6 @@ export function taskFilterDimensions(input: {
     }));
 }
 
-/**
- * Live files per task (non-deleted, not failed), read when a "Has
- * attachments" filter is on, again each time it's turned on. AT-3's live 📎
- * counts can replace this read.
- */
-function useAttachmentCounts(
-  runtime: ModuoRuntime | null,
-  workspaceId: string,
-  enabled: boolean,
-): (taskId: string) => number {
-  const [state, setState] = useState<{ workspaceId: string; counts: Map<string, number> } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!enabled || !runtime || !workspaceId) return;
-    let cancelled = false;
-    runtime.attachments
-      .list(workspaceId)
-      .then(({ attachments }) => {
-        if (cancelled) return;
-        const counts = new Map<string, number>();
-        for (const a of attachments) {
-          if (a.entityType !== "task" || a.deletedAt || a.status === "failed") continue;
-          counts.set(a.entityId, (counts.get(a.entityId) ?? 0) + 1);
-        }
-        setState({ workspaceId, counts });
-      })
-      .catch(() => {
-        // Unknown counts read as "no files"; the filter still works for the rest.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, runtime, workspaceId]);
-  const counts = state?.workspaceId === workspaceId ? state.counts : null;
-  return useCallback((taskId: string) => counts?.get(taskId) ?? 0, [counts]);
-}
-
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el?.tagName) return false;
@@ -347,7 +331,6 @@ export function useTasksFilters({
   conditions,
   onConditionsChange,
   api,
-  runtime,
   assignees,
   enabled,
   keepTaskId = null,
@@ -388,8 +371,24 @@ export function useTasksFilters({
     [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams],
   );
 
-  const attachmentsOn = conditions.some((c) => c.dimension === "attachments");
-  const attachmentCount = useAttachmentCounts(runtime, workspaceId, attachmentsOn);
+  // "Has attachments" reads the store's live 📎 counts (AT-3): files on tasks
+  // you can see, finished and not deleted.
+  const fileCounts = api.attachmentCounts;
+  const attachmentCount = useCallback(
+    (taskId: string) => fileCounts?.get(taskId) ?? 0,
+    [fileCounts],
+  );
+
+  // Each task's Waiting on… kinds (the Waiting on filter).
+  const waitingKinds = useMemo(() => {
+    const out = new Map<string, string[]>();
+    for (const w of api.waiting ?? []) {
+      const list = out.get(w.taskId);
+      if (list) list.push(w.kind);
+      else out.set(w.taskId, [w.kind]);
+    }
+    return out;
+  }, [api.waiting]);
 
   // Today's date keys the context, so "Today" and "This week" roll over at
   // midnight.
@@ -402,9 +401,11 @@ export function useTasksFilters({
       isBlocked: (id) => api.blockedTaskIds.has(id),
       hasSubtasks: (id) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
       attachmentCount,
+      waitingKindsOf: (id) => waitingKinds.get(id) ?? [],
     }),
     [
       today,
+      waitingKinds,
       api.tagsByTask,
       api.queuedTaskIds,
       api.blockedTaskIds,

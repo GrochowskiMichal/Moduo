@@ -56,9 +56,14 @@ function fakeApi(script: Partial<Record<Step, (unknown | (() => unknown))[]>> = 
     if (v instanceof Error) throw v;
     return v;
   };
+  const abandoned: string[] = [];
   const api = {
     calls,
+    abandoned,
     status: async (_ws: string) => status(),
+    async abandon(id: string) {
+      abandoned.push(id);
+    },
     async begin(input: unknown) {
       calls.push({ step: "begin", arg: input });
       next("begin");
@@ -552,6 +557,118 @@ describe("UploadQueue", () => {
     // The too-big one never uploads, so it doesn't block a reset.
     expect(t.queue.pendingIds("u1")).toHaveLength(2);
     expect(t.queue.pendingIds("u2")).toHaveLength(1);
+  });
+
+  // ── AT-3: unfinished uploads let their server row go at once ──────────────
+
+  it("answers with the files' queue ids, refused ones included", async () => {
+    const t = setup({ online: () => false });
+    await t.queue.start("u1");
+    const ids = await t.queue.add([png("a.png"), png("big.mov", 60 * MB)], TARGET, "u1", status());
+    expect(ids).toEqual(t.queue.getSnapshot().items.map((i) => i.id));
+    expect(t.queue.getSnapshot().items.map((i) => i.state)).toEqual(["waiting", "rejected"]);
+  });
+
+  it("dismissing a begun upload lets its server row go (abandon)", async () => {
+    const api = fakeApi({ upload: [new TypeError("Failed to fetch")] });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    const [item] = t.queue.getSnapshot().items;
+    expect(item).toMatchObject({ state: "waiting", attachmentId: "a1" });
+    t.queue.dismiss(item.id);
+    await settle();
+    expect(api.abandoned).toEqual(["a1"]);
+  });
+
+  it("a failed upload lets its old row go before it is begun again", async () => {
+    const api = fakeApi({ finalize: [() => record("a1", { status: "failed" })] });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(api.abandoned).toEqual(["a1"]);
+    t.queue.retry(t.queue.getSnapshot().items[0].id);
+    await settle();
+    expect(t.uploaded.map((r) => r.id)).toEqual(["a2"]);
+    expect(api.abandoned).toEqual(["a1"]);
+  });
+
+  it("a refused upload lets its row go", async () => {
+    const api = fakeApi({ finalize: [new AttachmentOpError("no_edit_access")] });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.queue.getSnapshot().items[0]).toMatchObject({ state: "rejected" });
+    expect(api.abandoned).toEqual(["a1"]);
+  });
+
+  it("a file dismissed while begin is answering lets the late row go", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const api = fakeApi();
+    const begin = api.begin.bind(api);
+    api.begin = async (input: unknown) => {
+      await gate;
+      return begin(input);
+    };
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    t.queue.dismiss(t.queue.getSnapshot().items[0].id);
+    release();
+    await settle();
+    expect(api.abandoned).toEqual(["a1"]);
+  });
+
+  it("waits for an offline capture's task to reach the server instead of dropping the file", async () => {
+    const api = fakeApi({
+      begin: [new AttachmentOpError("entity_not_found"), new AttachmentOpError("entity_not_found")],
+    });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status(), { awaitTask: true });
+    await settle();
+    expect(t.queue.getSnapshot().items[0]).toMatchObject({
+      state: "waiting",
+      problem: { kind: "task_syncing" },
+    });
+    await t.advance(3000);
+    expect(t.queue.getSnapshot().items[0]?.problem).toEqual({ kind: "task_syncing" });
+    await t.advance(10_000);
+    expect(t.uploaded.map((r) => r.id)).toEqual(["a1"]);
+  });
+
+  it("without a task to wait for, a missing task is final", async () => {
+    const api = fakeApi({ begin: [new AttachmentOpError("entity_not_found")] });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status());
+    await settle();
+    expect(t.queue.getSnapshot().items[0]).toMatchObject({
+      state: "rejected",
+      problem: { kind: "task_gone" },
+    });
+  });
+
+  it("stops waiting for the task after a day", async () => {
+    const api = fakeApi({
+      begin: Array.from({ length: 400 }, () => new AttachmentOpError("entity_not_found")),
+    });
+    const t = setup({ api });
+    await t.queue.start("u1");
+    await t.queue.add([png()], TARGET, "u1", status(), { awaitTask: true });
+    await settle();
+    for (let i = 0; i < 300; i += 1) await t.advance(5 * 60_000);
+    expect(t.queue.getSnapshot().items[0]).toMatchObject({
+      state: "rejected",
+      problem: { kind: "task_gone" },
+    });
   });
 
   it("backs off exponentially with jitter, capped at five minutes", () => {

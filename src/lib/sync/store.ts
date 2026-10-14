@@ -40,6 +40,7 @@
 // resend never makes a second task. Other edits say "Offline" (the hook).
 
 import { toast } from "sonner";
+import type { AgentSession } from "../../features/spine/agent-session";
 import { applyLiveTags, seedTags } from "../../features/tags/store";
 import { isNewer, type LiveChange, timestampMicros } from "../../features/tasks/live";
 import type {
@@ -53,6 +54,7 @@ import type {
   TaskWaitingEntry,
 } from "../../features/tasks/model";
 import { listenTasksLive, type TasksLiveEvent } from "../../features/tasks/realtime";
+import type { TaskView } from "../../features/tasks/view-row";
 import { splitArchived } from "../bucket-rows";
 import { TAG_LINKS_SCOPE, type Truncation } from "../paged-select";
 import type { ModuoRuntime } from "../runtime.types";
@@ -154,10 +156,19 @@ export type StoreSnapshot = {
   /** Per task, a stamp that moves whenever one of its comments is added,
    *  edited, deleted or reacted to (TV-U13): an open thread re-reads on it. */
   commentStamps: ReadonlyMap<string, string>;
+  /** Finished files per task (AT-3's 📎 counts). */
+  attachmentCounts: ReadonlyMap<string, number>;
+  /** Per task, a stamp that moves whenever one of its files is added,
+   *  deleted or restored (AT-3): an open strip re-reads on it. */
+  attachmentStamps: ReadonlyMap<string, string>;
   /** TV-D10: work sessions on tasks you can see, your own reminders, Waiting on… entries. */
   sessions: TaskSession[];
   reminders: TaskReminder[];
   waiting: TaskWaitingEntry[];
+  /** TV-U8: your saved views and the ones shared with you. */
+  views: TaskView[];
+  /** TV-D16: agent sessions you can see (yours; teammates' while they share). */
+  agentSessions: AgentSession[];
 };
 
 const EMPTY_BUNDLE: TasksModuleBundle = {
@@ -192,9 +203,13 @@ export const EMPTY_SNAPSHOT: StoreSnapshot = {
   completions: [],
   commentCounts: new Map(),
   commentStamps: new Map(),
+  attachmentCounts: new Map(),
+  attachmentStamps: new Map(),
   sessions: [],
   reminders: [],
   waiting: [],
+  views: [],
+  agentSessions: [],
 };
 
 // ── Tables ──────────────────────────────────────────────────────────────────
@@ -215,6 +230,9 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "areas", delta: false, phase: 1 },
   { name: "teams", delta: false, phase: 1 },
   { name: "teamMembers", delta: false, phase: 1 },
+  // TV-U8: who may read a shared view moves with project sharing and
+  // membership, which bump no stamp; small, so read whole.
+  { name: "views", delta: false, phase: 1 },
   // Hard deletes: stamped and tombstoned since TV-D11b's migration, so they
   // delta too; a database without it answers whole (`whole`).
   { name: "queue", delta: true, phase: 1 },
@@ -230,6 +248,10 @@ export const SYNC_TABLES: readonly { name: SyncTableName; delta: boolean; phase:
   { name: "sessions", delta: true, phase: 2 },
   { name: "reminders", delta: true, phase: 2 },
   { name: "waiting", delta: true, phase: 2 },
+  // TV-D16: the access check drops a session its person stops sharing.
+  { name: "agentSessions", delta: true, phase: 2 },
+  // AT-3: finished files (marks only), for the 📎 counts.
+  { name: "attachments", delta: true, phase: 2 },
 ];
 
 /**
@@ -250,6 +272,8 @@ const TASK_ROWS: readonly SyncTableName[] = [
   "sessions",
   "reminders",
   "waiting",
+  "agentSessions",
+  "attachments",
 ];
 
 type TableState = {
@@ -295,7 +319,9 @@ const LIVE_TO_TABLE: Record<LiveChange["table"], SyncTableName> = {
   task_sessions: "sessions",
   task_reminders: "reminders",
   task_waiting: "waiting",
+  agent_sessions: "agentSessions",
   task_completions: "completions",
+  attachments: "attachments",
 };
 
 // ── Timing ──────────────────────────────────────────────────────────────────
@@ -1982,6 +2008,11 @@ export class WorkspaceStore {
       prev && prev.commentsSource === comments
         ? { counts: prev.snapshot.commentCounts, stamps: prev.snapshot.commentStamps }
         : countComments(comments);
+    const files = this.rendered("attachments");
+    const { counts: attachmentCounts, stamps: attachmentStamps } =
+      prev && prev.attachmentsSource === files
+        ? { counts: prev.snapshot.attachmentCounts, stamps: prev.snapshot.attachmentStamps }
+        : countAttachments(files);
     const queue = this.queueRows();
     // The tasks waiting in the outbox (a List row's clock, TV-U10), the same
     // set object until it changes so rows don't redraw for nothing.
@@ -2011,11 +2042,15 @@ export class WorkspaceStore {
       completions: this.rendered("completions"),
       commentCounts,
       commentStamps,
+      attachmentCounts,
+      attachmentStamps,
       sessions: this.rendered("sessions"),
       reminders: this.rendered("reminders"),
       waiting: this.rendered("waiting"),
+      views: this.rendered("views"),
+      agentSessions: this.rendered("agentSessions"),
     };
-    this.lastSnapshot = { snapshot, bundle, commentsSource: comments };
+    this.lastSnapshot = { snapshot, bundle, commentsSource: comments, attachmentsSource: files };
     return snapshot;
   }
 
@@ -2023,7 +2058,31 @@ export class WorkspaceStore {
     snapshot: StoreSnapshot;
     bundle: TasksModuleBundle;
     commentsSource: readonly SyncRows["comments"][];
+    attachmentsSource: readonly SyncRows["attachments"][];
   } | null = null;
+}
+
+/**
+ * Finished files per task, and each task's file stamp: its newest file change
+ * plus the live count (a delete that drops the row moves it). A file still
+ * uploading (a Realtime row before it's finished) never counts.
+ */
+export function countAttachments(files: readonly SyncRows["attachments"][]): {
+  counts: ReadonlyMap<string, number>;
+  stamps: ReadonlyMap<string, string>;
+} {
+  const counts = new Map<string, number>();
+  const newest = new Map<string, string>();
+  for (const f of files) {
+    if (f.status !== "ready") continue;
+    const seen = newest.get(f.taskId);
+    if (!seen || f.updatedAt > seen) newest.set(f.taskId, f.updatedAt);
+    if (f.deletedAt) continue;
+    counts.set(f.taskId, (counts.get(f.taskId) ?? 0) + 1);
+  }
+  const stamps = new Map<string, string>();
+  for (const [taskId, at] of newest) stamps.set(taskId, `${at}#${counts.get(taskId) ?? 0}`);
+  return { counts, stamps };
 }
 
 /** Live comments per task, and each task's comment stamp: its newest

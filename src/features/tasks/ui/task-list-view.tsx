@@ -32,6 +32,7 @@ import {
 import { formatDate } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
+import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, partitionCompleted } from "../completed";
 import {
@@ -55,6 +56,7 @@ import {
 import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
 import { multiDropLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isSideDroppable } from "../dnd/rail-drop";
+import { readFolds, writeFold } from "../folds";
 import {
   canNestUnder,
   type GroupBy,
@@ -103,6 +105,7 @@ import type { ListExtraGroup, ListGrouping } from "./list-extensions";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
+import { useTaskFileDrop } from "./row-drop";
 import { type FactsSource, taskFactsOf, useRowActions, waitingLabelsOf } from "./row-facts";
 import { type SortColumn, TaskListHeader } from "./task-list-header";
 import {
@@ -117,6 +120,8 @@ import { activateGlyph, type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
 import type { MultiSelect } from "./use-task-selection";
 import { VirtualStack } from "./virtual-stack";
+
+const NO_AGENT_SESSIONS: readonly AgentSession[] = [];
 
 type Props = {
   tasks: Task[];
@@ -205,7 +210,7 @@ type Props = {
   onOpenTask?: (taskId: string) => void;
   /**
    * Where the groups you fold are remembered (per person, view and grouping,
-   * on this device; research §2). Null: not remembered.
+   * following the person: `listFoldKey`, TV-U8). Null: not remembered.
    */
   collapseKey?: string | null;
   /**
@@ -368,7 +373,7 @@ export function TaskListView({
   const showBucketTag = !detailed && showBucketPill(selection, chosenGroupBy);
   // In My tasks every row is mine, so rows leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
-  const { assignees, byId } = useAssignees();
+  const { assignees, byId, currentUserId } = useAssignees();
 
   // Section grouping reads this project's sections; Team grouping the teams.
   const projectSections = useMemo(
@@ -537,12 +542,12 @@ export function TaskListView({
   );
   const [choices, setChoices] = useState(() => ({
     key: collapseKey,
-    folded: readFolded(collapseKey),
+    folded: readFolds(collapseKey),
   }));
   let folded = choices.folded;
   if (choices.key !== collapseKey) {
     // Derive-on-render: the new view's choices replace the old in this render.
-    folded = readFolded(collapseKey);
+    folded = readFolds(collapseKey);
     setChoices({ key: collapseKey, folded });
   }
   const collapsed = useMemo(
@@ -552,7 +557,7 @@ export function TaskListView({
   const setFolded = useCallback((key: string, value: boolean) => {
     setChoices((prev) => {
       const next = { ...prev.folded, [key]: value };
-      writeFolded(prev.key, next);
+      writeFold(prev.key, key, value);
       return { key: prev.key, folded: next };
     });
   }, []);
@@ -628,6 +633,17 @@ export function TaskListView({
       return viewWhen ? viewWhen(t, now) : null;
     };
   }, [grouping, extraGroups, today, whenTick]);
+  // TV-D16: "Claude · working" on the rows an agent session you can see works
+  // on ("Anna's Claude · working" when it's a teammate's, first name only).
+  const agentMarks = useMemo(
+    () =>
+      agentRowMarks(
+        api.agentSessions ?? NO_AGENT_SESSIONS,
+        (id) => taskById.get(id) ?? null,
+        (s) => agentWho(s, currentUserId, (id) => byId(id)?.fullName.trim().split(/\s+/)[0]),
+      ),
+    [api.agentSessions, taskById, currentUserId, byId],
+  );
   const factsSource = useMemo<FactsSource>(
     () => ({
       queuedTaskIds: api.queuedTaskIds,
@@ -640,12 +656,15 @@ export function TaskListView({
       sectionNames,
       waitingLabels,
       commentCounts: api.commentCounts,
+      attachmentCounts: api.attachmentCounts,
       pendingTaskIds: api.pendingTaskIds,
       whenOf,
       takeableIds,
       sourceOf,
+      agentMarks,
     }),
     [
+      agentMarks,
       whenOf,
       takeableIds,
       sourceOf,
@@ -659,6 +678,7 @@ export function TaskListView({
       sectionNames,
       waitingLabels,
       api.commentCounts,
+      api.attachmentCounts,
       api.pendingTaskIds,
     ],
   );
@@ -1085,6 +1105,15 @@ export function TaskListView({
   // actions object never changes, so a memoised row redraws only when its
   // own task, facts or state do (TV-D11b: one edit, one row).
   const actions = useRowActions(api);
+
+  // Files dropped on a row attach to its task (AT-3, AT3-1).
+  const fileDrop = useTaskFileDrop({
+    canEdit,
+    taskOf: (id) => taskById.get(id),
+    userId: api.currentUserId,
+    pendingTaskIds: api.pendingTaskIds,
+    onOpen: (id) => onSelectTask(id),
+  });
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1569,7 +1598,9 @@ export function TaskListView({
           parentTitle={depth === 0 ? parentTitleFor(task) : null}
           dragListeners={drag?.dragListeners}
           dragActivatorRef={drag?.dragActivatorRef}
-          dropTarget={hover?.kind === "nest" && hover.targetId === task.id}
+          dropTarget={
+            (hover?.kind === "nest" && hover.targetId === task.id) || fileDrop.targetId === task.id
+          }
           {...extra}
         />
         {line && hover?.kind === "reorder" ? (
@@ -1962,6 +1993,7 @@ export function TaskListView({
               ref={containerRef}
               tabIndex={0}
               onKeyDown={onKeyDown}
+              {...fileDrop.handlers}
               // Chromium focuses a clicked button; after a mouse click on a row's
               // button, hand focus back to the list (as desktop WebKit does), so the
               // next Space/Enter acts on the selected row instead of re-clicking it.
@@ -2033,6 +2065,7 @@ export function TaskListView({
                             parentTitle={parentTitleFor(task)}
                             dragListeners={dragListeners}
                             dragActivatorRef={dragActivatorRef}
+                            dropTarget={fileDrop.targetId === task.id}
                           />
                         )}
                       />
@@ -2095,30 +2128,6 @@ function toggled<T>(set: ReadonlySet<T>, value: T): Set<T> {
   if (next.has(value)) next.delete(value);
   else next.add(value);
   return next;
-}
-
-/** The folds you chose for a view, from this device ({} when none or unreadable). */
-function readFolded(key: string | null): Record<string, boolean> {
-  if (!key || typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(key);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(parsed)) if (typeof v === "boolean") out[k] = v;
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-function writeFolded(key: string | null, folded: Record<string, boolean>): void {
-  if (!key || typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(folded));
-  } catch {
-    // Quota or disabled storage: the fold still works, it just isn't remembered.
-  }
 }
 
 /** Two hovers that draw the same thing (so a pointer move doesn't re-render). */

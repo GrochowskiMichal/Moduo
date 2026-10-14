@@ -55,6 +55,7 @@ export type NotificationType =
   | "dueFollowUp"
   | "waiting"
   | "teams"
+  | "agents"
   | "overdueTasks"
   | "storage";
 export type NotificationPrefs = Record<NotificationType, boolean>;
@@ -67,6 +68,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "dueFollowUp",
   "waiting",
   "teams",
+  "agents",
   "overdueTasks",
   "storage",
 ];
@@ -79,6 +81,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   dueFollowUp: true,
   waiting: true,
   teams: true,
+  // TV-D16: your agent needs you, is ready for review, or failed.
+  agents: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
   overdueTasks: false,
   // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
@@ -109,6 +113,8 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "tasks.routed": "teams",
   "tasks.team_check_back": "teams",
   "comments.team_mention": "teams",
+  // TV-D16: an agent you started needs you · is ready for review · failed.
+  "tasks.agent_status": "agents",
   // Tasks of yours that came back from someone who left (AC5.6).
   "tasks.handed_back": "assigned",
   "attachments.storage_80": "storage",
@@ -183,6 +189,18 @@ export interface TasksOnboardingPrefs {
   welcomeSeenAt: string | null;
   /** Workspaces their teaching tasks and starter went into, with when. */
   seeded: Record<string, string>;
+  /** Workspaces their role's saved views went into, with when (TV-U8). */
+  viewsSeeded: Record<string, string>;
+}
+
+/**
+ * What a person folded in one List or Board (TV-U8, following them to every
+ * device): each group's or column's fold choice, and when it last changed.
+ * Keyed `<workspace>:<place>:<group by>` (a Board: `<workspace>:<place>:board:<group by>`).
+ */
+export interface TasksFoldEntry {
+  at: string;
+  folds: Record<string, boolean>;
 }
 
 export interface Preferences {
@@ -211,6 +229,8 @@ export interface Preferences {
   tasksInbox: TasksInboxPrefs;
   /** The role question and Tasks' welcome (TV-U17), following the person. */
   tasksOnboarding: TasksOnboardingPrefs;
+  /** Folded groups and columns in each List and Board (TV-U8), following the person. */
+  tasksFolds: Record<string, TasksFoldEntry>;
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -223,7 +243,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {} },
   tasksInbox: { snoozed: {} },
-  tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {} },
+  tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
+  tasksFolds: {},
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -252,6 +273,7 @@ const notificationPrefsSchema = z
       dueFollowUp: z.boolean().catch(true),
       waiting: z.boolean().catch(true),
       teams: z.boolean().catch(true),
+      agents: z.boolean().catch(true),
       overdueTasks: z.boolean().catch(false),
       storage: z.boolean().catch(true),
     }),
@@ -322,24 +344,54 @@ const NO_ONBOARDING: TasksOnboardingPrefs = {
   roleAt: null,
   welcomeSeenAt: null,
   seeded: {},
+  viewsSeeded: {},
 };
+// Workspace → when; a bad entry drops alone, at most 200 workspaces.
+const workspaceStampsSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byWs) => {
+    const out: Record<string, string> = {};
+    for (const [ws, at] of Object.entries(byWs).slice(0, 200)) {
+      if (ws && typeof at === "string" && Number.isFinite(Date.parse(at))) out[ws] = at;
+    }
+    return out;
+  });
 const tasksOnboardingSchema = z
   .object({
     role: z.unknown().transform((v) => (isTasksRole(v) ? v : null)),
     roleAt: stampSchema,
     welcomeSeenAt: stampSchema,
-    seeded: z
-      .record(z.string(), z.unknown())
-      .catch({})
-      .transform((byWs) => {
-        const out: Record<string, string> = {};
-        for (const [ws, at] of Object.entries(byWs).slice(0, 200)) {
-          if (ws && typeof at === "string" && Number.isFinite(Date.parse(at))) out[ws] = at;
-        }
-        return out;
-      }),
+    seeded: workspaceStampsSchema,
+    viewsSeeded: workspaceStampsSchema,
   })
   .catch({ ...NO_ONBOARDING });
+/** At most this many Lists and Boards keep their folds (the newest win). */
+export const TASKS_FOLDS_KEEP = 300;
+/** And at most this many folds each. */
+const TASKS_FOLDS_PER_VIEW = 200;
+// A bad entry drops alone; the newest views are kept.
+const tasksFoldsSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byKey) => {
+    const entries: [string, TasksFoldEntry][] = [];
+    for (const [key, raw] of Object.entries(byKey)) {
+      const entry = raw as Partial<TasksFoldEntry> | null;
+      if (!key || key.length > 200 || !entry || typeof entry !== "object") continue;
+      if (typeof entry.at !== "string" || !Number.isFinite(Date.parse(entry.at))) continue;
+      const raws = entry.folds;
+      if (!raws || typeof raws !== "object" || Array.isArray(raws)) continue;
+      const folds: Record<string, boolean> = {};
+      // The newest folds are the last written: keep those.
+      for (const [id, v] of Object.entries(raws).slice(-TASKS_FOLDS_PER_VIEW)) {
+        if (id && id.length <= 200 && typeof v === "boolean") folds[id] = v;
+      }
+      entries.push([key, { at: entry.at, folds }]);
+    }
+    entries.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
+    return Object.fromEntries(entries.slice(0, TASKS_FOLDS_KEEP));
+  });
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -351,6 +403,7 @@ const preferencesSchema = z.object({
   tasksSidebar: tasksSidebarSchema,
   tasksInbox: tasksInboxSchema,
   tasksOnboarding: tasksOnboardingSchema,
+  tasksFolds: tasksFoldsSchema,
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -378,7 +431,25 @@ export function mergeOnboardingForward(
     roleAt: answered.roleAt,
     welcomeSeenAt: cloud.welcomeSeenAt ?? local.welcomeSeenAt,
     seeded: { ...local.seeded, ...cloud.seeded },
+    viewsSeeded: { ...local.viewsSeeded, ...cloud.viewsSeeded },
   };
+}
+
+/**
+ * Folds from the cloud and this device (TV-U8): each List's or Board's
+ * newest entry wins, so a device with an older copy of the preferences
+ * never folds back what another device changed since.
+ */
+export function mergeFoldsForward(
+  local: Record<string, TasksFoldEntry>,
+  cloud: Record<string, TasksFoldEntry>,
+): Record<string, TasksFoldEntry> {
+  const out: Record<string, TasksFoldEntry> = { ...cloud };
+  for (const [key, entry] of Object.entries(local)) {
+    const other = out[key];
+    if (!other || Date.parse(entry.at) > Date.parse(other.at)) out[key] = entry;
+  }
+  return tasksFoldsSchema.parse(out);
 }
 
 /** Top-level module routes the app can land on (and remember as "last used").
@@ -645,6 +716,7 @@ export function usePreferences(opts?: {
       ? {
           ...cloud,
           tasksOnboarding: mergeOnboardingForward(store.tasksOnboarding, cloud.tasksOnboarding),
+          tasksFolds: mergeFoldsForward(store.tasksFolds, cloud.tasksFolds),
         }
       : cloud;
     setStore(next);

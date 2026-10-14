@@ -19,6 +19,7 @@ import {
 import { useAuth } from "../../../providers/auth-provider";
 import { listenTasksLive } from "../../tasks/realtime";
 import { useWorkspace } from "../../workspaces/workspace-context";
+import { completeReferencedTask } from "./complete-task";
 import { ReferenceStoreProvider } from "./context";
 import type { ResolveContext } from "./resolvers";
 import { isLiveKind, ReferenceStore } from "./store";
@@ -40,9 +41,17 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
     taskKey,
     members,
     canEditTasks,
+    userId,
   });
   useLayoutEffect(() => {
-    latest.current = { runtime, workspaceId: selectedWorkspaceId, taskKey, members, canEditTasks };
+    latest.current = {
+      runtime,
+      workspaceId: selectedWorkspaceId,
+      taskKey,
+      members,
+      canEditTasks,
+      userId,
+    };
   });
 
   // A new person or workspace starts a new cache: nothing carries across.
@@ -74,14 +83,16 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
                     : null;
                 },
                 getEntities: (refs) => rt.spine.getEntities({ workspaceId, refs }),
+                // Done finishes open subtasks too, through the shared store (call 87).
                 setTaskStatus: canEdit
-                  ? async (taskId, done) => {
-                      await rt.tasks.opSetStatus({
+                  ? (taskId, done) =>
+                      completeReferencedTask({
+                        runtime: rt,
                         workspaceId,
+                        userId: latest.current.userId ?? null,
                         taskId,
-                        status: done ? "done" : "todo",
-                      });
-                    }
+                        done,
+                      })
                   : undefined,
                 now: () => new Date(),
               };

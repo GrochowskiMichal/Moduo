@@ -8,11 +8,18 @@ import type { Bucket, Task } from "./model";
 
 export type TasksSearch = {
   id?: string;
+  /** A saved view's link (TV-U8): `/tasks?view=<id>`. */
+  view?: string;
 };
+
+const VIEW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateTasksSearch(search: Record<string, unknown>): TasksSearch {
   const id = typeof search.id === "string" && search.id.length > 0 ? search.id : undefined;
-  return id ? { id } : {};
+  // Only a view id: anything else is dropped, never looked up.
+  const view =
+    typeof search.view === "string" && VIEW_ID.test(search.view) ? search.view : undefined;
+  return { ...(id ? { id } : {}), ...(view ? { view } : {}) };
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────
@@ -116,16 +123,18 @@ export function descriptionWords(description: string | null | undefined): string
 
 /**
  * Whether a task matches the search box: every word of the query appears in
- * its title or the text of its description, ignoring case. An empty query
- * matches everything.
+ * its title, the text of its description or the key it was imported under
+ * ("ENG-123", TV-D16, AC3.6; the server's `tasks_search` reads the same),
+ * ignoring case. An empty query matches everything.
  */
 export function taskMatchesQuery(
-  task: Pick<Task, "title" | "description">,
+  task: Pick<Task, "title" | "description" | "importedFrom">,
   query: string,
 ): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}`;
+  const key = task.importedFrom?.key?.toLowerCase() ?? "";
+  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}\n${key}`;
   return words.every((word) => haystack.includes(word));
 }
 

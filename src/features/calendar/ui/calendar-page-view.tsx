@@ -1180,6 +1180,7 @@ export function CalendarPageView({
               allDayByDay={eventChips.allDay}
               dueByDay={dueByDay}
               onDueClick={(id) => openDetail({ type: "task", id })}
+              fileCounts={api.attachmentCounts}
               prefs={prefs}
               loading={api.loading}
               error={api.error}

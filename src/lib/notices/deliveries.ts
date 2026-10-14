@@ -45,6 +45,9 @@ export function noticeCopy(delivery: NoticeDelivery): { title: string; body: str
   switch (delivery.kind) {
     case "reminder":
       return { title: "Reminder", body: delivery.body ?? delivery.title };
+    // TV-D16: "Claude is ready for review", and the task it's about.
+    case "agent":
+      return { title: delivery.title, body: delivery.body ?? "" };
   }
 }
 

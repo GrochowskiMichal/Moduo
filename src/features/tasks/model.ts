@@ -243,6 +243,11 @@ export type Bucket = {
    * Archived projects; Tasks' search still finds its tasks, labelled.
    */
   archivedAt?: string | null;
+  /**
+   * The project's description (TV-U16): plain text, "" when there is none,
+   * absent on a row read before its migration. The overview shows and edits it.
+   */
+  description?: string;
 };
 
 /**

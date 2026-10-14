@@ -39,6 +39,8 @@ export type TaskFacts = {
   waiting: string | null;
   /** Live comments on it (TV-D11a's counts). */
   comments: number;
+  /** Finished files on it (AT-3's 📎 counts). Absent: 0. */
+  attachments?: number;
   /** A capture or check-off of it waits on this device to sync (offline). */
   pending: boolean;
   /**
@@ -51,6 +53,8 @@ export type TaskFacts = {
   takeable?: boolean;
   /** Where an Inbox task came from ("from Mike"; TV-U15). */
   source?: string | null;
+  /** "Claude · working" while an agent session you can see works on it (TV-D16). */
+  agent?: string | null;
 };
 
 /** The API maps the facts are read from. */
@@ -69,6 +73,8 @@ export type FactsSource = Pick<
   /** Task id → its waiting line (`waitingLabelsOf`). */
   waitingLabels?: ReadonlyMap<string, string>;
   commentCounts?: ReadonlyMap<string, number>;
+  /** Task id → its finished files (AT-3). */
+  attachmentCounts?: ReadonlyMap<string, number>;
   pendingTaskIds?: ReadonlySet<string>;
   /** The view's own date words for a row (TV-U15). */
   whenOf?: (task: Task) => string | null;
@@ -76,6 +82,8 @@ export type FactsSource = Pick<
   takeableIds?: ReadonlySet<string>;
   /** Where a row's task came from (the Inbox's source words, TV-U15). */
   sourceOf?: (task: Task) => string | null;
+  /** Task id → its agent mark (`agentRowMarks`, TV-D16). */
+  agentMarks?: ReadonlyMap<string, string>;
 };
 
 const NONE: readonly never[] = [];
@@ -100,10 +108,12 @@ export function taskFactsOf(task: Task, api: FactsSource): TaskFacts {
     sectionName: task.sectionId ? (api.sectionNames?.get(task.sectionId) ?? null) : null,
     waiting: api.waitingLabels?.get(task.id) ?? null,
     comments: api.commentCounts?.get(task.id) ?? 0,
+    attachments: api.attachmentCounts?.get(task.id) ?? 0,
     pending: api.pendingTaskIds?.has(task.id) ?? false,
     ...(api.whenOf ? { when: api.whenOf(task) } : {}),
     ...(api.takeableIds?.has(task.id) ? { takeable: true } : {}),
     ...(api.sourceOf ? { source: api.sourceOf(task) } : {}),
+    ...(api.agentMarks?.has(task.id) ? { agent: api.agentMarks.get(task.id) } : {}),
   };
 }
 
@@ -154,10 +164,12 @@ export function sameTaskFacts(a: TaskFacts, b: TaskFacts): boolean {
     a.sectionName === b.sectionName &&
     a.waiting === b.waiting &&
     a.comments === b.comments &&
+    (a.attachments ?? 0) === (b.attachments ?? 0) &&
     a.pending === b.pending &&
     (a.when ?? null) === (b.when ?? null) &&
     !!a.takeable === !!b.takeable &&
     (a.source ?? null) === (b.source ?? null) &&
+    (a.agent ?? null) === (b.agent ?? null) &&
     (a.progress === b.progress ||
       (!!a.progress &&
         !!b.progress &&
