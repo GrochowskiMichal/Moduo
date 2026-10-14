@@ -656,7 +656,7 @@ export type GrantSubjectType = (typeof GRANT_SUBJECT_TYPES)[number];
 
 /**
  * Where a grant came from (`resource_grants.origin`, CHECK in
- * 20261010120000_tighten_write_checks.sql). `assign` grants come and go with a
+ * 20261010141712_tighten_write_checks.sql). `assign` grants come and go with a
  * task's assignee; `manual` ones are shares set by hand and are never revoked
  * by reassigning.
  */
@@ -759,7 +759,7 @@ export const inviteStatusSchema = z.enum(INVITE_STATUSES);
 
 // ---------------------------------------------------------------------------
 // Landing waitlist — public.waitlist.source / .status (CHECKs in
-// 20261010150000_tx4_invite_only_gate.sql; the join function's source list in
+// 20261010155652_tx4_invite_only_gate.sql; the join function's source list in
 // 20261001170000_waitlist_footer_source.sql).
 // ---------------------------------------------------------------------------
 
@@ -875,7 +875,7 @@ export function isEmailSuppressionReason(input: unknown): input is EmailSuppress
  * Build-updates subscriptions (T21), public.email_subscriptions. TX-4 creates
  * the table so a waitlist person's build-updates request survives their
  * sign-up (AC22); TX-8 and TX-10 add confirming, Settings and unsubscribing.
- * CHECKs in 20261010150000_tx4_invite_only_gate.sql.
+ * CHECKs in 20261010155652_tx4_invite_only_gate.sql.
  */
 export const EMAIL_SUBSCRIPTION_TOPICS = ["build_updates"] as const;
 export type EmailSubscriptionTopic = (typeof EMAIL_SUBSCRIPTION_TOPICS)[number];

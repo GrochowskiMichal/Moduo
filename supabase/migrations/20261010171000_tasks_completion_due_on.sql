@@ -314,7 +314,7 @@ EXCEPTION WHEN OTHERS THEN
 END;
 $$;
 
--- Production's body (TV-D8's 20261010160000, read from the catalog on
+-- Production's body (TV-D8's 20261010160001, read from the catalog on
 -- 2026-10-10), plus: status_id, due_on and due_time; the status (an id, a
 -- category word or a project's status name) is read in the task's project;
 -- a date-only due_date is the due date itself.
@@ -415,7 +415,7 @@ BEGIN
 END;
 $function$;
 
--- Production's body (TV-D8's 20261010160000, read from the catalog on
+-- Production's body (TV-D8's 20261010160001, read from the catalog on
 -- 2026-10-10), plus: status_id (through the status path, like status),
 -- due_on and due_time (a date-only due_date is a due_on); the trail line for
 -- a date says the day as well as the mirrored instant.

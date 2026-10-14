@@ -81,7 +81,9 @@ BEGIN
   IF position('tasks__visible' IN v_qual) > 0 THEN
     RETURN; -- re-run
   END IF;
-  IF regexp_replace(v_qual, '\s+', '', 'g') <> '(user_id=(SELECTuid()ASuid))' THEN
+  -- The policy text names auth.uid() with or without its schema, depending on
+  -- the applying role's search_path (postgres, as on prod, has no `auth`).
+  IF regexp_replace(v_qual, '\s+', '', 'g') NOT IN ('(user_id=(SELECTuid()ASuid))', '(user_id=(SELECTauth.uid()ASuid))') THEN
     RAISE EXCEPTION 'notice_deliveries_own_read isn''t the policy this migration expects (%); redefine it by hand.', v_qual;
   END IF;
   DROP POLICY notice_deliveries_own_read ON public.notice_deliveries;

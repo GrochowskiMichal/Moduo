@@ -1,4 +1,4 @@
--- Probe for supabase/migrations/20261010150000_tx4_invite_only_gate.sql (TX-4,
+-- Probe for supabase/migrations/20261010155652_tx4_invite_only_gate.sql (TX-4,
 -- specs/transactional-email.md AC20–AC23). Runs on the local stack
 -- (docs/local-dev.md) after the migration is applied there (`bun run
 -- local:reset` applies repo migrations newer than the snapshot). One
