@@ -239,13 +239,24 @@ BEGIN
   END LOOP;
   PERFORM test.ok(v_bad = '' AND test.typing_rows('G', 'B', false) = 1,
     'typing: five calls in a moment answer quietly and broadcast once', v_bad);
+  v := test.typing('C', 'G', true);
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'C', true) = 0 AND test.marks('C', 'G') = 0,
+    'typing: a stop with no start before it sends nothing', v);
   v := test.typing('B', 'G', true);
-  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 1, 'typing: a stop goes out', v);
-  v := test.typing('B', 'G', true);
-  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 2, 'typing: every stop goes out', v);
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 1, 'typing: a stop after a start goes out', v);
+  v_bad := '';
+  FOR i IN 1 .. 5 LOOP
+    v := test.typing('B', 'G', true);
+    IF v NOT LIKE 'ok %' THEN v_bad := v; END IF;
+  END LOOP;
+  PERFORM test.ok(v_bad = '' AND test.typing_rows('G', 'B', true) = 1,
+    'typing: repeated stops answer quietly and send nothing more', v_bad);
   v := test.typing('B', 'G');
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', false) = 1,
-    'typing: a stop doesn''t open the window early', v);
+    'typing: a start right after a stop, inside the window, is quiet', v);
+  v := test.typing('B', 'G', true);
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 1,
+    'typing: and the stop after that quiet start sends nothing', v);
 
   v := test.typing('A', 'G');
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'A', false) = 1,
@@ -258,10 +269,22 @@ BEGIN
   WHERE user_id = test.id('B') AND channel_id = test.ref('G');
   v := test.typing('B', 'G');
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', false) = 2,
-    'typing: 2.5 s later it goes out again', v);
+    'typing: after the window a start goes out again', v);
   v := test.typing('B', 'G');
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', false) = 2,
     'typing: and then waits again', v);
+  UPDATE public.chat_typing_marks SET sent_at = sent_at - interval '1 second'
+  WHERE user_id = test.id('B') AND channel_id = test.ref('G');
+  v := test.typing('B', 'G', true);
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 2,
+    'typing: its stop goes out once', v);
+  PERFORM test.ok(
+    (SELECT sent_at = now() - interval '1 second' AND NOT open FROM public.chat_typing_marks
+      WHERE user_id = test.id('B') AND channel_id = test.ref('G')),
+    'typing: a stop closes the mark without moving its time');
+  v := test.typing('B', 'G', true);
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', true) = 2,
+    'typing: a second stop sends nothing', v);
 
   -- Refusals are unchanged.
   v := test.typing('C', 'P');

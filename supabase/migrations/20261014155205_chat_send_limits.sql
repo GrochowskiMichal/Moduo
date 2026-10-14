@@ -18,13 +18,17 @@
 --      back-and-forth. A refusal is SQLSTATE PT429, which PostgREST answers as
 --      HTTP 429 with the message in the body; the app marks the message as not
 --      sent (with Retry) and shows the message in its toast, and the connector
---      returns it to the app that posted.
+--      returns it to the app that posted. Each check reads at most the
+--      sender's 30 newest messages, and waits at most 2 seconds for the
+--      sender's previous send to finish (then it is refused the same way).
 --   2. Typing. chat_op_typing broadcasts a person's "typing" at most once per
---      2.5 seconds per conversation (the app sends at most one every 3 s);
---      extra calls return quietly. "Stopped typing" always goes out. The last
---      broadcast per person and conversation is kept in chat_typing_marks: no
---      client reads or writes it, and it goes with the person's account and
---      with the conversation.
+--      2.5 seconds per conversation (the app sends at most one every 3 s), and
+--      "stopped typing" only to end a "typing" that went out, once. Every
+--      other call returns quietly. So a conversation hears at most one start
+--      and one stop per person per 2.5 s. The last start per person and
+--      conversation, and whether it is still open, is kept in
+--      chat_typing_marks: no client reads or writes it, and it goes with the
+--      person's account and with the conversation.
 --   3. Account erasure counts and removes the person's typing marks.
 --
 -- chat_op_typing is redefined from the live body (2026-10-14), same signature;
@@ -40,9 +44,11 @@ SET LOCAL lock_timeout = '5s';
 CREATE INDEX IF NOT EXISTS chat_messages_author_recent_idx
   ON public.chat_messages (author_id, workspace_id, created_at);
 
+-- lock_timeout bounds the wait for the sender's previous send; the function's
+-- own setting, restored when it returns.
 CREATE OR REPLACE FUNCTION public.chat_send_limit()
 RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public SET lock_timeout = '2s' AS $$
 DECLARE
   v_in_10s integer;
   v_in_60s integer;
@@ -53,25 +59,35 @@ BEGIN
   END IF;
 
   -- One send per sender and workspace at a time, so each count includes the
-  -- send before it.
-  PERFORM pg_advisory_xact_lock(hashtextextended(
-    'chat_send_limit:' || coalesce(NEW.author_id::text, 'apps') || ':' || NEW.workspace_id::text, 0));
+  -- send before it. A send still waiting after 2 s is refused like any other.
+  BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      'chat_send_limit:' || coalesce(NEW.author_id::text, 'apps') || ':' || NEW.workspace_id::text, 0));
+  EXCEPTION WHEN lock_not_available THEN
+    RAISE EXCEPTION 'You''re sending messages too quickly. Wait a moment and try again.'
+      USING ERRCODE = 'PT429';
+  END;
 
+  -- The newest 30 in the last minute are all either limit needs.
   IF NEW.author_id IS NOT NULL THEN
-    SELECT count(*), count(*) FILTER (WHERE m.created_at > now() - interval '10 seconds')
+    SELECT count(*), count(*) FILTER (WHERE r.created_at > now() - interval '10 seconds')
       INTO v_in_60s, v_in_10s
-      FROM public.chat_messages m
-     WHERE m.author_id = NEW.author_id
-       AND m.workspace_id = NEW.workspace_id
-       AND m.created_at > now() - interval '60 seconds';
+      FROM (SELECT m.created_at FROM public.chat_messages m
+             WHERE m.author_id = NEW.author_id
+               AND m.workspace_id = NEW.workspace_id
+               AND m.created_at > now() - interval '60 seconds'
+             ORDER BY m.created_at DESC
+             LIMIT 30) r;
   ELSE
-    SELECT count(*), count(*) FILTER (WHERE m.created_at > now() - interval '10 seconds')
+    SELECT count(*), count(*) FILTER (WHERE r.created_at > now() - interval '10 seconds')
       INTO v_in_60s, v_in_10s
-      FROM public.chat_messages m
-     WHERE m.author_id IS NULL
-       AND m.workspace_id = NEW.workspace_id
-       AND m.author_kind = 'api_key'
-       AND m.created_at > now() - interval '60 seconds';
+      FROM (SELECT m.created_at FROM public.chat_messages m
+             WHERE m.author_id IS NULL
+               AND m.workspace_id = NEW.workspace_id
+               AND m.author_kind = 'api_key'
+               AND m.created_at > now() - interval '60 seconds'
+             ORDER BY m.created_at DESC
+             LIMIT 30) r;
   END IF;
 
   IF v_in_10s >= 10 OR v_in_60s >= 30 THEN
@@ -90,11 +106,13 @@ CREATE TRIGGER chat_send_limit
 
 -- ── 2. Typing ────────────────────────────────────────────────────────────────
 
--- When each person last told a conversation they were typing. Server-only.
+-- When each person last told a conversation they were typing, and whether
+-- that "typing" is still open (no "stopped" sent for it yet). Server-only.
 CREATE TABLE IF NOT EXISTS public.chat_typing_marks (
   user_id    uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
   channel_id uuid NOT NULL REFERENCES public.chat_channels (id) ON DELETE CASCADE,
   sent_at    timestamptz NOT NULL,
+  open       boolean NOT NULL DEFAULT false,
   PRIMARY KEY (user_id, channel_id)
 );
 CREATE INDEX IF NOT EXISTS chat_typing_marks_channel_idx ON public.chat_typing_marks (channel_id);
@@ -104,7 +122,7 @@ REVOKE ALL ON TABLE public.chat_typing_marks FROM PUBLIC, anon, authenticated;
 -- "I'm typing" (or "I stopped") in a conversation I can read, told to the
 -- conversation's members through its typing topic. The sender is the session.
 -- "Typing" goes out at most once per 2.5 s per person and conversation;
--- "stopped" always does.
+-- "stopped" goes out once for each "typing" that did.
 CREATE OR REPLACE FUNCTION public.chat_op_typing(
   p_channel_id uuid,
   p_parent_id uuid DEFAULT NULL,
@@ -123,15 +141,20 @@ BEGIN
     RAISE EXCEPTION 'That thread no longer exists.';
   END IF;
   IF NOT coalesce(p_stop, false) THEN
-    -- Moves the mark only when the last one is old enough; a row back means send.
-    INSERT INTO public.chat_typing_marks AS t (user_id, channel_id, sent_at)
-    VALUES (auth.uid(), v_channel.id, now())
-    ON CONFLICT (user_id, channel_id) DO UPDATE SET sent_at = EXCLUDED.sent_at
+    -- Moves the mark only when the last start is old enough; a row back means send.
+    INSERT INTO public.chat_typing_marks AS t (user_id, channel_id, sent_at, open)
+    VALUES (auth.uid(), v_channel.id, now(), true)
+    ON CONFLICT (user_id, channel_id) DO UPDATE SET sent_at = EXCLUDED.sent_at, open = true
       WHERE t.sent_at <= EXCLUDED.sent_at - interval '2.5 seconds'
     RETURNING true INTO v_send;
-    IF v_send IS NULL THEN
-      RETURN;
-    END IF;
+  ELSE
+    -- Closes an open start, never moving its time; a row back means send.
+    UPDATE public.chat_typing_marks SET open = false
+     WHERE user_id = auth.uid() AND channel_id = v_channel.id AND open
+    RETURNING true INTO v_send;
+  END IF;
+  IF v_send IS NULL THEN
+    RETURN;
   END IF;
   PERFORM realtime.send(
     jsonb_build_object(
@@ -199,6 +222,15 @@ BEGIN
   END IF;
   IF to_regclass('public.chat_messages_author_recent_idx') IS NULL THEN
     RAISE EXCEPTION 'chat_messages_author_recent_idx is missing.';
+  END IF;
+  IF NOT coalesce((SELECT 'lock_timeout=2s' = ANY (proconfig) FROM pg_proc
+                   WHERE oid = 'public.chat_send_limit()'::regprocedure), false) THEN
+    RAISE EXCEPTION 'chat_send_limit must bound its wait with its own lock_timeout.';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_attribute
+                 WHERE attrelid = 'public.chat_typing_marks'::regclass AND attname = 'open'
+                   AND attnotnull AND NOT attisdropped) THEN
+    RAISE EXCEPTION 'chat_typing_marks needs its open column.';
   END IF;
   -- Both definer functions count and write past RLS as their owner.
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
