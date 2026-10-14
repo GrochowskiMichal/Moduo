@@ -194,12 +194,14 @@ export async function signInPage(
 /**
  * End a person's open Focus runs (TV-F6's `focus_runs`), so a session another
  * test left running (it reads as "on your other device") doesn't become the
- * Now card of the next one.
+ * Now card of the next one. A paused run is ended too: `focus_runs_paused`
+ * wants `paused_at` null unless the status is paused, so a run a test left
+ * paused made this PATCH fail (400) in every later spec's setup.
  */
 export async function endFocusRuns(userId: string): Promise<void> {
   await rest("service", `focus_runs?user_id=eq.${userId}&status=neq.ended`, {
     method: "PATCH",
-    body: { status: "ended", ended_at: new Date().toISOString() },
+    body: { status: "ended", ended_at: new Date().toISOString(), paused_at: null },
   });
 }
 

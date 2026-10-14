@@ -32,7 +32,7 @@ How the Chat v2 build runs, so anyone can pick it up. The spec is [specs/chat-v2
 1. **Read your brief** (`docs/build/chat-v2/briefs/<ID>.md`, 5–10 KB) and only the files it names. Don't read the whole spec, `BUILD_ORDER.md`, `BUILD_LOG.md`, `docs/decisions/*` or the gotchas files end to end; `grep` them for your area when the brief points you there.
 2. **Branch:** `git fetch origin && git switch -c t/maciej/cv-<id>-<kebab> origin/t/maciej/chat-v2-build`.
 3. **Build.** Keep the context small:
-   - run tests, typecheck and e2e through `scripts/agent/quiet.sh <label> <command…>` (exit code, failures and a short tail only; the full log stays on disk);
+   - run tests and typecheck through `scripts/agent/quiet.sh <label> <command…>` (exit code, failures and a short tail only; the full log stays on disk), and **e2e only through `scripts/agent/e2e.sh <playwright args…>`**: it takes the machine-wide e2e lock (one run on the local stack at a time, it prints whose run it waits for, so start it in the background), starts this worktree's own dev server on its own port, adds `--project=e2e`, and runs through `quiet.sh`;
    - batch shell reads into one command, read files in ranges, never `cat` a large file whole;
    - in the inner loop run the typecheck and only the affected test files; run the full `bun run verify` once, before review;
    - run only your block's own e2e specs; the full e2e suite runs at checkpoints, serially;
