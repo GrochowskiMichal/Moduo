@@ -907,7 +907,11 @@ export function TaskListView({
         return;
       }
     }
-    setSelectedId(visibleTasks[0]?.id ?? null);
+    // Nothing to show (every group with tasks folded): the page's own choice
+    // stands. Its backstop picks the first task in scope, so clearing it here
+    // flipped the selection back and forth until React gave up (MOD-122).
+    if (visibleTasks.length === 0) return;
+    setSelectedId(visibleTasks[0].id);
   }, [
     visibleTasks,
     selectedId,
