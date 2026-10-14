@@ -94,6 +94,23 @@ export function quietLineProperties(
 }
 
 /**
+ * How many names the quiet line spells out on its one line (MOD-114): whole
+ * names only, then "+n" for the rest (call 42), never fewer than one. Widths
+ * in px, each name's with its " · " before it; `room` is what the names may
+ * take. An unmeasured line (no room yet, a test) shows them all.
+ */
+export function namesThatFit(room: number, widths: readonly number[], moreWidth: number): number {
+  const total = widths.reduce((sum, w) => sum + w, 0);
+  if (room <= 0 || total <= room) return widths.length;
+  let used = 0;
+  for (let i = 0; i < widths.length; i++) {
+    if (used + widths[i] + moreWidth > room) return Math.max(i, 1);
+    used += widths[i];
+  }
+  return widths.length;
+}
+
+/**
  * The git branch name a task copies to (AC3.7): its handle and title in
  * lower case, words joined by "-", at most 60 characters, cut at a word:
  * "mod-142-logo-concepts". Without a handle, the title alone ("task" when

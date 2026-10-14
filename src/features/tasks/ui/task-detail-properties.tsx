@@ -3,8 +3,9 @@
 // place through one picker (no chevrons; hover shows the field). Status,
 // Assignee + Team, Priority, Due and Tags always show; Energy, Scheduled,
 // Reminder, Estimate, Repeat and Waiting on show once set, and until then
-// sit in one quiet line that names them. Picking a name there shows its row,
-// empty, with its editor open (Waiting on opens its list, below the
+// sit in one quiet "+" line that names them on one line, "+n" for what
+// doesn't fit (MOD-114). The line opens a menu of them all; picking one shows
+// its row, empty, with its editor open (Waiting on opens its list, below the
 // properties). Values wrap and never truncate; the label column narrows from
 // 96 to 76 px when the panel is under 320 px (the panel is the container).
 
@@ -13,8 +14,21 @@ import {
   type TaskStatusCategory,
   taskCategoryOf,
 } from "@contracts/vocabularies";
-import { Flag, Inbox, Plus, User, Users, Zap } from "lucide-react";
-import { useState } from "react";
+import {
+  Bell,
+  CalendarClock,
+  Flag,
+  Hourglass,
+  Inbox,
+  type LucideIcon,
+  Plus,
+  Repeat,
+  Timer,
+  User,
+  Users,
+  Zap,
+} from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { TagChip } from "../../../components/tag-chip";
@@ -33,6 +47,7 @@ import { DateField } from "../../../components/ui/date-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -47,6 +62,7 @@ import { type Assignee, assigneeLabel } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
 import { dueDayOf } from "../bulk";
 import {
+  namesThatFit,
   OPTIONAL_PROPERTY_LABELS,
   type OptionalProperty,
   type PropertyExtras,
@@ -237,30 +253,154 @@ export function TaskDetailProperties({
       <PropertyRow label="Tags" align="start">
         <TagsValue task={task} api={api} canEdit={canEdit} />
       </PropertyRow>
-      {quiet.length > 0 ? (
-        <div className="flex min-h-(--ctrl-h-sm) items-center gap-2 font-sans text-sm text-muted-foreground">
-          <Plus className="size-icon-sm shrink-0" aria-hidden />
-          <span className="flex min-w-0 flex-wrap items-center">
-            {quiet.map((p, i) => (
-              <span key={p} className="flex items-center">
-                {i > 0 ? (
-                  <span aria-hidden className="px-1">
-                    ·
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => reveal(p)}
-                  aria-label={`Add ${OPTIONAL_PROPERTY_LABELS[p].toLowerCase()}`}
-                  className="rounded-sm whitespace-nowrap transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  {OPTIONAL_PROPERTY_LABELS[p]}
-                </button>
-              </span>
-            ))}
+      {quiet.length > 0 ? <AddPropertyLine properties={quiet} onPick={reveal} /> : null}
+    </div>
+  );
+}
+
+// ── the "+" line ──────────────────────────────────────────────────────────────
+
+const PROPERTY_ICONS: Record<OptionalProperty, LucideIcon> = {
+  energy: Zap,
+  scheduled: CalendarClock,
+  reminder: Bell,
+  estimate: Timer,
+  repeat: Repeat,
+  waiting: Hourglass,
+};
+
+/**
+ * "+ Energy · Scheduled · Reminder · +3" (MOD-114, round-2b `.addprop`): the
+ * hidden properties as quiet text on one line that never wraps, whole names
+ * then "+n" (call 42). The whole line is one control: it opens a menu with
+ * every hidden property, and picking one adds its row. A hidden copy of the
+ * names (clipped, so it never widens the panel) gives their widths.
+ */
+function AddPropertyLine({
+  properties,
+  onPick,
+}: {
+  properties: OptionalProperty[];
+  onPick: (p: OptionalProperty) => void;
+}) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const namesRef = useRef<HTMLSpanElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const [fit, setFit] = useState(properties.length);
+  // The last count set, so a re-measure that changes nothing draws nothing.
+  const fitRef = useRef(fit);
+  // A pick opens its row's editor, which takes focus: the menu mustn't hand
+  // it back to this line as it closes (gotchas/ui.md, SH-1's capture).
+  const picked = useRef(false);
+  const key = properties.join(" ");
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the names change
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    const button = buttonRef.current;
+    const names = namesRef.current;
+    const measure = measureRef.current;
+    if (!box || !button || !names || !measure) return;
+    const run = () => {
+      const widths = [...measure.querySelectorAll<HTMLElement>("[data-name]")].map(
+        (el) => el.offsetWidth,
+      );
+      const more = measure.querySelector<HTMLElement>("[data-more]")?.offsetWidth ?? 0;
+      // The "+" and the button's padding take the rest of the line.
+      const chrome = button.offsetWidth - names.offsetWidth;
+      const room = box.clientWidth > 0 ? box.clientWidth - chrome : 0;
+      const next = namesThatFit(room, widths, more);
+      if (next !== fitRef.current) {
+        fitRef.current = next;
+        setFit(next);
+      }
+    };
+    run();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(run);
+    observer.observe(box);
+    observer.observe(measure);
+    return () => observer.disconnect();
+  }, [key]);
+
+  const shown = properties.slice(0, Math.min(fit, properties.length));
+  const rest = properties.length - shown.length;
+  const names = (list: OptionalProperty[], measuring: boolean) =>
+    list.map((p, i) => (
+      <span key={p} data-name={measuring ? p : undefined} className="shrink-0">
+        {i > 0 ? (
+          <span aria-hidden className="px-1">
+            ·
           </span>
-        </div>
-      ) : null}
+        ) : null}
+        {OPTIONAL_PROPERTY_LABELS[p]}
+      </span>
+    ));
+
+  return (
+    <div ref={boxRef} className="relative flex min-w-0">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            ref={buttonRef}
+            type="button"
+            aria-label="Add a property"
+            className={cn(
+              // PropertyValue's quiet control on the sm rung (round-2b `.addprop`).
+              "-ml-1.5 flex min-h-(--ctrl-h-sm) min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 py-0.5",
+              "font-sans text-sm text-subtle-foreground outline-none",
+              "transition-colors duration-(--motion-fade) ease-(--ease-out)",
+              "hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active aria-expanded:text-foreground",
+              "focus-visible:ring-2 focus-visible:ring-ring/50",
+            )}
+          >
+            <Plus className="size-icon-sm shrink-0" aria-hidden />
+            <span
+              ref={namesRef}
+              data-slot="add-property-names"
+              className="flex min-w-0 items-center overflow-hidden whitespace-nowrap"
+            >
+              {names(shown, false)}
+              {rest > 0 ? <span className="shrink-0 ps-1.5 tabular-nums">+{rest}</span> : null}
+            </span>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-48"
+          onCloseAutoFocus={(e) => {
+            if (!picked.current) return;
+            picked.current = false;
+            e.preventDefault();
+          }}
+        >
+          {properties.map((p) => {
+            const Icon = PROPERTY_ICONS[p];
+            return (
+              <DropdownMenuItem
+                key={p}
+                onSelect={() => {
+                  picked.current = true;
+                  onPick(p);
+                }}
+              >
+                <Icon aria-hidden />
+                {OPTIONAL_PROPERTY_LABELS[p]}
+              </DropdownMenuItem>
+            );
+          })}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* The widths: every name and a "+n", laid out but unseen and clipped. */}
+      <span aria-hidden className="pointer-events-none invisible absolute size-0 overflow-hidden">
+        <span ref={measureRef} className="flex w-max font-sans text-sm whitespace-nowrap">
+          {names(properties, true)}
+          <span data-more className="shrink-0 ps-1.5 tabular-nums">
+            +{properties.length}
+          </span>
+        </span>
+      </span>
     </div>
   );
 }

@@ -228,17 +228,31 @@ const ROW_LABELS = [
   "Tags",
 ];
 
+/** The labels of the property rows on screen (the "+" line names more, as text). */
 function shownRows(): string[] {
-  return ROW_LABELS.filter((l) => screen.queryByText(l, { selector: "span" }) !== null);
+  const labels = [...document.querySelectorAll("[data-slot=property-row]")].map(
+    (row) => row.firstElementChild?.textContent ?? "",
+  );
+  return ROW_LABELS.filter((l) => labels.includes(l));
+}
+
+const OPTIONAL_NAMES = ["Energy", "Scheduled", "Reminder", "Estimate", "Repeat", "Waiting on"];
+
+/** The quiet "+" line: one control naming what isn't shown yet (MOD-114). */
+function addLine(): HTMLElement {
+  return screen.getByRole("button", { name: "Add a property" });
+}
+
+async function openAddMenu(): Promise<HTMLElement> {
+  fireEvent.pointerDown(addLine(), { button: 0, pointerType: "mouse" });
+  return screen.findByRole("menu");
 }
 
 describe("the comp layout and property rule C (U3-1)", () => {
   it("shows the core properties always and names the rest in one quiet line", () => {
     renderPanel(task(), api(task()));
     expect(shownRows()).toEqual(["Status", "Assignee", "Priority", "Due", "Tags"]);
-    for (const name of ["energy", "scheduled", "reminder", "estimate", "repeat", "waiting on"]) {
-      expect(screen.getByRole("button", { name: `Add ${name}` })).toBeTruthy();
-    }
+    for (const name of OPTIONAL_NAMES) expect(addLine().textContent).toContain(name);
     // Checkbox beside a wrapping title, no chevrons on the values.
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Task title" }).tagName).toBe("TEXTAREA");
@@ -262,15 +276,22 @@ describe("the comp layout and property rule C (U3-1)", () => {
       "Scheduled",
       "Tags",
     ]);
-    expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Add estimate" })).toBeTruthy();
+    expect(addLine().textContent).not.toContain("Energy");
+    expect(addLine().textContent).toContain("Estimate");
   });
 
-  it("picking a name in the quiet line shows that row, empty", () => {
+  it("picking a name in the quiet line's menu shows that row, empty", async () => {
     renderPanel(task(), api(task()));
-    fireEvent.click(screen.getByRole("button", { name: "Add repeat" }));
-    expect(shownRows()).toContain("Repeat");
-    expect(screen.queryByRole("button", { name: "Add repeat" })).toBeNull();
+    const menu = await openAddMenu();
+    // The menu lists every property the line names, in panel order.
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(OPTIONAL_NAMES);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Repeat" }));
+    await waitFor(() => expect(shownRows()).toContain("Repeat"));
+    expect(addLine().textContent).not.toContain("Repeat");
   });
 
   it('reads the Estimate row as "1h 20m of ~4h" with my share, the bar on its own line', async () => {
@@ -289,7 +310,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
 
   it("view-only members see the values but no quiet line, and ⋯ only copies", async () => {
     renderPanel(task(), api(task()), null, false);
-    expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add a property" })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -334,6 +355,31 @@ describe("the description comes before the properties (MOD-116, the prototypes' 
     const statuses = screen.getAllByRole("button", { name: "Status: To do" });
     expect(statuses.length).toBeGreaterThan(0);
     for (const status of statuses) expect(follows(description, status)).toBe(true);
+  });
+});
+
+describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () => {
+  it("never wraps: the names sit on one clipped line", () => {
+    renderPanel(task(), api(task()));
+    const names = addLine().querySelector("[data-slot=add-property-names]") as HTMLElement;
+    expect(names.className).toContain("whitespace-nowrap");
+    expect(names.className).toContain("overflow-hidden");
+    expect(names.className).not.toContain("flex-wrap");
+    // One control, not a button per name.
+    expect(within(addLine()).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("opens from the keyboard, and a pick adds that property's row with its editor open", async () => {
+    renderPanel(task(), api(task()));
+    addLine().focus();
+    fireEvent.keyDown(addLine(), { key: "Enter" });
+    const menu = await screen.findByRole("menu", { name: "Add a property" });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Energy" }));
+    await waitFor(() => expect(shownRows()).toContain("Energy"));
+    // The new row's picker is open (a modal menu, so the rest reads as hidden).
+    expect(await screen.findByRole("menu", { name: "Energy: none" })).toBeTruthy();
+    const line = screen.getByRole("button", { name: "Add a property", hidden: true });
+    expect(line.textContent).not.toContain("Energy");
   });
 });
 
