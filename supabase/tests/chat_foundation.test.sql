@@ -299,7 +299,8 @@ BEGIN
     AND NOT has_function_privilege('authenticated', 'public.chat__v1_to_v2(text)', 'EXECUTE')
     AND NOT has_function_privilege('anon', 'public.chat_can_read_channel(uuid)', 'EXECUTE')
     AND has_function_privilege('authenticated', 'public.chat_can_read_channel(uuid)', 'EXECUTE')
-    AND NOT has_function_privilege('anon', 'public.chat__unaccent(text)', 'EXECUTE'),
+    AND NOT has_function_privilege('anon', 'public.chat__unaccent(text)', 'EXECUTE')
+    AND NOT has_function_privilege('authenticated', 'public.chat__unaccent(text)', 'EXECUTE'),
     'grants: the helpers are server-only; the read rule is for signed-in people');
   PERFORM test.ok(
     (SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname IN (
@@ -309,5 +310,84 @@ BEGIN
       'chat_catchup_channel_open_idx', 'chat_catchup_later_idx', 'chat_catchup_message_reason_uq',
       'chat_catchup_level_reset_uq')) = 13,
     'indexes: the stream, delta, search, name, General and Catch up indexes exist');
+END;
+$$;
+
+-- ── body_text runs on every write: its work stays linear in the body ────────
+-- Bodies built to be slow (8,000 characters each); each must take well under a
+-- second (they take ~10–70 ms locally; a quadratic reading took seconds).
+DO $$
+DECLARE
+  v_body text;
+  v_start timestamptz;
+  v_worst interval := interval '0';
+BEGIN
+  FOREACH v_body IN ARRAY ARRAY[
+    repeat('[a](', 2000),
+    repeat('*a ', 2666),
+    repeat('[', 4000) || repeat(']', 4000),
+    '[' || repeat('*a*', 2600) || '](moduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6)',
+    (SELECT string_agg(repeat('`', g), ' ') FROM generate_series(1, 125) g),
+    repeat('[x](<', 1600),
+    repeat(E'1. a\n   b\n', 800)
+  ] LOOP
+    v_start := clock_timestamp();
+    PERFORM public.chat__body_text(v_body);
+    v_worst := greatest(v_worst, clock_timestamp() - v_start);
+  END LOOP;
+  FOREACH v_body IN ARRAY ARRAY[repeat('```', 2666), repeat('_*', 4000), repeat('**_~~', 1600)] LOOP
+    v_start := clock_timestamp();
+    PERFORM public.chat__body_text(public.chat__v1_to_v2(v_body));
+    v_worst := greatest(v_worst, clock_timestamp() - v_start);
+  END LOOP;
+  PERFORM test.ok(v_worst < interval '1 second',
+    'cost: the slowest crafted 8,000-character body is read in under a second', v_worst::text);
+END;
+$$;
+
+-- ── The read rule is written out twice: both agree, and agree with perm_user_has ──
+-- (chat_can_read_channel for the session, chat__can_read_channel_as for a given
+-- person; the reference below composes the rule from perm_user_has itself, so a
+-- change to the permission core shows up here).
+CREATE FUNCTION test.read_rule_mismatches() RETURNS text LANGUAGE sql AS $$
+  SELECT string_agg(u || '/' || ch, ' ' ORDER BY u, ch)
+  FROM unnest(ARRAY['O', 'A', 'B', 'C', 'V', 'X']) AS u
+  CROSS JOIN unnest(ARRAY['P', 'Q', 'D']) AS ch
+  CROSS JOIN LATERAL (
+    SELECT test.value_as(u, format('SELECT public.chat_can_read_channel(%L)::text', test.ref(ch))) AS session,
+           public.chat__can_read_channel_as(test.ref(ch), test.id(u))::text AS given,
+           coalesce((SELECT (w.deleted_at IS NULL AND c.deleted_at IS NULL
+                             AND public.perm_user_has(c.workspace_id, test.id(u), 'chat.view')
+                             AND ((c.kind = 'channel' AND NOT c.is_private)
+                                  OR EXISTS (SELECT 1 FROM public.chat_members m
+                                              WHERE m.channel_id = c.id AND m.user_id = test.id(u)
+                                                AND m.left_at IS NULL)))::text
+                       FROM public.chat_channels c JOIN public.workspaces w ON w.id = c.workspace_id
+                      WHERE c.id = test.ref(ch)), 'false') AS reference) r
+  WHERE r.session IS DISTINCT FROM r.given OR r.given IS DISTINCT FROM r.reference
+$$;
+DO $$
+BEGIN
+  PERFORM test.ok(test.read_rule_mismatches() IS NULL,
+    'parity: session and per-person read rules agree with perm_user_has (after a leave and a delete)',
+    test.read_rule_mismatches());
+  UPDATE public.chat_channels SET deleted_at = NULL, deleted_by = NULL WHERE id = test.ref('Q');
+  UPDATE public.chat_members SET left_at = NULL WHERE channel_id = test.ref('P') AND user_id = test.id('B');
+  PERFORM test.ok(test.read_rule_mismatches() IS NULL,
+    'parity: … with everyone back in', test.read_rule_mismatches());
+  -- (perm_members_resolve would recompute perms from the role: set them as the
+  -- role editor's overrides would leave them.)
+  SET LOCAL session_replication_role = replica;
+  UPDATE public.workspace_members SET perms = array_remove(perms, 'chat.view')
+   WHERE workspace_id = test.id('W') AND user_id = test.id('C');
+  SET LOCAL session_replication_role = origin;
+  PERFORM test.ok(test.read_rule_mismatches() IS NULL
+                  AND NOT public.chat__can_read_channel_as(test.ref('Q'), test.id('C')),
+    'parity: … and with Chat at None for C (C reads nothing, even the public Q)', test.read_rule_mismatches());
+  UPDATE public.workspaces SET deleted_at = now() WHERE id = test.id('W');
+  PERFORM test.ok(test.read_rule_mismatches() IS NULL
+                  AND NOT public.chat__can_read_channel_as(test.ref('P'), test.id('A'))
+                  AND NOT public.chat__can_read_channel_as(test.ref('Q'), test.id('O')),
+    'parity: … and once the workspace is deleted (nobody reads, the owner included)', test.read_rule_mismatches());
 END;
 $$;

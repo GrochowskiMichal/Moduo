@@ -1028,6 +1028,86 @@ export function planHasChat(tier: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Chat v2 (CV-1) — mirrors the CHECKs in …_chat_v2_foundation
+// (chat_messages.kind, chat_messages.event->>'type', chat_catchup.reason,
+// chat_catchup.done_how). Huddle event types join CHAT_EVENT_TYPES through the
+// Calls blocks' own expand migrations (spec Assumption #37).
+// ---------------------------------------------------------------------------
+
+/** A row of the stream: a message, or a quiet event line ("moved", CH30c). */
+export const CHAT_MESSAGE_KINDS = ["message", "event"] as const;
+export type ChatMessageKind = (typeof CHAT_MESSAGE_KINDS)[number];
+export const chatMessageKindSchema = z.enum(CHAT_MESSAGE_KINDS);
+export function isChatMessageKind(value: unknown): value is ChatMessageKind {
+  return typeof value === "string" && (CHAT_MESSAGE_KINDS as readonly string[]).includes(value);
+}
+/** Read-side: rows written before the column existed are messages. */
+export function normalizeChatMessageKind(input: unknown): ChatMessageKind {
+  return isChatMessageKind(input) ? input : "message";
+}
+export function parseChatMessageKind(input: unknown): SafeParseResult<ChatMessageKind> {
+  return parseOrError(chatMessageKindSchema, input);
+}
+
+/** What an event line says (`chat_messages.event.type`). */
+export const CHAT_EVENT_TYPES = ["moved_out", "moved_in"] as const;
+export type ChatEventType = (typeof CHAT_EVENT_TYPES)[number];
+export const chatEventTypeSchema = z.enum(CHAT_EVENT_TYPES);
+export function isChatEventType(value: unknown): value is ChatEventType {
+  return typeof value === "string" && (CHAT_EVENT_TYPES as readonly string[]).includes(value);
+}
+/** Read-side: an event this build doesn't know is skipped (null), never drawn as another. */
+export function normalizeChatEventType(input: unknown): ChatEventType | null {
+  return isChatEventType(input) ? input : null;
+}
+export function parseChatEventType(input: unknown): SafeParseResult<ChatEventType> {
+  return parseOrError(chatEventTypeSchema, input);
+}
+
+/** Why a Catch up item is addressed to you (`chat_catchup.reason`, CH8, CH38). */
+export const CHAT_CATCHUP_REASONS = [
+  "dm",
+  "mention",
+  "team_mention",
+  "everyone",
+  "reply",
+  "announcement",
+  "every_message",
+  "reminder",
+  "added",
+  "removed",
+  "level_reset",
+] as const;
+export type ChatCatchupReason = (typeof CHAT_CATCHUP_REASONS)[number];
+export const chatCatchupReasonSchema = z.enum(CHAT_CATCHUP_REASONS);
+export function isChatCatchupReason(value: unknown): value is ChatCatchupReason {
+  return typeof value === "string" && (CHAT_CATCHUP_REASONS as readonly string[]).includes(value);
+}
+/** Read-side: an item with a reason this build doesn't know is skipped (null). */
+export function normalizeChatCatchupReason(input: unknown): ChatCatchupReason | null {
+  return isChatCatchupReason(input) ? input : null;
+}
+export function parseChatCatchupReason(input: unknown): SafeParseResult<ChatCatchupReason> {
+  return parseOrError(chatCatchupReasonSchema, input);
+}
+
+/** How a Catch up item was done (`chat_catchup.done_how`). */
+export const CHAT_CATCHUP_DONE_HOW = ["done", "read", "bell", "closed"] as const;
+export type ChatCatchupDoneHow = (typeof CHAT_CATCHUP_DONE_HOW)[number];
+export const chatCatchupDoneHowSchema = z.enum(CHAT_CATCHUP_DONE_HOW);
+export function isChatCatchupDoneHow(value: unknown): value is ChatCatchupDoneHow {
+  return typeof value === "string" && (CHAT_CATCHUP_DONE_HOW as readonly string[]).includes(value);
+}
+/** Read-side: an item marked done in a way this build doesn't know is still done ("done"). */
+export function normalizeChatCatchupDoneHow(input: unknown): ChatCatchupDoneHow | null {
+  if (input === null || input === undefined) return null;
+  return isChatCatchupDoneHow(input) ? input : "done";
+}
+export function parseChatCatchupDoneHow(input: unknown): SafeParseResult<ChatCatchupDoneHow> {
+  return parseOrError(chatCatchupDoneHowSchema, input);
+}
+
+// ---------------------------------------------------------------------------
 // Content authors — who wrote a chat message or a comment. Mirrors
 // chat_messages_author_kind_check (20261006160000_chat_agent_access) and
 // comments_author_kind_check (20261008123000_key_writes_act_as_creator).

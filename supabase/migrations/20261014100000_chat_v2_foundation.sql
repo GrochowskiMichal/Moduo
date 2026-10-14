@@ -82,6 +82,11 @@ $fn$;
 -- literal `*` and `~~`, so only text no editor writes can hold such a run.
 -- Agreement with the client was checked on 3,111 converted rows and spike 4's
 -- 290 corpus strings (docs/build/chat-v2/CV-1.md).
+--
+-- It runs on every message write (the body_text trigger), so its work is linear
+-- in the body: the look-aheads for a code span's closing run and a link's target
+-- share a budget of 2 × the length + 1,000 characters; past it, an unclosed
+-- backtick run or a `](` reads as text (only text built to be slow gets there).
 CREATE OR REPLACE FUNCTION public.chat__inline_text(p_src text)
 RETURNS text
 LANGUAGE plpgsql IMMUTABLE PARALLEL SAFE
@@ -95,8 +100,10 @@ DECLARE
   r integer;
   v_run integer;
   v_close integer;
+  v_budget integer;
   o text[] := '{}';
   lbs integer[] := '{}';   -- positions in o of a '[' that may still open a link
+  v_top integer := 0;      -- lbs is a stack: its live part is lbs[1:v_top]
   v_np integer := 0;       -- o's length when a reference, day, link or break was last read
   ch text;
   v text;
@@ -107,21 +114,24 @@ DECLARE
   v_ok boolean;
   v_before text;
   v_after text;
-  -- Emphasis markers read so far: where in o, which character, how long, and
-  -- whether the run could open or close.
+  -- Emphasis markers read so far (in o order): where in o, which character, how
+  -- long, and whether the run could open or close.
   d_pos integer[] := '{}';
   d_ch text[] := '{}';
   d_n integer[] := '{}';
   d_open boolean[] := '{}';
   d_close boolean[] := '{}';
+  d_keep boolean[];
   k integer;
-  q integer;
+  v_seen_star boolean;
+  v_seen_tilde boolean;
 BEGIN
   IF p_src IS NULL OR p_src = '' THEN
     RETURN p_src;
   END IF;
   c := regexp_split_to_array(p_src, '');
   n := cardinality(c);
+  v_budget := 2 * n + 1000;
   WHILE i <= n LOOP
     ch := c[i];
     -- Plain text up to the next character that can mean something.
@@ -152,7 +162,8 @@ BEGIN
       -- The closing run: exactly as long, on the same line.
       j := i + v_run;
       v_close := -1;
-      WHILE j <= n AND c[j] <> E'\n' LOOP
+      WHILE j <= n AND c[j] <> E'\n' AND v_budget > 0 LOOP
+        v_budget := v_budget - 1;
         IF c[j] = '`' THEN
           r := 1;
           WHILE j + r <= n AND c[j + r] = '`' LOOP
@@ -197,12 +208,13 @@ BEGIN
     END IF;
     IF ch = '[' THEN
       o := o || '['::text;
-      lbs := lbs || cardinality(o);
+      v_top := v_top + 1;
+      lbs[v_top] := cardinality(o);
       i := i + 1;
       CONTINUE;
     END IF;
     IF ch = ']' THEN
-      v_lb := CASE WHEN cardinality(lbs) > 0 THEN lbs[cardinality(lbs)] END;
+      v_lb := CASE WHEN v_top > 0 THEN lbs[v_top] END;
       v_ok := false;
       IF v_lb IS NOT NULL AND i < n AND c[i + 1] = '(' AND v_np < v_lb AND cardinality(o) > v_lb THEN
         -- The destination (parse.ts parseDestination).
@@ -210,7 +222,8 @@ BEGIN
         v_href := '';
         IF j <= n AND c[j] = '<' THEN
           j := j + 1;
-          WHILE j <= n AND c[j] <> '>' LOOP
+          WHILE j <= n AND c[j] <> '>' AND v_budget > 0 LOOP
+            v_budget := v_budget - 1;
             EXIT WHEN c[j] = E'\n' OR c[j] = '<';
             IF c[j] = '\' AND j < n AND c[j + 1] ~ '^[!-/:-@\[-`{-~]$' THEN
               v_href := v_href || c[j + 1];
@@ -226,7 +239,8 @@ BEGIN
           END IF;
         ELSE
           v_depth := 0;
-          WHILE j <= n LOOP
+          WHILE j <= n AND v_budget > 0 LOOP
+            v_budget := v_budget - 1;
             EXIT WHEN c[j] ~ '[[:space:]]' OR ascii(c[j]) < 32;
             IF c[j] = '\' AND j < n AND c[j + 1] ~ '^[!-/:-@\[-`{-~]$' THEN
               v_href := v_href || c[j + 1];
@@ -250,18 +264,18 @@ BEGIN
           IF m IS NOT NULL AND (m[2] IS NOT NULL OR public.chat__is_iso_day(m[1])) THEN
             -- `[title](moduo://…)`: the title is never stored or drawn.
             o := o[1:v_lb - 1];
-            k := 1;
-            WHILE k <= cardinality(d_pos) LOOP
-              IF d_pos[k] >= v_lb THEN
-                d_pos := d_pos[1:k - 1] || d_pos[k + 1:];
-                d_ch := d_ch[1:k - 1] || d_ch[k + 1:];
-                d_n := d_n[1:k - 1] || d_n[k + 1:];
-                d_open := d_open[1:k - 1] || d_open[k + 1:];
-                d_close := d_close[1:k - 1] || d_close[k + 1:];
-              ELSE
-                k := k + 1;
-              END IF;
+            -- Markers inside the dropped title go too (d_pos is in o order).
+            k := cardinality(d_pos);
+            WHILE k > 0 AND d_pos[k] >= v_lb LOOP
+              k := k - 1;
             END LOOP;
+            IF k < cardinality(d_pos) THEN
+              d_pos := d_pos[1:k];
+              d_ch := d_ch[1:k];
+              d_n := d_n[1:k];
+              d_open := d_open[1:k];
+              d_close := d_close[1:k];
+            END IF;
           ELSIF m IS NULL AND v_href ~* '^(https?://[^[:space:]]+|mailto:[^[:space:]]+)$'
                 AND v_href !~ '[\x01-\x1f\x7f]' THEN
             o[v_lb] := '';
@@ -270,14 +284,14 @@ BEGIN
           END IF;
         END IF;
         IF v_ok THEN
-          lbs := '{}';
+          v_top := 0;   -- an earlier '[' can't open a link around this one
           v_np := cardinality(o);
           i := j + 1;
           CONTINUE;
         END IF;
       END IF;
       IF v_lb IS NOT NULL THEN
-        lbs := lbs[1:cardinality(lbs) - 1];
+        v_top := v_top - 1;
       END IF;
       o := o || ']'::text;
       i := i + 1;
@@ -311,28 +325,34 @@ BEGIN
   END LOOP;
   -- A marker with no partner of its character (an opener with no closer after it,
   -- a closer with no opener before it) is text, as the client reads it (`**open`).
-  FOR k IN 1 .. coalesce(cardinality(d_pos), 0) LOOP
-    v_ok := false;
-    IF d_open[k] THEN
-      FOR q IN k + 1 .. cardinality(d_pos) LOOP
-        IF d_ch[q] = d_ch[k] AND d_close[q] THEN
-          v_ok := true;
-          EXIT;
-        END IF;
-      END LOOP;
-    END IF;
-    IF NOT v_ok AND d_close[k] THEN
-      FOR q IN 1 .. k - 1 LOOP
-        IF d_ch[q] = d_ch[k] AND d_open[q] THEN
-          v_ok := true;
-          EXIT;
-        END IF;
-      END LOOP;
-    END IF;
-    IF NOT v_ok THEN
-      o[d_pos[k]] := repeat(d_ch[k], d_n[k]);
-    END IF;
-  END LOOP;
+  -- Two linear passes: closers seen from the right, openers from the left.
+  k := coalesce(cardinality(d_pos), 0);
+  IF k > 0 THEN
+    d_keep := array_fill(false, ARRAY[k]);
+    v_seen_star := false;
+    v_seen_tilde := false;
+    FOR j IN REVERSE k .. 1 LOOP
+      IF d_open[j] AND (CASE d_ch[j] WHEN '*' THEN v_seen_star ELSE v_seen_tilde END) THEN
+        d_keep[j] := true;
+      END IF;
+      IF d_close[j] THEN
+        IF d_ch[j] = '*' THEN v_seen_star := true; ELSE v_seen_tilde := true; END IF;
+      END IF;
+    END LOOP;
+    v_seen_star := false;
+    v_seen_tilde := false;
+    FOR j IN 1 .. k LOOP
+      IF d_close[j] AND (CASE d_ch[j] WHEN '*' THEN v_seen_star ELSE v_seen_tilde END) THEN
+        d_keep[j] := true;
+      END IF;
+      IF d_open[j] THEN
+        IF d_ch[j] = '*' THEN v_seen_star := true; ELSE v_seen_tilde := true; END IF;
+      END IF;
+      IF NOT d_keep[j] THEN
+        o[d_pos[j]] := repeat(d_ch[j], d_n[j]);
+      END IF;
+    END LOOP;
+  END IF;
   RETURN array_to_string(o, '');
 END
 $fn$;
@@ -918,12 +938,19 @@ GRANT ALL ON public.chat_messages TO service_role;
 
 -- ── 6. Who reads a conversation (CH4a, §2.25 a) ─────────────────────────────
 
--- A person reads a conversation when (the workspace part) they are in the
--- workspace, it isn't deleted and their role has Chat at View, and (the
--- conversation part) it is live and either a public channel or one they are in
--- and haven't left. The plan is not asked: history stays readable while chat is
--- paused; every write still asks it (chat_op__guard). CV-19's
+-- A person reads a conversation when (the workspace part) the workspace isn't
+-- deleted and they own it or are in it with Chat at View (perm_user_has's rule),
+-- and (the conversation part) it is live and either a public channel or one they
+-- are in and haven't left. The plan is not asked: history stays readable while
+-- chat is paused; every write still asks it (chat_op__guard). CV-19's
 -- chat__readable_channel_ids must say exactly this, set-based.
+--
+-- Written out in both functions below, with no nested definer call: the RLS
+-- policies call chat_can_read_channel once per row, and each nested SECURITY
+-- DEFINER hop (chat_is_workspace_member, perm_user_has, perm_is_owner) cost
+-- ~100 µs a row (3,032 rows: 406 ms; written out: 23 ms). chat_foundation.test.sql
+-- asserts both agree with each other and with perm_user_has for every person
+-- and conversation of its cast.
 CREATE OR REPLACE FUNCTION public.chat__can_read_channel_as(p_channel_id uuid, p_user uuid)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -935,8 +962,10 @@ AS $fn$
       JOIN public.workspaces w ON w.id = c.workspace_id AND w.deleted_at IS NULL
      WHERE c.id = p_channel_id
        -- the workspace part
-       AND public.chat_is_workspace_member(c.workspace_id, p_user)
-       AND public.perm_user_has(c.workspace_id, p_user, 'chat.view')
+       AND (w.owner_id = p_user
+            OR EXISTS (SELECT 1 FROM public.workspace_members wm
+                        WHERE wm.workspace_id = c.workspace_id AND wm.user_id = p_user
+                          AND 'chat.view' = ANY (wm.perms)))
        -- the conversation part
        AND c.deleted_at IS NULL
        AND ((c.kind = 'channel' AND NOT c.is_private)
@@ -944,13 +973,26 @@ AS $fn$
                         WHERE m.channel_id = c.id AND m.user_id = p_user AND m.left_at IS NULL)))
 $fn$;
 
--- The RLS read rule of every chat table, the signed-in person's reading.
+-- The RLS read rule of every chat table: the signed-in person's reading (the
+-- same rule as chat__can_read_channel_as, for auth.uid()).
 CREATE OR REPLACE FUNCTION public.chat_can_read_channel(p_channel_id uuid)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
-  SELECT public.chat__can_read_channel_as(p_channel_id, auth.uid())
+  SELECT auth.uid() IS NOT NULL AND EXISTS (
+    SELECT 1
+      FROM public.chat_channels c
+      JOIN public.workspaces w ON w.id = c.workspace_id AND w.deleted_at IS NULL
+     WHERE c.id = p_channel_id
+       AND (w.owner_id = auth.uid()
+            OR EXISTS (SELECT 1 FROM public.workspace_members wm
+                        WHERE wm.workspace_id = c.workspace_id AND wm.user_id = auth.uid()
+                          AND 'chat.view' = ANY (wm.perms)))
+       AND c.deleted_at IS NULL
+       AND ((c.kind = 'channel' AND NOT c.is_private)
+            OR EXISTS (SELECT 1 FROM public.chat_members m
+                        WHERE m.channel_id = c.id AND m.user_id = auth.uid() AND m.left_at IS NULL)))
 $function$;
 
 -- "Can this person see it", for notifications and the spine: conversations and
@@ -1336,10 +1378,11 @@ BEGIN
       RAISE EXCEPTION 'public.% must not be callable by clients.', fn;
     END IF;
   END LOOP;
-  -- The generated column calls chat__unaccent as whoever writes the row: pure,
-  -- so signed-in people keep it (gotchas §Supabase: CHECK/policy/trigger helpers).
-  REVOKE ALL ON FUNCTION public.chat__unaccent(text) FROM PUBLIC, anon;
-  GRANT EXECUTE ON FUNCTION public.chat__unaccent(text) TO authenticated, service_role;
+  -- The generated column calls chat__unaccent as whoever writes the row: the
+  -- ops (definer, run as their owner) and the service role. Signed-in people
+  -- can't write chat tables directly, so they don't need it as an RPC either.
+  REVOKE ALL ON FUNCTION public.chat__unaccent(text) FROM PUBLIC, anon, authenticated;
+  GRANT EXECUTE ON FUNCTION public.chat__unaccent(text) TO service_role;
   -- The read rules the policies call.
   FOREACH fn IN ARRAY ARRAY[
     'chat_can_read_channel(uuid)',
@@ -1352,8 +1395,9 @@ BEGIN
       RAISE EXCEPTION 'Grants on public.% are not as intended: signed-in people, never anon.', fn;
     END IF;
   END LOOP;
-  IF has_function_privilege('anon', 'public.chat__unaccent(text)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'public.chat__unaccent must not be callable by anon.';
+  IF has_function_privilege('anon', 'public.chat__unaccent(text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.chat__unaccent(text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'public.chat__unaccent must not be callable by clients.';
   END IF;
   -- Tables: signed-in people read through RLS and write nothing.
   IF has_table_privilege('authenticated', 'public.chat_catchup', 'INSERT')

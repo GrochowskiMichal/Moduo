@@ -402,6 +402,52 @@ describe("chat vocabularies", () => {
   });
 });
 
+describe("chat v2 vocabularies (CV-1)", () => {
+  it("mirror the …_chat_v2_foundation CHECKs", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CHAT_MESSAGE_KINDS]).toEqual(["message", "event"]);
+    expect([...v.CHAT_EVENT_TYPES]).toEqual(["moved_out", "moved_in"]);
+    expect([...v.CHAT_CATCHUP_REASONS]).toEqual([
+      "dm",
+      "mention",
+      "team_mention",
+      "everyone",
+      "reply",
+      "announcement",
+      "every_message",
+      "reminder",
+      "added",
+      "removed",
+      "level_reset",
+    ]);
+    expect([...v.CHAT_CATCHUP_DONE_HOW]).toEqual(["done", "read", "bell", "closed"]);
+  });
+  it("parse strictly for writes", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.parseChatMessageKind("event").success).toBe(true);
+    expect(v.parseChatMessageKind("note").success).toBe(false);
+    expect(v.parseChatEventType("moved_in").success).toBe(true);
+    expect(v.parseChatEventType("copied").success).toBe(false);
+    expect(v.parseChatCatchupReason("level_reset").success).toBe(true);
+    expect(v.parseChatCatchupReason("gossip").success).toBe(false);
+    expect(v.parseChatCatchupDoneHow("bell").success).toBe(true);
+    expect(v.parseChatCatchupDoneHow("ignored").success).toBe(false);
+  });
+  it("normalize reads: unknown kinds are messages, unknown events and reasons are skipped", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeChatMessageKind(undefined)).toBe("message");
+    expect(v.normalizeChatMessageKind("event")).toBe("event");
+    expect(v.normalizeChatEventType("huddle_started")).toBeNull();
+    expect(v.normalizeChatEventType("moved_out")).toBe("moved_out");
+    expect(v.normalizeChatCatchupReason("gossip")).toBeNull();
+    expect(v.normalizeChatCatchupReason("dm")).toBe("dm");
+    expect(v.normalizeChatCatchupDoneHow(null)).toBeNull();
+    expect(v.normalizeChatCatchupDoneHow("snoozed")).toBe("done");
+    expect(v.isChatCatchupDoneHow("read")).toBe(true);
+    expect(v.isChatEventType(42)).toBe(false);
+  });
+});
+
 describe("MCP key scopes: modules, maps and strict parses", () => {
   it("lists the key modules in key-card order, Links last", async () => {
     const v = await import("./vocabularies.ts");
