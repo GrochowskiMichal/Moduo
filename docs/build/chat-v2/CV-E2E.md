@@ -1,6 +1,6 @@
 # CV-E2E — e2e isolation across worktrees
 
-> Branch `t/maciej/cv-e2e-isolation` · head `<sha>` · status: built, not landed (cut from `b22678e4`; the build branch has moved on, so land it with a merge, never by taking this tree)
+> Branch `t/maciej/cv-e2e-isolation` · head: the branch tip (the hand-back names it) · status: built, not landed (cut from `b22678e4`; the build branch has moved on, so land it with a merge, never by taking this tree)
 > Migration: none. App code: none. Touches `playwright.config.ts`, `scripts/agent/`, `tests/support/local-stack.ts` and the runbook's step 3 only.
 
 ## Delivered against the row
