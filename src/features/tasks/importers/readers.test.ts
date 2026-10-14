@@ -107,6 +107,32 @@ describe("Trello", () => {
   const plan = read("trello-launch.json", "Europe/Warsaw");
   const project = plan.projects[0]!;
 
+  it("numbers members the board doesn't name, one person each", () => {
+    const board = {
+      name: "Side board",
+      lists: [{ id: "l1", name: "To Do", pos: 1 }],
+      members: [{ id: "m-known", fullName: "Dana Park" }],
+      cards: [
+        { id: "c1", name: "First", idList: "l1", idMembers: ["m-gone-a"], pos: 1 },
+        { id: "c2", name: "Second", idList: "l1", idMembers: ["m-gone-b"], pos: 2 },
+        { id: "c3", name: "Third", idList: "l1", idMembers: ["m-gone-a"], pos: 3 },
+        { id: "c4", name: "Fourth", idList: "l1", idMembers: ["m-known"], pos: 4 },
+      ],
+    };
+    const res = readImportText("side.json", JSON.stringify(board), {
+      zone: "Europe/Warsaw",
+      now: NOW,
+    });
+    if (!res.ok) throw new Error(res.message);
+    const who = (title: string) => task(res.plan, title).assignee?.name;
+    expect(["First", "Second", "Third", "Fourth"].map(who)).toEqual([
+      "Trello member 1",
+      "Trello member 2",
+      "Trello member 1",
+      "Dana Park",
+    ]);
+  });
+
   it("makes open lists statuses with a guessed category", () => {
     expect(project.name).toBe("Website launch");
     expect(project.statuses).toEqual([

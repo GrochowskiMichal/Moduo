@@ -312,3 +312,32 @@ export function upcomingForHome(
   const scope = tasks.filter((t) => isOpenTask(t) && inUpcoming(t, coverage, now));
   return upcomingGroups(orderUpcoming(scope, projectRank), now).filter((g) => g.tasks.length > 0);
 }
+
+/** The days the Upcoming widget draws, and how many tasks didn't fit. */
+export type FittedUpcoming = {
+  shown: Array<{ key: string; label: string; count: number; rows: Task[] }>;
+  hidden: number;
+};
+
+/**
+ * Fill `rows` lines with the days in order: a day's header takes a line, and
+ * a day starts only when its header and at least one task fit. What's left
+ * over is the "+n more".
+ */
+export function fitUpcoming(groups: readonly TaskGroup[], rows: number): FittedUpcoming {
+  let left = rows;
+  let hidden = 0;
+  const shown: FittedUpcoming["shown"] = [];
+  for (const g of groups) {
+    if (left <= 1) {
+      hidden += g.tasks.length;
+      continue;
+    }
+    left -= 1;
+    const taken = g.tasks.slice(0, left);
+    left -= taken.length;
+    hidden += g.tasks.length - taken.length;
+    shown.push({ key: g.key, label: g.label, count: g.tasks.length, rows: taken });
+  }
+  return { shown, hidden };
+}

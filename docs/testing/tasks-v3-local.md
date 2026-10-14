@@ -1,7 +1,7 @@
 # Tasks v3 on this Mac: testing guide
 
 > Written 2026-10-14 · branch `t/maciej/tasks-v3-build` (integration head) · **Live-verified:** yes, a full walkthrough on the local stack in headless Chromium at 1440×900, dark theme.
-> Everything here runs on the local stack. None of Tasks v3's migrations are on prod.
+> **Released 2026-10-14:** the migrations are on prod and app.moduo.app runs this build. This guide still works on the local stack.
 > **Screenshots** (local, not in git): `docs/local/tasks-v3-walkthrough/` in the `tasks-module-research` worktree. The links below work when you open this file there.
 
 ## 1. Open and sign in
@@ -103,14 +103,7 @@
 ## 3. Known gaps
 
 - **Deferred on purpose:** [tasks-v3-polish-deferred.md](./tasks-v3-polish-deferred.md). Each one has a recommendation.
-- **Seen in this walkthrough, not fixed yet:**
-  - **Home's Upcoming widget** (small): shows one task and "+2 more", with most of the widget empty.
-  - **Timeline drag:** the old hover label ("Due Tue, Oct 20") stays on screen next to the new date while you drag (screenshot 11).
-  - **Timeline zoom:** going from Quarter to Month once left Today just off the left edge; Today brings it back.
-  - **Project overview:** on the Client row, the edit pencil sits on its own line under the client chip (screenshot 12).
-  - **Imported descriptions:** Markdown lists ("- short", "- long") arrive as plain lines, not a list (screenshot 3).
-  - **Capture:** the tag suggestions open past the dialog's right edge.
-  - **Console only:** a new person's first Tasks open logs three failed reads for a teaching task that isn't saved yet. Nothing shows on screen.
+- **Seen in this walkthrough, not fixed yet** (the seven Tasks items were fixed in polish batch 2, `t/maciej/tv-polish-2`: [t-maciej-tv-polish-2.md](./t-maciej-tv-polish-2.md)):
   - **Local setup only:**
     - Signing in logs a failed trial start: the local functions have no Stripe test key.
     - The local functions' `PUBLIC_APP_URL` says port 8081, so links they build (invites) point at 8081, not 8100.
@@ -118,9 +111,8 @@
 
 ## 4. Not in this build
 
-- **The release itself:** none of v3's migrations are on prod, and nothing here is deployed.
 - **TV-D7, contract cleanup:** it drops the old columns and mirrors after the release (≥2 desktop releases and 14 days after TV-D9 ships).
-- **TV-SEC1:** it stays on its own branch until the release. The local database already has its migration.
+- **TV-SEC1:** shipped with the release (#364).
 
 ## 5. Release order
 

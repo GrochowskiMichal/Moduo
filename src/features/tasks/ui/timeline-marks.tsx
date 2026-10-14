@@ -14,7 +14,15 @@
 // cursor and no ends to resize (`editable`, worked out by the view, TL2-14).
 
 import { CircleCheck, Repeat } from "lucide-react";
-import { createContext, useContext, useMemo, useSyncExternalStore } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { normalizeLabelColor } from "../../../components/tag-colors";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -36,7 +44,12 @@ import {
   xOfDay,
 } from "../timeline-scale";
 import { spanWords } from "../timeline-words";
-import { useDragFor, useHoverDay, usePointDelta } from "./timeline-drag-store";
+import {
+  TimelineCanvasContext,
+  useDragFor,
+  useHoverDay,
+  usePointDelta,
+} from "./timeline-drag-store";
 
 // ── Shared geometry ──────────────────────────────────────────────────────────
 
@@ -172,6 +185,29 @@ function HintButton({ label, onClick }: { label: string; onClick: () => void }) 
   );
 }
 
+/**
+ * A mark's hover text, shut while any drag runs: the canvas starts a drag
+ * (not the mark), so the tooltip never hears the press and its old date would
+ * stand beside the drag's own label. Only an open one listens to the canvas.
+ */
+export function MarkTooltip({ label, children }: { label: ReactNode; children: ReactNode }) {
+  const canvas = useContext(TimelineCanvasContext);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    if (canvas.getDrag()) setOpen(false);
+    return canvas.subscribe(() => {
+      if (canvas.getDrag()) setOpen(false);
+    });
+  }, [open, canvas]);
+  return (
+    <Tooltip open={open} onOpenChange={(next) => setOpen(next && canvas.getDrag() === null)}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 // ── A task's point ───────────────────────────────────────────────────────────
 
 /** How a point is coloured when Colour by asks (REPLAN 71). */
@@ -232,29 +268,26 @@ export function TaskPointMark({
                 : "bg-muted-foreground";
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            data-timeline-mark="point"
-            data-task-id={taskId}
-            data-late={point.late || undefined}
-            data-label={!done && colorBy === "project" && tone.hue ? tone.hue : undefined}
-            data-editable={editable || undefined}
-            aria-hidden
-            className={cn(
-              POINT,
-              fill,
-              done && "flex items-center justify-center bg-card text-primary",
-              selected && "shadow-[0_0_0_2px_var(--card),0_0_0_4px_var(--timeline-outline)] ring-0",
-              editable && "cursor-grab",
-            )}
-            style={{ left }}
-          >
-            {done ? <CircleCheck className="size-icon-xs" aria-hidden /> : null}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
+      <MarkTooltip label={label}>
+        <span
+          data-timeline-mark="point"
+          data-task-id={taskId}
+          data-late={point.late || undefined}
+          data-label={!done && colorBy === "project" && tone.hue ? tone.hue : undefined}
+          data-editable={editable || undefined}
+          aria-hidden
+          className={cn(
+            POINT,
+            fill,
+            done && "flex items-center justify-center bg-card text-primary",
+            selected && "shadow-[0_0_0_2px_var(--card),0_0_0_4px_var(--timeline-outline)] ring-0",
+            editable && "cursor-grab",
+          )}
+          style={{ left }}
+        >
+          {done ? <CircleCheck className="size-icon-xs" aria-hidden /> : null}
+        </span>
+      </MarkTooltip>
       {point.repeat ? (
         <Repeat
           aria-hidden
@@ -438,27 +471,24 @@ export function SectionDiamond({
   const x = dayCenterX(range, dw, at);
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <svg
-            data-timeline-mark="diamond"
-            data-section-id={sectionId}
-            viewBox="0 0 14 14"
-            strokeWidth={2}
-            paintOrder="stroke"
-            aria-hidden
-            className={cn(
-              "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-visible fill-muted-foreground stroke-card",
-              small ? "size-2.5" : "size-3.5",
-              editable && "cursor-grab",
-            )}
-            style={{ left: x }}
-          >
-            <path d={DIAMOND_PATH} />
-          </svg>
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
+      <MarkTooltip label={label}>
+        <svg
+          data-timeline-mark="diamond"
+          data-section-id={sectionId}
+          viewBox="0 0 14 14"
+          strokeWidth={2}
+          paintOrder="stroke"
+          aria-hidden
+          className={cn(
+            "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-visible fill-muted-foreground stroke-card",
+            small ? "size-2.5" : "size-3.5",
+            editable && "cursor-grab",
+          )}
+          style={{ left: x }}
+        >
+          <path d={DIAMOND_PATH} />
+        </svg>
+      </MarkTooltip>
       {drag && !small ? (
         <DragLabel x={x + 12} text={`Ends ${formatWeekdayDate(dateOfDay(at))}`} />
       ) : null}
@@ -513,54 +543,51 @@ export function ProjectBarMark({
   const solid = bar.solid || drag !== null;
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span
-            data-timeline-mark="bar"
-            data-project-id={projectId}
-            data-solid={solid || undefined}
-            data-label={normalizeLabelColor(color)}
-            aria-hidden
-            className={cn(
-              // `overflow-clip`, not hidden: it rounds the corners without
-              // becoming a scroll box, so a segment's name can stick in view.
-              "absolute top-1/2 h-(--ctrl-h-xs) -translate-y-1/2 overflow-clip rounded-sm",
-              // Worked out from its work: an outline over the faintest fill, so a
-              // bar wider than the screen still reads as a bar, not two lines.
-              solid ? "bg-timeline-bar" : "border border-timeline-outline bg-timeline-band",
-              muted && "opacity-60",
-              editable && "cursor-grab",
-            )}
-            style={{ left, width: Math.max(width, 4) }}
-          >
-            {bar.segments.map((s) => {
-              // Sections keep their own dates when the project's move.
-              const segLeft = (s.start - span.start) * dw;
-              // A quiet gap between phases that touch (68a).
-              const segWidth = Math.max(1, (s.end - s.start + 1) * dw - 1);
-              return (
-                <span
-                  key={s.sectionId}
-                  data-section-id={s.sectionId}
-                  className="absolute inset-y-0 flex items-center overflow-clip bg-timeline-segment font-sans text-2xs font-medium whitespace-nowrap text-foreground"
-                  style={{ left: segLeft, width: segWidth }}
-                >
-                  {fits(s.name, segWidth) ? <span className="px-2">{s.name}</span> : null}
-                </span>
-              );
-            })}
-            <span className="tag-dot absolute inset-y-0 left-0 z-[1] w-[3px]" />
-            {share > 0 ? (
+      <MarkTooltip label={label}>
+        <span
+          data-timeline-mark="bar"
+          data-project-id={projectId}
+          data-solid={solid || undefined}
+          data-label={normalizeLabelColor(color)}
+          aria-hidden
+          className={cn(
+            // `overflow-clip`, not hidden: it rounds the corners without
+            // becoming a scroll box, so a segment's name can stick in view.
+            "absolute top-1/2 h-(--ctrl-h-xs) -translate-y-1/2 overflow-clip rounded-sm",
+            // Worked out from its work: an outline over the faintest fill, so a
+            // bar wider than the screen still reads as a bar, not two lines.
+            solid ? "bg-timeline-bar" : "border border-timeline-outline bg-timeline-band",
+            muted && "opacity-60",
+            editable && "cursor-grab",
+          )}
+          style={{ left, width: Math.max(width, 4) }}
+        >
+          {bar.segments.map((s) => {
+            // Sections keep their own dates when the project's move.
+            const segLeft = (s.start - span.start) * dw;
+            // A quiet gap between phases that touch (68a).
+            const segWidth = Math.max(1, (s.end - s.start + 1) * dw - 1);
+            return (
               <span
-                className="absolute bottom-0 left-0 z-[1] h-0.5 bg-timeline-progress"
-                style={{ width: `${share * 100}%` }}
-              />
-            ) : null}
-            {editable ? <SpanEdges width={width} /> : null}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>{label}</TooltipContent>
-      </Tooltip>
+                key={s.sectionId}
+                data-section-id={s.sectionId}
+                className="absolute inset-y-0 flex items-center overflow-clip bg-timeline-segment font-sans text-2xs font-medium whitespace-nowrap text-foreground"
+                style={{ left: segLeft, width: segWidth }}
+              >
+                {fits(s.name, segWidth) ? <span className="px-2">{s.name}</span> : null}
+              </span>
+            );
+          })}
+          <span className="tag-dot absolute inset-y-0 left-0 z-[1] w-[3px]" />
+          {share > 0 ? (
+            <span
+              className="absolute bottom-0 left-0 z-[1] h-0.5 bg-timeline-progress"
+              style={{ width: `${share * 100}%` }}
+            />
+          ) : null}
+          {editable ? <SpanEdges width={width} /> : null}
+        </span>
+      </MarkTooltip>
       {drag ? <DragLabel x={left + width + 8} text={spanWords(span.start, span.end)} /> : null}
       {showMilestones
         ? bar.milestones.map((m) => (

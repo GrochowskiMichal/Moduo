@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
 - 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
@@ -23,6 +24,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-14 · Chat v1 per-person sending and typing limits: 10 messages per 10 s and 30 per 60 s per person per workspace (a workspace's apps share one budget), refused with `PT429` (a send waits at most 2 s for the previous one); "typing" at most once per 2.5 s per person and conversation, and a stop only once, to close a start that went out.
 - 2026-10-14 · Chat v1 privacy rules: a conversation's registry and activity rows follow its read rule, typing is one server-written private topic per conversation, `chat_caps_get` answers members only, announcement mode needs a readable channel and never a DM.
 - 2026-10-13 · SEC2: workspaces are created only for the signed-in person, and the free plan's one-workspace limit is enforced in the database.
 - 2026-10-10 · A project's owner, workspace and Inbox flag and a tag's owner are fixed, rows never change workspace, tags and dependencies follow the items they're on, and the Edit an assignment gives goes when it ends.
@@ -235,6 +237,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 (agent's choices): Home's Upcoming fills its cell and its "+n more" opens Upcoming (`?place=upcoming`); Timeline hover labels shut during a drag, a zoom holds Today, a month's name never shows as a fragment, a mixed move names the tasks it skipped; plain-text Markdown bullets read as "•" lines; the `@ # /` menu keeps inside its dialog; an unsaved task reads nothing by its temporary id; small ones (client row, Storage's task link, the Board's "+n", Move's toast after the moves, teaching tasks only in a new workspace, numbered Trello members, no stray entry script) → decisions/tasks.md PL2-1…PL2-9
 - 2026-10-14 · TV-POLISH Tasks v3 polish batch (agent's choices): e2e specs run one at a time (one shared seed workspace), SQL tests set the shared stack's other rows aside; at All and My tasks each project asks for its own Edit (no handles on a view-only one); ⇧L opens a late task's mark; a No date drag over the name column says "Drop on a day"; a reference's tick outside Tasks finishes open subtasks with one Undo; a storage alert opens Storage in its own workspace and a drop's toast offers the owner Upgrade; small dead ends and a missing Undo; the rest listed in docs/testing/tasks-v3-polish-deferred.md → decisions/tasks.md PL-1…PL-8
 - 2026-10-14 · TV-U18 Native importers (v3 block 35, agent's choices): one "Import tasks…" dialog from the sidebar's ⋯, read in the app, with a preview ("7 tasks, 1 project, 2 skipped"), confirmable list categories and "On the way in"; 10 MB, 2,000 tasks, 20 comments a task; each service's mapping (Trello lists → statuses, Jira epics → sections, Linear/Jira/Asana ids kept); a re-run updates words and dates and leaves place and state; priorities on three levels plus a tag for Urgent-like words; assignees matched in the app (your own email, a name one member has) and picked by hand per person in the preview, never looked up on the server; repeats only where Moduo can follow them, else text; comments say who and where and still go with Undo; "Imported from" in the panel's ⋯ → decisions/tasks.md U18-1…U18-9
 - 2026-10-14 · AT-3 Attachments everywhere + Settings → Storage (agent's choices): file marks (no names) join the shared store, so the 📎 counts are live on every task surface and an open strip re-reads on its task's stamp; rows and cards take file drops through one listener and say what happened in one toast; capture makes the task first and its files wait with an offline capture; an unfinished upload lets its space go at once (`attachments_op_abandon`); Settings → Storage shows the pool to owners and admins only and everyone the largest files they can see (Delete with edit access, no counts); the 80/95% notices open it; Has attachments reads the store → decisions/tasks.md AT3D-1…AT3D-8
@@ -339,6 +342,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
 - 2026-10-10 · TX-4: invite-only is a before-user-created hook over three allow sources, a waitlist invite is one queued B1, and a build-updates request outlives the waitlist row
 - 2026-10-09 · TX-3: the outbox queues, retries and suppresses, and the worker's secret lives only in Vault
 - 2026-10-08 · TX-2: sign-in emails go through a Send Email Hook that keeps dashboard invites working, logs without codes, and erases its log with the account

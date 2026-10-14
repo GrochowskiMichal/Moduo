@@ -6,12 +6,11 @@
 // Rows open the task.
 
 import { Paperclip } from "lucide-react";
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, useRef } from "react";
 
 import { MetaCount } from "@/components/ui/meta-count";
 import { filesLabel } from "@/features/attachments/files";
-import { upcomingForHome } from "@/features/tasks/home";
-import type { Task } from "@/features/tasks/model";
+import { fitUpcoming, upcomingForHome } from "@/features/tasks/home";
 import { teamIdsOf } from "@/features/tasks/teams";
 import { upcomingWhen } from "@/features/tasks/upcoming";
 import { nowOn, useToday } from "@/features/tasks/use-today";
@@ -19,6 +18,7 @@ import { useAuth } from "@/providers/auth-provider";
 
 import { useDashboardData } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
+import { useRowsThatFit } from "../../hooks/use-rows-that-fit";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
 import { openEntity, openModuleRoute } from "../../widget-nav";
@@ -37,6 +37,10 @@ export function UpcomingWidget({ size }: WidgetComponentProps) {
   const { userId } = useAuth();
   const density = useDensity();
   const today = useToday();
+  // The rows the cell really holds (a day's header counts as one): the
+  // density budget is only the floor, so a tall cell isn't left mostly empty.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const fits = useRowsThatFit(bodyRef);
 
   const { buckets, teamMembers } = tasks.data;
   const groups = useMemo(() => {
@@ -55,26 +59,15 @@ export function UpcomingWidget({ size }: WidgetComponentProps) {
   if (groups.length === 0) return <WidgetEmpty>Nothing coming up.</WidgetEmpty>;
 
   // Each day's header takes a row of the budget.
-  const budget = widgetRowBudget(size, density);
+  const { shown, hidden } = fitUpcoming(
+    groups,
+    Math.max(widgetRowBudget(size, density), fits ?? 0),
+  );
   const now = new Date();
-  let left = budget;
-  let hidden = 0;
-  const shown: Array<{ key: string; label: string; count: number; rows: Task[] }> = [];
-  for (const g of groups) {
-    if (left <= 1) {
-      hidden += g.tasks.length;
-      continue;
-    }
-    left -= 1;
-    const rows = g.tasks.slice(0, left);
-    left -= rows.length;
-    hidden += g.tasks.length - rows.length;
-    shown.push({ key: g.key, label: g.label, count: g.tasks.length, rows });
-  }
 
   return (
     <WidgetBodyRoot>
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
         {shown.map((g) => (
           <Fragment key={g.key}>
             <WidgetGroupLabel count={g.count}>{g.label}</WidgetGroupLabel>
@@ -105,7 +98,7 @@ export function UpcomingWidget({ size }: WidgetComponentProps) {
           </Fragment>
         ))}
       </div>
-      <WidgetMore count={hidden} onClick={() => openModuleRoute("/tasks")} />
+      <WidgetMore count={hidden} onClick={() => openModuleRoute("/tasks", { place: "upcoming" })} />
     </WidgetBodyRoot>
   );
 }
