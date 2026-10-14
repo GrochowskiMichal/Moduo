@@ -39,6 +39,7 @@ import type { ReactNode } from "react";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { RightPanel } from "../../../components/app/right-panel";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { setRunClaims } from "../../focus/claims";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
@@ -60,6 +61,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   clearTaskTimeShares();
+  setRunClaims(null, new Map());
 });
 
 const INBOX: Bucket = {
@@ -446,14 +448,14 @@ describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
 function renderInRightPanel(
   t: Task,
   a: TasksModuleApi,
-  opts: { onOpenFullPage?: () => void } = {},
+  opts: { onOpenFullPage?: () => void; canEdit?: boolean } = {},
 ) {
   const taskDetails = () => (
     <TaskDetailPanel
       task={t}
       buckets={[APP]}
       inbox={INBOX}
-      canEdit
+      canEdit={opts.canEdit ?? true}
       onRequestCapture={() => {}}
       onSelectTask={() => {}}
       onOpenFullPage={opts.onOpenFullPage}
@@ -545,6 +547,29 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     const menu = await openMore(titleActions());
     fireEvent.click(within(menu).getByRole("menuitem", { name: /Delete/ }));
     expect(a.deleteTask).toHaveBeenCalledWith("t1");
+  });
+
+  it("stays short at its fullest: a viewer, in their Focus, three people on it, one lined up", () => {
+    act(() => setRunClaims("w", new Map([["t1", ["u3", "u4", "u5"]]])));
+    const t = task();
+    const a = api(t, {
+      canEdit: false,
+      queuedTaskIds: new Set(["t1"]),
+      queueClaims: new Map([["t1", ["u2"]]]),
+    });
+    renderInRightPanel(t, a, { onOpenFullPage: () => {}, canEdit: false });
+    const slot = titleActions();
+    // One avatar and "+2" for the three on it; the mark's name says who.
+    const onIt = within(slot).getByRole("img", { name: /are on this$/ });
+    expect(onIt.querySelectorAll("[data-slot=avatar]")).toHaveLength(1);
+    expect(onIt.textContent).toContain("+2");
+    // Mike, who has it lined up, then the viewer's own "In Focus" as an icon:
+    // its words are in its name and tooltip, never on the row.
+    expect(within(slot).getByRole("img", { name: "Also in Mike’s Focus" })).toBeTruthy();
+    const inFocus = within(slot).getByRole("img", { name: "In Focus" });
+    expect(inFocus.textContent).toBe("");
+    expect(slot.textContent).not.toContain("In Focus");
+    expect(labels(slot)).toEqual(["Open full page", "More actions"]);
   });
 
   it("the Project view and a multi-selection show none of the task's actions", () => {

@@ -218,7 +218,7 @@ export function TaskDetailHeader({
           280 px panel has no room left for who's on the task (round-2b
           frame 5 shows ↗ and ⋯ there, frames 2–3 the Focus toggle). */}
       <TitleActions>
-        {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />}
+        {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} max={1} />}
         {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
         {onOpenFullPage ? (
           <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />
@@ -539,13 +539,23 @@ function QueueButton({
 
   if (!canEdit) {
     if (!queued) return claimMark;
+    // The state without the action: an icon on the same rung as ↗ and ⋯, its
+    // words in the tooltip and the name (a label would push ⋯ out at 280 px).
     return (
       <>
         {claimMark}
-        <span className="flex h-(--ctrl-h-sm) shrink-0 items-center gap-1.5 px-1.5 font-sans text-xs text-muted-foreground">
-          <ListChecks className="size-icon-sm text-primary" aria-hidden />
-          In Focus
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="img"
+              aria-label="In Focus"
+              className="flex size-(--ctrl-h-sm) shrink-0 items-center justify-center"
+            >
+              <ListChecks className="size-icon-sm text-primary" aria-hidden />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>In Focus</TooltipContent>
+        </Tooltip>
       </>
     );
   }
