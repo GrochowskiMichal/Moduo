@@ -1,13 +1,13 @@
 # Tasks v3 release rehearsal
 
-> Last run 2026-10-14 on `t/maciej/tv-release-fixes` (from `t/maciej/tasks-v3-build` at `511aa979`, AT-3 included). It used a throwaway Supabase stack only: the shared local stack (54321/54322) was read with read-only sessions and never written, and the cloud project was not touched. The first run on `d6d9f649` found the problems that §2 lists as fixed.
+> Last run 2026-10-14 on `t/maciej/tv-release-fixes` (from `t/maciej/tasks-v3-build` at `363fc9e6`, AT-3 and TV-U18 included). It used a throwaway Supabase stack only: the shared local stack (54321/54322) was read with read-only sessions and never written, and the cloud project was not touched. The first run on `d6d9f649` found the problems that §2 lists as fixed.
 
 ## Summary
 
 | Question | Answer |
 | --- | --- |
 | Do the migrations apply to a fresh database? | **Yes, with the fixes in §2.** In prod's order: the 9 migrations prod received after the snapshot, then the 32 release files. In timestamp order: the 35 repo files newer than the snapshot. No failures and no workarounds. |
-| SQL suite (`supabase/tests`, 35 files) | 35/35 pass in both orders (1,850 checks). |
+| SQL suite (`supabase/tests`, 36 files) | 36/36 pass in both orders (1,871 checks). |
 | Does the release order change the end state? | No. Prod order and timestamp order end identical, apart from the changes prod got from other branches, which the release leaves intact. |
 | Grants on v3 objects | No v3 function is executable by `anon` or `PUBLIC`. Every table v3 creates has RLS and gives clients `SELECT` at most. One flag in §5. |
 | Shared stack vs fresh | Columns, triggers, constraints, indexes, cron jobs and views match. The release files' functions match except one comment line. The other differences are ownership, the snapshot's broader grants on older tables, and work not yet on the integration branch (§6). |
@@ -44,8 +44,8 @@ The shared stack needed nothing re-applied:
 
 | Database | Result |
 | --- | --- |
-| Fresh, prod order | 35/35 files, 1,850 checks |
-| Fresh, timestamp order | 35/35 files, 1,850 checks |
+| Fresh, prod order | 36/36 files, 1,871 checks |
+| Fresh, timestamp order | 36/36 files, 1,871 checks |
 | Shared stack | Not run: the runner writes inside a rolled-back transaction, and the shared stack takes no writes from a rehearsal. Its catalog matches the fresh replay on every release-file object (§6). |
 
 A database built the way `local:reset` builds it (as `supabase_admin`, snapshot restored with the broader default grants) fails 4 grant checks in `focus_runs.test.sql`. The cause is the base, not a migration: prod and the shared stack have those four helpers service-only.
