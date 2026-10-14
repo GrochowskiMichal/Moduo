@@ -392,7 +392,17 @@ export function withNoticeDetails(
 }
 
 /** A deep-link target for a card, or null when the type isn't routable yet. */
-export type NotificationDeepLink = { route: string; entityType: string; entityId: string };
+export type NotificationDeepLink = {
+  route: string;
+  entityType: string;
+  entityId: string;
+  /**
+   * The workspace to open it in, when that matters (a storage alert opens
+   * Settings → Storage in the workspace that raised it, whose owner's pool
+   * it is: AT-3). Absent: the one you're in.
+   */
+  workspaceId?: string;
+};
 
 const ROUTE_BY_TYPE: Record<string, string> = {
   task: "/tasks",
@@ -434,7 +444,13 @@ export function notificationDeepLink(group: NotificationGroup): NotificationDeep
   // page opens: `entityType: "settings"` names the section instead (the
   // entity-open host in app-chrome.tsx opens Settings there).
   if (group.op === "attachments.storage_80" || group.op === "attachments.storage_95") {
-    return { route: "/settings", entityType: "settings", entityId: "storage" };
+    const workspaceId = newestItem(group).workspaceId ?? group.targetId;
+    return {
+      route: "/settings",
+      entityType: "settings",
+      entityId: "storage",
+      ...(workspaceId ? { workspaceId } : {}),
+    };
   }
   // A reminder or a team notice opens its task, not the Inbox it hangs on
   // (TV-D12, TV-D13; several routed tasks open the first).

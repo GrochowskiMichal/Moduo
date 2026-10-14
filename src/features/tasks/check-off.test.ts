@@ -2,9 +2,32 @@
 // finishes a task through the shared store, its open subtasks too, and one
 // Undo puts back only what is still done.
 
-import { describe, expect, it } from "@rstest/core";
+import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
-import { checkOffWithSubtasks, focusAnchor, restoreFocusPlace, undoCheckOff } from "./check-off";
+const said = {
+  labels: [] as string[],
+  onUndo: null as null | (() => void),
+  errors: [] as string[],
+};
+rs.mock("@/lib/undo-toast", () => ({
+  UNDO_TOAST_MS: 8000,
+  undoToast: (label: string, opts: { onUndo: () => void }) => {
+    said.labels.push(label);
+    said.onUndo = opts.onUndo;
+    return 1;
+  },
+}));
+rs.mock("sonner", () => ({
+  toast: Object.assign(() => 1, { error: (text: string) => said.errors.push(text) }),
+}));
+
+import {
+  checkOffWithSubtasks,
+  finishOutsideTasks,
+  focusAnchor,
+  restoreFocusPlace,
+  undoCheckOff,
+} from "./check-off";
 import { makeTask } from "./helpers";
 import type { Task } from "./model";
 
@@ -132,5 +155,110 @@ describe("focusAnchor (Undo puts a task back in Focus where it was)", () => {
     const store = { queueOp: (_o: unknown, op: () => Promise<unknown>) => op() };
     await restoreFocusPlace(store as never, tasks as never, "w1", "c", ["a", "b", "c", "d"]);
     expect(calls).toEqual(["add", "after:a"]);
+  });
+});
+
+describe("finishOutsideTasks (Home's row, a reference's tick outside Tasks)", () => {
+  const parent = task("p");
+  const sub = task("s", { parentId: "p" });
+
+  beforeEach(() => {
+    said.labels = [];
+    said.onUndo = null;
+    said.errors = [];
+  });
+
+  function surface(refuse: ReadonlySet<string> = new Set()) {
+    const store = fakeStore(refuse);
+    const shown = new Map<string, Task>();
+    const calls: string[] = [];
+    const deps = {
+      store: {
+        ...store,
+        queueOp: (_o: unknown, op: () => Promise<unknown>) => op(),
+        getSnapshot: () => ({ bundle: { tasks: [...shown.values()] } }),
+      },
+      tasks: {
+        opQueueAdd: async () => {
+          calls.push("add");
+          return [];
+        },
+        opQueueReorder: async () => {
+          calls.push("reorder");
+          return [];
+        },
+      },
+    };
+    return { store, shown, calls, deps };
+  }
+
+  it("finishes its open subtasks too and offers one Undo, Focus place included", async () => {
+    const { store, shown, calls, deps } = surface();
+    await finishOutsideTasks({
+      ...(deps as never as Parameters<typeof finishOutsideTasks>[0]),
+      workspaceId: "w1",
+      task: parent,
+      copy: [parent, sub],
+      lineupBefore: ["p"],
+      sayLone: false,
+    });
+    expect(store.sent.map((s) => s.taskId)).toEqual(["p", "s"]);
+    expect(said.labels).toEqual(["Done · also 1 subtask"]);
+    for (const t of [parent, sub])
+      shown.set(t.id, { ...t, status: "done", statusCategory: "done" });
+    said.onUndo?.();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.sent.slice(2).map((s) => [s.taskId, s.status])).toEqual([
+      ["p", "todo"],
+      ["s", "todo"],
+    ]);
+    expect(calls).toEqual(["add", "reorder"]);
+  });
+
+  it("says nothing for a lone tick that stays on screen, 'Done' for a row that leaves", async () => {
+    const quiet = surface();
+    await finishOutsideTasks({
+      ...(quiet.deps as never as Parameters<typeof finishOutsideTasks>[0]),
+      workspaceId: "w1",
+      task: sub,
+      copy: [sub],
+      lineupBefore: [],
+      sayLone: false,
+    });
+    expect(said.labels).toEqual([]);
+    const loud = surface();
+    await finishOutsideTasks({
+      ...(loud.deps as never as Parameters<typeof finishOutsideTasks>[0]),
+      workspaceId: "w1",
+      task: sub,
+      copy: [sub],
+      lineupBefore: [],
+      sayLone: true,
+    });
+    expect(said.labels).toEqual(["Done"]);
+  });
+
+  it("rejects when the task itself is refused, and counts a refused subtask", async () => {
+    const refused = surface(new Set(["p"]));
+    await expect(
+      finishOutsideTasks({
+        ...(refused.deps as never as Parameters<typeof finishOutsideTasks>[0]),
+        workspaceId: "w1",
+        task: parent,
+        copy: [parent, sub],
+        lineupBefore: [],
+        sayLone: false,
+      }),
+    ).rejects.toThrow("refused");
+    const partly = surface(new Set(["s"]));
+    await finishOutsideTasks({
+      ...(partly.deps as never as Parameters<typeof finishOutsideTasks>[0]),
+      workspaceId: "w1",
+      task: parent,
+      copy: [parent, sub],
+      lineupBefore: [],
+      sayLone: false,
+    });
+    expect(said.errors).toEqual(["Couldn’t finish 1 subtask."]);
   });
 });

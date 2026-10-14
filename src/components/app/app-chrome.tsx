@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
@@ -125,7 +125,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   // AT-2: pending uploads resume for whoever is signed in.
   useUploadQueueBoot(userId ?? null, runtime);
-  const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
+  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace } =
+    useWorkspace();
+  // What a deep link to another workspace needs, without re-adding the listener.
+  const workspaceNav = useRef({ selectedWorkspaceId, workspaces, selectWorkspace });
+  useLayoutEffect(() => {
+    workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
+  });
   // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
   const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
@@ -235,7 +241,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onEntityOpen = (event: Event) => {
-      const detail = (event as CustomEvent<{ type?: string; id?: string; to?: string }>).detail;
+      const detail = (
+        event as CustomEvent<{ type?: string; id?: string; to?: string; workspaceId?: string }>
+      ).detail;
       // A dashboard widget header opens its whole module with an explicit route
       // (no entity id) — navigate directly, bypassing the id-based route map.
       if (detail?.to) {
@@ -246,9 +254,21 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       // or without one (an id-less "open my inbox" from the widget) — let
       // entityOpenTarget decide (it returns null for id-less non-email → toast).
       if (!detail?.type) return;
-      // A settings section, by id (the storage alerts open Settings → Storage, AT-3).
+      // A settings section, by id (the storage alerts open Settings → Storage, AT-3),
+      // in the workspace the link names when it's one of yours: a storage alert
+      // is about that workspace's owner's pool.
       if (detail.type === "settings") {
-        if (isSettingsSectionId(detail.id)) dispatchOpenSettings({ section: detail.id });
+        if (!isSettingsSectionId(detail.id)) return;
+        const nav = workspaceNav.current;
+        const target = detail.workspaceId;
+        if (
+          target &&
+          target !== nav.selectedWorkspaceId &&
+          nav.workspaces.some((w) => w.id === target)
+        ) {
+          nav.selectWorkspace(target);
+        }
+        dispatchOpenSettings({ section: detail.id });
         return;
       }
       const target = entityOpenTarget(detail.type, detail.id ?? "");

@@ -48,7 +48,9 @@ INSERT INTO public.tags (id, workspace_id, owner_id, name) VALUES
 CREATE FUNCTION test.extras_written() RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (SELECT 1 FROM public.tags WHERE name LIKE 'parity-%')
       OR EXISTS (SELECT 1 FROM public.task_reminders r JOIN public.tasks t ON t.id = r.task_id WHERE t.title LIKE 'Parity %')
-      OR EXISTS (SELECT 1 FROM public.import_rows)
+      -- This file's workspaces only: the local stack is shared (an e2e
+      -- import leaves its rows).
+      OR EXISTS (SELECT 1 FROM public.import_rows WHERE workspace_id IN (test.id('W'), test.id('W2')))
 $$;
 -- A create refused alike: the plain op and the sibling (with tags, a
 -- reminder and an import run), as the same key.

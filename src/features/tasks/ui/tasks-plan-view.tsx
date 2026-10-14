@@ -164,7 +164,7 @@ import { useUpcomingView } from "./upcoming-view";
 import { boardDropName } from "./use-board-folds";
 import { useBulkActions } from "./use-bulk-actions";
 import { useInFlight } from "./use-in-flight";
-import { useProjectEditable } from "./use-project-overview-data";
+import { useEditableProjects, useProjectEditable } from "./use-project-overview-data";
 import { useSavedViews } from "./use-saved-views";
 import { useTaskSelection } from "./use-task-selection";
 import { useTasksDisplay } from "./use-tasks-display";
@@ -1667,6 +1667,31 @@ export function TasksPlanView({
   );
   const timelineCanDrag =
     canEdit && !archivedProject && (timelineProjectId === "" || timelineProjectAccess === true);
+  // Across projects (All, My tasks) the same question per project, all at
+  // once: a project shared with you view-only shows no handles there either.
+  // Your own projects and Inboxes aren't asked (a task you handed on, sitting
+  // in someone's Inbox, stays yours to move; the server decides).
+  const timelineAskIds = useMemo(
+    () =>
+      timelineShown && timelineProjectId === "" && canEdit
+        ? buckets
+            .filter(
+              (b) => !b.isSystem && !b.deletedAt && !b.archivedAt && b.ownerId !== currentUserId,
+            )
+            .map((b) => b.id)
+        : [],
+    [timelineShown, timelineProjectId, canEdit, buckets, currentUserId],
+  );
+  const timelineProjectAnswer = useEditableProjects(
+    workspaceId,
+    timelineAskIds,
+    timelineAskIds.length > 0,
+  );
+  const timelineCanDragIn = useMemo(() => {
+    const asked = new Set(timelineAskIds);
+    return (projectId: string) =>
+      !asked.has(projectId) || timelineProjectAnswer(projectId) === true;
+  }, [timelineAskIds, timelineProjectAnswer]);
   // "No date · n" opens the panel on that view (the panel too, if it's closed).
   const openNoDate = useCallback(() => {
     setPanelView(NO_DATE_PANEL_VIEW);
@@ -1825,6 +1850,7 @@ export function TasksPlanView({
         onViewKey={bulk.onKey}
         onOpenNoDate={openNoDate}
         canDrag={timelineCanDrag}
+        canDragIn={timelineCanDragIn}
       />
     ) : (
       <TaskListView
@@ -2235,6 +2261,7 @@ export function TasksPlanView({
                 projects={buckets}
                 inboxId={inbox?.id ?? null}
                 canEdit={timelineCanDrag}
+                canEditIn={timelineCanDragIn}
                 selectedTaskId={selectedTaskId}
                 onOpen={(id) => {
                   setPanelView("details");

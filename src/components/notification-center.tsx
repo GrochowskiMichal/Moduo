@@ -152,7 +152,7 @@ export function NotificationCenter() {
         setHistoryOpen(false);
         window.dispatchEvent(
           new CustomEvent(ENTITY_OPEN_EVENT, {
-            detail: { type: link.entityType, id: link.entityId },
+            detail: { type: link.entityType, id: link.entityId, workspaceId: link.workspaceId },
           }),
         );
       }

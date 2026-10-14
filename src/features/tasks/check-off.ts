@@ -7,9 +7,11 @@
 // offline, like any check-off.
 
 import { legacyTaskStatus, taskCategoryOf, taskStatusWord } from "@contracts/vocabularies";
+import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import type { WorkspaceStore } from "../../lib/sync/store";
+import { undoToast } from "../../lib/undo-toast";
 import { subtasksToFinish } from "./home";
 import type { Task } from "./model";
 
@@ -125,5 +127,53 @@ export function restoreFocusPlace(
     const others = new Set(mine.map((e) => e.taskId).filter((id) => id !== taskId));
     const afterTaskId = focusAnchor(taskId, lineupBefore, others);
     return tasks.opQueueReorder({ workspaceId, taskId, afterTaskId });
+  });
+}
+
+const subtaskWord = (n: number) => (n === 1 ? "1 subtask" : `${n} subtasks`);
+
+/**
+ * Finish a task from outside the Tasks page and say so (call 87): Home's Tasks
+ * widget and a reference's tick (Notes, the bell, Home). Its open subtasks
+ * finish too; "Done · also 2 subtasks" offers one Undo that puts back what is
+ * still done and the task's place in my Focus line-up. A lone check-off says
+ * "Done" only when `sayLone` (Home's row leaves the widget at once; a
+ * reference's tick stays on screen and can be unticked). Rejects when the
+ * task itself is refused (its own fields go back): the caller says so.
+ */
+export async function finishOutsideTasks({
+  store,
+  tasks: taskOps,
+  workspaceId,
+  task,
+  copy,
+  lineupBefore,
+  sayLone,
+}: {
+  store: Pick<WorkspaceStore, "sendStatus" | "queueOp" | "getSnapshot">;
+  tasks: QueueRuntime;
+  workspaceId: string;
+  task: Task;
+  /** The workspace's tasks as shown now (its subtasks are read from here). */
+  copy: readonly Task[];
+  /** My Focus line-up before the check-off (finishing takes it out). */
+  lineupBefore: readonly string[];
+  sayLone: boolean;
+}): Promise<void> {
+  const { subtasks, refused } = await checkOffWithSubtasks(store, task, copy);
+  if (refused > 0) toast.error(`Couldn’t finish ${subtaskWord(refused)}.`);
+  if (subtasks.length === 0 && !sayLone) return;
+  undoToast(subtasks.length > 0 ? `Done · also ${subtaskWord(subtasks.length)}` : "Done", {
+    onUndo: () => {
+      // The store's own copy: the surface may be gone by the time Undo is clicked.
+      const current = (id: string) => store.getSnapshot().bundle.tasks.find((t) => t.id === id);
+      void undoCheckOff(store, [task, ...subtasks], current)
+        .then(async ({ restored, failed }) => {
+          if (failed > 0) toast.error("Couldn’t undo all of that.");
+          if (!restored.includes(task.id) || !lineupBefore.includes(task.id)) return;
+          await restoreFocusPlace(store, taskOps, workspaceId, task.id, lineupBefore);
+        })
+        .catch(() => toast.error("Couldn’t put it back in Focus."));
+    },
   });
 }

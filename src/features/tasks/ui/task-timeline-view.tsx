@@ -152,7 +152,14 @@ type Props = {
    * the project when the place is one. False: no drag handles at all.
    */
   canDrag?: boolean;
+  /**
+   * Across projects (All, My tasks): may this person move dates in this
+   * project? A project shared view-only shows no handles. Absent: all of them.
+   */
+  canDragIn?: (projectId: string) => boolean;
 };
+
+const EVERY_PROJECT = () => true;
 
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_RELATIONS: readonly TaskRelation[] = [];
@@ -256,6 +263,7 @@ export function TaskTimelineView({
   onViewKey,
   onOpenNoDate,
   canDrag: canDragProp,
+  canDragIn = EVERY_PROJECT,
 }: Props) {
   const scopeKey = inbox && selection === inbox.id ? "inbox" : selection;
   const scopeKind = useMemo(() => timelineScopeOf(scopeKey), [scopeKey]);
@@ -654,10 +662,23 @@ export function TaskTimelineView({
   };
 
   // ── Who may move what (TV-TL2) ──────────────────────────────────────────
+  // Across projects, each row asks its own project (TV-TL2): a project shared
+  // with you view-only has no handles, its tasks none either.
   const canDragRow = useCallback(
     (row: TimelineRow) =>
-      canDrag && (row.kind === "task" || row.kind === "section" || row.kind === "project"),
-    [canDrag],
+      canDrag &&
+      (row.kind === "task"
+        ? canDragIn(row.task.bucketId)
+        : row.kind === "section"
+          ? canDragIn(row.projectId)
+          : row.kind === "project"
+            ? canDragIn(row.project.id)
+            : false),
+    [canDrag, canDragIn],
+  );
+  const canMoveTask = useCallback(
+    (task: Task) => canDrag && canDragIn(task.bucketId),
+    [canDrag, canDragIn],
   );
 
   // ── Dependencies (70, 68b) ──────────────────────────────────────────────
@@ -732,7 +753,10 @@ export function TaskTimelineView({
     nameW,
     rowOf: (key) => rowByKey.get(key),
     canDrag: canDragRow,
-    canEditTask: () => canDrag,
+    canEditTask: (id) => {
+      const task = taskById.get(id);
+      return !!task && canMoveTask(task);
+    },
     selection: selectedIds,
   });
   useLayoutEffect(() => {
@@ -742,7 +766,10 @@ export function TaskTimelineView({
       nameW,
       rowOf: (key) => rowByKey.get(key),
       canDrag: canDragRow,
-      canEditTask: () => canDrag,
+      canEditTask: (id) => {
+        const task = taskById.get(id);
+        return !!task && canMoveTask(task);
+      },
       selection: selectedIds,
     };
   });
@@ -760,7 +787,10 @@ export function TaskTimelineView({
     geometry: canvasLive,
     canEdit: canDrag,
     taskOf: (id) => taskById.get(id) ?? null,
-    onDrop: writes.placeTask,
+    onDrop: (id, day) => {
+      const task = taskById.get(id);
+      if (task && canMoveTask(task)) writes.placeTask(id, day);
+    },
   });
   const { setDropRef } = drop;
   const setScroller = useCallback(
@@ -787,6 +817,11 @@ export function TaskTimelineView({
 
   // ── What rows ask for ─────────────────────────────────────────────────
   const [command, setCommand] = useState<{ id: string; command: TaskCommand } | null>(null);
+  // ⇧L opened this task's late mark (68b) from the keyboard; the cursor
+  // moving on closes it.
+  const [lateOpen, setLateOpen] = useState<{ id: string; at: string | null } | null>(null);
+  if (lateOpen && lateOpen.at !== cursorKey) setLateOpen(null);
+  const lateOpenId = lateOpen?.at === cursorKey ? lateOpen.id : null;
   const [editingId, setEditingId] = useState<string | null>(null);
   const refocus = useCallback(() => scrollerRef.current?.focus({ preventScroll: true }), []);
   const latest = useRef({
@@ -841,6 +876,10 @@ export function TaskTimelineView({
       requestCommand: (id, cmd) => setCommand({ id, command: cmd }),
       scrollToDay,
       clearCommand: () => setCommand(null),
+      closeLate: () => {
+        setLateOpen(null);
+        refocus();
+      },
       refocus,
     }),
     [refocus, scrollToDay],
@@ -914,26 +953,40 @@ export function TaskTimelineView({
       // ⌥←/→ (⇧ a week): the selection, or the row under the cursor (70).
       if (!canDrag) return false;
       const several = selectedTasks();
-      if (several.length > 0) writes.shiftTasks(several, shift);
-      else if (row?.kind === "task") writes.shiftTasks([row.task], shift);
-      else if (!row || !writes.shiftRow(row, shift)) return false;
+      if (several.length > 0) {
+        const movable = several.filter(canMoveTask);
+        if (movable.length === 0) return false;
+        writes.shiftTasks(movable, shift);
+      } else if (row?.kind === "task") {
+        if (!canMoveTask(row.task)) return false;
+        writes.shiftTasks([row.task], shift);
+      } else if (!row || !canDragRow(row) || !writes.shiftRow(row, shift)) return false;
       return true;
     }
     switch (action) {
       case "date":
-        if (row?.kind !== "task" || !canDrag) return false;
+        if (row?.kind !== "task" || !canMoveTask(row.task)) return false;
         setCommand({ id: row.task.id, command: "due" });
         return true;
       case "clear-date": {
         if (!canDrag) return false;
         const several = selectedTasks();
-        const targets = several.length > 0 ? several : row?.kind === "task" ? [row.task] : [];
+        const targets = (
+          several.length > 0 ? several : row?.kind === "task" ? [row.task] : []
+        ).filter(canMoveTask);
         if (targets.length === 0) return false;
         writes.clearDue(targets);
         return true;
       }
       case "fit":
         return fitSelection(row);
+      case "late":
+        // The late mark's why and its "Move to …", by keyboard (68b).
+        if (row?.kind !== "task" || !lateMarks.has(row.task.id) || !canMoveTask(row.task)) {
+          return false;
+        }
+        setLateOpen({ id: row.task.id, at: cursorKey });
+        return true;
       case "extend-next":
       case "extend-prev":
         if (!multiSelect || row?.kind !== "task") return false;
@@ -1251,6 +1304,7 @@ export function TaskTimelineView({
                                 contradiction={
                                   row.kind === "task" ? (lateMarks.get(row.task.id) ?? null) : null
                                 }
+                                lateOpen={row.kind === "task" && row.task.id === lateOpenId}
                                 stubs={
                                   row.kind === "task" && row.task.id === selectedTaskId
                                     ? stubs

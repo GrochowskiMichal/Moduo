@@ -61,6 +61,8 @@ export type TimelineRowHandlers = {
   endRename: (taskId: string, title: string | null) => void;
   requestCommand: (taskId: string, command: TaskCommand) => void;
   clearCommand: () => void;
+  /** The late mark ⇧L opened closed: hand the keyboard back. */
+  closeLate: () => void;
   /** Hand the keyboard back to the view (a menu or an editor closed). */
   refocus: () => void;
   /** Scroll sideways to a day (an off-screen hint's click). */
@@ -93,6 +95,8 @@ export type TimelineRowProps = {
   editable: boolean;
   /** A task due before something it waits on (68b). */
   contradiction: Contradiction | null;
+  /** ⇧L opened its late mark (the keyboard's way to its "Move to …"). */
+  lateOpen?: boolean;
   /** The selected task's undrawn line ends. */
   stubs: RowStubs | null;
   /** A task row's finished files (AT-3's 📎 mark beside the title; 0 hides it). */
@@ -395,6 +399,7 @@ function Track({
   handlers,
   editable,
   contradiction,
+  lateOpen = false,
   stubs,
 }: TimelineRowProps) {
   // A row with no date yet shows what a click would set (only to an editor).
@@ -475,6 +480,8 @@ function Track({
                   contradiction={contradiction}
                   editable={editable}
                   onMove={(day) => handlers.moveTaskTo(task.id, day)}
+                  openByKey={lateOpen}
+                  onKeyClose={handlers.closeLate}
                 />
               ) : null}
               <TaskPointMark
@@ -560,6 +567,7 @@ function sameRowProps(a: TimelineRowProps, b: TimelineRowProps): boolean {
     a.actions === b.actions &&
     a.editable === b.editable &&
     a.contradiction === b.contradiction &&
+    !!a.lateOpen === !!b.lateOpen &&
     a.stubs === b.stubs &&
     (a.files ?? 0) === (b.files ?? 0)
   );

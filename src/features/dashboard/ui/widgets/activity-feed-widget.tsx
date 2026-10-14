@@ -93,7 +93,11 @@ export function ActivityFeedWidget({ size }: WidgetComponentProps) {
               )}
               trailing={timeAgo(group.latestAt, now)}
               emphasis={unread}
-              onClick={link ? () => openEntity(link.entityType, link.entityId) : undefined}
+              onClick={
+                link
+                  ? () => openEntity(link.entityType, link.entityId, link.workspaceId)
+                  : undefined
+              }
             />
           );
         })}

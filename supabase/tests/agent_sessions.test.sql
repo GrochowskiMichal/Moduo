@@ -77,7 +77,9 @@ BEGIN
   PERFORM test.ok(r LIKE '%edit access to Tasks%', 'another workspace''s key gets nothing here', r);
   r := test.report('KX', 'T1', '{"state": "working"}', 'W2');
   PERFORM test.ok(r LIKE '%Task not found%', 'nor through its own workspace', r);
-  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.agent_sessions), 'none of those wrote anything');
+  -- This file's workspaces only: the local stack is shared.
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.agent_sessions WHERE workspace_id IN (test.id('W'), test.id('W2'))),
+    'none of those wrote anything');
 
   -- ── The five fields ─────────────────────────────────────────────────────
   r := test.report('K', 'T1', jsonb_build_object('state', 'working', 'note', 'Writing tests', 'step', 3, 'steps', 5,

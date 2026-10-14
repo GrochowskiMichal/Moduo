@@ -19,6 +19,7 @@
 //   ⇧T         fit the selection (its marks in view)
 //   ⇧↑ ⇧↓      extend the selection (TV-U12)
 //   ⌘A         select every task row
+//   ⇧L         a late task's mark (68b): why, and "Move to …" (TV-POLISH)
 
 export type TimelineKeyAction =
   | "next"
@@ -41,7 +42,8 @@ export type TimelineKeyAction =
   | "fit"
   | "extend-next"
   | "extend-prev"
-  | "select-all";
+  | "select-all"
+  | "late";
 
 type Key = Pick<KeyboardEvent, "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey">;
 
@@ -78,6 +80,7 @@ export function timelineKeyAction(event: Key): TimelineKeyAction | null {
   if (event.shiftKey && event.code === "BracketLeft") return "name-column";
   if (event.shiftKey && (event.key === "D" || event.key === "d")) return "clear-date";
   if (event.shiftKey && (event.key === "T" || event.key === "t")) return "fit";
+  if (event.shiftKey && (event.key === "L" || event.key === "l")) return "late";
   switch (event.key) {
     case "ArrowDown":
       return event.shiftKey ? "extend-next" : "next";

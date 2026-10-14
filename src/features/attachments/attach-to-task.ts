@@ -4,50 +4,60 @@
 // task's panel. Problems are facts with one way forward, never red (AT2-4).
 
 import { toast } from "sonner";
+import { getRuntime } from "@/lib/runtime";
 import { getUploadQueue } from "@/lib/uploads";
-import { describeProblem, describeTooLarge, type UploadProblem } from "@/lib/uploads/errors";
+import {
+  describeProblem,
+  describeTooLarge,
+  type ProblemCopy,
+  type UploadProblem,
+} from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
 import { dispatchOpenSettings } from "../settings/settings-events";
 
-/** What one drop's files came to: the line to show, and whether any is on its way. */
+/**
+ * What one drop's files came to: the line to show, whether the pool is full,
+ * and whether to offer Upgrade (only the pool's owner, when a bigger plan
+ * would take the files, the way the task's strip offers it).
+ */
 export function dropSummary(
   items: readonly Pick<UploadView, "fileName" | "sizeBytes" | "state" | "problem">[],
   title: string,
-): { text: string; description: string | null; full: boolean } | null {
+  isOwner = false,
+): { text: string; description: string | null; full: boolean; upgrade: boolean } | null {
   if (items.length === 0) return null;
   const on = `on “${title.trim() || "Untitled"}”`;
   const refused = items.filter((i) => i.state === "rejected" && i.problem);
   const going = items.filter((i) => i.state !== "rejected");
   const full = going.find((i) => i.problem?.kind === "storage_full");
+  const offers = (copy: ProblemCopy | null) => !!copy?.actions.includes("upgrade");
   if (full?.problem) {
-    return {
-      text: describeProblem(full.problem, { fileName: full.fileName, isOwner: false }).text,
-      description: on,
-      full: true,
-    };
+    const copy = describeProblem(full.problem, { fileName: full.fileName, isOwner });
+    return { text: copy.text, description: on, full: true, upgrade: offers(copy) };
   }
-  const refusedLine = (() => {
+  const refusedCopy = ((): ProblemCopy | null => {
     if (refused.length === 0) return null;
     const tooBig = refused.filter((i) => i.problem?.kind === "too_large");
     const first = tooBig[0]?.problem as Extract<UploadProblem, { kind: "too_large" }> | undefined;
     if (first && tooBig.length === refused.length) {
       return describeTooLarge(
         tooBig.map((i) => ({ fileName: i.fileName, sizeBytes: i.sizeBytes })),
-        { perFileBytes: first.perFileBytes, tier: first.tier, isOwner: false },
-      ).text;
+        { perFileBytes: first.perFileBytes, tier: first.tier, isOwner },
+      );
     }
     const one = refused[0];
-    return one?.problem
-      ? describeProblem(one.problem, { fileName: one.fileName, isOwner: false }).text
-      : null;
+    return one?.problem ? describeProblem(one.problem, { fileName: one.fileName, isOwner }) : null;
   })();
+  const refusedLine = refusedCopy?.text ?? null;
+  const upgrade = offers(refusedCopy);
   if (going.length === 0)
-    return { text: refusedLine ?? "Not attached", description: on, full: false };
+    return { text: refusedLine ?? "Not attached", description: on, full: false, upgrade };
   const what = going.length === 1 ? (going[0]?.fileName ?? "1 file") : `${going.length} files`;
   return {
     text: `Attaching ${what}`,
     description: refusedLine ? `${on} · ${refusedLine}` : on,
     full: false,
+    upgrade,
   };
 }
 
@@ -73,13 +83,18 @@ export async function attachFilesToTask({
 }): Promise<void> {
   if (files.length === 0) return;
   const queue = getUploadQueue();
+  // The pool, read once here: the queue weighs the files against it, and the
+  // toast knows whether you own it (only the owner is offered Upgrade).
+  const api = getRuntime()?.attachments;
+  const pool = api ? await api.status(workspaceId).catch(() => null) : null;
   let ids: string[];
   try {
     ids = await queue.add(
       files,
       { workspaceId, entityType: "task", entityId: taskId },
       userId,
-      undefined,
+      // Unread (offline, an older server): the queue tries itself.
+      pool ?? undefined,
       { awaitTask },
     );
   } catch {
@@ -87,7 +102,7 @@ export async function attachFilesToTask({
     return;
   }
   const items = queue.getSnapshot().items.filter((i) => ids.includes(i.id));
-  const summary = dropSummary(items, title);
+  const summary = dropSummary(items, title, pool?.isOwner ?? false);
   if (!summary) return;
   toast(summary.text, {
     ...(summary.description ? { description: summary.description } : {}),
@@ -96,6 +111,11 @@ export async function attachFilesToTask({
       : onOpen
         ? { label: "Open", onClick: onOpen }
         : undefined,
+    ...(summary.upgrade
+      ? {
+          cancel: { label: "Upgrade", onClick: () => dispatchOpenSettings({ section: "billing" }) },
+        }
+      : {}),
   });
   // The toast said why: refused files don't linger as tiles on the task.
   for (const item of items) if (item.state === "rejected") queue.dismiss(item.id);

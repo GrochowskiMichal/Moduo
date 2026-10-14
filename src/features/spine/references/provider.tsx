@@ -16,7 +16,10 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { findWorkspaceStore } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
+import { finishOutsideTasks } from "../../tasks/check-off";
+import { queueEntriesOf } from "../../tasks/queue";
 import { listenTasksLive } from "../../tasks/realtime";
 import { useWorkspace } from "../../workspaces/workspace-context";
 import { ReferenceStoreProvider } from "./context";
@@ -40,9 +43,17 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
     taskKey,
     members,
     canEditTasks,
+    userId,
   });
   useLayoutEffect(() => {
-    latest.current = { runtime, workspaceId: selectedWorkspaceId, taskKey, members, canEditTasks };
+    latest.current = {
+      runtime,
+      workspaceId: selectedWorkspaceId,
+      taskKey,
+      members,
+      canEditTasks,
+      userId,
+    };
   });
 
   // A new person or workspace starts a new cache: nothing carries across.
@@ -76,6 +87,27 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
                 getEntities: (refs) => rt.spine.getEntities({ workspaceId, refs }),
                 setTaskStatus: canEdit
                   ? async (taskId, done) => {
+                      // Done goes through the workspace's shared store, like
+                      // every other check-off (call 87): its open subtasks
+                      // finish too, with one Undo. Reopening is the task alone.
+                      const store = done ? findWorkspaceStore(rt, workspaceId) : null;
+                      const snap = store?.getSnapshot() ?? null;
+                      const task = snap?.bundle.tasks.find((t) => t.id === taskId && !t.deletedAt);
+                      if (store && snap && task) {
+                        await finishOutsideTasks({
+                          store,
+                          tasks: rt.tasks,
+                          workspaceId,
+                          task,
+                          copy: snap.bundle.tasks,
+                          lineupBefore: queueEntriesOf(
+                            snap.queue,
+                            latest.current.userId ?? null,
+                          ).map((e) => e.taskId),
+                          sayLone: false,
+                        });
+                        return;
+                      }
                       await rt.tasks.opSetStatus({
                         workspaceId,
                         taskId,

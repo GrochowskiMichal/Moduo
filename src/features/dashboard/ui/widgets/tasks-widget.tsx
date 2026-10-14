@@ -10,14 +10,13 @@ import { toast } from "sonner";
 import { MetaCount } from "@/components/ui/meta-count";
 import { filesLabel } from "@/features/attachments/files";
 import { useFocusTaskState } from "@/features/focus/timer";
-import { checkOffWithSubtasks, restoreFocusPlace, undoCheckOff } from "@/features/tasks/check-off";
+import { finishOutsideTasks } from "@/features/tasks/check-off";
 import { focusOrOpen } from "@/features/tasks/home";
 import type { Task } from "@/features/tasks/model";
 import { queueEntriesOf } from "@/features/tasks/queue";
 import { teamIdsOf } from "@/features/tasks/teams";
 import { getRuntime } from "@/lib/runtime";
 import { findWorkspaceStore } from "@/lib/sync/store";
-import { undoToast } from "@/lib/undo-toast";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -84,8 +83,6 @@ function TaskRow({
   );
 }
 
-const subtaskWord = (n: number) => (n === 1 ? "1 subtask" : `${n} subtasks`);
-
 export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
   const { tasks: taskSource, taskQueue, taskFiles, workspaceId } = useDashboardData();
   const { userId } = useAuth();
@@ -132,30 +129,17 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
       const store = findWorkspaceStore(runtime, workspaceId);
       if (!store) return;
       // Finishing takes it out of my Focus on the server; Undo puts it back there.
-      const lineupBefore = queueEntriesOf(latest.current.queue, userId).map((e) => e.taskId);
-      void checkOffWithSubtasks(store, task, latest.current.tasks)
-        .then(({ subtasks, refused }) => {
-          if (refused > 0) toast.error(`Couldn’t finish ${subtaskWord(refused)}.`);
-          // Call 87: "Done · also 2 subtasks", one Undo for all of them. The
-          // row leaves the widget at once, so a lone check-off has an Undo too.
-          const label =
-            subtasks.length > 0 ? `Done · also ${subtaskWord(subtasks.length)}` : "Done";
-          undoToast(label, {
-            onUndo: () => {
-              // The store's own copy: Home may be gone by the time Undo is clicked.
-              const current = (id: string) =>
-                store.getSnapshot().bundle.tasks.find((t) => t.id === id);
-              void undoCheckOff(store, [task, ...subtasks], current)
-                .then(async ({ restored, failed }) => {
-                  if (failed > 0) toast.error("Couldn’t undo all of that.");
-                  if (!restored.includes(task.id) || !lineupBefore.includes(task.id)) return;
-                  await restoreFocusPlace(store, runtime.tasks, workspaceId, task.id, lineupBefore);
-                })
-                .catch(() => toast.error("Couldn’t put it back in Focus."));
-            },
-          });
-        })
-        .catch(() => toast.error("Couldn’t complete that task."));
+      // Call 87: "Done · also 2 subtasks", one Undo for all of them. The row
+      // leaves the widget at once, so a lone check-off has an Undo too.
+      void finishOutsideTasks({
+        store,
+        tasks: runtime.tasks,
+        workspaceId,
+        task,
+        copy: latest.current.tasks,
+        lineupBefore: queueEntriesOf(latest.current.queue, userId).map((e) => e.taskId),
+        sayLone: true,
+      }).catch(() => toast.error("Couldn’t complete that task."));
     },
     [canWrite, workspaceId, userId],
   );

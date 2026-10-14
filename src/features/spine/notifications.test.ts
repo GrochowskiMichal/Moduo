@@ -405,12 +405,25 @@ describe("notificationDeepLink", () => {
       const [g] = groupNotifications([
         item({ id: op, createdAt: "x", op, targetType: "workspace", targetId: "w1" }),
       ]);
+      // In the workspace that raised it: the pool is its owner's.
       expect(notificationDeepLink(g)).toEqual({
         route: "/settings",
         entityType: "settings",
         entityId: "storage",
+        workspaceId: "w1",
       });
     }
+    const [other] = groupNotifications([
+      item({
+        id: "o",
+        createdAt: "x",
+        op: "attachments.storage_95",
+        workspaceId: "w2",
+        targetType: "workspace",
+        targetId: "w2",
+      }),
+    ]);
+    expect(notificationDeepLink(other)?.workspaceId).toBe("w2");
     expect(notificationDeepLinkNoun("settings")).toBe("Storage settings");
   });
 

@@ -131,8 +131,35 @@ describe("dropSummary (a row or card drop's one line)", () => {
       ],
       "Fix login",
     );
-    expect(s).toMatchObject({ full: true });
+    expect(s).toMatchObject({ full: true, upgrade: false });
     expect(s?.text).toContain("storage is full");
+  });
+
+  it("offers the pool's owner Upgrade, the way the task's strip does", () => {
+    const full = (tier: string) =>
+      item("a.png", {
+        state: "waiting",
+        problem: { kind: "storage_full", usedBytes: 2, totalBytes: 2, tier },
+      });
+    expect(dropSummary([full("free")], "Fix login", true)).toMatchObject({
+      full: true,
+      upgrade: true,
+    });
+    // Nothing bigger to move to.
+    expect(dropSummary([full("founder")], "Fix login", true)?.upgrade).toBe(false);
+    // 30 MB on Free (20 MB a file): a bigger plan takes it (under the 50 MB cap).
+    const tooBig = item("rec.mov", {
+      state: "rejected",
+      sizeBytes: 30 * 1048576,
+      problem: {
+        kind: "too_large",
+        sizeBytes: 30 * 1048576,
+        perFileBytes: 20 * 1048576,
+        tier: "free",
+      },
+    });
+    expect(dropSummary([tooBig], "Fix login", true)?.upgrade).toBe(true);
+    expect(dropSummary([tooBig], "Fix login", false)?.upgrade).toBe(false);
   });
 
   it("nothing to say for nothing dropped", () => {
