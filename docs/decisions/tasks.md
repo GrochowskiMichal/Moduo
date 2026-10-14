@@ -2,6 +2,62 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
+
+Screen-only, no migration: the seven Tasks gaps the local walkthrough found (`docs/testing/tasks-v3-local.md` §3) and the quick no-migration lines of [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md) whose recommendation held. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **PL2-1 · Home's Upcoming widget fills its cell** → `dashboard/hooks/use-rows-that-fit.ts`, `home.ts` `fitUpcoming`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the widget measures its body and a drawn row and shows as many lines as fit (a day's header counts as one); the density budget (DB-5) stays the floor. "+n more" only for what really doesn't fit.
+  - Why: an S cell is as tall as an M one, but its three-row budget showed one task and "+2 more" over empty space.
+  - Rejected: raising every widget's S budget (changes all of Home); no cut at all (a long list with no "+n more").
+- **PL2-2 · Upcoming's "+n more" opens Tasks' Upcoming** → `search.ts` `place`, `tasks-page.tsx`, `tasks-plan-view.tsx`, `widget-nav.ts` `openModuleRoute(to, search)`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (closes TV-H1's deferred line).
+  - Decision: `/tasks?place=upcoming`, a closed list of places (only `upcoming` today); read once, then taken off the URL. On a fresh mount it is the first selection itself; on an open page it acts like a sidebar pick.
+  - Why: a link, like `?view=`; set any later, the page's selection check (still holding a remembered project while the store loads) sent it to the Inbox.
+  - Rejected: Focus's one-shot event flag (not a link, and the same Inbox race).
+- **PL2-3 · A Timeline mark's hover label shuts while a drag runs** → `timeline-marks.tsx` `MarkTooltip` (points, diamonds, bars, the late mark)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the hover labels are controlled: none opens while any drag runs, and an open one closes the moment one starts; only an open label listens to the canvas.
+  - Why: the canvas starts drags, not the mark, so the tooltip never heard the press and its old date stood beside the drag's label.
+  - Rejected: hiding only the dragged mark's label (a selection drags several).
+- **PL2-4 · Zooming from the control or the keys holds Today** → `timeline-scale.ts` `zoomAnchor`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: with Today on screen, a zoom keeps Today's x; otherwise the middle. ⌘-scroll still keeps the day under the pointer.
+  - Why: Today sits a quarter across, so keeping the middle pushed it off the left edge going Quarter → Month.
+  - Rejected: always the middle (the bug); always Today (a jump when you've scrolled away from it).
+- **PL2-5 · Markdown bullets in plain text read as "•" lines** → `spine/editor/entity-rich-html.ts` `plainListLine`, `entity-text-editor.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: when a stored description is plain text (imports, agents, older rows), a line starting "- ", "* " or "+ " shows as "• …", indent kept; nothing is written until the person edits it.
+  - Why: the description editor is deliberately not a block editor (DF-23), so a list from an importer or an agent showed raw "- " lines.
+  - Rejected: list nodes in the description editor (a block editor by the back door); converting in the importers only (misses agents' text and rows already imported).
+- **PL2-6 · The `@ # /` menu keeps inside its dialog** → `spine/editor/mention-menu-plugin.tsx` `menuLeftWithin`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: in a dialog (the capture), the menu's right edge stays 8 px inside the dialog's, using the menu's drawn width; outside a dialog only the window bounds it, as before.
+  - Why: the capture's tag suggestions opened past its right edge.
+  - Rejected: always opening the menu leftwards of the caret.
+- **PL2-7 · An unsaved task's panel reads nothing by its temporary id** → `model.ts` `isUnsavedTaskId`, `task-detail-panel.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: while a task has its `tmp-` id, the panel's files, links and comments aren't read (Linked hides); the panel remounts with the real id and reads them then.
+  - Why: a new person's teaching tasks open in the panel at once, and the three reads failed in the console.
+  - Rejected: a guard in each reader hook (three places to keep in step).
+- **PL2-8 · Smaller ones** (one line each)
+  - The project overview's Client row stays one line: the chip's name shortens before the pencil wraps (`project-overview-parts.tsx`).
+  - Settings → Storage: a file's task name closes Settings and opens the task (`settings-events.ts` `dispatchCloseSettings`).
+  - The Board's drag preview counts the rest of a selection ("+2"), like the List.
+  - ⌥←/→ and ⇧D on a mixed selection add "· n not yours to move" to the toast (`use-timeline-writes.tsx` `withSkipped`).
+  - The Timeline header hides a month's name once less of the month is on screen than the name needs (no "…ber"); it redraws only when that flips.
+  - Archive or Done with Move shows its toast once the moves landed; a refused move shows only its error. The project write still joins its chain at once (gotchas/ui.md, TV-U16).
+  - Teaching tasks: archived projects and their tasks make a workspace not new; seeding stops if the workspace changes mid-way.
+  - The Trello importer numbers members the board doesn't name ("Trello member 1, 2…"), one picker each.
+  - `index.html` loses the pre-Rsbuild `<script type="module" src="/src/main.tsx">`: Rsbuild injects the entry, and the built app logged a MIME error for it on every load.
+  - Who for all: agent's choice, deferred to by Maciej, 2026-10-14. Rejected alternatives: none worth keeping.
+- **PL2-9 · Left deferred on purpose**
+  - The multi-select panel title ("Details ▾" over "4 tasks"): the title row names the view and is its switcher; renaming it per selection reads as another view. Needs a design look.
+  - "Done this month" in the saved zone: the time report's own month is the device's too; changing one breaks "the two always agree". Do both together.
+  - `TASKS_ROLES` → `@contracts`: a contracts change is a Tier-2 review path, not a polish diff.
+  - The rest stay in the deferred file with their recommendation; 🗄 lines are marked for the next release train.
+
 ## 2026-10-14 · TV-POLISH Tasks v3 polish batch — the agent's choices (deferred to by Maciej)
 
 The one polish batch after the module's blocks (no migration): the known items from the orchestrator and the quick, safe lines of every checklist's "Polish later". What wasn't quick or needs a call is in [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
