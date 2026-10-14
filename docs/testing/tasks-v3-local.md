@@ -1,7 +1,7 @@
 # Tasks v3 on this Mac: testing guide
 
 > Written 2026-10-14 · branch `t/maciej/tasks-v3-build` (integration head) · **Live-verified:** yes, a full walkthrough on the local stack in headless Chromium at 1440×900, dark theme.
-> Everything here runs on the local stack. None of Tasks v3's migrations are on prod.
+> **Released 2026-10-14:** the migrations are on prod and app.moduo.app runs this build. This guide still works on the local stack.
 > **Screenshots** (local, not in git): `docs/local/tasks-v3-walkthrough/` in the `tasks-module-research` worktree. The links below work when you open this file there.
 
 ## 1. Open and sign in
@@ -111,9 +111,8 @@
 
 ## 4. Not in this build
 
-- **The release itself:** none of v3's migrations are on prod, and nothing here is deployed.
 - **TV-D7, contract cleanup:** it drops the old columns and mirrors after the release (≥2 desktop releases and 14 days after TV-D9 ships).
-- **TV-SEC1:** it stays on its own branch until the release. The local database already has its migration.
+- **TV-SEC1:** shipped with the release (#364).
 
 ## 5. Release order
 
