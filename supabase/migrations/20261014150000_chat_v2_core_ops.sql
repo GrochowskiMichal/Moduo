@@ -919,7 +919,8 @@ BEGIN
   IF v_msg.deleted_at IS NOT NULL THEN
     RETURN v_msg;
   END IF;
-  UPDATE public.chat_messages SET deleted_at = now()
+  -- The clock, not the transaction's start: the Undo window is measured on it.
+  UPDATE public.chat_messages SET deleted_at = clock_timestamp()
    WHERE id = p_message_id
   RETURNING * INTO v_msg;
   IF v_msg.parent_id IS NOT NULL THEN
@@ -983,7 +984,7 @@ BEGIN
        AND (m.body <> '' OR m.reactions <> '{}'::jsonb OR m.pinned_at IS NOT NULL
             OR m.mentioned_user_ids <> '{}'::uuid[] OR m.mentioned_team_ids <> '{}'::uuid[]
             OR m.mentions_everyone)
-       AND m.deleted_at < now() - interval '10 seconds'
+       AND m.deleted_at < clock_timestamp() - interval '10 seconds'
      ORDER BY m.deleted_at
      LIMIT greatest(coalesce(p_limit, 5000), 1)
      FOR UPDATE SKIP LOCKED
