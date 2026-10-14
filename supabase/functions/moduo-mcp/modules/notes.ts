@@ -8,29 +8,38 @@
  * comes from the key, never from tool args; reads run as service_role (RLS
  * bypassed) so every query MUST filter on ctx.key.workspaceId.
  *
- * Markdown, not CRDT (specs/notes.md assumption 10). The server never parses
- * the Yjs doc; the connector writes the derived `body_md` (the read/search/
- * publish source) and a plain-text `body_text` for FTS. A headless Deno Yjs
- * builder was deliberately NOT attempted here. Consequence: a note
- * created/appended here is immediately listable, gettable-as-markdown,
- * searchable, exportable, and publishable.
- *
- * UPDATED by NOTE-FIX-1 (2026-07-29) — read this before touching the writes.
- * A headless builder IS now proven in the APP (`src/features/notes/editor/
- * materialize.ts`, `@lexical/headless` + `createBindingV2__EXPERIMENTAL`), and
- * the app repairs body-only notes via `notes_op_seed_doc`. So:
- *   - a note CREATED here still lands correctly — it has a body and no doc, so
- *     the app's blank-note sweep materializes it the next time /notes loads;
- *   - a note APPENDED/UPDATED here that is ALREADY materialized no longer
- *     reaches the editor at all. The doc wins on open, and the user's next
- *     keystroke flushes `deriveBody(doc)` over this body write, discarding it.
- * That second case used to self-heal (imported notes stayed un-materialized);
- * it no longer does. Giving the connector a real CRDT write path — or routing
- * its edits through the same materializer — is now REQUIRED for MCP-1.
+ * Writes are real CRDT changes (specs/notes-refresh.md NR-6, AC11). Append
+ * and update rebuild the note's Yjs doc from the server (snapshot + update
+ * log), apply the edit through the app's own headless editor (the prebuilt
+ * `_shared/notes-doc/notes-doc.bundle.js`; rebuild it with
+ * `bun run build:notes-doc` whenever the notes editor schema changes), and
+ * push the edit's own update through `notes_op_apply_updates`. The server
+ * sees the key and records the row as the key's (`origin = 'api_key'`) and
+ * logs `notes.agent_edit`. A cue on the note's live channel makes open
+ * editors pull it at once (the cue carries no content, so nobody can pass an
+ * edit off as an agent's); a closed note gets it on its next pull.
+ * `body_md` / `body_text` come from the same converter the app uses, and are
+ * re-derived when another write raced this one. A note that has a body but no
+ * doc yet is seeded first through `notes_op_seed_doc`, the once-only guard.
+ * Create builds the doc up front, so a new note is complete the moment it
+ * exists. The bundle is loaded on the first notes write only, so the other
+ * modules' tools never pay for it.
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { assertReach, visibleIds } from "../share.ts";
+
+/** Mirrors `AgentEdit` in src/features/notes/editor/agent-write.ts (the
+ * bundle ships no types). */
+type AgentEdit = { kind: "append" | "replace"; markdown: string };
+
+// deno-lint-ignore no-explicit-any
+let notesDocModule: Promise<any> | null = null;
+/** The headless notes-doc writer, loaded once, on the first notes write. */
+function notesDoc() {
+  notesDocModule ??= import("../../_shared/notes-doc/notes-doc.bundle.js");
+  return notesDocModule;
+}
 
 type Row = Record<string, any>;
 
@@ -62,27 +71,6 @@ async function rows(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data ?? [];
-}
-
-/** Light markdown → plain text for the FTS body_text (the CRDT is the faithful
- * serializer; this is a good-enough approximation for search/snippets). */
-function mdToPlain(source: string): string {
-  return source
-    .replace(/<!--[\s\S]*?-->/g, " ") // task-line id comments etc.
-    .replace(/```[\s\S]*?```/g, " ") // fenced code
-    .replace(/`([^`]*)`/g, "$1") // inline code
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links / chips → label
-    .replace(/^#{1,6}\s+/gm, "") // headings
-    .replace(/^\s*>\s?/gm, "") // blockquotes
-    .replace(/^\s*[-*+]\s+(\[[ xX]\]\s+)?/gm, "") // list / checkbox markers
-    .replace(/[*_~]/g, "") // emphasis marks
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
 }
 
 /** Build a note's stored body from a title + a markdown body: the first line IS
@@ -125,6 +113,137 @@ async function getNote(ctx: ToolContext, id: string, cols: string): Promise<Row 
       .limit(1),
   );
   return found[0] ?? null;
+}
+
+const UPDATE_PAGE = 1000;
+
+/** Every update row after `after`, paged past PostgREST's 1000-row cap, and
+ * the highest id read. */
+async function noteUpdateLog(
+  ctx: ToolContext,
+  noteId: string,
+  after = 0,
+): Promise<{ updates: string[]; upto: number }> {
+  const updates: string[] = [];
+  let upto = after;
+  for (;;) {
+    const page = await rows(
+      ctx.db
+        .from("note_updates")
+        .select("id, update_b64")
+        .eq("workspace_id", ctx.key.workspaceId)
+        .eq("note_id", noteId)
+        .gt("id", upto)
+        .order("id", { ascending: true })
+        .limit(UPDATE_PAGE),
+    );
+    const before = upto;
+    for (const r of page) {
+      if (typeof r.update_b64 === "string") updates.push(r.update_b64);
+      upto = Math.max(upto, Number(r.id));
+    }
+    if (page.length < UPDATE_PAGE || upto === before) return { updates, upto };
+  }
+}
+
+/** Log first, snapshot second (the app's pull order): a compaction in
+ * between only makes the snapshot newer than the log, and applying both is
+ * lossless. */
+async function readNoteDoc(ctx: ToolContext, noteId: string) {
+  const log = await noteUpdateLog(ctx, noteId);
+  const note = await getNote(ctx, noteId, "id, body_md, doc_state");
+  if (!note) throw new Error("Note not found in this workspace.");
+  const snapshotB64 = typeof note.doc_state === "string" && note.doc_state ? note.doc_state : null;
+  return { log, snapshotB64, bodyMd: String(note.body_md ?? "") };
+}
+
+type AgentPlan =
+  /** The note has a body but no doc: seed it first, then plan again. */
+  | { kind: "seed"; args: Row }
+  | { kind: "write"; args: Row; readUpto: number }
+  | { kind: "noop" };
+
+/** Work out the write for an agent edit. Each tool makes the calls itself
+ * (so the key-scope check sees which tool needs what). */
+async function planAgentEdit(
+  ctx: ToolContext,
+  noteId: string,
+  edit: AgentEdit,
+  seeded = false,
+): Promise<AgentPlan> {
+  const lib = await notesDoc();
+  const { log, snapshotB64, bodyMd } = await readNoteDoc(ctx, noteId);
+  if (!seeded && !snapshotB64 && log.updates.length === 0 && bodyMd.trim()) {
+    const built = lib.agentCreateDoc(noteId, bodyMd);
+    if (built) {
+      // Bodies stay as stored (an imported note keeps its raw file).
+      return {
+        kind: "seed",
+        args: { p_note_id: noteId, p_doc_state_b64: built.docStateB64 },
+      };
+    }
+  }
+  const result = lib.agentWriteFromLog({ snapshotB64, updatesB64: log.updates, edit });
+  if (!result.updateB64) return { kind: "noop" };
+  return {
+    kind: "write",
+    readUpto: log.upto,
+    args: {
+      p_note_id: noteId,
+      // A fresh client id per write: seq 1 can never collide with an earlier
+      // write's row (a reused id would be dropped as a duplicate).
+      p_client_id: `agent:${crypto.randomUUID()}`,
+      p_updates: [{ clientSeq: 1, updateB64: result.updateB64 }],
+      p_body_md: result.bodyMd,
+      p_body_text: result.bodyText,
+    },
+  };
+}
+
+/** After the write: refuse a silent no-op, cue open editors, and return the
+ * arguments for a body re-save when another write landed between this one's
+ * read and its insert (its bodies were derived without that write). */
+async function afterAgentWrite(
+  ctx: ToolContext,
+  noteId: string,
+  plan: { args: Row; readUpto: number },
+  applied: Row | null,
+): Promise<Row | null> {
+  if (Number(applied?.inserted ?? 0) < 1) throw new Error("The edit could not be saved.");
+  await cueOpenEditors(ctx, noteId);
+  const since = await noteUpdateLog(ctx, noteId, plan.readUpto);
+  if (since.updates.length <= 1) return null;
+  const lib = await notesDoc();
+  const { log, snapshotB64 } = await readNoteDoc(ctx, noteId);
+  const body = lib.bodyFromLog({ snapshotB64, updatesB64: log.updates });
+  return {
+    p_note_id: noteId,
+    p_client_id: plan.args.p_client_id,
+    p_updates: null,
+    p_body_md: body.bodyMd,
+    p_body_text: body.bodyText,
+  };
+}
+
+/** Tell open editors to pull. Best effort: a missed cue is caught up by the
+ * editor's next pull, so it never fails the write. */
+async function cueOpenEditors(ctx: ToolContext, noteId: string) {
+  const lib = await notesDoc();
+  const payload = { origin: lib.AGENT_WRITE_CUE };
+  try {
+    const channel = ctx.db.channel(lib.noteChannelName(noteId));
+    try {
+      if (typeof channel.httpSend === "function") {
+        await channel.httpSend(lib.NOTE_UPDATE_EVENT, payload);
+      } else {
+        await channel.send({ type: "broadcast", event: lib.NOTE_UPDATE_EVENT, payload });
+      }
+    } finally {
+      await ctx.db.removeChannel(channel);
+    }
+  } catch (e) {
+    console.warn("[notes] live cue failed; editors catch up on their next pull", e);
+  }
 }
 
 export const notesConnectorModule: ConnectorModule = {
@@ -214,7 +333,7 @@ export const notesConnectorModule: ConnectorModule = {
     {
       name: "notes_create",
       description:
-        "Create a note from markdown (optionally under a parent) — agents build whole trees this way. The note is immediately listable / searchable / publishable; its rich editor materializes from the markdown on first open.",
+        "Create a note from markdown (optionally under a parent) — agents build whole trees this way. The note is immediately listable, searchable, publishable and editable, and lands in the Inbox when it has no parent.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -236,14 +355,18 @@ export const notesConnectorModule: ConnectorModule = {
         if (parentId) await assertReach(ctx, "note", parentId);
         const id = crypto.randomUUID();
         const bodyMd = composeBody(title, body);
+        // Built here, so the note opens complete everywhere, with no seeding.
+        const built = (await notesDoc()).agentCreateDoc(id, bodyMd);
+        if (!built) throw new Error("The note could not be built from that markdown.");
         const result = await callOp(ctx, "notes_op_import", {
           p_rows: [
             {
               id,
               parentId,
               title,
-              bodyMd,
-              bodyText: mdToPlain(bodyMd),
+              docStateB64: built.docStateB64,
+              bodyMd: built.bodyMd,
+              bodyText: built.bodyText,
             },
           ],
         });
@@ -255,7 +378,7 @@ export const notesConnectorModule: ConnectorModule = {
     {
       name: "notes_append",
       description:
-        "Append markdown to the end of a note's body (adds to the read/search/publish source; the live editor reflects it after its next materialization).",
+        "Append markdown to the end of a note. It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -269,23 +392,24 @@ export const notesConnectorModule: ConnectorModule = {
         const noteId = str(args, "note_id");
         const addition = md(args, "markdown");
         await assertReach(ctx, "note", noteId);
-        const existing = await getNote(ctx, noteId, "id, body_md");
-        if (!existing) throw new Error("Note not found in this workspace.");
-        const combined = `${(existing.body_md ?? "").replace(/\s+$/g, "")}\n\n${addition}`.trim();
-        await callOp(ctx, "notes_op_apply_updates", {
-          p_note_id: noteId,
-          p_client_id: "mcp",
-          p_updates: null,
-          p_body_md: combined,
-          p_body_text: mdToPlain(combined),
-        });
+        const edit: AgentEdit = { kind: "append", markdown: addition };
+        let plan = await planAgentEdit(ctx, noteId, edit);
+        if (plan.kind === "seed") {
+          await callOp(ctx, "notes_op_seed_doc", plan.args);
+          plan = await planAgentEdit(ctx, noteId, edit, true);
+        }
+        if (plan.kind === "write") {
+          const applied = await callOp(ctx, "notes_op_apply_updates", plan.args);
+          const resave = await afterAgentWrite(ctx, noteId, plan, applied);
+          if (resave) await callOp(ctx, "notes_op_apply_updates", resave);
+        }
         return { id: noteId, ok: true };
       },
     },
     {
       name: "notes_update",
       description:
-        "Replace a note's markdown body wholesale (optionally rename it). The live editor reflects it after its next materialization.",
+        "Replace a note's markdown body wholesale (optionally rename it). It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -301,9 +425,6 @@ export const notesConnectorModule: ConnectorModule = {
         const body = md(args, "markdown");
         const title = str(args, "title", false);
         await assertReach(ctx, "note", noteId);
-        if (title) {
-          await callOp(ctx, "notes_op_rename", { p_note_id: noteId, p_title: title });
-        }
         // Preserve the current title as the first line when the caller didn't
         // pass a new one, so the first-line-title convention holds.
         let firstLine = title;
@@ -312,14 +433,21 @@ export const notesConnectorModule: ConnectorModule = {
           if (!cur) throw new Error("Note not found in this workspace.");
           firstLine = (cur.title ?? "").trim();
         }
-        const bodyMd = composeBody(firstLine, body);
-        await callOp(ctx, "notes_op_apply_updates", {
-          p_note_id: noteId,
-          p_client_id: "mcp",
-          p_updates: null,
-          p_body_md: bodyMd,
-          p_body_text: mdToPlain(bodyMd),
-        });
+        const edit: AgentEdit = { kind: "replace", markdown: composeBody(firstLine, body) };
+        let plan = await planAgentEdit(ctx, noteId, edit);
+        if (plan.kind === "seed") {
+          await callOp(ctx, "notes_op_seed_doc", plan.args);
+          plan = await planAgentEdit(ctx, noteId, edit, true);
+        }
+        if (plan.kind === "write") {
+          const applied = await callOp(ctx, "notes_op_apply_updates", plan.args);
+          const resave = await afterAgentWrite(ctx, noteId, plan, applied);
+          if (resave) await callOp(ctx, "notes_op_apply_updates", resave);
+        }
+        // Renamed only once the body is in, so a failed edit leaves the title.
+        if (title) {
+          await callOp(ctx, "notes_op_rename", { p_note_id: noteId, p_title: title });
+        }
         return { id: noteId, ok: true };
       },
     },

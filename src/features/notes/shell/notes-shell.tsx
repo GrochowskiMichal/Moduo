@@ -295,6 +295,9 @@ export function NotesShell() {
               onRestore={module.restoreNote}
               onOpenEntity={openEntity}
               onOpenDetail={() => shell.showPanelVariant("detail")}
+              memberName={(id) =>
+                workspace.members.find((m) => m.userId === id)?.displayName?.trim() || null
+              }
             />
           }
           right={

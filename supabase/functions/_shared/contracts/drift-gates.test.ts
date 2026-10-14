@@ -69,6 +69,15 @@ describe("cross-runtime drift guards", () => {
     );
   });
 
+  it("CONTENT_AUTHOR_KINDS matches note_updates_origin_check (NR-6)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261014120000_notes_agent_writes.sql"),
+      "utf8",
+    );
+    const inList = CONTENT_AUTHOR_KINDS.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (origin IN (${inList}))`);
+  });
+
   it("task statuses stay the closed set used by MCP parsers", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "done", "archived"]);
   });

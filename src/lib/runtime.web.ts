@@ -927,6 +927,8 @@ export const webRuntime: ModuoRuntime = {
       // NR-1 columns ride on top of v2; until that migration is applied the
       // v2 read still works fully (not degraded) and sections derive Inbox.
       const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
+      // NR-6: the last human editor, for the header's "Edited … by …".
+      const NR6_COLS = `${NR1_COLS}, edited_by, edited_at`;
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -942,13 +944,15 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      const { res, tier } = await selectFirstDeployedTier([NR1_COLS, V2_COLS, LEGACY_COLS], query);
+      const tiers = [NR6_COLS, NR1_COLS, V2_COLS, LEGACY_COLS];
+      const { res, tier } = await selectFirstDeployedTier(tiers, query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
       if (res.error) throw new Error(res.error.message);
       return {
         notes: mapKnownRows(res.rows, mapNoteRow),
-        degraded: tier === 2,
+        // Only the legacy column set (the last tier) means the v2 ops are missing.
+        degraded: tier === tiers.length - 1,
         truncated: collectTruncations(res.truncation),
       };
     },
@@ -961,18 +965,25 @@ export const webRuntime: ModuoRuntime = {
       // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
       // ceiling, so a long log silently lost its tail. A failed page fails
       // the pull rather than returning a partial log the cursor would skip.
-      const updRes = await readAfterCursor({
-        after: sinceUpdateId ?? 0,
-        idOf: (row: { id: number | string }) => Number(row.id),
-        page: async (after, limit) =>
-          supabaseClient
-            .from("note_updates")
-            .select("id, client_id, client_seq, update_b64")
-            .eq("note_id", noteId)
-            .gt("id", after)
-            .order("id", { ascending: true })
-            .limit(limit),
-      });
+      // NR-6 adds who wrote each row; until that migration is applied the
+      // select 42703s, so retry once with the original columns.
+      const readLog = (cols: string) =>
+        readAfterCursor({
+          after: sinceUpdateId ?? 0,
+          idOf: (row: { id: number | string }) => Number(row.id),
+          page: async (after, limit) =>
+            supabaseClient
+              .from("note_updates")
+              .select<string, { id: number | string }>(cols)
+              .eq("note_id", noteId)
+              .gt("id", after)
+              .order("id", { ascending: true })
+              .limit(limit),
+        });
+      let updRes = await readLog("id, client_id, client_seq, update_b64, origin, actor_key_id");
+      if (updRes.error && (updRes.error as { code?: string }).code === "42703") {
+        updRes = await readLog("id, client_id, client_seq, update_b64");
+      }
       if (updRes.error) throw new Error(updRes.error.message);
       const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
 

@@ -74,6 +74,7 @@ describe("spineActivityLine", () => {
       "commented: “ping me when ready”",
     );
     expect(spineActivityLine(entry("comments.add"))).toBe("left a comment");
+    expect(spineActivityLine(entry("notes.agent_edit"))).toBe("edited this note");
   });
 
   it("never lies by omission — unknown ops fall back to the op name", () => {
