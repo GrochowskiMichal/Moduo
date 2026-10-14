@@ -147,9 +147,9 @@ BEGIN
     'plan off: C still reads nothing about P');
   v := test.as_user('B', format($q$SELECT public.chat_op_send(%L, 'still?', NULL, '{}'::uuid[], false, NULL, NULL)$q$,
     test.ref('P')));
-  PERFORM test.ok(v = 'P0001 Chat is available on the Duo and Team plans.', 'plan off: writing still needs the plan', v);
+  PERFORM test.ok(v = '42501 Chat is available on the Duo and Team plans.', 'plan off: writing still needs the plan', v);
   v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('P')));
-  PERFORM test.ok(v = 'P0001 Chat is available on the Duo and Team plans.'
+  PERFORM test.ok(v = '42501 Chat is available on the Duo and Team plans.'
                   AND NOT (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('P')),
     'plan off: announcement mode, a write, needs the plan too', v);
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
@@ -179,10 +179,11 @@ DECLARE
   v text;
 BEGIN
   PERFORM test.ok(
-    (SELECT format_version FROM public.chat_messages WHERE id = test.ref('N')) = 1
+    (SELECT format_version FROM public.chat_messages WHERE id = test.ref('N')) = 2
+    AND (SELECT body FROM public.chat_messages WHERE id = test.ref('N')) = 'Żółw *ahead*'
     AND (SELECT body_text FROM public.chat_messages WHERE id = test.ref('N')) = 'Żółw ahead'
     AND (SELECT body_text FROM public.chat_messages WHERE id = test.ref('M')) = 'hello',
-    'body_text: a v1 op''s row stays v1 and its words are read through the converter (no person id)');
+    'body_text: a v1 send (through its wrapper, CV-2a) is stored as v2 and its words carry no person id');
   PERFORM test.ok(
     (SELECT search_tsv @@ to_tsquery('simple', 'zolw') FROM public.chat_messages WHERE id = test.ref('N'))
     AND (SELECT search_tsv @@ to_tsquery('simple', 'ahead') FROM public.chat_messages WHERE id = test.ref('N')),
@@ -219,10 +220,10 @@ BEGIN
     'body_text: quotes, code blocks, escapes, titled references, an unclosed marker');
   PERFORM test.ok(
     (SELECT column_default FROM information_schema.columns
-      WHERE table_schema = 'public' AND table_name = 'chat_messages' AND column_name = 'format_version') = '1'
+      WHERE table_schema = 'public' AND table_name = 'chat_messages' AND column_name = 'format_version') = '2'
     AND (SELECT column_default FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'chat_messages' AND column_name = 'kind') = '''message''::text',
-    'columns: v1 ops keep writing format_version 1 until CV-2a; rows are messages by default');
+    'columns: new rows are v2 (format_version defaults to 2 since CV-2a); rows are messages by default');
 END;
 $$;
 
