@@ -944,16 +944,15 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      const { res, tier } = await selectFirstDeployedTier(
-        [NR6_COLS, NR1_COLS, V2_COLS, LEGACY_COLS],
-        query,
-      );
+      const tiers = [NR6_COLS, NR1_COLS, V2_COLS, LEGACY_COLS];
+      const { res, tier } = await selectFirstDeployedTier(tiers, query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
       if (res.error) throw new Error(res.error.message);
       return {
         notes: mapKnownRows(res.rows, mapNoteRow),
-        degraded: tier === 2,
+        // Only the legacy column set (the last tier) means the v2 ops are missing.
+        degraded: tier === tiers.length - 1,
         truncated: collectTruncations(res.truncation),
       };
     },

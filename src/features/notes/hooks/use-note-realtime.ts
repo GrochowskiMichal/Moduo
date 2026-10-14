@@ -19,7 +19,7 @@
 import { useEffect, useState } from "react";
 import * as Y from "yjs";
 import { supabaseClient } from "@/lib/runtime.web";
-import { broadcastOrigin, isForeignOrigin } from "../sync/agent-origin";
+import { isAgentWriteCue, isForeignOrigin } from "../sync/agent-origin";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import {
   coalesceUpdates,
@@ -136,13 +136,16 @@ export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName 
       channel
         .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) => {
           const payload = msg.payload as Record<string, unknown> | undefined;
+          // An MCP write (NR-6) is announced, never relayed: pull it, so the
+          // stored row (not a peer's claim) says it was an agent's.
+          if (isAgentWriteCue(payload)) {
+            void engine.pullNote(noteId);
+            return;
+          }
           const b64 = payload?.b64;
           if (typeof b64 !== "string") return;
-          // An MCP write (NR-6) arrives marked as the agent's, so the
-          // session's Undo can revert exactly it.
-          const origin = broadcastOrigin(payload);
           try {
-            Y.applyUpdate(doc, decodeBase64ToUint8(b64), origin);
+            Y.applyUpdate(doc, decodeBase64ToUint8(b64), "remote");
           } catch {
             // A malformed peer update can't wedge us; the next pull reconciles.
           }

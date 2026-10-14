@@ -1,11 +1,23 @@
 /**
  * Agent-origin updates and their Undo (specs/notes-refresh.md NR-6, AC11).
  *
- * An MCP write reaches an open note as a Yjs update, by the live broadcast or
- * by the next pull. It is applied with an `AgentOrigin` instead of "remote",
- * so a per-session `Y.UndoManager` can track exactly those transactions: undo
- * reverts the agent's change and keeps every human edit made since. The undo
- * itself is an ordinary local edit, so the engine pushes it like typing.
+ * An MCP write is stored as an `api_key` row in `note_updates`. A session
+ * learns of it by pulling (the live channel only carries a cue to pull, never
+ * the bytes, so nobody can pass their own edit off as an agent's), and
+ * applies those rows with an `AgentOrigin` instead of "remote". A per-session
+ * `Y.UndoManager` tracks exactly those transactions; the undo itself is an
+ * ordinary local edit, so the engine pushes it like typing.
+ *
+ * What Undo promises, and how it stays safe:
+ * - It reverts the most recent agent write only. Older agent steps are
+ *   dropped from the stack, so one click can never reach past the write the
+ *   header names.
+ * - Text typed elsewhere in the note is kept. Text typed INSIDE a block the
+ *   agent added goes with that block (Yjs undoes the block as a whole).
+ * - The moment anyone else's change arrives (another person, another device,
+ *   another tab, including their own Undo of this write), the stack is
+ *   cleared. Yjs records "already undone" locally only, so a second Undo of
+ *   the same write elsewhere would restore replaced text twice.
  *
  * Yjs matches tracked origins by identity OR by constructor, which is why
  * this is a class: one `AgentOrigin` entry in `trackedOrigins` covers every
@@ -19,8 +31,6 @@ export class AgentOrigin {
   constructor(
     /** The API key that wrote it, when known. */
     readonly keyId: string | null,
-    /** The key's display name (the meta line says "<label> edited"). */
-    readonly label: string | null,
   ) {}
 }
 
@@ -34,64 +44,66 @@ export function isForeignOrigin(origin: unknown, persistence: unknown): boolean 
   return origin === "remote" || origin === persistence || isAgentOrigin(origin);
 }
 
-/** The origin to apply a live-channel update with: an agent's write (NR-6)
- * gets an `AgentOrigin` so Undo can track it. The sent name is never
- * trusted (the channel is public until NR-7); the meta line reads it from
- * the activity row. */
-export function broadcastOrigin(
-  payload: Record<string, unknown> | undefined,
-): AgentOrigin | "remote" {
-  if (payload?.origin !== "agent") return "remote";
-  return new AgentOrigin(typeof payload.keyId === "string" ? payload.keyId : null, null);
+/** The live channel's "an agent just wrote this note" cue (NR-6). It carries
+ * no content: receivers pull, and the stored row says who wrote it. */
+export const AGENT_WRITE_CUE = "api_key";
+
+export function isAgentWriteCue(payload: Record<string, unknown> | undefined): boolean {
+  return payload?.origin === AGENT_WRITE_CUE && payload.b64 === undefined;
 }
 
 export type AgentUndo = {
   canUndo: () => boolean;
-  /** Revert the most recent agent change still on the stack. */
+  /** Revert the most recent agent write (the only step kept). */
   undo: () => void;
-  /** Called whenever the stack changes (an agent edit arrives or is undone). */
+  /** Called whenever Undo becomes available or goes away. */
   subscribe: (cb: () => void) => () => void;
-  /** The last agent write this session saw (label + when it landed). */
-  last: () => { label: string | null; at: number } | null;
   destroy: () => void;
 };
 
 export function createAgentUndo(doc: Y.Doc): AgentUndo {
   const root = doc.get(NOTES_DOC_ROOT, Y.XmlElement);
-  // captureTimeout 0: each agent write is its own undo step, never merged
-  // with the one before it.
+  // captureTimeout 0: each agent write is its own step, never merged with
+  // the one before it.
   const manager = new Y.UndoManager(root, {
     trackedOrigins: new Set<unknown>([AgentOrigin]),
     captureTimeout: 0,
   });
   const listeners = new Set<() => void>();
-  let last: { label: string | null; at: number } | null = null;
   const notify = () => {
     for (const cb of listeners) cb();
   };
-  const onAdded = (event: { origin: unknown; type: "undo" | "redo" }) => {
-    if (event.type === "undo" && isAgentOrigin(event.origin)) {
-      last = { label: event.origin.label, at: Date.now() };
+  const onAdded = (event: { type: "undo" | "redo" }) => {
+    if (event.type === "undo") {
+      // Keep only the newest agent write.
+      manager.undoStack.splice(0, manager.undoStack.length - 1);
     }
     notify();
   };
-  const onPopped = () => notify();
+  const onDocUpdate = (_update: Uint8Array, origin: unknown) => {
+    if (origin !== "remote" || manager.undoStack.length === 0) return;
+    manager.clear(true, true);
+    notify();
+  };
   manager.on("stack-item-added", onAdded);
-  manager.on("stack-item-popped", onPopped);
+  doc.on("update", onDocUpdate);
   return {
     canUndo: () => manager.undoStack.length > 0,
     undo: () => {
       manager.undo();
+      // No redo: the header offers Undo once, and a stale redo step could
+      // re-apply text someone else has since changed.
+      manager.clear(true, true);
+      notify();
     },
     subscribe: (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);
     },
-    last: () => last,
     destroy: () => {
       listeners.clear();
       manager.off("stack-item-added", onAdded);
-      manager.off("stack-item-popped", onPopped);
+      doc.off("update", onDocUpdate);
       manager.destroy();
     },
   };

@@ -59,6 +59,9 @@ export function spineActivityLine(entry: {
     case "links.delete":
     case "contacts.unlink":
       return "removed a link";
+    // NR-6: an MCP key wrote into a note (the actor is the key's name).
+    case "notes.agent_edit":
+      return "edited this note";
     case "comments.add": {
       const excerpt = str(p.excerpt);
       return excerpt ? `commented: “${excerpt}”` : "left a comment";

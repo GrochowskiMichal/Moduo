@@ -305,7 +305,8 @@ export class NotesSyncEngineV2 {
       // lacks it. Re-derive once from the merged doc (an update-free save).
       if (isAgentOrigin(origin) && s!.synced && s!.editedLocally && !this.drafts.has(noteId)) {
         s!.bodyOwed = true;
-        this.scheduleFlush(s!, AGENT_BODY_RESAVE_MS);
+        // Never push back a flush that is already due (local edits waiting).
+        if (!s!.flushTimer) this.scheduleFlush(s!, AGENT_BODY_RESAVE_MS);
         return;
       }
       // Ignore what we applied ourselves: remote pulls, the local IDB cache
@@ -378,7 +379,7 @@ export class NotesSyncEngineV2 {
           // rows are history (possibly days old and built upon), so they
           // apply as plain remote and are never offered for Undo.
           const origin =
-            u.origin === "agent" && s.synced ? new AgentOrigin(u.actorKeyId, null) : "remote";
+            u.origin === "api_key" && s.synced ? new AgentOrigin(u.actorKeyId) : "remote";
           Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), origin);
           ids.push(u.id);
         } catch (e) {

@@ -7,7 +7,7 @@
  * ./types.ts stays until the old surfaces retire with NO-2/NO-3.
  */
 
-import { type NoteUpdateOrigin, normalizeNoteUpdateOrigin } from "@contracts/vocabularies";
+import { type ContentAuthorKind, normalizeContentAuthorKind } from "@contracts/vocabularies";
 import type { Truncation } from "../../lib/paged-select";
 
 export type Note = {
@@ -67,8 +67,8 @@ export type NoteUpdateRow = {
   clientId: string;
   clientSeq: number;
   updateB64: string;
-  /** NR-6: "agent" rows were written by an MCP key (`actorKeyId`). */
-  origin: NoteUpdateOrigin;
+  /** NR-6: "api_key" rows were written by an MCP key (`actorKeyId`). */
+  origin: ContentAuthorKind;
   actorKeyId: string | null;
 };
 
@@ -126,7 +126,7 @@ export function noteUpdateRowToModel(r: any): NoteUpdateRow {
     clientId: r.client_id ?? "",
     clientSeq: Number(r.client_seq ?? 0),
     updateB64: r.update_b64 ?? "",
-    origin: normalizeNoteUpdateOrigin(r.origin),
+    origin: normalizeContentAuthorKind(r.origin),
     actorKeyId: r.actor_key_id ?? null,
   };
 }

@@ -30,6 +30,7 @@ import {
   $noteMarkdown,
   $noteText,
   createNotesHeadlessEditor,
+  deriveNoteBody,
   NOTES_DOC_ROOT,
 } from "./doc-markdown";
 import { NOTES_TRANSFORMERS } from "./markdown";
@@ -58,10 +59,12 @@ export function applyAgentEdit(
   edit: AgentEdit,
 ): { update: Uint8Array | null; bodyMd: string; bodyText: string } {
   doc.get(NOTES_DOC_ROOT, Y.XmlElement);
-  const before = Y.encodeStateVector(doc);
-  let touched = false;
-  const onUpdate = () => {
-    touched = true;
+  // Only the edit's own changes: an update encoded against a state vector
+  // would also carry every deletion the doc already held, and a client that
+  // hadn't seen one yet would file it under the agent's Undo.
+  const own: Uint8Array[] = [];
+  const onUpdate = (update: Uint8Array) => {
+    own.push(update);
   };
 
   const { editor, takeError } = createNotesHeadlessEditor("moduo-note-agent");
@@ -115,7 +118,7 @@ export function applyAgentEdit(
     if (error) throw error;
     const body = editor.getEditorState().read(() => ({ md: $noteMarkdown(), text: $noteText() }));
     return {
-      update: touched ? Y.encodeStateAsUpdate(doc, before) : null,
+      update: own.length > 0 ? Y.mergeUpdates(own) : null,
       bodyMd: body.md,
       bodyText: body.text,
     };
@@ -126,40 +129,40 @@ export function applyAgentEdit(
   }
 }
 
+/** Rebuild a note's doc from what the server holds (snapshot + update log).
+ * A row Yjs can't decode is skipped, as the app's pull does: one poison row
+ * must not block every later write to the note. */
+function docFromLog(snapshotB64: string | null, updatesB64: string[]): Y.Doc {
+  const doc = new Y.Doc();
+  doc.get(NOTES_DOC_ROOT, Y.XmlElement);
+  for (const b64 of snapshotB64 ? [snapshotB64, ...updatesB64] : updatesB64) {
+    try {
+      Y.applyUpdate(doc, decodeBase64ToUint8(b64));
+    } catch {
+      // Skipped; clients skip it too, so nobody's doc holds it.
+    }
+  }
+  return doc;
+}
+
 /**
- * The connector's entry point: rebuild the note's doc from what the server
- * holds (snapshot + update log), apply the edit, return the update to push.
+ * The connector's entry point: rebuild the note's doc from the server's
+ * state, apply the edit, return the update to push (the edit's own changes
+ * only) and the bodies derived from the edited doc.
  *
- * A note that has a body but no doc yet (created or imported before it was
- * ever opened) is first materialized from that body with the deterministic
- * per-note builder, the same bytes the app's blank-note sweep would write, so
- * a concurrent sweep merges instead of duplicating the text.
+ * A note with a body but no doc yet must be seeded first, through
+ * `notes_op_seed_doc` (the once-only guard), never inside this update.
  */
 export function agentWriteFromLog(input: {
-  noteId: string;
   snapshotB64: string | null;
   updatesB64: string[];
-  /** The note's current `body_md`, used only when it has no doc yet. */
-  bodyMd: string;
   edit: AgentEdit;
 }): AgentWriteResult {
-  const doc = new Y.Doc();
+  const doc = docFromLog(input.snapshotB64, input.updatesB64);
   try {
-    doc.get(NOTES_DOC_ROOT, Y.XmlElement);
-    if (input.snapshotB64) Y.applyUpdate(doc, decodeBase64ToUint8(input.snapshotB64));
-    for (const b64 of input.updatesB64) Y.applyUpdate(doc, decodeBase64ToUint8(b64));
-    const before = Y.encodeStateVector(doc);
-    if (doc.getXmlElement(NOTES_DOC_ROOT).length === 0 && input.bodyMd.trim()) {
-      const seeded = buildDocStateFromMarkdown(input.noteId, input.bodyMd);
-      if (seeded) Y.applyUpdate(doc, decodeBase64ToUint8(seeded.docStateB64));
-    }
     const result = applyAgentEdit(doc, input.edit);
-    const sinceServer = Y.encodeStateAsUpdate(doc, before);
-    // Push everything new since the server's state: the seed (if any) and
-    // the edit travel as one update.
-    const changed = result.update !== null;
     return {
-      updateB64: changed ? encodeUint8ToBase64(sinceServer) : null,
+      updateB64: result.update ? encodeUint8ToBase64(result.update) : null,
       bodyMd: result.bodyMd,
       bodyText: result.bodyText,
     };
@@ -167,6 +170,26 @@ export function agentWriteFromLog(input: {
     doc.destroy();
   }
 }
+
+/** The bodies of the doc the server holds, for a re-save after a write that
+ * raced another one (the write's own bodies can miss the other change). */
+export function bodyFromLog(input: { snapshotB64: string | null; updatesB64: string[] }): {
+  bodyMd: string;
+  bodyText: string;
+} {
+  const doc = docFromLog(input.snapshotB64, input.updatesB64);
+  try {
+    const body = deriveNoteBody(doc);
+    return { bodyMd: body.md, bodyText: body.text };
+  } finally {
+    doc.destroy();
+  }
+}
+
+export { AGENT_WRITE_CUE } from "../sync/agent-origin";
+/** The app's live channel for a note, shipped in the bundle so the connector
+ * can never drift from it. */
+export { NOTE_UPDATE_EVENT, noteChannelName } from "../sync/notes-realtime";
 
 /** A brand-new note's doc from markdown (the connector's `notes_create`). */
 export function agentCreateDoc(noteId: string, markdown: string): MaterializedDoc | null {

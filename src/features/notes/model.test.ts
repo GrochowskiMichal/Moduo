@@ -112,8 +112,8 @@ describe("noteUpdateRowToModel", () => {
 
   it("carries an agent row's origin and key (NR-6)", () => {
     expect(
-      noteUpdateRowToModel({ id: 1, update_b64: "QQ==", origin: "agent", actor_key_id: "k1" }),
-    ).toMatchObject({ origin: "agent", actorKeyId: "k1" });
+      noteUpdateRowToModel({ id: 1, update_b64: "QQ==", origin: "api_key", actor_key_id: "k1" }),
+    ).toMatchObject({ origin: "api_key", actorKeyId: "k1" });
     expect(noteUpdateRowToModel({ id: 1, origin: "robot" }).origin).toBe("user");
   });
 });

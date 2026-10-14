@@ -169,7 +169,7 @@ describe("agent writes reach an open note (NR-6)", () => {
       clientId: "agent:x",
       clientSeq: 1,
       updateB64: encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before)),
-      origin: "agent",
+      origin: "api_key",
       actorKeyId: "key-1",
     };
     let rows: (typeof agentRow)[] = [];
@@ -262,7 +262,7 @@ describe("agent body re-save (NR-6)", () => {
         clientId: "agent:y",
         clientSeq: 1,
         updateB64: agentB64,
-        origin: "agent",
+        origin: "api_key",
         actorKeyId: "k",
       },
     ];

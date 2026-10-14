@@ -13,25 +13,33 @@
  * log), apply the edit through the app's own headless editor (the prebuilt
  * `_shared/notes-doc/notes-doc.bundle.js`; rebuild it with
  * `bun run build:notes-doc` whenever the notes editor schema changes), and
- * push the resulting update through `notes_op_apply_updates` as an agent
- * write. The server records the key and logs `notes.agent_edit`; the update
- * is broadcast on the note's live channel so an open editor shows it at once,
- * and a closed one pulls it on the next open. `body_md` / `body_text` come
- * from the same converter the app uses, so reads, search and publish agree
- * with the doc. Create builds the doc up front, so a new note is complete
- * the moment it exists.
+ * push the edit's own update through `notes_op_apply_updates`. The server
+ * sees the key and records the row as the key's (`origin = 'api_key'`) and
+ * logs `notes.agent_edit`. A cue on the note's live channel makes open
+ * editors pull it at once (the cue carries no content, so nobody can pass an
+ * edit off as an agent's); a closed note gets it on its next pull.
+ * `body_md` / `body_text` come from the same converter the app uses, and are
+ * re-derived when another write raced this one. A note that has a body but no
+ * doc yet is seeded first through `notes_op_seed_doc`, the once-only guard.
+ * Create builds the doc up front, so a new note is complete the moment it
+ * exists. The bundle is loaded on the first notes write only, so the other
+ * modules' tools never pay for it.
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { assertReach, visibleIds } from "../share.ts";
-import {
-  agentCreateDoc,
-  agentWriteFromLog,
-} from "../../_shared/notes-doc/notes-doc.bundle.js";
 
 /** Mirrors `AgentEdit` in src/features/notes/editor/agent-write.ts (the
  * bundle ships no types). */
 type AgentEdit = { kind: "append" | "replace"; markdown: string };
+
+// deno-lint-ignore no-explicit-any
+let notesDocModule: Promise<any> | null = null;
+/** The headless notes-doc writer, loaded once, on the first notes write. */
+function notesDoc() {
+  notesDocModule ??= import("../../_shared/notes-doc/notes-doc.bundle.js");
+  return notesDocModule;
+}
 
 type Row = Record<string, any>;
 
@@ -63,27 +71,6 @@ async function rows(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data ?? [];
-}
-
-/** Light markdown → plain text for the FTS body_text (the CRDT is the faithful
- * serializer; this is a good-enough approximation for search/snippets). */
-function mdToPlain(source: string): string {
-  return source
-    .replace(/<!--[\s\S]*?-->/g, " ") // task-line id comments etc.
-    .replace(/```[\s\S]*?```/g, " ") // fenced code
-    .replace(/`([^`]*)`/g, "$1") // inline code
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1") // links / chips → label
-    .replace(/^#{1,6}\s+/gm, "") // headings
-    .replace(/^\s*>\s?/gm, "") // blockquotes
-    .replace(/^\s*[-*+]\s+(\[[ xX]\]\s+)?/gm, "") // list / checkbox markers
-    .replace(/[*_~]/g, "") // emphasis marks
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .join("\n")
-    .trim();
 }
 
 /** Build a note's stored body from a title + a markdown body: the first line IS
@@ -128,16 +115,17 @@ async function getNote(ctx: ToolContext, id: string, cols: string): Promise<Row 
   return found[0] ?? null;
 }
 
-/** The app's live channel for a note (src/features/notes/sync/notes-realtime.ts
- * `noteChannelName`, event `NOTE_UPDATE_EVENT`). */
-const NOTE_CHANNEL_PREFIX = "notes:";
-const NOTE_UPDATE_EVENT = "u";
 const UPDATE_PAGE = 1000;
 
-/** Every update row after the snapshot, paged past PostgREST's 1000-row cap. */
-async function noteUpdateLog(ctx: ToolContext, noteId: string): Promise<string[]> {
-  const out: string[] = [];
-  let after = 0;
+/** Every update row after `after`, paged past PostgREST's 1000-row cap, and
+ * the highest id read. */
+async function noteUpdateLog(
+  ctx: ToolContext,
+  noteId: string,
+  after = 0,
+): Promise<{ updates: string[]; upto: number }> {
+  const updates: string[] = [];
+  let upto = after;
   for (;;) {
     const page = await rows(
       ctx.db
@@ -145,67 +133,61 @@ async function noteUpdateLog(ctx: ToolContext, noteId: string): Promise<string[]
         .select("id, update_b64")
         .eq("workspace_id", ctx.key.workspaceId)
         .eq("note_id", noteId)
-        .gt("id", after)
+        .gt("id", upto)
         .order("id", { ascending: true })
         .limit(UPDATE_PAGE),
     );
+    const before = upto;
     for (const r of page) {
-      if (typeof r.update_b64 === "string") out.push(r.update_b64);
-      after = Math.max(after, Number(r.id));
+      if (typeof r.update_b64 === "string") updates.push(r.update_b64);
+      upto = Math.max(upto, Number(r.id));
     }
-    if (page.length < UPDATE_PAGE) return out;
+    if (page.length < UPDATE_PAGE || upto === before) return { updates, upto };
   }
 }
 
-/** Tell open editors right away. Best effort: a missed broadcast is caught
- * up by the editor's next pull, so it never fails the write. */
-async function broadcastAgentUpdate(ctx: ToolContext, noteId: string, updateB64: string) {
-  const payload = {
-    b64: updateB64,
-    origin: "agent",
-    keyId: ctx.key.id,
-    label: ctx.key.name ?? null,
-  };
-  try {
-    const channel = ctx.db.channel(`${NOTE_CHANNEL_PREFIX}${noteId}`);
-    try {
-      if (typeof channel.httpSend === "function") {
-        await channel.httpSend(NOTE_UPDATE_EVENT, payload);
-      } else {
-        await channel.send({ type: "broadcast", event: NOTE_UPDATE_EVENT, payload });
-      }
-    } finally {
-      await ctx.db.removeChannel(channel);
-    }
-  } catch (e) {
-    console.warn("[notes] live broadcast failed; editors catch up on their next pull", e);
-  }
+/** Log first, snapshot second (the app's pull order): a compaction in
+ * between only makes the snapshot newer than the log, and applying both is
+ * lossless. */
+async function readNoteDoc(ctx: ToolContext, noteId: string) {
+  const log = await noteUpdateLog(ctx, noteId);
+  const note = await getNote(ctx, noteId, "id, body_md, doc_state");
+  if (!note) throw new Error("Note not found in this workspace.");
+  const snapshotB64 = typeof note.doc_state === "string" && note.doc_state ? note.doc_state : null;
+  return { log, snapshotB64, bodyMd: String(note.body_md ?? "") };
 }
 
-/** Apply an agent edit to the note's doc as the server holds it. Returns
- * the `notes_op_apply_updates` arguments for the write, or null when the edit
- * changed nothing. The tool itself makes the call (so the key-scope check
- * sees which tool needs what). */
-async function prepareAgentEdit(
+type AgentPlan =
+  /** The note has a body but no doc: seed it first, then plan again. */
+  | { kind: "seed"; args: Row }
+  | { kind: "write"; args: Row; readUpto: number }
+  | { kind: "noop" };
+
+/** Work out the write for an agent edit. Each tool makes the calls itself
+ * (so the key-scope check sees which tool needs what). */
+async function planAgentEdit(
   ctx: ToolContext,
   noteId: string,
   edit: AgentEdit,
-): Promise<{ args: Row; updateB64: string } | null> {
-  // Log first, snapshot second (the app's pull order): a compaction in between
-  // only makes the snapshot newer than the log, and applying both is lossless.
-  const updatesB64 = await noteUpdateLog(ctx, noteId);
-  const note = await getNote(ctx, noteId, "id, body_md, doc_state");
-  if (!note) throw new Error("Note not found in this workspace.");
-  const result = agentWriteFromLog({
-    noteId,
-    snapshotB64: typeof note.doc_state === "string" && note.doc_state ? note.doc_state : null,
-    updatesB64,
-    bodyMd: String(note.body_md ?? ""),
-    edit,
-  });
-  if (!result.updateB64) return null;
+  seeded = false,
+): Promise<AgentPlan> {
+  const lib = await notesDoc();
+  const { log, snapshotB64, bodyMd } = await readNoteDoc(ctx, noteId);
+  if (!seeded && !snapshotB64 && log.updates.length === 0 && bodyMd.trim()) {
+    const built = lib.agentCreateDoc(noteId, bodyMd);
+    if (built) {
+      // Bodies stay as stored (an imported note keeps its raw file).
+      return {
+        kind: "seed",
+        args: { p_note_id: noteId, p_doc_state_b64: built.docStateB64 },
+      };
+    }
+  }
+  const result = lib.agentWriteFromLog({ snapshotB64, updatesB64: log.updates, edit });
+  if (!result.updateB64) return { kind: "noop" };
   return {
-    updateB64: result.updateB64,
+    kind: "write",
+    readUpto: log.upto,
     args: {
       p_note_id: noteId,
       // A fresh client id per write: seq 1 can never collide with an earlier
@@ -214,20 +196,54 @@ async function prepareAgentEdit(
       p_updates: [{ clientSeq: 1, updateB64: result.updateB64 }],
       p_body_md: result.bodyMd,
       p_body_text: result.bodyText,
-      p_origin: "agent",
     },
   };
 }
 
-/** After the write: refuse a silent no-op, then tell open editors. */
-async function finishAgentEdit(
+/** After the write: refuse a silent no-op, cue open editors, and return the
+ * arguments for a body re-save when another write landed between this one's
+ * read and its insert (its bodies were derived without that write). */
+async function afterAgentWrite(
   ctx: ToolContext,
   noteId: string,
+  plan: { args: Row; readUpto: number },
   applied: Row | null,
-  updateB64: string,
-): Promise<void> {
+): Promise<Row | null> {
   if (Number(applied?.inserted ?? 0) < 1) throw new Error("The edit could not be saved.");
-  await broadcastAgentUpdate(ctx, noteId, updateB64);
+  await cueOpenEditors(ctx, noteId);
+  const since = await noteUpdateLog(ctx, noteId, plan.readUpto);
+  if (since.updates.length <= 1) return null;
+  const lib = await notesDoc();
+  const { log, snapshotB64 } = await readNoteDoc(ctx, noteId);
+  const body = lib.bodyFromLog({ snapshotB64, updatesB64: log.updates });
+  return {
+    p_note_id: noteId,
+    p_client_id: plan.args.p_client_id,
+    p_updates: null,
+    p_body_md: body.bodyMd,
+    p_body_text: body.bodyText,
+  };
+}
+
+/** Tell open editors to pull. Best effort: a missed cue is caught up by the
+ * editor's next pull, so it never fails the write. */
+async function cueOpenEditors(ctx: ToolContext, noteId: string) {
+  const lib = await notesDoc();
+  const payload = { origin: lib.AGENT_WRITE_CUE };
+  try {
+    const channel = ctx.db.channel(lib.noteChannelName(noteId));
+    try {
+      if (typeof channel.httpSend === "function") {
+        await channel.httpSend(lib.NOTE_UPDATE_EVENT, payload);
+      } else {
+        await channel.send({ type: "broadcast", event: lib.NOTE_UPDATE_EVENT, payload });
+      }
+    } finally {
+      await ctx.db.removeChannel(channel);
+    }
+  } catch (e) {
+    console.warn("[notes] live cue failed; editors catch up on their next pull", e);
+  }
 }
 
 export const notesConnectorModule: ConnectorModule = {
@@ -340,16 +356,17 @@ export const notesConnectorModule: ConnectorModule = {
         const id = crypto.randomUUID();
         const bodyMd = composeBody(title, body);
         // Built here, so the note opens complete everywhere, with no seeding.
-        const built = agentCreateDoc(id, bodyMd);
+        const built = (await notesDoc()).agentCreateDoc(id, bodyMd);
+        if (!built) throw new Error("The note could not be built from that markdown.");
         const result = await callOp(ctx, "notes_op_import", {
           p_rows: [
             {
               id,
               parentId,
               title,
-              docStateB64: built?.docStateB64 ?? null,
-              bodyMd: built?.bodyMd ?? bodyMd,
-              bodyText: built?.bodyText ?? mdToPlain(bodyMd),
+              docStateB64: built.docStateB64,
+              bodyMd: built.bodyMd,
+              bodyText: built.bodyText,
             },
           ],
         });
@@ -375,10 +392,16 @@ export const notesConnectorModule: ConnectorModule = {
         const noteId = str(args, "note_id");
         const addition = md(args, "markdown");
         await assertReach(ctx, "note", noteId);
-        const edit = await prepareAgentEdit(ctx, noteId, { kind: "append", markdown: addition });
-        if (edit) {
-          const applied = await callOp(ctx, "notes_op_apply_updates", edit.args);
-          await finishAgentEdit(ctx, noteId, applied, edit.updateB64);
+        const edit: AgentEdit = { kind: "append", markdown: addition };
+        let plan = await planAgentEdit(ctx, noteId, edit);
+        if (plan.kind === "seed") {
+          await callOp(ctx, "notes_op_seed_doc", plan.args);
+          plan = await planAgentEdit(ctx, noteId, edit, true);
+        }
+        if (plan.kind === "write") {
+          const applied = await callOp(ctx, "notes_op_apply_updates", plan.args);
+          const resave = await afterAgentWrite(ctx, noteId, plan, applied);
+          if (resave) await callOp(ctx, "notes_op_apply_updates", resave);
         }
         return { id: noteId, ok: true };
       },
@@ -402,9 +425,6 @@ export const notesConnectorModule: ConnectorModule = {
         const body = md(args, "markdown");
         const title = str(args, "title", false);
         await assertReach(ctx, "note", noteId);
-        if (title) {
-          await callOp(ctx, "notes_op_rename", { p_note_id: noteId, p_title: title });
-        }
         // Preserve the current title as the first line when the caller didn't
         // pass a new one, so the first-line-title convention holds.
         let firstLine = title;
@@ -413,13 +433,20 @@ export const notesConnectorModule: ConnectorModule = {
           if (!cur) throw new Error("Note not found in this workspace.");
           firstLine = (cur.title ?? "").trim();
         }
-        const edit = await prepareAgentEdit(ctx, noteId, {
-          kind: "replace",
-          markdown: composeBody(firstLine, body),
-        });
-        if (edit) {
-          const applied = await callOp(ctx, "notes_op_apply_updates", edit.args);
-          await finishAgentEdit(ctx, noteId, applied, edit.updateB64);
+        const edit: AgentEdit = { kind: "replace", markdown: composeBody(firstLine, body) };
+        let plan = await planAgentEdit(ctx, noteId, edit);
+        if (plan.kind === "seed") {
+          await callOp(ctx, "notes_op_seed_doc", plan.args);
+          plan = await planAgentEdit(ctx, noteId, edit, true);
+        }
+        if (plan.kind === "write") {
+          const applied = await callOp(ctx, "notes_op_apply_updates", plan.args);
+          const resave = await afterAgentWrite(ctx, noteId, plan, applied);
+          if (resave) await callOp(ctx, "notes_op_apply_updates", resave);
+        }
+        // Renamed only once the body is in, so a failed edit leaves the title.
+        if (title) {
+          await callOp(ctx, "notes_op_rename", { p_note_id: noteId, p_title: title });
         }
         return { id: noteId, ok: true };
       },

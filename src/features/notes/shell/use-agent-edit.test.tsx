@@ -29,7 +29,7 @@ function setup() {
   const agentWrite = () =>
     doc.transact(
       () => root.insert(root.length, [new Y.XmlElement("paragraph")]),
-      new AgentOrigin("k1", null),
+      new AgentOrigin("k1"),
     );
   return { engine, runtime, agentWrite, at };
 }
@@ -48,6 +48,15 @@ describe("useAgentEdit", () => {
     expect(result.current.agentEdit?.label).toBe("Research bot");
 
     act(() => result.current.undo());
+    await waitFor(() => expect(result.current.canUndo).toBe(false));
+    expect(result.current.agentEdit).toBeNull();
+  });
+
+  it("renders without an activity reader (Storybook's fake runtime)", async () => {
+    const { engine } = setup();
+    const { result } = renderHook(() =>
+      useAgentEdit({ runtime: {} as ModuoRuntime, engine, workspaceId: "ws1", noteId: "n1" }),
+    );
     await waitFor(() => expect(result.current.canUndo).toBe(false));
     expect(result.current.agentEdit).toBeNull();
   });

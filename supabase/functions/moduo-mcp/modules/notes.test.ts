@@ -14,9 +14,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
 
+import { applyAgentEdit } from "../../../../src/features/notes/editor/agent-write";
 import { deriveNoteBody, NOTES_DOC_ROOT } from "../../../../src/features/notes/editor/doc-markdown";
 import { buildDocStateFromMarkdown } from "../../../../src/features/notes/editor/materialize";
-import { notesDocSourceHash } from "../../_shared/notes-doc/source-hash.ts";
+import { notesDocCodeHash, notesDocSourceHash } from "../../_shared/notes-doc/source-hash.ts";
 
 rs.mock("../share.ts", () => ({
   assertReach: async () => {},
@@ -33,8 +34,10 @@ const NOTE = "44444444-4444-4444-8444-444444444444";
 
 const b64ToBytes = (b64: string) => Uint8Array.from(Buffer.from(b64, "base64"));
 
-/** notes + note_updates + the three RPCs the write path calls + a channel. */
-function fakeDb(note: Row) {
+/** notes + note_updates + the RPCs the write path calls + a channel.
+ * `beforeApply` runs inside the next apply call, before its insert (to
+ * stage a write that races the connector's). */
+function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
   const tables: Record<string, Row[]> = { notes: [note], note_updates: [] };
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
   const broadcasts: Array<{ topic: string; event: string; payload: Row }> = [];
@@ -59,13 +62,17 @@ function fakeDb(note: Row) {
   async function rpc(fn: string, args: Row) {
     rpcCalls.push({ fn, args });
     if (fn === "notes_op_apply_updates") {
+      const stage = opts.beforeApply;
+      opts.beforeApply = undefined;
+      stage?.();
       for (const u of args.p_updates ?? []) {
         tables.note_updates!.push({
           id: nextId++,
           workspace_id: WS,
           note_id: args.p_note_id,
           update_b64: u.updateB64,
-          origin: args.p_origin,
+          // The server records a key's write as the key's, whatever is passed.
+          origin: "api_key",
         });
       }
       const n = tables.notes!.find((r) => r.id === args.p_note_id)!;
@@ -87,6 +94,13 @@ function fakeDb(note: Row) {
       return { data: { imported: args.p_rows.length }, error: null };
     }
     if (fn === "notes_op_rename") return { data: null, error: null };
+    if (fn === "notes_op_seed_doc") {
+      const n = tables.notes!.find((r) => r.id === args.p_note_id)!;
+      const has = tables.note_updates!.some((u) => u.note_id === args.p_note_id);
+      if (n.doc_state || has) return { data: { seeded: false }, error: null };
+      n.doc_state = args.p_doc_state_b64;
+      return { data: { seeded: true }, error: null };
+    }
     return { data: null, error: { message: `unexpected rpc ${fn}` } };
   }
   const channel = (topic: string) => ({
@@ -99,7 +113,16 @@ function fakeDb(note: Row) {
     key: { id: "key-1", workspaceId: WS, name: "Research bot", createdBy: null, scopes: {} } as any,
     db: db as any,
   };
-  return { ctx, tables, rpcCalls, broadcasts };
+  /** Stage a row from another writer (a person, another agent). */
+  const pushRow = (update: Uint8Array) =>
+    tables.note_updates!.push({
+      id: nextId++,
+      workspace_id: WS,
+      note_id: NOTE,
+      update_b64: Buffer.from(update).toString("base64"),
+      origin: "user",
+    });
+  return { ctx, tables, rpcCalls, broadcasts, pushRow };
 }
 
 function tool(name: string) {
@@ -132,25 +155,24 @@ function materializedNote(markdown: string): Row {
 }
 
 describe("crdt write", () => {
-  it("notes_append writes an agent update the client materializes, and broadcasts it", async () => {
+  it("notes_append writes the key's update the client materializes, and cues open editors", async () => {
     const { ctx, tables, rpcCalls, broadcasts } = fakeDb(materializedNote("# Plan\n\nHello"));
     await tool("notes_append").handler({ note_id: NOTE, markdown: "- [ ] call **Acme**" }, ctx);
 
     const call = rpcCalls.find((c) => c.fn === "notes_op_apply_updates")!;
-    expect(call.args.p_origin).toBe("agent");
+    // Who wrote it is the server's call (the key), never an argument.
+    expect(call.args).not.toHaveProperty("p_origin");
     expect(call.args.p_client_id).toMatch(/^agent:/);
     expect(call.args.p_updates).toHaveLength(1);
     const expected = "# Plan\n\nHello\n\n- [ ] call **Acme**";
     expect(call.args.p_body_md).toBe(expected);
     expect(clientMarkdown(tables, NOTE)).toBe(expected);
+    expect(tables.note_updates!.every((u) => u.origin === "api_key")).toBe(true);
 
-    expect(broadcasts).toHaveLength(1);
-    expect(broadcasts[0]).toMatchObject({
-      topic: `notes:${NOTE}`,
-      event: "u",
-      payload: { origin: "agent", keyId: "key-1", label: "Research bot" },
-    });
-    expect(broadcasts[0]!.payload.b64).toBe(call.args.p_updates[0].updateB64);
+    // A content-free cue on the app's own channel: editors pull the row.
+    expect(broadcasts).toEqual([
+      { topic: `notes:${NOTE}`, event: "u", payload: { origin: "api_key" } },
+    ]);
   });
 
   it("appends on top of earlier logged updates, not just the snapshot", async () => {
@@ -160,18 +182,56 @@ describe("crdt write", () => {
     expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
   });
 
-  it("notes_update replaces the body and keeps the title as the first line", async () => {
+  it("notes_update replaces the body, keeps the title line, and renames only after", async () => {
     const { ctx, tables, rpcCalls } = fakeDb(materializedNote("# Plan\n\nOld body"));
     await tool("notes_update").handler({ note_id: NOTE, markdown: "New *body*" }, ctx);
     const call = rpcCalls.find((c) => c.fn === "notes_op_apply_updates")!;
     expect(call.args.p_body_md).toBe("Plan\n\nNew *body*");
     expect(clientMarkdown(tables, NOTE)).toBe("Plan\n\nNew *body*");
+
+    const renamed = fakeDb(materializedNote("# Plan\n\nOld body"));
+    await tool("notes_update").handler(
+      { note_id: NOTE, markdown: "Body", title: "Renamed" },
+      renamed.ctx,
+    );
+    expect(renamed.rpcCalls.map((c) => c.fn)).toEqual([
+      "notes_op_apply_updates",
+      "notes_op_rename",
+    ]);
   });
 
-  it("an append to a body-only note keeps its imported body", async () => {
-    const { ctx, tables } = fakeDb({ ...materializedNote("x"), doc_state: null, body_md: "Imported" });
+  it("seeds a body-only note through the once-only guard, then appends on top", async () => {
+    const { ctx, tables, rpcCalls } = fakeDb({
+      ...materializedNote("x"),
+      doc_state: null,
+      body_md: "Imported",
+    });
     await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(rpcCalls.map((c) => c.fn)).toEqual(["notes_op_seed_doc", "notes_op_apply_updates"]);
+    // The seed keeps the stored body; only the doc is written.
+    expect(rpcCalls[0]!.args).not.toHaveProperty("p_body_md");
     expect(clientMarkdown(tables, NOTE)).toBe("Imported\n\nMore");
+  });
+
+  it("re-saves the body when another write lands between its read and its insert", async () => {
+    const note = materializedNote("# Plan\n\nHello");
+    const racer = new Y.Doc();
+    racer.get(NOTES_DOC_ROOT, Y.XmlElement);
+    Y.applyUpdate(racer, b64ToBytes(note.doc_state));
+    const before = Y.encodeStateVector(racer);
+    applyAgentEdit(racer, { kind: "append", markdown: "Typed meanwhile" });
+    const human = Y.encodeStateAsUpdate(racer, before);
+
+    const db = fakeDb(note, { beforeApply: () => db.pushRow(human) });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "From the agent" }, db.ctx);
+    const applies = db.rpcCalls.filter((c) => c.fn === "notes_op_apply_updates");
+    expect(applies).toHaveLength(2);
+    // The write's own body missed the racing text; the re-save has both.
+    expect(applies[0]!.args.p_body_md).not.toContain("Typed meanwhile");
+    expect(applies[1]!.args.p_updates).toBeNull();
+    expect(applies[1]!.args.p_body_md).toContain("Typed meanwhile");
+    expect(applies[1]!.args.p_body_md).toContain("From the agent");
+    expect(db.tables.notes![0]!.body_md).toBe(applies[1]!.args.p_body_md);
   });
 
   it("notes_create stores a built doc, so the note opens complete", async () => {
@@ -188,17 +248,21 @@ describe("crdt write", () => {
 });
 
 describe("notes-doc bundle is current", () => {
-  it("was rebuilt after the last change to the notes editor sources", () => {
+  it("was rebuilt after the last change to the notes editor sources, and not edited by hand", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const root = resolve(here, "../../../..");
     const bundle = readFileSync(
       resolve(root, "supabase/functions/_shared/notes-doc/notes-doc.bundle.js"),
       "utf8",
     );
-    const hash = /^\/\/ source-hash: (\w+)$/m.exec(bundle)?.[1];
-    const inputs = JSON.parse(/^\/\/ inputs: (.*)$/m.exec(bundle)?.[1] ?? "[]") as string[];
+    const header = (name: string) => new RegExp(`^// ${name}: (.*)$`, "m").exec(bundle)?.[1];
+    const inputs = JSON.parse(header("inputs") ?? "[]") as string[];
+    const packages = JSON.parse(header("packages") ?? "[]") as string[];
     expect(inputs.length).toBeGreaterThan(0);
+    expect(packages).toEqual(expect.arrayContaining(["lexical", "yjs", "lib0"]));
     // Stale? Run `bun run build:notes-doc` and commit the bundle.
-    expect(notesDocSourceHash(root, inputs)).toBe(hash);
+    expect(notesDocSourceHash(root, inputs, packages)).toBe(header("source-hash"));
+    const code = bundle.slice(bundle.indexOf("\n", bundle.indexOf("// packages: ")) + 1);
+    expect(notesDocCodeHash(code)).toBe(header("code-hash"));
   });
 });
