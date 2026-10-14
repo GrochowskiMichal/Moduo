@@ -47,6 +47,19 @@ if [ -z "${E2E_BASE_URL:-}" ] && [ "$(bun scripts/local/env.ts which 2>/dev/null
   say "this worktree's .env.local points at the cloud project. Run 'bun run env:local' first (DOCKER_CONTEXT=orbstack if it can't find the stack)."
   exit 2
 fi
+# The config starts this worktree's own dev server and never reuses one, so a
+# listener already on its port (a leftover of yours, or a path-hash collision
+# with another worktree) would fail the run late. Say so now; never kill it.
+if [ -z "${E2E_BASE_URL:-}" ]; then
+  appurl="$(bun scripts/agent/e2e-env.ts 2>/dev/null | head -n 1)"
+  port="${appurl#http://127.0.0.1:}"; port="${port%% *}"
+  holder_pid="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -n 1)"
+  if [ -n "$holder_pid" ]; then
+    say "port $port (this worktree's dev server) is already in use by pid $holder_pid: $(ps -o command= -p "$holder_pid" 2>/dev/null | cut -c1-100)"
+    say "stop it only if you started it, or pick another port with E2E_PORT=<free port>."
+    exit 2
+  fi
+fi
 
 # ---- the machine-wide lock ----
 now() { date +%s; }
