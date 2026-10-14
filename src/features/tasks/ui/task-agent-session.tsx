@@ -1,21 +1,28 @@
 // The agent session line under a task's title (Tasks v3 TV-D16, call 52, spec
-// §12): "Claude · Writing tests · step 3 of 5 · 2m ago · PR #42 ↗", the run's
-// earlier lines folded under it, and for whoever started it the hand-back
-// summary with "Post as comment" and a way to clear the line. Status, not
-// conversation: there is no reply box. Who sees a session is the server's
-// (RLS); this renders the sessions the reader's store holds.
+// §12), as round-1c's rows draw it: a chip "Claude · working" (a dot, or a
+// check or an x once it's ready or failed), one sentence "Writing tests ·
+// step 3 of 5 · 2m ago" with its link "PR #42 ↗", or several links as small
+// chips under it; the run's earlier lines folded under that, and for whoever
+// started it the hand-back summary with "Post as comment" and a way to clear
+// the line. Status, not conversation: there is no reply box. Who sees a
+// session is the server's (RLS); this renders the sessions the reader's
+// store holds.
 
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight, CircleCheck, CircleX, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
+import { chipClasses } from "../../../components/ui/chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { cn } from "../../../lib/utils";
 import {
+  type AgentChipTone,
   type AgentSession,
-  agentLineParts,
+  type AgentSessionLink,
+  agentChip,
   agentLineText,
+  agentSentence,
   agentWho,
   isOwnSession,
   linkWords,
@@ -89,7 +96,6 @@ function AgentSessionLine({
   runtime: ModuoRuntime | null;
 }) {
   const now = new Date();
-  const parts = agentLineParts(session, now, who);
   const [open, setOpen] = useState(false);
   // The summary read, tagged with the summary it belongs to: a newer one (a
   // re-report, a new run) reads again, so the fold never shows text other
@@ -99,7 +105,6 @@ function AgentSessionLine({
   const hasSummary = own && !!session.summaryAt;
   const summaryText = summary && summary.at === session.summaryAt ? summary.text : null;
   const canFold = session.earlier.length > 0 || hasSummary;
-  const loud = !session.stoppedAt && (session.state === "needs_you" || session.state === "failed");
 
   // The summary is read only when its person opens the fold (it never rides the store).
   useEffect(() => {
@@ -155,89 +160,84 @@ function AgentSessionLine({
   };
 
   const text = agentLineText(session, now, who);
-  // Who and what (an agent's note can run long) shorten with an ellipsis, a
-  // link's words too; the step, the age and the buttons are small and wrap.
-  const head = parts.slice(0, 2);
-  const tail = parts.slice(2);
+  const chip = agentChip(session, now, who);
+  const sentence = agentSentence(session, now);
+  const links = session.links;
+  // round-1c `.lr`: a chip ("Claude · needs you") with its controls at the
+  // row's right end, then ONE sentence cut with an ellipsis (a lone link
+  // rides at its end), then several links as one wrapping row of small chips.
+  // No item is ever wider than the line (MOD-119).
   return (
     <div data-slot="agent-session" data-state={session.stoppedAt ? "stopped" : session.state}>
-      {/* Wraps, but no item is ever wider than the line (MOD-119): Focus's
-          Now card scrolled sideways on a long "needs you: …". */}
       <div
         data-slot="agent-session-line"
-        className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 font-sans text-xs text-muted-foreground"
+        className="flex min-w-0 flex-col gap-0.5 font-sans text-xs text-muted-foreground"
       >
         <span className="sr-only">{text}</span>
-        <span aria-hidden title={text} className="min-w-0 max-w-full truncate">
-          {head.map((part, i) => (
-            <span
-              // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.
-              key={i}
-              className={cn(
-                i === 0 && "font-medium text-foreground",
-                i === 1 && "ms-1.5",
-                i === 1 && loud && "text-foreground",
-              )}
-            >
-              {i > 0 ? `· ${part}` : part}
-            </span>
-          ))}
-        </span>
-        {tail.map((part, i) => (
+        <div className="flex min-w-0 items-center gap-1.5">
           <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.
-            key={i}
             aria-hidden
-            className="min-w-0 max-w-full truncate"
+            data-slot="agent-session-chip"
+            data-tone={chip.tone}
+            className={cn(
+              "inline-flex min-w-0 max-w-full items-center gap-1.5",
+              chip.tone === "loud" && "text-foreground",
+              chip.tone === "stale" && "text-subtle-foreground",
+            )}
           >
-            {`· ${part}`}
+            <AgentMark tone={chip.tone} />
+            <span className="min-w-0 truncate">{chip.words}</span>
           </span>
-        ))}
-        {session.links.map((link) => (
-          <a
-            key={link.url}
-            href={link.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={linkWords(link)}
-            className="inline-flex min-w-0 max-w-full items-center gap-0.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            <span aria-hidden className="shrink-0">
-              ·
+          {canFold || (own && runtime?.tasks.dismissAgentSession) ? (
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              {canFold ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={open}
+                  onClick={() => setOpen((o) => !o)}
+                  className="h-auto px-1 py-0 text-xs text-muted-foreground"
+                >
+                  {open ? "Fold" : hasSummary ? "Summary" : `${session.earlier.length} earlier`}
+                </Button>
+              ) : null}
+              {own && runtime?.tasks.dismissAgentSession ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Clear this line"
+                      disabled={busy}
+                      onClick={clear}
+                      className="hit-min size-4 shrink-0 text-muted-foreground"
+                    >
+                      <X className="size-icon-xs" aria-hidden />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Clear this line</TooltipContent>
+                </Tooltip>
+              ) : null}
             </span>
-            <span className="min-w-0 max-w-40 truncate">{linkWords(link)}</span>
-            <ArrowUpRight className="size-icon-xs shrink-0" aria-hidden />
-          </a>
-        ))}
-        {canFold ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={open}
-            onClick={() => setOpen((o) => !o)}
-            className="h-auto min-w-0 max-w-full px-1 py-0 text-xs text-muted-foreground"
+          ) : null}
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5 ps-4.5">
+          <span
+            aria-hidden
+            title={text}
+            data-slot="agent-session-sentence"
+            className={cn("min-w-0 max-w-full truncate", chip.tone === "loud" && "text-foreground")}
           >
-            <span className="min-w-0 truncate">
-              {open ? "Fold" : hasSummary ? "Summary" : `${session.earlier.length} earlier`}
-            </span>
-          </Button>
-        ) : null}
-        {own && runtime?.tasks.dismissAgentSession ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Clear this line"
-                disabled={busy}
-                onClick={clear}
-                className="hit-min size-4 shrink-0 text-muted-foreground"
-              >
-                <X className="size-icon-xs" aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Clear this line</TooltipContent>
-          </Tooltip>
+            {sentence}
+          </span>
+          {links.length === 1 ? <AgentLink link={links[0]} /> : null}
+        </div>
+        {links.length > 1 ? (
+          <div data-slot="agent-session-links" className="flex min-w-0 flex-wrap gap-1 ps-4.5">
+            {links.map((link) => (
+              <AgentLink key={link.url} link={link} chip />
+            ))}
+          </div>
         ) : null}
       </div>
       {open ? (
@@ -266,5 +266,53 @@ function AgentSessionLine({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** The chip's mark (round-1c `.adot`): a dot, filled when it needs you, hollow when quiet or stopped; a check or an x once it's done. */
+function AgentMark({ tone }: { tone: AgentChipTone }) {
+  return (
+    <span aria-hidden className="flex w-3 shrink-0 items-center justify-center">
+      {tone === "ready" ? (
+        <CircleCheck className="size-icon-xs text-muted-foreground" />
+      ) : tone === "failed" ? (
+        <CircleX className="size-icon-xs text-muted-foreground" />
+      ) : (
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            tone === "loud"
+              ? "bg-foreground"
+              : tone === "stale"
+                ? "ring-1 ring-subtle-foreground ring-inset"
+                : "bg-subtle-foreground",
+          )}
+        />
+      )}
+    </span>
+  );
+}
+
+/** A link the agent sent: inline at the sentence's end, or a small chip in the links row. Its words cut, never the line. */
+function AgentLink({ link, chip = false }: { link: AgentSessionLink; chip?: boolean }) {
+  const words = linkWords(link);
+  return (
+    <a
+      href={link.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={words}
+      className={
+        chip
+          ? cn(
+              chipClasses({ size: "xs", interactive: true }),
+              "text-muted-foreground hover:text-foreground",
+            )
+          : "inline-flex min-w-0 max-w-full items-center gap-0.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      }
+    >
+      <span className="min-w-0 max-w-40 truncate">{words}</span>
+      <ArrowUpRight className="size-icon-xs shrink-0" aria-hidden />
+    </a>
   );
 }

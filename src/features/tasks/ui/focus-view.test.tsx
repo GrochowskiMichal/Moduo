@@ -609,11 +609,14 @@ describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
     renderView(fakeApi([task("t1"), task("t2")], { agentSessions: [session] }));
     const card = screen.getByRole("region", { name: "Now" });
     const line = card.querySelector('[data-slot="agent-session-line"]') as HTMLElement;
-    // It may wrap, but the note's item is never wider than the line.
-    expect(line.className).toContain("flex-wrap");
+    // A chip, then one sentence: the note never makes it wider than the line.
     expect(line.className).toContain("min-w-0");
+    expect(line.querySelector('[data-slot="agent-session-chip"]')?.textContent).toBe(
+      "Claude · needs you",
+    );
     // The full text on hover; the words that can run long cut with an ellipsis.
-    const shortened = line.querySelector(".truncate") as HTMLElement;
+    const shortened = line.querySelector('[data-slot="agent-session-sentence"]') as HTMLElement;
+    expect(shortened.className).toContain("truncate");
     expect(shortened.getAttribute("title")).toBe(`Claude · Needs you: ${note} · just now`);
     expect(shortened.textContent).toContain(note);
     expect(shortened.className).toContain("min-w-0");
