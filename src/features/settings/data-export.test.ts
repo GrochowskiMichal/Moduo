@@ -284,4 +284,90 @@ describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #
     expect(data.waiting).toEqual([{ id: "w1", kind: "text", label: "Feedback" }]);
     expect(data.truncated).toEqual([sessionsCut]);
   });
+
+  it("carries your templates and the shared ones, with their bodies (TV-D15)", async () => {
+    const template = { id: "tp1", kind: "project", name: "Season kit", body: { v: 1 } };
+    const cut = { scope: "task templates", shown: 500, total: null };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTemplates: async () => ({ templates: [template], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.templates).toEqual([template]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
+  it("carries your own time entries with their days and notes (TV-D14)", async () => {
+    const entry = { id: "e1", kind: "manual", seconds: 7200, entryOn: "2026-10-12", note: "Call" };
+    const cut = { scope: "time entries", shown: 20000, total: 20001 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTimeEntries: async () => ({ entries: [entry], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.timeEntries).toEqual([entry]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
+  it("reads as no templates on a runtime without them", async () => {
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.templates).toEqual([]);
+  });
+
+  it("carries your own Focus runs (TV-F6), and says when they were cut", async () => {
+    const run = { id: "run-1", mode: "per_task", focusedSeconds: 1200 };
+    const runsCut = { scope: "Focus runs", shown: 10000, total: 10002 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+      { listMyRuns: async () => ({ runs: [run], truncated: [runsCut] }) },
+    );
+    expect(data.focusRuns).toEqual([run]);
+    expect(data.truncated).toEqual([runsCut]);
+  });
+
+  it("carries your own agent sessions and import runs (TV-D16), and none without them", async () => {
+    const session = { id: "s1", agent: "Claude", state: "ready" };
+    const run = { id: "imp-1", source: "todoist", label: "Syllabus" };
+    const base = {
+      list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+      listCompletions: async () => ({ completions: [], truncated: [] }),
+      ...noD10Reads,
+    };
+    const rowsCut = { scope: "imported rows", shown: 100000, total: 100400 };
+    const data = await readTasksExport(
+      {
+        ...base,
+        listMyAgentSessions: async () => ({ sessions: [session], truncated: [] }),
+        listImports: async () => ({ imports: [run], truncated: [rowsCut] }),
+      },
+      "ws-1",
+    );
+    expect(data.agentSessions).toEqual([session]);
+    expect(data.imports).toEqual([run]);
+    // A cut read is named, never silent.
+    expect(data.truncated).toEqual([rowsCut]);
+    const none = await readTasksExport(base, "ws-1");
+    expect(none.agentSessions).toEqual([]);
+    expect(none.imports).toEqual([]);
+  });
 });

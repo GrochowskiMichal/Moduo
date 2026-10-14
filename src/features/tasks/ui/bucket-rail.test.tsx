@@ -14,11 +14,13 @@ import { useState } from "react";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { TasksSidebarHideable } from "../../../lib/preferences";
 import type { Area, Bucket } from "../model";
+import type { TaskView } from "../views";
 import {
   ARCHIVED_SELECTION,
   asRailProject,
   BucketRail,
   parseCollapsedSections,
+  TEMPLATES_SELECTION,
   TRASH_SELECTION,
   UPCOMING_SELECTION,
 } from "./bucket-rail";
@@ -87,6 +89,9 @@ function renderRail({
   hidden: initialHidden = new Set<TasksSidebarHideable>(),
   pinned: initialPinned = [] as string[],
   dnd = false,
+  templates = false,
+  views,
+  canModerate = false,
 }: {
   canEdit?: boolean;
   selection?: string;
@@ -97,6 +102,11 @@ function renderRail({
   pinned?: string[];
   /** Inside a DndContext, with sortable rows and drop targets. */
   dnd?: boolean;
+  /** Offer Duplicate…, Save as template… and Templates (TV-D15). */
+  templates?: boolean;
+  /** Saved views (TV-U8); "u" is the signed-in person. */
+  views?: TaskView[];
+  canModerate?: boolean;
 } = {}) {
   const calls = {
     onSelect: rs.fn(),
@@ -113,6 +123,15 @@ function renderRail({
     onCreateBucket: rs.fn(),
     onCreateArea: rs.fn(async () => "new-area"),
     onTriageBucket: rs.fn(),
+    onDuplicate: rs.fn(),
+    onSaveAsTemplate: rs.fn(),
+    onNewFromTemplate: rs.fn(),
+    onOpenWelcome: rs.fn(),
+    onRenameView: rs.fn(),
+    onShareView: rs.fn(),
+    onDeleteView: rs.fn(),
+    onMoveView: rs.fn(),
+    onCopyViewLink: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -121,8 +140,6 @@ function renderRail({
     const [pinned, setPinned] = useState(initialPinned);
     const rail = (
       <BucketRail
-        mode="plan"
-        onModeChange={() => {}}
         selection={selection}
         onSelect={(next) => {
           calls.onSelect(next);
@@ -185,6 +202,27 @@ function renderRail({
         onDeleteArea={calls.onDeleteArea}
         archivedCount={2}
         trashCount={5}
+        templates={
+          templates
+            ? {
+                onDuplicate: calls.onDuplicate,
+                onSaveAsTemplate: calls.onSaveAsTemplate,
+                onNewFromTemplate: calls.onNewFromTemplate,
+              }
+            : undefined
+        }
+        onOpenWelcome={calls.onOpenWelcome}
+        views={views}
+        viewActions={{
+          currentUserId: "u",
+          onRename: calls.onRenameView,
+          onShare: calls.onShareView,
+          onDelete: calls.onDeleteView,
+          onMove: calls.onMoveView,
+          onCopyLink: calls.onCopyViewLink,
+          canShare: canEdit,
+          canModerate,
+        }}
         dropAccepts={dnd ? () => false : undefined}
       />
     );
@@ -247,7 +285,7 @@ describe("the decided sidebar (AC11.1)", () => {
     const nav = screen.getByRole("navigation", { name: "Tasks" });
     expect(nav.textContent ?? "").not.toMatch(/bucket/i);
     expect(within(nav).queryByText("Queue")).toBeNull();
-    expect(main(/^Focus, 4 queued$/)).toBeTruthy();
+    expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
     expect(main(/^New project$/)).toBeTruthy();
   });
 
@@ -304,7 +342,7 @@ describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (
     // The menu stays open while ticking several; Esc closes it.
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     await settle();
-    expect(main(/^Focus, 4 queued$/)).toBeTruthy();
+    expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
   });
 
   it("opens Archived projects and Recently deleted from the ⋯, never as rows", async () => {
@@ -350,6 +388,127 @@ describe("Pin (REPLAN 29b)", () => {
   });
 });
 
+function savedView(id: string, name: string, extra: Partial<TaskView> = {}): TaskView {
+  return {
+    id,
+    workspaceId: "w",
+    ownerId: "u",
+    name,
+    scope: "all",
+    projectId: null,
+    filters: [],
+    display: {},
+    shared: false,
+    position: 1,
+    seed: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+    deletedAt: null,
+    ...extra,
+  };
+}
+
+const VIEWS = [
+  savedView("v1", "Due this week", { position: 1 }),
+  savedView("v2", "Waiting on client", { position: 2, shared: true }),
+  savedView("v3", "Mike's board", { ownerId: "mike", shared: true }),
+];
+
+describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
+  it("sit between Pinned and the projects, with no glyphs, and open as view:<id>", () => {
+    const calls = renderRail({ views: VIEWS, pinned: ["c-acme"] });
+    expect(order().slice(5, 12)).toEqual([
+      "All",
+      "Pinned",
+      "Acme rebrand",
+      "Views",
+      "Due this week",
+      "Waiting on client",
+      "Mike's board",
+    ]);
+    // An empty slot keeps the names in line with the projects', with no glyph.
+    const row = main(/^Due this week$/).closest('[data-slot="nav-row"]') as HTMLElement;
+    expect(row.querySelector('[data-slot="nav-row-main"] svg')).toBeNull();
+    fireEvent.click(main(/^Due this week$/));
+    expect(calls.onSelect).toHaveBeenCalledWith("view:v1");
+  });
+
+  it("the group collapses like the others", () => {
+    const calls = renderRail({ views: VIEWS });
+    fireEvent.click(screen.getByRole("button", { name: /^Views/ }));
+    expect(calls.onToggleCollapsed).toHaveBeenCalledWith("views");
+    expect(screen.queryByRole("button", { name: /^Due this week$/ })).toBeNull();
+  });
+
+  it("your view's ⋯: Rename · Pin · Share · Move · Copy link · Delete", async () => {
+    const calls = renderRail({ views: VIEWS });
+    await rowMenu(/^Due this week$/);
+    const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+    expect(items).toEqual([
+      "Rename",
+      "Pin to sidebar",
+      "Share with the workspace",
+      "Move up",
+      "Move down",
+      "Copy link",
+      "Delete view",
+    ]);
+    expect(screen.getByRole("menuitem", { name: "Move up" }).getAttribute("aria-disabled")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: "Share with the workspace" }));
+    await settle();
+    expect(calls.onShareView).toHaveBeenCalledWith("v1", true);
+  });
+
+  it("someone else's shared view: only Pin and Copy link (an admin can also stop sharing it)", async () => {
+    renderRail({ views: VIEWS });
+    await rowMenu(/^Mike's board$/);
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Pin to sidebar",
+      "Copy link",
+    ]);
+    cleanup();
+    const calls = renderRail({ views: VIEWS, canModerate: true });
+    await rowMenu(/^Mike's board$/);
+    expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual([
+      "Pin to sidebar",
+      "Stop sharing",
+      "Copy link",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stop sharing" }));
+    await settle();
+    expect(calls.onShareView).toHaveBeenCalledWith("v3", false);
+  });
+
+  it("a viewer keeps views but can't share them; a shared one can still stop", async () => {
+    renderRail({ views: VIEWS, canEdit: false });
+    await rowMenu(/^Due this week$/);
+    expect(screen.queryByRole("menuitem", { name: "Share with the workspace" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toBeTruthy();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    await settle();
+    await rowMenu(/^Waiting on client$/);
+    expect(screen.getByRole("menuitem", { name: "Stop sharing" })).toBeTruthy();
+    // What a shared view shows needs Tasks edit to change.
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+  });
+
+  it("Pin puts a view in Pinned, in pin order with projects", async () => {
+    const calls = renderRail({ views: VIEWS, pinned: ["c-acme"] });
+    await rowMenu(/^Waiting on client$/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Pin to sidebar" }));
+    await settle();
+    expect(calls.onTogglePin).toHaveBeenCalledWith("view:v2");
+    expect(order().slice(6, 9)).toEqual(["Pinned", "Acme rebrand", "Waiting on client"]);
+  });
+
+  it("a pinned view that's gone drops out of Pinned", () => {
+    renderRail({ views: VIEWS, pinned: ["view:gone"] });
+    expect(screen.queryByText("Pinned")).toBeNull();
+  });
+});
+
 describe("the project menu (REPLAN 13–16, 30, 78)", () => {
   it("offers colour, area, pin, share, statuses, archive and delete; no Open at", async () => {
     renderRail();
@@ -365,6 +524,50 @@ describe("the project menu (REPLAN 13–16, 30, 78)", () => {
       "Delete project…",
     ]);
     expect(screen.queryByText(/Open at/)).toBeNull();
+  });
+
+  it("with templates: Duplicate… and Save as template… before Archive (TV-D15)", async () => {
+    const calls = renderRail({ templates: true });
+    await rowMenu(/^Website,/);
+    const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
+    expect(items).toEqual([
+      "Rename",
+      "Colour",
+      "Area",
+      "Pin to sidebar",
+      "Share",
+      "Duplicate…",
+      "Save as template…",
+      "Archive…",
+      "Delete project…",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate…" }));
+    await settle();
+    expect(calls.onDuplicate).toHaveBeenCalledWith(expect.objectContaining({ id: "b-site" }));
+    await rowMenu(/^Website,/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Save as template…" }));
+    await settle();
+    expect(calls.onSaveAsTemplate).toHaveBeenCalledWith(expect.objectContaining({ id: "b-site" }));
+  });
+
+  it("with templates: the ⋯ offers New project from template… and Templates (TV-D15)", async () => {
+    const calls = renderRail({ templates: true });
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New project from template…" }));
+    await settle();
+    expect(calls.onNewFromTemplate).toHaveBeenCalled();
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Templates" }));
+    await settle();
+    expect(calls.onSelect).toHaveBeenCalledWith(TEMPLATES_SELECTION);
+  });
+
+  it("the ⋯ reopens Tasks' welcome: What's in Tasks, once the menu closes (TV-U17)", async () => {
+    const calls = renderRail();
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "What’s in Tasks" }));
+    await settle();
+    expect(calls.onOpenWelcome).toHaveBeenCalledTimes(1);
   });
 
   it("Archive… and Delete project… ask the page first", async () => {

@@ -14,6 +14,7 @@
 // A value won from the cloud (another device) flows back through the same store,
 // so it propagates to every instance exactly like a local edit.
 
+import { type FocusTimerMode, normalizeFocusTimerMode } from "@contracts/vocabularies";
 import { useCallback, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useDomainSync } from "./prefs-sync";
@@ -33,6 +34,17 @@ export interface FocusPrefs {
   autoStartNext: boolean;
   /** Play a short chime when an interval ends. */
   soundEnabled: boolean;
+  /** Focus's Timer (TV-F6, call 62a): Per task (the default), Pomodoro or Off.
+   *  A new session starts with it; Focus's ⋯ menu changes it everywhere,
+   *  the running session included. */
+  timer: FocusTimerMode;
+  /** Per task: count down the task's estimate instead of up (62a, client only). */
+  countdownEstimate: boolean;
+  /** "Offer quick tasks along the way" (TV-F8, call 59a): one quick task from
+   *  the project you're leaving, between two tasks. On by default. */
+  alongTheWay: boolean;
+  /** "≈ 7h 30m at your usual pace" in Up next's header (TV-F8, call 10). */
+  usualPace: boolean;
 }
 
 export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
@@ -42,6 +54,10 @@ export const DEFAULT_FOCUS_PREFS: FocusPrefs = {
   sessionsBeforeLongBreak: 4,
   autoStartNext: false,
   soundEnabled: true,
+  timer: "per_task",
+  countdownEstimate: false,
+  alongTheWay: true,
+  usualPace: true,
 };
 
 const LOCAL_STORAGE_KEY = "moduo.focus";
@@ -62,6 +78,10 @@ const focusPrefsSchema = z.object({
   sessionsBeforeLongBreak: z.coerce.number().catch(DEFAULT_FOCUS_PREFS.sessionsBeforeLongBreak),
   autoStartNext: z.boolean().catch(DEFAULT_FOCUS_PREFS.autoStartNext),
   soundEnabled: z.boolean().catch(DEFAULT_FOCUS_PREFS.soundEnabled),
+  timer: z.unknown().transform(normalizeFocusTimerMode),
+  countdownEstimate: z.boolean().catch(DEFAULT_FOCUS_PREFS.countdownEstimate),
+  alongTheWay: z.boolean().catch(DEFAULT_FOCUS_PREFS.alongTheWay),
+  usualPace: z.boolean().catch(DEFAULT_FOCUS_PREFS.usualPace),
 });
 
 function sanitize(raw: unknown): FocusPrefs {
@@ -83,6 +103,10 @@ function sanitize(raw: unknown): FocusPrefs {
     ),
     autoStartNext: parsed.autoStartNext,
     soundEnabled: parsed.soundEnabled,
+    timer: parsed.timer,
+    countdownEstimate: parsed.countdownEstimate,
+    alongTheWay: parsed.alongTheWay,
+    usualPace: parsed.usualPace,
   };
 }
 

@@ -31,8 +31,13 @@ type GroupHeaderProps = Omit<React.ComponentProps<"div">, "children"> & {
   sub?: React.ReactNode;
   /** A dot, team mark or icon before the label. */
   leading?: React.ReactNode;
-  /** Shown on hover / focus-within, in a reserved slot ("+", "⋯"). */
+  /** Shown on hover / focus-within, in a reserved slot ("⋯"). */
   actions?: React.ReactNode;
+  /**
+   * Always shown, after `actions` (a List group's "+", tasks-v3 default n:
+   * the end of a long group can be far away, the header is always there).
+   */
+  persistentActions?: React.ReactNode;
   /** Makes the label a toggle; `collapsed` turns the chevron. */
   onToggle?: () => void;
   collapsed?: boolean;
@@ -47,6 +52,7 @@ function GroupHeader({
   sub,
   leading,
   actions,
+  persistentActions,
   onToggle,
   collapsed = false,
   sticky = false,
@@ -119,6 +125,11 @@ function GroupHeader({
           )}
         >
           {actions}
+        </span>
+      ) : null}
+      {persistentActions ? (
+        <span data-slot="group-header-persistent" className="flex shrink-0 items-center gap-0.5">
+          {persistentActions}
         </span>
       ) : null}
     </div>

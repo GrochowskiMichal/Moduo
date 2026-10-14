@@ -3,7 +3,12 @@
  * Implementations live in runtime.tauri.ts (desktop) and runtime.web.ts (web).
  */
 
-import type { AttachmentStatus, ContentAuthorKind } from "@contracts/vocabularies";
+import type {
+  AttachmentPreviewMime,
+  AttachmentStatus,
+  CommentReaction,
+  ContentAuthorKind,
+} from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -27,6 +32,7 @@ import type {
 import type { NeedsAttentionItem } from "../features/contacts/needs-attention";
 import type { ReconnectItem } from "../features/contacts/reconnect";
 import type { DashboardLayout } from "../features/dashboard/engine/types";
+import type { FocusRunRuntime } from "../features/focus/run-model";
 import type {
   NoteDocPull,
   NotesImportRow,
@@ -47,20 +53,27 @@ import type {
   TagLink,
   Task,
   TaskCompletion,
+  TaskCycle,
   TaskQueueEntry,
   TaskRelation,
   TaskStatus,
   TaskStatusCategory,
   TasksCatchUpItem,
   TasksModuleBundle,
+  TaskTimeEntry,
   TaskTimeResult,
   TaskTimeTotals,
   TimeBlockMap,
+  TimeReportQuery,
+  TimeReportResult,
   TrackTimeInput,
 } from "../features/tasks/model";
 import type { EntityLink, EntityRecord, EntityRef, LinkOrigin, RelationKind } from "./entity-links";
 import type { Truncation } from "./paged-select";
+import type { TasksAgentsApi } from "./runtime.web.agents";
 import type { TasksStructureApi } from "./runtime.web.structure";
+import type { TasksTemplatesApi } from "./runtime.web.templates";
+import type { TasksViewsApi } from "./runtime.web.views";
 import type {
   SyncAccessResult,
   SyncIdsResult,
@@ -71,6 +84,7 @@ import type {
   TaskSearchResult,
 } from "./sync/types";
 import type { TaskFieldPatch } from "./task-rows";
+import type { TimeRegion, TimeRegionPatch } from "./time-region";
 
 /**
  * TV-D10's structure around tasks (runtime.web.structure.ts): areas, project
@@ -79,6 +93,27 @@ import type { TaskFieldPatch } from "./task-rows";
  * own signatures above.
  */
 export type TasksStructureRuntime = Omit<TasksStructureApi, "getTimeBlocks" | "setTimeBlocks">;
+
+/**
+ * TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts):
+ * reads under RLS, writes as ops; an apply or a duplicate answers with every
+ * row it made. Optional: a runtime without them offers neither.
+ */
+export type TasksTemplatesRuntime = Partial<TasksTemplatesApi>;
+
+/**
+ * TV-U8's saved views (runtime.web.views.ts): the store reads `task_views`
+ * through `syncRead`; these are the ops. Optional: a runtime without them
+ * offers no views.
+ */
+export type TasksViewsRuntime = Partial<TasksViewsApi>;
+
+/**
+ * TV-D16's agent work and import runs (runtime.web.agents.ts): a session's
+ * summary, posting or clearing it, the share switch, and your import runs.
+ * Optional: a runtime without them shows no agent work.
+ */
+export type TasksAgentsRuntime = Partial<TasksAgentsApi>;
 
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
@@ -96,7 +131,14 @@ export type SpineComment = {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  /** When its author last edited it (TV-U13); null when never: it reads "edited". */
+  editedAt: string | null;
+  /** Who reacted with which of the six (TV-U13, REPLAN 88), oldest first. */
+  reactions: CommentReactionMark[];
 };
+
+/** One person's reaction on a comment. */
+export type CommentReactionMark = { userId: string; reaction: CommentReaction };
 
 export type RuntimeSession = {
   access_token: string;
@@ -222,6 +264,52 @@ export type AttachmentRecord = {
   /** Set while the file is in the trash (restorable for 30 days). */
   deletedAt: string | null;
   createdAt: string;
+  /** Storage paths in the `attachments` bucket (signed links only). */
+  objectPath: string | null;
+  previewPath: string | null;
+  previewMime: AttachmentPreviewMime | null;
+};
+
+/** The owner's storage pool as `storage_status` reports it (AT-1). */
+export type StorageStatus = {
+  tier: string;
+  perFileBytes: number;
+  totalBytes: number;
+  usedBytes: number;
+  pendingBytes: number;
+  /** 0, 80 or 95: the alert level the pool is at. */
+  level: number;
+  overLimit: boolean;
+  isOwner: boolean;
+  /** Only told to the owner. */
+  ownedWorkspaces: number | null;
+};
+
+/** One row of Settings → Storage's largest-files list (`attachments_largest`, AT-3). */
+export type LargestAttachment = {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  /** Null once the uploader's account is deleted. */
+  uploaderId: string | null;
+  createdAt: string;
+  /** The reader has edit access to the task. */
+  canDelete: boolean;
+};
+
+export type AttachmentBeginInput = {
+  workspaceId: string;
+  entityType: "task";
+  entityId: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  previewMime: AttachmentPreviewMime | null;
+  width: number | null;
+  height: number | null;
 };
 
 export type ModuoRuntime = {
@@ -554,6 +642,14 @@ export type ModuoRuntime = {
      */
     setTimeZone(timeZone: string): Promise<void>;
     /**
+     * Time & region (TV-D14): the person's zone, week start, clock, date
+     * order and "Share my tracked time with the workspace owner". Null when
+     * signed out or before the migration.
+     */
+    getTimeRegion(): Promise<TimeRegion | null>;
+    /** Change some of them (`user_op_set_time_region`); answers the whole setting. */
+    setTimeRegion(patch: TimeRegionPatch): Promise<TimeRegion | null>;
+    /**
      * The oldest app version that may still save (`app_settings.min_build`,
      * TV-D8), or null when it can't be read (the app then runs as normal).
      */
@@ -592,16 +688,49 @@ export type ModuoRuntime = {
   };
 
   /**
-   * Attachments (AT-1) — files on tasks. AT-1 ships the listing the workspace
-   * export reads; upload, delete and restore arrive with the panel (AT-2).
-   * `list` returns every row this person can see (trash included), and [] until
-   * the migration reaches the database.
+   * Attachments (AT-1 storage, AT-2 upload) — files on tasks. `list` returns
+   * every row this person can see (trash included; the workspace export reads
+   * it), and [] until the migration reaches the database. Uploads go begin →
+   * `uploadObject` (original, then preview) → finalize; refusals throw
+   * `AttachmentOpError` with AT-1's machine code and numbers.
    */
   attachments: {
     list(workspaceId: string): Promise<{
       attachments: AttachmentRecord[];
       truncation: Truncation | null;
     }>;
+    /** The ready, undeleted files on one entity, oldest first. */
+    listForEntity(input: {
+      workspaceId: string;
+      entityType: string;
+      entityId: string;
+    }): Promise<AttachmentRecord[]>;
+    begin(input: AttachmentBeginInput): Promise<AttachmentRecord>;
+    uploadObject(input: {
+      path: string;
+      blob: Blob;
+      contentType: string;
+      onProgress?: (loaded: number, total: number) => void;
+      signal?: AbortSignal;
+    }): Promise<void>;
+    finalize(id: string): Promise<AttachmentRecord>;
+    /** To the trash: the space is free at once, restorable for 30 days. */
+    remove(id: string): Promise<AttachmentRecord>;
+    restore(id: string): Promise<AttachmentRecord>;
+    /**
+     * Let go of one's own upload that never finished (dismissed, or begun
+     * again): its space is free at once (AT-3). A finished file is left as it
+     * is. Quiet on a database without the op.
+     */
+    abandon(id: string): Promise<void>;
+    status(workspaceId: string): Promise<StorageStatus>;
+    /**
+     * Settings → Storage (AT-3): the biggest finished files in a workspace
+     * whose task the reader can see, with whether the reader may delete each.
+     */
+    largest(workspaceId: string, limit?: number): Promise<LargestAttachment[]>;
+    /** Signed links by path (missing paths are left out). */
+    signedUrls(paths: string[], ttlSeconds: number): Promise<Map<string, string>>;
   };
 
   window: {
@@ -1093,6 +1222,23 @@ export type ModuoRuntime = {
      */
     listTimeTotals(workspaceId: string, since?: string | null): Promise<TaskTimeTotals[]>;
     /**
+     * Your own time entries on a task (TV-D14), newest first: what "Add time…"
+     * logged, Focus stretches, adjustments and give-backs. Only on a task you
+     * can see. Empty until the migration reaches the database.
+     */
+    listMyTimeEntries(workspaceId: string, taskId: string): Promise<TaskTimeEntry[]>;
+    /**
+     * The time report's rows (TV-D14, `tasks_time_report`): one per entry, on
+     * tasks the reader can see, dated in `query.zone`; yours, and for the
+     * workspace owner the time of people who share theirs. Paged past
+     * PostgREST's row cap; `truncated` when it held more than it reads.
+     */
+    timeReport(query: TimeReportQuery): Promise<TimeReportResult>;
+    /** Your own time entries in a workspace, on tasks you can see, for the data export (TV-D14). */
+    exportTimeEntries(
+      workspaceId: string,
+    ): Promise<{ entries: TaskTimeEntry[]; truncated: Truncation[] }>;
+    /**
      * Assign (or, with null, unassign) through `tasks_op_assign`: the person
      * has to be a member who can work on tasks. Assigning someone else
      * notifies them once.
@@ -1102,6 +1248,12 @@ export type ModuoRuntime = {
       taskId: string;
       assigneeId: string | null;
     }): Promise<Task>;
+    /**
+     * Take an unclaimed task of a team you're in (TV-D13, `tasks_op_claim`):
+     * it becomes yours and keeps its team. Needs Edit on the task; one someone
+     * else took first is refused ("Someone already took this task.").
+     */
+    opClaim(input: { workspaceId: string; taskId: string }): Promise<Task>;
     opSetStatus(input: {
       workspaceId: string;
       taskId: string;
@@ -1129,6 +1281,35 @@ export type ModuoRuntime = {
       releaseCommit: boolean;
     }): Promise<Task>;
     /**
+     * "Move just this one" (TV-D12): move this cycle's due date or its work
+     * session's start; the other date moves by the same days and the rule
+     * stays (the next cycle is back on the pattern). One of the two.
+     */
+    opMoveOccurrence(input: {
+      workspaceId: string;
+      taskId: string;
+      dueOn?: string | null;
+      startsAt?: string | null;
+    }): Promise<Task>;
+    /** A repeat's cycles, done and skipped, with your own tracked time (TV-D12). */
+    taskHistory(input: { workspaceId: string; taskId: string }): Promise<TaskCycle[]>;
+    /**
+     * Which of these tasks an API key made, with the trail's label for it
+     * ("Alex · via Claude Desktop"; TV-U13b, the Inbox's agent chip). Read from
+     * the tasks' `tasks.create` trail rows, so only tasks the caller can see
+     * answer. Batched; tasks no key made are left out.
+     */
+    listAgentCaptures(input: {
+      workspaceId: string;
+      taskIds: readonly string[];
+    }): Promise<Array<{ taskId: string; label: string }>>;
+    /** Notify the people picked by `@` in a task's description (TV-D12). */
+    mentionInTask(input: {
+      workspaceId: string;
+      taskId: string;
+      userIds: string[];
+    }): Promise<number>;
+    /**
      * Ask the server to roll this workspace's repeats over now (TV-D8): it
      * answers with what changed, plus the tasks named in `items`, as it has
      * them. Builds since TV-D8 send no items; the server's engine decides.
@@ -1145,7 +1326,10 @@ export type ModuoRuntime = {
        * under module='contacts', not 'tasks'. */
       module?: string;
     }): Promise<ActivityEntry[]>;
-  } & TasksStructureRuntime;
+  } & TasksStructureRuntime &
+    TasksTemplatesRuntime &
+    TasksViewsRuntime &
+    TasksAgentsRuntime;
 
   /**
    * Connective-tissue spine — the link substrate (specs/connective-tissue.md
@@ -1158,6 +1342,9 @@ export type ModuoRuntime = {
    */
   /** Chat (specs/chat.md) — Supabase-direct on both surfaces; Duo/Team/Founder workspaces. */
   chat: ChatRuntime;
+
+  /** Focus runs and claims (TV-F6) — Supabase-direct on both surfaces. */
+  focus: FocusRunRuntime;
 
   spine: {
     /**
@@ -1236,6 +1423,16 @@ export type ModuoRuntime = {
       entityLabel?: string;
       entityIcon?: string | null;
     }): Promise<SpineComment>;
+    /**
+     * The opening words (140 characters) of comments a bell notice names by
+     * id (TV-D16: notices carry no comment text). Read through the comments'
+     * own policy, so only comments on items the reader can still see answer;
+     * a deleted comment doesn't.
+     */
+    getCommentExcerpts?(input: {
+      workspaceId: string;
+      commentIds: string[];
+    }): Promise<Array<{ id: string; excerpt: string }>>;
     /** Read an entity's comment thread (oldest first, tombstones excluded) —
      * the Comments rail (NO-7 AC9). Direct member-read SELECT (RLS-guarded). */
     listComments(input: {
@@ -1244,11 +1441,50 @@ export type ModuoRuntime = {
       entityId: string;
     }): Promise<SpineComment[]>;
     /**
+     * Edit your own comment (`comments_op_edit`, TV-U13): only its author, and
+     * only someone named for the first time (`mentionedUserIds`) is notified.
+     */
+    editComment(input: {
+      commentId: string;
+      body: string;
+      mentionedUserIds?: string[];
+    }): Promise<SpineComment>;
+    /** Delete a comment (`comments_op_delete`): yours, or anyone's with Full
+     *  access to the task or note. A soft delete, so the 8 s Undo can restore it. */
+    deleteComment(input: { commentId: string }): Promise<SpineComment>;
+    /** Undo a comment's delete (`comments_op_restore`). */
+    restoreComment(input: { commentId: string }): Promise<SpineComment>;
+    /**
+     * `@Team` in your own comment (TV-D13, `comments_op_mention_teams`): each
+     * member of those teams who can see the item hears once (never you, nor
+     * anyone the comment already reached). Call it after posting or editing.
+     */
+    mentionTeams(input: { commentId: string; teamIds: string[] }): Promise<void>;
+    /** Add (`on`) or take back one of the six reactions; answers the comment's
+     *  reactions after the change. Never notifies (REPLAN 88). */
+    reactToComment(input: {
+      commentId: string;
+      reaction: CommentReaction;
+      on: boolean;
+    }): Promise<CommentReactionMark[]>;
+    /**
      * The derived notification feed: `module_activity` rows targeting me,
      * overlaid with my read state, newest first (AC10). The NotificationCenter
      * groups these by target then verb.
      */
     listNotifications(input: { workspaceId: string; limit?: number }): Promise<NotificationItem[]>;
+    /**
+     * Register this browser for Web Push notices (TV-D12): the subscription's
+     * endpoint (a known push service) and keys, for the signed-in person.
+     */
+    pushSubscribe(input: {
+      endpoint: string;
+      p256dh: string;
+      auth: string;
+      userAgent?: string | null;
+    }): Promise<void>;
+    /** Forget this browser's Web Push subscription (only your own). */
+    pushUnsubscribe(input: { endpoint: string }): Promise<void>;
     /** Mark one notification (activity row) read. Idempotent. */
     markNotificationRead(input: { workspaceId: string; activityId: string }): Promise<void>;
     /** Mark every targeting-me notification in the workspace read. */

@@ -1,22 +1,91 @@
+import { isFocusTimerMode } from "@contracts/vocabularies";
 import type { ReactNode } from "react";
 
 import { Input } from "../../../components/ui/input";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Switch } from "../../../components/ui/switch";
 import { useFocusPrefs } from "../../../lib/focus-prefs";
 
+import { PrefGroup } from "./preferences-section";
 import { SettingsSectionShell } from "./section-shell";
 
-/** Pomodoro intervals + the Focus timer's behaviour. Persisted via
- *  useFocusPrefs; the Focus card's ⋯ popover edits the same work/break values. */
+/**
+ * Focus (Tasks v3 TV-F8, calls 59a, 62a, 63, 10; F7-17): your defaults for the
+ * Timer (Per task · Pomodoro · Off, with "Count down the estimate" under Per
+ * task), "Offer quick tasks along the way", your usual pace, then Pomodoro's
+ * lengths. Focus's ⋯ menu changes the same settings everywhere (63); a change
+ * here is the default the next session starts with. Persisted via
+ * useFocusPrefs. (The Settings rebuild moves this under Tasks → Focus.)
+ */
 export function FocusSection() {
   const { prefs, setPrefs } = useFocusPrefs();
 
   return (
     <SettingsSectionShell
       title="Focus"
-      description="Pomodoro intervals and how the Focus timer behaves. The timer is always opt-in — it never starts on its own."
+      description="How Focus times your work and what it offers between tasks. The timer never starts on its own."
     >
-      <section className="rounded-lg border border-border bg-card px-6 py-2">
+      <PrefGroup label="Timer and offers">
+        <FocusRow
+          title="Timer"
+          description={
+            prefs.timer === "off"
+              ? "Off: no clock, and nothing is recorded. Focus still works."
+              : prefs.timer === "pomodoro"
+                ? "Pomodoro: one rhythm for the session, breaks offered between tasks. Time still goes on each task."
+                : "Per task: a clock on the task you're on, and its time is recorded."
+          }
+        >
+          <SegmentedControl
+            size="sm"
+            value={prefs.timer}
+            onValueChange={(v) => {
+              if (isFocusTimerMode(v)) setPrefs({ timer: v });
+            }}
+            items={[
+              { value: "per_task", label: "Per task" },
+              { value: "pomodoro", label: "Pomodoro" },
+              { value: "off", label: "Off" },
+            ]}
+            aria-label="Timer"
+          />
+        </FocusRow>
+        <FocusRow
+          title="Count down the estimate"
+          description="Per task: show what's left of the estimate instead of counting up."
+        >
+          <Switch
+            checked={prefs.countdownEstimate}
+            disabled={prefs.timer !== "per_task"}
+            onCheckedChange={(v) => setPrefs({ countdownEstimate: v })}
+            aria-label="Count down the estimate"
+          />
+        </FocusRow>
+        <FocusRow
+          title="Offer quick tasks along the way"
+          description="Between two tasks in different projects, offer one task of 15 minutes or less from the project you're leaving."
+        >
+          <Switch
+            checked={prefs.alongTheWay}
+            onCheckedChange={(v) => setPrefs({ alongTheWay: v })}
+            aria-label="Offer quick tasks along the way"
+          />
+        </FocusRow>
+        <FocusRow
+          title="Show my usual pace"
+          description="After about ten timed tasks, Up next says how long it takes at your own pace. Only you see it."
+        >
+          <Switch
+            checked={prefs.usualPace}
+            onCheckedChange={(v) => setPrefs({ usualPace: v })}
+            aria-label="Show my usual pace"
+          />
+        </FocusRow>
+      </PrefGroup>
+      <PrefGroup
+        label="Pomodoro"
+        description="Lengths for the Pomodoro timer. The ⋯ menu in Focus offers presets."
+      >
         <FocusRow title="Work" description="Length of one focus block." htmlFor="focus-work">
           <MinutesInput
             id="focus-work"
@@ -85,7 +154,7 @@ export function FocusSection() {
             aria-label="Interval-end sound"
           />
         </FocusRow>
-      </section>
+      </PrefGroup>
     </SettingsSectionShell>
   );
 }

@@ -12,16 +12,21 @@ import {
   type FocusFlushSink,
   type FocusPhaseEnd,
   flushFocusSession,
+  focusOnTask,
   followFocusTask,
   forgetFocusUser,
   getFocusSession,
   previewFocusInterval,
   registerFocusFlushSink,
   resolveFocusAway,
+  STOP_UNDO_MS,
+  setFocusTimer,
+  skipFocusBreak,
   startFocus,
   stopFocus,
   toggleFocusPomodoro,
   toggleFocusRunning,
+  undoStopFocus,
 } from "./engine";
 import { blankRecord, parseRecord, settleFlush, takeFlushBatch } from "./engine-core";
 import type { FocusPhaseNext } from "./phase-alert";
@@ -407,6 +412,22 @@ describe("F1-4 — pomodoro catch-up", () => {
     expect(s.away?.endedPhases).toHaveLength(1);
     resolveFocusAway("keep");
     expect(getFocusSession().accrued).toBe(25 * 60);
+  });
+
+  it("skipping the waiting break starts a fresh work block now (TV-F8's between-tasks offer)", () => {
+    bindFocusTask(task("t1"));
+    toggleFocusPomodoro();
+    startFocus();
+    rs.advanceTimersByTime(25 * MIN + 1000);
+    expect(getFocusSession()).toMatchObject({ phase: "break", running: false });
+    const accrued = getFocusSession().accrued;
+    skipFocusBreak();
+    expect(getFocusSession()).toMatchObject({ phase: "work", running: true, pomoLeft: 25 * 60 });
+    // The break's waiting time was never work.
+    expect(getFocusSession().accrued).toBe(accrued);
+    // Outside a break it does nothing.
+    skipFocusBreak();
+    expect(getFocusSession()).toMatchObject({ phase: "work", running: true });
   });
 
   it("a phase end while you're there alerts once and banks the finished block", () => {
@@ -1005,5 +1026,171 @@ describe("focus engine — several tabs", () => {
     const takenAt = Date.now();
     b.toggleRunning(); // acting in B takes the clock, then saves
     expect(contexts.at(-1)?.ownedSince).toBe(takenAt);
+  });
+});
+
+// TV-F6 · the one time engine (spec §6.10, AC map "timer modes" and "stop with
+// undo; session survives navigation").
+describe("timer modes (AC8.2, AC8.3, AC2.8)", () => {
+  it("Per task writes a closed stretch per task, and its clock is the task's own", () => {
+    const { calls, sink } = recordingSink();
+    registerFocusFlushSink(WS, sink);
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(40_000);
+    expect(getFocusSession()).toMatchObject({ timer: "per_task", taskSeconds: 40, bigClock: 40 });
+    focusOnTask(task("t2")); // Done → the next task: the session carries on
+    rs.advanceTimersByTime(20_000);
+    expect(getFocusSession()).toMatchObject({
+      taskId: "t2",
+      taskSeconds: 20,
+      bigClock: 20,
+      sitElapsed: 60,
+    });
+    stopFocus();
+    expect(calls).toEqual([
+      { taskId: "t1", seconds: 40 },
+      { taskId: "t2", seconds: 20 },
+    ]);
+  });
+
+  it("Pomodoro writes per task too, and a work phase's end offers the break", () => {
+    setPrefs({ workMinutes: 25, breakMinutes: 5 });
+    const { sink, total } = recordingSink();
+    registerFocusFlushSink(WS, sink);
+    focusOnTask(task("t1"), "pomodoro");
+    rs.advanceTimersByTime(10 * MIN);
+    expect(getFocusSession()).toMatchObject({
+      timer: "pomodoro",
+      pomodoro: true,
+      pomoLeft: 15 * 60,
+    });
+    expect(getFocusSession().bigClock).toBe(15 * 60);
+    focusOnTask(task("t2")); // the rhythm belongs to the sitting
+    rs.advanceTimersByTime(15 * MIN);
+    expect(alerts.at(-1)?.end.phase).toBe("work");
+    expect(getFocusSession()).toMatchObject({ phase: "break", running: false });
+    expect(total("t1")).toBe(600);
+    expect(total("t2")).toBe(900);
+  });
+
+  it("Off records nothing, shows no clock, and Focus still runs (Done moves on)", () => {
+    const { calls, sink } = recordingSink();
+    registerFocusFlushSink(WS, sink);
+    focusOnTask(task("t1"), "off");
+    rs.advanceTimersByTime(5 * MIN);
+    expect(getFocusSession()).toMatchObject({
+      timer: "off",
+      tracking: true,
+      running: true,
+      bigClock: 0,
+      sitElapsed: 0,
+      accrued: 0,
+    });
+    focusOnTask(task("t2"));
+    expect(getFocusSession()).toMatchObject({ taskId: "t2", tracking: true });
+    // A laptop asleep under Off holds nothing to ask about.
+    wallJump(10 * MIN);
+    rs.advanceTimersByTime(1000);
+    expect(getFocusSession().away).toBeNull();
+    stopFocus();
+    expect(calls).toEqual([]);
+  });
+
+  it("the timer changes mid-session: Off stops recording from there, Per task picks up again", () => {
+    const { sink, total } = recordingSink();
+    registerFocusFlushSink(WS, sink);
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(30_000);
+    setFocusTimer("off");
+    expect(total("t1")).toBe(30); // turning the clock off banks what it counted
+    rs.advanceTimersByTime(60_000);
+    setFocusTimer("per_task");
+    rs.advanceTimersByTime(15_000);
+    stopFocus();
+    expect(total("t1")).toBe(45);
+  });
+
+  it("a session from before TV-F6 reads its timer from the pomodoro flag", () => {
+    bindFocusTask(task("t1"));
+    toggleFocusPomodoro();
+    startFocus();
+    window.dispatchEvent(new Event("pagehide"));
+    const stored = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    delete stored.timer;
+    delete stored.taskMs;
+    delete stored.creditedTo;
+    localStorage.setItem(KEY, JSON.stringify(stored));
+    newPage();
+    expect(getFocusSession()).toMatchObject({ tracking: true, timer: "pomodoro", pomodoro: true });
+  });
+});
+
+describe("stop with undo; the session survives navigation (AC8.3, AC8.4)", () => {
+  it("Stop then Undo within 10 s brings the clock back as if it never stopped", () => {
+    const { sink, total } = recordingSink();
+    registerFocusFlushSink(WS, sink);
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(60_000);
+    expect(stopFocus()).toBe(true);
+    expect(total("t1")).toBe(60); // Stop saved what it had
+    expect(getFocusSession().tracking).toBe(false);
+    rs.advanceTimersByTime(4000);
+    expect(undoStopFocus()).toBe(true);
+    expect(getFocusSession()).toMatchObject({ taskId: "t1", tracking: true, running: true });
+    rs.advanceTimersByTime(6000);
+    // 60 s before Stop, 4 s in the Undo window, 6 s after: 70, none counted twice.
+    expect(getFocusSession().taskSeconds).toBe(70);
+    stopFocus();
+    expect(total("t1")).toBe(70);
+  });
+
+  it("after the window, Undo does nothing", () => {
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(5000);
+    stopFocus();
+    rs.advanceTimersByTime(STOP_UNDO_MS + 1000);
+    expect(undoStopFocus()).toBe(false);
+    expect(getFocusSession().tracking).toBe(false);
+  });
+
+  it("a paused session comes back paused", () => {
+    focusOnTask(task("t1"), "pomodoro");
+    rs.advanceTimersByTime(5 * MIN);
+    toggleFocusRunning();
+    stopFocus();
+    undoStopFocus();
+    rs.advanceTimersByTime(MIN);
+    expect(getFocusSession()).toMatchObject({ tracking: true, running: false, pomoLeft: 20 * 60 });
+  });
+
+  it("a new session started meanwhile wins over Undo", () => {
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(5000);
+    stopFocus();
+    focusOnTask(task("t2"), "per_task");
+    expect(undoStopFocus()).toBe(false);
+    expect(getFocusSession().taskId).toBe("t2");
+  });
+
+  it("leaving the Focus view (any page unmounting) never touches the session", () => {
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(30_000);
+    // Routing to Notes unmounts every Tasks view; nothing calls the engine.
+    document.dispatchEvent(new Event("visibilitychange"));
+    rs.advanceTimersByTime(30_000);
+    expect(getFocusSession()).toMatchObject({ tracking: true, running: true, taskSeconds: 60 });
+  });
+
+  it("Focus on a task while one runs moves the clock there; a paused one resumes", () => {
+    focusOnTask(task("t1"), "per_task");
+    rs.advanceTimersByTime(10_000);
+    toggleFocusRunning();
+    focusOnTask(task("t2"), "pomodoro"); // the running session keeps its timer
+    expect(getFocusSession()).toMatchObject({
+      taskId: "t2",
+      running: true,
+      timer: "per_task",
+      taskSeconds: 0,
+    });
   });
 });

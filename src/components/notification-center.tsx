@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  useNotificationLabels,
+  useNotificationDetails,
   useNotificationReferenceNames,
 } from "../features/spine/hooks/use-notification-labels";
 import {
@@ -11,12 +11,14 @@ import {
   notificationDeepLinkNoun,
   notificationSubject,
   notificationSummary,
+  withNoticeDetails,
 } from "../features/spine/notifications";
 import { type OverdueItem, selectOverdueTasks } from "../features/spine/overdue-inbox";
 import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { usePreferencesValue } from "../lib/preferences";
 import { useShortcut } from "../lib/shortcuts";
 import { useStoreSnapshot, useWorkspaceStore } from "../lib/sync/react";
+import { formatDate } from "../lib/time-format";
 import { undoToast } from "../lib/undo-toast";
 import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
@@ -42,7 +44,7 @@ function relativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 /**
@@ -97,18 +99,27 @@ export function NotificationCenter() {
   const { notifications: notificationPrefs } = usePreferencesValue();
   const overdueItems = useOverdueInbox(notificationPrefs.overdueTasks, open);
 
-  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+  const rawGroups = useMemo(() => groupNotifications(notifications), [notifications]);
   const inviteGroups = useMemo(
     () => groupNotifications(workspaceInvitations),
     [workspaceInvitations],
   );
-  const historyGroups = useMemo(
+  const rawHistoryGroups = useMemo(
     () => groupNotifications(notificationHistory),
     [notificationHistory],
   );
-  // Every task card names its task (TV-P0): comment notices carry no title.
+  // Notices name their items by id (TV-P0, TV-D16): every card's task, a
+  // comment's text and an unblocking task are looked up for this reader, and
+  // only what they can still see is filled in.
+  const rawAll = useMemo(() => [...rawGroups, ...rawHistoryGroups], [rawGroups, rawHistoryGroups]);
+  const details = useNotificationDetails(rawAll);
+  const groups = useMemo(() => withNoticeDetails(rawGroups, details), [rawGroups, details]);
+  const historyGroups = useMemo(
+    () => withNoticeDetails(rawHistoryGroups, details),
+    [rawHistoryGroups, details],
+  );
   const allGroups = useMemo(() => [...groups, ...historyGroups], [groups, historyGroups]);
-  const labels = useNotificationLabels(allGroups);
+  const labels = details.labels;
   // A comment's excerpt names its references per reader (RF-1: "Private item").
   const referenceName = useNotificationReferenceNames(allGroups);
   const badge = Math.min(unreadCountWorkspace, BADGE_CAP);
@@ -141,7 +152,7 @@ export function NotificationCenter() {
         setHistoryOpen(false);
         window.dispatchEvent(
           new CustomEvent(ENTITY_OPEN_EVENT, {
-            detail: { type: link.entityType, id: link.entityId },
+            detail: { type: link.entityType, id: link.entityId, workspaceId: link.workspaceId },
           }),
         );
       }
@@ -278,7 +289,7 @@ export function NotificationCenter() {
         </Card>
       );
     },
-    [activateGroup, handleDismiss, userId, labels],
+    [activateGroup, handleDismiss, userId, labels, referenceName],
   );
 
   // Cap the passive overdue list so a big backlog never becomes a wall (quiet-core);

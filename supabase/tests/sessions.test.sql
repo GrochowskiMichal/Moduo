@@ -199,6 +199,10 @@ BEGIN
   -- The sender stub claims due reminders on open tasks only.
   PERFORM test.new_task('E', 'R2', '{"due_on": "2030-05-10", "status": "backlog"}');
   PERFORM test.as_user('E', format($q$SELECT * FROM public.tasks_op_reminder_add(%L, %L, 'day_before')$q$, test.id('W'), test.id('R2')));
+  -- Only this file's reminders count: anything else due in the local stack
+  -- (someone's real reminder) waits, inside this rolled-back run.
+  UPDATE public.task_reminders SET suspended_at = now()
+  WHERE workspace_id <> test.id('W') AND fired_at IS NULL AND suspended_at IS NULL;
   v_n := public.tasks__fire_reminders('2030-05-11T16:00:00Z', 500);
   PERFORM test.ok(v_n = 2 AND (SELECT count(*) FROM public.task_reminders WHERE task_id = test.id('R1') AND fired_at IS NOT NULL) = 2
               AND (SELECT fired_at FROM public.task_reminders WHERE task_id = test.id('R2')) IS NULL,

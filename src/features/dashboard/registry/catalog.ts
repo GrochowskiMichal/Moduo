@@ -1,5 +1,5 @@
-// DB-5 — the pure widget catalog: metadata + gating predicates for all 16
-// widget types. No React here, so the AC2/AC8 test imports this without pulling
+// DB-5 — the pure widget catalog: metadata + gating predicates for every
+// widget type. No React here, so the AC2/AC8 test imports this without pulling
 // component code (and without the `@/lib` value-import trap under vitest).
 //
 // The 9 module widgets (tasks, notes, calendar, email, timetracking,
@@ -49,14 +49,18 @@ export const WIDGET_CATALOG: Record<WidgetType, WidgetMeta> = {
     permissionModule: "tasks",
     openRoute: "/calendar",
   },
+  // TV-H1: your tracked task time this week (TV-D14's entries), on web and
+  // desktop. The type keeps its old id so placed widgets carry over; the
+  // desktop window tracker it used to read stays dormant (tasks-v2 §17).
   timetracking: {
     type: "timetracking",
-    label: "Time tracking",
-    moduleLabel: "Time tracking",
-    sizes: ["S", "M"],
+    label: "Time",
+    moduleLabel: "Tasks",
+    sizes: ["S", "M", "L"],
     defaultSize: "S",
     defaultConfig: {},
-    isAvailable: (caps) => caps.hasTimeTracking,
+    permissionModule: "tasks",
+    openRoute: "/tasks",
   },
   email: {
     type: "email",
@@ -169,6 +173,29 @@ export const WIDGET_CATALOG: Record<WidgetType, WidgetMeta> = {
     defaultSize: "S",
     defaultConfig: {},
   },
+  // TV-H1 (decision 12, CH70): one row per person, Chat's "now" line above
+  // Tasks' load. `teamId` narrows it to one team (none = everyone).
+  team: {
+    type: "team",
+    label: "Team",
+    moduleLabel: "Tasks",
+    sizes: ["S", "M", "L"],
+    defaultSize: "M",
+    defaultConfig: {},
+    permissionModule: "tasks",
+    openRoute: "/tasks",
+  },
+  // TV-H1: Upcoming's days (TV-U15), the ones with work in them.
+  upcoming: {
+    type: "upcoming",
+    label: "Upcoming",
+    moduleLabel: "Tasks",
+    sizes: ["S", "M", "L"],
+    defaultSize: "M",
+    defaultConfig: {},
+    permissionModule: "tasks",
+    openRoute: "/tasks",
+  },
 };
 
 /** The widget types whose bodies exist in DB-5 (the rest are placeholders). */
@@ -183,6 +210,8 @@ export const SHIPPED_WIDGET_TYPES: readonly WidgetType[] = [
   "needs-attention",
   "reconnect",
   "chat",
+  "team",
+  "upcoming",
 ];
 
 export function widgetMeta(type: WidgetType): WidgetMeta {

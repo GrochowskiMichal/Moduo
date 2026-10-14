@@ -20,11 +20,15 @@ export type PlanHeaderControls = {
   filter?: ReactNode;
   /** The Display menu. */
   display?: ReactNode;
+  /** The view's ⋯: Copy as text · Export view as CSV · Print (TV-D14). */
+  more?: ReactNode;
   /** The active-filter row under the toolbar, when a filter is on. */
   activeFilters?: ReactNode;
   /** "Sorted by due date · Back to manual order", when a project view is
    *  sorted (`SortedOrderLine`, default m). */
   sortedNote?: ReactNode;
+  /** An open saved view whose Filter or Display changed: Save · Revert (TV-U8). */
+  viewChanges?: ReactNode;
 };
 
 /**
@@ -52,7 +56,7 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, activeFilters, sortedNote } = controls;
+  const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges } = controls;
   return (
     <div className="mb-3 shrink-0 space-y-1.5">
       <Toolbar gap="snug">
@@ -63,6 +67,10 @@ export function PlanViewHeader({
               {count}
             </span>
           ) : null}
+          {/* Read-only (research §9): said once, after the title. */}
+          {canEdit ? null : (
+            <span className="shrink-0 font-sans text-xs text-subtle-foreground">View only</span>
+          )}
         </div>
         <Toolbar.Spacer />
         {viewControls ? <Toolbar.Group>{viewControls}</Toolbar.Group> : null}
@@ -70,18 +78,25 @@ export function PlanViewHeader({
           {search}
           {filter}
           {display}
+          {more}
         </Toolbar.Group>
         <ToolbarSeparator />
         <ViewSwitcher view={view} onViewChange={onViewChange} />
-        <ToolbarSeparator />
-        <Toolbar.Primary>
-          <Button size="sm" onClick={onRequestCapture} disabled={!canEdit}>
-            <Plus aria-hidden />
-            New
-          </Button>
-        </Toolbar.Primary>
+        {/* Read-only views have no New (research §9: no add in that project). */}
+        {canEdit ? (
+          <>
+            <ToolbarSeparator />
+            <Toolbar.Primary>
+              <Button size="sm" onClick={() => onRequestCapture()}>
+                <Plus aria-hidden />
+                New
+              </Button>
+            </Toolbar.Primary>
+          </>
+        ) : null}
       </Toolbar>
       {activeFilters}
+      {viewChanges}
       {sortedNote}
     </div>
   );

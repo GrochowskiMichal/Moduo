@@ -43,8 +43,9 @@ import { cn } from "../../../../lib/utils";
 
 // ── drag payload ─────────────────────────────────────────────────────────────
 
-/** Where a dragged task originated (lets a target react to cross-surface drags). */
-export type TaskDragSource = "list" | "board" | "queue" | "tray";
+/** Where a dragged task originated (lets a target react to cross-surface drags).
+ *  "no-date": the right panel's No date view beside the Timeline (TV-TL2). */
+export type TaskDragSource = "list" | "board" | "queue" | "no-date";
 
 /** The `data` every draggable task carries on its dnd-kit node. */
 export type TaskDragData = { type: "task"; taskId: string; from: TaskDragSource };
@@ -74,9 +75,10 @@ export function asTaskDrag(data: unknown): TaskDragData | null {
 export type TaskDropTarget =
   // Board column → move (and re-rank to the column end on a bare column drop).
   | { type: "column"; dim: "status" | "bucket"; value: string }
-  // The Timeline's lanes region — ONE droppable for the whole axis; the drop
-  // day is derived from the raw tracked pointer at drop time (dnd-kit's delta
-  // folds auto-scroll in — gotchas.md), not from per-day droppables.
+  // The Timeline's canvas (TV-TL2): ONE droppable for the whole canvas, where a
+  // task from the panel's No date view lands on a day. The day comes from the
+  // raw pointer at drop time against the canvas measured then (dnd-kit's delta
+  // folds auto-scroll in — gotchas/ui.md), not from per-day droppables.
   | { type: "timeline-axis" };
 // Future, additive: | { type: "calendar-slot"; startsAt: string }
 

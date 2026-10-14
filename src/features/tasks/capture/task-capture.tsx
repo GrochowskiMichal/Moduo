@@ -17,7 +17,18 @@
 //   one Undo).
 
 import { $createTextNode, type NodeKey } from "lexical";
-import { CalendarDays, ChevronDown, Circle, FileText, Inbox, Mail, Plus, User } from "lucide-react";
+import {
+  CalendarDays,
+  ChevronDown,
+  Circle,
+  FileText,
+  Inbox,
+  LayoutTemplate,
+  Mail,
+  Paperclip,
+  Plus,
+  User,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -38,11 +49,13 @@ import type { CaptureBodyProps } from "../../../lib/capture-registry";
 import type { CaptureSourceKind } from "../../../lib/capture-source";
 import { isMacPlatform } from "../../../lib/shortcuts";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
+import { localDayOf } from "../../../lib/task-rows";
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { dragHasFiles, filesFromDataTransfer, pastedFiles } from "../../attachments/files";
 import type { MenuPickApi } from "../../spine/editor/mention-menu-plugin";
 import { dateCommandDay } from "../../spine/grammar";
 import { resolveEntityIcon } from "../../spine/icon-map";
@@ -80,7 +93,12 @@ import {
   loadDraft,
   saveDraft,
 } from "./capture-draft";
-import { captureAttachments, captureTemplates } from "./capture-hooks";
+import {
+  type CaptureTemplateChoice,
+  type CaptureTemplateProvider,
+  captureAttachments,
+  captureTemplates,
+} from "./capture-hooks";
 import {
   type CapturePerson,
   commandEntries,
@@ -108,7 +126,47 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
 let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
-let openBody: ((draft: CaptureDraft) => void) | null = null;
+let openBody: ((draft: CaptureDraft, files: File[]) => void) | null = null;
+
+/**
+ * A refused capture's files (AT-3): the draft slot on the device keeps words
+ * and ids only, so its files wait here, in memory, for its Restore (or the
+ * next capture that opens with it) — per person and workspace.
+ */
+let refusedFiles: { key: string; files: File[]; restoring?: boolean } | null = null;
+
+function takeRefusedFiles(
+  userId: string | null,
+  workspaceId: string | null,
+  onlyRestoring = false,
+): File[] {
+  const key = `${userId ?? ""}:${workspaceId ?? ""}`;
+  if (!refusedFiles || refusedFiles.key !== key) return [];
+  if (onlyRestoring && !refusedFiles.restoring) return [];
+  const { files } = refusedFiles;
+  refusedFiles = null;
+  return files;
+}
+
+/**
+ * The capture's task as the file seam needs it (AT-3): made on the server,
+ * waiting on this device to sync (offline: the files wait with it), or not
+ * made at all (refused: nothing to attach to).
+ */
+export function taskForFiles(
+  sending: Promise<{ created: readonly Pick<Task, "id">[]; queued: readonly string[] }>,
+  id: string,
+): Promise<{ id: string; queued: boolean } | null> {
+  return sending
+    .then(({ created, queued }) =>
+      created.some((t) => t.id === id)
+        ? { id, queued: false }
+        : queued.includes(id)
+          ? { id, queued: true }
+          : null,
+    )
+    .catch(() => null);
+}
 
 /** The plain words of a title (tokens as their words): what the shell carries between types. */
 function plainText(segments: readonly TitleSegment[]): string {
@@ -171,13 +229,15 @@ export function TaskCaptureBody({
         : refused && draftHasContent(refused)
           ? refused
           : null;
-    if (restored === refused) clearDraft(owner.userId, owner.workspaceId, "refused");
+    const refusedNow = restored === refused;
+    if (refusedNow) clearDraft(owner.userId, owner.workspaceId, "refused");
     let start: CaptureDraft = restored ?? EMPTY_DRAFT;
     // Typed under another type (⌘2, then back): those words come along.
     if (shellDraft.trim() && shellDraft !== lastTitleWords) {
       start = { ...start, segments: [{ text: shellDraft }] };
     }
-    // A filtered scope pre-fills its tags, assignee and priority (U2-5).
+    // A filtered scope pre-fills its tags, assignee and priority (U2-5); a
+    // List group's "+" its team, due day or status (TV-U10).
     const seed = context?.seed;
     if (!restored && seed) {
       start = {
@@ -186,11 +246,28 @@ export function TaskCaptureBody({
           ...EMPTY_FIELDS,
           ...(seed.assigneeId !== undefined ? { assigneeId: seed.assigneeId } : {}),
           ...(seed.priority ? { priority: seed.priority } : {}),
+          ...(seed.teamId ? { teamId: seed.teamId } : {}),
+          ...(seed.dueDay ? { dueDay: seed.dueDay } : {}),
+          ...(seed.status ? { status: seed.status } : {}),
+          // A Board column's own status (TV-U11) rides with its category.
+          ...(seed.status && seed.statusId
+            ? { statusId: seed.statusId, statusName: seed.statusName ?? null }
+            : {}),
           tags: (seed.tagIds ?? []).map((id) => ({ id, name: "" })),
         },
       };
     }
-    return { draft: start, restored: Boolean(restored) };
+    return {
+      draft: start,
+      restored: Boolean(restored),
+      // A refused capture opened again (or by its Restore) brings its files
+      // back too (AT-3).
+      files: refusedNow
+        ? takeRefusedFiles(owner.userId, owner.workspaceId)
+        : restored
+          ? takeRefusedFiles(owner.userId, owner.workspaceId, true)
+          : [],
+    };
   });
   const [segments, setSegments] = useState<TitleSegment[]>(initial.draft.segments);
   const [segmentKeys, setSegmentKeys] = useState<Array<NodeKey | null>>([]);
@@ -215,7 +292,17 @@ export function TaskCaptureBody({
   const [hint, setHint] = useState<string | null>(null);
   const [openPill, setOpenPill] = useState<OpenPill>(null);
   const [destinationOpen, setDestinationOpen] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>(initial.files);
+  // A task template picked (`/template`, More → Template…, TV-D15).
+  const templateProvider = runtime?.tasks.applyTaskTemplate ? captureTemplates() : null;
+  const [template, setTemplate] = useState<CaptureTemplateChoice | null>(null);
+  const [pickingTemplate, setPickingTemplate] = useState(false);
+  /** A template's tasks are being made: the capture waits (it's online only). */
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  // What `/` offers is read inside a stable callback: through a ref.
+  const templateDue = Boolean(template?.dated && template.anchor === "due");
+  const templateOn = useRef(false);
+  templateOn.current = Boolean(templateProvider) && !template;
   const titleApi = useRef<TitleEditorApi | null>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const subtaskRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -315,7 +402,7 @@ export function TaskCaptureBody({
       }
       if (token.kind === "team" && !token.label) {
         const t = teams.find((x) => x.id === token.teamId);
-        return t ? { ...token, label: t.name, letters: t.mark || null } : null;
+        return t ? { ...token, label: t.name, letters: t.mark || null, color: t.color } : null;
       }
       if (token.kind === "tag" && token.tagId && !token.label) {
         const t = tags.find((x) => x.id === token.tagId);
@@ -370,6 +457,8 @@ export function TaskCaptureBody({
     remindAt: resolved.single.remind?.at ?? fields.remindAt ?? null,
     tags: tagValues,
     waitingOn: fields.waitingOn,
+    status: fields.status ?? null,
+    statusName: fields.statusId ? (fields.statusName ?? null) : null,
   };
 
   // ── where it goes ─────────────────────────────────────────────────────────
@@ -428,7 +517,7 @@ export function TaskCaptureBody({
     [tags, projects],
   );
   const commandCandidates = useCallback((query: string, base: MentionCandidate[]) => {
-    const entries = commandEntries(query, base, { templates: captureTemplates() !== null });
+    const entries = commandEntries(query, base, { templates: templateOn.current });
     effects.current["/"] = entries.effects;
     return entries.candidates;
   }, []);
@@ -505,6 +594,7 @@ export function TaskCaptureBody({
             teamId: candidate.teamId,
             label: candidate.label,
             letters: candidate.letters,
+            color: candidate.color ?? null,
           };
         case "entity":
           return candidate.ref.type === "bucket"
@@ -604,6 +694,11 @@ export function TaskCaptureBody({
         words("remind");
         setFields((f) => ({ ...f, remindAt: change.value }));
         return;
+      case "status":
+        // A List group's "+" set it (TV-U10); its chip's × clears it, with
+        // a Board column's own status (TV-U11).
+        setFields((f) => ({ ...f, status: change.value, statusId: null, statusName: null }));
+        return;
       case "tag": {
         const { tag, on } = change;
         if (on) {
@@ -629,13 +724,23 @@ export function TaskCaptureBody({
 
   // ── templates and files (seams for TV-D15 and AT-2/AT-3) ──────────────────
   const openTemplate = () => {
-    const provider = captureTemplates();
-    if (!provider) return;
-    provider.open((template) => {
-      if (template.title) titleApi.current?.setSegments([{ text: template.title }]);
-      if (template.description) setDescription(template.description);
-      if (template.subtasks?.length) setSubtasks(template.subtasks);
-    });
+    if (!templateProvider) return;
+    setOpenPill(null);
+    setPickingTemplate(true);
+  };
+  /** A template picked: its title when none is typed, its project when none is picked. */
+  const pickTemplate = (choice: CaptureTemplateChoice) => {
+    setTemplate(choice);
+    setPickingTemplate(false);
+    if (!title.trim()) titleApi.current?.setSegments([{ text: choice.title ?? choice.name }]);
+    if (!destination.projectId && choice.project && projects.some((p) => p.id === choice.project)) {
+      setDestination({ projectId: choice.project, sectionId: null });
+    }
+    // What was typed below the title waits until the template is removed.
+    if (description.trim() || subtasks.some((line) => line.trim())) {
+      setHint("Your description and subtasks are set aside while the template is on.");
+    }
+    titleApi.current?.focus();
   };
 
   const takeFiles = (incoming: File[]) => {
@@ -652,7 +757,12 @@ export function TaskCaptureBody({
   const lineContext = useMemo(
     () => ({
       people: menuPeople.map((p) => ({ userId: p.userId, name: p.name })),
-      teams: teams.map((t) => ({ id: t.id, name: t.name, letters: t.mark || null })),
+      teams: teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        letters: t.mark || null,
+        color: t.color,
+      })),
       tags: tags.map((t) => ({ id: t.id, name: t.name, color: t.color })),
     }),
     [menuPeople, teams, tags],
@@ -770,13 +880,14 @@ export function TaskCaptureBody({
   useEffect(() => {
     segmentsRef.current = segments;
   });
-  const fill = (kept: CaptureDraft) => {
+  const fill = (kept: CaptureDraft, keptFiles: File[] = []) => {
     titleApi.current?.setSegments(kept.segments);
     setKeep(kept.keep);
     setDescription(kept.description);
     setSubtasks(kept.subtasks);
     setFields(kept.fields);
     setPasted(kept.pasted ?? null);
+    setFiles(keptFiles);
     setRestoredNotice(false);
     titleApi.current?.focus();
   };
@@ -785,22 +896,25 @@ export function TaskCaptureBody({
     fillRef.current = fill;
   });
   useEffect(() => {
-    const restore = (kept: CaptureDraft) => fillRef.current(kept);
+    const restore = (kept: CaptureDraft, keptFiles: File[]) => fillRef.current(kept, keptFiles);
     openBody = restore;
     return () => {
       mounted.current = false;
       if (openBody === restore) openBody = null;
     };
   }, []);
-  const putBack = (kept: CaptureDraft, message: string) => {
+  const putBack = (kept: CaptureDraft, message: string, keptFiles: File[] = []) => {
     const empty = segmentsRef.current.every((x) => "text" in x && !x.text.trim());
     if (mounted.current && empty && !pastedRef.current) {
-      fill(kept);
+      fill(kept, keptFiles);
       toast.error(message, { description: "Your capture is back: change it and try again." });
       return;
     }
     const { userId: who, workspaceId: where } = owner;
     saveDraft(who, where, kept, "refused");
+    // Its files can't go in the device slot: they wait in memory for Restore.
+    refusedFiles =
+      keptFiles.length > 0 ? { key: `${who ?? ""}:${where ?? ""}`, files: keptFiles } : null;
     toast.error(message, {
       description: "Your capture is kept on this device.",
       action: {
@@ -809,8 +923,10 @@ export function TaskCaptureBody({
           const waiting = loadDraft(who, where, "refused");
           if (!waiting) return;
           clearDraft(who, where, "refused");
-          if (openBody) openBody(waiting);
+          if (openBody) openBody(waiting, takeRefusedFiles(who, where));
           else {
+            // The capture that opens takes the files with the draft.
+            if (refusedFiles) refusedFiles.restoring = true;
             saveDraft(who, where, waiting);
             lastTitleWords = "";
             dispatchOpenCapture();
@@ -839,13 +955,16 @@ export function TaskCaptureBody({
     titleApi.current?.focus();
   };
 
-  /** Save a plan behind the closed capture; answers with what was created. */
+  /** Save a plan behind the closed capture; answers with what was created and
+   *  what waits on this device to sync (offline). */
   const send = async (
     plan: CapturePlan,
     kept: CaptureDraft | null,
     batch: boolean,
-  ): Promise<Task[]> => {
-    if (!runtime) return [];
+    /** The capture's files: they come back with it if nothing was made. */
+    keptFiles: File[] = [],
+  ): Promise<{ created: Task[]; queued: readonly string[] }> => {
+    if (!runtime) return { created: [], queued: [] };
     const deps = { runtime, userId, store };
     let result: CaptureResult;
     try {
@@ -865,7 +984,7 @@ export function TaskCaptureBody({
       const message =
         result.error instanceof Error ? result.error.message : "Couldn't create the task.";
       if (landed === 0) {
-        if (kept) putBack(kept, message);
+        if (kept) putBack(kept, message, keptFiles);
         else toast.error(message);
       } else if (batch && result.created.length > 0) {
         // Part of a list: what saved can go again with one Undo.
@@ -876,7 +995,7 @@ export function TaskCaptureBody({
       } else {
         toast.error(`${landed} of ${plan.tasks.length} saved`, { description: message });
       }
-      return result.created;
+      return { created: result.created, queued: result.queued };
     }
     if (result.queued.length > 0) {
       // Offline: they wait on this device and go once it's back (default g).
@@ -887,15 +1006,15 @@ export function TaskCaptureBody({
           : (plan.tasks[0]?.title ?? "Task"),
         { description: plan.tasks.length > 1 ? undefined : `Waiting to sync · ${placeLabel}` },
       );
-      return result.created;
+      return { created: result.created, queued: result.queued };
     }
     if (batch) {
       const n = result.created.length;
       undoToast(`${n} ${n === 1 ? "task" : "tasks"} created`, { onUndo: undoSaved });
-      return result.created;
+      return { created: result.created, queued: result.queued };
     }
     const first = result.created[0];
-    if (!first) return result.created;
+    if (!first) return { created: result.created, queued: result.queued };
     if (result.extrasFailed > 0) {
       toast.error("The task is saved, but a link or reminder didn't save.");
     }
@@ -903,7 +1022,7 @@ export function TaskCaptureBody({
       description: summaryText,
       action: { label: "Open", onClick: () => openReferenceFull({ type: "task", id: first.id }) },
     });
-    return result.created;
+    return { created: result.created, queued: result.queued };
   };
 
   const placeLabel = destination.projectId || teamDefault ? destinationLabel : "Inbox";
@@ -928,6 +1047,10 @@ export function TaskCaptureBody({
     }
     if (!writable) {
       toast.error("You have view-only access to tasks.");
+      return;
+    }
+    if (template) {
+      createFromTemplate(template, more);
       return;
     }
     if (needsProject) {
@@ -957,6 +1080,17 @@ export function TaskCaptureBody({
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
+      status: values.status,
+      // A Board column's own status belongs to the project it was opened
+      // in: filed elsewhere, the task takes that project's first of the
+      // category (TV-U11).
+      // (Your Inbox is "no project" on both sides: the default set's.)
+      statusId:
+        values.status &&
+        fields.statusId &&
+        (projectId ?? null) === (context?.destination?.projectId ?? null)
+          ? fields.statusId
+          : null,
     };
     const lines = subtasks.map((s) => s.trim()).filter(Boolean);
     const childPositions = positionsAfter(lines.length, []);
@@ -981,12 +1115,99 @@ export function TaskCaptureBody({
       onDraftChange("");
       onDone();
     }
-    const sending = send(plan, kept, false);
-    // Files go up once the task exists (the AT-2 / AT-3 seam).
-    handler?.({
-      workspaceId,
-      taskId: sending.then((created) => (created.some((t) => t.id === main.id) ? main.id : null)),
-      files: filesNow,
+    const sending = send(plan, kept, false, filesNow);
+    // Files go up once the task exists, or wait with it on this device when
+    // it was made offline (the AT-3 seam): the task is always created first.
+    if (handler && userId) {
+      handler({ workspaceId, userId, task: taskForFiles(sending, main.id), files: filesNow });
+    }
+  };
+
+  /**
+   * Create from the picked template (TV-D15): the task and its subtasks are
+   * made on the server from the template, with the title typed, the
+   * destination, Due as the date its dates count from, and Assign.
+   */
+  const createFromTemplate = (choice: CaptureTemplateChoice, more: boolean) => {
+    if (!templateProvider || !runtime || !workspaceId || !store || !userId || applyingTemplate) {
+      return;
+    }
+    // A template brings its own tags, priority, dates and the rest: what the
+    // title or More set beyond the person and Due would be lost, so it says so.
+    const extra =
+      values.tags.length > 0 ||
+      values.priority !== null ||
+      values.scheduledAt !== null ||
+      values.recurrence !== null ||
+      values.remindAt !== null ||
+      values.estimateMinutes !== null ||
+      values.waitingOn.length > 0 ||
+      values.teamId !== null ||
+      resolved.things.length > 0 ||
+      (!templateDue && values.dueDay !== null);
+    if (extra) {
+      setHint(
+        "With a template, only the person" +
+          (templateDue ? " and Due" : "") +
+          " apply. Remove the other words, or the template.",
+      );
+      return;
+    }
+    // The one date: Due when the template counts from its due date; today
+    // when it counts from the day it's made; none when it has no dates.
+    const date = !choice.dated
+      ? null
+      : choice.anchor === "due"
+        ? (values.dueDay ?? null)
+        : localDayOf(new Date().toISOString());
+    const where = placeLabel;
+    const madeTitle = title;
+    const handler = files.length > 0 ? captureAttachments() : null;
+    const filesNow = files;
+    setApplyingTemplate(true);
+    const applying = templateProvider.apply(
+      { runtime, store, workspaceId, userId },
+      {
+        templateId: choice.id,
+        id: newTaskId(),
+        title: madeTitle,
+        projectId: projectId ?? null,
+        sectionId,
+        date,
+        ...(values.assigneeId !== undefined ? { assigneeId: values.assigneeId } : {}),
+      },
+    );
+    // The capture's files go on the task the template makes (made on the
+    // server, so never one waiting offline).
+    if (handler && userId) {
+      handler({
+        workspaceId,
+        userId,
+        task: applying.then((id) => (id ? { id, queued: false } : null)).catch(() => null),
+        files: filesNow,
+      });
+    }
+    void applying.then((created) => {
+      if (!mounted.current) return;
+      setApplyingTemplate(false);
+      // Refused or offline (the provider said why): the capture stays as it was.
+      if (!created) return;
+      if (more) {
+        setTemplate(null);
+        resetForMore();
+      } else {
+        clearDraft(owner.userId, owner.workspaceId);
+        lastTitleWords = "";
+        onDraftChange("");
+        onDone();
+      }
+      toast(madeTitle, {
+        description: `From “${choice.name}” · ${where}`,
+        action: {
+          label: "Open",
+          onClick: () => openReferenceFull({ type: "task", id: created }),
+        },
+      });
     });
   };
 
@@ -1017,13 +1238,22 @@ export function TaskCaptureBody({
     });
     // Kept, the list comes back if the server refuses it.
     const kept: CaptureDraft = { ...EMPTY_DRAFT, fields, pasted };
+    const handler = files.length > 0 ? captureAttachments() : null;
+    const filesNow = files;
     setPasted(null);
-    if (!more) onDone();
-    void send(
+    if (more) setFiles([]);
+    else onDone();
+    const sending = send(
       { workspaceId, tasks, source: context?.source ?? null, queueTop: Boolean(context?.queueTop) },
       kept,
       true,
+      filesNow,
     );
+    // Files with a pasted list go on its first task (AT-3).
+    const first = tasks[0]?.id;
+    if (handler && userId && first) {
+      handler({ workspaceId, userId, task: taskForFiles(sending, first), files: filesNow });
+    }
   };
 
   const keepPastedAsOne = () => {
@@ -1114,12 +1344,14 @@ export function TaskCaptureBody({
     <div
       className="flex flex-col"
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+        if (dragHasFiles(e.dataTransfer)) e.preventDefault();
       }}
       onDrop={(e) => {
-        if (e.dataTransfer.files.length === 0) return;
+        // Folders are left out (AT-3); a drop of only folders does nothing.
+        const dropped = filesFromDataTransfer(e.dataTransfer);
+        if (dropped.length === 0) return;
         e.preventDefault();
-        takeFiles(Array.from(e.dataTransfer.files));
+        takeFiles(dropped);
       }}
     >
       {/* The destination row (91): the type, where it goes, what it came from. */}
@@ -1168,6 +1400,17 @@ export function TaskCaptureBody({
           </DropdownMenuContent>
         </DropdownMenu>
         <span className="grow" />
+        {template ? (
+          <Chip
+            size="sm"
+            icon={LayoutTemplate}
+            onRemove={() => setTemplate(null)}
+            removeLabel="Don't use the template"
+            className="max-w-64"
+          >
+            Template: {template.name}
+          </Chip>
+        ) : null}
         {context?.source && sourceOn && SourceIcon ? (
           <Chip
             size="sm"
@@ -1215,6 +1458,32 @@ export function TaskCaptureBody({
           segmentKeys={segmentKeys}
         />
 
+        {pickingTemplate && templateProvider ? (
+          <TemplatePickPanel
+            provider={templateProvider}
+            onPick={pickTemplate}
+            onCancel={() => {
+              setPickingTemplate(false);
+              titleApi.current?.focus();
+            }}
+          />
+        ) : null}
+
+        {template ? (
+          <p className="py-1 font-sans text-sm text-muted-foreground">
+            {template.subtasks > 0
+              ? `With its ${template.subtasks} ${template.subtasks === 1 ? "subtask" : "subtasks"}, description, tags and priority.`
+              : "With its description, tags and priority."}
+            {!template.dated
+              ? ""
+              : template.anchor === "due"
+                ? values.dueDay
+                  ? " Due is the date its dates count from."
+                  : " Pick Due, or it's made without dates."
+                : " Its dates count from today."}
+          </p>
+        ) : null}
+
         {pastedList ? (
           <PastePanel
             list={pastedList}
@@ -1229,37 +1498,50 @@ export function TaskCaptureBody({
           />
         ) : null}
 
-        <Textarea
-          ref={descriptionRef}
-          value={description}
-          placeholder="Add a description…"
-          aria-label="Description"
-          onChange={(e) => setDescription(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault();
-              submit(true);
-            }
-          }}
-          rows={1}
-          // Grows with its words to about six lines, then scrolls (56).
-          className="field-sizing-content max-h-36 min-h-0 resize-none border-0 bg-transparent px-0 py-1 font-sans text-base shadow-none focus-visible:ring-0"
-        />
+        {template ? null : (
+          <>
+            <Textarea
+              ref={descriptionRef}
+              value={description}
+              placeholder="Add a description…"
+              aria-label="Description"
+              onChange={(e) => setDescription(e.target.value)}
+              onPaste={(e) => {
+                // A screenshot pasted here becomes a file chip too (AT3-2);
+                // text stays a text paste.
+                const pastedHere = pastedFiles(e.clipboardData);
+                if (pastedHere.length > 0 && takeFiles(pastedHere)) e.preventDefault();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  submit(true);
+                }
+              }}
+              rows={1}
+              // Grows with its words to about six lines, then scrolls (56).
+              className="field-sizing-content max-h-36 min-h-0 resize-none border-0 bg-transparent px-0 py-1 font-sans text-base shadow-none focus-visible:ring-0"
+            />
 
-        <Subtasks
-          lines={subtasks}
-          refs={subtaskRefs}
-          onChange={setSubtasks}
-          onSubmit={submit}
-          onDone={() => titleApi.current?.focus()}
-        />
+            <Subtasks
+              lines={subtasks}
+              refs={subtaskRefs}
+              onChange={setSubtasks}
+              onSubmit={submit}
+              onDone={() => titleApi.current?.focus()}
+            />
+          </>
+        )}
 
         {files.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 py-1">
+          // The file chips (AT3-2): each attaches once the task exists, and
+          // keeps trying on the task's strip if it can't yet.
+          <div className="flex flex-wrap gap-1.5 py-1" data-slot="capture-files">
             {files.map((f, i) => (
               <Chip
                 // biome-ignore lint/suspicious/noArrayIndexKey: two files can share a name
                 key={`${f.name}-${i}`}
+                icon={Paperclip}
                 onRemove={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
                 removeLabel={`Remove ${f.name}`}
               >
@@ -1279,7 +1561,9 @@ export function TaskCaptureBody({
             onChange={onPillChange}
             open={openPill}
             onOpenChange={setOpenPill}
-            onTemplate={captureTemplates() ? openTemplate : undefined}
+            onTemplate={templateProvider && !template ? openTemplate : undefined}
+            templateMode={Boolean(template)}
+            templateDue={templateDue}
           />
         </div>
       </div>
@@ -1343,6 +1627,87 @@ function ProjectItems({
         </DropdownMenuItem>
       ))}
     </>
+  );
+}
+
+/**
+ * The task templates to pick from (TV-D15): yours and the shared ones, by
+ * name, with a filter. Its own component so the provider's list hook always
+ * runs while it's open.
+ */
+function TemplatePickPanel({
+  provider,
+  onPick,
+  onCancel,
+}: {
+  provider: CaptureTemplateProvider;
+  onPick: (choice: CaptureTemplateChoice) => void;
+  onCancel: () => void;
+}) {
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId } = useWorkspace();
+  const { loaded, choices } = provider.useChoices(runtime, selectedWorkspaceId);
+  const [query, setQuery] = useState("");
+  const shown = choices.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase()));
+  return (
+    <section
+      aria-label="Templates"
+      className="motion-pop flex flex-col gap-2 rounded-lg border border-hairline p-2"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
+    >
+      <Input
+        autoFocus
+        aria-label="Find a template"
+        placeholder="Find a template…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && shown[0]) {
+            e.preventDefault();
+            onPick(shown[0]);
+          }
+        }}
+      />
+      {loaded && choices.length === 0 ? (
+        <p className="px-1 font-sans text-sm text-muted-foreground">
+          No task templates yet. Save one from a task's ⋯ → Save as template.
+        </p>
+      ) : (
+        <ul className="flex max-h-48 flex-col overflow-y-auto">
+          {shown.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onClick={() => onPick(c)}
+                className="flex h-(--row-h) w-full min-w-0 items-center gap-2 rounded-md px-2 text-left font-sans text-base text-foreground outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <LayoutTemplate
+                  className="size-icon-sm shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <span className="truncate">{c.name}</span>
+                <span className="shrink-0 font-sans text-xs text-muted-foreground">
+                  {c.subtasks > 0
+                    ? `${c.subtasks} ${c.subtasks === 1 ? "subtask" : "subtasks"}`
+                    : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex justify-end">
+        <Button size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 

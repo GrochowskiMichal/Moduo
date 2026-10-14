@@ -29,7 +29,13 @@ export type DragOrder =
  * whose own line-up is the queue's, not `position`) are across projects.
  */
 export function hasManualOrder(scope: string): boolean {
-  return scope !== "all" && scope !== "mine" && scope !== "today" && scope !== "upcoming";
+  return (
+    scope !== "all" &&
+    scope !== "mine" &&
+    scope !== "today" &&
+    scope !== "upcoming" &&
+    scope !== "wontdo"
+  );
 }
 
 /** How a drag in `scope` under Display → Order by `order` treats the order. */
@@ -49,6 +55,8 @@ const SORTED_BY: Record<Exclude<TaskOrder, "manual">, string> = {
   priority: "priority",
   created: "date created",
   updated: "last updated",
+  title: "title",
+  status: "status",
 };
 
 /** "Sorted by due date": the sorted note, the drag note and the drop toast. */

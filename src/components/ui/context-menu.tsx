@@ -4,6 +4,7 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
+import { useMoreBelowRef } from "./menu-scroll";
 import { CONTEXT_MENU_SCROLL, FLOATING_SURFACE } from "./surface";
 
 // The one floating surface (surface.ts): grows from where it was opened.
@@ -77,10 +78,14 @@ function ContextMenuSubTrigger({
 function ContextMenuSubContent({
   className,
   style,
+  ref,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
+  // A long menu scrolls, and fades at its foot while more waits below.
+  const moreBelowRef = useMoreBelowRef(ref);
   return (
     <ContextMenuPrimitive.SubContent
+      ref={moreBelowRef}
       data-slot="context-menu-sub-content"
       className={cn(contentBase, className)}
       style={{
@@ -96,11 +101,14 @@ function ContextMenuSubContent({
 function ContextMenuContent({
   className,
   style,
+  ref,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+  const moreBelowRef = useMoreBelowRef(ref);
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
+        ref={moreBelowRef}
         data-slot="context-menu-content"
         className={cn(contentBase, className)}
         style={{

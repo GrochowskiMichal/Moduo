@@ -43,7 +43,7 @@ export function describeOtpSendError(error: OtpSendError): OtpSendFailure {
   const code = error.code ?? "";
 
   // An address nobody invited: the before-user-created hook refuses it with the
-  // message `invite_only` (TX-4, 20261010150000). Checked before the
+  // message `invite_only` (TX-4, 20261010155652). Checked before the
   // hook-failure branch below, so a refusal never reads as "couldn't send".
   if (/\binvite_only\b/.test(message)) {
     return { kind: "message", message: OTP_INVITE_ONLY_MESSAGE };

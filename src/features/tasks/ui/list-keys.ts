@@ -13,28 +13,38 @@
 //   • Keys typed in a row's portaled surfaces (its popovers, its context menu)
 //     never reach the List, though React bubbles them up to it.
 //
-// Shift isn't a bail-out: letters match case-insensitively (TV-U5 claims ⇧J/⇧K
-// for extending the selection, checked before the lowercase match), and `>` /
-// `<` (nest under the row above, un-nest; default k) match `event.key`,
-// whatever the keyboard needs to type them.
+// Shift isn't a bail-out: letters match case-insensitively (⇧J/⇧K and ⇧↑/⇧↓
+// extend the selection, TV-U12, checked before the lowercase match; ⇧S opens
+// the status menu, TV-U10), and `>` / `<` (nest under the row above, un-nest;
+// default k) match `event.key`, whatever the keyboard needs to type them.
 
 export type ListKeyAction =
   | "next"
   | "prev"
   | "toggle-done"
+  | "open"
   | "edit"
   | "capture"
   | "bucket"
   | "schedule"
   | "due"
+  | "status"
   | "queue"
+  | "focus-on"
   | "expand"
   | "collapse"
   | "delete"
   | "nest"
   | "unnest"
   | "move-up"
-  | "move-down";
+  | "move-down"
+  /** ⇧↓ / ⇧J and ⇧↑ / ⇧K: the selection grows to the next row (TV-U12). */
+  | "extend-next"
+  | "extend-prev"
+  /** ⌘A: every row the view shows. */
+  | "select-all"
+  /** Esc: back to the cursor alone (only while several are selected). */
+  | "clear-selection";
 
 type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey"> &
   Partial<Pick<KeyboardEvent, "shiftKey">>;
@@ -42,7 +52,7 @@ type ListKey = Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey"> &
 /**
  * The attribute a row puts on its title button. Clicking the title is how a
  * row gets selected (and Chromium focuses a clicked button), so on the
- * SELECTED row's title Space/Enter stay the List's keys — complete and edit.
+ * SELECTED row's title Space/Enter stay the List's keys — complete and open.
  */
 export const ROW_TITLE_ATTR = "data-row-title";
 
@@ -85,9 +95,16 @@ export function listKeyAction(
       if (key === "ArrowDown") return "move-down";
     }
     const command = (metaKey || ctrlKey) && !altKey;
+    // ⌘A selects the view (an explicit binding, keymap; never the page's text).
+    if (command && !shiftKey && key.toLowerCase() === "a") return "select-all";
     return command && (key === "Backspace" || key === "Delete") ? "delete" : null;
   }
   if (opts.onControl && (key === " " || key === "Enter")) return null;
+  if (key === "Escape") return "clear-selection";
+  if (shiftKey) {
+    if (key === "ArrowDown" || key.toLowerCase() === "j") return "extend-next";
+    if (key === "ArrowUp" || key.toLowerCase() === "k") return "extend-prev";
+  }
   switch (key) {
     case "ArrowDown":
       return "next";
@@ -100,12 +117,17 @@ export function listKeyAction(
     case " ":
       return "toggle-done";
     case "Enter":
-      return "edit";
+      // ⏎ opens, `e` edits (decision 22, TV-U10).
+      return "open";
     case ">":
       return "nest";
     case "<":
       return "unnest";
   }
+  // ⇧S: the status menu (default k), before `s` (schedule) matches below.
+  if (shiftKey && key.toLowerCase() === "s") return "status";
+  // ⇧F "Focus on this" (call 31); a bare f stays Filter's (use-tasks-filters).
+  if (shiftKey && key.toLowerCase() === "f") return "focus-on";
   switch (key.toLowerCase()) {
     case "j":
       return "next";

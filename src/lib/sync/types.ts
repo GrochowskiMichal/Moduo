@@ -9,6 +9,7 @@
 // `features/tasks/live.ts` if it is published.
 
 import type { AccessChangeResource } from "@contracts/vocabularies";
+import type { AgentSession } from "../../features/spine/agent-session";
 import type {
   Area,
   Bucket,
@@ -26,6 +27,7 @@ import type {
   Team,
   TeamMember,
 } from "../../features/tasks/model";
+import type { TaskView } from "../../features/tasks/view-row";
 import type { Truncation } from "../paged-select";
 
 /**
@@ -35,6 +37,19 @@ import type { Truncation } from "../paged-select";
 export type CommentMark = {
   id: string;
   taskId: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
+/**
+ * A file on a task, as far as the 📎 counts and an open strip's refresh need
+ * it (AT-3): no name, path or size ever lands on the device copy. Only
+ * finished files are read; a Realtime row still uploading is skipped.
+ */
+export type AttachmentMark = {
+  id: string;
+  taskId: string;
+  status: string;
   updatedAt: string;
   deletedAt: string | null;
 };
@@ -59,6 +74,12 @@ export type SyncRows = {
   /** Only your own (RLS returns nobody else's). */
   reminders: TaskReminder;
   waiting: TaskWaitingEntry;
+  /** TV-U8: your saved views and the ones shared with you (read whole). */
+  views: TaskView;
+  /** TV-D16: agent sessions the reader may see (RLS). */
+  agentSessions: AgentSession;
+  /** AT-3: finished files on tasks the reader may see (RLS), for the 📎 counts. */
+  attachments: AttachmentMark;
 };
 
 export type SyncTableName = keyof SyncRows;

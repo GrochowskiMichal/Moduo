@@ -8,6 +8,8 @@
 // "every other friday" · "first monday of the month" · presets ("every day",
 // "weekdays", "every week", "every month") · "every N days/weeks/months".
 
+import { formatTime as formatClockTime } from "../../lib/time-format";
+
 export type ParsedNLRecurrence = {
   /** RFC 5545 RRULE body (no "RRULE:" prefix) — expansion-ready. */
   rrule: string;
@@ -45,13 +47,9 @@ const ORDINALS: Record<string, { pos: string; label: string }> = {
   last: { pos: "-1", label: "last" },
 };
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, {
-  hour: "numeric",
-  minute: "2-digit",
-});
-
+/** The echo's clock reads Time & region's 12/24-hour setting (TV-D14). */
 function formatTime(hour: number, minute: number): string {
-  return TIME_FMT.format(new Date(2000, 0, 1, hour, minute));
+  return formatClockTime(new Date(2000, 0, 1, hour, minute));
 }
 
 /** "at 9" / "at 9:30" / "at 9am" / "at noon" — the pinned time suffixes. */

@@ -22,6 +22,20 @@ export function TasksPage() {
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as TasksSearch;
   const urlTaskId = search.id ?? null;
+  // A saved view's link (TV-U8): opened once, then taken off the URL, so a
+  // refresh reopens where you are rather than the link's view.
+  const urlViewId = search.view ?? null;
+  const onUrlViewConsumed = useCallback(() => {
+    void navigate({
+      to: "/tasks",
+      replace: true,
+      search: (prev: Record<string, unknown>) => {
+        const next = { ...prev };
+        delete next.view;
+        return next;
+      },
+    });
+  }, [navigate]);
   const onUrlTaskIdChange = useCallback(
     (id: string | null) => {
       void navigate({
@@ -83,6 +97,8 @@ export function TasksPage() {
       runtime={runtime}
       urlTaskId={urlTaskId}
       onUrlTaskIdChange={onUrlTaskIdChange}
+      urlViewId={urlViewId}
+      onUrlViewConsumed={onUrlViewConsumed}
     />
   );
 }

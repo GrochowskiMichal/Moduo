@@ -16,13 +16,13 @@ type Story = StoryObj<typeof meta>;
 
 /**
  * The top bar's Help button. Its menu: Docs · Keyboard shortcuts (?) ·
- * Contact support · Report a bug. The shortcuts dialog is mounted beside it,
- * as in the app chrome.
+ * What's in Tasks (with Tasks access, TV-U17) · Contact support · Report a
+ * bug. The shortcuts dialog is mounted beside it, as in the app chrome.
  */
 export const Default: Story = {
   render: () => (
     <div className="flex justify-end p-4">
-      <HelpMenu />
+      <HelpMenu onWhatsInTasks={() => undefined} />
       <GlobalShortcutsDialog />
     </div>
   ),

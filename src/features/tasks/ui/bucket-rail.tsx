@@ -46,7 +46,6 @@ import {
   NavSectionHeader,
   restoreNavFocus,
 } from "../../../components/ui/nav-row";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { TasksSidebarHideable } from "../../../lib/preferences";
 import { useAuth } from "../../../providers/auth-provider";
@@ -55,18 +54,22 @@ import { ShareMenu } from "../../sharing/share-menu";
 import { RAIL_SORT_PREFIX, type RailDropTarget } from "../dnd/rail-drop";
 import type { Area, Bucket } from "../model";
 import { BUCKET_COLOR_OPTIONS, bucketDotColor, sidebarGroups } from "../sidebar";
+import { type TaskView, viewIdOf, viewSelection } from "../views";
 import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
-
-export type TasksMode = "plan" | "execute";
 
 /** The sidebar's selections besides projects: the centre views its ⋯ opens. */
 export const ARCHIVED_SELECTION = "archived";
 export const TRASH_SELECTION = "trash";
-/** Upcoming (REPLAN 29): its own screen is TV-U15's; until then a dated scope. */
+/** Templates (TV-D15): opened from the hairline's ⋯ until Settings → Tasks → Templates exists. */
+export const TEMPLATES_SELECTION = "templates";
+/** Upcoming (REPLAN 29, TV-U15's screen). */
 export const UPCOMING_SELECTION = "upcoming";
+/** Won't do: the reachable list with Reopen (tasks-v3 §2), from the ⋯ (TV-U15). */
+export const WONTDO_SELECTION = "wontdo";
 
 /** The keys collapse is remembered by: Pinned, Views, and each area. */
 export const PINNED_GROUP = "pinned";
+export const VIEWS_GROUP = "views";
 export const areaGroupKey = (areaId: string) => `area:${areaId}`;
 
 // Project rows are sortable inside the page's one DndContext (DF-22). Their
@@ -86,8 +89,6 @@ export function asRailProject(data: unknown): string | null {
 }
 
 type Props = {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
   /** "inbox" | "today" (Focus) | "upcoming" | "mine" | "all" | "archived" | "trash" | project id */
   selection: string;
   onSelect: (selection: string) => void;
@@ -107,9 +108,17 @@ type Props = {
   /** Customize sidebar (REPLAN 29a): the rows this person hid. */
   hidden: ReadonlySet<TasksSidebarHideable>;
   onToggleHidden: (row: TasksSidebarHideable) => void;
-  /** Pin (REPLAN 29b): this person's pinned projects here, in pin order. */
+  /** Pin (REPLAN 29b): this person's pinned projects and views (`view:<id>`)
+   *  here, in pin order. */
   pinned: readonly string[];
-  onTogglePin: (projectId: string) => void;
+  /** A project id, or a view's `view:<id>`. */
+  onTogglePin: (id: string) => void;
+  /**
+   * Saved views (TV-U8): yours in your order, then the ones shared with you.
+   * Absent: no Views group (a build ahead of its server, stories).
+   */
+  views?: readonly TaskView[];
+  viewActions?: ViewActions;
   /** Collapsed groups (REPLAN 29e): Pinned, Views and each area. */
   collapsed: ReadonlySet<string>;
   onToggleCollapsed: (key: string) => void;
@@ -144,6 +153,22 @@ type Props = {
   /** Archived projects and Recently deleted: from the ⋯, never rows (98). */
   archivedCount: number;
   trashCount: number;
+  /** Won't do tasks (TV-U15): from the ⋯ too. */
+  wontDoCount?: number;
+  /**
+   * Templates (TV-D15): a project's ⋯ → Duplicate… and Save as template…, the
+   * hairline's ⋯ → New project from template… and Templates. Absent: none of
+   * them (a build ahead of its server, stories).
+   */
+  templates?: {
+    onDuplicate: (bucket: Bucket) => void;
+    onSaveAsTemplate: (bucket: Bucket) => void;
+    onNewFromTemplate: () => void;
+  };
+  /** The hairline's ⋯ → "What's in Tasks" reopens Tasks' welcome (TV-U17). */
+  onOpenWelcome?: () => void;
+  /** The hairline's ⋯ → "Import tasks…" (TV-U18). */
+  onImport?: () => void;
 
   /** The sidebar's <nav>, for the page to hand focus back to it (`focusNavRow`). */
   navRef?: RefObject<HTMLElement | null>;
@@ -181,9 +206,22 @@ export function parseCollapsedSections(raw: string | null): Set<string> {
 
 type Adding = { kind: "project"; areaId: string | null } | { kind: "area" } | null;
 
+/** What a view's ⋯ can do (TV-U8). */
+export type ViewActions = {
+  /** Whose views are yours (only the maker changes a view). */
+  currentUserId: string | null;
+  onRename: (viewId: string, name: string) => void;
+  onShare: (viewId: string, shared: boolean) => void;
+  onDelete: (viewId: string) => void;
+  onMove: (viewId: string, direction: "up" | "down") => void;
+  onCopyLink: (viewId: string) => void;
+  /** Sharing a view needs edit access. */
+  canShare: boolean;
+  /** The workspace's owner or an admin: may unshare or delete a shared view. */
+  canModerate: boolean;
+};
+
 export function BucketRail({
-  mode,
-  onModeChange,
   selection,
   onSelect,
   buckets,
@@ -199,6 +237,8 @@ export function BucketRail({
   onToggleHidden,
   pinned,
   onTogglePin,
+  views = NO_VIEWS,
+  viewActions,
   collapsed,
   onToggleCollapsed,
   onCreateBucket,
@@ -219,6 +259,10 @@ export function BucketRail({
   onDeleteArea,
   archivedCount,
   trashCount,
+  wontDoCount = 0,
+  templates,
+  onOpenWelcome,
+  onImport,
   navRef,
   dropAccepts,
 }: Props) {
@@ -240,9 +284,37 @@ export function BucketRail({
   // Drag to reorder needs edit access and the page's DndContext.
   const sortable = canEdit && !!dropAccepts;
   const pinnedIds = new Set(pinned);
-  const pinnedProjects = pinned
-    .map((id) => buckets.find((b) => b.id === id))
-    .filter((b): b is Bucket => !!b);
+  // Pinned projects and views, in pin order (one that's gone drops out).
+  const pinnedEntries = pinned.flatMap((id): PinnedEntry[] => {
+    const viewId = viewIdOf(id);
+    if (viewId) {
+      const view = views.find((v) => v.id === viewId);
+      return view ? [{ kind: "view", view }] : [];
+    }
+    const bucket = buckets.find((b) => b.id === id);
+    return bucket ? [{ kind: "project", bucket }] : [];
+  });
+  const ownViews = views.filter((v) => v.ownerId === viewActions?.currentUserId);
+  const viewRow = (view: TaskView, opts?: { pinnedCopy?: boolean }) => {
+    const selectionKey = viewSelection(view.id);
+    const mine = view.ownerId === viewActions?.currentUserId;
+    const index = ownViews.findIndex((v) => v.id === view.id);
+    return (
+      <ViewRow
+        key={opts?.pinnedCopy ? `pin:${selectionKey}` : selectionKey}
+        view={view}
+        navId={opts?.pinnedCopy ? `pin:${selectionKey}` : selectionKey}
+        current={selection === selectionKey}
+        mine={mine}
+        pinned={pinnedIds.has(selectionKey)}
+        first={index <= 0}
+        last={index === -1 || index === ownViews.length - 1}
+        actions={viewActions}
+        onSelect={() => onSelect(selectionKey)}
+        onTogglePin={() => onTogglePin(selectionKey)}
+      />
+    );
+  };
   const shows = (row: TasksSidebarHideable) => !hidden.has(row);
 
   const projectRow = (bucket: Bucket, opts?: { pinnedCopy?: boolean }) => {
@@ -270,6 +342,8 @@ export function BucketRail({
         onCapture={canEdit && onCaptureInto ? () => onCaptureInto(bucket.id) : undefined}
         onTriage={() => onTriageBucket(bucket.id)}
         onEditStatuses={onEditStatuses ? () => onEditStatuses(bucket.id) : undefined}
+        onDuplicate={templates ? () => templates.onDuplicate(bucket) : undefined}
+        onSaveAsTemplate={templates ? () => templates.onSaveAsTemplate(bucket) : undefined}
         onShareCloseAutoFocus={returnFocus(bucket.id)}
         onInputExit={() => focusRowSoon(bucket.id)}
         dropAccepts={dropAccepts}
@@ -310,8 +384,6 @@ export function BucketRail({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <ModeToggle mode={mode} onModeChange={onModeChange} />
-
       <div className="pane-scroll min-h-0 flex-1 overflow-auto">
         <nav ref={nav} className="flex flex-col gap-px" aria-label="Tasks">
           {/* ── Yours ───────────────────────────────────────────────────── */}
@@ -366,7 +438,7 @@ export function BucketRail({
               label="Focus"
               icon={<ListChecks aria-hidden />}
               count={queueCount}
-              countLabel={`${queueCount} queued`}
+              countLabel={`${queueCount} lined up`}
               current={selection === "today"}
               onSelect={() => onSelect("today")}
             />
@@ -405,8 +477,16 @@ export function BucketRail({
             trashCount={trashCount}
             onOpenArchived={() => onSelect(ARCHIVED_SELECTION)}
             onOpenTrash={() => onSelect(TRASH_SELECTION)}
+            wontDoCount={wontDoCount}
+            onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
+            wontDoCurrent={selection === WONTDO_SELECTION}
             archivedCurrent={selection === ARCHIVED_SELECTION}
             trashCurrent={selection === TRASH_SELECTION}
+            onNewFromTemplate={templates?.onNewFromTemplate}
+            onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
+            templatesCurrent={selection === TEMPLATES_SELECTION}
+            onOpenWelcome={onOpenWelcome}
+            onImport={onImport}
           />
 
           {/* ── Shared ──────────────────────────────────────────────────── */}
@@ -423,7 +503,7 @@ export function BucketRail({
           ) : null}
 
           {/* Pinned exists only once you pin something yourself (29b). */}
-          {pinnedProjects.length > 0 ? (
+          {pinnedEntries.length > 0 ? (
             <div className="mt-2 flex flex-col gap-px">
               <NavSectionHeader
                 label="Pinned"
@@ -432,11 +512,26 @@ export function BucketRail({
               />
               {collapsed.has(PINNED_GROUP)
                 ? null
-                : pinnedProjects.map((b) => projectRow(b, { pinnedCopy: true }))}
+                : pinnedEntries.map((entry) =>
+                    entry.kind === "view"
+                      ? viewRow(entry.view, { pinnedCopy: true })
+                      : projectRow(entry.bucket, { pinnedCopy: true }),
+                  )}
             </div>
           ) : null}
 
-          {/* Views: TV-U8's saved views join here; no header until there's one. */}
+          {/* Views (TV-U8, 29c–29e): no glyphs (names line up with the
+              projects'), no header until there's one. */}
+          {views.length > 0 ? (
+            <div className="mt-2 flex flex-col gap-px">
+              <NavSectionHeader
+                label="Views"
+                collapsed={collapsed.has(VIEWS_GROUP)}
+                onToggle={() => onToggleCollapsed(VIEWS_GROUP)}
+              />
+              {collapsed.has(VIEWS_GROUP) ? null : views.map((v) => viewRow(v))}
+            </div>
+          ) : null}
 
           {sortable ? <ProjectDndMonitor onMove={onMoveBucket} /> : null}
 
@@ -534,31 +629,6 @@ export function BucketRail({
   );
 }
 
-// ── mode toggle ───────────────────────────────────────────────────────────────
-
-function ModeToggle({
-  mode,
-  onModeChange,
-}: {
-  mode: TasksMode;
-  onModeChange: (mode: TasksMode) => void;
-}) {
-  // Shared SegmentedControl primitive. The internal mode value stays "execute"
-  // (model-level); the label reads "Focus". TV-F7 removes the switch.
-  return (
-    <SegmentedControl
-      aria-label="Tasks mode"
-      fullWidth
-      value={mode}
-      onValueChange={(value) => onModeChange(value as TasksMode)}
-      items={[
-        { value: "plan", label: "Plan" },
-        { value: "execute", label: "Focus" },
-      ]}
-    />
-  );
-}
-
 // ── the hairline and its ⋯ (REPLAN 20 A, 29a, 98) ────────────────────────────
 
 const HIDEABLE_LABELS: Record<TasksSidebarHideable, string> = {
@@ -581,6 +651,14 @@ function SidebarHairline({
   onOpenTrash,
   archivedCurrent,
   trashCurrent,
+  wontDoCount,
+  onOpenWontDo,
+  wontDoCurrent,
+  onNewFromTemplate,
+  onOpenTemplates,
+  templatesCurrent,
+  onOpenWelcome,
+  onImport,
 }: {
   canEdit: boolean;
   hidden: ReadonlySet<TasksSidebarHideable>;
@@ -594,6 +672,15 @@ function SidebarHairline({
   onOpenTrash: () => void;
   archivedCurrent: boolean;
   trashCurrent: boolean;
+  wontDoCount: number;
+  onOpenWontDo: () => void;
+  wontDoCurrent: boolean;
+  onNewFromTemplate?: () => void;
+  onOpenTemplates?: () => void;
+  templatesCurrent: boolean;
+  onOpenWelcome?: () => void;
+  /** "Import tasks…" (TV-U18), when you can import here. */
+  onImport?: () => void;
 }) {
   const rows: TasksSidebarHideable[] = showMine
     ? ["focus", "upcoming", "mine", "all"]
@@ -652,7 +739,16 @@ function SidebarHairline({
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={afterClose(onNewProject)}>New project</DropdownMenuItem>
+              {onNewFromTemplate ? (
+                <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
+                  New project from template…
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
+              {onImport ? (
+                // Opens a dialog: wait for the menu to close (gotchas/ui.md).
+                <DropdownMenuItem onSelect={afterClose(onImport)}>Import tasks…</DropdownMenuItem>
+              ) : null}
             </>
           ) : null}
           <DropdownMenuSeparator />
@@ -662,10 +758,31 @@ function SidebarHairline({
               <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut>
             ) : null}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenWontDo} data-current={wontDoCurrent || undefined}>
+            Won’t do
+            {wontDoCount > 0 ? <DropdownMenuShortcut>{wontDoCount}</DropdownMenuShortcut> : null}
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenTrash} data-current={trashCurrent || undefined}>
             Recently deleted
             {trashCount > 0 ? <DropdownMenuShortcut>{trashCount}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
+          {onOpenTemplates ? (
+            <DropdownMenuItem
+              onSelect={onOpenTemplates}
+              data-current={templatesCurrent || undefined}
+            >
+              Templates
+            </DropdownMenuItem>
+          ) : null}
+          {onOpenWelcome ? (
+            <>
+              <DropdownMenuSeparator />
+              {/* Opens a dialog: wait for the menu to close (gotchas/ui.md). */}
+              <DropdownMenuItem onSelect={afterClose(onOpenWelcome)}>
+                What’s in Tasks
+              </DropdownMenuItem>
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -825,6 +942,89 @@ function SortableProject({
   );
 }
 
+type PinnedEntry = { kind: "project"; bucket: Bucket } | { kind: "view"; view: TaskView };
+
+const NO_VIEWS: readonly TaskView[] = [];
+
+/**
+ * A saved view in the sidebar (TV-U8). Yours: Rename · Pin · Share · Move ·
+ * Copy link · Delete. Someone else's shared view: Pin · Copy link (and, for
+ * the workspace's owner or an admin, Stop sharing). No glyph: an empty slot
+ * keeps its name in line with the projects' (29c).
+ */
+function ViewRow({
+  view,
+  navId,
+  current,
+  mine,
+  pinned,
+  first,
+  last,
+  actions,
+  onSelect,
+  onTogglePin,
+}: {
+  view: TaskView;
+  navId: string;
+  current: boolean;
+  mine: boolean;
+  pinned: boolean;
+  first: boolean;
+  last: boolean;
+  actions?: ViewActions;
+  onSelect: () => void;
+  onTogglePin: () => void;
+}) {
+  const moderate = !mine && view.shared && !!actions?.canModerate;
+  // Changing what a shared view shows needs Tasks edit (the server says so too).
+  const canRename = mine && !!actions && (actions.canShare || !view.shared);
+  const menu = (m: MenuKit) => (
+    <>
+      {canRename ? <m.Item onSelect={m.rename}>Rename</m.Item> : null}
+      <m.Item onSelect={onTogglePin}>{pinned ? "Unpin from sidebar" : "Pin to sidebar"}</m.Item>
+      {mine && actions && (actions.canShare || view.shared) ? (
+        <m.Item onSelect={() => actions.onShare(view.id, !view.shared)}>
+          {view.shared ? "Stop sharing" : "Share with the workspace"}
+        </m.Item>
+      ) : null}
+      {moderate && actions ? (
+        <m.Item onSelect={() => actions.onShare(view.id, false)}>Stop sharing</m.Item>
+      ) : null}
+      {mine && actions ? (
+        <>
+          <m.Item disabled={first} onSelect={() => actions.onMove(view.id, "up")}>
+            Move up
+          </m.Item>
+          <m.Item disabled={last} onSelect={() => actions.onMove(view.id, "down")}>
+            Move down
+          </m.Item>
+        </>
+      ) : null}
+      {actions ? <m.Item onSelect={() => actions.onCopyLink(view.id)}>Copy link</m.Item> : null}
+      {mine && actions ? (
+        <>
+          <m.Separator />
+          <m.Item variant="destructive" onSelect={() => actions.onDelete(view.id)}>
+            Delete view
+          </m.Item>
+        </>
+      ) : null}
+    </>
+  );
+  return (
+    <NavRow
+      navId={navId}
+      label={view.name}
+      icon={<span aria-hidden />}
+      current={current}
+      onSelect={onSelect}
+      onRename={canRename && actions ? (name) => actions.onRename(view.id, name) : undefined}
+      menu={menu}
+      menuLabel={`${view.name} options`}
+    />
+  );
+}
+
 /** Commits a project drop: inside the page's DndContext, it reacts only to sidebar projects. */
 function ProjectDndMonitor({ onMove }: { onMove: (activeId: string, overId: string) => void }) {
   useDndMonitor({
@@ -857,6 +1057,8 @@ function ProjectRow({
   onCapture,
   onTriage,
   onEditStatuses,
+  onDuplicate,
+  onSaveAsTemplate,
   onShareCloseAutoFocus,
   onInputExit,
   dropAccepts,
@@ -882,6 +1084,9 @@ function ProjectRow({
   onCapture?: () => void;
   onTriage: () => void;
   onEditStatuses?: () => void;
+  /** Duplicate… and Save as template… (TV-D15). */
+  onDuplicate?: () => void;
+  onSaveAsTemplate?: () => void;
   onShareCloseAutoFocus: (event: Event) => void;
   /** The New area input closed by Enter/Esc: focus goes back to the row. */
   onInputExit: () => void;
@@ -905,7 +1110,18 @@ function ProjectRow({
   const pinItem = (m: MenuKit) => (
     <m.Item onSelect={onTogglePin}>{pinned ? "Unpin from sidebar" : "Pin to sidebar"}</m.Item>
   );
-  // Rename · Colour · Area · Pin · Share · Statuses · Triage · Archive · Delete
+  // Rename · Colour · Area · Pin · Share · Statuses · Triage · Duplicate ·
+  // Save as template · Archive · Delete
+  const templateItems = (m: MenuKit) =>
+    onDuplicate || onSaveAsTemplate ? (
+      <>
+        <m.Separator />
+        {onDuplicate ? <m.Item onSelect={m.afterClose(onDuplicate)}>Duplicate…</m.Item> : null}
+        {onSaveAsTemplate ? (
+          <m.Item onSelect={m.afterClose(onSaveAsTemplate)}>Save as template…</m.Item>
+        ) : null}
+      </>
+    ) : null;
   const menu = (m: MenuKit) =>
     canEdit ? (
       <>
@@ -937,6 +1153,7 @@ function ProjectRow({
         {drift > 0 ? (
           <m.Item onSelect={m.afterClose(onTriage)}>Triage {drift} drifted…</m.Item>
         ) : null}
+        {templateItems(m)}
         <m.Separator />
         <m.Item onSelect={m.afterClose(onArchive)}>Archive…</m.Item>
         <m.Item variant="destructive" onSelect={m.afterClose(onDelete)}>
@@ -961,6 +1178,12 @@ function ProjectRow({
         count={count}
         countLabel={`${count} open`}
         current={current}
+        // On hold and Done read one step quieter (REPLAN 16); never hidden.
+        className={
+          !current && (bucket.status === "on_hold" || bucket.status === "done")
+            ? "text-subtle-foreground"
+            : undefined
+        }
         onSelect={onSelect}
         indicator={
           drift > 0 ? (

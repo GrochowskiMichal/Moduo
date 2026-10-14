@@ -6,7 +6,7 @@
 // they need the workspace's members and tags.
 //
 // Operators: is / is not / any of, AND across dimensions. Yes/no dimensions
-// (In my queue, Blocked, …) offer only "is".
+// (In my Focus, Blocked, …) offer only "is".
 
 import { TASK_STATUSES } from "@contracts/vocabularies";
 import {
@@ -17,21 +17,27 @@ import {
   sanitizeConditions,
   toggleFilterValue,
 } from "../../components/ui/filter-model";
-import { dueFilterValues, scheduledFilterValues } from "./day-buckets";
+import { completedFilterValues, dueFilterValues, scheduledFilterValues } from "./day-buckets";
 import type { PriorityLevel, Task, TaskStatus } from "./model";
 import { type StatusKey, statusKeyOf } from "./statuses";
 
 export const TASK_FILTER_DIMENSIONS = [
   "assignee",
+  // TV-D13: the team a task is routed to.
+  "team",
   "creator",
   "tag",
   "status",
+  // TV-U8: when a task was finished (the seeded "Done last week").
+  "completed",
   "priority",
   "energy",
   "due",
   "scheduled",
   "queued",
   "blocked",
+  // TV-U8: who or what a task waits on (the seeded "Waiting on …" views).
+  "waiting",
   "recurring",
   "subtasks",
   "attachments",
@@ -51,15 +57,18 @@ const YES_NO_DIMENSIONS: ReadonlySet<string> = new Set([
 
 export const TASK_FILTER_LABELS: Record<TaskFilterDimension, string> = {
   assignee: "Assignee",
+  team: "Team",
   creator: "Creator",
   tag: "Tag",
   status: "Status",
+  completed: "Completed",
   priority: "Priority",
   energy: "Energy",
   due: "Due date",
   scheduled: "Scheduled",
-  queued: "In my queue",
+  queued: "In my Focus",
   blocked: "Blocked",
+  waiting: "Waiting on",
   recurring: "Recurring",
   subtasks: "Has subtasks",
   attachments: "Has attachments",
@@ -113,7 +122,12 @@ export type TaskFilterContext = {
   hasSubtasks: (taskId: string) => boolean;
   /** Live files on a task; unknown (not loaded yet) counts as none. */
   attachmentCount: (taskId: string) => number;
+  /** What a task waits on (the kinds of its live Waiting on… entries). */
+  waitingKindsOf?: (taskId: string) => readonly string[];
 };
+
+/** Waiting on's "anything" value: a task with at least one entry. */
+export const WAITING_ANY = "any";
 
 const yesNo = (on: boolean) => [on ? "yes" : "no"];
 
@@ -126,6 +140,8 @@ export function taskFilterValues(
   switch (dimension as TaskFilterDimension) {
     case "assignee":
       return [task.assigneeId ?? NONE_VALUE];
+    case "team":
+      return [task.teamId ?? NONE_VALUE];
     case "creator":
       // A creator lost before TV-D1 matches no one.
       return task.creatorUnknown || !task.creatorId ? [] : [task.creatorId];
@@ -143,6 +159,12 @@ export function taskFilterValues(
       return dueFilterValues(task, ctx.now);
     case "scheduled":
       return scheduledFilterValues(task, ctx.now);
+    case "completed":
+      return completedFilterValues(task, ctx.now);
+    case "waiting": {
+      const kinds = ctx.waitingKindsOf?.(task.id) ?? [];
+      return kinds.length > 0 ? [WAITING_ANY, ...new Set(kinds)] : [NONE_VALUE];
+    }
     case "queued":
       return yesNo(ctx.isQueued(task.id));
     case "blocked":
@@ -191,7 +213,18 @@ export function showsArchived(conditions: readonly FilterCondition[]): boolean {
  * "N completed · show" lines.
  */
 export function showsDone(conditions: readonly FilterCondition[]): boolean {
-  return asksForStatus(conditions, "done");
+  return asksForStatus(conditions, "done") || asksForCompletion(conditions);
+}
+
+/** A Completed filter that asks for a finished day ("Done last week"): it
+ *  lists done tasks, so Display → Completed can't hide them. */
+function asksForCompletion(conditions: readonly FilterCondition[]): boolean {
+  return conditions.some(
+    (c) =>
+      c.dimension === "completed" &&
+      c.operator !== "is_not" &&
+      c.values.some((v) => v !== NONE_VALUE),
+  );
 }
 
 /**

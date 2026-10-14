@@ -327,10 +327,20 @@ export function toDateInputValue(iso: string | null): string {
  * Display → Group by (tasks-v3 default l): Section · Status · Priority ·
  * Assignee · Team · Date · Project, then None. Never Tag or Energy (a task
  * with three tags would be listed three times; both stay filters). Section
- * and Team join when their data exists (TV-D10); "bucket" is the stored key
- * for Project until the contract step (TV-D7) renames buckets.
+ * is offered inside one project only, Team once the workspace has teams
+ * (TV-U10); "bucket" is the stored key for Project until the contract step
+ * (TV-D7) renames buckets.
  */
-export const GROUP_BYS = ["status", "priority", "assignee", "date", "bucket", "none"] as const;
+export const GROUP_BYS = [
+  "section",
+  "status",
+  "priority",
+  "assignee",
+  "team",
+  "date",
+  "bucket",
+  "none",
+] as const;
 export type GroupBy = (typeof GROUP_BYS)[number];
 
 export type TaskGroup = {
@@ -341,6 +351,10 @@ export type TaskGroup = {
 
 export type GroupContext = {
   bucketName: (bucketId: string) => string;
+  /** The project's sections (Section grouping, TV-U10). */
+  sections?: ReadonlyArray<{ id: string; name: string; position: number }>;
+  /** The workspace's teams (Team grouping). */
+  teams?: ReadonlyArray<{ id: string; name: string }>;
   /** Bucket groups follow the rail (Inbox first), not the order tasks arrive. */
   bucketOrder?: readonly string[];
   /** Workspace members in picker order (me first). An assignee not listed
@@ -426,7 +440,9 @@ export function dateGroupLabel(group: DateGroup, now: Date = new Date()): string
  * projects (All).
  */
 export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskGroup[] {
-  if (by === "none") {
+  // Section grouping in a project with no sections yet is the plain list
+  // (the list's "+ Add section" line makes the first one).
+  if (by === "none" || (by === "section" && (ctx.sections?.length ?? 0) === 0)) {
     return [{ key: "all", label: "", tasks }];
   }
   const now = ctx.now ?? new Date();
@@ -459,6 +475,10 @@ export function groupKeyFor(task: Task, by: GroupBy, now: Date = new Date()): st
       return task.priority ?? "unset";
     case "date":
       return dateGroupOf(task, now);
+    case "section":
+      return task.sectionId ?? NO_KEY;
+    case "team":
+      return task.teamId ?? NO_KEY;
     default:
       return "all";
   }
@@ -489,6 +509,25 @@ function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>, ctx: GroupConte
   if (by === "date") {
     return DATE_GROUPS.filter((g) => present.has(g));
   }
+  if (by === "section") {
+    // Tasks with no section first (the top of a project, as in Todoist), then
+    // the sections in their order; a section gone meanwhile keeps its
+    // first-seen place at the end.
+    const known = [...(ctx.sections ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .map((s) => s.id)
+      .filter((id) => present.has(id));
+    const gone = keys.filter((k) => k !== NO_KEY && !known.includes(k));
+    return [...(present.has(NO_KEY) ? [NO_KEY] : []), ...known, ...gone];
+  }
+  if (by === "team") {
+    const known = [...(ctx.teams ?? [])]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((t) => t.id)
+      .filter((id) => present.has(id));
+    const gone = keys.filter((k) => k !== NO_KEY && !known.includes(k));
+    return [...known, ...gone, ...(present.has(NO_KEY) ? [NO_KEY] : [])];
+  }
   return keys;
 }
 
@@ -502,6 +541,14 @@ function groupLabel(by: GroupBy, key: string, ctx: GroupContext, now: Date): str
     return ctx.assignees?.find((a) => a.userId === key)?.name ?? "Former member";
   }
   if (by === "date") return dateGroupLabel(key as DateGroup, now);
+  if (by === "section") {
+    if (key === NO_KEY) return "No section";
+    return ctx.sections?.find((s) => s.id === key)?.name ?? "Deleted section";
+  }
+  if (by === "team") {
+    if (key === NO_KEY) return "No team";
+    return ctx.teams?.find((t) => t.id === key)?.name ?? "Former team";
+  }
   return key;
 }
 
@@ -519,7 +566,12 @@ function validDate(iso: string | null): Date | null {
  * tasks) | "today" (the Queue) | "inbox" | a bucket id.
  */
 export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
-  const crossBucket = scope === "all" || scope === "mine" || scope === "today";
+  const crossBucket =
+    scope === "all" ||
+    scope === "mine" ||
+    scope === "today" ||
+    scope === "upcoming" ||
+    scope === "wontdo";
   return crossBucket && groupBy !== "bucket";
 }
 
@@ -529,7 +581,27 @@ export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
  * ordered line-up, never grouped.
  */
 export function groupsByBucket(scope: string): boolean {
-  return scope === "all" || scope === "mine";
+  return scope === "all" || scope === "mine" || scope === "wontdo";
+}
+
+/** The rail's scopes that aren't one project (see `bucket-rail.tsx`). */
+const NON_PROJECT_SCOPES: ReadonlySet<string> = new Set([
+  "all",
+  "mine",
+  "today",
+  "inbox",
+  "upcoming",
+  "wontdo",
+  "archived",
+  "trash",
+]);
+
+/**
+ * Whether a scope is one project (a bucket id): the only place sections live,
+ * so the only place Group by offers Section (TV-U10).
+ */
+export function isProjectScope(scope: string): boolean {
+  return !NON_PROJECT_SCOPES.has(scope);
 }
 
 // ── Organization: rail sections + tag filter (Session 4) ─────────────────────

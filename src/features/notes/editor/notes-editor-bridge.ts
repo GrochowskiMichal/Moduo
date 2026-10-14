@@ -56,6 +56,8 @@ export type NotesTaskBridge = {
   restoreDetachedTasks: (taskIds: string[]) => void;
   /** Open the Task-detail rail variant for this task. */
   openTaskDetail: (taskId: string) => void;
+  /** The task's finished files (AT-3's 📎 mark on the line). Absent: 0. */
+  fileCount?: (taskId: string) => number;
 };
 
 export type NotesEditorBridge = {

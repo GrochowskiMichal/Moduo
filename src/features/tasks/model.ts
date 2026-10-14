@@ -12,10 +12,13 @@ import type {
   EnergyLevel,
   PriorityLevel,
   ProjectState,
+  RecurrenceMode,
   TaskReminderKind,
   TaskStatus,
   TaskStatusCategory,
   TaskTimeAction,
+  TaskTimeAdjustmentReason,
+  TaskTimeEntryKind,
   TaskTimeStatus,
   TaskWaitingKind,
 } from "@contracts/vocabularies";
@@ -27,10 +30,13 @@ export type {
   EnergyLevel,
   PriorityLevel,
   ProjectState,
+  RecurrenceMode,
   TaskReminderKind,
   TaskStatus,
   TaskStatusCategory,
   TaskTimeAction,
+  TaskTimeAdjustmentReason,
+  TaskTimeEntryKind,
   TaskTimeStatus,
   TaskWaitingKind,
 } from "@contracts/vocabularies";
@@ -147,8 +153,10 @@ export type TaskReminder = {
   kind: TaskReminderKind;
   /** When it fires; null for a relative one while the task has no due date. */
   at: string | null;
-  /** When the sender picked it up (TV-D12 delivers it). */
+  /** When the sender picked it up and delivered it (or retired it unsent). */
   firedAt: string | null;
+  /** Set while the task sits in Backlog or Won't do (TV-D12); restoring clears it. */
+  suspendedAt: string | null;
   updatedAt: string;
 };
 
@@ -179,9 +187,16 @@ export type RecurrenceRule = {
   nextOccurrence: string | null;
   /**
    * "after_completion": the next one counts from the day it was done (the
-   * server reads it; the picker comes with TV-D12/TV-U13). Absent: by the rule.
+   * server reads it; the picker is TV-U13's). Absent: by the rule.
    */
-  mode?: "after_completion";
+  mode?: RecurrenceMode;
+  /**
+   * "Move just this one" (TV-D12, server-written): the pattern's slot this
+   * cycle was moved from, and by how many days. The next cycle is back on the
+   * pattern.
+   */
+  movedFrom?: string;
+  movedDays?: number;
 };
 
 /**
@@ -228,6 +243,11 @@ export type Bucket = {
    * Archived projects; Tasks' search still finds its tasks, labelled.
    */
   archivedAt?: string | null;
+  /**
+   * The project's description (TV-U16): plain text, "" when there is none,
+   * absent on a row read before its migration. The overview shows and edits it.
+   */
+  description?: string;
 };
 
 /**
@@ -366,9 +386,71 @@ export type TrackTimeInput = {
   /** When the stretch ended (now when left out). */
   endedAt?: string | null;
   key?: string | null;
-  /** The adjustment an Undo removes. */
+  /** The adjustment an Undo removes; the entry an edit or remove changes. */
   entryId?: string | null;
+  /** "Add time…" / an edit: the day the logged time is for (YYYY-MM-DD). */
+  on?: string | null;
+  /** "Add time…" / an edit: the note ("" clears it on an edit). */
+  note?: string | null;
+  /** A Focus save or a give-back: the run it came from (TV-D14). */
+  runId?: string | null;
+  /** An adjustment's label: `give_back` after a Focus takeover (TV-F6). */
+  reason?: TaskTimeAdjustmentReason | null;
 };
+
+/** One of your own time entries on a task (TV-D3; TV-D14's day, note, label). */
+export type TaskTimeEntry = {
+  id: string;
+  taskId: string;
+  kind: TaskTimeEntryKind;
+  /** Signed for an adjustment (a give-back is negative). */
+  seconds: number;
+  startedAt: string | null;
+  endedAt: string | null;
+  /** The day a logged entry is for (YYYY-MM-DD); null for the others. */
+  entryOn: string | null;
+  note: string | null;
+  reason: TaskTimeAdjustmentReason | null;
+  runId: string | null;
+  createdAt: string;
+};
+
+/** What the time report reads (TV-D14): a period of days in `zone`, scoped to
+ *  projects, a client, or the whole workspace. */
+export type TimeReportQuery = {
+  workspaceId: string;
+  /** First and last day, inclusive (YYYY-MM-DD); at most a year apart. */
+  from: string;
+  to: string;
+  projectIds?: readonly string[] | null;
+  clientContactId?: string | null;
+  /** The reader's zone for the days (Time & region's); else the saved one. */
+  zone?: string | null;
+};
+
+/** One entry in the time report: on a task the reader can see, yours or (for
+ *  the workspace owner) a teammate's who shares their time. */
+export type TimeReportRow = {
+  entryId: string;
+  taskId: string;
+  taskTitle: string;
+  projectId: string | null;
+  /** Null when the reader can't see the project ("Private project"). */
+  projectName: string | null;
+  projectIsInbox: boolean;
+  userId: string;
+  isMine: boolean;
+  /** YYYY-MM-DD in the report's zone. */
+  day: string;
+  /** Signed: a give-back is negative; sum them. */
+  seconds: number;
+  kind: TaskTimeEntryKind;
+  reason: TaskTimeAdjustmentReason | null;
+  note: string | null;
+};
+
+/** A report read: its rows, and whether there were more than it holds. */
+export type TimeReportResult = { rows: TimeReportRow[]; truncated: boolean };
 
 /** What a time write answered. Totals are null when the task is gone. */
 export type TaskTimeResult = {
@@ -434,6 +516,19 @@ export type TaskCompletion = {
   cycleKey: string;
   updatedAt: string;
   deletedAt: string | null;
+};
+
+/**
+ * One cycle of a repeat in its history (TV-D12, `tasks_op_history`): done or
+ * skipped, when, by whom, and the reader's own tracked seconds in it (nobody
+ * sees anyone else's). Misses are never listed.
+ */
+export type TaskCycle = {
+  kind: "done" | "skipped";
+  at: string;
+  cycle: string | null;
+  by: string | null;
+  mySeconds: number;
 };
 
 /**
@@ -603,6 +698,30 @@ export function isDrifted(
   if (!isOpenTask(task)) return false;
   if (!task.scheduledAt) return false;
   return new Date(task.scheduledAt).getTime() < now.getTime();
+}
+
+/**
+ * Late (REPLAN 23, TV-U10): an open task whose due day has passed. Muted,
+ * never red; the List offers Move · Won't do · Break down on it. Backlog is
+ * never late (TV-D9), and the server's `tasks_late` says the same. `today` is
+ * the local date key (`useToday`), so the flag rolls over at midnight.
+ */
+export function isLate(
+  task: Pick<Task, "dueDate" | "dueOn" | "status" | "statusCategory">,
+  today: string,
+): boolean {
+  if (!isOpenTask(task)) return false;
+  const day = task.dueOn ?? localDayKey(task.dueDate);
+  return day !== null && day < today;
+}
+
+/** The local date key ("2026-10-13") of an instant, or null. */
+function localDayKey(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /**

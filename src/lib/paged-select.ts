@@ -45,6 +45,10 @@ export const READ_CAPS = {
   taskSessions: 20000,
   taskReminders: 10000,
   taskWaiting: 10000,
+  /** TV-U8: your saved views and the ones shared with you (200 each at most). */
+  taskViews: 2000,
+  // TV-D16: agent sessions you can see (yours, and teammates' they share).
+  agentSessions: 10000,
   taskQueue: 5000,
   notes: 5000,
   contacts: 10000,
@@ -59,6 +63,8 @@ export const READ_CAPS = {
   closedTasks: 20000,
   /** Comments on tasks, read for their counts only (id + task). */
   taskComments: 20000,
+  /** Finished files on tasks, read for the 📎 counts only (id + task; AT-3). */
+  attachmentMarks: 20000,
   /** One delta read; past it the store reads again from where it stopped. */
   syncDelta: 5000,
   /** The store's access check: every live id of a table. */
