@@ -1,10 +1,26 @@
-import { ChartGantt, Columns3, List, Plus } from "lucide-react";
+import {
+  ChartGantt,
+  CircleDashed,
+  Columns3,
+  Ellipsis,
+  FolderKanban,
+  List,
+  Plus,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
+import { IconButton } from "../../../components/ui/icon-button";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Separator } from "../../../components/ui/separator";
 import { Toolbar } from "../../../components/ui/toolbar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { TaskLayout } from "../display";
 import { BACK_TO_MANUAL_ORDER } from "../order";
 
@@ -29,11 +45,22 @@ export type PlanHeaderControls = {
   sortedNote?: ReactNode;
   /** An open saved view whose Filter or Display changed: Save · Revert (TV-U8). */
   viewChanges?: ReactNode;
+  /**
+   * The project this view shows (MOD-95, round-2b): its title opens Project
+   * details in the right panel, and a ⋯ beside it offers the project's own
+   * actions. Absent for the Inbox, All, My tasks and saved views.
+   */
+  project?: {
+    onOpenDetails: () => void;
+    /** ⋯ → Statuses… (TV-D9); absent without edit access. */
+    onEditStatuses?: () => void;
+  };
 };
 
 /**
  * The one toolbar of the List, Board and Timeline (tasks-v2 §7, comp §1):
- * title + count · Search · Filter · Display | view switch | New. One control
+ * title (a project's opens its details, with its ⋯ beside it) + count ·
+ * Search · Filter · Display | view switch | New. One control
  * language: ghost controls on the sm rung, the view switch as a raised
  * plate, and New as the one primary. Grouping lives in Display; a view's own
  * navigation (the Timeline's Today and zoom) sits before Search.
@@ -56,12 +83,31 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges } = controls;
+  const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges, project } =
+    controls;
   return (
     <div className="mb-3 shrink-0 space-y-1.5">
       <Toolbar gap="snug">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h1 className="truncate font-display text-lg text-foreground">{title}</h1>
+          {project ? (
+            <h1 className="min-w-0 font-display text-lg text-foreground">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={project.onOpenDetails}
+                    className="-mx-1 block max-w-full truncate rounded-md px-1 text-left outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+                  >
+                    {title}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Project details</TooltipContent>
+              </Tooltip>
+            </h1>
+          ) : (
+            <h1 className="truncate font-display text-lg text-foreground">{title}</h1>
+          )}
+          {project ? <ProjectMenu project={project} /> : null}
           {count !== undefined ? (
             <span className="shrink-0 font-sans text-sm tabular-nums text-muted-foreground">
               {count}
@@ -127,6 +173,37 @@ export function SortedOrderLine({
         {BACK_TO_MANUAL_ORDER}
       </button>
     </p>
+  );
+}
+
+/**
+ * The project's ⋯ beside its title (round-2b `.pmore`, "Project · Statuses ·
+ * …"): the items the app already has an action for.
+ */
+function ProjectMenu({ project }: { project: NonNullable<PlanHeaderControls["project"]> }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton
+          icon={Ellipsis}
+          label="Project actions"
+          tooltip={null}
+          className="-ml-1 self-center text-muted-foreground"
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuItem onSelect={project.onOpenDetails}>
+          <FolderKanban aria-hidden />
+          Project details
+        </DropdownMenuItem>
+        {project.onEditStatuses ? (
+          <DropdownMenuItem onSelect={project.onEditStatuses}>
+            <CircleDashed aria-hidden />
+            Statuses…
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

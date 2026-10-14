@@ -1541,6 +1541,17 @@ export function TasksPlanView({
   const viewExtraGroups: readonly ListExtraGroup[] =
     place === "mine" ? mineExtraGroups : isInboxScope ? inboxView.extraGroups : NO_EXTRAS;
   const extraTaskIds = new Set(viewExtraGroups.flatMap((g) => g.taskIds));
+  // A project's title opens Project details in the right panel (MOD-95), the
+  // way the panel shows it when nothing is selected, the panel too if it's
+  // closed. A saved view's title is the view's name, so it stays plain.
+  const titleProjectId = !openView
+    ? (buckets.find((b) => b.id === place && !b.isSystem)?.id ?? archivedProject?.id ?? null)
+    : null;
+  const openProjectDetails = useCallback(() => {
+    setPanelView("project");
+    const state = readFeaturePanelState("tasks");
+    if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
+  }, []);
   const header: PlanHeaderControls = {
     // Won't do counts what it lists (none of it is open); a saved view, the
     // tasks it shows ("Done last week" counts its done ones).
@@ -1571,6 +1582,16 @@ export function TasksPlanView({
       view !== "timeline" && order !== "manual" && showsSortedNote(place, order) ? (
         <SortedOrderLine label={sortedByLabel(order)} onManualOrder={backToManualOrder} />
       ) : null,
+    project: titleProjectId
+      ? {
+          onOpenDetails: openProjectDetails,
+          // An archived project is read-only (TV-U6).
+          onEditStatuses:
+            canEdit && !archivedProject
+              ? () => setStatusesEditor({ projectId: titleProjectId })
+              : undefined,
+        }
+      : undefined,
   };
 
   const sharedViewProps = {
