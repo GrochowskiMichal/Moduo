@@ -22,6 +22,7 @@ import {
   CHAT_CATCHUP_REASONS,
   CHAT_EVENT_TYPES,
   CHAT_MESSAGE_KINDS,
+  CHAT_PLAN_TIERS,
   COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
   DATE_ORDERS,
@@ -136,6 +137,27 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`(event ->> 'type') IN (${inList(CHAT_EVENT_TYPES)})`);
     expect(sql).toContain(`CHECK (reason IN (${inList(CHAT_CATCHUP_REASONS)}))`);
     expect(sql).toContain(`done_how IN (${inList(CHAT_CATCHUP_DONE_HOW)})`);
+  });
+
+  it("CHAT_PLAN_TIERS are plan_tier_rank's tiers at Duo or above; the plan source reads TX-9b's grant (CV-4)", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const rankSql = read("20261006120000_entitlements_from_stripe_sync.sql");
+    const body = rankSql.slice(rankSql.indexOf("function public.plan_tier_rank"));
+    const rank = new Map(
+      [...body.slice(0, body.indexOf("$$;")).matchAll(/when '(\w+)' then (\d+)/g)].map(
+        (m) => [m[1], Number(m[2])] as const,
+      ),
+    );
+    const duo = rank.get("duo");
+    expect(duo).toBeDefined();
+    const atLeastDuo = PLAN_TIERS.filter((t) => (rank.get(t) ?? 0) >= (duo ?? Number.NaN));
+    expect([...atLeastDuo].sort()).toEqual([...CHAT_PLAN_TIERS].sort());
+
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_plan_source.sql"));
+    expect(file).toBeDefined();
+    const sql = read(file ?? "");
+    expect(sql).toContain("to_regprocedure('public.plan_grant_effective_tier(uuid)')");
+    expect(sql).toContain(">= public.plan_tier_rank('duo')");
   });
 
   it("content author kinds match the chat_messages and comments CHECKs", () => {
