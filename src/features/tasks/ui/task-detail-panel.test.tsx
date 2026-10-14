@@ -388,7 +388,7 @@ describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () =>
 });
 
 describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
-  it("shortens the names with the full one on hover, and puts the handle at the end", () => {
+  it("shortens the names with the full one on hover, and puts the handle at the end", async () => {
     const t = task({ number: 142, sectionId: "s1" });
     const a = api(t, {
       sections: [
@@ -421,13 +421,13 @@ describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
     expect(nav.className).toContain("flex-nowrap");
     expect(nav.className).not.toContain("flex-wrap ");
     const section = within(nav).getByRole("button", { name: /^Section: / });
-    expect(section.getAttribute("title")).toBe("A section name long enough to need the ellipsis");
     expect(section.querySelector("span")?.className).toContain("truncate");
-    expect(
-      within(nav)
-        .getByRole("button", { name: /^Project: / })
-        .getAttribute("title"),
-    ).toBe("Moduo App");
+    // The full name in the kit tooltip (as the handle's), not a native title.
+    expect(section.getAttribute("title")).toBeNull();
+    act(() => section.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "A section name long enough to need the ellipsis",
+    );
     // The handle is the task's, outside the crumbs and their chevrons, pushed right.
     const handle = screen.getByRole("button", { name: "Copy MOD-142" });
     expect(nav.contains(handle)).toBe(false);
