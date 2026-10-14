@@ -21,6 +21,16 @@ The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([rou
   - Decision: with no files the strip is hidden, as prototyped; Attach files… in the panel's ⋯ opens the picker, and dragging or pasting adds files anywhere on the task. The "+" tile shows once there are files, or while files are dragged over. The description reads as plain text; editing is a soft fill with the padding inside, no ring.
   - Why: the prototypes have no empty tile; showing it on hover either reflows the properties under the pointer (R6) or holds an empty 60 px row.
   - Rejected: the tile on hover (reflow), a reserved row for it (an empty band), and no picker at all for a task without files.
+- **MOD-119 · The agent's status line never widens its column; Focus never scrolls sideways** → `task-agent-session.tsx`, `focus-view.tsx`, `focus-now-card.tsx`, `entity-rich-text.tsx`
+  - Who: Maciej asked for the fix (dogfood MOD-119, high priority); the shape is the agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the line still wraps, but no item is wider than it: who + note and each link's words cut with an ellipsis (full words on hover), the step, the age and the buttons are small and wrap. Focus's scroller clips sideways, and descriptions break long words.
+  - Why: an agent's "needs you: …" note and its links ran wider than the Now card, so all of Focus scrolled sideways.
+  - Rejected: one line that never wraps (five long links still overflow it) and letting the note wrap in full (a 280-character note pushes the task down).
+- **MOD-95 · A project's title opens its overview; a ⋯ sits beside it; a narrow toolbar keeps the title** → `plan-view-header.tsx`, `tasks-plan-view.tsx` `openProjectDetails`, the kit's `FilterButton` and `DisplayMenu`
+  - Who: Maciej (dogfood MOD-95, and his yes to this batch); the narrow toolbar and what the ⋯ holds are the agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the title opens Project in the right panel (over an item stacked there, and during a multi-selection, until the cursor or the place moves); the ⋯ holds Project details and Statuses… (round-2b names nothing else). The title group starts at 10rem with its ⋯ and count; under 36rem Filter and Display are icons; narrower still, the controls wrap under the title.
+  - Why: the project's details had no way in from the centre; at a 1024 px window with both side panels open the title collapsed to nothing.
+  - Rejected: a new route or a separate "About" button, and squeezing the title before the controls give way.
 
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 
