@@ -433,10 +433,11 @@ describe("chat v2 vocabularies (CV-1)", () => {
     expect(v.parseChatCatchupDoneHow("bell").success).toBe(true);
     expect(v.parseChatCatchupDoneHow("ignored").success).toBe(false);
   });
-  it("normalize reads: unknown kinds are messages, unknown events and reasons are skipped", async () => {
+  it("normalize reads: a missing kind is a message; unknown kinds, events and reasons are skipped", async () => {
     const v = await import("./vocabularies.ts");
     expect(v.normalizeChatMessageKind(undefined)).toBe("message");
     expect(v.normalizeChatMessageKind("event")).toBe("event");
+    expect(v.normalizeChatMessageKind("huddle")).toBeNull();
     expect(v.normalizeChatEventType("huddle_started")).toBeNull();
     expect(v.normalizeChatEventType("moved_out")).toBe("moved_out");
     expect(v.normalizeChatCatchupReason("gossip")).toBeNull();

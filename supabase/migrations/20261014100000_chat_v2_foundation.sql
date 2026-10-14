@@ -1149,6 +1149,7 @@ DECLARE
   v_md text;
   v_text text;
   v_tz text;
+  v_person text;
   v_title constant text := 'Notes to self (from Chat)';
 BEGIN
   -- It converts v1's data and runs once, right after the foundation and before
@@ -1219,8 +1220,14 @@ BEGIN
      ORDER BY c.created_at, c.id
   LOOP
     SELECT nullif(btrim(p.time_zone), '') INTO v_tz FROM public.user_preferences p WHERE p.user_id = r.user_id;
-    IF v_tz IS NULL OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_timezone_names z WHERE z.name = v_tz) THEN
+    IF v_tz IS NULL THEN
       v_tz := 'UTC';
+    ELSE
+      BEGIN
+        PERFORM now() AT TIME ZONE v_tz;   -- a zone Postgres doesn't know falls back to UTC
+      EXCEPTION WHEN OTHERS THEN
+        v_tz := 'UTC';
+      END;
     END IF;
     SELECT string_agg('**' || to_char(m.created_at AT TIME ZONE v_tz, 'YYYY-MM-DD HH24:MI')
                         || CASE WHEN v_tz = 'UTC' THEN ' UTC' ELSE '' END || '**'
@@ -1234,6 +1241,15 @@ BEGIN
       FROM public.chat_messages m
      WHERE m.channel_id = r.id AND m.deleted_at IS NULL AND m.kind = 'message';
     IF v_md IS NOT NULL THEN
+      -- A person mention reads as their name in the note (Notes draws no person
+      -- reference); other references stay `moduo://` references.
+      FOR v_person IN
+        SELECT DISTINCT (regexp_matches(v_md, 'moduo://person/([0-9a-f-]{36})', 'g'))[1]
+      LOOP
+        v_md := replace(v_md, 'moduo://person/' || v_person,
+          '@' || coalesce((SELECT nullif(btrim(p.display_name), '') FROM public.profiles p
+                            WHERE p.id::text = v_person), 'someone'));
+      END LOOP;
       INSERT INTO public.notes (workspace_id, created_by, title, kind, position, body_md, body_text, in_inbox)
       VALUES (r.workspace_id, r.user_id, v_title, 'note', '', v_md, coalesce(v_text, ''), true)
       RETURNING id INTO v_note;
@@ -1278,12 +1294,14 @@ BEGIN
   )
   SELECT (SELECT count(*) FROM up), (SELECT count(*) FROM lines) INTO v_levels, v_lines;
 
-  -- 4. General: each workspace's first live channel named "general" is flagged.
-  --    Nobody is added (only people who join from now on are).
+  -- 4. General: each workspace's first live channel named "general" is flagged,
+  --    if it is public and not archived (new members join it). Nobody is added
+  --    (only people who join from now on are).
   WITH g AS (
     SELECT DISTINCT ON (c.workspace_id) c.id
       FROM public.chat_channels c
      WHERE c.kind = 'channel' AND lower(c.name) = 'general' AND c.deleted_at IS NULL
+       AND c.archived_at IS NULL AND NOT c.is_private
        AND (p_workspace_id IS NULL OR c.workspace_id = p_workspace_id)
        AND NOT EXISTS (SELECT 1 FROM public.chat_channels d
                         WHERE d.workspace_id = c.workspace_id AND d.is_default)
@@ -1326,12 +1344,13 @@ BEGIN
   -- 7. The bell's old excerpts: one that holds a v1 token (written from a raw
   --    body) is rewritten so it draws like new ones; one the v1 client wrote as
   --    plain text (names already in) keeps its text, which the converter would
-  --    only escape. The marker in the payload says it's done.
+  --    only escape; so does one whose only token was cut off by the excerpt's
+  --    length. The marker in the payload says it's done.
   WITH up AS (
     UPDATE public.module_activity a
        SET payload = CASE
                        WHEN a.payload ->> 'excerpt'
-                            ~ '<@[0-9a-fA-F-]{36}>|<!channel>|<moduo:[a-z_]{1,32}:'
+                            ~ '<@[0-9a-fA-F-]{36}>|<!channel>|<moduo:[a-z_]{1,32}:[0-9a-fA-F-]{36}\|[^>\n]{0,200}>'
                          THEN jsonb_set(a.payload, '{excerpt}',
                                         to_jsonb(public.chat__v1_to_v2(a.payload ->> 'excerpt')))
                        ELSE a.payload
@@ -1364,8 +1383,8 @@ $fn$;
 -- A person's Catch up items and the chains they stopped following go with them,
 -- in every workspace (their own workspaces' rows go with those anyway), and the
 -- preview counts both. "Nobody else is in it" (a DM or private channel that goes)
--- and the handover of a channel they managed alone count only people who haven't
--- left. Patched into the live body by anchored replace, one patch at a time: a
+-- and the handover of a channel they managed alone (another manager, the owner,
+-- the earliest member) count only people who haven't left. Patched into the live body by anchored replace, one patch at a time: a
 -- patch whose text is already there is skipped, so a re-run only adds what's
 -- missing, and an anchor that isn't there exactly once stops the migration.
 DO $erase$
@@ -1379,7 +1398,8 @@ DECLARE
     'DELETE FROM public.chat_channels c WHERE c.id = ANY (v_channel_del);',
     'WHERE cm.channel_id = c.id AND cm.user_id <> p_user',
     'WHERE cm.channel_id = r.id AND cm.user_id <> p_user',
-    'WHERE cm.channel_id = r.id AND cm.user_id = v_owner'
+    'WHERE cm.channel_id = r.id AND cm.user_id = v_owner',
+    'WHERE m2.channel_id = c.id AND m2.user_id <> p_user'
   ];
   v_patch text[] := ARRAY[
     'v_time_notes integer;'
@@ -1397,7 +1417,10 @@ DECLARE
       || E'\n  DELETE FROM public.chat_chain_mutes x WHERE x.user_id = p_user;',
     'WHERE cm.channel_id = c.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
     'WHERE cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
-    'WHERE cm.channel_id = r.id AND cm.user_id = v_owner AND cm.left_at IS NULL'
+    'WHERE cm.channel_id = r.id AND cm.user_id = v_owner AND cm.left_at IS NULL',
+    'WHERE m2.channel_id = c.id AND m2.user_id <> p_user'
+      || E'\n          AND NOT EXISTS (SELECT 1 FROM public.chat_members lm WHERE lm.channel_id = c.id'
+      || E'\n                          AND lm.user_id = m2.user_id AND lm.left_at IS NOT NULL)'
   ];
   -- Text only the patched body holds, one per patch.
   v_done text[] := ARRAY[
@@ -1407,7 +1430,8 @@ DECLARE
     'DELETE FROM public.chat_catchup x',
     'cm.channel_id = c.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
     'cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
-    'cm.user_id = v_owner AND cm.left_at IS NULL'
+    'cm.user_id = v_owner AND cm.left_at IS NULL',
+    'lm.user_id = m2.user_id AND lm.left_at IS NOT NULL'
   ];
   k integer;
 BEGIN

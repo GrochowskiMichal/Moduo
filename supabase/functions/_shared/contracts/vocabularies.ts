@@ -1041,9 +1041,13 @@ export const chatMessageKindSchema = z.enum(CHAT_MESSAGE_KINDS);
 export function isChatMessageKind(value: unknown): value is ChatMessageKind {
   return typeof value === "string" && (CHAT_MESSAGE_KINDS as readonly string[]).includes(value);
 }
-/** Read-side: rows written before the column existed are messages. */
-export function normalizeChatMessageKind(input: unknown): ChatMessageKind {
-  return isChatMessageKind(input) ? input : "message";
+/**
+ * Read-side: a row read without the column (an older cached copy) is a message;
+ * a kind this build doesn't know is skipped (null), never drawn as a message.
+ */
+export function normalizeChatMessageKind(input: unknown): ChatMessageKind | null {
+  if (input === undefined || input === null) return "message";
+  return isChatMessageKind(input) ? input : null;
 }
 export function parseChatMessageKind(input: unknown): SafeParseResult<ChatMessageKind> {
   return parseOrError(chatMessageKindSchema, input);

@@ -27,7 +27,7 @@
 | AC13.1–13.7 | `supabase/tests/chat_convert.test.sql` · "v1 → v2, twice" (spike 4's 68 pairs, every token, notes to self, thread counts, levels, slugs, General, excerpts, zero rows on the second run, refusals) + the full round trip below |
 | AC12.8 (its tables) | `supabase/tests/chat_erasure.test.sql` · "export and erasure": preview counts, delete, others untouched, the profile cascade. The export half is CV-22's (`src/features/chat/export.test.ts`) |
 
-`bun run db:test chat`: 5 files, 33 + 8 + 44 + 60 + 19 checks. Full `bun run db:test`: 42 files pass. `bun run verify` green.
+`bun run db:test chat`: 5 files, 34 + 9 + 44 + 60 + 19 checks. Full `bun run db:test`: 42 files pass. `bun run verify` green.
 
 ## Converter run (round-3 §2.6 round trip)
 
@@ -53,7 +53,11 @@
 - **Link rows gated at both ends** (source or target a conversation/message) · agent · a link from a task to a private message must not reveal it · rejected: source only (round-3's wording).
 - **The read rule is written out in `chat_can_read_channel` and `chat__can_read_channel_as`, without nested definer calls**, guarded by a parity test against `perm_user_has` · agent · the RLS policies call it per row: 3,032 rows read in 406 ms with nested calls, 23–26 ms written out · rejected: one function calling the other (and `perm_user_has`), which kept the logic in one place but cost ~100 µs a row.
 - **`chat__inline_text`'s look-aheads share a budget of 2 × length + 1,000 characters** (past it, an unclosed backtick run or a `](` reads as text) and emphasis markers pair in two linear passes · agent · it runs on every message write; crafted 8,000-character bodies now take ≤ ~70 ms (one took 4.4 s before) · rejected: the client's unbounded scans (fast in JS, quadratic in plpgsql). Only text built to be slow reads differently from the client.
-- **Typing topics for members only**: a person who reads a public channel without being in it gets no typing line there (spec #17, round-3 §2.7) · the privacy test's old expectation was updated.
+- **Typing topics for members only**: a person who reads a public channel without being in it gets no typing line there (spec #17, round-3 §2.7). **`supabase/tests/chat_privacy.test.sql` changed on purpose**: its check "realtime: C reads the public channel Q's typing topic" (C reads Q but isn't in it) now expects 0 and adds that Q's member A reads it. Any branch that still carries the old line fails that one check against a stack with this foundation, until it merges CV-1.
+- **General is flagged only on a public, unarchived "general"** (new members are joined to it) · agent (code review) · rejected: flagging whatever is named general.
+- **In the notes-to-self note, a person mention reads `@Name`** (Notes draws no person reference); other references stay `moduo://` URIs for Notes' reference grammar · agent (code review) · rejected: leaving `moduo://person/<id>` in the note.
+- **`chat_catchup` stays own-rows only**, not gated on the conversation's read rule: a "removed" line must reach the person who can no longer read the conversation; items carry ids only, and CV-11 closes items (`closed`) when access goes.
+- **`normalizeChatMessageKind`**: a missing kind is a message, an unknown one is skipped (null), like event types and reasons.
 - **`chat_channels_name_trimmed` is `NOT VALID`**: new and changed names are checked, existing v1 slugs aren't re-scanned at release · agent · one untrimmed prod name would otherwise roll the foundation back.
 - **The body_text trigger is `zx_body_text`**, sorting after `perm_enforce_write` and `share_chat_message_guard`, so a refused write doesn't pay for the parse.
 - **Migrations applied as `supabase_admin`** (the stack's own applying role in `stack.sh`): `spine__visible_to` is owned by `supabase_admin` locally, so `postgres` couldn't redefine it.
@@ -70,7 +74,7 @@
 
 ## For later blocks
 
-- **CV-2a:** write `format_version = 2` in every redefined op (and flip the column default to 2 once no v1 writer is left); the v1 signature wrappers convert v1 input with `public.chat__v1_to_v2` (internal, server-only). `share_chat_message_guard` should read `mentions_everyone`, not the text. Typing is the members' now (the topic's read rule): `chat_op_typing` should ask membership too, as round-3 §2.7 says. The body_text trigger keeps `body_text`; don't write it from ops.
+- **CV-2a:** write `format_version = 2` in every redefined op and **flip the column default to 2 in CV-2a's own migration** (the conversion's refusal keys on it); then `chat_convert.test.sql` must set the default back to 1 inside its own transaction before calling `chat__convert_v1` (as its refusal case does), and `chat_foundation.test.sql`'s default check (`'1'`) changes; the v1 signature wrappers convert v1 input with `public.chat__v1_to_v2` (internal, server-only). `share_chat_message_guard` should read `mentions_everyone`, not the text. Typing is the members' now (the topic's read rule): `chat_op_typing` should ask membership too, as round-3 §2.7 says. The body_text trigger keeps `body_text`; don't write it from ops.
 - **CV-2b:** `chat_op_open_dm` must skip a deleted DM (the conversion deletes notes-to-self DMs, and `chat_channels_dm_uq` still covers deleted rows: make it partial or reuse the row). `chat_unread_counts` counts replies, skips `v1_thread_reply` rows whose root is at or before the mark, and reads `last_read_id`; `chat_sync_ids` (spike 2's draft) on `chat__can_read_channel_as`; the General-join trigger and `chat_op_bootstrap` set `is_default`; leaving stamps `left_at` (the read rule, typing topic and erasure already honour it). `share_chat_channel_guard` still exempts a channel *named* `general` from the create caps: key it on `is_default` when bootstrap sets it.
 - **CV-5 / ❓ orchestrator:** no block names the bell drawing chat excerpts with the stored-form parser; today's bell prints `p.excerpt` as text (`src/features/spine/activity.ts`), so a converted excerpt shows `moduo://person/<id>` until something parses it (AC13.7's "redraw" is complete only then).
 - **CV-8a:** v1's `watchTyping` joins the open conversation's typing topic with no status handler; a reader who isn't a member of a public channel is now refused that join (no typing shown). The v2 client should join only as a member.
@@ -80,7 +84,8 @@
 - **CV-19:** `chat__readable_channel_ids` must mirror the written-out rule exactly (deleted workspace, owner or `chat.view`, live conversation, public or active member).
 - **CV-22:** the export (`src/features/chat/export.test.ts`); it carries neither `chat_catchup` nor `chat_chain_mutes`.
 - **CV-23:** drop v1's `chat_messages_channel_idx` and `chat_normalize_channel_name`; `VALIDATE CONSTRAINT chat_channels_name_trimmed` once prod has no untrimmed name.
-- **Orchestrator:** apply `…_convert_v1.sql` to the local stack when the research workspace may be converted; until then CV-2a/CV-3 see v1 bodies there (`format_version` 1, searchable through the trigger).
+- **Orchestrator:** decide whether the research workspace may be converted: if so, apply `…_convert_v1.sql` to the local stack **before CV-2a's migration** (afterwards it refuses); if not, the local stack keeps it as v1 rows (`format_version` 1, searchable through the trigger) and the conversion is proven only by the rolled-back round trip and `chat_convert.test.sql`.
+- **Release (not fixed here, noted):** the conversion runs `chat__v1_to_v2` over every v1 body three times (the foundation's `body_text` backfill, the 8,000-character pre-check, step 1) and `chat_messages` is rewritten three times (backfill, `search_tsv`, step 1): 3,111 rows took 0.5 s locally; at prod's size, consider computing the converted bodies once into a temp table.
 
 ## Manual checklist (step → expect → surface)
 

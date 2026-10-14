@@ -220,7 +220,8 @@ INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body,
 INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body, created_at, deleted_at) VALUES
   (test.id('s:1'), test.id('W'), test.id('S'), test.id('C'), 'Buy milk _today_', '2026-03-01 08:00Z', NULL),
   (test.id('s:2'), test.id('W'), test.id('S'), test.id('C'),
-   '<moduo:task:d037b0b7-4125-415d-bef9-72662d6b58e6|Secret title> follow up', '2026-03-01 08:30Z', NULL),
+   '<moduo:task:d037b0b7-4125-415d-bef9-72662d6b58e6|Secret title> follow up with <@' || test.id('A') || '>',
+   '2026-03-01 08:30Z', NULL),
   (test.id('s:3'), test.id('W'), test.id('S'), test.id('C'), 'gone', '2026-03-01 09:00Z', '2026-03-01 09:01Z');
 
 -- The bell's v1 rows (excerpts as v1 wrote them).
@@ -232,7 +233,10 @@ VALUES
   (test.id('bell:2'), test.id('W'), 'chat', 'chat_channel', test.id('T'), 'chat.reply', 'user', test.id('B'),
    jsonb_build_object('excerpt', 'Agreed, cut it to one line.', 'message_id', test.id('t:r1'))),
   (test.id('bell:3'), test.id('W'), 'chat', 'chat_channel', test.id('T'), 'chat.reply', 'user', test.id('C'),
-   jsonb_build_object('excerpt', '_only italic_', 'message_id', test.id('t:r2')));
+   jsonb_build_object('excerpt', '_only italic_', 'message_id', test.id('t:r2'))),
+  -- An excerpt cut through its only token (excerpts are the body's first characters).
+  (test.id('bell:4'), test.id('W'), 'chat', 'chat_channel', test.id('E'), 'chat.mention', 'user', test.id('A'),
+   jsonb_build_object('excerpt', 'see 2*3 and <moduo:task:d037b0b7-41', 'message_id', test.id('msg:f02')));
 
 SET LOCAL session_replication_role = origin;
 -- fixture:end
@@ -276,7 +280,7 @@ BEGIN
   PERFORM test.ok(v = jsonb_build_object(
       'bodies', 79, 'replies_flagged', 2, 'self_dms_closed', 2, 'notes_written', 1,
       'levels_reset', 4, 'level_reset_lines', 3, 'general_flagged', 1, 'read_marks', 11,
-      'registered', 7, 'excerpts', 3),
+      'registered', 7, 'excerpts', 4),
     'convert: each step changed what it should', v::text);
 
   -- ── AC13.1 bodies ──
@@ -348,8 +352,9 @@ BEGIN
     AND v_note.in_inbox AND v_note.parent_id IS NULL AND v_note.deleted_at IS NULL,
     'AC13.3: C''s notes to self become one note, C''s, in C''s Inbox');
   PERFORM test.ok(
-    v_note.body_md = E'**2026-03-01 08:00 UTC**\nBuy milk *today*\n\n**2026-03-01 08:30 UTC**\nmoduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6 follow up',
-    'AC13.3: every message, in order, with its time; the deleted one and the title stay out', v_note.body_md);
+    v_note.body_md = E'**2026-03-01 08:00 UTC**\nBuy milk *today*\n\n**2026-03-01 08:30 UTC**\nmoduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6 follow up with @A',
+    'AC13.3: every message, in order, with its time; a person reads as their name; the deleted one and the title stay out',
+    v_note.body_md);
   PERFORM test.ok(
     public.can_access('note', v_note.id, 'view', test.id('C'))
     AND NOT public.can_access('note', v_note.id, 'view', test.id('A'))
@@ -420,9 +425,11 @@ BEGIN
       = 'Hey moduo://person/' || test.id('B') || ' look *now*'
     AND (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:2')) = 'Agreed, cut it to one line.'
     AND (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:3')) = '_only italic_'
+    AND (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:4'))
+          = 'see 2*3 and <moduo:task:d037b0b7-41'
     AND (SELECT bool_and(payload ->> 'format_version' = '2') FROM public.module_activity
           WHERE workspace_id = test.id('W') AND op IN ('chat.mention', 'chat.reply')),
-    'AC13.7: an excerpt with v1 tokens is rewritten; a plain-text one keeps its text; all are marked');
+    'AC13.7: an excerpt with whole v1 tokens is rewritten; plain text or a cut-off token keeps its text; all are marked');
 
   -- ── Twice: a second run changes nothing ──
   CREATE TEMP TABLE before_rerun ON COMMIT DROP AS SELECT * FROM test.row_versions();
@@ -499,5 +506,22 @@ BEGIN
     'refuse: once the v2 ops are in (format_version defaults to 2)', v_msg);
   PERFORM test.ok(public.chat__convert_v1(test.id('W2')) ->> 'bodies' = '1',
     'refuse: with neither, it converts');
+END;
+$$;
+
+-- ── General is a public, live channel: an archived "general" isn't flagged ──
+DO $$
+DECLARE
+  v jsonb;
+BEGIN
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W4'), test.id('O'), 'Archived general');
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO public.chat_channels (id, workspace_id, kind, name, archived_at)
+  VALUES (test.id('W4:g'), test.id('W4'), 'channel', 'general', now());
+  SET LOCAL session_replication_role = origin;
+  v := public.chat__convert_v1(test.id('W4'));
+  PERFORM test.ok((v ->> 'general_flagged') = '0'
+                  AND NOT (SELECT is_default FROM public.chat_channels WHERE id = test.id('W4:g')),
+    'AC13.6: an archived "general" is not made General (new members won''t be put in it)', v::text);
 END;
 $$;

@@ -21,7 +21,9 @@ INSERT INTO public.chat_channels (id, workspace_id, kind, name, is_private, dm_k
   (test.id('c:left'), test.id('W'), 'channel', 'with-f', true, NULL),
   (test.id('c:kept'), test.id('W'), 'channel', 'with-g', true, NULL),
   -- E manages it alone; the owner O was in it and left, G is still in it.
-  (test.id('c:hand'), test.id('W'), 'channel', 'handover', true, NULL);
+  (test.id('c:hand'), test.id('W'), 'channel', 'handover', true, NULL),
+  -- E and F manage it; F left it, G is still in it.
+  (test.id('c:hand2'), test.id('W'), 'channel', 'co-managed', true, NULL);
 INSERT INTO public.chat_members (channel_id, user_id, workspace_id, left_at) VALUES
   (test.id('c:W'), test.id('E'), test.id('W'), NULL),
   (test.id('c:W'), test.id('F'), test.id('W'), NULL),
@@ -31,8 +33,14 @@ INSERT INTO public.chat_members (channel_id, user_id, workspace_id, left_at) VAL
   (test.id('c:kept'), test.id('G'), test.id('W'), NULL),
   (test.id('c:hand'), test.id('O'), test.id('W'), now()),
   (test.id('c:hand'), test.id('E'), test.id('W'), NULL),
-  (test.id('c:hand'), test.id('G'), test.id('W'), NULL);
-INSERT INTO public.chat_channel_managers (channel_id, user_id) VALUES (test.id('c:hand'), test.id('E'));
+  (test.id('c:hand'), test.id('G'), test.id('W'), NULL),
+  (test.id('c:hand2'), test.id('E'), test.id('W'), NULL),
+  (test.id('c:hand2'), test.id('F'), test.id('W'), now()),
+  (test.id('c:hand2'), test.id('G'), test.id('W'), NULL);
+INSERT INTO public.chat_channel_managers (channel_id, user_id) VALUES
+  (test.id('c:hand'), test.id('E')),
+  (test.id('c:hand2'), test.id('E')),
+  (test.id('c:hand2'), test.id('F'));
 INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body) VALUES
   (test.id('m:1'), test.id('W'), test.id('c:W'), test.id('F'), 'one'),
   (test.id('m:2'), test.id('W'), test.id('c:W'), test.id('F'), 'two'),
@@ -79,6 +87,9 @@ BEGIN
     (SELECT array_agg(user_id) FROM public.chat_channel_managers WHERE channel_id = test.id('c:hand'))
       = ARRAY[test.id('G')],
     'erase: a channel E managed alone goes to G, still in it, not to the owner who left it');
+  PERFORM test.ok(
+    EXISTS (SELECT 1 FROM public.chat_channel_managers WHERE channel_id = test.id('c:hand2') AND user_id = test.id('G')),
+    'erase: a co-manager who left doesn''t count: E''s channel still gets a manager who is in it (G)');
 
   -- The rows also go with the profile (account deletion's cascade).
   DELETE FROM auth.users WHERE id = test.id('F');
