@@ -275,8 +275,11 @@ BEGIN
   PERFORM test.ok(test.realtime_reads('A', v_p) = 3, 'realtime: A reads P''s typing topic');
   PERFORM test.ok(test.realtime_reads('C', v_p) = 0, 'realtime: C, not in P, reads nothing on P''s typing topic');
   PERFORM test.ok(test.realtime_reads('X', v_p) = 0, 'realtime: X reads nothing on P''s typing topic');
-  PERFORM test.ok(test.realtime_reads('C', 'chat:typing:' || test.ref('Q')::text) = 1,
-    'realtime: C reads the public channel Q''s typing topic');
+  -- Chat v2 (CV-1, …_chat_v2_foundation): a typing topic is its members' only, so
+  -- C, who reads the public Q without being in it, gets none.
+  PERFORM test.ok(test.realtime_reads('C', 'chat:typing:' || test.ref('Q')::text) = 0
+                  AND test.realtime_reads('A', 'chat:typing:' || test.ref('Q')::text) = 1,
+    'realtime: the public channel Q''s typing topic is read by its member A, not by C who only reads Q');
 
   -- Writing: nobody writes a typing topic; members track presence on the workspace topic.
   v := test.realtime_writes('B', v_p, 'broadcast');
