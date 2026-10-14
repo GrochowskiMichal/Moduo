@@ -108,7 +108,7 @@ import {
 } from "./capture-menus";
 import { CapturePills, type OpenPill, type PillChange, type PillValues } from "./capture-pills";
 import { $tokensToText, type MenuPick, TitleEditor, type TitleEditorApi } from "./title-editor";
-import { $createCaptureTokenNode } from "./token-node";
+import { $createCaptureTokenNode, TokenPhotoContext } from "./token-node";
 
 const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
   email: Mail,
@@ -358,11 +358,17 @@ export function TaskCaptureBody({
       assignees.map((a) => ({
         userId: a.userId,
         name: a.isMe ? a.fullName || "You" : a.name,
+        avatarUrl: a.avatarUrl,
         isMe: a.isMe,
         canTakeTasks: a.canTakeTasks,
       })),
     [assignees],
   );
+  // The title's person tokens look their photo up here (MOD-96).
+  const photoOf = useMemo(() => {
+    const photos = new Map(assignees.map((a) => [a.userId, a.avatarUrl]));
+    return (id: string) => photos.get(id) ?? null;
+  }, [assignees]);
   const menuPeople = useMemo<CapturePerson[]>(() => people.filter((p) => p.canTakeTasks), [people]);
 
   // ── a restored draft's names, looked up again (it keeps ids only) ─────────
@@ -1435,28 +1441,30 @@ export function TaskCaptureBody({
       </div>
 
       <div className="flex flex-col gap-1 px-4 pt-1">
-        <TitleEditor
-          apiRef={titleApi}
-          initial={initial.draft.segments}
-          runtime={runtime}
-          workspaceId={workspaceId}
-          placeholder="Task title"
-          mentionCandidates={mentionCandidates}
-          tagCandidates={tagCandidates}
-          commandCandidates={commandCandidates}
-          onPick={onPick}
-          onChange={onTitleChange}
-          onSubmit={submit}
-          onShiftEnter={() => descriptionRef.current?.focus()}
-          onPaste={(text, pastedFiles) => {
-            if (pastedFiles.length > 0 && takeFiles(pastedFiles)) return true;
-            if (!isPastedList(text)) return false;
-            setPasted(text);
-            return true;
-          }}
-          highlights={highlights}
-          segmentKeys={segmentKeys}
-        />
+        <TokenPhotoContext value={photoOf}>
+          <TitleEditor
+            apiRef={titleApi}
+            initial={initial.draft.segments}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            placeholder="Task title"
+            mentionCandidates={mentionCandidates}
+            tagCandidates={tagCandidates}
+            commandCandidates={commandCandidates}
+            onPick={onPick}
+            onChange={onTitleChange}
+            onSubmit={submit}
+            onShiftEnter={() => descriptionRef.current?.focus()}
+            onPaste={(text, pastedFiles) => {
+              if (pastedFiles.length > 0 && takeFiles(pastedFiles)) return true;
+              if (!isPastedList(text)) return false;
+              setPasted(text);
+              return true;
+            }}
+            highlights={highlights}
+            segmentKeys={segmentKeys}
+          />
+        </TokenPhotoContext>
 
         {pickingTemplate && templateProvider ? (
           <TemplatePickPanel

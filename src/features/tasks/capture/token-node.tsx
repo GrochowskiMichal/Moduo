@@ -1,7 +1,8 @@
 // A recognised token in the capture title (TV-U14): the kit Chip at the inline
 // rung with the active fill, so the title shows what the `@ # /` menus
 // understood and its pill fills at the same moment (research §2). A person is
-// round, a team square (95); a linked thing is a live Reference chip.
+// round, a team square (95); a linked thing is a live Reference chip. A person
+// shows their profile photo when they have one (MOD-96), else their initials.
 
 import {
   $applyNodeReplacement,
@@ -12,7 +13,7 @@ import {
   type Spread,
 } from "lexical";
 import { Bell, CalendarClock, CalendarDays, Flag, Repeat, Timer } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 
 import { PersonAvatar, TeamMark } from "../../../components/ui/avatar";
 import { Chip } from "../../../components/ui/chip";
@@ -28,7 +29,16 @@ const FALLBACK: Partial<Record<CaptureToken["kind"], string>> = {
 
 export type SerializedCaptureTokenNode = Spread<{ token: CaptureToken }, SerializedLexicalNode>;
 
+/**
+ * A person's profile photo by id, for their tokens (MOD-96). The Task body
+ * provides it from the member list, so a photo URL never rides in the token or
+ * the device's draft, and a new photo shows at once. Without a provider every
+ * token shows initials.
+ */
+export const TokenPhotoContext = createContext<(userId: string) => string | null>(() => null);
+
 function TokenChip({ token }: { token: CaptureToken }) {
+  const photoOf = useContext(TokenPhotoContext);
   if (token.kind === "thing") {
     // In the capture a click never opens it (that would leave the capture);
     // the hover card still shows what it is.
@@ -46,7 +56,7 @@ function TokenChip({ token }: { token: CaptureToken }) {
   }
   const icon: ReactNode | undefined =
     token.kind === "person" ? (
-      <PersonAvatar name={token.label} id={token.userId} />
+      <PersonAvatar name={token.label} id={token.userId} src={photoOf(token.userId)} />
     ) : token.kind === "team" ? (
       <TeamMark
         name={token.label}

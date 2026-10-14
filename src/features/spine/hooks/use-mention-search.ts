@@ -69,7 +69,12 @@ function memberToPerson(member: unknown, query: string): SearchedPerson | null {
   const label = String(profile.display_name || profile.email || "Member");
   const q = query.trim().toLowerCase();
   if (q && !label.toLowerCase().includes(q)) return null;
-  return { memberId: id, label, icon: null };
+  // The avatar: their photo when set (MOD-96), else the initials of their own
+  // name; someone without one is "?", never the "ME" of "Member" (call 43).
+  const name = String(profile.display_name || "").trim() || "?";
+  const avatarUrl =
+    typeof profile.avatar_url === "string" ? profile.avatar_url.trim() || null : null;
+  return { memberId: id, label, icon: null, name, avatarUrl };
 }
 
 export function useMentionSearch({
