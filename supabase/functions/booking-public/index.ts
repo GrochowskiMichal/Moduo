@@ -48,7 +48,14 @@ import {
   zoomMeetingIdFromLink,
 } from "../_shared/zoom.ts";
 import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
-import { type BookingFacts, bookEmails, cancelEmails, type EnqueueRequest, guestTimeZone } from "./emails.ts";
+import {
+  type BookingFacts,
+  bookEmails,
+  cancelEmails,
+  type EnqueueRequest,
+  emailContext,
+  guestTimeZone,
+} from "./emails.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
@@ -829,21 +836,9 @@ Deno.serve(async (req: Request) => {
   }
   const ids = committed.data as { event_id?: string; contact_id?: string };
 
-  await db
-    .from("slot_bookings")
-    .update({
-      status: "confirmed",
-      meeting_id: meet.eventId,
-      meeting_link: meet.meetLink,
-      calendar_event_id: ids.event_id ?? null,
-      contact_id: ids.contact_id ?? null,
-      calendar_synced: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", bookingId);
-
   // Never from the request: body.origin only picks one of our own hosts.
-  const cancelUrl = bookingCancelUrl(bookingOrigin(body.origin), cancelToken);
+  const origin = bookingOrigin(body.origin);
+  const cancelUrl = bookingCancelUrl(origin, cancelToken);
   // Google created the event with sendUpdates=all, so it invites everyone itself.
   const googleInvites = meet.eventId != null;
   const facts: BookingFacts = {
@@ -861,6 +856,31 @@ Deno.serve(async (req: Request) => {
     googleInvites,
     at: new Date().toISOString(),
   };
+
+  // Confirming queues the reminders (TX-6, a trigger), which render from the
+  // email context saved with the booking, so both go in one update.
+  const confirmed = {
+    status: "confirmed",
+    meeting_id: meet.eventId,
+    meeting_link: meet.meetLink,
+    calendar_event_id: ids.event_id ?? null,
+    contact_id: ids.contact_id ?? null,
+    calendar_synced: true,
+    updated_at: new Date().toISOString(),
+  };
+  const withContext = await db
+    .from("slot_bookings")
+    .update({
+      ...confirmed,
+      email_context: emailContext(facts, { cancelUrl, rebookUrl: `${origin}/book/${encodeURIComponent(link.slug)}` }),
+    })
+    .eq("id", bookingId);
+  if (withContext.error) {
+    // Deployed before its migration (no email_context column): confirm without it.
+    console.error("[booking-public] confirm with email context failed:", withContext.error.code, withContext.error.message);
+    await db.from("slot_bookings").update(confirmed).eq("id", bookingId);
+  }
+
   await queueEmails(
     db,
     bookEmails(facts, {

@@ -331,6 +331,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-14 · TX-6: reminders and the host's cancel are queued by Postgres triggers from an email context saved on the booking
 - 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
 - 2026-10-10 · TX-4: invite-only is a before-user-created hook over three allow sources, a waitlist invite is one queued B1, and a build-updates request outlives the waitlist row
 - 2026-10-09 · TX-3: the outbox queues, retries and suppresses, and the worker's secret lives only in Vault

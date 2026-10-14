@@ -21,7 +21,12 @@ import {
 } from "../connect-return";
 import type { CalendarAccountModel } from "../events";
 import { startWebGoogleConnect } from "../google-web";
-import { BookingLinkDialog, type LinkDraft } from "./booking-link-dialog";
+import {
+  BookingLinkDialog,
+  DEFAULT_GUEST_REMINDER_MINUTES,
+  type GuestReminderMinutes,
+  type LinkDraft,
+} from "./booking-link-dialog";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -46,6 +51,8 @@ type LinkRow = {
   busy_calendar_ids: unknown;
   note_enabled: boolean;
   guests_enabled: boolean;
+  /** TX-6; absent on a database without the column. */
+  guest_reminder_minutes?: number | null;
   questions_json: unknown;
   paused: boolean;
   video_provider: string | null;
@@ -93,9 +100,27 @@ function emptyDraft(): Draft {
     questions: [],
     paused: false,
     video: "google_meet",
+    guestReminderMinutes: DEFAULT_GUEST_REMINDER_MINUTES,
     cohostIds: [],
     savedCohostIds: [],
   };
+}
+
+/** The saved reminder: off (null), 1 hour or 24 hours; anything else reads as the default. */
+export function reminderFromRow(value: number | null | undefined): GuestReminderMinutes {
+  if (value === null) return null;
+  return value === 60 || value === 1440 ? value : DEFAULT_GUEST_REMINDER_MINUTES;
+}
+
+/** PostgREST's answer when a written column doesn't exist (the migration isn't applied yet). */
+export function isMissingReminderColumn(
+  error: { code?: string; message?: string } | null,
+): boolean {
+  return (
+    !!error &&
+    (error.code === "PGRST204" || error.code === "42703") &&
+    (error.message ?? "").includes("guest_reminder_minutes")
+  );
 }
 
 function draftFromRow(row: LinkRow): Draft {
@@ -118,6 +143,7 @@ function draftFromRow(row: LinkRow): Draft {
     questions: questionsFromJson(row.questions_json),
     paused: row.paused,
     video: videoSetting(row.video_provider),
+    guestReminderMinutes: reminderFromRow(row.guest_reminder_minutes),
     cohostIds: [],
     savedCohostIds: null,
   };
@@ -349,26 +375,42 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         owner_avatar_url: profile.data?.avatar_url ?? null,
         updated_at: new Date().toISOString(),
       };
+      // TX-6's column; a database without it yet saves the rest (the reminder
+      // then stays at the default the migration gives every link).
+      const withReminder = { ...payload, guest_reminder_minutes: draft.guestReminderMinutes };
       if (draft.id) {
-        const { error: updateError } = await supabaseClient
+        let { error: updateError } = await supabaseClient
           .from("exposed_slot_links")
-          .update(payload)
+          .update(withReminder)
           .eq("id", draft.id);
+        if (isMissingReminderColumn(updateError)) {
+          ({ error: updateError } = await supabaseClient
+            .from("exposed_slot_links")
+            .update(payload)
+            .eq("id", draft.id));
+        }
         if (updateError) throw updateError;
       } else {
-        const { data: inserted, error: insertError } = await supabaseClient
+        const fresh = {
+          slot_id: crypto.randomUUID(),
+          slug: slugFor(name),
+          owner_user_id: userId,
+          owner_handle: (email ?? "host").split("@")[0] || "host",
+          workspace_id: workspaceId,
+        };
+        let { data: inserted, error: insertError } = await supabaseClient
           .from("exposed_slot_links")
-          .insert({
-            ...payload,
-            slot_id: crypto.randomUUID(),
-            slug: slugFor(name),
-            owner_user_id: userId,
-            owner_handle: (email ?? "host").split("@")[0] || "host",
-            workspace_id: workspaceId,
-          })
+          .insert({ ...withReminder, ...fresh })
           .select("id")
           .single();
-        if (insertError) throw insertError;
+        if (isMissingReminderColumn(insertError)) {
+          ({ data: inserted, error: insertError } = await supabaseClient
+            .from("exposed_slot_links")
+            .insert({ ...payload, ...fresh })
+            .select("id")
+            .single());
+        }
+        if (insertError || !inserted) throw insertError ?? new Error("Could not save the link.");
         draft.id = inserted.id;
       }
       // Send the co-host list whenever it changed — including to empty, which

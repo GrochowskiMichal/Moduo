@@ -47,6 +47,8 @@ export type LinkDraft = {
   questions: GuestQuestion[];
   paused: boolean;
   video: VideoSetting;
+  /** "Remind guests" (TX-6): minutes before the meeting, or null for off. */
+  guestReminderMinutes: GuestReminderMinutes;
   /** Other workspace members who host this link with you. */
   cohostIds: string[];
   /** The co-hosts as last saved (null until loaded for an existing link). */
@@ -59,6 +61,17 @@ export type LinkDraft = {
  * (PERM-8 follow-up). The database side is live and unused.
  */
 export const COLLECTIVE_LINKS_ENABLED = false;
+
+export type GuestReminderMinutes = 60 | 1440 | null;
+
+/** New and existing links start at 24 hours (specs/transactional-email.md Q36). */
+export const DEFAULT_GUEST_REMINDER_MINUTES: GuestReminderMinutes = 1440;
+
+const REMINDER_OPTIONS: { value: string; minutes: GuestReminderMinutes; label: string }[] = [
+  { value: "off", minutes: null, label: "Off" },
+  { value: "60", minutes: 60, label: "1 hour before" },
+  { value: "1440", minutes: 1440, label: "24 hours before" },
+];
 
 const NOTICE_OPTIONS = [
   { minutes: 0, label: "No minimum" },
@@ -636,6 +649,35 @@ export function BookingLinkDialog({
                         {optionsWith(BUFFERS, draft.bufferAfter).map((minutes) => (
                           <SelectItem key={minutes} value={String(minutes)}>
                             {minutes === 0 ? "None" : `${minutes} min`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="font-display text-sm text-foreground">Remind guests</span>
+                    <Select
+                      value={
+                        draft.guestReminderMinutes === null
+                          ? "off"
+                          : String(draft.guestReminderMinutes)
+                      }
+                      onValueChange={(value) =>
+                        onChange({
+                          ...draft,
+                          guestReminderMinutes:
+                            REMINDER_OPTIONS.find((option) => option.value === value)?.minutes ??
+                            null,
+                        })
+                      }
+                    >
+                      <SelectTrigger aria-label="Remind guests">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {REMINDER_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
