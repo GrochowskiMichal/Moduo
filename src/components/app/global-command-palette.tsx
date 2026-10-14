@@ -8,11 +8,13 @@ import {
   House,
   Inbox,
   MessagesSquare,
+  Paperclip,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { filesLabel } from "../../features/attachments/files";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import type { EntityRecord } from "../../lib/entity-links";
@@ -32,6 +34,7 @@ import {
   CommandShortcut,
 } from "../ui/command";
 import { Eyebrow } from "../ui/eyebrow";
+import { MetaCount } from "../ui/meta-count";
 import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
 
 type Action = {
@@ -148,6 +151,12 @@ export function GlobalCommandPalette() {
       ...bundle.archivedBuckets.map((b) => b.id),
       ...(bundle.archivedTasks ?? []).map((t) => t.id),
     ]);
+  }, [runtime, selectedWorkspaceId, results]);
+  // A task result's 📎 mark (AT-3), read from the same copy (files you can see).
+  const fileCounts = useMemo(() => {
+    if (!runtime || !selectedWorkspaceId || results.length === 0) return null;
+    const counts = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().attachmentCounts;
+    return counts && counts.size > 0 ? counts : null;
   }, [runtime, selectedWorkspaceId, results]);
 
   const go = useCallback(
@@ -323,6 +332,13 @@ export function GlobalCommandPalette() {
                   >
                     <Icon />
                     <span className="min-w-0 flex-1 truncate">{record.label || "Untitled"}</span>
+                    {record.type === "task" ? (
+                      <MetaCount
+                        icon={Paperclip}
+                        count={fileCounts?.get(record.id) ?? 0}
+                        label={filesLabel}
+                      />
+                    ) : null}
                     <Eyebrow className="shrink-0" tone="tag">
                       {TYPE_LABEL[record.type] ?? record.type}
                     </Eyebrow>

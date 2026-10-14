@@ -39,6 +39,16 @@ describe("the capture draft", () => {
     expect(loadDraft("u1", "w1")?.fields.status).toBeNull();
   });
 
+  it("never keeps date phrases kept as words: they're read afresh when it comes back", () => {
+    saveDraft("u1", "w1", draft());
+    expect(loadDraft("u1", "w1")?.keep).toEqual([]);
+    // A draft stored before this still heals on load.
+    const key = Object.keys(window.localStorage)[0];
+    const stored = JSON.parse(window.localStorage.getItem(key) ?? "{}");
+    window.localStorage.setItem(key, JSON.stringify({ ...stored, keep: ["Monday"] }));
+    expect(loadDraft("u1", "w1")?.keep).toEqual([]);
+  });
+
   it("belongs to one person in one workspace", () => {
     saveDraft("u1", "w1", draft());
     expect(loadDraft("u1", "w1")?.description).toBe("My own words");

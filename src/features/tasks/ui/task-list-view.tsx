@@ -105,6 +105,7 @@ import type { ListExtraGroup, ListGrouping } from "./list-extensions";
 import { listKeyActionFor } from "./list-keys";
 import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
+import { useTaskFileDrop } from "./row-drop";
 import { type FactsSource, taskFactsOf, useRowActions, waitingLabelsOf } from "./row-facts";
 import { type SortColumn, TaskListHeader } from "./task-list-header";
 import {
@@ -655,6 +656,7 @@ export function TaskListView({
       sectionNames,
       waitingLabels,
       commentCounts: api.commentCounts,
+      attachmentCounts: api.attachmentCounts,
       pendingTaskIds: api.pendingTaskIds,
       whenOf,
       takeableIds,
@@ -676,6 +678,7 @@ export function TaskListView({
       sectionNames,
       waitingLabels,
       api.commentCounts,
+      api.attachmentCounts,
       api.pendingTaskIds,
     ],
   );
@@ -1102,6 +1105,15 @@ export function TaskListView({
   // actions object never changes, so a memoised row redraws only when its
   // own task, facts or state do (TV-D11b: one edit, one row).
   const actions = useRowActions(api);
+
+  // Files dropped on a row attach to its task (AT-3, AT3-1).
+  const fileDrop = useTaskFileDrop({
+    canEdit,
+    taskOf: (id) => taskById.get(id),
+    userId: api.currentUserId,
+    pendingTaskIds: api.pendingTaskIds,
+    onOpen: (id) => onSelectTask(id),
+  });
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -1586,7 +1598,9 @@ export function TaskListView({
           parentTitle={depth === 0 ? parentTitleFor(task) : null}
           dragListeners={drag?.dragListeners}
           dragActivatorRef={drag?.dragActivatorRef}
-          dropTarget={hover?.kind === "nest" && hover.targetId === task.id}
+          dropTarget={
+            (hover?.kind === "nest" && hover.targetId === task.id) || fileDrop.targetId === task.id
+          }
           {...extra}
         />
         {line && hover?.kind === "reorder" ? (
@@ -1979,6 +1993,7 @@ export function TaskListView({
               ref={containerRef}
               tabIndex={0}
               onKeyDown={onKeyDown}
+              {...fileDrop.handlers}
               // Chromium focuses a clicked button; after a mouse click on a row's
               // button, hand focus back to the list (as desktop WebKit does), so the
               // next Space/Enter acts on the selected row instead of re-clicking it.
@@ -2050,6 +2065,7 @@ export function TaskListView({
                             parentTitle={parentTitleFor(task)}
                             dragListeners={dragListeners}
                             dragActivatorRef={dragActivatorRef}
+                            dropTarget={fileDrop.targetId === task.id}
                           />
                         )}
                       />

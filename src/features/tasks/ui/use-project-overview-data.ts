@@ -4,7 +4,7 @@
 // the overview opens a project and again when its signal moves; neither
 // refetches on every render.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getRuntime } from "../../../lib/runtime";
 import type { AttachmentRecord } from "../../../lib/runtime.types";
 
@@ -123,4 +123,73 @@ export function useProjectEditable(projectId: string, enabled: boolean): boolean
   }, [projectId, enabled]);
   if (!enabled) return false;
   return answer?.id === projectId ? answer.ok : null;
+}
+
+/**
+ * The same question for every project on a canvas that holds several (the
+ * Timeline at All and My tasks, TV-TL2): asked once per project for this
+ * workspace, all at once, answers kept while the page stays. Null while
+ * asking; a server that can't answer leaves it to the ops (yes).
+ */
+export function useEditableProjects(
+  workspaceId: string,
+  projectIds: readonly string[],
+  enabled: boolean,
+): (projectId: string) => boolean | null {
+  return useEditable("project", workspaceId, projectIds, enabled);
+}
+
+/**
+ * The same for single tasks (Edit on the task: its project's, or its own,
+ * e.g. an assignee's in a project they can only view).
+ */
+export function useEditableTasks(
+  workspaceId: string,
+  taskIds: readonly string[],
+  enabled: boolean,
+): (taskId: string) => boolean | null {
+  return useEditable("task", workspaceId, taskIds, enabled);
+}
+
+function useEditable(
+  kind: "project" | "task",
+  workspaceId: string,
+  projectIds: readonly string[],
+  enabled: boolean,
+): (id: string) => boolean | null {
+  const [answers, setAnswers] = useState<{ ws: string; ok: ReadonlyMap<string, boolean> }>(() => ({
+    ws: workspaceId,
+    ok: new Map(),
+  }));
+  const asked = useRef({ ws: workspaceId, ids: new Set<string>() });
+  const key = projectIds.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the list's content
+  useEffect(() => {
+    if (!enabled) return;
+    if (asked.current.ws !== workspaceId) asked.current = { ws: workspaceId, ids: new Set() };
+    const fresh = projectIds.filter((id) => !asked.current.ids.has(id));
+    if (fresh.length === 0) return;
+    for (const id of fresh) asked.current.ids.add(id);
+    const ask = getRuntime()?.tasks.canCopyTemplateSource;
+    const settle = (id: string, ok: boolean) => {
+      // An answer for a workspace you've left since is dropped.
+      if (asked.current.ws !== workspaceId) return;
+      setAnswers((prev) => {
+        const base = prev.ws === workspaceId ? prev.ok : new Map<string, boolean>();
+        const next = new Map(base);
+        next.set(id, ok);
+        return { ws: workspaceId, ok: next };
+      });
+    };
+    for (const id of fresh) {
+      if (!ask) settle(id, true);
+      else
+        ask({ kind, id }).then(
+          (ok) => settle(id, ok),
+          () => settle(id, true),
+        );
+    }
+  }, [kind, workspaceId, key, enabled]);
+  const known = answers.ws === workspaceId ? answers.ok : null;
+  return useCallback((id: string) => known?.get(id) ?? null, [known]);
 }

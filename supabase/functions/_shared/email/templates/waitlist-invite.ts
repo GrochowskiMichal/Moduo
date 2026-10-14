@@ -1,7 +1,7 @@
 /**
  * B1 · Waitlist invite. Copy: `.design/transactional-email/email-set.html` (B1).
  * Queued by the waitlist triggers when a row becomes `invited` (TX-4,
- * 20261010150000_tx4_invite_only_gate.sql): one email per invite, no expiry and
+ * 20261010155652_tx4_invite_only_gate.sql): one email per invite, no expiry and
  * no reminder (Q20, Q21).
  *
  * The payload is written by SQL in snake_case; `parseWaitlistInvitePayload`

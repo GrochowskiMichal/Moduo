@@ -285,6 +285,21 @@ export type StorageStatus = {
   ownedWorkspaces: number | null;
 };
 
+/** One row of Settings → Storage's largest-files list (`attachments_largest`, AT-3). */
+export type LargestAttachment = {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  /** Null once the uploader's account is deleted. */
+  uploaderId: string | null;
+  createdAt: string;
+  /** The reader has edit access to the task. */
+  canDelete: boolean;
+};
+
 export type AttachmentBeginInput = {
   workspaceId: string;
   entityType: "task";
@@ -702,7 +717,18 @@ export type ModuoRuntime = {
     /** To the trash: the space is free at once, restorable for 30 days. */
     remove(id: string): Promise<AttachmentRecord>;
     restore(id: string): Promise<AttachmentRecord>;
+    /**
+     * Let go of one's own upload that never finished (dismissed, or begun
+     * again): its space is free at once (AT-3). A finished file is left as it
+     * is. Quiet on a database without the op.
+     */
+    abandon(id: string): Promise<void>;
     status(workspaceId: string): Promise<StorageStatus>;
+    /**
+     * Settings → Storage (AT-3): the biggest finished files in a workspace
+     * whose task the reader can see, with whether the reader may delete each.
+     */
+    largest(workspaceId: string, limit?: number): Promise<LargestAttachment[]>;
     /** Signed links by path (missing paths are left out). */
     signedUrls(paths: string[], ttlSeconds: number): Promise<Map<string, string>>;
   };
@@ -1397,6 +1423,16 @@ export type ModuoRuntime = {
       entityLabel?: string;
       entityIcon?: string | null;
     }): Promise<SpineComment>;
+    /**
+     * The opening words (140 characters) of comments a bell notice names by
+     * id (TV-D16: notices carry no comment text). Read through the comments'
+     * own policy, so only comments on items the reader can still see answer;
+     * a deleted comment doesn't.
+     */
+    getCommentExcerpts?(input: {
+      workspaceId: string;
+      commentIds: string[];
+    }): Promise<Array<{ id: string; excerpt: string }>>;
     /** Read an entity's comment thread (oldest first, tombstones excluded) —
      * the Comments rail (NO-7 AC9). Direct member-read SELECT (RLS-guarded). */
     listComments(input: {

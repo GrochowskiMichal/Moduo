@@ -123,7 +123,8 @@ test("AC10.7 — clicking a reference opens it in the panel as ← item; back re
   await expect(panel(page).getByRole("textbox", { name: "Task title" })).toHaveValue(target.title);
 
   await back.click();
-  await expect(panel(page).getByRole("heading", { name: "Details" })).toBeVisible();
+  // Back on Details: the title row is its view switcher again ("Details ▾").
+  await expect(panel(page).getByRole("button", { name: "Panel view: Details" })).toBeVisible();
   await expect(panel(page).getByRole("textbox", { name: "Task title" })).toHaveValue(host.title);
 });
 

@@ -20,6 +20,11 @@ export default defineConfig({
     {
       name: "e2e",
       testIgnore: ["**/visual/**", "**/perf/**", "**/clips/**"],
+      // One spec at a time: every spec signs in as the same seed person in
+      // the same workspace on the local stack, so parallel files read each
+      // other's rows (a bell's newest notices, a project's order, the
+      // offline queue's sync line). Serial, the whole suite passes together.
+      workers: 1,
       use: {
         ...devices["Desktop Chrome"],
         baseURL: E2E_BASE_URL ?? "http://127.0.0.1:8081",

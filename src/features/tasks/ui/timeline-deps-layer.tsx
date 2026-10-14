@@ -195,6 +195,8 @@ export function ContradictionMark({
   contradiction,
   editable,
   onMove,
+  openByKey = false,
+  onKeyClose,
 }: {
   taskId: string;
   /** The task's point's day. */
@@ -202,9 +204,23 @@ export function ContradictionMark({
   contradiction: Contradiction;
   editable: boolean;
   onMove: (day: number) => void;
+  /** ⇧L opened it from the keyboard (the mark itself is never a tab stop). */
+  openByKey?: boolean;
+  /** It closed after ⇧L opened it: the view takes the keyboard back. */
+  onKeyClose?: () => void;
 }) {
   const { range, dw } = useTimelineGeometry();
-  const [open, setOpen] = useState(false);
+  const [clicked, setClicked] = useState(false);
+  const open = clicked || openByKey;
+  // Closing what ⇧L opened hands the keyboard to the canvas, not to the mark.
+  const keyClosing = useRef(false);
+  const setOpen = (next: boolean) => {
+    setClicked(next);
+    if (!next && openByKey) {
+      keyClosing.current = true;
+      onKeyClose?.();
+    }
+  };
   // It goes with its point while a drag moves it.
   const delta = usePointDelta(taskId);
   const x = dayCenterX(range, dw, day + delta) - 18;
@@ -241,6 +257,11 @@ export function ContradictionMark({
         align="start"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
+        onCloseAutoFocus={(e) => {
+          if (!keyClosing.current) return;
+          keyClosing.current = false;
+          e.preventDefault();
+        }}
       >
         <p className="font-sans text-sm text-foreground">{why}.</p>
         <div className="mt-2 flex justify-end">

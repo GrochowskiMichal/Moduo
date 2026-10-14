@@ -93,7 +93,7 @@ describe("cross-runtime drift guards", () => {
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
     const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
     const join = read("20261001170000_waitlist_footer_source.sql");
-    const gate = read("20261010150000_tx4_invite_only_gate.sql");
+    const gate = read("20261010155652_tx4_invite_only_gate.sql");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     // The landing joins with a CTA source only; the row CHECK also allows `manual`.
     expect(join).toContain(`p_source NOT IN (${inList(WAITLIST_SOURCES)})`);
@@ -102,7 +102,7 @@ describe("cross-runtime drift guards", () => {
   });
 
   it("email_subscriptions CHECKs list the canonical subscription vocabularies (TX-4)", () => {
-    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010150000_tx4_invite_only_gate.sql"), "utf8");
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261010155652_tx4_invite_only_gate.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`topic IN (${inList(EMAIL_SUBSCRIPTION_TOPICS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_SUBSCRIPTION_STATUSES)})`);
@@ -192,7 +192,7 @@ describe("cross-runtime drift guards", () => {
 
   it("grant origins match the resource_grants CHECK", () => {
     const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261010120000_tighten_write_checks.sql"),
+      resolve(MIGRATIONS_DIR, "20261010141712_tighten_write_checks.sql"),
       "utf8",
     );
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
@@ -292,7 +292,7 @@ describe("cross-runtime drift guards", () => {
 
   it("repeat modes and notice delivery kinds match the server's checks (TV-D8, TV-D12)", () => {
     const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
-    const ops = read("20261010160000_tasks_ops_registry_handles.sql");
+    const ops = read("20261010160001_tasks_ops_registry_handles.sql");
     expect(RECURRENCE_MODES).toEqual(["after_completion"]);
     expect(ops).toContain(`p_rec ->> 'mode' <> '${RECURRENCE_MODES[0]}'`);
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");

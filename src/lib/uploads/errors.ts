@@ -48,6 +48,8 @@ export type UploadProblem =
   /** Can't add files to this task (view-only, or it's gone). */
   | { kind: "no_access" }
   | { kind: "task_gone" }
+  /** The task was made offline and hasn't reached the server yet (AT-3). Waits. */
+  | { kind: "task_syncing" }
   /** An empty file: nothing to attach. */
   | { kind: "empty" }
   /** Storage itself refused the size (413), whatever the plan says. */
@@ -126,7 +128,8 @@ export function problemRetriesItself(problem: UploadProblem): boolean {
     problem.kind === "interrupted" ||
     problem.kind === "storage_full" ||
     problem.kind === "busy" ||
-    problem.kind === "elsewhere"
+    problem.kind === "elsewhere" ||
+    problem.kind === "task_syncing"
   );
 }
 
@@ -223,6 +226,11 @@ export function describeProblem(
       };
     case "task_gone":
       return { text: "Not attached — the task was deleted", actions: ["dismiss"] };
+    case "task_syncing":
+      return {
+        text: "Not attached yet — the task is still syncing. It attaches by itself",
+        actions: ["dismiss"],
+      };
     case "empty":
       return { text: `Not attached — ${ctx.fileName} is empty`, actions: ["dismiss"] };
     case "server_too_large":

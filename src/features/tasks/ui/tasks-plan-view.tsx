@@ -99,9 +99,11 @@ import {
   railSortCollision,
 } from "../dnd/rail-drop";
 import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import type { InFlightItem } from "../focus-screen";
 import { boardFoldKey, listFoldKey } from "../folds";
 import { todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { useTaskImport } from "../importers/ui/use-task-import";
 import type { ListExportContext } from "../list-export";
 import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
@@ -116,7 +118,7 @@ import {
 } from "../my-tasks";
 import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
-import { NO_DATE_PANEL_VIEW } from "../panel-views";
+import { IN_FLIGHT_PANEL_VIEW, NO_DATE_PANEL_VIEW } from "../panel-views";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
@@ -140,8 +142,10 @@ import { BulkPanel } from "./bulk-panel";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "./delete-bucket-dialog";
 import { asTaskDrag, taskDragAnnouncements, useTaskDndSensors } from "./dnd/task-dnd";
 import { DriftTriageDialog } from "./drift-triage-dialog";
+import { checkBackAt } from "./focus-hand-off";
 import { FocusView } from "./focus-view";
 import { FrontierOfferDialog } from "./frontier-offer-dialog";
+import { InFlightPanel } from "./in-flight-panel";
 import { useInboxView } from "./inbox-view";
 import type { ListExtraGroup } from "./list-extensions";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
@@ -159,7 +163,12 @@ import { TimelineNoDatePanel } from "./timeline-no-date-panel";
 import { useUpcomingView } from "./upcoming-view";
 import { boardDropName } from "./use-board-folds";
 import { useBulkActions } from "./use-bulk-actions";
-import { useProjectEditable } from "./use-project-overview-data";
+import { useInFlight } from "./use-in-flight";
+import {
+  useEditableProjects,
+  useEditableTasks,
+  useProjectEditable,
+} from "./use-project-overview-data";
 import { useSavedViews } from "./use-saved-views";
 import { useTaskSelection } from "./use-task-selection";
 import { useTasksDisplay } from "./use-tasks-display";
@@ -1201,6 +1210,19 @@ export function TasksPlanView({
     onOpenTask: (id) => onUrlTaskIdChange(id),
   });
   const offersTemplates = templateActions.supported && canEdit;
+  // "Import tasks…" (TV-U18): the hairline ⋯ opens it.
+  const taskImport = useTaskImport({
+    runtime,
+    store: templateStore,
+    workspaceId,
+    userId: currentUserId,
+    canEdit,
+    buckets,
+    sections: api.sections,
+    tasks,
+    archivedTasks: api.archivedTasks,
+    onOpenProject: pickSelection,
+  });
 
   const left = (
     <BucketRail
@@ -1260,6 +1282,7 @@ export function TasksPlanView({
           : undefined
       }
       onOpenWelcome={welcome.reopen}
+      onImport={taskImport.supported ? taskImport.open : undefined}
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -1648,12 +1671,102 @@ export function TasksPlanView({
   );
   const timelineCanDrag =
     canEdit && !archivedProject && (timelineProjectId === "" || timelineProjectAccess === true);
+  // Across projects (All, My tasks) the same question per project, all at
+  // once: a project shared with you view-only shows no handles there either.
+  // Your own projects and Inboxes aren't asked (a task you handed on, sitting
+  // in someone's Inbox, stays yours to move; the server decides).
+  const timelineAskIds = useMemo(
+    () =>
+      timelineShown && timelineProjectId === "" && canEdit
+        ? buckets
+            .filter(
+              (b) => !b.isSystem && !b.deletedAt && !b.archivedAt && b.ownerId !== currentUserId,
+            )
+            .map((b) => b.id)
+        : [],
+    [timelineShown, timelineProjectId, canEdit, buckets, currentUserId],
+  );
+  const timelineProjectAnswer = useEditableProjects(
+    workspaceId,
+    timelineAskIds,
+    timelineAskIds.length > 0,
+  );
+  const timelineCanDragIn = useMemo(() => {
+    const asked = new Set(timelineAskIds);
+    return (projectId: string) =>
+      !asked.has(projectId) || timelineProjectAnswer(projectId) === true;
+  }, [timelineAskIds, timelineProjectAnswer]);
+  // A task: its project's answer, else its own. A task you're on in a project
+  // you can only view is asked once by itself: assignment there usually keeps
+  // you Edit on it, but not always (the server decides; a few tasks at most).
+  const timelineAskTaskIds = useMemo(
+    () =>
+      timelineAskIds.length > 0 && currentUserId
+        ? api.tasks
+            .filter(
+              (t) =>
+                t.assigneeId === currentUserId &&
+                !t.deletedAt &&
+                timelineProjectAnswer(t.bucketId) === false,
+            )
+            .map((t) => t.id)
+        : [],
+    [timelineAskIds, currentUserId, api.tasks, timelineProjectAnswer],
+  );
+  const timelineTaskAnswer = useEditableTasks(
+    workspaceId,
+    timelineAskTaskIds,
+    timelineAskTaskIds.length > 0,
+  );
+  const timelineCanDragTask = useCallback(
+    (task: Task) => timelineCanDragIn(task.bucketId) || timelineTaskAnswer(task.id) === true,
+    [timelineCanDragIn, timelineTaskAnswer],
+  );
   // "No date · n" opens the panel on that view (the panel too, if it's closed).
   const openNoDate = useCallback(() => {
     setPanelView(NO_DATE_PANEL_VIEW);
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
   }, []);
+  // Focus's "2 in flight" opens In flight the same way (TV-F8).
+  const openInFlight = useCallback(() => {
+    setPanelView(IN_FLIGHT_PANEL_VIEW);
+    const state = readFeaturePanelState("tasks");
+    if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
+  }, []);
+  // The offer's Shrink shows the task's Details (TV-F8).
+  const showDetails = useCallback((id: string) => {
+    setPanelView("details");
+    setSelectedTaskId(id);
+  }, []);
+  // In flight (TV-F8): what I'm waiting on, and my agents' work.
+  const inFlight = useInFlight(api);
+  // Pick up: the wait is over, the task goes back to the top of Focus.
+  const pickUpInFlight = useCallback(
+    (item: InFlightItem) => {
+      const id = item.task.id;
+      const waits = item.waiting;
+      const wasQueued = api.queuedTaskIds.has(id);
+      for (const w of waits) api.removeWaiting(w.id);
+      api.addToQueue(id, "top");
+      undoToast("Back in Focus", {
+        onUndo: () => {
+          for (const w of waits) api.addWaiting(id, { kind: w.kind, ref: w.ref, label: w.label });
+          if (!wasQueued) api.removeFromQueue(id);
+        },
+      });
+    },
+    [api],
+  );
+  // Still waiting: check back tomorrow morning (a new check-back un-brightens the card).
+  const checkBackLater = useCallback(
+    (item: InFlightItem) => {
+      const at = checkBackAt("tomorrow", new Date());
+      if (!at) return;
+      if (api.addReminder(item.task.id, "at", at.toISOString())) toast("Checking back tomorrow");
+    },
+    [api],
+  );
   // The place's open tasks with no date and no session (the button's count).
   const undated = useMemo(
     () =>
@@ -1718,6 +1831,8 @@ export function TasksPlanView({
         onOpenTask={openTaskInPanel}
         panelTaskId={panelTopTaskId}
         onRequestCapture={openCapture}
+        onShowInFlight={openInFlight}
+        onShowDetails={showDetails}
       />
     ) : view === "board" ? (
       <TaskBoardView
@@ -1765,6 +1880,8 @@ export function TasksPlanView({
         onViewKey={bulk.onKey}
         onOpenNoDate={openNoDate}
         canDrag={timelineCanDrag}
+        canDragIn={timelineCanDragIn}
+        canDragTask={timelineCanDragTask}
       />
     ) : (
       <TaskListView
@@ -2136,8 +2253,7 @@ export function TasksPlanView({
         : panelView;
 
   // The right panel's title row names and switches its views (SH-1): Details
-  // and Project (TV-U13), No date beside the Timeline (TV-TL2); In flight
-  // registers later (TV-F8).
+  // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
   const right = (
     <RightPanel
       module="tasks"
@@ -2155,6 +2271,18 @@ export function TasksPlanView({
         // Inbox task) it says so.
         project: () =>
           projectView ?? <ProjectPanel project={null} tasks={api.tasks} sections={api.sections} />,
+        // Always listed (an alongside view): hand-offs and my agents' work.
+        [IN_FLIGHT_PANEL_VIEW]: () => (
+          <InFlightPanel
+            items={inFlight.items}
+            canEdit={canEdit}
+            bucketNameById={bucketNameById}
+            onOpenTask={openTaskInPanel}
+            onPickUp={pickUpInFlight}
+            onLater={checkBackLater}
+            fileCounts={api.attachmentCounts}
+          />
+        ),
         // Listed only while the Timeline shows (the registry hides a view a
         // page can't render).
         [NO_DATE_PANEL_VIEW]: timelineShown
@@ -2164,6 +2292,7 @@ export function TasksPlanView({
                 projects={buckets}
                 inboxId={inbox?.id ?? null}
                 canEdit={timelineCanDrag}
+                canMove={timelineCanDragTask}
                 selectedTaskId={selectedTaskId}
                 onOpen={(id) => {
                   setPanelView("details");
@@ -2316,6 +2445,7 @@ export function TasksPlanView({
         }
       />
       {templateActions.dialogs}
+      {taskImport.dialog}
       {savedViews.dialog}
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}

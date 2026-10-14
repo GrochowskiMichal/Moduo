@@ -4,6 +4,7 @@ export const SETTINGS_SECTION_IDS = [
   "billing",
   "workspace",
   "access",
+  "storage",
   "integrations",
   "apikeys",
   "preferences",
@@ -22,7 +23,7 @@ export const SETTINGS_GROUPS = [
     label: "Personal",
     ids: ["account", "billing", "appearance", "preferences", "timeregion", "focus"],
   },
-  { label: "Workspace", ids: ["workspace", "access", "integrations", "apikeys"] },
+  { label: "Workspace", ids: ["workspace", "access", "storage", "integrations", "apikeys"] },
   { label: "App", ids: ["advanced", "about"] },
 ] as const satisfies ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[] }>;
 

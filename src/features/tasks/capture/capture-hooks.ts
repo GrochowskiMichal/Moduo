@@ -5,7 +5,9 @@
 //   the destination, Due as the date its dates count from, Assign);
 // - attachments (AT-2's upload pipeline, AT-3's capture paste chip): files
 //   pasted or dropped on a capture go to the handler with the new task's id
-//   once it exists. Until one is registered, the capture says where files go.
+//   once it exists (AT-3 registers `attachCaptureFiles`,
+//   features/attachments/capture.ts). Until one is registered, the capture
+//   says where files go.
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { WorkspaceStore } from "../../../lib/sync/store";
@@ -64,8 +66,14 @@ export function captureTemplates(): CaptureTemplateProvider | null {
 
 export type CaptureAttachmentHandler = (input: {
   workspaceId: string;
-  /** The task's id once it's created (null: it wasn't). */
-  taskId: Promise<string | null>;
+  /** Who captured it: the files are theirs to upload. */
+  userId: string;
+  /**
+   * The task once it exists: made on the server, or waiting on this device to
+   * sync (`queued`, an offline capture: its files wait with it). Null: it
+   * wasn't made (the server refused), so there's nothing to attach to.
+   */
+  task: Promise<{ id: string; queued: boolean } | null>;
   files: File[];
 }) => void;
 

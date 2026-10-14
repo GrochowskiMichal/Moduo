@@ -4,6 +4,7 @@
 
 import {
   Activity,
+  CalendarClock,
   CalendarDays,
   CheckSquare,
   Clock,
@@ -20,15 +21,16 @@ import {
   Type,
   UserRoundPlus,
   Users,
+  UsersRound,
 } from "lucide-react";
 
 import type { WidgetType } from "../engine/types";
 
 export const WIDGET_GALLERY_META: Record<WidgetType, { icon: LucideIcon; description: string }> = {
-  tasks: { icon: CheckSquare, description: "Your queue, with inline check-off." },
+  tasks: { icon: CheckSquare, description: "Your Focus line-up, with inline check-off." },
   notes: { icon: FileText, description: "Recently touched notes." },
   calendar: { icon: CalendarDays, description: "What's left on today's schedule." },
-  timetracking: { icon: Timer, description: "Time tracked today (desktop)." },
+  timetracking: { icon: Timer, description: "Your tracked task time this week." },
   email: { icon: Mail, description: "Unread + snoozed + follow-ups (desktop)." },
   "recently-linked": { icon: Link2, description: "The spine's most recent links." },
   activity: { icon: Activity, description: "Cross-module activity + notifications." },
@@ -42,4 +44,6 @@ export const WIDGET_GALLERY_META: Record<WidgetType, { icon: LucideIcon; descrip
   habits: { icon: Repeat, description: "Daily checkboxes + streaks." },
   pinned: { icon: Pin, description: "Pin any note, task, contact…" },
   chat: { icon: MessagesSquare, description: "DMs and mentions waiting for you (Duo / Team)." },
+  team: { icon: UsersRound, description: "What each person has on: Focus, in progress, due." },
+  upcoming: { icon: CalendarClock, description: "Your coming days, from Tasks' Upcoming." },
 };

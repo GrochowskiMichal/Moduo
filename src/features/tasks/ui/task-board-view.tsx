@@ -68,6 +68,7 @@ import { DndBoundary, taskDragAnnouncements, useTaskDndSensors } from "./dnd/tas
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
+import { useTaskFileDrop } from "./row-drop";
 import {
   type FactsSource,
   type TaskFacts,
@@ -488,6 +489,7 @@ export function TaskBoardView({
       sectionNames,
       waitingLabels,
       commentCounts: api.commentCounts,
+      attachmentCounts: api.attachmentCounts,
       pendingTaskIds: api.pendingTaskIds,
     }),
     [
@@ -501,6 +503,7 @@ export function TaskBoardView({
       sectionNames,
       waitingLabels,
       api.commentCounts,
+      api.attachmentCounts,
       api.pendingTaskIds,
     ],
   );
@@ -536,6 +539,13 @@ export function TaskBoardView({
   // A card's facts and actions: each card redraws only when its own task or
   // facts change. Selecting a card hands the keys to the board.
   const actions = useRowActions(api);
+  const fileDrop = useTaskFileDrop({
+    canEdit,
+    taskOf: (id) => taskById.get(id),
+    userId: api.currentUserId,
+    pendingTaskIds: api.pendingTaskIds,
+    onOpen: (id) => onSelectTask(id),
+  });
   // A click's ⇧ / ⌘ go to the page's selection (TV-U12) with the cards in
   // the order the keys walk them (column by column).
   const selectionRef = useRef<{ multiSelect?: MultiSelect; order: readonly string[] }>({
@@ -924,6 +934,7 @@ export function TaskBoardView({
     today,
     taskKey,
     team: task.teamId ? (teamMarks.get(task.teamId) ?? null) : null,
+    dropTarget: task.id === fileDrop.targetId,
   });
 
   const header_ = (column: ViewColumn) =>
@@ -1062,6 +1073,8 @@ export function TaskBoardView({
               aria-roledescription="board"
               aria-label={`${scopeTitle} board`}
               onKeyDown={onKeyDown}
+              // Files dropped on a card attach to its task (AT-3, AT3-1).
+              {...fileDrop.handlers}
               // As on the List: after a mouse click on a card's button, focus
               // comes back to the board, so the next Space/⏎ acts on the
               // selected card; a button that opens a menu keeps it.

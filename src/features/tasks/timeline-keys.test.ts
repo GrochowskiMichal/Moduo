@@ -65,6 +65,11 @@ describe("timelineKeyAction", () => {
     expect(timelineKeyAction(key("a", { ctrlKey: true }))).toBe("select-all");
   });
 
+  it("⇧L opens a late task's mark; a bare l stays free (the rows' tags)", () => {
+    expect(timelineKeyAction(key("L", { shiftKey: true }))).toBe("late");
+    expect(timelineKeyAction(key("l"))).toBeNull();
+  });
+
   it("knows a field keeps its own keys", () => {
     expect(isTypingTarget(document.createElement("input"))).toBe(true);
     expect(isTypingTarget(document.createElement("div"))).toBe(false);

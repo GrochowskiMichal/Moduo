@@ -4,6 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CornerDownRight } from "lucide-react";
 import { memo, useCallback } from "react";
 import { TeamMark } from "../../../components/ui/avatar";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { ItemCard, ItemCardMeta, ItemCardTitle } from "../../../components/ui/item-card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { useTimeRegion } from "../../../lib/time-region";
@@ -73,6 +74,8 @@ type Props = {
   taskKey?: string | null;
   /** Its team, while nobody has taken it (TV-D13): the mark stands in for an avatar. */
   team?: CardTeam | null;
+  /** Files are dragged over it and it would take them (AT-3; DS-4's DROP_TARGET). */
+  dropTarget?: boolean;
 };
 
 const NOOP = () => {};
@@ -120,6 +123,7 @@ function TaskCardView({
   today,
   taskKey = null,
   team = null,
+  dropTarget = false,
 }: Props) {
   // Dates redraw when Time & region changes (TV-D14; the card is memoised).
   useTimeRegion();
@@ -170,6 +174,7 @@ function TaskCardView({
         // `group` too: the Focus mark reveals on the card's hover (R6).
         "group w-(--board-card-w) select-none",
         canEdit && !editing && "cursor-grab active:cursor-grabbing",
+        dropTarget && DROP_TARGET,
       )}
     >
       <CardBody

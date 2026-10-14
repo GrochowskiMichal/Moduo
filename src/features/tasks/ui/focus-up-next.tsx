@@ -1,23 +1,29 @@
 // Up next on the Focus screen (TV-F7, spec §7; REPLAN 62): the rest of my
 // line-up in order, numbered, with a divider where the project changes,
 // "Up next · 4 · ~1h" above. Drag or ⌥⇧↑↓ reorders (with Undo); a row opens
-// its details on click; hover offers ▶ Focus on this and Remove.
+// its details on click; hover offers ▶ Focus on this and Remove. TV-F8 adds
+// your usual pace to the header (10), "Arrange by project · 2 fewer switches"
+// when it saves two or more (57, 62), and the next meeting as a divider where
+// it falls (64).
 
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { closestCenter } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { Play, X } from "lucide-react";
+import { CalendarClock, Paperclip, Play, X } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
 import { IconButton } from "../../../components/ui/icon-button";
 import { Kbd } from "../../../components/ui/kbd";
+import { MetaCount } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { SELECTED_ROW } from "../../../components/ui/selection";
-import { formatDuration } from "../../../lib/time-format";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { formatDuration, formatTime } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
+import { filesLabel } from "../../attachments/files";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
-import { upNextLines, upNextMove, upNextSummary } from "../focus-screen";
+import { type MeetingLine, upNextLines, upNextMove, upNextSummary } from "../focus-screen";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
 import { bucketDotColor } from "../sidebar";
@@ -38,6 +44,9 @@ export function UpNext({
   selectedTaskId,
   onSelectTask,
   dndMode,
+  meeting = null,
+  pace = null,
+  arrange = null,
 }: {
   upNext: Task[];
   api: TasksModuleApi;
@@ -46,10 +55,16 @@ export function UpNext({
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
   dndMode: "internal" | "external";
+  /** The next meeting's divider and where it falls (64). */
+  meeting?: MeetingLine | null;
+  /** "≈ 1h 20m at your usual pace" (10), or null. */
+  pace?: string | null;
+  /** "Arrange by project · n fewer switches", when it saves two or more (62). */
+  arrange?: { saved: number; onArrange: () => void } | null;
 }) {
   const sensors = useTaskDndSensors();
   const ids = useMemo(() => upNext.map((t) => t.id), [upNext]);
-  const lines = useMemo(() => upNextLines(upNext), [upNext]);
+  const lines = useMemo(() => upNextLines(upNext, meeting), [upNext, meeting]);
   const projects = useMemo(() => new Map(api.buckets.map((b) => [b.id, b])), [api.buckets]);
   // A lined-up subtask says whose it is ("· ↳ parent").
   const parentTitles = useMemo(() => {
@@ -79,17 +94,45 @@ export function UpNext({
 
   if (upNext.length === 0) {
     return (
-      <p className="px-1 font-sans text-sm text-muted-foreground">
-        Last one. Nothing else is lined up.
-      </p>
+      <div className="flex flex-col gap-1">
+        <p className="px-1 font-sans text-sm text-muted-foreground">
+          Last one. Nothing else is lined up.
+        </p>
+        {meeting ? <MeetingDivider title={meeting.title} startsAt={meeting.startsAt} /> : null}
+      </div>
     );
   }
 
   return (
     <section aria-label="Up next" className="flex flex-col gap-1" data-slot="focus-up-next">
-      <p className="px-1 font-sans text-sm text-foreground">
-        Up next <span className="tabular-nums text-muted-foreground">{upNextSummary(upNext)}</span>
-      </p>
+      <div className="flex min-h-(--ctrl-h-sm) flex-wrap items-center gap-x-2 gap-y-0.5 px-1">
+        <p className="min-w-0 flex-1 font-sans text-sm text-foreground">
+          Up next{" "}
+          <span className="tabular-nums text-muted-foreground">{upNextSummary(upNext)}</span>
+          {pace ? (
+            <span className="tabular-nums text-muted-foreground" data-slot="focus-pace">
+              {" "}
+              · {pace}
+            </span>
+          ) : null}
+        </p>
+        {arrange && canEdit ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={arrange.onArrange}
+                data-slot="focus-arrange"
+                className="hit-min -mr-1 shrink-0 rounded-md px-1.5 font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                Arrange by project
+                <span className="text-subtle-foreground"> · {arrange.saved} fewer switches</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Keeps each project’s tasks together. Undo any time.</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
       <DndBoundary
         dndMode={dndMode}
         sensors={sensors}
@@ -107,7 +150,9 @@ export function UpNext({
               container, and the numbers already say the order. */}
           <div className="flex flex-col">
             {lines.map((line) =>
-              line.kind === "divider" ? (
+              line.kind === "meeting" ? (
+                <MeetingDivider key={line.key} title={line.title} startsAt={line.startsAt} />
+              ) : line.kind === "divider" ? (
                 <div
                   key={line.key}
                   className="flex items-center gap-2 px-1.5 pt-2 pb-0.5 font-sans text-xs text-muted-foreground"
@@ -134,6 +179,7 @@ export function UpNext({
                       }
                       selected={selectedTaskId === line.task.id}
                       canEdit={canEdit}
+                      files={api.attachmentCounts?.get(line.task.id) ?? 0}
                       onSelect={() => onSelectTask(line.task.id)}
                       onFocusOn={() => api.focusOnTask(line.task.id)}
                       onRemove={() => {
@@ -156,12 +202,42 @@ export function UpNext({
   );
 }
 
+/** "── 2:30 PM · Acme call ──": your next meeting, where it falls (64). */
+function MeetingDivider({ title, startsAt }: { title: string; startsAt: number }) {
+  const time = formatTime(startsAt);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div
+          // A row of its own, read out where it sits in the line-up.
+          role="note"
+          aria-label={`Meeting at ${time}: ${title}. Tasks above the line fit before it.`}
+          data-slot="focus-meeting"
+          tabIndex={-1}
+          className="flex min-h-(--ctrl-h-sm) items-center gap-2 px-1.5 font-sans text-xs text-muted-foreground"
+        >
+          <span aria-hidden className="h-px flex-1 bg-hairline" />
+          <CalendarClock className="size-icon-xs shrink-0 text-subtle-foreground" aria-hidden />
+          <span className="shrink-0 tabular-nums">{time}</span>
+          <span aria-hidden className="text-subtle-foreground">
+            ·
+          </span>
+          <span className="min-w-0 truncate">{title}</span>
+          <span aria-hidden className="h-px flex-1 bg-hairline" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>Tasks above the line fit before it, using your estimates</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function UpNextRow({
   task,
   number,
   parentTitle,
   selected,
   canEdit,
+  files,
   onSelect,
   onFocusOn,
   onRemove,
@@ -174,6 +250,8 @@ function UpNextRow({
   parentTitle: string | null;
   selected: boolean;
   canEdit: boolean;
+  /** Its finished files (AT-3's 📎 mark; 0 hides it). */
+  files: number;
   onSelect: () => void;
   onFocusOn: () => void;
   onRemove: () => void;
@@ -215,6 +293,7 @@ function UpNextRow({
           {parentTitle ? <span className="text-subtle-foreground"> · ↳ {parentTitle}</span> : null}
         </span>
       </button>
+      <MetaCount icon={Paperclip} count={files} label={filesLabel} />
       <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />
       {est ? (
         <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground">

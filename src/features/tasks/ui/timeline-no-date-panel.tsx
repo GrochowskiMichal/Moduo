@@ -25,6 +25,7 @@ export function TimelineNoDatePanel({
   projects,
   inboxId,
   canEdit,
+  canMove,
   selectedTaskId,
   onOpen,
 }: {
@@ -34,6 +35,8 @@ export function TimelineNoDatePanel({
   projects: readonly Bucket[];
   inboxId: string | null;
   canEdit: boolean;
+  /** Across projects: may you date this task (absent: every one)? */
+  canMove?: (task: Task) => boolean;
   selectedTaskId: string | null;
   onOpen: (taskId: string) => void;
 }) {
@@ -111,28 +114,11 @@ export function TimelineNoDatePanel({
                   </span>
                 </div>
               ) : (
-                <DraggableTask
-                  id={item.task.id}
-                  from="no-date"
-                  disabled={!canEdit}
-                  render={({ dragListeners, dragActivatorRef }) => (
-                    // The drag's activator is the row, never the button inside:
-                    // Enter/Space on the button open the task (a keyboard lift
-                    // could never land, the drop is the pointer's; gotchas/ui.md).
-                    <div ref={dragActivatorRef} data-no-date-task={item.task.id} {...dragListeners}>
-                      <button
-                        type="button"
-                        onClick={() => onOpen(item.task.id)}
-                        className={cn(
-                          "flex h-(--row-h) w-full items-center rounded-md px-2 text-left font-sans text-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
-                          canEdit && "cursor-grab",
-                          selectedTaskId === item.task.id && "bg-state-selected",
-                        )}
-                      >
-                        <span className="min-w-0 truncate">{item.task.title || "Untitled"}</span>
-                      </button>
-                    </div>
-                  )}
+                <NoDateRow
+                  task={item.task}
+                  movable={canEdit && (canMove?.(item.task) ?? true)}
+                  selected={selectedTaskId === item.task.id}
+                  onOpen={onOpen}
                 />
               )
             }
@@ -140,5 +126,44 @@ export function TimelineNoDatePanel({
         )}
       </div>
     </div>
+  );
+}
+
+function NoDateRow({
+  task,
+  movable,
+  selected,
+  onOpen,
+}: {
+  task: Task;
+  /** You may date it (a task of a project shared with you view-only isn't). */
+  movable: boolean;
+  selected: boolean;
+  onOpen: (taskId: string) => void;
+}) {
+  return (
+    <DraggableTask
+      id={task.id}
+      from="no-date"
+      disabled={!movable}
+      render={({ dragListeners, dragActivatorRef }) => (
+        // The drag's activator is the row, never the button inside:
+        // Enter/Space on the button open the task (a keyboard lift
+        // could never land, the drop is the pointer's; gotchas/ui.md).
+        <div ref={dragActivatorRef} data-no-date-task={task.id} {...dragListeners}>
+          <button
+            type="button"
+            onClick={() => onOpen(task.id)}
+            className={cn(
+              "flex h-(--row-h) w-full items-center rounded-md px-2 text-left font-sans text-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
+              movable && "cursor-grab",
+              selected && "bg-state-selected",
+            )}
+          >
+            <span className="min-w-0 truncate">{task.title || "Untitled"}</span>
+          </button>
+        </div>
+      )}
+    />
   );
 }

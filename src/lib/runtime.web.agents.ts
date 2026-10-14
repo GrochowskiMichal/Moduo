@@ -49,6 +49,14 @@ export type ImportUndoResult = {
   projectsRemoved: number;
 };
 
+/** What a finished run made, counted by the server (only what you can see). */
+export type ImportRunCounts = {
+  tasksCreated: number;
+  tasksUpdated: number;
+  projectsCreated: number;
+  sectionsCreated: number;
+};
+
 const NOT_READY = "Agent work isn't available on this server yet.";
 
 /** The export reads every run (a person makes few) and every row they made. */
@@ -282,6 +290,102 @@ export function createTasksAgents(
           rows: rowsByRun.get(r.id as string) ?? [],
         })),
         truncated: collectTruncations(read.truncation, rowsCut),
+      };
+    },
+
+    // ── The native importers' writes (TV-U18): the same engine as MCP ──────
+
+    /** Begin a run (`imports_op_begin`); answers its id. */
+    async beginImport(input: {
+      workspaceId: string;
+      source: string;
+      label: string;
+    }): Promise<{ id: string }> {
+      const { data, error } = await client.rpc("imports_op_begin", {
+        p_workspace_id: input.workspaceId,
+        p_source: input.source,
+        p_label: input.label,
+      });
+      if (error)
+        throw new Error(
+          isMissingFunctionError(error, "imports_op_begin") ? NOT_READY : error.message,
+        );
+      return { id: String((data as Row | null)?.id ?? "") };
+    },
+
+    /** A project the run makes and records (`imports_op_project_create`). */
+    async createImportProject(input: {
+      workspaceId: string;
+      importId: string;
+      project: { id: string; name: string; description?: string };
+    }): Promise<{ id: string; name: string }> {
+      const { data, error } = await client.rpc("imports_op_project_create", {
+        p_workspace_id: input.workspaceId,
+        p_import_id: input.importId,
+        p_project: input.project,
+      });
+      if (error) throw new Error(error.message);
+      const row = (data ?? {}) as Row;
+      return {
+        id: String(row.id ?? input.project.id),
+        name: String(row.name ?? input.project.name),
+      };
+    },
+
+    /** A section the run makes and records (`imports_op_section_create`). */
+    async createImportSection(input: {
+      workspaceId: string;
+      importId: string;
+      projectId: string;
+      section: { id: string; name: string };
+    }): Promise<{ id: string }> {
+      const { error } = await client.rpc("imports_op_section_create", {
+        p_workspace_id: input.workspaceId,
+        p_import_id: input.importId,
+        p_project_id: input.projectId,
+        p_section: input.section,
+      });
+      if (error) throw new Error(error.message);
+      return { id: input.section.id };
+    },
+
+    /**
+     * One task of the run with its tags (`tasks_op_create_with`): a key you
+     * already used on a live task of yours updates that task instead.
+     */
+    async createImportTask(input: {
+      workspaceId: string;
+      importId: string;
+      task: Record<string, unknown>;
+      tags?: string[];
+    }): Promise<{ action: "created" | "updated" | "existing"; id: string }> {
+      const { data, error } = await client.rpc("tasks_op_create_with", {
+        p_workspace_id: input.workspaceId,
+        p_task: input.task,
+        p_with: {
+          import_id: input.importId,
+          ...(input.tags?.length ? { tags: input.tags } : {}),
+        },
+      });
+      if (error) throw new Error(error.message);
+      const row = (data ?? {}) as Row;
+      const action = row.action === "updated" || row.action === "existing" ? row.action : "created";
+      return { action, id: String((row.task as Row | undefined)?.id ?? input.task.id ?? "") };
+    },
+
+    /** Finish a run (`imports_op_finish`): what it made, counted by the server. */
+    async finishImport(input: { workspaceId: string; importId: string }): Promise<ImportRunCounts> {
+      const { data, error } = await client.rpc("imports_op_finish", {
+        p_workspace_id: input.workspaceId,
+        p_import_id: input.importId,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as Row;
+      return {
+        tasksCreated: num(r.tasks_created),
+        tasksUpdated: num(r.tasks_updated),
+        projectsCreated: num(r.projects_created),
+        sectionsCreated: num(r.sections_created),
       };
     },
 

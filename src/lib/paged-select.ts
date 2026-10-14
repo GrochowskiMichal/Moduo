@@ -63,6 +63,8 @@ export const READ_CAPS = {
   closedTasks: 20000,
   /** Comments on tasks, read for their counts only (id + task). */
   taskComments: 20000,
+  /** Finished files on tasks, read for the 📎 counts only (id + task; AT-3). */
+  attachmentMarks: 20000,
   /** One delta read; past it the store reads again from where it stopped. */
   syncDelta: 5000,
   /** The store's access check: every live id of a table. */

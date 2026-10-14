@@ -1,0 +1,15 @@
+TYPE,CONTENT,DESCRIPTION,PRIORITY,INDENT,AUTHOR,RESPONSIBLE,DATE,DATE_LANG,TIMEZONE,DURATION,DURATION_UNIT,DEADLINE,DEADLINE_LANG
+meta,view_style=list,,,,,,,,,,,,
+note,Syllabus is on the course site,,,,Sam Student (48211903),,,,,,,,
+section,Week 1,,,,,,,,,,,,
+task,Read chapter 1 @reading,Pages 1–40. Skim the exercises.,2,1,Sam Student (48211903),,2026-10-20,en,Europe/Warsaw,45,minute,,
+note,Focus on 1.3 — it's on the quiz,,,,Sam Student (48211903),,,,,,,,
+task,Problem set 1 @homework @graded,,1,1,Sam Student (48211903),,every monday,en,Europe/Warsaw,,,,
+task,Question 1,,4,2,Sam Student (48211903),,,,Europe/Warsaw,,,,
+task,Question 2 (part b),,4,3,Sam Student (48211903),,,,Europe/Warsaw,,,,
+,,,,,,,,,,,,,
+section,Week 2,,,,,,,,,,,,
+task,Lab report draft,"Template in the shared drive.
+Use the ""results"" table.",3,1,Sam Student (48211903),Alex Kim (51882011),Oct 27 2026 17:00,en,Europe/Warsaw,,,,
+task,Office hours,,4,1,Sam Student (48211903),,every 3rd workday,en,Europe/Warsaw,,,,
+task,Midterm prep,,1,1,Sam Student (48211903),,,,Europe/Warsaw,,,2026-11-03,en

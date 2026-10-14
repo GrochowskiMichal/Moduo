@@ -14,10 +14,11 @@
 //      coming back to the app refetches (see `use-tasks-module.ts`).
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
-import type { CommentMark } from "../../lib/sync/types";
+import type { AttachmentMark, CommentMark } from "../../lib/sync/types";
 import {
   agentSessionRowToModel,
   areaRowToModel,
+  attachmentMarkRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
   projectStatusRowToModel,
@@ -86,6 +87,8 @@ export const LIVE_SIDE_TABLES = [
   "task_completions",
   // TV-D16: published by its own migration (a build can be ahead of it).
   "agent_sessions",
+  // AT-3: files on tasks (published by TV-D11b's migration), for the 📎 counts.
+  "attachments",
 ] as const;
 
 export type LiveTable = (typeof LIVE_TABLES)[number] | (typeof LIVE_SIDE_TABLES)[number];
@@ -109,6 +112,7 @@ export type LiveChange =
   | Upsert<"task_waiting", TaskWaitingEntry>
   | Upsert<"task_completions", TaskCompletion>
   | Upsert<"agent_sessions", AgentSession>
+  | Upsert<"attachments", AttachmentMark>
   | { table: LiveTable; kind: "delete"; id: string };
 
 /**
@@ -179,6 +183,13 @@ export function parseLiveChange(table: LiveTable, payload: LivePayload): LiveCha
         return { table, kind: "upsert", row: taskCompletionRowToModel(payload.new) };
       case "agent_sessions":
         return { table, kind: "upsert", row: agentSessionRowToModel(payload.new) };
+      case "attachments": {
+        // Only finished files on tasks count; an upload in progress (or one
+        // that failed) is skipped, and only the mark is kept (no name or path).
+        const raw = payload.new as { entity_type?: unknown; status?: unknown } | null;
+        if (raw?.entity_type !== "task" || raw.status !== "ready") return null;
+        return { table, kind: "upsert", row: attachmentMarkRowToModel(payload.new) };
+      }
     }
   } catch {
     return null;
