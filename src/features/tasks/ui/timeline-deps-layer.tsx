@@ -22,7 +22,6 @@ import {
 
 import { Button } from "../../../components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { formatDate } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import type { Task, TaskRelation } from "../model";
@@ -36,7 +35,7 @@ import {
 import { taskRowKey } from "../timeline-rows";
 import { dateOfDay, dayCenterX } from "../timeline-scale";
 import { TimelineCanvasContext, useHoverTask, usePointDelta } from "./timeline-drag-store";
-import { timelineRowDomId, useTimelineGeometry } from "./timeline-marks";
+import { MarkTooltip, timelineRowDomId, useTimelineGeometry } from "./timeline-marks";
 
 type Drawn = { key: string; shape: EdgeShape; focus: boolean };
 
@@ -242,12 +241,7 @@ export function ContradictionMark({
     </button>
   );
   if (!editable) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{mark}</TooltipTrigger>
-        <TooltipContent>{why}</TooltipContent>
-      </Tooltip>
-    );
+    return <MarkTooltip label={why}>{mark}</MarkTooltip>;
   }
   return (
     <Popover open={open} onOpenChange={setOpen}>

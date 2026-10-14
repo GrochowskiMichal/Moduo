@@ -120,7 +120,7 @@ import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
 import { IN_FLIGHT_PANEL_VIEW, NO_DATE_PANEL_VIEW } from "../panel-views";
 import { handleLabel } from "../row-layout";
-import { resolveTasksDeepLink, taskIdForHandle } from "../search";
+import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
@@ -189,6 +189,9 @@ type Props = {
   /** `?view=<id>` (TV-U8): a saved view's link, opened once, then taken off the URL. */
   urlViewId?: string | null;
   onUrlViewConsumed?: () => void;
+  /** `?place=upcoming` (Home's Upcoming "+n more"): opened once, then taken off. */
+  urlPlace?: TasksPlace | null;
+  onUrlPlaceConsumed?: () => void;
 };
 
 // The selection→URL mirror writes only at rest (see the mirror effect).
@@ -237,6 +240,8 @@ export function TasksPlanView({
   onUrlTaskIdChange,
   urlViewId = null,
   onUrlViewConsumed,
+  urlPlace = null,
+  onUrlPlaceConsumed,
 }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
@@ -428,6 +433,15 @@ export function TasksPlanView({
     setFullPageId(null);
     pickSelection("today");
   }, [pickSelection]);
+
+  // `?place=upcoming` (Home's Upcoming "+n more"): open it like a sidebar pick
+  // (it wins over "where you left it"), then take it off the URL.
+  useEffect(() => {
+    if (urlPlace !== "upcoming") return;
+    setFullPageId(null);
+    pickSelection(UPCOMING_SELECTION);
+    onUrlPlaceConsumed?.();
+  }, [urlPlace, pickSelection, onUrlPlaceConsumed]);
   useEffect(() => {
     if (consumeFocusViewRequest()) openFocus();
     const onRequest = () => {
