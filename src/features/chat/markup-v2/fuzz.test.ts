@@ -168,6 +168,34 @@ function headless() {
   });
 }
 
+describe("emphasis, exhaustively", () => {
+  // Every sequence of up to N leaves, each text or inline code with any of the
+  // 8 mark sets: the emphasis stack must read back exactly what was written.
+  // N = 3 is 4,368 sequences; CHAT_EXHAUSTIVE_DEPTH=4 runs 69,904.
+  it("every mark sequence round-trips", () => {
+    const depth = Number(process.env.CHAT_EXHAUSTIVE_DEPTH ?? 3);
+    const failures: string[] = [];
+    let total = 0;
+    const walk = (prefix: Inline[]) => {
+      if (prefix.length > 0) {
+        total += 1;
+        const tree = canonicalBlocks([{ t: "p", c: prefix }]);
+        const stored = serializeBlocks(tree);
+        if (JSON.stringify(parseStored(stored)) !== JSON.stringify(tree)) failures.push(stored);
+      }
+      if (prefix.length === depth) return;
+      for (let m = 0; m < 8; m++) {
+        for (const t of ["text", "code"] as const) {
+          walk([...prefix, { t, v: "abcd"[prefix.length] as string, m }]);
+        }
+      }
+    };
+    walk([]);
+    expect(total).toBe(depth === 3 ? 4368 : total);
+    expect(failures.slice(0, 5)).toEqual([]);
+  });
+});
+
 describe("stored form fuzz", () => {
   it("every canonical tree survives the editor: import → export → parse → import", () => {
     const failures: string[] = [];
