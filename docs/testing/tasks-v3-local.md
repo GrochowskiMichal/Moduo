@@ -104,7 +104,6 @@
 
 - **Deferred on purpose:** [tasks-v3-polish-deferred.md](./tasks-v3-polish-deferred.md). Each one has a recommendation.
 - **Seen in this walkthrough, not fixed yet:**
-  - **Capture draft:** type "Call the printer tomorrow 3pm" in ⌘⇧K, press Esc and reload the app. The text comes back without its date chip, and Create saves "tomorrow 3pm" in the title with no due date.
   - **Home's Upcoming widget** (small): shows one task and "+2 more", with most of the widget empty.
   - **Timeline drag:** the old hover label ("Due Tue, Oct 20") stays on screen next to the new date while you drag (screenshot 11).
   - **Timeline zoom:** going from Quarter to Month once left Today just off the left edge; Today brings it back.
