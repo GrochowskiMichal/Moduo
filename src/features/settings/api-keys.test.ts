@@ -275,11 +275,14 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       for (const tool of tools) for (const m of tool.source.matchAll(RPC_CALL)) roots.add(m[1]);
     }
     const reached = new Set<string>();
+    // Blocks under `IF module_api_key_id() IS NULL` are people-only (see
+    // keyLanes): a key never reaches what they call.
     const walk = (fn: string) => {
       const body = bodies.get(fn);
       if (body === undefined || reached.has(fn)) return;
       reached.add(fn);
-      for (const [, callee] of body.toLowerCase().matchAll(/\b(\w+)\s*\(/g)) walk(callee);
+      const keyPath = body.toLowerCase().replace(PEOPLE_ONLY, "");
+      for (const [, callee] of keyPath.matchAll(/\b(\w+)\s*\(/g)) walk(callee);
     };
     for (const rpc of roots) walk(rpc);
     expect(reached.size).toBeGreaterThan(40);
