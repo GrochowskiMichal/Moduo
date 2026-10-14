@@ -5,10 +5,10 @@
 
 ## Delivered against the row
 
-- **New rows are v2:** `chat_messages.format_version` defaults to 2 (the conversion refuses from here on; `chat_convert.test.sql` puts v1's default back inside its own transaction for its fixture).
+- **New rows are v2:** `chat_messages.format_version` defaults to 2 (the conversion refuses from here on; `chat_convert.test.sql` puts v1's default back inside its own transaction for its fixture). New column `chat_messages.deleted_by` (who deleted it; FK to the person, `ON DELETE SET NULL`, partial index).
 - **`chat_op_send(id, channel, body, reply_to_id)`**: the client-minted `id` is the idempotency key (a resent id returns the stored row to its author; two concurrent sends of one id return the winner); the v2 stored form, ≤ 8,000 stored characters refused with the count (`22023`, `DETAIL` `{"length","max"}`), nothing partial; people, teams and `@channel` read from the text on the server (`chat__mentions`); a reply joins its root's chain (`parent_id` = root, `reply_to_id` = what it quotes) and keeps `reply_count`, `last_reply_at`, `reply_user_ids`; the sender's `last_read_id` (and `last_read_at`) moves to the message; announcement channels take their managers' posts only; the bell row as v1 rang it, with a server-built excerpt (`chat__excerpt`, stored form, `payload.format_version = 2`) until CV-5's fan-out.
 - **`chat_op_edit(message, body)`**: the author's v2 text, mentions read again, `edited_at`; the same text again is a no-op.
-- **`chat_op_delete(message)`** hides at once (`deleted_at`), keeps the text for Undo; **`chat_op_restore(message)`** inside the window; the minute job **`chat-blank-deleted`** (`chat__blank_deleted`) blanks text, mentions, reactions and pin once the window passed. Author while they can post, or anyone with "Delete others' messages". Chain counters follow (`chat__chain_refresh`).
+- **`chat_op_delete(message)`** hides at once (`deleted_at`, `deleted_by`), keeps the text for Undo; **`chat_op_restore(message)`** inside the window, by whoever deleted it or anyone with "Delete others' messages"; the minute job **`chat-blank-deleted`** (`chat__blank_deleted`) blanks text, mentions, reactions and pin once the window passed. Delete: the author while they can post, or anyone with "Delete others' messages". Chain counters follow (`chat__chain_refresh`).
 - **`chat_op_react(message, key, on)`**: explicit on/off, idempotent, never notifies, readers including viewers, works while chat is paused (`chat_op__reader`, no plan check). The live key check and 20-kind cap kept for CV-7c.
 - **`chat_op_pin(message, pinned)`**: messages only, ≤ 100 live pins per conversation, posters (managers in an announcement channel) and holders of "Manage any channel".
 - **`chat_op_typing`** (live signature): the sender must be a member of the conversation who hasn't left; people only (no service role).
@@ -23,7 +23,7 @@
 
 | AC | Test or live check |
 | --- | --- |
-| AC12.1 | `chat_ops.test.sql` · send / edit / delete / restore / react / pin / typing as owner, admin, manager, member, custom role, viewer, outsider and a key; the plan (react works paused, the rest refuse); a resent id returns the stored row; each logged op writes one attributed row with ids only; a plain send and typing write none |
+| AC12.1 | `chat_ops.test.sql` · send / edit / delete / restore / react / pin / typing as owner, admin, manager, member, custom role, viewer, outsider and a key, and in archived, deleted, left and removed conversations; the plan (react works paused, the rest refuse); a resent id returns the stored row; each logged op writes one attributed row with ids only; a plain send and typing write none |
 | AC12.4 | `chat_ops.test.sql` · "typing": members only, sender from the session, a key refused; `chat_privacy.test.sql` · a reader who isn't a member is refused |
 | AC1.4 (server half) | `chat_ops.test.sql` · "resend": a retried id returns the stored row, never a second message; concurrent same-id sends collapse to one (unique_violation path). The page-boundary half is the store's (CV-3) |
 | AC12.9 (server half) | `chat_wrappers.test.sql` · v1 send/edit/react convert and succeed; v2 calls resolve to v2; the app's post writes v2. The client half (`src/lib/min-build.test.ts`) is unchanged; `min_build` is raised at the release (CV-23) |
@@ -46,9 +46,12 @@
 - **Chain counters are recounted on delete and restore** ("N replies" counts live replies) · agent · v1 decremented on delete and had no restore.
 - **Posting in a public channel joins it, or back** (clears `left_at`), as v1 joined on post · agent.
 - **The Undo window:** 8 s in the app, the server takes a restore up to 10 s after the delete (the request in flight), and the job blanks after 10 s; `deleted_at` is stamped from the clock · agent.
-- **Who deletes:** the author while their role can post, or "Delete others' messages"; the same for restore · §12 + agent (a viewer can't delete even an old message of theirs).
+- **Who deletes:** the author while their role can post, or "Delete others' messages" · §12 + agent (a viewer can't delete even an old message of theirs).
+- **Who undoes a delete:** the person who deleted it (while they still may), or anyone with "Delete others' messages"; an author can't undo an admin's delete. Needs `deleted_by` (new column) · agent · rejected: "as delete" read literally (the author could put back a message an admin took down).
+- **An archived conversation is read-only:** no sending (v1), editing, reacting or pinning; deleting (and its Undo) still works · agent · rejected: v1's edits, reactions and pins in archived channels.
+- **Someone a manager removed doesn't post their way back** into a public channel (`42501 You were removed from this conversation.`); someone who left on their own posts and is back in · agent · CV-2b's join decides whether a removed person may rejoin.
 - **Who pins:** whoever can post there (managers only in an announcement channel) and holders of "Manage any channel" · agent (round-3 "Poster").
-- **Edit needs the author's role to still post;** archived channels behave as in v1 for edit, delete, react and pin (CV-2b owns archive) · agent.
+- **Edit needs the author's role to still post** · agent.
 - **Activity rows only on a change** (a resent react, pin, delete or restore writes none); entity `chat_channel`, payload `message_id` (+ `key`/`on`, `pinned`) · agent.
 - **`chat_op_agent_post`: one change** · agent · the default flipped to v2, so it converts its v1 markup and writes `format_version = 2` (and quotes its thread root); CV-21 redefines it.
 - **Excerpt:** the stored form's first 140 characters without half a reference (CV-1's format, drawn by CV-11) · agent.
@@ -63,7 +66,7 @@
 
 ## For later blocks
 
-- **CV-2b:** `chat_op__reader(channel)` is the plan-free guard for mark_read / mark_unread / set_prefs / leave; the guards now raise `42501` / `P0002`; extend `chat_ops.test.sql` (cast and helpers are there; `test.msg`/`test.acts` are VOLATILE on purpose). `chat_unread_counts` should count replies (they are stream messages now).
+- **CV-2b:** `chat_op_remove_member` must stamp `removed_by` (send reads it to refuse a removed person); `chat_op__reader(channel)` is the plan-free guard for mark_read / mark_unread / set_prefs / leave; the guards now raise `42501` / `P0002`; extend `chat_ops.test.sql` (cast and helpers are there; `test.msg`/`test.acts` are VOLATILE on purpose). `chat_unread_counts` should count replies (they are stream messages now).
 - **CV-3:** v2 send is `chat_op_send(p_id, p_channel_id, p_body, p_reply_to_id)`; a resend returns the stored row; `22023 That message id is already used.` means the id is someone else's; a length refusal carries `DETAIL` `{"length":…,"max":8000}`. `client_id` is no longer written.
 - **CV-5:** replace the bell block at the end of `chat_op_send` (and add edit's first-time mentions there); team mentions are stored, not expanded.
 - **CV-7a:** draw the `@channel` pill only when `mentions_everyone` (otherwise it is the typed text); a deleted row's body is blank after the window.

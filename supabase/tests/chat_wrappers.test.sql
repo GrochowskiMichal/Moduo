@@ -115,6 +115,8 @@ BEGIN
   PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = format('now moduo://person/%s *later*', test.id('A'))
                   AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('A')] AND NOT (test.msg(v_id)).mentions_everyone,
     'edit v1: converted, mentions read again', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'not mine', p_mentioned_user_ids => '{}')$q$, v_id));
+  PERFORM test.ok(v = '42501 You can only edit your own messages.', 'edit v1: the v2 rules hold (only the author edits)', v);
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'v2 _as typed_')$q$, v_id));
   PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = 'v2 _as typed_',
     'edit: two named arguments mean the v2 op (no conversion, no ambiguity)', v);

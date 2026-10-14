@@ -6,7 +6,7 @@
 --
 -- What it does:
 --   1. New rows are v2: format_version defaults to 2 (the conversion refuses from
---      here on).
+--      here on). A message records who deleted it (deleted_by): the Undo is theirs.
 --   2. chat_has_cap: a person who isn't in the workspace has no chat capability.
 --   3. The ops' guards answer with codes the client can tell from a lost
 --      connection: 42501 (not allowed), P0002 (gone), 22023 (bad input).
@@ -17,7 +17,9 @@
 --      moves to the message. chat_op_edit(message, body). chat_op_delete hides at
 --      once, chat_op_restore undoes it within the window, and the minute job
 --      chat-blank-deleted blanks what's left. chat_op_react(message, key, on),
---      chat_op_pin(message, pinned). Each of edit, delete, restore, react and pin
+--      chat_op_pin(message, pinned). An archived conversation is read-only (a
+--      message can still be deleted); someone a manager removed doesn't post
+--      their way back in. Each of edit, delete, restore, react and pin
 --      logs one attributed activity row with ids only; a plain send and typing
 --      log none.
 --   6. The v1 signatures of send, edit and react stay one release as wrappers
@@ -32,6 +34,13 @@ SET LOCAL lock_timeout = '5s';
 -- ── 1. New rows are v2 ───────────────────────────────────────────────────────
 
 ALTER TABLE public.chat_messages ALTER COLUMN format_version SET DEFAULT 2;
+
+-- Who deleted a message: its Undo belongs to them (or to someone who may delete
+-- others' messages), never to an author whose message was taken down.
+ALTER TABLE public.chat_messages
+  ADD COLUMN IF NOT EXISTS deleted_by uuid REFERENCES auth.users (id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS chat_messages_deleted_by_idx
+  ON public.chat_messages (deleted_by) WHERE deleted_by IS NOT NULL;
 
 -- At most 100 live pins per conversation, counted on every pin.
 CREATE INDEX IF NOT EXISTS chat_messages_pinned_idx
@@ -735,10 +744,16 @@ BEGIN
                   WHERE tm.id = u AND tm.workspace_id = v_channel.workspace_id AND tm.deleted_at IS NULL);
   v_everyone := v_everyone AND public.chat_has_cap(v_channel.workspace_id, v_me, 'mention_everyone');
 
-  -- Posting in a public channel joins it (back).
+  -- Posting in a public channel joins it, or back after leaving it; someone a
+  -- manager removed doesn't post their way back in.
+  IF EXISTS (SELECT 1 FROM public.chat_members mb
+              WHERE mb.channel_id = p_channel_id AND mb.user_id = v_me
+                AND mb.left_at IS NOT NULL AND mb.removed_by IS NOT NULL) THEN
+    RAISE EXCEPTION 'You were removed from this conversation.' USING ERRCODE = '42501';
+  END IF;
   INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
   VALUES (p_channel_id, v_me, v_channel.workspace_id)
-  ON CONFLICT (channel_id, user_id) DO UPDATE SET left_at = NULL, removed_by = NULL
+  ON CONFLICT (channel_id, user_id) DO UPDATE SET left_at = NULL
    WHERE public.chat_members.left_at IS NOT NULL;
 
   BEGIN
@@ -842,6 +857,9 @@ BEGIN
   IF v_msg.author_id IS DISTINCT FROM v_me OR v_msg.kind <> 'message' THEN
     RAISE EXCEPTION 'You can only edit your own messages.' USING ERRCODE = '42501';
   END IF;
+  IF v_channel.archived_at IS NOT NULL THEN
+    RAISE EXCEPTION 'This channel is archived.' USING ERRCODE = '42501';
+  END IF;
   IF NOT public.chat_has_cap(v_channel.workspace_id, v_me, 'post') THEN
     RAISE EXCEPTION 'Your role can''t post in chat.' USING ERRCODE = '42501';
   END IF;
@@ -920,7 +938,7 @@ BEGIN
     RETURN v_msg;
   END IF;
   -- The clock, not the transaction's start: the Undo window is measured on it.
-  UPDATE public.chat_messages SET deleted_at = clock_timestamp()
+  UPDATE public.chat_messages SET deleted_at = clock_timestamp(), deleted_by = auth.uid()
    WHERE id = p_message_id
   RETURNING * INTO v_msg;
   IF v_msg.parent_id IS NOT NULL THEN
@@ -947,16 +965,22 @@ BEGIN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   PERFORM public.chat_op__channel(v_msg.channel_id);
-  IF NOT public.chat__may_delete(v_msg, auth.uid()) THEN
-    RAISE EXCEPTION 'You can only delete your own messages.' USING ERRCODE = '42501';
-  END IF;
   IF v_msg.deleted_at IS NULL THEN
+    IF NOT public.chat__may_delete(v_msg, auth.uid()) THEN
+      RAISE EXCEPTION 'You can only delete your own messages.' USING ERRCODE = '42501';
+    END IF;
     RETURN v_msg;
+  END IF;
+  -- The Undo is the deleter's (while they may still delete it), or anyone's who
+  -- may delete others' messages: an author can't undo a delete by someone else.
+  IF NOT ((v_msg.deleted_by = auth.uid() AND public.chat__may_delete(v_msg, auth.uid()))
+          OR public.chat_has_cap(v_msg.workspace_id, auth.uid(), 'delete_others')) THEN
+    RAISE EXCEPTION 'Only the person who deleted it can undo that.' USING ERRCODE = '42501';
   END IF;
   IF clock_timestamp() - v_msg.deleted_at > interval '10 seconds' THEN
     RAISE EXCEPTION 'It''s too late to undo that delete.' USING ERRCODE = '22023';
   END IF;
-  UPDATE public.chat_messages SET deleted_at = NULL
+  UPDATE public.chat_messages SET deleted_at = NULL, deleted_by = NULL
    WHERE id = p_message_id
   RETURNING * INTO v_msg;
   IF v_msg.parent_id IS NOT NULL THEN
@@ -1029,7 +1053,9 @@ BEGIN
   IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
-  PERFORM public.chat_op__reader(v_msg.channel_id);
+  IF (public.chat_op__reader(v_msg.channel_id)).archived_at IS NOT NULL THEN
+    RAISE EXCEPTION 'This channel is archived.' USING ERRCODE = '42501';
+  END IF;
   IF v_msg.kind <> 'message' THEN
     RAISE EXCEPTION 'Only a message takes reactions.' USING ERRCODE = '22023';
   END IF;
@@ -1081,6 +1107,9 @@ BEGIN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   v_channel := public.chat_op__channel(v_msg.channel_id);
+  IF v_channel.archived_at IS NOT NULL THEN
+    RAISE EXCEPTION 'This channel is archived.' USING ERRCODE = '42501';
+  END IF;
   IF v_msg.kind <> 'message' THEN
     RAISE EXCEPTION 'Only a message can be pinned.' USING ERRCODE = '22023';
   END IF;
@@ -1364,6 +1393,8 @@ BEGIN
   -- Typing: people only, never a key (the service role) or anon.
   REVOKE ALL ON FUNCTION public.chat_op_typing(uuid, uuid, boolean) FROM PUBLIC, anon, service_role;
   GRANT EXECUTE ON FUNCTION public.chat_op_typing(uuid, uuid, boolean) TO authenticated;
+  -- The share guard is a trigger function: nobody calls it directly.
+  REVOKE ALL ON FUNCTION public.share_chat_message_guard() FROM PUBLIC, anon, authenticated;
   -- The app's post: the service role only (the connector), as before.
   REVOKE ALL ON FUNCTION public.chat_op_agent_post(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
   GRANT EXECUTE ON FUNCTION public.chat_op_agent_post(uuid, uuid, text, uuid) TO service_role;

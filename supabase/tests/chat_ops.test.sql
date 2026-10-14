@@ -333,8 +333,13 @@ BEGIN
    WHERE id = test.mid('m1');
   v := test.as_user('D', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('m1')));
   PERFORM test.ok(v = 'ok 1' AND test.acts('m1', 'chat.message_delete', 'D') = 1, 'delete: an admin deletes B''s message', v);
+  PERFORM test.ok((test.msg('m1')).deleted_by = test.id('D'), 'delete: the row says who deleted it');
   v := test.as_user('B', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('m1')));
-  PERFORM test.ok(v = 'ok 1', 'restore: its author can undo it too', v);
+  PERFORM test.ok(v = '42501 Only the person who deleted it can undo that.' AND (test.msg('m1')).deleted_at IS NOT NULL,
+    'restore: the author can''t undo a delete by someone else', v);
+  v := test.as_user('D', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('m1')));
+  PERFORM test.ok(v = 'ok 1' AND (test.msg('m1')).deleted_at IS NULL AND (test.msg('m1')).deleted_by IS NULL,
+    'restore: the admin who deleted it can', v);
   v := test.as_user('D', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('m1')));
   UPDATE public.chat_messages SET deleted_at = clock_timestamp() - interval '20 seconds' WHERE id = test.mid('m1');
   v := test.as_user('D', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('m1')));
@@ -359,6 +364,66 @@ BEGIN
   PERFORM test.ok(test.send('C', 'Q', 'r5', 'still in the chain', 'r2') LIKE 'ok %'
                   AND (test.msg('r5')).parent_id = test.mid('root') AND (test.msg('root')).reply_count = 3,
     'chain: a reply to a live reply still joins the deleted root''s chain');
+END;
+$$;
+
+-- ── Archived, deleted, left and removed ─────────────────────────────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'old-room', '', false, ARRAY[%L, %L]::uuid[])$q$,
+    test.id('W'), test.id('B'), test.id('C')));
+  INSERT INTO test.ids SELECT 'OLD', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'old-room';
+  PERFORM test.ok(test.send('B', 'OLD', 'old1', 'before the archive') LIKE 'ok %'
+                  AND test.send('C', 'OLD', 'old2', 'me too') LIKE 'ok %', 'setup: B and C write in OLD');
+
+  -- Removed by a manager: no posting back in; leaving on your own and posting rejoins.
+  UPDATE public.chat_members SET left_at = now(), removed_by = test.id('A')
+   WHERE channel_id = test.ref('OLD') AND user_id = test.id('C');
+  v := test.send('C', 'OLD', 'old3', 'let me back in');
+  PERFORM test.ok(v = '42501 You were removed from this conversation.' AND test.msg('old3') IS NULL
+                  AND (SELECT left_at FROM public.chat_members WHERE channel_id = test.ref('OLD') AND user_id = test.id('C')) IS NOT NULL,
+    'removed: C, removed from the public OLD, can''t post their way back in', v);
+  UPDATE public.chat_members SET left_at = now() WHERE channel_id = test.ref('OLD') AND user_id = test.id('B');
+  v := test.send('B', 'OLD', 'old4', 'back again');
+  PERFORM test.ok(v = 'ok 1'
+                  AND (SELECT left_at FROM public.chat_members WHERE channel_id = test.ref('OLD') AND user_id = test.id('B')) IS NULL,
+    'left: B, who left OLD, posts and is back in', v);
+
+  -- Removed from a private conversation: nothing there any more, own messages included.
+  UPDATE public.chat_members SET left_at = now(), removed_by = test.id('A')
+   WHERE channel_id = test.ref('P') AND user_id = test.id('B');
+  PERFORM test.ok(test.send('B', 'P', 'p2', 'still here?') = '42501 You''re not a member of this conversation.'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('p1')))
+                        = '42501 You''re not a member of this conversation.',
+    'removed: B, removed from the private P, can''t post or react there');
+  UPDATE public.chat_members SET left_at = NULL, removed_by = NULL
+   WHERE channel_id = test.ref('P') AND user_id = test.id('B');
+
+  -- Archived: read-only (a message can still be deleted).
+  v := test.as_user('A', format($q$SELECT public.chat_op_archive_channel(%L, true)$q$, test.ref('OLD')));
+  PERFORM test.ok(v = 'ok 1', 'setup: A archives OLD', v);
+  PERFORM test.ok(test.send('B', 'OLD', 'old5', 'after the archive') = '42501 This channel is archived.'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_edit(%L::uuid, 'edited late'::text)$q$, test.mid('old1')))
+                        = '42501 This channel is archived.'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('old2')))
+                        = '42501 This channel is archived.'
+                  AND test.as_user('A', format($q$SELECT public.chat_op_pin(%L::uuid, true)$q$, test.mid('old1')))
+                        = '42501 This channel is archived.',
+    'archived: no sending, editing, reacting or pinning');
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('old1'))) = 'ok 1',
+    'archived: the author can still delete their message');
+
+  -- Deleted: gone for everyone.
+  UPDATE public.chat_channels SET deleted_at = now(), deleted_by = test.id('A') WHERE id = test.ref('OLD');
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_restore(%L::uuid)$q$, test.mid('old1')))
+                        = '42501 You''re not a member of this conversation.'
+                  AND test.as_user('C', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('old2')))
+                        = '42501 You''re not a member of this conversation.'
+                  AND test.as_user('D', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('old2')))
+                        = '42501 You''re not a member of this conversation.',
+    'deleted channel: nobody writes there, an admin included');
 END;
 $$;
 
@@ -576,6 +641,7 @@ BEGIN
   PERFORM test.ok(v_bad IS NULL, 'definers: search_path pinned, no PUBLIC or anon EXECUTE', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad
     FROM unnest(ARRAY['chat__mentions(text)', 'chat__mentions_inline(text)', 'chat__mentions_ref_at(text)',
+                      'share_chat_message_guard()',
                       'chat__excerpt(text)', 'chat__chain_refresh(uuid)', 'chat__may_delete(public.chat_messages, uuid)',
                       'chat__blank_deleted(integer)', 'chat_op__guard(uuid)', 'chat_op__channel(uuid)',
                       'chat_op__reader(uuid)', 'chat_has_cap(uuid, uuid, text)', 'chat_op_agent_post(uuid, uuid, text, uuid)']) AS f
