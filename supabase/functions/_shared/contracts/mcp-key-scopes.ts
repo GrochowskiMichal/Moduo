@@ -51,6 +51,7 @@ export const MCP_KEY_MODULE_LABELS: Readonly<Record<McpKeyModule, string>> = {
  * guarded by that module's key scope:
  * - Calendar's task-block tools move and complete the task itself (tasks_op_*).
  * - notes_link creates a spine link (links_op_create, the Links guard).
+ * - tasks_comment adds a spine comment (comments_op_add, the Links guard; TV-D16).
  */
 export const MCP_TOOL_NEEDS: ReadonlyArray<{
   tool: string;
@@ -63,6 +64,7 @@ export const MCP_TOOL_NEEDS: ReadonlyArray<{
   { tool: "calendar_complete_block", module: "calendar", access: "edit", needs: "tasks" },
   { tool: "calendar_roll_forward", module: "calendar", access: "edit", needs: "tasks" },
   { tool: "notes_link", module: "notes", access: "edit", needs: "links" },
+  { tool: "tasks_comment", module: "tasks", access: "edit", needs: "links" },
 ];
 
 /** The other modules a tool needs at Edit (empty for most tools). */

@@ -81,6 +81,19 @@ function fakeRuntime(tasks: Task[], opts: { failStatus?: boolean } = {}) {
     updateTask: rs.fn(({ taskId, patch }: { taskId: string; patch: Partial<Task> }) =>
       write(`update:${taskId}`, taskId, patch),
     ),
+    // The move op (TV-D8): the server carries the subtasks with their parent
+    // in one transaction and answers with every row it changed.
+    opUpdateTask: rs.fn(async ({ taskId, patch }: { taskId: string; patch: Partial<Task> }) => {
+      const parent = await write(`op:${taskId}`, taskId, patch);
+      const carried = [...rows.values()]
+        .filter((t) => t.parentId === taskId)
+        .map((t) => {
+          const next = { ...t, bucketId: parent.bucketId };
+          rows.set(t.id, next);
+          return next;
+        });
+      return [parent, ...carried];
+    }),
     opSetStatus: rs.fn(
       async ({
         taskId,
@@ -152,7 +165,7 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
   });
 
   it("a project move brings every subtask once — Won't do and done ones too — to the project's end", async () => {
-    const { hook, api } = await mount([
+    const { hook, api, rows } = await mount([
       task("parent", "0000000010"),
       task("open", "0000000020", { parentId: "parent" }),
       task("wont", "0000000030", { parentId: "parent", status: "archived" }),
@@ -163,17 +176,17 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
     await act(async () => {
       await hook.result.current.dropTask({ taskId: "parent", bucketId: "p2" }, "Moved to p2");
     });
-    const calls = api.updateTask.mock.calls.map((c) => c[0]);
-    // One write per row: no second write for a subtask (#329's double write).
-    expect(calls.map((c) => c.taskId).sort()).toEqual(["done", "open", "parent", "wont"]);
-    for (const c of calls.filter((c) => c.taskId !== "parent")) {
-      expect(c.patch).toEqual({ bucketId: "p2" });
-    }
-    const parent = calls.find((c) => c.taskId === "parent");
+    // One move op for the parent: the server carries the subtasks (TV-U10:
+    // no write per subtask, so one you can only view never fails the drop).
+    expect(api.updateTask).not.toHaveBeenCalled();
+    const calls = api.opUpdateTask.mock.calls.map((c) => c[0]);
+    expect(calls.map((c) => c.taskId)).toEqual(["parent"]);
+    const parent = calls[0];
     // After p2's last task (x), before what follows it (y).
     expect(parent?.patch.bucketId).toBe("p2");
     const pos = parent?.patch.position as string;
     expect(pos > "0000000050" && pos < "0000000060").toBe(true);
+    for (const id of ["open", "wont", "done"]) expect(rows.get(id)?.bucketId).toBe("p2");
   });
 
   it("a failed drop says so and offers no Undo (#329's toast on a failed move)", async () => {

@@ -9,6 +9,7 @@ import {
   deriveNotificationFeeds,
   groupNotifications,
   type NotificationItem,
+  noticeCommentIds,
   notificationDeepLink,
   notificationDeepLinkNoun,
   notificationSubject,
@@ -16,6 +17,7 @@ import {
   partitionBySource,
   unnamedTaskTargets,
   unreadCount,
+  withNoticeDetails,
 } from "./notifications";
 
 function item(
@@ -183,7 +185,7 @@ describe("deriveNotificationFeeds", () => {
   });
 
   it("drops muted event types from active AND history (AC10)", () => {
-    const isEnabled = (op: string) => op !== "tasks.assigned";
+    const isEnabled = (row: { op: string }) => row.op !== "tasks.assigned";
     const feeds = deriveNotificationFeeds(
       [
         item({ id: "keep", createdAt: "x", workspaceId: "w1", op: "comments.add" }),
@@ -396,6 +398,35 @@ describe("notificationDeepLink", () => {
     expect(notificationDeepLink(g2)).toBeNull();
   });
 
+  // AT-3 (AT3-4): the 80/95% storage alerts hang on the workspace; they open
+  // Settings → Storage (its largest files), never a dead end.
+  it("opens Settings → Storage from a storage alert", () => {
+    for (const op of ["attachments.storage_80", "attachments.storage_95"]) {
+      const [g] = groupNotifications([
+        item({ id: op, createdAt: "x", op, targetType: "workspace", targetId: "w1" }),
+      ]);
+      // In the workspace that raised it: the pool is its owner's.
+      expect(notificationDeepLink(g)).toEqual({
+        route: "/settings",
+        entityType: "settings",
+        entityId: "storage",
+        workspaceId: "w1",
+      });
+    }
+    const [other] = groupNotifications([
+      item({
+        id: "o",
+        createdAt: "x",
+        op: "attachments.storage_95",
+        workspaceId: "w2",
+        targetType: "workspace",
+        targetId: "w2",
+      }),
+    ]);
+    expect(notificationDeepLink(other)?.workspaceId).toBe("w2");
+    expect(notificationDeepLinkNoun("settings")).toBe("Storage settings");
+  });
+
   // DF-9: email snooze/follow-up notifications (entity_type='email_thread') must
   // deep-link the thread, not dead-end. entityType flows to the entity-open host,
   // which resolves email_thread → /email?thread=<id> (DF-2).
@@ -414,6 +445,196 @@ describe("notificationDeepLink", () => {
       entityType: "email_thread",
       entityId: "th1",
     });
+  });
+});
+
+describe("a team notice (TV-D13)", () => {
+  it("is one card per notice, names its one task and opens it, not the Inbox it hangs on", () => {
+    const groups = groupNotifications([
+      item({
+        id: "a",
+        createdAt: "2",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: {
+          task_id: "t9",
+          task_ids: ["t9"],
+          count: 1,
+          title: "Hero image",
+          team_name: "Design",
+        },
+      }),
+      item({
+        id: "b",
+        createdAt: "1",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: {
+          task_id: "t7",
+          task_ids: ["t7", "t8"],
+          count: 2,
+          title: "Icons",
+          team_name: "Development",
+        },
+      }),
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(notificationSubject(groups[0])).toBe("Hero image");
+    expect(notificationDeepLink(groups[0])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t9",
+    });
+    // Several routed tasks are counted, not named after the first.
+    expect(notificationSubject(groups[1])).toBeNull();
+    expect(notificationDeepLink(groups[1])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t7",
+    });
+  });
+});
+
+describe("an agent's notice (TV-D16)", () => {
+  it("names its task only through the registry, which answers only for what the reader sees", () => {
+    const groups = groupNotifications([
+      item({
+        id: "a1",
+        createdAt: "2030-01-01T10:00:00Z",
+        op: "tasks.agent_status",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorType: "api_key",
+        actorLabel: "Claude",
+        payload: { task_id: "t5", state: "ready", session_id: "s1" },
+      }),
+    ]);
+    expect(unnamedTaskTargets(groups)).toEqual(["t5"]);
+    expect(notificationSubject(groups[0])).toBeNull();
+    expect(notificationSubject(groups[0], new Map([["t5", "Release notes"]]))).toBe(
+      "Release notes",
+    );
+    // The Inbox it hangs on is never its name.
+    expect(notificationSubject(groups[0], new Map([["inbox-me", "Inbox"]]))).toBeNull();
+    expect(notificationDeepLink(groups[0])).toEqual({
+      route: "/tasks",
+      entityType: "task",
+      entityId: "t5",
+    });
+  });
+
+  it("reminders and team notices name their task the same way; several routed stay counted", () => {
+    const groups = groupNotifications([
+      item({
+        id: "r1",
+        createdAt: "2030-01-01T09:00:00Z",
+        op: "tasks.reminder",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorType: "agent",
+        actorLabel: "Moduo",
+        payload: { task_id: "t6", reminder_id: "rem1" },
+      }),
+      item({
+        id: "g1",
+        createdAt: "2030-01-01T08:00:00Z",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        payload: { task_id: "t7", task_ids: ["t7"], count: 1, team_name: "Development" },
+      }),
+      item({
+        id: "g2",
+        createdAt: "2030-01-01T07:00:00Z",
+        op: "tasks.routed",
+        targetType: "bucket",
+        targetId: "inbox-me",
+        actorId: "u3",
+        payload: { task_id: "t8", task_ids: ["t8", "t9"], count: 2, team_name: "Design" },
+      }),
+    ]);
+    expect(unnamedTaskTargets(groups).sort()).toEqual(["t6", "t7"]);
+    const labels = new Map([
+      ["t6", "Call the venue"],
+      ["t7", "Icons"],
+      ["t8", "Never named"],
+    ]);
+    const subjects = groups.map((g) => notificationSubject(g, labels));
+    expect(subjects).toContain("Call the venue");
+    expect(subjects).toContain("Icons");
+    expect(subjects).not.toContain("Never named");
+  });
+});
+
+describe("notices name their items by id (TV-D16)", () => {
+  const groups = () =>
+    groupNotifications([
+      item({
+        id: "c1",
+        createdAt: "2030-01-01T10:00:00Z",
+        op: "comments.add",
+        targetId: "t1",
+        payload: { comment_id: "cm1", mentioned_user_ids: ["me"] },
+      }),
+      item({
+        id: "u1",
+        createdAt: "2030-01-01T09:00:00Z",
+        op: "tasks.unblocked",
+        targetId: "t2",
+        payload: { notify_user_ids: ["me"], blocker_id: "t9" },
+      }),
+      item({
+        id: "a1",
+        createdAt: "2030-01-01T08:00:00Z",
+        op: "tasks.assigned",
+        targetId: "t3",
+        payload: { mentioned_user_ids: ["me"] },
+      }),
+    ]);
+
+  it("asks for each card's task, the blocker and the comment, by id", () => {
+    expect(unnamedTaskTargets(groups()).sort()).toEqual(["t1", "t2", "t3", "t9"]);
+    expect(noticeCommentIds(groups())).toEqual(["cm1"]);
+  });
+
+  it("fills in only what the reader may see", () => {
+    const seen = withNoticeDetails(groups(), {
+      labels: new Map([
+        ["t1", "Brief"],
+        ["t2", "Launch"],
+        ["t3", "Deck"],
+        ["t9", "Copy review"],
+      ]),
+      excerpts: new Map([["cm1", "Looks good"]]),
+    });
+    const lines = seen.map((g) =>
+      notificationSummary(
+        g,
+        "me",
+        notificationSubject(
+          g,
+          new Map([
+            ["t1", "Brief"],
+            ["t2", "Launch"],
+            ["t3", "Deck"],
+          ]),
+        ),
+      ),
+    );
+    expect(lines).toContain("Mike commented on “Brief”: “Looks good”");
+    expect(lines).toContain("Mike finished “Copy review”, unblocking “Launch”");
+    expect(lines).toContain("Mike assigned “Deck” to you");
+
+    // Lost access: the registry and the comments answer nothing.
+    const unseen = withNoticeDetails(groups(), { labels: new Map(), excerpts: new Map() });
+    const quiet = unseen.map((g) =>
+      notificationSummary(g, "me", notificationSubject(g, new Map())),
+    );
+    expect(quiet).toContain("Mike left a comment");
+    expect(quiet).toContain("Mike unblocked this");
+    expect(quiet).toContain("Mike assigned this to you");
   });
 });
 

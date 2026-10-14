@@ -1,7 +1,8 @@
 import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
 import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
 import {
@@ -14,6 +15,7 @@ import {
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { FocusRunFollower } from "../../features/focus/focus-run-follower";
 import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
   dispatchLayoutPanelsApply,
@@ -25,9 +27,10 @@ import {
   writePanelsMap,
 } from "../../features/layout/panel-events";
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
-import { dispatchOpenSettings } from "../../features/settings/settings-events";
+import { dispatchOpenSettings, isSettingsSectionId } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { ReferencesProvider } from "../../features/spine/references/provider";
+import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 import { initialsOf } from "../../lib/initials";
@@ -60,7 +63,9 @@ import { GlobalCommandPalette } from "./global-command-palette";
 import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
+import { NoticeDeliveries } from "./notice-deliveries";
 import { TasksSyncStatus } from "./sync-status";
+import { TimeRegionPrompt } from "./time-region-prompt";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
 
 type ModuleTabProps = {
@@ -118,7 +123,15 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   // useShortcut wiring here for the rest.
   useShortcut("new-item", () => dispatchCreateNew());
   const { runtime, userEmail, userId } = useAuth();
-  const { loading, modulePermissions, selectedWorkspaceId } = useWorkspace();
+  // AT-2: pending uploads resume for whoever is signed in.
+  useUploadQueueBoot(userId ?? null, runtime);
+  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace } =
+    useWorkspace();
+  // What a deep link to another workspace needs, without re-adding the listener.
+  const workspaceNav = useRef({ selectedWorkspaceId, workspaces, selectWorkspace });
+  useLayoutEffect(() => {
+    workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
+  });
   // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
   const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
@@ -228,7 +241,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onEntityOpen = (event: Event) => {
-      const detail = (event as CustomEvent<{ type?: string; id?: string; to?: string }>).detail;
+      const detail = (
+        event as CustomEvent<{ type?: string; id?: string; to?: string; workspaceId?: string }>
+      ).detail;
       // A dashboard widget header opens its whole module with an explicit route
       // (no entity id) — navigate directly, bypassing the id-based route map.
       if (detail?.to) {
@@ -239,6 +254,23 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       // or without one (an id-less "open my inbox" from the widget) — let
       // entityOpenTarget decide (it returns null for id-less non-email → toast).
       if (!detail?.type) return;
+      // A settings section, by id (the storage alerts open Settings → Storage, AT-3),
+      // in the workspace the link names when it's one of yours: a storage alert
+      // is about that workspace's owner's pool.
+      if (detail.type === "settings") {
+        if (!isSettingsSectionId(detail.id)) return;
+        const nav = workspaceNav.current;
+        const target = detail.workspaceId;
+        if (
+          target &&
+          target !== nav.selectedWorkspaceId &&
+          nav.workspaces.some((w) => w.id === target)
+        ) {
+          nav.selectWorkspace(target);
+        }
+        dispatchOpenSettings({ section: detail.id });
+        return;
+      }
       const target = entityOpenTarget(detail.type, detail.id ?? "");
       if (!target) {
         toast("Nothing to open yet", {
@@ -535,10 +567,26 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             {/* The shared Tasks store for this workspace, held all session, and its
                 quiet sync state: Offline / "2 waiting to sync" (TV-D11a). */}
             <TasksSyncStatus />
+            {/* The run rules + claims for the one time engine, app-wide (TV-F6;
+                renders nothing). */}
+            <FocusRunFollower />
             {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
             <FocusSessionChip />
-            <HelpMenu />
+            <HelpMenu
+              onWhatsInTasks={
+                modulePermissions.tasks === "none"
+                  ? undefined
+                  : () => {
+                      // Tasks' welcome (TV-U17), on /tasks or once it opens.
+                      requestTasksWelcome();
+                      if (pathname !== "/tasks") void navigate({ to: "/tasks" });
+                    }
+              }
+            />
             <NotificationCenter />
+            <NoticeDeliveries />
+            {/* Asks once when this device is in another time zone (TV-D14). */}
+            <TimeRegionPrompt />
             <UserMenu
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}

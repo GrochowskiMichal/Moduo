@@ -7,3 +7,9 @@
 
 # A provider key in a since-removed backup file (removed 2026-10-07 in b7645011), rotated at the provider.
 795f4c3c944630afba9e2f5824dd2a69003716f0:opencode.json.openchamber.backup:generic-api-key:10
+
+# A test fixture uses the Push API's published example subscription key (a public sample value, not a credential).
+d10c10b76c14e0369549d63c575d912e3840f24b:supabase/tests/notifications.test.sql:generic-api-key:287
+
+# A sign-in email test uses a made-up token hash (a fixture value, not a credential).
+d6447e9e326d7f8a3fc1fd2980b92efe61498c61:supabase/functions/auth-email-hook/handler.test.ts:generic-api-key:10

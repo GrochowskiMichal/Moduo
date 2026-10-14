@@ -1,6 +1,8 @@
 import {
   Building2,
   CreditCard,
+  Globe,
+  HardDrive,
   Info,
   KeyRound,
   type LucideIcon,
@@ -31,6 +33,8 @@ import { BillingSection } from "./sections/billing-section";
 import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
+import { StorageSection } from "./sections/storage-section";
+import { TimeRegionSection } from "./sections/time-region-section";
 import { WorkspaceSection } from "./sections/workspace-section";
 import {
   clearPendingOpenSettings,
@@ -55,6 +59,7 @@ const SECTIONS: SectionEntry[] = [
   { id: "billing", label: "Billing", icon: CreditCard, Component: BillingSection },
   { id: "workspace", label: "Workspace", icon: Building2, Component: WorkspaceSection },
   { id: "access", label: "Members and access", icon: Users, Component: AccessSection },
+  { id: "storage", label: "Storage", icon: HardDrive, Component: StorageSection },
   { id: "integrations", label: "Integrations", icon: Plug, Component: IntegrationsSection },
   { id: "apikeys", label: "API keys", icon: KeyRound, Component: ApiKeysSection },
   {
@@ -63,6 +68,7 @@ const SECTIONS: SectionEntry[] = [
     icon: Sliders,
     Component: PreferencesSection,
   },
+  { id: "timeregion", label: "Time & region", icon: Globe, Component: TimeRegionSection },
   { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
   {
     id: "advanced",
@@ -137,6 +143,13 @@ export function SettingsModal() {
         />
         <DialogPrimitive.Content
           aria-describedby={undefined}
+          onInteractOutside={(e) => {
+            // An Undo toast raised in Settings (a team's delete, TV-D13) is
+            // pressed without closing Settings, like the kit's Dialog does.
+            if (e.target instanceof Element && e.target.closest("[data-sonner-toaster]")) {
+              e.preventDefault();
+            }
+          }}
           className={cn(
             "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
             "w-[min(92vw,1040px)] h-[min(80vh,720px)]",

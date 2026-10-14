@@ -6,6 +6,7 @@
  * return { error: { message: "Desktop only" } } — the UI hides them via capabilities.
  */
 
+import { ATTACHMENTS_BUCKET } from "@contracts/attachments";
 import {
   activityRowSchema,
   attachmentRowSchema,
@@ -22,6 +23,7 @@ import {
   habitRowSchema,
   linkSuggestionRowSchema,
   mapKnownRows,
+  noteFavoriteRowSchema,
   noteRowSchema,
   noteUpdateRowSchema,
   notificationRowSchema,
@@ -33,9 +35,11 @@ import {
   taskRelationRowSchema,
 } from "@contracts/rows";
 import {
+  isAttachmentPreviewMime,
   isOpenTask,
   normalizeAccessChangeResource,
   normalizeAttachmentStatus,
+  normalizeCommentReaction,
   normalizeContentAuthorKind,
   normalizeTaskStatusCategory,
 } from "@contracts/vocabularies";
@@ -78,14 +82,18 @@ import {
   type TimeBlockMap,
   type TrackTimeInput,
 } from "../features/tasks/model";
+import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
+// Any missing table (develop's deploy-gap guard); task-rows' version names the table.
+import { isMissingTableError as isAnyTableMissing, selectFirstDeployedTier } from "./deploy-tiers";
 import type { EntityLink, EntityRecord } from "./entity-links";
 import { readOnlyFetch } from "./min-build";
 import {
   collectTruncations,
   PGRST_MAX_ROWS,
   READ_CAPS,
+  readAfterCursor,
   readPaged,
   TAG_LINKS_SCOPE,
   type Truncation,
@@ -97,14 +105,17 @@ import {
 } from "./prefs-columns";
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
+import { webFocusRuntime } from "./runtime.focus.web";
 import type {
   AttachmentRecord,
   AuthChangeEvent,
   AuthListener,
+  CommentReactionMark,
   EmailAccountRef,
   EmailThreadRef,
   HabitRow,
   IntegrationStatusItem,
+  LargestAttachment,
   LocalAuthState,
   ModuoRuntime,
   OtpSendError,
@@ -113,8 +124,11 @@ import type {
   SpineComment,
   UserPreferences,
 } from "./runtime.types";
+import { createTasksAgents } from "./runtime.web.agents";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
+import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
+import { createTasksViews } from "./runtime.web.views";
 import { deltaCursor } from "./sync/delta-cursor";
 import type {
   AccessChange,
@@ -128,7 +142,9 @@ import type {
 } from "./sync/types";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import {
+  agentSessionRowToModel,
   areaRowToModel,
+  attachmentMarkRowToModel,
   bucketRowToModel,
   commentMarkRowToModel,
   editableTaskFields,
@@ -146,6 +162,7 @@ import {
   taskCreateOpInput,
   taskCreateRow,
   taskCreateRowLegacy,
+  taskCyclesFromJson,
   taskPatchToColumns,
   taskPatchToOpFields,
   taskQueueRowToModel,
@@ -153,13 +170,19 @@ import {
   taskRowToModel,
   taskSessionRowToModel,
   taskTimeAnswerToModel,
+  taskTimeEntryRowToModel,
   taskTimeTotalsRowToModel,
   taskWaitingRowToModel,
   teamMemberRowToModel,
   teamRowToModel,
+  timeReportRowToModel,
+  trackTimeExtras,
   withFieldFallback,
   withoutTvD9Fields,
 } from "./task-rows";
+import { timeRegionPatchToRow, timeRegionRowToModel } from "./time-region";
+import { AttachmentOpError, parseOpDetail } from "./uploads/errors";
+import { uploadObject } from "./uploads/transport";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
 
@@ -372,7 +395,53 @@ function mapAttachmentRow(raw: unknown): AttachmentRecord {
     status: normalizeAttachmentStatus(r.status),
     deletedAt: r.deleted_at ?? null,
     createdAt: r.created_at,
+    objectPath: r.object_path ?? null,
+    previewPath: r.preview_path ?? null,
+    previewMime: isAttachmentPreviewMime(r.preview_mime) ? r.preview_mime : null,
   };
+}
+
+const ATTACHMENT_COLUMNS =
+  "id, entity_type, entity_id, uploader_id, file_name, mime, size_bytes, width, height, status, deleted_at, created_at, object_path, preview_path, preview_mime";
+
+/** One row of `attachments_largest` (AT-3, 20261013272000) → the model. */
+function mapLargestAttachmentRow(raw: unknown): LargestAttachment {
+  const r = raw as Record<string, unknown> | null;
+  if (typeof r?.id !== "string" || typeof r.task_id !== "string") {
+    throw new Error("Malformed largest-files row");
+  }
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    taskTitle: typeof r.task_title === "string" ? r.task_title : "",
+    fileName: typeof r.file_name === "string" ? r.file_name : "file",
+    mime: typeof r.mime === "string" ? r.mime : "application/octet-stream",
+    sizeBytes: Number.isFinite(Number(r.size_bytes)) ? Number(r.size_bytes) : 0,
+    uploaderId: typeof r.uploader_id === "string" ? r.uploader_id : null,
+    createdAt: typeof r.created_at === "string" ? r.created_at : "",
+    canDelete: r.can_delete === true,
+  };
+}
+
+/** An attachments op's answer → the record, or AT-1's refusal as a typed error
+ *  (machine code in the message, numbers as JSON in `details`). */
+function attachmentOpResult(
+  data: unknown,
+  error: { message?: string; details?: unknown; code?: string } | null,
+): AttachmentRecord {
+  if (error) {
+    const code = (error.message ?? "").trim();
+    if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
+    throw new Error(error.message ?? "The attachment operation failed.");
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error("The operation returned nothing.");
+  return mapAttachmentRow(row);
+}
+
+async function currentAccessToken(): Promise<string | null> {
+  const { data } = await supabaseClient.auth.getSession();
+  return data.session?.access_token ?? null;
 }
 
 // ── Capabilities ──────────────────────────────────────────────────────────────
@@ -398,12 +467,29 @@ const tasksStructure = createTasksStructure(supabaseClient, {
   setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
 });
 
+/** TV-D16's agent work and import runs (runtime.web.agents.ts). */
+const tasksAgents = createTasksAgents(supabaseClient, {
+  userId: async () => (await getAuthedUser())?.id ?? null,
+});
+
+/** TV-D15's templates and "Duplicate project…" (runtime.web.templates.ts). */
+const tasksTemplates = createTasksTemplates(supabaseClient, {
+  mapAnswer: (raw) => templateAnswerToModels(raw),
+});
+
+/** TV-U8's saved views (runtime.web.views.ts). */
+const tasksViews = createTasksViews(supabaseClient);
+
 export const webRuntime: ModuoRuntime = {
   capabilities: webCapabilities,
 
   // Chat (specs/chat.md): ops + RLS reads live in runtime.chat.web.ts. Only this
   // file imports it — importing it first elsewhere would hit the module cycle.
   chat: webChatRuntime,
+
+  // Focus runs and claims (TV-F6): ops + own-row reads live in
+  // runtime.focus.web.ts, which only this file imports (the same module cycle).
+  focus: webFocusRuntime,
 
   auth: {
     async getLocalAuthState() {
@@ -913,14 +999,21 @@ export const webRuntime: ModuoRuntime = {
     // MCP connector keys (docs/moduo-mcp-connector.md). Explicit column list —
     // key_hash is never client-readable (column-level grant excludes it).
     async listApiKeys(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("workspace_api_keys")
-        .select("id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at")
-        .eq("workspace_id", workspaceId)
-        .is("revoked_at", null)
-        .order("created_at", { ascending: false });
+      const columns =
+        "id, workspace_id, name, key_prefix, scopes, created_by, created_at, last_used_at";
+      const list = (select: string) =>
+        supabaseClient
+          .from("workspace_api_keys")
+          .select(select)
+          .eq("workspace_id", workspaceId)
+          .is("revoked_at", null)
+          .order("created_at", { ascending: false });
+      let { data, error } = await list(`${columns}, expires_at`);
+      // 42703 = expires_at isn't on this backend yet (migration 20261009210000
+      // not applied): list the keys without it rather than lose the whole list.
+      if (error?.code === "42703") ({ data, error } = await list(columns));
       if (error) throw new Error(error.message);
-      return (data ?? []).map((row) => ({
+      return ((data ?? []) as unknown as Array<Record<string, any>>).map((row) => ({
         id: row.id,
         workspaceId: row.workspace_id,
         name: row.name,
@@ -929,13 +1022,15 @@ export const webRuntime: ModuoRuntime = {
         createdBy: row.created_by ?? null,
         createdAt: row.created_at,
         lastUsedAt: row.last_used_at ?? null,
+        expiresAt: row.expires_at ?? null,
       }));
     },
-    async createApiKey({ workspaceId, name, scopes }) {
+    async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
       const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
         p_workspace_id: workspaceId,
         p_name: name,
         p_scopes: scopes,
+        ...(expiresInDays != null ? { p_expires_in_days: expiresInDays } : {}),
       });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
@@ -949,6 +1044,7 @@ export const webRuntime: ModuoRuntime = {
         createdBy: (await getAuthedUser())?.id ?? null,
         createdAt: row.created_at,
         lastUsedAt: null,
+        expiresAt: row.expires_at ?? null,
         secret: row.secret,
       };
     },
@@ -1015,6 +1111,9 @@ export const webRuntime: ModuoRuntime = {
     async listMeta(workspaceId) {
       const V2_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
+      // NR-1 columns ride on top of v2; until that migration is applied the
+      // v2 read still works fully (not degraded) and sections derive Inbox.
+      const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -1030,23 +1129,14 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      const res = await query(V2_COLS);
-      if (!res.error) {
-        return {
-          notes: mapKnownRows(res.rows, mapNoteRow),
-          degraded: false,
-          truncated: collectTruncations(res.truncation),
-        };
-      }
+      const { res, tier } = await selectFirstDeployedTier([NR1_COLS, V2_COLS, LEGACY_COLS], query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
-      if (res.error.code !== "42703") throw new Error(res.error.message);
-      const legacy = await query(LEGACY_COLS);
-      if (legacy.error) throw new Error(legacy.error.message);
+      if (res.error) throw new Error(res.error.message);
       return {
-        notes: mapKnownRows(legacy.rows, mapNoteRow),
-        degraded: true,
-        truncated: collectTruncations(legacy.truncation),
+        notes: mapKnownRows(res.rows, mapNoteRow),
+        degraded: tier === 2,
+        truncated: collectTruncations(res.truncation),
       };
     },
 
@@ -1055,13 +1145,23 @@ export const webRuntime: ModuoRuntime = {
       // reads then only ever makes the snapshot NEWER than the log we hold —
       // applying both stays lossless (Yjs is idempotent). The reverse order
       // could pair a stale snapshot with a log missing its folded tail.
-      const updRes = await supabaseClient
-        .from("note_updates")
-        .select("id, client_id, client_seq, update_b64")
-        .eq("note_id", noteId)
-        .gt("id", sinceUpdateId ?? 0)
-        .order("id", { ascending: true });
-      const updates = updRes.error ? [] : mapKnownRows(updRes.data ?? [], mapNoteUpdateRow);
+      // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
+      // ceiling, so a long log silently lost its tail. A failed page fails
+      // the pull rather than returning a partial log the cursor would skip.
+      const updRes = await readAfterCursor({
+        after: sinceUpdateId ?? 0,
+        idOf: (row: { id: number | string }) => Number(row.id),
+        page: async (after, limit) =>
+          supabaseClient
+            .from("note_updates")
+            .select("id, client_id, client_seq, update_b64")
+            .eq("note_id", noteId)
+            .gt("id", after)
+            .order("id", { ascending: true })
+            .limit(limit),
+      });
+      if (updRes.error) throw new Error(updRes.error.message);
+      const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
 
       const noteRes = await supabaseClient
         .from("notes")
@@ -1131,6 +1231,45 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return mapNoteRow(firstRow(data, "notes_op_set_meta"));
+    },
+
+    async fileNote({ workspaceId, noteId, inInbox, position }) {
+      const { data, error } = await supabaseClient.rpc("notes_op_file", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_in_inbox: inInbox,
+        p_position: position ?? "",
+      });
+      if (error) throw new Error(error.message);
+      return mapNoteRow(firstRow(data, "notes_op_file"));
+    },
+
+    async listFavorites(workspaceId) {
+      const { data, error } = await supabaseClient
+        .from("note_favorites")
+        .select("note_id, position, created_at")
+        .eq("workspace_id", workspaceId)
+        .order("position")
+        .order("created_at");
+      if (error) {
+        // Deploy gap (table not created yet) → no favorites, never a wall.
+        if (isAnyTableMissing(error)) return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows(data ?? [], (raw) => {
+        const r = requireRow(noteFavoriteRowSchema, raw, "note favorite");
+        return { noteId: r.note_id, position: r.position, createdAt: r.created_at };
+      });
+    },
+
+    async setFavorite({ workspaceId, noteId, value, position }) {
+      const { error } = await supabaseClient.rpc("notes_op_set_favorite", {
+        p_workspace_id: workspaceId,
+        p_note_id: noteId,
+        p_value: value,
+        p_position: position ?? null,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async duplicate({ workspaceId, sourceNoteId, position }) {
@@ -1346,6 +1485,8 @@ export const webRuntime: ModuoRuntime = {
         docStateB64: r.docStateB64 ?? null,
         bodyText: r.bodyText ?? "",
         bodyMd: r.bodyMd ?? "",
+        // Omitted (undefined → dropped by JSON) lets the server decide.
+        inInbox: r.inInbox,
       }));
       const { data, error } = await supabaseClient.rpc("notes_op_import", {
         p_workspace_id: workspaceId,
@@ -1509,6 +1650,21 @@ export const webRuntime: ModuoRuntime = {
         throw new Error(error.message);
       }
     },
+    async getTimeRegion() {
+      const { data, error } = await supabaseClient.rpc("user_time_region");
+      // Before TV-D14's migration there is no Time & region to read.
+      if (isMissingFunctionError(error, "user_time_region")) return null;
+      if (error) throw new Error(error.message);
+      return data ? timeRegionRowToModel(data) : null;
+    },
+    async setTimeRegion(patch) {
+      const { data, error } = await supabaseClient.rpc("user_op_set_time_region", {
+        p_patch: timeRegionPatchToRow(patch),
+      });
+      if (isMissingFunctionError(error, "user_op_set_time_region")) return null;
+      if (error) throw new Error(error.message);
+      return data ? timeRegionRowToModel(data) : null;
+    },
     async getMinBuild() {
       const { data, error } = await supabaseClient
         .from("app_settings")
@@ -1561,10 +1717,7 @@ export const webRuntime: ModuoRuntime = {
         build: (opts) =>
           supabaseClient
             .from("attachments")
-            .select(
-              "id, entity_type, entity_id, uploader_id, file_name, mime, size_bytes, width, height, status, deleted_at, created_at",
-              opts,
-            )
+            .select(ATTACHMENT_COLUMNS, opts)
             .eq("workspace_id", workspaceId),
         order: (q) => q.order("created_at").order("id"),
       });
@@ -1576,6 +1729,127 @@ export const webRuntime: ModuoRuntime = {
         throw new Error(res.error.message);
       }
       return { attachments: mapKnownRows(res.rows, mapAttachmentRow), truncation: res.truncation };
+    },
+
+    async listForEntity({ workspaceId, entityType, entityId }) {
+      const { data, error } = await supabaseClient
+        .from("attachments")
+        .select(ATTACHMENT_COLUMNS)
+        .eq("workspace_id", workspaceId)
+        .eq("entity_type", entityType)
+        .eq("entity_id", entityId)
+        .eq("status", "ready")
+        .is("deleted_at", null)
+        .order("created_at")
+        .order("id")
+        .limit(500);
+      if (error) {
+        if (isMissingTableError(error, "attachments")) return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows(data ?? [], mapAttachmentRow);
+    },
+
+    async begin(input) {
+      const { data, error } = await supabaseClient.rpc("attachments_op_begin", {
+        p_workspace_id: input.workspaceId,
+        p_entity_type: input.entityType,
+        p_entity_id: input.entityId,
+        p_file_name: input.fileName,
+        p_mime: input.mime,
+        p_size_bytes: input.sizeBytes,
+        p_preview_mime: input.previewMime,
+        p_width: input.width,
+        p_height: input.height,
+      });
+      return attachmentOpResult(data, error);
+    },
+
+    uploadObject({ path, blob, contentType, onProgress, signal }) {
+      return uploadObject({
+        supabaseUrl: SUPABASE_URL,
+        apiKey: SUPABASE_PUBLISHABLE_KEY,
+        getToken: currentAccessToken,
+        bucket: ATTACHMENTS_BUCKET,
+        path,
+        blob,
+        contentType,
+        onProgress,
+        signal,
+      });
+    },
+
+    async finalize(id) {
+      const { data, error } = await supabaseClient.rpc("attachments_op_finalize", { p_id: id });
+      return attachmentOpResult(data, error);
+    },
+
+    async remove(id) {
+      const { data, error } = await supabaseClient.rpc("attachments_op_delete", { p_id: id });
+      return attachmentOpResult(data, error);
+    },
+
+    async restore(id) {
+      const { data, error } = await supabaseClient.rpc("attachments_op_restore", { p_id: id });
+      return attachmentOpResult(data, error);
+    },
+
+    async abandon(id) {
+      const { error } = await supabaseClient.rpc("attachments_op_abandon", { p_id: id });
+      // A database before AT-3 has no such op: the 24 h sweep frees it there.
+      if (!error || isMissingFunctionError(error, "attachments_op_abandon")) return;
+      const code = (error.message ?? "").trim();
+      if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
+      throw new Error(error.message ?? "Couldn't let the upload go.");
+    },
+
+    async largest(workspaceId, limit = 50) {
+      const { data, error } = await supabaseClient.rpc("attachments_largest", {
+        p_workspace_id: workspaceId,
+        p_limit: limit,
+      });
+      if (error) {
+        if (isMissingFunctionError(error, "attachments_largest")) return [];
+        throw new Error(error.message);
+      }
+      return mapKnownRows((data ?? []) as unknown[], mapLargestAttachmentRow);
+    },
+
+    async status(workspaceId) {
+      const { data, error } = await supabaseClient.rpc("storage_status", {
+        p_workspace_id: workspaceId,
+      });
+      if (error) {
+        const code = (error.message ?? "").trim();
+        if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
+        throw new Error(error.message);
+      }
+      const r = (data ?? {}) as Record<string, unknown>;
+      const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      return {
+        tier: typeof r.tier === "string" ? r.tier : "free",
+        perFileBytes: n(r.per_file_bytes),
+        totalBytes: n(r.total_bytes),
+        usedBytes: n(r.used_bytes),
+        pendingBytes: n(r.pending_bytes),
+        level: n(r.level),
+        overLimit: r.over_limit === true,
+        isOwner: r.is_owner === true,
+        ownedWorkspaces: r.owned_workspaces == null ? null : n(r.owned_workspaces),
+      };
+    },
+
+    async signedUrls(paths, ttlSeconds) {
+      const out = new Map<string, string>();
+      if (paths.length === 0) return out;
+      const { data, error } = await supabaseClient.storage
+        .from(ATTACHMENTS_BUCKET)
+        .createSignedUrls(paths, ttlSeconds);
+      if (error) throw new Error(error.message);
+      for (const item of data ?? []) {
+        if (item.path && item.signedUrl && !item.error) out.set(item.path, item.signedUrl);
+      }
+      return out;
     },
   },
 
@@ -1592,7 +1866,7 @@ export const webRuntime: ModuoRuntime = {
       // The habits table is deploy-gated — a missing relation degrades to [] (a
       // widget must never wall), like notesV2.recent's 42703 guard.
       if (error) {
-        if (error.code === "42P01" || error.code === "PGRST205") return [];
+        if (isAnyTableMissing(error)) return [];
         throw new Error(error.message);
       }
       return mapKnownRows(data, mapHabitRow);
@@ -2128,6 +2402,11 @@ export const webRuntime: ModuoRuntime = {
   tasks: {
     // TV-D10: areas, projects, sections, teams, sessions, reminders, waiting.
     ...tasksStructure,
+    // TV-D15: templates and "Duplicate project…".
+    ...tasksTemplates,
+    // TV-U8: saved views.
+    ...tasksViews,
+    ...tasksAgents,
     async list(workspaceId) {
       // Best effort: a Viewer can't create their own Inbox (no tasks.create),
       // and that must not stop them reading the shared buckets.
@@ -2651,10 +2930,16 @@ export const webRuntime: ModuoRuntime = {
           p_workspace_id: input.workspaceId,
           p_task_id: input.taskId,
           p_action: input.action,
-          p_seconds: input.action === "undo" ? null : Math.round(input.seconds ?? 0),
+          p_seconds:
+            input.action === "undo" || input.action === "remove" || input.seconds === undefined
+              ? null
+              : Math.round(input.seconds),
           p_ended_at: input.endedAt ?? null,
           p_client_key: input.key ?? null,
           p_entry_id: input.entryId ?? null,
+          // TV-D14: sent only when used, so a database before it still takes
+          // every older save.
+          ...trackTimeExtras(input),
         })
         .abortSignal(AbortSignal.timeout(TIME_WRITE_TIMEOUT_MS));
       // Until the migration reaches the database there are no entries: write
@@ -2672,6 +2957,99 @@ export const webRuntime: ModuoRuntime = {
       if (isMissingFunctionError(error, "tasks_time_totals")) return [];
       if (error) throw new Error(error.message);
       return mapKnownRows(Array.isArray(data) ? data : [], taskTimeTotalsRowToModel);
+    },
+
+    async listMyTimeEntries(workspaceId, taskId) {
+      // RLS answers only your own entries, on a task you can see (TV-D14).
+      const { data, error } = await supabaseClient
+        .from("task_time_entries")
+        .select(
+          "id, task_id, kind, seconds, started_at, ended_at, entry_on, note, reason, run_id, created_at",
+        )
+        .eq("workspace_id", workspaceId)
+        .eq("task_id", taskId)
+        .neq("kind", "legacy")
+        .order("created_at", { ascending: false })
+        .order("id")
+        .limit(MY_TIME_ENTRIES_CAP);
+      // Before TV-D14's migration the entries have no day or note to show.
+      if (error && (error.code === "42703" || error.code === "42P01")) return [];
+      if (error) throw new Error(error.message);
+      return mapKnownRows(Array.isArray(data) ? data : [], taskTimeEntryRowToModel);
+    },
+
+    async exportTimeEntries(workspaceId) {
+      // Your own entries, on tasks you can still see (RLS), for the export.
+      const build = (opts?: { count: "exact"; head: true }) =>
+        supabaseClient
+          .from("task_time_entries")
+          .select(
+            "id, task_id, kind, seconds, started_at, ended_at, entry_on, note, reason, run_id, created_at",
+            opts,
+          )
+          .eq("workspace_id", workspaceId)
+          .neq("kind", "legacy");
+      const res = await readPaged<Record<string, unknown>, { message: string; code?: string }>({
+        scope: "time entries",
+        cap: TIME_REPORT_CAP,
+        page: async (offset, limit) => {
+          const { data, error } = await build()
+            .order("created_at", { ascending: false })
+            .order("id")
+            .range(offset, offset + limit - 1);
+          return { data: (data ?? null) as Record<string, unknown>[] | null, error };
+        },
+        countTotal: async () => {
+          const { count, error } = await build({ count: "exact", head: true });
+          return error ? null : (count ?? null);
+        },
+        keyOf: (row) => String(row.id),
+      });
+      if (res.error) {
+        if (res.error.code === "42703" || res.error.code === "42P01") {
+          return { entries: [], truncated: [] };
+        }
+        throw new Error(res.error.message);
+      }
+      return {
+        entries: mapKnownRows(res.rows, taskTimeEntryRowToModel),
+        truncated: collectTruncations(res.truncation),
+      };
+    },
+
+    async timeReport(query) {
+      const res = await readPaged<Record<string, unknown>, { message: string; code?: string }>({
+        scope: "time entries",
+        cap: TIME_REPORT_CAP,
+        page: async (offset, limit) => {
+          // The function orders its rows totally (day, task, entry), so pages
+          // never skip or repeat one.
+          const { data, error } = await supabaseClient
+            .rpc("tasks_time_report", {
+              p_workspace_id: query.workspaceId,
+              p_from: query.from,
+              p_to: query.to,
+              p_project_ids: query.projectIds ? [...query.projectIds] : null,
+              p_client_contact_id: query.clientContactId ?? null,
+              p_zone: query.zone ?? null,
+              // The function stops at the end of this page (PostgREST slices after it).
+              p_limit: offset + limit,
+            })
+            .range(offset, offset + limit - 1);
+          return { data: (data ?? null) as Record<string, unknown>[] | null, error };
+        },
+        keyOf: (row) => String(row.entry_id),
+      });
+      if (res.error) {
+        if (isMissingFunctionError(res.error, "tasks_time_report")) {
+          return { rows: [], truncated: false };
+        }
+        throw new Error(res.error.message);
+      }
+      return {
+        rows: mapKnownRows(res.rows, timeReportRowToModel),
+        truncated: res.truncation !== null,
+      };
     },
 
     async opSetStatus({ workspaceId, taskId, status, recurrence, position }) {
@@ -2701,6 +3079,10 @@ export const webRuntime: ModuoRuntime = {
       return taskRowToModel(row);
     },
 
+    opClaim({ workspaceId, taskId }) {
+      return taskOpRpc("tasks_op_claim", { p_workspace_id: workspaceId, p_task_id: taskId });
+    },
+
     async opReschedule({ workspaceId, taskId, scheduledAt, days }) {
       return taskOpRpc("tasks_op_reschedule", {
         p_workspace_id: workspaceId,
@@ -2725,6 +3107,61 @@ export const webRuntime: ModuoRuntime = {
         p_recurrence: recurrence,
         p_release_commit: releaseCommit,
       });
+    },
+
+    async opMoveOccurrence({ workspaceId, taskId, dueOn, startsAt }) {
+      return taskOpRpc("tasks_op_move_occurrence", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_due_on: dueOn ?? null,
+        p_starts_at: startsAt ?? null,
+      });
+    },
+
+    async taskHistory({ workspaceId, taskId }) {
+      const { data, error } = await supabaseClient.rpc("tasks_op_history", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+      });
+      if (error) throw new Error(error.message);
+      return taskCyclesFromJson(data);
+    },
+
+    async listAgentCaptures({ workspaceId, taskIds }) {
+      // The trail's own read policy answers only tasks the caller can see, so a
+      // key's name never reaches anyone else (TV-U13b). 100 ids per request
+      // keeps the URL short.
+      const out: Array<{ taskId: string; label: string }> = [];
+      for (let i = 0; i < taskIds.length; i += 100) {
+        const { data, error } = await supabaseClient
+          .from("module_activity")
+          .select("entity_id, actor_label")
+          .eq("workspace_id", workspaceId)
+          .eq("module", "tasks")
+          .eq("entity_type", "task")
+          .eq("op", "tasks.create")
+          .eq("actor_type", "api_key")
+          .in("entity_id", taskIds.slice(i, i + 100));
+        if (error) throw new Error(error.message);
+        for (const row of (data ?? []) as Array<{
+          entity_id: string;
+          actor_label: string | null;
+        }>) {
+          if (row.actor_label?.trim()) out.push({ taskId: row.entity_id, label: row.actor_label });
+        }
+      }
+      return out;
+    },
+
+    async mentionInTask({ workspaceId, taskId, userIds }) {
+      if (userIds.length === 0) return 0;
+      const { data, error } = await supabaseClient.rpc("tasks_op_mention", {
+        p_workspace_id: workspaceId,
+        p_task_id: taskId,
+        p_user_ids: userIds,
+      });
+      if (error) throw new Error(error.message);
+      return typeof data === "number" ? data : 0;
     },
 
     async opCatchUp({ workspaceId, items }) {
@@ -2920,19 +3357,93 @@ export const webRuntime: ModuoRuntime = {
       return commentRowToModel(row);
     },
 
-    async listComments({ workspaceId, entityType, entityId }) {
+    async getCommentExcerpts({ workspaceId, commentIds }) {
+      const ids = [...new Set(commentIds)].slice(0, 200);
+      if (ids.length === 0) return [];
+      // RLS: only comments on items the reader can still see.
       const { data, error } = await supabaseClient
         .from("comments")
-        // `*`, not a column list: author_kind / author_label arrive with
-        // 20261008123000, and naming them would fail this read until it applies.
-        .select("*")
+        .select("id, body")
         .eq("workspace_id", workspaceId)
-        .eq("entity_type", entityType)
-        .eq("entity_id", entityId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true });
+        .in("id", ids)
+        .is("deleted_at", null);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((r) => ({
+        id: String(r.id),
+        excerpt: String(r.body ?? "").slice(0, 140),
+      }));
+    },
+
+    async listComments({ workspaceId, entityType, entityId }) {
+      // `*`, not a column list: author_kind / author_label arrive with
+      // 20261008123000, and naming them would fail this read until it applies.
+      // The reactions ride along (TV-U13); a database before 20261013100000
+      // has no such table, so the thread is read without them there.
+      const read = (select: string) =>
+        supabaseClient
+          .from("comments")
+          .select(select)
+          .eq("workspace_id", workspaceId)
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true });
+      let { data, error } = await read("*, comment_reactions(user_id, reaction)");
+      if (error && isMissingReactionsError(error)) ({ data, error } = await read("*"));
       if (error) throw new Error(error.message);
       return mapKnownRows(data, commentRowToModel);
+    },
+
+    // ── Comment edit / delete / reactions (TV-U13) ───────────────────────────
+    async editComment({ commentId, body, mentionedUserIds }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_edit", {
+        p_comment_id: commentId,
+        p_body: body,
+        p_mentioned_user_ids: mentionedUserIds ?? [],
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async deleteComment({ commentId }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_delete", {
+        p_comment_id: commentId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async mentionTeams({ commentId, teamIds }) {
+      if (teamIds.length === 0) return;
+      const { error } = await supabaseClient.rpc("comments_op_mention_teams", {
+        p_comment_id: commentId,
+        p_team_ids: teamIds,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async restoreComment({ commentId }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_restore", {
+        p_comment_id: commentId,
+      });
+      if (error) throw new Error(error.message);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) throw new Error("The comment operation returned nothing.");
+      return commentRowToModel(row);
+    },
+
+    async reactToComment({ commentId, reaction, on }) {
+      const { data, error } = await supabaseClient.rpc("comments_op_react", {
+        p_comment_id: commentId,
+        p_reaction: reaction,
+        p_on: on,
+      });
+      if (error) throw new Error(error.message);
+      return reactionMarks(Array.isArray(data) ? data : []);
     },
 
     async listNotifications({ workspaceId, limit }) {
@@ -2942,6 +3453,21 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) throw new Error(error.message);
       return mapKnownRows(data, notificationRowToModel);
+    },
+
+    async pushSubscribe({ endpoint, p256dh, auth, userAgent }) {
+      const { error } = await supabaseClient.rpc("push_op_subscribe", {
+        p_endpoint: endpoint,
+        p_p256dh: p256dh,
+        p_auth: auth,
+        p_user_agent: userAgent ?? null,
+      });
+      if (error) throw new Error(error.message);
+    },
+
+    async pushUnsubscribe({ endpoint }) {
+      const { error } = await supabaseClient.rpc("push_op_unsubscribe", { p_endpoint: endpoint });
+      if (error) throw new Error(error.message);
     },
 
     async markNotificationRead({ workspaceId, activityId }) {
@@ -3479,6 +4005,10 @@ async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Tas
 
 /** How long a time write may take before it counts as failed. */
 const TIME_WRITE_TIMEOUT_MS = 30_000;
+/** Your own entries listed on one task (TV-D14): the newest this many. */
+const MY_TIME_ENTRIES_CAP = 200;
+/** Entries one time report reads (TV-D14); a longer one says it was cut. */
+const TIME_REPORT_CAP = 20_000;
 
 /**
  * Tracked time on a database without TV-D3's entries: read the task's total and
@@ -3702,6 +4232,13 @@ type SyncSource = {
   order?: (q: any) => any;
 };
 
+/** A saved view row, or a throw the reader drops (TV-U8). */
+function taskViewRowToModel(raw: unknown): TaskView {
+  const view = taskViewFromRow(raw);
+  if (!view) throw new Error("An unreadable saved view.");
+  return view;
+}
+
 const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
   tasks: {
     table: "tasks",
@@ -3836,6 +4373,38 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
     cap: READ_CAPS.taskWaiting,
     delta: true,
     scope: "waiting entries",
+  },
+  // TV-U8: read whole every sync (SYNC_TABLES); RLS returns your views and
+  // the shared ones you may see, never a deleted one.
+  views: {
+    table: "task_views",
+    select: "*",
+    map: taskViewRowToModel,
+    cap: READ_CAPS.taskViews,
+    delta: true,
+    scope: "saved views",
+  },
+  // TV-D16: agent sessions, under RLS (yours, and teammates' they share).
+  agentSessions: {
+    table: "agent_sessions",
+    select: "*",
+    map: agentSessionRowToModel,
+    cap: READ_CAPS.agentSessions,
+    delta: true,
+    scope: "agent sessions",
+  },
+  // AT-3: finished files on tasks, for the 📎 counts and an open strip's
+  // refresh. Under RLS (the item gate: a file shows only to people who can see
+  // its task); never a name, path or size. A finished file never goes back to
+  // pending, and a trashed one keeps `ready`, so the delta sees every change.
+  attachments: {
+    table: "attachments",
+    select: "id,entity_id,status,updated_at,deleted_at",
+    map: attachmentMarkRowToModel,
+    cap: READ_CAPS.attachmentMarks,
+    delta: true,
+    scope: "attachments",
+    filter: (q) => q.eq("entity_type", "task").eq("status", "ready"),
   },
 };
 
@@ -4344,6 +4913,37 @@ async function createTaskRow(task: Task): Promise<Task> {
   return taskRowToModel(data);
 }
 
+/**
+ * What a template apply or a duplicate answered (raw rows per store table,
+ * `templates__bundle`) as the store's rows, through each table's own mapper.
+ * A row this build can't read is left out; the next sync brings it.
+ */
+function templateAnswerToModels(raw: unknown): TemplateApplyResult {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const rows = <T extends "buckets" | "statuses" | "sections" | "tasks" | "tagLinks" | "relations">(
+    name: T,
+  ): SyncRows[T][] => {
+    const list = r[name];
+    if (!Array.isArray(list)) return [];
+    const map = SYNC_SOURCES[name].map as (row: unknown) => SyncRows[T];
+    return list.flatMap((row) => {
+      try {
+        return [map(row)];
+      } catch {
+        return [];
+      }
+    });
+  };
+  return {
+    buckets: rows("buckets"),
+    statuses: rows("statuses"),
+    sections: rows("sections"),
+    tasks: rows("tasks"),
+    tagLinks: rows("tagLinks"),
+    relations: rows("relations"),
+  };
+}
+
 function taskRelationRowToModel(raw: unknown): TaskRelation {
   const r = requireRow(taskRelationRowSchema, raw, "task relation");
   return {
@@ -4416,7 +5016,30 @@ function commentRowToModel(raw: unknown): SpineComment {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+    editedAt: r.edited_at ?? null,
+    reactions: reactionMarks(r.comment_reactions ?? []),
   };
+}
+
+/** Reaction rows → marks; a reaction this build doesn't know is left out. */
+function reactionMarks(rows: readonly unknown[]): CommentReactionMark[] {
+  const out: CommentReactionMark[] = [];
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+    const row = raw as { user_id?: unknown; reaction?: unknown };
+    const reaction = normalizeCommentReaction(row.reaction);
+    if (typeof row.user_id === "string" && reaction) out.push({ userId: row.user_id, reaction });
+  }
+  return out;
+}
+
+/** PostgREST's answer when the comments read names `comment_reactions` before
+ *  20261013100000 made it (no relationship, or no table). */
+function isMissingReactionsError(error: { code?: string; message?: string }): boolean {
+  return (
+    (error.code === "PGRST200" || error.code === "PGRST205" || error.code === "42P01") &&
+    (error.message ?? "").includes("comment_reactions")
+  );
 }
 
 /** A `notifications_list` row → the normalized NotificationItem the reducer groups. */

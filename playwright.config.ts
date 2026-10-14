@@ -19,7 +19,12 @@ export default defineConfig({
   projects: [
     {
       name: "e2e",
-      testIgnore: ["**/visual/**", "**/perf/**"],
+      testIgnore: ["**/visual/**", "**/perf/**", "**/clips/**"],
+      // One spec at a time: every spec signs in as the same seed person in
+      // the same workspace on the local stack, so parallel files read each
+      // other's rows (a bell's newest notices, a project's order, the
+      // offline queue's sync line). Serial, the whole suite passes together.
+      workers: 1,
       use: {
         ...devices["Desktop Chrome"],
         baseURL: E2E_BASE_URL ?? "http://127.0.0.1:8081",
@@ -35,6 +40,22 @@ export default defineConfig({
         baseURL: E2E_BASE_URL ?? "http://127.0.0.1:8081",
       },
     },
+    // Tasks' welcome clips (TV-U17): frames of the real app, written to
+    // public/welcome. Only with MODUO_CLIPS=1, so a plain `playwright test`
+    // (bun run e2e) never rewrites them; run by hand when the UI changes.
+    ...(process.env.MODUO_CLIPS
+      ? [
+          {
+            name: "clips",
+            testMatch: ["**/clips/**/*.spec.ts"],
+            timeout: 180_000,
+            use: {
+              ...devices["Desktop Chrome"],
+              baseURL: E2E_BASE_URL ?? "http://127.0.0.1:8081",
+            },
+          },
+        ]
+      : []),
     {
       name: "visual",
       testMatch: ["**/visual/**/*.spec.ts"],

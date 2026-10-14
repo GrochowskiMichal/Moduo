@@ -13,6 +13,12 @@ import type { ReferencePreviewApi } from "../../spine/references/rows";
 import { ReferenceStore } from "../../spine/references/store";
 import type { Bucket, Task, Team } from "../model";
 import { EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
+import {
+  type CaptureAttachmentHandler,
+  type CaptureTemplateProvider,
+  registerCaptureAttachments,
+  registerCaptureTemplates,
+} from "./capture-hooks";
 
 const ME = "u-me";
 const SAM = "u-sam";
@@ -23,12 +29,13 @@ const h = rs.hoisted(() => ({
   userId: "u-me",
   runtime: null as unknown,
   bundle: null as unknown,
+  store: null as unknown,
 }));
 
 // The workspace's shared store, as a loaded snapshot (no store: saves go
 // straight to the runtime, the store's own behaviour is its tests').
 rs.mock("../../../lib/sync/react", () => ({
-  useWorkspaceStore: () => null,
+  useWorkspaceStore: () => h.store ?? null,
   useStoreSnapshot: () => ({ loaded: true, bundle: h.bundle }),
 }));
 
@@ -63,7 +70,7 @@ rs.mock("../assignees", () => ({
   }),
 }));
 
-import { TaskCaptureBody } from "./task-capture";
+import { TaskCaptureBody, taskForFiles } from "./task-capture";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -212,6 +219,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  h.store = null;
+  registerCaptureTemplates(null);
 });
 
 describe("a restored draft", () => {
@@ -286,6 +295,25 @@ describe("a restored draft", () => {
     const title = await screen.findByRole("textbox", { name: "Task title" });
     await waitFor(() => expect(title.textContent).toBe("Refused words"));
     expect(loadDraft(ME, WS, "refused")).toBeNull();
+  });
+
+  it("reopened (after Esc, or a reload), its date words are read as a date again, like freshly typed ones", async () => {
+    // The first Esc after "tomorrow 3pm" keeps it as words while the capture is
+    // open; the draft it leaves must not carry that into the next open.
+    saveDraft(ME, WS, {
+      segments: [{ text: "Call the printer tomorrow 3pm" }],
+      keep: ["tomorrow 3pm"],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody();
+    await screen.findByText(/Draft restored/);
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    const [task] = fake.saved;
+    expect(task.title).toBe("Call the printer");
+    expect(task.scheduledAt).toBeTruthy();
   });
 
   it("a second person on this device never sees it", async () => {
@@ -397,6 +425,18 @@ describe("a team task (54, 94)", () => {
   });
 });
 
+describe("a group's + (TV-U10)", () => {
+  it("shows the status it opened with as a chip, and files the task in it", async () => {
+    renderBody({ seed: { status: "in_progress" } }, referenceStore({}), "Sketch the banner");
+    expect(await screen.findByRole("button", { name: "Clear In progress" })).toBeTruthy();
+    const title = await screen.findByRole("textbox", { name: "Task title" });
+    await waitFor(() => expect(title.textContent).toBe("Sketch the banner"));
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.statusCategory).toBe("in_progress");
+  });
+});
+
 describe("Create (AC10.3, AC5.4)", () => {
   async function createWith(context: Partial<CaptureContext>, removeSource = false) {
     saveDraft(ME, WS, {
@@ -450,5 +490,221 @@ describe("Create (AC10.3, AC5.4)", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(fake.links).toEqual([]);
+  });
+});
+
+describe("From template (`/template`, More → Template…, TV-D15)", () => {
+  function withTemplates() {
+    const apply = rs.fn(async (_deps: unknown, _input: unknown) => "t-new" as string | null);
+    const provider: CaptureTemplateProvider = {
+      useChoices: () => ({
+        loaded: true,
+        choices: [
+          {
+            id: "tt-1",
+            name: "Episode",
+            title: "Record episode",
+            subtasks: 3,
+            dated: true,
+            anchor: "due",
+            project: "p-acme",
+          },
+          {
+            id: "tt-2",
+            name: "Onboarding",
+            title: "Onboard a client",
+            subtasks: 2,
+            dated: true,
+            anchor: "start",
+            project: null,
+          },
+        ],
+      }),
+      apply,
+    };
+    registerCaptureTemplates(provider);
+    h.store = { isOffline: () => false };
+    (fake.runtime as { tasks: Record<string, unknown> }).tasks.applyTaskTemplate = rs.fn();
+    return apply;
+  }
+
+  it("a picked template fills the title and its project, and Create makes it on the server", async () => {
+    const apply = withTemplates();
+    const { onDone } = renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    expect(destination().textContent).toContain("Acme rebrand");
+    // Its description, subtasks, tags and priority come from the template.
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Tags/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(onDone).toHaveBeenCalled();
+    expect(apply.mock.calls[0]?.[1]).toMatchObject({
+      templateId: "tt-1",
+      title: "Record episode",
+      projectId: "p-acme",
+      date: null,
+    });
+    // Nothing went through the capture's own create.
+    expect(fake.saved).toEqual([]);
+  });
+
+  it("a template that counts from its start hides Due and starts today", async () => {
+    const apply = withTemplates();
+    renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Onboarding/ }));
+    expect(await screen.findByText(/Its dates count from today/)).toBeTruthy();
+    await screen.findByText("Template: Onboarding");
+    expect(screen.queryByRole("button", { name: /^Due/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    const sent = apply.mock.calls[0]?.[1] as { date: string | null; projectId: string | null };
+    expect(sent.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(sent.projectId).toBeNull();
+  });
+
+  it("a refused apply keeps the capture open with its template", async () => {
+    const apply = withTemplates();
+    apply.mockImplementation(async () => null);
+    const { onDone } = renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    expect(destination().textContent).toContain("Acme rebrand");
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getByText("Template: Episode")).toBeTruthy();
+  });
+
+  it("without a registered provider there's no Template… in More", async () => {
+    renderBody();
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    await screen.findByText("Waiting on");
+    expect(screen.queryByRole("button", { name: "Template…" })).toBeNull();
+  });
+});
+
+describe("Files on a capture (AT-3, AT3-2)", () => {
+  const shot = () => new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
+  const clipboard = (files: File[], text = "") => ({
+    clipboardData: {
+      types: [...(files.length > 0 ? ["Files"] : []), ...(text ? ["text/plain"] : [])],
+      files,
+      items: files.map((f) => ({ kind: "file", getAsFile: () => f })),
+      getData: (type: string) => (type === "text/plain" ? text : ""),
+    },
+  });
+  let handled: Array<Parameters<CaptureAttachmentHandler>[0]>;
+  beforeEach(() => {
+    handled = [];
+    registerCaptureAttachments((input) => handled.push(input));
+  });
+  afterEach(() => registerCaptureAttachments(null));
+
+  async function openWithTitle() {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Fix the login screen" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody();
+    await screen.findByText(/Draft restored/);
+  }
+  const description = () => screen.getByRole("textbox", { name: "Description" });
+
+  it("a screenshot pasted into the description becomes a chip; Create sends it with the new task", async () => {
+    await openWithTitle();
+    fireEvent.paste(description(), clipboard([shot()]));
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    expect(document.querySelector('[data-slot="capture-files"]')?.textContent).toContain(
+      "shot.png",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(handled).toHaveLength(1);
+    expect(handled[0]).toMatchObject({ workspaceId: WS, userId: ME });
+    expect(handled[0]?.files.map((f) => f.name)).toEqual(["shot.png"]);
+    // The task is made first; the files go on it once it exists.
+    await expect(handled[0]?.task).resolves.toEqual({ id: fake.saved[0]?.id, queued: false });
+  });
+
+  it("a capture the server refuses keeps its files: they come back with it", async () => {
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      throw new Error("You can't add tasks here.");
+    });
+    await openWithTitle();
+    fireEvent.paste(description(), clipboard([shot()]));
+    await screen.findByRole("button", { name: "Remove shot.png" });
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).not.toBeNull());
+    // Nothing was made, so nothing is attached anywhere.
+    await expect(handled[0]?.task).resolves.toBeNull();
+    cleanup();
+    renderBody();
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+  });
+
+  it("text pasted into the description stays text", async () => {
+    await openWithTitle();
+    fireEvent.paste(description(), clipboard([], "notes"));
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+
+  it("files dropped on the capture become chips; a chip comes off again", async () => {
+    await openWithTitle();
+    fireEvent.drop(description(), {
+      dataTransfer: {
+        types: ["Files"],
+        files: [shot()],
+        items: [
+          {
+            kind: "file",
+            getAsFile: () => shot(),
+            webkitGetAsEntry: () => ({ isDirectory: false }),
+          },
+        ],
+      },
+    });
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove shot.png" }));
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
+  });
+
+  it("a folder dropped on the capture is left out", async () => {
+    await openWithTitle();
+    fireEvent.drop(description(), {
+      dataTransfer: {
+        types: ["Files"],
+        files: [],
+        items: [
+          { kind: "file", getAsFile: () => null, webkitGetAsEntry: () => ({ isDirectory: true }) },
+        ],
+      },
+    });
+    expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+});
+
+describe("taskForFiles (the file seam's task, AT3-2)", () => {
+  it("made: the files go now; waiting offline: they wait with it; refused: nothing to attach to", async () => {
+    const made = Promise.resolve({ created: [{ id: "t1" }], queued: [] as string[] });
+    await expect(taskForFiles(made, "t1")).resolves.toEqual({ id: "t1", queued: false });
+    const offline = Promise.resolve({ created: [] as { id: string }[], queued: ["t1"] });
+    await expect(taskForFiles(offline, "t1")).resolves.toEqual({ id: "t1", queued: true });
+    const refused = Promise.resolve({ created: [] as { id: string }[], queued: [] as string[] });
+    await expect(taskForFiles(refused, "t1")).resolves.toBeNull();
+    await expect(taskForFiles(Promise.reject(new Error("no")), "t1")).resolves.toBeNull();
   });
 });

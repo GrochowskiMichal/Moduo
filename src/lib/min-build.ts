@@ -86,12 +86,15 @@ export function useMinBuild(): MinBuildState {
  * this file hasn't classified.
  */
 export const READ_RPCS: ReadonlySet<string> = new Set([
+  // AT-3: Settings → Storage's largest-files list.
+  "attachments_largest",
   "booking_google_connected",
   "calendar_busy_blocks",
   "chat_caps_get",
   "chat_unread_counts",
   "chat_workspace_enabled",
   "contact_merge_candidates",
+  "focus_claims",
   "links_suggest",
   "notes_list_unmaterialized",
   "notifications_list",
@@ -99,8 +102,16 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "share_can",
   "share_defaults_get",
   "share_op_state",
+  "storage_status",
+  // TV-D16: a task's agent sessions (with your summary), and your share switch.
+  "tasks_agent_sessions",
+  "tasks_op_history",
+  "templates_can_copy",
   "tasks_search",
+  "tasks_time_report",
   "tasks_time_totals",
+  "user_agent_work",
+  "user_time_region",
 ]);
 
 /**
@@ -121,6 +132,8 @@ export function isWriteRequest(method: string | undefined, url: string): boolean
   const rpc = /\/rest\/v1\/rpc\/([^/?]+)/.exec(path);
   if (rpc) return !READ_RPCS.has(decodeURIComponent(rpc[1]!));
   if (path.includes("/rest/v1/")) return true;
+  // A resumable (TUS) upload creates and appends to an object.
+  if (path.includes("/storage/v1/upload/")) return true;
   if (path.includes("/storage/v1/object/")) {
     // Signed download links and listings are reads, even though they POST.
     return !/\/storage\/v1\/object\/(?:sign|list|info)\//.test(path);

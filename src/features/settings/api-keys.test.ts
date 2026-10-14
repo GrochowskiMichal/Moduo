@@ -10,13 +10,17 @@ import { moduleManifests } from "../../lib/module-registry";
 import {
   ceilingHint,
   clampScopes,
+  DEFAULT_KEY_EXPIRY,
   DEFAULT_KEY_SCOPES,
   effectiveScopes,
+  expiryDays,
   grantsAnyAccess,
+  KEY_EXPIRY_OPTIONS,
   KEY_SCOPE_LABELS,
   KEY_SCOPE_MODULES,
   KEY_SCOPE_NEEDS,
   type KeyActor,
+  keyLifecycle,
   keyScopeCap,
   MCP_KEY_MODULES,
   MCP_KEY_SCOPES,
@@ -104,6 +108,8 @@ function latestSqlFunctionBodies(): Map<string, string> {
 const PEOPLE_ONLY =
   /if\s+(?:public\.)?module_api_key_id\(\)\s+is\s+null\s+then([\s\S]*?)end\s+if\s*;/g;
 const LANE_CHECK = /\b(\w+?)_(?:op__guard\w*|module_permission|key_scope)\s*\(/g;
+const BEST_EFFORT =
+  /\bbegin\s+perform\s[^;]*;\s*exception\s+when\s+insufficient_privilege\s+or\s+raise_exception\s+then\s+null\s*;\s*end\s*;/g;
 
 /**
  * The key-scope lanes a call into `fn` is checked against, following its calls:
@@ -120,13 +126,25 @@ function keyLanes(fn: string, bodies: Map<string, string>, seen = new Set<string
   const raw = bodies.get(fn);
   if (raw === undefined || seen.has(fn)) return lanes;
   seen.add(fn);
-  const body = raw.toLowerCase().replace(PEOPLE_ONLY, (_block, inner: string) => {
-    expect(inner, `${fn}: a people-only block must be a plain IF`).not.toMatch(
-      /\b(?:else|elsif|if)\b/,
-    );
-    return "";
-  });
-  for (const [, owner] of body.matchAll(LANE_CHECK)) lanes.add(owner === "spine" ? "links" : owner);
+  const body = raw
+    .toLowerCase()
+    .replace(PEOPLE_ONLY, (_block, inner: string) => {
+      expect(inner, `${fn}: a people-only block must be a plain IF`).not.toMatch(
+        /\b(?:else|elsif|if)\b/,
+      );
+      return "";
+    })
+    // A best-effort call whose refusal the op swallows (a template's links,
+    // TV-D15) needs nothing: without that lane the key just gets less.
+    .replace(BEST_EFFORT, "");
+  for (const m of body.matchAll(LANE_CHECK)) {
+    const owner = m[1] === "spine" ? "links" : (m[1] as string);
+    // A permission read that lets View through (`… NOT IN ('view', 'edit',
+    // 'admin')`, TV-D12/D16 reads) is a View lane, not an Edit one.
+    const tail = body.slice((m.index ?? 0) + m[0].length).split(/;|\bthen\b/)[0] ?? "";
+    const viewLevel = /_module_permission\s*\($/.test(m[0]) && /'view'/.test(tail);
+    lanes.add(viewLevel ? `${owner}@view` : owner);
+  }
   if (/\b\w+_can_access_workspace\s*\(/.test(body)) lanes.add("no-key");
   for (const [, callee] of body.matchAll(/\b(\w+)\s*\(/g)) {
     if (callee === fn || !bodies.has(callee)) continue;
@@ -223,7 +241,8 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
         if (lanes.has(id ?? "") && tool.access === "view") {
           throw new Error(`${tool.name} is listed at View but its RPC needs ${id} Edit`);
         }
-        const needs = [...lanes].filter((lane) => lane !== id).sort();
+        // The tool's own module at View is what any key that lists it holds.
+        const needs = [...lanes].filter((lane) => lane !== id && lane !== `${id}@view`).sort();
         expect(needs, `${file}: ${tool.name}`).toEqual([...mcpToolNeeds(tool.name)].sort());
       }
       // Helpers above the tools (chat's plan check) must not hit a key lane.
@@ -243,6 +262,9 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       "perm_actor_id", // defines the fallback itself
       "module_activity_log", // `IF auth.uid() IS NOT NULL` → the user branch; keys go to the api_key branch
       "perm_can_view_entity", // reached only for types without a module (true for everyone)
+      // `IF auth.uid() IS NOT NULL OR module_api_key_id() IS NOT NULL` → module_activity_log
+      // for a person or a key alike; only system work (cron) writes as "Moduo".
+      "tasks__notice",
     ]);
     const bodies = latestSqlFunctionBodies();
     const roots = new Set<string>();
@@ -277,7 +299,7 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
   it("gives every need a row note, and the notes come from the needs", () => {
     expect(
       KEY_SCOPE_NEEDS.map(({ module, when, needs }) => `${module}@${when}>${needs}`).sort(),
-    ).toEqual(["calendar@edit>tasks", "notes@edit>links"]);
+    ).toEqual(["calendar@edit>tasks", "notes@edit>links", "tasks@edit>links"]);
     for (const need of KEY_SCOPE_NEEDS) expect(need.note.length).toBeGreaterThan(0);
   });
 });
@@ -497,5 +519,59 @@ describe("scopeCeiling: who may raise what", () => {
     expect(
       ceilingHint({ module: "tasks", isCreator: false, myCap: "edit", creatorName: "Anna" }),
     ).toBe("Only Anna can give this key more access.");
+  });
+});
+
+describe("key expiry", () => {
+  it("starts the picker at 90 days and maps every choice to the days the server takes", () => {
+    expect(DEFAULT_KEY_EXPIRY).toBe("90");
+    expect(KEY_EXPIRY_OPTIONS.map((o) => expiryDays(o.value))).toEqual([null, 30, 90, 365]);
+    expect(expiryDays("nonsense")).toBeNull();
+  });
+
+  const NOW = Date.parse("2026-10-09T12:00:00Z");
+  const day = (n: number) => new Date(NOW + n * 86_400_000).toISOString();
+
+  it("reads a key with no expiry as active and never expiring", () => {
+    const life = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: null }, NOW);
+    expect(life).toEqual({ status: "active", expiryLine: null, staleNote: null });
+  });
+
+  it("says when a key expires, and gets louder in the last week", () => {
+    const far = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(60) }, NOW);
+    expect(far.status).toBe("active");
+    expect(far.expiryLine).toMatch(/^Expires .+\d{4}$/);
+    const soon = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(4) }, NOW);
+    expect(soon).toMatchObject({ status: "expiring", expiryLine: "Expires in 4 days" });
+    const tomorrow = keyLifecycle(
+      { createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(0.5) },
+      NOW,
+    );
+    expect(tomorrow.expiryLine).toBe("Expires within a day");
+    const tmrw = keyLifecycle({ createdAt: day(-5), lastUsedAt: day(-1), expiresAt: day(1) }, NOW);
+    expect(tmrw.expiryLine).toBe("Expires tomorrow");
+  });
+
+  it("marks a key expired once its time has passed, and an unreadable one too", () => {
+    const gone = keyLifecycle(
+      { createdAt: day(-99), lastUsedAt: day(-3), expiresAt: day(-1) },
+      NOW,
+    );
+    expect(gone.status).toBe("expired");
+    expect(gone.expiryLine).toMatch(/^Expired .+\d{4}$/);
+    expect(gone.staleNote).toBeNull();
+    const broken = keyLifecycle({ createdAt: day(-9), lastUsedAt: null, expiresAt: "soon" }, NOW);
+    expect(broken).toMatchObject({ status: "expired", expiryLine: "Expired" });
+  });
+
+  it("nudges to revoke a key unused for 60 days, or never used for 60 days", () => {
+    const idle = keyLifecycle({ createdAt: day(-200), lastUsedAt: day(-61), expiresAt: null }, NOW);
+    expect(idle.staleNote).toBe("Unused for 61 days. Revoke it if you no longer need it.");
+    const never = keyLifecycle({ createdAt: day(-70), lastUsedAt: null, expiresAt: null }, NOW);
+    expect(never.staleNote).toBe("Never used in 70 days. Revoke it if you no longer need it.");
+    const fresh = keyLifecycle({ createdAt: day(-10), lastUsedAt: null, expiresAt: null }, NOW);
+    expect(fresh.staleNote).toBeNull();
+    const used = keyLifecycle({ createdAt: day(-200), lastUsedAt: day(-59), expiresAt: null }, NOW);
+    expect(used.staleNote).toBeNull();
   });
 });

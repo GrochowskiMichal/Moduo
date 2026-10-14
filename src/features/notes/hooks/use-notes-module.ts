@@ -11,7 +11,8 @@ import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { endPosition } from "../../tasks/helpers";
-import type { Note } from "../model";
+import type { Draft } from "../draft-note";
+import type { Note, NoteFavorite } from "../model";
 import { repairNote, repairUnmaterializedNotes } from "../repair";
 import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
 import { readMetaCache, writeMetaCache } from "../sync/idb";
@@ -24,16 +25,19 @@ type Params = {
   userId: string | null;
   workspaceId: string | null;
   modulePermission?: string;
+  /** Load the viewer's favorites too (the refreshed shell, NR-2). */
+  withFavorites?: boolean;
 };
 
 export type NotesModuleApi = ReturnType<typeof useNotesModule>;
 
 export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
-  const { userId, workspaceId, modulePermission = "none" } = params;
+  const { userId, workspaceId, modulePermission = "none", withFavorites = false } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
 
   const [notes, setNotes] = useState<Note[]>([]);
+  const [favorites, setFavorites] = useState<NoteFavorite[]>([]);
   const [loading, setLoading] = useState(true);
   const [degraded, setDegraded] = useState(false);
   /** SCALE-1: collections the read had to cut — the page must show these. */
@@ -46,6 +50,15 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   /** Optimistic creates whose op hasn't settled — merged into every server
    * bundle so a concurrent load() can't clobber a just-captured note. */
   const pendingCreatesRef = useRef(new Map<string, Note>());
+  /** In-flight creates of materialized drafts (NR-2): any later op on the same
+   * note waits for its create, so a rename can never reach the server first. */
+  const createPromisesRef = useRef(new Map<string, Promise<unknown>>());
+  /** Drafts whose create the server refused: never send ops for them. */
+  const failedCreatesRef = useRef(new Set<string>());
+  const favoritesRef = useRef<NoteFavorite[]>([]);
+  useEffect(() => {
+    favoritesRef.current = favorites;
+  }, [favorites]);
   const notesRef = useRef<Note[]>([]);
   useEffect(() => {
     notesRef.current = notes;
@@ -80,8 +93,16 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     }
     const req = ++reqRef.current;
     try {
-      const bundle = await runtime!.notesV2.listMeta(workspaceId!);
+      const [bundle, favs] = await Promise.all([
+        runtime!.notesV2.listMeta(workspaceId!),
+        // Favorites are personal and degrade to [] pre-deploy; a failed read
+        // keeps the ones on screen rather than walling the sidebar.
+        withFavorites
+          ? runtime!.notesV2.listFavorites(workspaceId!).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       if (reqRef.current !== req) return;
+      if (favs) setFavorites(favs);
       serverLoadedRef.current = true;
       // Merge unsettled optimistic creates so a load racing a capture can't
       // drop the just-created note (and deselect it via the stale-id sweep).
@@ -101,13 +122,14 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       setLoadError(e instanceof Error ? e.message : "Couldn't load notes.");
       setLoading(false);
     }
-  }, [ready, runtime, workspaceId]);
+  }, [ready, runtime, workspaceId, withFavorites]);
   refreshRef.current = () => void load();
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setNotes([]);
+    setFavorites([]);
     setDegraded(false);
     setTruncated([]);
     setLoadError(null);
@@ -256,14 +278,27 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   /** Run an engine meta-op after an optimistic patch; on a server rejection
    * reload the truth + toast. Offline queueing resolves as success. */
   const guard = useCallback(
-    (fn: () => Promise<unknown>) => {
-      if (!engine || !canEdit) return;
-      void fn().catch((e) => {
-        toast.error(e instanceof Error ? e.message : "Something went wrong.");
-        void load();
-      });
+    (fn: () => Promise<unknown>): Promise<boolean> => {
+      if (!engine || !canEdit) return Promise.resolve(false);
+      return fn().then(
+        () => true,
+        (e) => {
+          toast.error(e instanceof Error ? e.message : "Something went wrong.");
+          void load();
+          return false;
+        },
+      );
     },
     [engine, canEdit, load],
+  );
+
+  /** Run `fn` once the note's own create (if still in flight) has settled. */
+  const afterCreate = useCallback(
+    (noteId: string, fn: () => Promise<unknown>) => () =>
+      (createPromisesRef.current.get(noteId) ?? Promise.resolve()).then(() =>
+        failedCreatesRef.current.has(noteId) ? undefined : fn(),
+      ),
+    [],
   );
 
   // ── mutations ──────────────────────────────────────────────────────────────
@@ -292,6 +327,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         deletedAt: null,
         shareMode: "custom",
         workspaceShared: false,
+        inInbox: parentId === null,
+        fullWidth: false,
       };
       setNotes((prev) => [...prev, optimistic]);
       pendingCreatesRef.current.set(id, optimistic);
@@ -311,19 +348,29 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       const existing = notesRef.current.find((n) => n.id === noteId);
       if (!existing || existing.title === title) return;
       patchLocal(noteId, { title, updatedAt: new Date().toISOString() });
-      guard(() => engine.runMetaOp("rename", { workspaceId, noteId, title }));
+      guard(afterCreate(noteId, () => engine.runMetaOp("rename", { workspaceId, noteId, title })));
     },
-    [engine, workspaceId, patchLocal, guard],
+    [engine, workspaceId, patchLocal, guard, afterCreate],
   );
 
   const moveNote = useCallback(
-    (noteId: string, parentId: string | null, position: string) => {
-      if (!engine || !workspaceId) return;
-      if (wouldCreateCycle(notesRef.current, noteId, parentId)) return; // quiet no-op
-      patchLocal(noteId, { parentId, position, updatedAt: new Date().toISOString() });
-      guard(() => engine.runMetaOp("move", { workspaceId, noteId, parentId, position }));
+    (noteId: string, parentId: string | null, position: string): Promise<boolean> => {
+      if (!engine || !workspaceId) return Promise.resolve(false);
+      if (wouldCreateCycle(notesRef.current, noteId, parentId)) return Promise.resolve(false); // quiet no-op
+      // Nesting clears the stored Inbox flag server-side (NR-1 trigger).
+      patchLocal(noteId, {
+        parentId,
+        position,
+        ...(parentId ? { inInbox: false } : {}),
+        updatedAt: new Date().toISOString(),
+      });
+      return guard(
+        afterCreate(noteId, () =>
+          engine.runMetaOp("move", { workspaceId, noteId, parentId, position }),
+        ),
+      );
     },
-    [engine, workspaceId, patchLocal, guard],
+    [engine, workspaceId, patchLocal, guard, afterCreate],
   );
 
   const setIcon = useCallback(
@@ -333,6 +380,17 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       guard(() =>
         engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { icon: icon ?? "" } }),
       );
+    },
+    [engine, workspaceId, patchLocal, guard],
+  );
+
+  /** Full width (NR-1/NR-3): a per-note opt-out of the reading measure.
+   * Stored on the note, written through `notes_op_set_meta`, no activity. */
+  const setFullWidth = useCallback(
+    (noteId: string, fullWidth: boolean) => {
+      if (!engine || !workspaceId) return;
+      patchLocal(noteId, { fullWidth });
+      guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { fullWidth } }));
     },
     [engine, workspaceId, patchLocal, guard],
   );
@@ -430,7 +488,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       const now = new Date().toISOString();
       const ids = new Set([noteId, ...descendantIds(notesRef.current, noteId)]);
       setNotes((prev) => prev.map((n) => (ids.has(n.id) ? { ...n, deletedAt: now } : n)));
-      guard(() => engine.runMetaOp("trash", { workspaceId, noteId }));
+      guard(afterCreate(noteId, () => engine.runMetaOp("trash", { workspaceId, noteId })));
       const extra = ids.size - 1;
       const taskIds = opts?.detachedTaskIds ?? [];
       const n = taskIds.length;
@@ -455,7 +513,140 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
             : undefined,
       });
     },
-    [engine, workspaceId, guard, restoreNote],
+    [engine, workspaceId, guard, restoreNote, afterCreate],
+  );
+
+  /**
+   * A lazy draft got its first character (NR-2, AC3): create it for real,
+   * exactly once, then let the engine push its document. The create rides the
+   * FIFO meta-outbox, so offline it queues ahead of the doc push.
+   */
+  const materializeDraft = useCallback(
+    (draft: Draft) => {
+      if (!engine || !canEdit || !workspaceId) return;
+      if (createPromisesRef.current.has(draft.id)) return;
+      if (notesRef.current.some((n) => n.id === draft.id)) return;
+      const { id, parentId } = draft;
+      const toPages = parentId === null && draft.toPages === true;
+      const position = endPosition(siblingsOf(notesRef.current, parentId));
+      const now = new Date().toISOString();
+      const optimistic: Note = {
+        id,
+        workspaceId,
+        createdBy: userId,
+        parentId,
+        title: "",
+        icon: null,
+        isPinned: false,
+        position,
+        isArchived: false,
+        publishedAt: null,
+        publishToken: null,
+        docVersion: 0,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        shareMode: parentId ? "inherit" : "custom",
+        workspaceShared: false,
+        inInbox: parentId === null && !toPages,
+        fullWidth: false,
+      };
+      setNotes((prev) => [...prev, optimistic]);
+      pendingCreatesRef.current.set(id, optimistic);
+      // Queue what was typed durably now; the push waits for the create.
+      void engine.promoteDraft(id);
+      const created = engine
+        .runMetaOp("create", { workspaceId, id, parentId, title: "", position })
+        .then(
+          () => {
+            pendingCreatesRef.current.delete(id);
+            engine.releasePush(id);
+            // "+ New page": a root lands in the Inbox server-side; file it.
+            // Its own failure leaves a saved note in the Inbox, nothing lost.
+            if (toPages) {
+              void engine
+                .runMetaOp("file", { workspaceId, noteId: id, inInbox: false, position })
+                .catch(() => {
+                  toast.error("Saved, but it landed in the Inbox. Move it to Pages from its menu.");
+                  void load();
+                });
+            }
+          },
+          (e) => {
+            // The server refused the create. Keep the note on screen as a
+            // local draft again (its queued push is dropped: it can never
+            // land) so the typed text isn't yanked away,
+            // skip every later op on it, and say plainly it isn't saved.
+            failedCreatesRef.current.add(id);
+            void engine.revertToDraft(id);
+            toast.error("Couldn't save this new note.", {
+              description: `${e instanceof Error ? e.message : "The server said no."} Copy what you typed before leaving it.`,
+            });
+          },
+        )
+        .finally(() => {
+          createPromisesRef.current.delete(id);
+        });
+      createPromisesRef.current.set(id, created);
+    },
+    [engine, canEdit, workspaceId, userId, load],
+  );
+
+  /** Inbox ↔ Pages (NR-1 `notes_op_file`). Filing into the Inbox re-roots a
+   * nested note; filing into Pages keeps the note where it is unless a
+   * position is given. Attributed activity is written server-side. */
+  const fileNote = useCallback(
+    (noteId: string, inInbox: boolean, position?: string) => {
+      if (!engine || !workspaceId || !canEdit) return;
+      patchLocal(noteId, {
+        inInbox,
+        ...(inInbox ? { parentId: null } : {}),
+        ...(position ? { position } : {}),
+        updatedAt: new Date().toISOString(),
+      });
+      guard(
+        afterCreate(noteId, () =>
+          engine.runMetaOp("file", { workspaceId, noteId, inInbox, position }),
+        ),
+      );
+    },
+    [engine, workspaceId, canEdit, patchLocal, guard, afterCreate],
+  );
+
+  /** Add, reorder (with `position`) or remove one of the viewer's favorites.
+   * Personal: view access is enough, and no activity row is written. */
+  const setFavorite = useCallback(
+    (noteId: string, value: boolean, position?: string) => {
+      if (!engine || !workspaceId || !ready) return;
+      const current = favoritesRef.current;
+      const nextPosition =
+        position ?? current.find((f) => f.noteId === noteId)?.position ?? endPosition(current);
+      setFavorites((prev) => {
+        const rest = prev.filter((f) => f.noteId !== noteId);
+        if (!value) return rest;
+        const existing = prev.find((f) => f.noteId === noteId);
+        return [
+          ...rest,
+          {
+            noteId,
+            position: nextPosition,
+            createdAt: existing?.createdAt ?? new Date().toISOString(),
+          },
+        ];
+      });
+      void afterCreate(noteId, () =>
+        engine.runMetaOp("setFavorite", {
+          workspaceId,
+          noteId,
+          value,
+          position: value ? nextPosition : null,
+        }),
+      )().catch((e) => {
+        toast.error(e instanceof Error ? e.message : "Couldn't update your favorites.");
+        void load();
+      });
+    },
+    [engine, workspaceId, ready, afterCreate, load],
   );
 
   const purgeNote = useCallback(
@@ -509,6 +700,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
 
   return {
     notes,
+    favorites,
     loading,
     degraded,
     truncated,
@@ -519,6 +711,10 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     welcomeNoteId,
     refresh: load,
     createNote,
+    materializeDraft,
+    fileNote,
+    setFavorite,
+    setFullWidth,
     renameNote,
     moveNote,
     setIcon,
@@ -573,5 +769,7 @@ function welcomeOptimisticNote(id: string, workspaceId: string, userId: string |
     deletedAt: null,
     shareMode: "custom",
     workspaceShared: false,
+    inInbox: true,
+    fullWidth: false,
   };
 }

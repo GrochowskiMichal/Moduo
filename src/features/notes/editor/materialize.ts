@@ -25,7 +25,6 @@
  * the FIRST writer's snapshot is ever stored, and everyone else pulls it.
  */
 
-import { createHeadlessEditor } from "@lexical/headless";
 import { $convertFromMarkdownString } from "@lexical/markdown";
 import {
   createBindingV2__EXPERIMENTAL,
@@ -33,14 +32,16 @@ import {
 } from "@lexical/yjs";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
-import { deriveBody } from "../sync/doc-text";
 import { encodeUint8ToBase64 } from "../utils/base64";
+import {
+  $noteMarkdown,
+  $noteText,
+  createNotesHeadlessEditor,
+  NOTES_DOC_ROOT,
+} from "./doc-markdown";
 import { NOTES_TRANSFORMERS } from "./markdown";
-import { NOTE_EDITOR_NODES } from "./note-nodes";
 
-/** The Yjs root the live editor's v2 collab binding uses (its default, and what
- * `engine-v2` pre-registers on every session doc). */
-export const NOTES_DOC_ROOT = "root-v2";
+export { NOTES_DOC_ROOT };
 
 /** A note's materialization identity: a stable uint32 from its id (FNV-1a).
  * Same note → same clientID on every device and every run, which is what makes
@@ -58,8 +59,8 @@ export function seedClientId(noteId: string): number {
 export type MaterializedDoc = {
   /** base64 `Y.encodeStateAsUpdate` — goes straight into `notes.doc_state`. */
   docStateB64: string;
-  /** Derived bodies from the SAME walker the sync engine uses on every push,
-   * so the stored body can't drift from the doc that now backs it. */
+  /** Derived bodies from the SAME converter the sync engine uses on every
+   * push (NR-3), so the stored body can't drift from the doc that backs it. */
   bodyText: string;
   bodyMd: string;
 };
@@ -85,14 +86,7 @@ export function buildDocStateFromMarkdown(
   // text-loss footgun when an update applies before the type is known).
   doc.get(NOTES_DOC_ROOT, Y.XmlElement);
 
-  let error: unknown = null;
-  const editor = createHeadlessEditor({
-    namespace: `moduo-note-${noteId}`,
-    nodes: [...NOTE_EDITOR_NODES],
-    onError: (e: Error) => {
-      error = e;
-    },
-  });
+  const { editor, takeError } = createNotesHeadlessEditor(`moduo-note-${noteId}`);
 
   const docMap = new Map<string, Y.Doc>([[noteId, doc]]);
   const binding = createBindingV2__EXPERIMENTAL(editor, noteId, doc, docMap);
@@ -136,11 +130,14 @@ export function buildDocStateFromMarkdown(
       { discrete: true },
     );
 
+    const error = takeError();
     if (error) throw error;
 
     const root = doc.getXmlElement(NOTES_DOC_ROOT);
     if (root.toArray().length > 0) {
-      const body = deriveBody(doc);
+      // The editor that built the doc IS the doc's editor state, so the bodies
+      // come straight off it — no second read back through the binding.
+      const body = editor.getEditorState().read(() => ({ text: $noteText(), md: $noteMarkdown() }));
       result = {
         docStateB64: encodeUint8ToBase64(Y.encodeStateAsUpdate(doc)),
         bodyText: body.text,

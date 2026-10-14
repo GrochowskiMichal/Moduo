@@ -1,10 +1,12 @@
 /**
  * Local preview of the static landing, served the way Vercel ships it:
- *   /          → landing/index.html   (www.moduo.app, prod-landing)
+ *   /          → landing/index.html   (moduo.app, prod-landing)
  *   /staging   → landing/staging.html (staging.moduo.app, staging-landing)
  *   /manifesto → landing/manifesto.html
  *   /privacy   → landing/privacy.html
  *   /terms     → landing/terms.html
+ *   /dpa       → landing/dpa.html
+ *   /aup       → landing/aup.html
  *   /parked/x  → landing/parked/x.html (kept for later, never deployed)
  *
  * Usage: bun run preview:landing   (PORT=… to change the port)
@@ -20,6 +22,8 @@ const SUBPAGES: Record<string, string> = {
   "/manifesto": "manifesto.html",
   "/privacy": "privacy.html",
   "/terms": "terms.html",
+  "/dpa": "dpa.html",
+  "/aup": "aup.html",
 };
 
 const server = Bun.serve({

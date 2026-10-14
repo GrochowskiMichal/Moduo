@@ -2,6 +2,7 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css";
 @import "./styles/tokens.css";
+@import "./styles/notes-prose.css";
 
 /* Body + display fonts.
    Token strings reference "Geist" and "Fraunces" (see tokens.css §9), but the
@@ -436,315 +437,7 @@ body,
   }
 }
 
-/* ═══ Notes: Lexical theme — token-driven ═══ */
-
-/* Wave-3 editor: the first line IS the title (no separate title field) —
-   the leading TEXT block renders display-sized. Scoped to paragraph/heading
-   so a note starting with a checklist/code/table doesn't blow up 3xl. */
-.notes-editor-v2 [contenteditable] > .notes-p:first-child,
-.notes-editor-v2 [contenteditable] > .notes-h1:first-child,
-.notes-editor-v2 [contenteditable] > .notes-h2:first-child,
-.notes-editor-v2 [contenteditable] > .notes-h3:first-child {
-  margin-top: 0;
-  margin-bottom: 0.75rem;
-  font-family: var(--font-display);
-  font-size: var(--text-3xl);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-  color: var(--foreground);
-}
-
-.notes-p {
-  margin: 0 0 0.625rem;
-  color: var(--foreground);
-}
-
-.notes-h1,
-.notes-h2,
-.notes-h3 {
-  margin: 1.25rem 0 0.5rem;
-  font-family: var(--font-display);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-  color: var(--foreground);
-}
-
-.notes-h1 {
-  font-size: var(--text-3xl);
-}
-
-.notes-h2 {
-  font-size: var(--text-2xl);
-}
-
-.notes-h3 {
-  font-size: var(--text-xl);
-}
-
-.notes-quote {
-  margin: 0.75rem 0;
-  border-left: 3px solid var(--border);
-  padding: 0.125rem 0 0.125rem 0.75rem;
-  color: var(--muted-foreground);
-  font-style: italic;
-}
-
-.notes-list-ul,
-.notes-list-ol,
-.notes-checklist {
-  margin: 0.5rem 0 0.75rem;
-  color: var(--foreground);
-}
-
-.notes-list-ul {
-  list-style: disc outside;
-  padding-left: 1.5rem;
-}
-
-.notes-list-ol {
-  list-style: decimal outside;
-  padding-left: 1.75rem;
-}
-
-.notes-list-item {
-  display: list-item;
-  margin: 0.1875rem 0;
-}
-
-.notes-list-item>.notes-list-ul,
-.notes-list-item>.notes-list-ol {
-  margin-top: 0.25rem;
-}
-
-.notes-list-item .notes-p {
-  margin: 0;
-}
-
-.notes-list-item::marker {
-  color: var(--muted-foreground);
-}
-
-/* Lexical indent can create a parent placeholder list item (no own text) that wraps
-   a nested list. Hide only that placeholder marker; keep real parent markers. */
-.notes-list-item:has(> .notes-list-ul):not(:has(> .notes-p > span[data-lexical-text]:not(:empty))),
-.notes-list-item:has(> .notes-list-ol):not(:has(> .notes-p > span[data-lexical-text]:not(:empty))) {
-  list-style: none;
-}
-
-.notes-list-ul .notes-list-ul {
-  list-style-type: circle;
-}
-
-.notes-list-ul .notes-list-ul .notes-list-ul {
-  list-style-type: square;
-}
-
-.notes-list-ol .notes-list-ol {
-  list-style-type: lower-alpha;
-}
-
-.notes-list-ol .notes-list-ol .notes-list-ol {
-  list-style-type: lower-roman;
-}
-
-.notes-checklist {
-  list-style: none;
-  padding-left: 0;
-}
-
-.notes-list-item-unchecked,
-.notes-list-item-checked {
-  list-style: none;
-  position: relative;
-  padding-left: 1.75rem;
-  margin: 0.25rem 0;
-}
-
-.notes-list-item-unchecked .notes-p,
-.notes-list-item-checked .notes-p {
-  margin: 0;
-}
-
-.notes-list-item-unchecked::marker,
-.notes-list-item-checked::marker {
-  content: "";
-}
-
-/* Mirrors CompleteToggle (round, muted hairline, primary fill when done) so
- * the /task conversion never morphs the checkbox — "the checkbox IS the task"
- * has to hold visually. Geometry matches the task-line overlay (left 0.25rem). */
-.notes-list-item-unchecked::before,
-.notes-list-item-checked::before {
-  content: "";
-  position: absolute;
-  left: 0.25rem;
-  top: 0.375rem;
-  width: 1rem;
-  height: 1rem;
-  border-radius: var(--radius-full);
-  border: 1px solid color-mix(in oklab, var(--muted-foreground) 50%, transparent);
-  background: transparent;
-  transition: background-color var(--motion-fade) var(--ease-out),
-    border-color var(--motion-fade) var(--ease-out);
-}
-
-.notes-list-item-unchecked:hover::before {
-  border-color: var(--foreground);
-}
-
-.notes-list-item-checked::before {
-  content: "✓";
-  color: var(--primary-foreground);
-  background: var(--primary);
-  border-color: var(--primary);
-  font-size: var(--text-xs);
-  display: grid;
-  place-items: center;
-}
-
-/* Task lines (NO-5) — a checkbox line that grew up, never a card. The
- * checkbox/meta chrome renders in the plugin's OVERLAY outside the
- * contenteditable (Lexical reclaims foreign DOM inside its root); this block
- * only reserves the gutters the overlay draws into. */
-.notes-task-line {
-  position: relative;
-  margin: 0.25rem 0;
-  padding: 0.125rem 7rem 0.125rem 1.75rem;
-  border-radius: var(--radius-sm);
-  min-height: 1.75rem;
-}
-
-.notes-task-line[data-done="true"] {
-  color: var(--muted-foreground);
-  text-decoration: line-through;
-  text-decoration-color: var(--border);
-}
-
-.notes-task-line[data-pending="true"] {
-  color: var(--muted-foreground);
-}
-
-/* Inline text formats (DF-13) — Lexical expresses only ONE format via the
- * element tag; combinations and strikethrough/underline need theme classes. */
-.notes-text-bold {
-  font-weight: 700;
-}
-
-.notes-text-italic {
-  font-style: italic;
-}
-
-.notes-text-strikethrough {
-  text-decoration: line-through;
-}
-
-.notes-text-underline {
-  text-decoration: underline;
-}
-
-.notes-text-underline-strikethrough {
-  text-decoration: underline line-through;
-}
-
-.notes-inline-code,
-.notes-code-block {
-  font-family: var(--font-mono);
-}
-
-.notes-inline-code {
-  padding: 0.0625rem 0.375rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--muted);
-  color: var(--foreground);
-  font-size: 0.875em;
-}
-
-.notes-code-block {
-  display: block;
-  white-space: pre;
-  tab-size: 2;
-  overflow-x: auto;
-  line-height: var(--leading-relaxed);
-  font-size: var(--text-sm);
-  margin: 0.75rem 0;
-  padding: 0.75rem 0.875rem;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--foreground);
-}
-
-.notes-link {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-  text-decoration-thickness: 1px;
-  transition: color 120ms ease;
-}
-
-.notes-link:hover {
-  color: var(--primary-hover);
-}
-
-/* ═══ Notes: Table ═══ */
-
-.notes-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1rem 0;
-  table-layout: fixed;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-
-.notes-table-cell {
-  border: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
-  vertical-align: top;
-  min-width: 5rem;
-  font-size: var(--text-sm);
-  color: var(--foreground);
-  line-height: var(--leading-relaxed);
-  background: var(--card);
-  outline: none;
-  position: relative;
-}
-
-.notes-table-cell:focus-within {
-  background: var(--accent);
-  box-shadow: inset 0 0 0 2px var(--ring);
-}
-
-.notes-table-cell-header {
-  border: 1px solid var(--border);
-  padding: 0.5rem 0.75rem;
-  vertical-align: top;
-  min-width: 5rem;
-  font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--foreground);
-  background: var(--popover);
-  outline: none;
-  text-align: left;
-  position: relative;
-}
-
-.notes-table-cell-header:focus-within {
-  background: var(--accent);
-  box-shadow: inset 0 0 0 2px var(--ring);
-}
-
-/* Lexical table selection highlight — token-driven, no raw rgba. */
-.notes-table-cell.selected,
-.notes-table-cell-header.selected {
-  background: var(--accent);
-  box-shadow: inset 0 0 0 2px var(--ring);
-}
+/* Notes prose (editor + published page) lives in styles/notes-prose.css. */
 
 /* ═══ Slash menu: Table size picker ═══ */
 
@@ -839,6 +532,15 @@ body,
    does the scrolling, or the pane shows a dead strip beside the real bar. */
 .pane-scroll {
   scrollbar-gutter: stable;
+}
+
+/* ═══ A menu that scrolls says so (DS-6 follow-up, TV-U10) ═══
+   A menu taller than its room scrolls inside (surface.ts); while more items
+   wait below, its foot fades out, so the cut-off last item reads as "there's
+   more". The menu primitives set `data-more-below` (menu-scroll.ts); a mask
+   fades every surface the same in both themes, no colour involved. */
+[data-more-below] {
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--menu-fade)), transparent);
 }
 
 /* ═══ Hit target (DS-6, visual audit B14) ═══
@@ -1086,89 +788,68 @@ body,
   animation: chromeFadeIn var(--motion-base) var(--ease-out) both;
 }
 
-/* Public published-note page (NO-9b): styles the elements react-markdown
-   renders from body_md. Tokens-only, mirrors the .notes-* editor prose. */
-.notes-public-prose {
-  color: var(--foreground);
-  line-height: var(--leading-relaxed);
+/* Print layouts (TV-D14): the time report's "Export PDF" and a view's print
+   layout render into a print root (components/app/print-root.tsx). On screen
+   it never shows; on paper it is the only thing that does, in the light
+   theme whatever the app's (its own data-theme), on plain paper. */
+[data-print-root] {
+  display: none;
 }
-.notes-public-prose > :first-child {
-  margin-top: 0;
+
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto;
+    background: transparent;
+  }
+
+  body:has(> [data-print-root]) > :not([data-print-root]) {
+    display: none !important;
+  }
+
+  [data-print-root] {
+    display: block;
+    background: var(--card);
+    color: var(--foreground);
+  }
+
+  [data-print-root] .print-avoid-break {
+    break-inside: avoid;
+  }
 }
-.notes-public-prose h1,
-.notes-public-prose h2,
-.notes-public-prose h3 {
-  margin: 1.5rem 0 0.5rem;
-  font-family: var(--font-display);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--tracking-tight);
-  line-height: var(--leading-tight);
-  color: var(--foreground);
+
+/* TV-TL1 · the Timeline's grid (REPLAN 69): one hairline per unit (a day at
+   Week and Month, a week at Quarter) and a faint tint on weekends at Week and
+   Month, painted as a background so an endless canvas costs nothing to draw.
+   The view sets the geometry: --timeline-dw (a day's width), --timeline-unit
+   (the unit's width) and where the first unit line and Saturday fall
+   (--timeline-unit-x, --timeline-weekend-x). Month and year lines are
+   elements (months aren't even). */
+.timeline-grid {
+  background-image: linear-gradient(to right, var(--timeline-grid) 1px, transparent 1px);
+  background-size: var(--timeline-unit) 100%;
+  background-position-x: var(--timeline-unit-x);
 }
-.notes-public-prose h1 { font-size: var(--text-3xl); }
-.notes-public-prose h2 { font-size: var(--text-2xl); }
-.notes-public-prose h3 { font-size: var(--text-xl); }
-.notes-public-prose p { margin: 0.75rem 0; }
-.notes-public-prose ul,
-.notes-public-prose ol {
-  margin: 0.75rem 0;
-  padding-left: 1.5rem;
+
+.timeline-grid[data-weekends] {
+  background-image:
+    linear-gradient(to right, var(--timeline-grid) 1px, transparent 1px),
+    linear-gradient(
+      to right,
+      var(--timeline-weekend) calc(var(--timeline-dw) * 2),
+      transparent calc(var(--timeline-dw) * 2)
+    );
+  background-size:
+    var(--timeline-unit) 100%,
+    calc(var(--timeline-dw) * 7) 100%;
+  background-position-x: var(--timeline-unit-x), var(--timeline-weekend-x);
 }
-.notes-public-prose ul { list-style: disc outside; }
-.notes-public-prose ol { list-style: decimal outside; }
-.notes-public-prose li { margin: 0.25rem 0; }
-.notes-public-prose li::marker { color: var(--muted-foreground); }
-.notes-public-prose a {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+
+.timeline-grid[data-unit="month"] {
+  background-image: none;
 }
-.notes-public-prose code {
-  border-radius: var(--radius-sm);
-  background: var(--muted);
-  padding: 0.1rem 0.3rem;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
-.notes-public-prose pre {
-  margin: 1rem 0;
-  overflow-x: auto;
-  border-radius: var(--radius-lg);
-  background: var(--muted);
-  padding: 0.875rem 1rem;
-}
-.notes-public-prose pre code {
-  background: none;
-  padding: 0;
-}
-.notes-public-prose blockquote {
-  margin: 1rem 0;
-  border-left: 3px solid var(--border);
-  padding: 0.125rem 0 0.125rem 0.875rem;
-  color: var(--muted-foreground);
-}
-.notes-public-prose img {
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--radius-lg);
-  margin: 1rem 0;
-}
-.notes-public-prose hr {
-  margin: 1.5rem 0;
-  border: 0;
-  border-top: 1px solid var(--border);
-}
-.notes-public-prose table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1rem 0;
-  display: block;
-  overflow-x: auto;
-}
-.notes-public-prose th,
-.notes-public-prose td {
-  border: 1px solid var(--border);
-  padding: 0.375rem 0.625rem;
-  text-align: left;
-}
-.notes-public-prose input[type="checkbox"] { margin-right: 0.375rem; }

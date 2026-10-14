@@ -45,18 +45,28 @@ import {
   type LexicalNode,
   type NodeKey,
 } from "lexical";
-import { CalendarClock, CheckSquare, ExternalLink, Trash2, Unlink, X } from "lucide-react";
+import {
+  CalendarClock,
+  CheckSquare,
+  ExternalLink,
+  Paperclip,
+  Trash2,
+  Unlink,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CompleteToggle } from "@/components/ui/complete-toggle";
 import { DateField } from "@/components/ui/date-field";
+import { MetaCount } from "@/components/ui/meta-count";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { filesLabel } from "@/features/attachments/files";
 import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
 import type { TaskLineSnapshot } from "../../tasks/detach";
-import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../nodes/task-line-node";
 import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
+import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../schema/task-line-node";
 
 /** Our own programmatic updates — the deletion detector skips these. */
 export const TASK_LINE_TAG = "moduo-task-line";
@@ -355,11 +365,14 @@ function TaskLineMeta({
   const scheduledLabel = formatScheduled(task!.scheduledAt);
   const chipLabel = scheduledLabel ?? dueLabel;
   const reveal = active || scheduleOpen;
+  const files = tasks.fileCount?.(entry.taskId!) ?? 0;
 
   return (
     <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
       <PopoverAnchor asChild>
         <span className="inline-flex items-center gap-1">
+          {/* The task's 📎 mark (AT-3), quiet beside its details chip. */}
+          <MetaCount icon={Paperclip} count={files} label={filesLabel} />
           <button
             type="button"
             className="inline-flex max-w-40 items-center gap-1 truncate rounded-sm bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"

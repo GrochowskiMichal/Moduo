@@ -7,6 +7,7 @@
 import { describe, expect, it } from "@rstest/core";
 import {
   GROUP_LABELS,
+  nextHeaderSort,
   orderTasks,
   sanitizeTasksView,
   TASKS_DISPLAY_DEFAULTS,
@@ -38,17 +39,43 @@ describe("Tasks Display — stored value", () => {
       layout: "list",
       group: "none",
       boardGroup: "status",
+      // TV-U11: lanes off and no description on cards until asked (85, AC7.4).
+      boardLanes: "none",
+      cardDescription: "hidden",
       order: "manual",
+      orderDir: "asc",
       completed: "hidden",
       subtasks: "nested",
       rows: "standard",
       properties: ["priority", "date", "assignee"],
+      // TV-TL1: the Timeline's own (REPLAN 67, 69, 71).
+      timelineZoom: "month",
+      timelineGroup: "project",
+      colorBy: "none",
+      timelineShow: [],
+      timelineSubtasks: "hidden",
+      // TV-TL2: the selected task's dependency lines (REPLAN 70).
+      timelineDeps: "selected",
     });
     expect(tasksDisplayDefaults("all").group).toBe("bucket");
     // Call 84: My tasks answers "what am I in the middle of".
     expect(tasksDisplayDefaults("mine").group).toBe("status");
-    expect(tasksDisplayDefaults("b-42").group).toBe("none");
+    // TV-U10: a project groups by section (a plain list until it has some).
+    expect(tasksDisplayDefaults("b-42").group).toBe("section");
     expect(tasksDisplayDefaults("inbox").group).toBe("none");
+  });
+
+  it("the Timeline opens All at Quarter by area, a project at Month by section (TV-TL1)", () => {
+    const all = tasksDisplayDefaults("all");
+    expect([all.timelineZoom, all.timelineGroup]).toEqual(["quarter", "area"]);
+    const project = tasksDisplayDefaults("b-42");
+    expect([project.timelineZoom, project.timelineGroup]).toEqual(["month", "section"]);
+    const mine = tasksDisplayDefaults("mine");
+    expect([mine.timelineZoom, mine.timelineGroup]).toEqual(["month", "project"]);
+    // The student role turns Due per week on (call 34: roles change defaults only).
+    expect(tasksDisplayDefaults("b-42", "standard", { duePerWeek: true }).timelineShow).toEqual([
+      "duePerWeek",
+    ]);
   });
 
   it("a scope without a stored layout starts with the old workspace-wide one", () => {
@@ -62,17 +89,27 @@ describe("Tasks Display — stored value", () => {
       layout: "board",
       group: "date",
       boardGroup: "bucket",
+      boardLanes: "assignee",
+      cardDescription: "preview",
       order: "priority",
+      orderDir: "desc",
       completed: "week",
       subtasks: "flat",
       rows: "detailed",
       properties: ["energy", "priority"],
+      timelineZoom: "year",
+      timelineGroup: "none",
+      colorBy: "project",
+      timelineShow: ["repeats", "undated"],
+      timelineSubtasks: "nested",
+      timelineDeps: "all",
       filters: [{ dimension: "priority", operator: "is", values: ["high"] }],
     };
     expect(sanitizeTasksView(stored, tasksViewDefaults("all"), "all")).toEqual({
       ...stored,
       // Toggles come back in the menu's order.
       properties: ["priority", "energy"],
+      timelineShow: ["undated", "repeats"],
     });
   });
 
@@ -81,14 +118,22 @@ describe("Tasks Display — stored value", () => {
       layout: "gallery",
       group: "mood",
       order: "random",
+      orderDir: "sideways",
       completed: "forever",
       subtasks: "deep",
       rows: "compact",
       properties: ["priority", "mood"],
+      timelineZoom: "decade",
+      // Area only at All; Colour by Project only across projects.
+      timelineGroup: "area",
+      colorBy: "project",
+      timelineShow: ["gantt"],
       filters: [{ dimension: "mood", operator: "is", values: ["happy"] }, "junk"],
     };
     expect(sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1")).toEqual({
       ...TASKS_DISPLAY_DEFAULTS,
+      group: "section",
+      timelineGroup: "section",
       properties: ["priority"],
       filters: [],
     });
@@ -100,9 +145,22 @@ describe("Tasks Display — stored value", () => {
   it("project grouping only across projects, even from storage (List and Board)", () => {
     const stored = { group: "bucket", boardGroup: "bucket" };
     const one = sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1");
-    expect([one.group, one.boardGroup]).toEqual(["none", "status"]);
+    expect([one.group, one.boardGroup]).toEqual(["section", "status"]);
     const all = sanitizeTasksView(stored, tasksViewDefaults("all"), "all");
     expect([all.group, all.boardGroup]).toEqual(["bucket", "bucket"]);
+  });
+
+  it("section grouping only inside one project, even from storage (TV-U10)", () => {
+    expect(sanitizeTasksView({ group: "section" }, tasksViewDefaults("all"), "all").group).toBe(
+      "bucket",
+    );
+    expect(sanitizeTasksView({ group: "section" }, tasksViewDefaults("b1"), "b1").group).toBe(
+      "section",
+    );
+    // Team is kept from storage while teams load.
+    expect(sanitizeTasksView({ group: "team" }, tasksViewDefaults("all"), "all").group).toBe(
+      "team",
+    );
   });
 
   it("v2's groupings (Tag, Energy, Time, Due, Scheduled) fall back to the scope's default", () => {
@@ -140,47 +198,122 @@ describe("Tasks Display — controls per scope and layout", () => {
     expect(rows?.options.map((o) => o.label)).toEqual(["Standard", "Detailed"]);
   });
 
-  it("Group by: Status · Priority · Assignee · Date · Project · None, never Tag or Energy", () => {
-    const groups = (scope: string) => {
-      const control = tasksDisplayControls(scope, "list").find((c) => c.id === "group");
+  it("Group by: Section · Status · Priority · Assignee · Team · Date · Project · None, never Tag or Energy", () => {
+    const groups = (scope: string, teams = true) => {
+      const control = tasksDisplayControls(scope, "list", { teams }).find((c) => c.id === "group");
       return control?.options.map((o) => o.label);
     };
-    expect(groups("all")).toEqual(["Status", "Priority", "Assignee", "Date", "Project", "None"]);
-    // Project only across projects.
-    expect(groups("b1")).toEqual(["Status", "Priority", "Assignee", "Date", "None"]);
+    expect(groups("all")).toEqual([
+      "Status",
+      "Priority",
+      "Assignee",
+      "Team",
+      "Date",
+      "Project",
+      "None",
+    ]);
+    // Section inside one project only; Project only across projects.
+    expect(groups("b1")).toEqual([
+      "Section",
+      "Status",
+      "Priority",
+      "Assignee",
+      "Team",
+      "Date",
+      "None",
+    ]);
+    // Team once the workspace has teams.
+    expect(groups("b1", false)).not.toContain("Team");
     const every = Object.values(GROUP_LABELS);
     for (const gone of ["Tag", "Energy", "Time", "Due date", "Scheduled", "Bucket"]) {
       expect(every).not.toContain(gone);
     }
   });
 
-  it("the Board says Group by, never Columns (across projects only)", () => {
+  it("the Board says Group by, never Columns; Lanes, Rows and Description too (TV-U11)", () => {
     expect(controlIds("all", "board")).toEqual([
       "layout",
       "boardGroup",
+      "boardLanes",
       "order",
       "completed",
       "subtasks",
+      "rows",
       "properties",
+      "cardDescription",
     ]);
-    const control = tasksDisplayControls("all", "board").find((c) => c.id === "boardGroup");
-    expect(control?.label).toBe("Group by");
-    expect(control?.options.map((o) => o.label)).toEqual(["Status", "Project"]);
-    expect(controlIds("b1", "board")).not.toContain("boardGroup");
+    const option = (scope: string, id: string, teams = true, areas = true) =>
+      tasksDisplayControls(scope, "board", { teams, areas })
+        .find((c) => c.id === id)
+        ?.options.map((o) => o.label);
+    // Call 22: across projects, Project and Area; one project, Section.
+    expect(option("all", "boardGroup")).toEqual([
+      "Status",
+      "Assignee",
+      "Team",
+      "Priority",
+      "Project",
+      "Area",
+      "Waiting on",
+    ]);
+    expect(option("b1", "boardGroup")).toEqual([
+      "Status",
+      "Section",
+      "Assignee",
+      "Team",
+      "Priority",
+      "Waiting on",
+    ]);
+    expect(option("b1", "boardGroup", false)).not.toContain("Team");
+    expect(option("all", "boardGroup", true, false)).not.toContain("Area");
+    // Call 85: Lanes none · assignee · priority · project (across) · team.
+    expect(option("all", "boardLanes")).toEqual([
+      "None",
+      "Assignee",
+      "Priority",
+      "Project",
+      "Team",
+    ]);
+    expect(option("b1", "boardLanes", false)).toEqual(["None", "Assignee", "Priority"]);
+    expect(option("all", "cardDescription")).toEqual(["Hidden", "Preview"]);
     const labels = (scope: string, layout: "list" | "board") =>
       tasksDisplayControls(scope, layout).map((c) => c.label);
     for (const layout of ["list", "board"] as const) {
       expect(labels("all", layout)).not.toContain("Columns");
     }
+    expect(labels("b1", "board")).toContain("Show on cards");
+  });
+
+  it("a stored Board grouping a scope can't offer falls back to Status (call 86)", () => {
+    const stored = { boardGroup: "section", boardLanes: "bucket" };
+    const all = sanitizeTasksView(stored, tasksViewDefaults("all"), "all");
+    expect([all.boardGroup, all.boardLanes]).toEqual(["status", "bucket"]);
+    const one = sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1");
+    expect([one.boardGroup, one.boardLanes]).toEqual(["section", "none"]);
   });
 
   it("the Queue is a line-up (no Completed choice: done leaves the queue)", () => {
     expect(controlIds("today", "list")).toEqual(["layout", "rows", "properties"]);
-    expect(controlIds("today", "board")).toEqual(["layout", "properties"]);
+    expect(controlIds("today", "board")).toEqual([
+      "layout",
+      "rows",
+      "properties",
+      "cardDescription",
+    ]);
   });
 
-  it("the Timeline keeps its own rules", () => {
-    expect(controlIds("inbox", "timeline")).toEqual(["layout"]);
+  it("the Timeline has its own (REPLAN 71): Group by, Show done, Colour by, Dependencies, Show, Subtasks", () => {
+    expect(controlIds("inbox", "timeline")).toEqual([
+      "layout",
+      "timelineGroup",
+      "completed",
+      "colorBy",
+      "timelineDeps",
+      "timelineShow",
+      "timelineSubtasks",
+    ]);
+    // The lines show for the selected task by default (TV-TL2, REPLAN 70).
+    expect(tasksDisplayDefaults("inbox").timelineDeps).toBe("selected");
   });
 });
 
@@ -230,6 +363,47 @@ describe("Order by", () => {
     const x = task("x", { priority: "high" });
     const y = task("y", { priority: "high" });
     expect(ids(orderTasks([x, y], "priority"))).toEqual(["x", "y"]);
+  });
+
+  it("titles A to Z (numbers in order), statuses In progress first (TV-U10)", () => {
+    const t10 = task("t10", { title: "Step 10" });
+    const t2 = task("t2", { title: "step 2" });
+    const blank = task("blank", { title: "" });
+    expect(ids(orderTasks([t10, blank, t2], "title"))).toEqual(["t2", "t10", "blank"]);
+    const todo = task("todo", { status: "todo" });
+    const doing = task("doing", { status: "in_progress" });
+    const done = task("done", { status: "done" });
+    expect(ids(orderTasks([done, todo, doing], "status"))).toEqual(["doing", "todo", "done"]);
+  });
+
+  it("descending turns a sort around, and a task without the value stays last", () => {
+    expect(ids(orderTasks(list, "due", "desc"))).toEqual(["a", "c", "b"]);
+    expect(ids(orderTasks(list, "priority", "desc"))).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("Detailed headers (TV-U10)", () => {
+  it("ascending, then descending, then back to the view's own order", () => {
+    let state = { order: "manual" as const, orderDir: "asc" as const } as {
+      order: Parameters<typeof nextHeaderSort>[0]["order"];
+      orderDir: "asc" | "desc";
+    };
+    state = nextHeaderSort(state, "due", "manual");
+    expect(state).toEqual({ order: "due", orderDir: "asc" });
+    state = nextHeaderSort(state, "due", "manual");
+    expect(state).toEqual({ order: "due", orderDir: "desc" });
+    state = nextHeaderSort(state, "due", "manual");
+    expect(state).toEqual({ order: "manual", orderDir: "asc" });
+    // Another column starts ascending.
+    expect(nextHeaderSort({ order: "due", orderDir: "desc" }, "title", "manual")).toEqual({
+      order: "title",
+      orderDir: "asc",
+    });
+    // A view sorted by that column anyway (Upcoming by due) turns back.
+    expect(nextHeaderSort({ order: "due", orderDir: "desc" }, "due", "due")).toEqual({
+      order: "due",
+      orderDir: "asc",
+    });
   });
 });
 
@@ -343,5 +517,50 @@ describe("Group by", () => {
       "priority",
     );
     expect(groupsOf(tasks, "status")).toEqual([["To do", ["b", "a"]]]);
+  });
+
+  const sections = [
+    { id: "s2", name: "Build", position: 2 },
+    { id: "s1", name: "Design", position: 1 },
+  ];
+
+  it("Section (TV-U10): No section first, then the sections in their order", () => {
+    const tasks = [
+      task("a", { sectionId: "s2" }),
+      task("b", { sectionId: null }),
+      task("c", { sectionId: "s1" }),
+    ];
+    expect(groupsOf(tasks, "section", { sections })).toEqual([
+      ["No section", ["b"]],
+      ["Design", ["c"]],
+      ["Build", ["a"]],
+    ]);
+  });
+
+  it("Section with no sections yet is the plain list (no headers)", () => {
+    // The same rows both sides: a task's stamps are the clock's (a millisecond
+    // apart under load).
+    const rows = [task("a"), task("b")];
+    const groups = groupTasks(rows, "section", { ...ctx, sections: [] });
+    expect(groups).toEqual([{ key: "all", label: "", tasks: rows }]);
+  });
+
+  it("Team: teams by name, a team gone, then No team", () => {
+    const teams = [
+      { id: "t1", name: "Sales" },
+      { id: "t2", name: "Design" },
+    ];
+    const tasks = [
+      task("a", { teamId: "t1" }),
+      task("b", { teamId: null }),
+      task("c", { teamId: "t2" }),
+      task("d", { teamId: "gone" }),
+    ];
+    expect(groupsOf(tasks, "team", { teams })).toEqual([
+      ["Design", ["c"]],
+      ["Sales", ["a"]],
+      ["Former team", ["d"]],
+      ["No team", ["b"]],
+    ]);
   });
 });

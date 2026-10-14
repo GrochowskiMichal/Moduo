@@ -8,20 +8,10 @@
 
 import { ArrowDown, Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatWeekdayDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { TimelineRow } from "../timeline";
 
-const DAY_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-});
-const DAY_FMT_YEAR = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-});
 const NEAR_BOTTOM_PX = 120;
 const NEAR_TOP_PX = 240;
 
@@ -32,7 +22,7 @@ function dayLabel(iso: string): string {
   const diff = Math.round((start(today) - start(d)) / 86_400_000);
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
-  return d.getFullYear() === today.getFullYear() ? DAY_FMT.format(d) : DAY_FMT_YEAR.format(d);
+  return formatWeekdayDate(d, today);
 }
 
 export function MessageList({

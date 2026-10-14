@@ -25,9 +25,14 @@ export const PERF_TASKS = 10_000;
 /** The word only the fixture's every 500th task carries. */
 export const PERF_SEARCH_WORD = "quokka";
 
-type Status = { API_URL: string; DB_URL: string; SERVICE_ROLE_KEY?: string; SECRET_KEY?: string };
+export type Status = {
+  API_URL: string;
+  DB_URL: string;
+  SERVICE_ROLE_KEY?: string;
+  SECRET_KEY?: string;
+};
 
-function stack(): Status {
+export function stack(): Status {
   const status = JSON.parse(
     execFileSync("supabase", ["status", "-o", "json"], {
       encoding: "utf8",
@@ -40,7 +45,7 @@ function stack(): Status {
   return status;
 }
 
-function psql(dbUrl: string, sql: string): string {
+export function psql(dbUrl: string, sql: string): string {
   const run = spawnSync("psql", [dbUrl, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], {
     input: sql,
     encoding: "utf8",
@@ -52,7 +57,7 @@ function psql(dbUrl: string, sql: string): string {
 }
 
 /** The perf person (made once through the Auth admin API), password set after. */
-async function ensurePerfUser(s: Status): Promise<string> {
+export async function ensurePerfUser(s: Status): Promise<string> {
   const service = s.SERVICE_ROLE_KEY ?? s.SECRET_KEY ?? "";
   const admin = {
     apikey: service,

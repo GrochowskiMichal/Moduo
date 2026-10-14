@@ -13,11 +13,11 @@ import { createBindingV2__EXPERIMENTAL, syncYjsStateToLexicalV2__EXPERIMENTAL } 
 import { describe, expect, it } from "@rstest/core";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
-import { deriveBody } from "../sync/doc-text";
 import { decodeBase64ToUint8 } from "../utils/base64";
+import { deriveNoteBody } from "./doc-markdown";
 import { NOTES_TRANSFORMERS } from "./markdown";
 import { buildDocStateFromMarkdown, NOTES_DOC_ROOT, seedClientId } from "./materialize";
-import { NOTE_EDITOR_NODES } from "./note-nodes";
+import { NOTE_EDITOR_NODES } from "./schema/nodes";
 
 const NOTE_ID = "3f7c1b2e-6a4d-4b9e-8c11-0d2e5a7b9c44";
 
@@ -51,8 +51,8 @@ function applySnapshot(docStateB64: string): Y.Doc {
 
 /**
  * Read a stored snapshot back the way the LIVE editor does — through the same
- * v2 binding, into a real Lexical editor — rather than through `deriveBody`.
- * Verifying with `deriveBody` alone would only prove the walker agrees with
+ * v2 binding, into a real Lexical editor — written out longhand rather than
+ * through `deriveNoteBody`, which would only prove the converter agrees with
  * itself; this proves the doc is one Lexical can actually mount.
  */
 function readBackThroughEditor(docStateB64: string, noteId = NOTE_ID): string {
@@ -101,15 +101,14 @@ describe("buildDocStateFromMarkdown", () => {
     expect(md).toContain("*italic*");
   });
 
-  it("keeps link URLs and inline marks in the DOC even though deriveBody drops them", () => {
-    // This asymmetry is why the import and the repair store the raw markdown
-    // and never a `deriveBody` result: the doc is the rich copy, `body_md` is
-    // the faithful copy, and neither may be overwritten by the other.
+  it("keeps link URLs and inline marks in the doc AND in the derived body (NR-3)", () => {
+    // Before NR-3 the derived body dropped both (the doc-text walker); now
+    // it comes from the same converter that reads the doc.
     const md = "See [pricing](https://x.test/p) and **bold**.\n";
     const built = buildDocStateFromMarkdown(NOTE_ID, md)!;
 
     expect(readBackThroughEditor(built.docStateB64)).toContain("https://x.test/p");
-    expect(built.bodyMd).not.toContain("https://x.test/p");
+    expect(built.bodyMd).toBe("See [pricing](https://x.test/p) and **bold**.");
   });
 
   it("returns null for blank markdown so callers skip the write", () => {
@@ -129,7 +128,7 @@ describe("buildDocStateFromMarkdown", () => {
   it("round-trips the content back out of the CRDT, not just into it", () => {
     const built = buildDocStateFromMarkdown(NOTE_ID, SAMPLE)!;
     const doc = applySnapshot(built.docStateB64);
-    const body = deriveBody(doc);
+    const body = deriveNoteBody(doc);
 
     // Prose + every block type survives the markdown → Lexical → Yjs trip.
     expect(body.text).toContain("Quarterly plan");
@@ -153,7 +152,7 @@ describe("buildDocStateFromMarkdown", () => {
   it("derives the bodies from the built doc, so they cannot drift from it", () => {
     const built = buildDocStateFromMarkdown(NOTE_ID, SAMPLE)!;
     const doc = applySnapshot(built.docStateB64);
-    const body = deriveBody(doc);
+    const body = deriveNoteBody(doc);
 
     expect(built.bodyMd).toBe(body.md);
     expect(built.bodyText).toBe(body.text);
@@ -182,9 +181,9 @@ describe("buildDocStateFromMarkdown", () => {
     // Merging both is indistinguishable from applying one — the whole point of
     // the deterministic clientID. A random clientID makes this assertion fail
     // with the heading (and every other block) appearing twice.
-    expect(deriveBody(merged).md).toBe(deriveBody(once).md);
+    expect(deriveNoteBody(merged).md).toBe(deriveNoteBody(once).md);
 
-    const headings = deriveBody(merged).md.match(/# Quarterly plan/g) ?? [];
+    const headings = deriveNoteBody(merged).md.match(/# Quarterly plan/g) ?? [];
     expect(headings).toHaveLength(1);
   });
 

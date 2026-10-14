@@ -315,6 +315,9 @@ export type ImportRow = {
   docStateB64: string | null;
   bodyText: string;
   bodyMd: string;
+  /** Always `false`: importing files the tree (NR-1) — imported roots land in
+   * Pages, not in the Inbox with fresh captures. */
+  inInbox: false;
 };
 
 /**
@@ -352,12 +355,12 @@ export function buildImportRows(
       title: n.title,
       position: positions.get(n.tempId) ?? "",
       docStateB64: built?.docStateB64 ?? null,
-      // ALWAYS the raw file, never the doc-derived body. `deriveBody` is lossy
-      // (link URLs, inline marks, intra-block line breaks, tables), and
-      // `body_md` is the copy that feeds search, export, the published page
-      // and the MCP connector. The doc carries the rich version.
+      // ALWAYS the raw file, never the doc-derived body: the user's own
+      // markdown, byte for byte, until someone edits the note (then the one
+      // converter re-derives it from the doc, NR-3).
       bodyText: mdToPlainText(n.md),
       bodyMd: n.md,
+      inInbox: false,
     };
   });
 }

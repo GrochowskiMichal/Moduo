@@ -1,5 +1,11 @@
-import { describe, expect, it } from "@rstest/core";
+import { beforeAll, describe, expect, it } from "@rstest/core";
 import { RRule } from "rrule";
+
+import { applyTimeRegion, EMPTY_TIME_REGION } from "../../../lib/time-region";
+
+// Written for a Monday week start (Time & region, TV-D14): "/next week" is
+// the coming week's first day.
+beforeAll(() => applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null));
 
 import { parseCapture } from "./capture-parser";
 import { captureDates, resolveTitle, segmentsFromLine, type TitleSegment } from "./capture-tokens";

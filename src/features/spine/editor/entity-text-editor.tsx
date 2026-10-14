@@ -25,6 +25,7 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { DRAG_DROP_PASTE } from "@lexical/rich-text";
 import {
   $createLineBreakNode,
   $createParagraphNode,
@@ -192,7 +193,38 @@ export type EntityTextEditorProps = {
   /** Extra classes for the placeholder (match a changed text size). */
   placeholderClassName?: string;
   onCommit?: (html: string, text: string) => void;
+  /**
+   * People in the `@` menu (TV-D12): picking one inserts their name as text
+   * and calls this, which notifies them (a task's description). Without it
+   * the menu offers things only.
+   */
+  onMentionPerson?: (memberId: string, label: string) => Promise<void> | void;
+  /** Files pasted or dropped into the text (AT-2): handed to the caller, which
+   * attaches them. Never inserted as image nodes (attachments-only). Without
+   * it, Lexical drops them as before. */
+  onFiles?: (files: File[]) => void;
 };
+
+/** Pasted/dropped files go to `onFiles` (the attachments service), not into
+ * the text. Lexical's rich-text paste and drop dispatch DRAG_DROP_PASTE. */
+function FilesPlugin({ onFiles }: { onFiles: (files: File[]) => void }) {
+  const [editor] = useLexicalComposerContext();
+  const ref = useRef(onFiles);
+  ref.current = onFiles;
+  useEffect(
+    () =>
+      editor.registerCommand(
+        DRAG_DROP_PASTE,
+        (files) => {
+          if (files.length > 0) ref.current(files);
+          return true;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    [editor],
+  );
+  return null;
+}
 
 export function EntityTextEditor({
   value,
@@ -208,6 +240,8 @@ export function EntityTextEditor({
   className,
   placeholderClassName,
   onCommit,
+  onMentionPerson,
+  onFiles,
 }: EntityTextEditorProps) {
   const initialConfig = useMemo(
     () => ({
@@ -302,9 +336,15 @@ export function EntityTextEditor({
       <HistoryPlugin />
       <SeedPlugin value={value} />
       {editable ? <CommitOnBlurPlugin onCommit={onCommit} /> : null}
+      {editable && onFiles ? <FilesPlugin onFiles={onFiles} /> : null}
       {editable ? (
         <>
-          <MentionMenuPlugin {...shared} triggerChar="@" trigger="mention" />
+          <MentionMenuPlugin
+            {...shared}
+            triggerChar="@"
+            trigger="mention"
+            onMentionPerson={onMentionPerson}
+          />
           <MentionMenuPlugin
             {...shared}
             triggerChar="/"

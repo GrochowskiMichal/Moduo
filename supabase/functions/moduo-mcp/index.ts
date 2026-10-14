@@ -26,6 +26,7 @@ import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supa
 import { jsonRpcRequestSchema } from "../_shared/contracts/rows.ts";
 import { listingJsonSchema, parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 import { parseOrError } from "../_shared/contracts/errors.ts";
+import { apiKeyExpired } from "../_shared/api-key-expiry.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import {
   connectorModules,
@@ -68,10 +69,12 @@ async function authenticate(req: Request, admin: SupabaseClient): Promise<KeyCon
   if (!match) return null;
   const { data, error } = await admin
     .from("workspace_api_keys")
-    .select("id, workspace_id, name, scopes, created_by, revoked_at, last_used_at")
+    .select("id, workspace_id, name, scopes, created_by, revoked_at, expires_at, last_used_at")
     .eq("key_hash", await sha256Hex(match[1]))
     .maybeSingle();
   if (error || !data || data.revoked_at) return null;
+  // API-KEY-EXP-1: an expired key is refused like a revoked one (a 401).
+  if (apiKeyExpired(data.expires_at)) return null;
   // PERM-0: a key acts as its creator. A key with no recorded creator can't be
   // scoped to anyone's private data, so it is refused outright.
   if (!data.created_by) return null;
@@ -166,7 +169,7 @@ Deno.serve(async (req: Request) => {
   const key = await authenticate(req, admin);
   if (!key) {
     return json(
-      { error: "Missing or invalid API key. Send Authorization: Bearer moduo_sk_… (Workspace settings → API keys)." },
+      { error: "Missing, invalid, revoked or expired API key. Send Authorization: Bearer moduo_sk_… (Workspace settings → API keys)." },
       { status: 401 },
     );
   }

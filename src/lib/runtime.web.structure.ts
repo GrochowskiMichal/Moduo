@@ -56,6 +56,8 @@ export type ProjectFields = {
   color?: string | null;
   /** TV-U6: archive (true) or unarchive (false). Needs Full access. */
   archived?: boolean;
+  /** TV-U16: plain text, up to 20,000 characters; null or "" clears it. */
+  description?: string | null;
 };
 
 export type SectionFields = {
@@ -117,6 +119,7 @@ const PROJECT_KEYS: Record<Exclude<keyof ProjectFields, "archived">, string> = {
   areaId: "area_id",
   position: "position",
   color: "color",
+  description: "description",
 };
 
 /** Project fields as the ops take them (snake_case, only the keys given).
@@ -786,6 +789,19 @@ export function createTasksStructure(
       return rpcRows(
         "tasks_op_reminder_remove",
         { p_workspace_id: input.workspaceId, p_reminder_id: input.reminderId },
+        taskReminderRowToModel,
+      );
+    },
+
+    /**
+     * Bring back the reminders a move to Backlog / Won't do suspended (TV-D12),
+     * once the task is open again: everyone's when you can edit it, else your
+     * own; only those still ahead. Answers with your reminders on the task.
+     */
+    restoreReminders(input: { workspaceId: string; taskId: string }) {
+      return rpcRows(
+        "tasks_op_reminders_restore",
+        { p_workspace_id: input.workspaceId, p_task_id: input.taskId },
         taskReminderRowToModel,
       );
     },

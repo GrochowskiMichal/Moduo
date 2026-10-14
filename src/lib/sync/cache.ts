@@ -10,15 +10,19 @@
 // person another's copy; every copy is wiped on sign-out (account deletion
 // signs out too), and when someone else signs in on the device every copy but
 // theirs goes. A copy holds only the rows the views read: never a token, key
-// or session, comments without their text, no time entries or agent sessions.
+// or session, comments without their text, files as marks only (no name, path
+// or size), no time entries or agent sessions.
 // Where IndexedDB is missing (tests, a locked-down browser) there is no copy:
 // the store still works, it just opens from the server.
 
 import type { SyncTableName } from "./types";
 
 /** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept).
- *  3: projects carry their colour and archive stamp (TV-U6). */
-export const CACHE_VERSION = 3;
+ *  3: projects carry their colour and archive stamp (TV-U6).
+ *  4: reminders carry their suspension (TV-D12).
+ *  5: agent sessions join the copy (TV-D16).
+ *  6: file marks join the copy (AT-3; id, task, stamps only). */
+export const CACHE_VERSION = 6;
 
 /** One table's rows and its delta cursor. */
 export type CachedTable = { rows: unknown[]; cursor: string | null };

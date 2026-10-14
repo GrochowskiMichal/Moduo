@@ -6,6 +6,8 @@
  * docs/testing/t-maciej-api-key-module-scopes.md.
  */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
@@ -132,8 +134,11 @@ describe("which tools a key lists and may call", () => {
   it("lists only its modules' tools at its level, and nothing for none or an unknown level", () => {
     const viewTasks = toolsForKey(key({ tasks: "view" }));
     expect(viewTasks.length).toBeGreaterThan(0);
+    // The Tasks module's tools (TV-D16: projects, sections, areas, statuses,
+    // teams, templates and imports are Tasks' too).
+    const tasksPrefix = /^(tasks|projects|sections|areas|statuses|teams|templates|imports)_/;
     for (const t of viewTasks) {
-      expect(t.name.startsWith("tasks_"), t.name).toBe(true);
+      expect(tasksPrefix.test(t.name), t.name).toBe(true);
       expect(t.access, t.name).toBe("view");
     }
     expect(toolsForKey(key({}))).toEqual([]);
@@ -405,5 +410,12 @@ describe("calendar_day", () => {
     )) as Row;
     expect(none.blocks).toEqual([]);
     expect(none.strip).toEqual([]);
+  });
+});
+
+describe("connector wiring", () => {
+  it("refuses an expired key in authenticate()", () => {
+    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    expect(source).toContain("apiKeyExpired(data.expires_at)");
   });
 });

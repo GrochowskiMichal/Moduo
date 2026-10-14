@@ -1,32 +1,26 @@
-// The live focus readout (CAL-5). Self-ticking so ONLY this span re-renders
-// each second — the grid/chip stay off the per-second render path. Elapsed =
-// the banked (paused) seconds + the live running stretch since `runningSinceMs`.
+// The live focus readout on a Calendar block (CAL-5), now on the one time
+// engine (TV-F6): the same clock as the top-bar timer and Focus. Its own
+// component, so only this span redraws each second; the grid and chip stay
+// off the per-second path.
 
-import { useEffect, useState } from "react";
-
-import { formatFocusClock } from "../focus";
+import { formatFocusClock } from "../../focus/clock";
+import { useFocusTimer } from "../../focus/timer";
 
 type Props = {
-  /** Epoch (ms) the running stretch began; null while paused. */
-  runningSinceMs: number | null;
-  /** Seconds banked before the current stretch. */
-  baseSeconds: number;
   className?: string;
 };
 
-export function FocusReadout({ runningSinceMs, baseSeconds, className }: Props) {
-  const [, force] = useState(0);
-  useEffect(() => {
-    if (runningSinceMs == null) return;
-    const id = window.setInterval(() => force((n) => n + 1), 1000);
-    return () => window.clearInterval(id);
-  }, [runningSinceMs]);
-
-  const seconds =
-    baseSeconds + (runningSinceMs != null ? Math.floor((Date.now() - runningSinceMs) / 1000) : 0);
+export function FocusReadout({ className }: Props) {
+  const timer = useFocusTimer();
+  if (timer.timer === "off") {
+    return <span className={className}>Focus</span>;
+  }
+  const clock = formatFocusClock(timer.bigClock);
+  const label =
+    timer.timer === "pomodoro" ? `${timer.phaseLabel} ${clock} left` : `Focused ${clock}`;
   return (
-    <span className={className} aria-label={`Focused ${formatFocusClock(seconds)}`}>
-      {formatFocusClock(seconds)}
+    <span role="timer" className={className} aria-label={label}>
+      {clock}
     </span>
   );
 }

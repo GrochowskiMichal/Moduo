@@ -1,61 +1,48 @@
-import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
+import { isClosedTask } from "@contracts/vocabularies";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, CornerDownRight } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
-import { SELECTED_ROW } from "@/components/ui/selection";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "../../../components/ui/context-menu";
-import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
-import { DROP_TARGET } from "../../../components/ui/drag-visuals";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { Row, RowColumn, RowColumns as RowColumnsSlot } from "../../../components/ui/row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { EnergyLevel, PriorityLevel, Task } from "../model";
-import { ALL_ROW_COLUMNS, type RowColumns, type RowDate, rowDate, rowTime } from "../row-layout";
+import { requestBreakDown } from "../break-down";
+import { isLate, type Task } from "../model";
+import {
+  ALL_ROW_COLUMNS,
+  handleLabel,
+  type RowColumns,
+  rowTime,
+  updatedLabel,
+} from "../row-layout";
+import { type SelectMods, selectModsOf } from "../selection";
 import { nowOn } from "../use-today";
-import { AssignContextMenu } from "./assign-context-menu";
 import { AssigneeAvatar } from "./assignee-avatar";
 import type { DragActivatorRef } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { ROW_TITLE_ATTR } from "./list-keys";
-import { ProjectMenuItems } from "./project-choices";
 import { QueueToggle } from "./queue-toggle";
 import { sameTaskFacts, sameValues, type TaskFacts, type TaskRowActions } from "./row-facts";
-import { StatusIcon } from "./status-icon";
-import { BucketLabel, DateMark, TaskCounts } from "./task-meta";
+import { activateTask, type TaskCommand, TaskContextMenu } from "./task-context-menu";
+import { TaskCounts } from "./task-meta";
+import { DateCell, HandleCell, LateFixes, ProjectMenu, StatusGlyph } from "./task-row-cells";
 
 // The blocked marker moved to task-meta; the Timeline still imports it here.
 export { BlockedMarker } from "./task-meta";
 
-/** Which inline popover the keyboard asked to open on this row. */
-export type RowCommand = "bucket" | "schedule" | "due" | null;
+/** Which inline menu or popover the keyboard asked to open on this row. */
+export type RowCommand = TaskCommand | null;
 
 type Props = {
   task: Task;
   bucketName: string;
   inboxId: string | null;
+  /** Standard: the project shows after the counts (where the scope doesn't
+   *  imply it). Detailed has its own column (`columns.project`). */
   showBucket: boolean;
   selected: boolean;
   editing: boolean;
@@ -63,31 +50,38 @@ type Props = {
   canEdit: boolean;
   /**
    * What the row shows beyond its task (queue, claims, blocked, tags,
-   * subtasks, status name): its own facts only, so it redraws when they
-   * change and not when another task does (row-facts.ts, TV-D11b).
+   * subtasks, status name, section, waiting, comments, pending): its own facts
+   * only, so it redraws when they change and not when another task does
+   * (row-facts.ts, TV-D11b).
    */
   facts: TaskFacts;
   /** The row's actions: one object for the life of the view (`useRowActions`). */
   actions: TaskRowActions;
   /**
-   * Today's date key (`useToday`): the date column says "Today", "Tomorrow"
-   * or "late" against it, so a row left open over midnight redraws then.
+   * Today's date key (`useToday`): the date cells say "Today", "Tomorrow" or
+   * late against it, so a row left open over midnight redraws then.
    */
   today: string;
-  /** Callbacks take the task's id, so one function serves every row. */
-  onSelect: (taskId: string) => void;
+  /** Goes up each minute while the row shows its age (Updated), so it redraws. */
+  ageTick?: number;
+  /** Callbacks take the task's id, so one function serves every row. A
+   *  click passes its ⇧ / ⌘ (a range, one more: multi-select, TV-U12). */
+  onSelect: (taskId: string, mods?: SelectMods) => void;
   onStartEdit: (taskId: string) => void;
   onEndEdit: () => void;
   onClearCommand: () => void;
   onRequestCommand: (taskId: string, command: RowCommand) => void;
   /**
-   * The right-hand columns this view shows (computed once per list, so every
-   * row's meta lines up). A row rendered on its own shows them all.
+   * The columns this view shows (computed once per list, so every row's meta
+   * lines up; their widths are the list's `--tl-col-*` variables). A row
+   * rendered on its own shows Standard's.
    */
   columns?: RowColumns;
+  /** The workspace's task key ("MOD"): Detailed's handle. */
+  taskKey?: string | null;
   /**
-   * Reserve the expand gutter so checkboxes stay aligned. The list turns this
-   * on only when the scope actually nests subtasks (quiet until used).
+   * Reserve the expand gutter so status icons stay aligned. The list turns
+   * this on only when the scope actually nests subtasks (quiet until used).
    */
   expandSlot?: boolean;
   /** Subtask nesting (Session 5): this row has children → chevron + n/m mirror. */
@@ -111,14 +105,23 @@ type Props = {
   dropTarget?: boolean;
   /** False in My tasks, where every row is mine (D4-4). */
   showAssignee?: boolean;
+  /**
+   * "Take it" on a team's unclaimed task (My tasks' team block, TV-U15): the
+   * row shows the button while its facts say `takeable`.
+   */
+  onTake?: (taskId: string) => void;
 };
 
 /**
- * One task in the List (tasks-v2 §6): checkbox · title · quiet counts, then
- * fixed right-hand columns (priority · [energy] · date · assignee · queue) so
- * the meta lines up down the list. Display → Rows: Detailed adds the status
- * name, the time and the assignee's name (TV-U2). A done row dims as a whole
- * except its checkbox; selection is the tint (DS-2), never a bar.
+ * One task in the List (tasks-v3 §4, TV-U10) on the kit Row: status icon ·
+ * [handle] · title · quiet counts · [project], then the columns (Standard:
+ * priority · date · avatar · Focus mark; Detailed adds Project › Section, the
+ * status name, Due and Next session, time, waiting, the assignee's name and
+ * updated). The title takes the free width and gives way first; columns hold
+ * the list's widths, so nothing in them truncates. Hover shows only the Focus
+ * mark, an empty date cell's picker and a late row's fixes (default i). A
+ * closed row fades as a whole except its status icon; selection is the tint
+ * (DS-2), never a bar.
  */
 export const TaskRow = memo(TaskRowView, sameRowProps);
 
@@ -135,6 +138,9 @@ function sameRowProps(a: Props, b: Props): boolean {
   );
 }
 
+/** Finish an open task, or reopen a closed one (To do): the glyph, Space, `x`. */
+export const activateGlyph: (task: Task, actions: TaskRowActions) => void = activateTask;
+
 function TaskRowView({
   task,
   bucketName,
@@ -150,6 +156,7 @@ function TaskRowView({
   onClearCommand,
   onRequestCommand,
   columns = ALL_ROW_COLUMNS,
+  taskKey = null,
   expandSlot = false,
   expandable = false,
   expanded = false,
@@ -160,22 +167,17 @@ function TaskRowView({
   dragActivatorRef,
   dropTarget = false,
   showAssignee = true,
+  onTake,
   facts,
   actions,
   today,
 }: Props) {
-  const done = task.status === "done";
+  // Dates and times redraw when Time & region changes (TV-D14): this row is
+  // memoised on its facts, which don't carry the setting.
+  useTimeRegion();
   // A Won't do task kept in view (TV-P0) reads closed, like a done one.
   const closed = isClosedTask(task);
-  const queued = facts.queued;
-  // Menu items that hand focus to something in the row (the title editor, a
-  // chip's popover) run once the context menu has closed: Radix returns focus
-  // to the list a tick after the menu unmounts, and whatever opened sooner
-  // reads that as focus leaving it and closes again.
-  const pendingMenuAction = useRef<(() => void) | null>(null);
-  const afterMenuClose = (action: () => void) => {
-    pendingMenuAction.current = action;
-  };
+  const late = isLate(task, today);
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
   const blocked = facts.blockedLabel !== null;
   const { assignees, byId } = useAssignees();
@@ -183,37 +185,60 @@ function TaskRowView({
   const assigneeName = assigneeLabel(task.assigneeId, byId);
   // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
   const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
-  const time = columns.time ? rowTime(task) : null;
-  const dateCommand = command === "schedule" || command === "due";
+  const detailed = columns.project || columns.status || columns.updated;
+  const dateCommand = command === "schedule" || command === "due" ? command : null;
+  const handle = handleLabel(taskKey, task.number);
+  const now = nowOn(today);
+  const projectVariant = columns.project ? null : showBucket ? "inline" : "implied";
+  const projectMenu = (variant: "inline" | "column" | "implied") => (
+    <ProjectMenu
+      task={task}
+      inboxId={inboxId}
+      projectName={bucketName}
+      sectionName={facts.sectionName}
+      variant={variant}
+      canEdit={canEdit}
+      open={command === "bucket"}
+      onOpenChange={(o) => (o ? onRequestCommand(task.id, "bucket") : onClearCommand())}
+      actions={actions}
+    />
+  );
+  const fixes =
+    late && canEdit ? (
+      <LateFixes
+        onMove={() => onRequestCommand(task.id, "due")}
+        onWontDo={() => actions.setTaskStatus(task.id, { category: "wont_do" })}
+        onBreakDown={
+          task.parentId
+            ? null
+            : () => {
+                onSelect(task.id);
+                requestBreakDown(task.id);
+              }
+        }
+      />
+    ) : null;
 
   const row = (
-    <div
+    <Row
       ref={dragActivatorRef}
       role="row"
       aria-selected={selected}
       data-task-id={task.id}
-      data-done={done || undefined}
-      onClick={() => onSelect(task.id)}
+      data-late={late || undefined}
+      selected={selected}
+      done={closed}
+      dropTarget={dropTarget}
+      onClick={(e) => onSelect(task.id, selectModsOf(e))}
       {...(editing ? {} : dragListeners)}
       className={cn(
-        "group relative flex items-center gap-3 rounded-md py-0.5 pr-2.5 pl-2 text-sm",
-        "border border-transparent select-none",
-        "transition-colors duration-(--motion-fade) ease-(--ease-out)",
+        // `group` too: the Focus mark and older cells read the unnamed group.
+        "group text-sm select-none",
         // Whole-row drag (queue reorder / drag-to-nest): a grab cursor signals
         // it; a 6px activation distance keeps plain clicks selecting the row.
         dragListeners ? "cursor-grab active:cursor-grabbing" : "cursor-default",
-        selected
-          ? // Tint-only selection (R5): the accent tint + the row hairline
-            // switch (--state-selected-edge). No bar.
-            SELECTED_ROW
-          : "hover:bg-state-hover",
         nested && "ml-10",
-        // The nest target wins over selection/hover while a drag is live;
-        // after the row's own classes so its hover: copy replaces theirs.
-        dropTarget && DROP_TARGET,
       )}
-      // height rides the density setting; py is only a multiline guard
-      style={{ minHeight: "var(--row-h)" }}
     >
       {/* nested subtask indent guide — a quiet vertical hairline in the indent gutter */}
       {nested ? (
@@ -230,7 +255,7 @@ function TaskRowView({
                 className={cn(
                   // hit-min pads the pointer target to 24 px; the glyph stays put.
                   "hit-min flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  done && "opacity-40",
+                  closed && "opacity-40",
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -250,9 +275,17 @@ function TaskRowView({
           <span className="size-4 shrink-0" aria-hidden />
         )
       ) : null}
-      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => actions.toggleDone(task)} />
+      <StatusGlyph
+        task={task}
+        statusName={facts.statusName}
+        canEdit={canEdit}
+        menuOpen={command === "status"}
+        onMenuOpenChange={(o) => (o ? onRequestCommand(task.id, "status") : onClearCommand())}
+        onActivate={() => activateGlyph(task, actions)}
+        onPickStatus={(target) => actions.setTaskStatus(task.id, target)}
+      />
+      {columns.handle ? <HandleCell handle={handle} /> : null}
 
-      {/* A done row dims as a whole, except its checkbox (tasks-v2 §6). */}
       {editing ? (
         <div className="min-w-0 flex-1">
           <TitleEditor
@@ -268,7 +301,9 @@ function TaskRowView({
       ) : (
         <div
           data-slot="row-title"
-          className={cn("flex min-w-0 flex-1 items-center gap-2.5", closed && "opacity-40")}
+          // The title is the one flexible track: it takes the free width (the
+          // checkpoint-1 fix) and gives way first (call 42).
+          className="relative flex min-w-0 flex-1 items-center gap-2.5 group-data-[done]/row:opacity-50"
         >
           <button
             type="button"
@@ -276,20 +311,19 @@ function TaskRowView({
             // List's (complete / edit), unlike the row's other buttons.
             {...{ [ROW_TITLE_ATTR]: "" }}
             className={cn(
-              // The title shrinks first; the counts sit right after it.
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
               "min-w-0 truncate text-left font-sans text-md",
-              // Done dims through the cell's opacity, like the comp; a muted
-              // colour on top would dim it twice.
+              // A closed row dims through the cell's opacity; a muted colour on
+              // top would dim it twice.
               closed
-                ? "text-foreground line-through"
+                ? "text-foreground line-through decoration-subtle-foreground"
                 : blocked
                   ? "text-muted-foreground"
                   : "text-foreground",
             )}
             onClick={(e) => {
               e.stopPropagation();
-              onSelect(task.id);
+              onSelect(task.id, selectModsOf(e));
             }}
             onDoubleClick={(e) => {
               e.stopPropagation();
@@ -298,79 +332,163 @@ function TaskRowView({
           >
             {task.title || "Untitled"}
           </button>
-          <TaskCounts task={task} facts={facts} />
+          <TaskCounts
+            task={task}
+            facts={facts}
+            tagNames={detailed}
+            waitingColumn={columns.waiting}
+          />
+          {facts.agent ? (
+            // An agent working on it (TV-D16, call 52): status, not conversation.
+            <span
+              data-slot="row-agent"
+              className="shrink-0 font-sans text-xs whitespace-nowrap text-muted-foreground"
+            >
+              {facts.agent}
+            </span>
+          ) : null}
+          {facts.source ? (
+            // Where an Inbox task came from (research §7): quiet, after the
+            // counts; it gives way before the title does ("via Claude Desktop"
+            // is long, TV-U13b).
+            <span
+              data-slot="row-source"
+              className="min-w-0 shrink-3 truncate font-sans text-xs whitespace-nowrap text-muted-foreground"
+            >
+              {facts.source}
+            </span>
+          ) : null}
           {parentTitle ? (
             <span className="flex min-w-0 shrink-3 items-center gap-1 truncate font-sans text-xs text-muted-foreground">
               <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
               <span className="truncate">{parentTitle}</span>
             </span>
           ) : null}
-          {showBucket || canEdit ? (
-            <BucketPopover
-              task={task}
-              inboxId={inboxId}
-              bucketName={bucketName}
-              showLabel={showBucket}
-              canEdit={canEdit}
-              open={command === "bucket"}
-              onOpenChange={(o) => (o ? onRequestCommand(task.id, "bucket") : onClearCommand())}
-              api={actions}
-            />
+          {projectVariant && (showBucket || canEdit) ? projectMenu(projectVariant) : null}
+          {facts.takeable && onTake && canEdit ? (
+            // The team block's one action (TV-U15): always shown, so the
+            // block says what to do with it.
+            <Button
+              variant="outline"
+              size="sm"
+              data-slot="row-take"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTake(task.id);
+              }}
+              className="shrink-0"
+            >
+              Take it
+            </Button>
+          ) : null}
+          {/* A late row's fixes, over the cell's end on hover or selection:
+              they fade in and take no room from the title (R6: nothing
+              reflows), on the row's own surface so the title doesn't show
+              through. */}
+          {fixes ? (
+            <span
+              className={cn(
+                "absolute inset-y-0 end-0 flex items-center bg-card",
+                "invisible opacity-0 transition-[opacity,visibility] duration-(--motion-fade) ease-(--ease-out)",
+                "group-hover/row:visible group-hover/row:opacity-100",
+                "group-data-[selected]/row:visible group-data-[selected]/row:opacity-100",
+              )}
+            >
+              <span className="flex h-full items-center ps-2 group-hover/row:bg-state-hover group-data-[selected]/row:bg-state-selected">
+                {fixes}
+              </span>
+            </span>
           ) : null}
         </div>
       )}
 
-      {/* Fixed columns: each cell has a set width, so a column lines up down
-          the list, and an empty cell still holds its place. */}
-      <div
-        data-slot="row-columns"
-        className={cn("flex shrink-0 items-center gap-3", closed && "opacity-40")}
-      >
-        {/* Detailed's cells hold their width (min-w, so a longer value widens
-            the cell rather than truncate, call 41). */}
+      {/* The columns: each holds the list's width for it, so a column lines up
+          down the list, and an empty cell still holds its place. */}
+      <RowColumnsSlot data-slot="row-columns">
+        {columns.project ? projectMenu("column") : null}
         {columns.status ? (
-          <span
-            data-col="status"
-            className="flex min-w-24 shrink-0 items-center gap-1.5 whitespace-nowrap font-sans text-xs text-muted-foreground"
-          >
-            {/* The project's own name; the icon is the category's (TV-D9). */}
-            <StatusIcon category={taskCategoryOf(task)} />
-            {facts.statusName}
-          </span>
+          <RowColumn data-col="status" className="justify-start min-w-(--tl-col-status)">
+            {/* The project's own name; the icon (the lead) is the category's. */}
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRequestCommand(task.id, "status");
+                }}
+                className="-mx-1 rounded-sm px-1 text-left transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                {facts.statusName}
+              </button>
+            ) : (
+              facts.statusName
+            )}
+          </RowColumn>
         ) : null}
         {columns.priority ? (
-          <span data-col="priority" className="flex w-icon-sm shrink-0 items-center justify-center">
+          <RowColumn data-col="priority" className="w-icon-sm justify-center">
             <PriorityMark level={task.priority} />
-          </span>
+          </RowColumn>
         ) : null}
         {columns.energy ? (
-          <span data-col="energy" className="flex w-icon-sm shrink-0 items-center justify-center">
+          <RowColumn data-col="energy" className="w-icon-sm justify-center">
             <EnergyMark level={task.energyLevel} />
-          </span>
+          </RowColumn>
         ) : null}
-        {columns.date || dateCommand ? (
+        {columns.date || (!detailed && dateCommand) ? (
           <DateCell
             task={task}
+            kind="row"
+            label={facts.when ?? null}
             canEdit={canEdit}
-            command={dateCommand ? command : null}
+            command={dateCommand}
             today={today}
             onRequestCommand={(kind) => onRequestCommand(task.id, kind)}
             onClearCommand={onClearCommand}
-            api={actions}
+            actions={actions}
+          />
+        ) : null}
+        {columns.due || (detailed && dateCommand === "due") ? (
+          <DateCell
+            task={task}
+            kind="due"
+            canEdit={canEdit}
+            command={dateCommand === "due" ? "due" : null}
+            today={today}
+            onRequestCommand={(kind) => onRequestCommand(task.id, kind)}
+            onClearCommand={onClearCommand}
+            actions={actions}
+          />
+        ) : null}
+        {columns.session || (detailed && dateCommand === "schedule") ? (
+          <DateCell
+            task={task}
+            kind="session"
+            canEdit={canEdit}
+            command={dateCommand === "schedule" ? "schedule" : null}
+            today={today}
+            onRequestCommand={(kind) => onRequestCommand(task.id, kind)}
+            onClearCommand={onClearCommand}
+            actions={actions}
           />
         ) : null}
         {columns.time ? (
-          <span
-            data-col="time"
-            className="min-w-22 shrink-0 whitespace-nowrap text-right font-sans text-xs tabular-nums text-muted-foreground"
+          <RowColumn data-col="time" className="min-w-(--tl-col-time)">
+            {rowTime(task)}
+          </RowColumn>
+        ) : null}
+        {columns.waiting ? (
+          <RowColumn
+            data-col="waiting"
+            className="justify-start whitespace-normal min-w-(--tl-col-waiting) max-w-(--tl-col-waiting)"
           >
-            {time}
-          </span>
+            {facts.waiting}
+          </RowColumn>
         ) : null}
         {withAssignee && columns.assigneeName ? (
-          <span
+          <RowColumn
             data-col="assignee"
-            className="flex min-w-24 shrink-0 items-center gap-1.5 whitespace-nowrap font-sans text-xs text-muted-foreground"
+            className="justify-start gap-1.5 min-w-(--tl-col-assignee)"
           >
             {task.assigneeId ? (
               <>
@@ -378,9 +496,9 @@ function TaskRowView({
                 {assignee ? firstName(assignee.name) : assigneeName}
               </>
             ) : null}
-          </span>
+          </RowColumn>
         ) : withAssignee ? (
-          <span data-col="assignee" className="flex w-icon shrink-0 items-center justify-center">
+          <RowColumn data-col="assignee" width="icon">
             {task.assigneeId ? (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -395,18 +513,22 @@ function TaskRowView({
                 <TooltipContent>{assigneeName}</TooltipContent>
               </Tooltip>
             ) : null}
-          </span>
+          </RowColumn>
         ) : null}
-        {/* Queue mark — pinned to the far right so it has one predictable,
+        {columns.updated ? (
+          <RowColumn data-col="updated" className="min-w-(--tl-col-updated)">
+            {updatedLabel(task, now)}
+          </RowColumn>
+        ) : null}
+        {/* The Focus mark — pinned to the far right so it has one predictable,
             targetable home (the marker IS the action): my queue toggle, or a
-            teammate's ringed avatar when it's in their queue (TV-D4). The
-            toggle shows on hover, focus or selection unless the task is
-            queued or claimed (QueueToggle's revealOnHover, the comp). */}
+            teammate's ringed avatar when it's in their queue (TV-D4). It shows
+            on hover, focus or selection unless the task is queued or claimed. */}
         {columns.queue ? (
-          <span
+          <RowColumn
             data-col="queue"
             className={cn(
-              "flex shrink-0 items-center justify-end gap-1",
+              "gap-1",
               columns.queueWide ? "w-[calc(var(--icon)*2_+_0.25rem)]" : "w-icon",
             )}
           >
@@ -418,121 +540,42 @@ function TaskRowView({
               canEdit={canEdit}
               revealOnHover
             />
-          </span>
+          </RowColumn>
         ) : null}
-      </div>
-    </div>
+      </RowColumnsSlot>
+    </Row>
   );
 
-  if (!canEdit) return row;
-
+  // The one menu for rows, cards and bars (TV-U11): Open selects the row.
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-      <ContextMenuContent
-        className="w-48"
-        onCloseAutoFocus={(e) => {
-          const action = pendingMenuAction.current;
-          if (!action) return;
-          pendingMenuAction.current = null;
-          e.preventDefault(); // the editor or popover takes focus, not the list
-          action();
-        }}
-      >
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onStartEdit(task.id))}>
-          Rename
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => actions.toggleDone(task)}>
-          {done ? "Mark not done" : "Mark done"}
-        </ContextMenuItem>
-        {!done && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => actions.toggleQueue(task.id)}>
-            {queued ? "Remove from queue" : "Add to queue"}
-          </ContextMenuItem>
-        ) : null}
-        {task.recurrence && !done && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => actions.skipOccurrence(task.id)}>
-            Skip occurrence
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "schedule"))}
-        >
-          Schedule…
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "due"))}>
-          Set due date…
-        </ContextMenuItem>
-        <ContextMenuItem onSelect={() => afterMenuClose(() => onRequestCommand(task.id, "bucket"))}>
-          Move to project…
-        </ContextMenuItem>
-        {task.parentId ? (
-          <ContextMenuItem onSelect={() => actions.setTaskParent(task.id, null)}>
-            Detach from parent
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <AssignContextMenu task={task} api={actions} />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.priority ?? "none"}
-              onValueChange={(v) =>
-                actions.patchTask(task.id, {
-                  priority: v === "none" ? null : (v as PriorityLevel),
-                })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Energy</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.energyLevel ?? "none"}
-              onValueChange={(v) =>
-                actions.patchTask(task.id, {
-                  energyLevel: v === "none" ? null : (v as EnergyLevel),
-                })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onSelect={() => actions.deleteTask(task.id)}>
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <TaskContextMenu
+      task={task}
+      facts={facts}
+      canEdit={canEdit}
+      taskKey={taskKey}
+      actions={actions}
+      onOpen={onSelect}
+      onRename={onStartEdit}
+      onRequestCommand={onRequestCommand}
+    >
+      {row}
+    </TaskContextMenu>
   );
 }
 
 // ── inline title editor ───────────────────────────────────────────────────────
 
-function TitleEditor({
+export function TitleEditor({
   initial,
   onCommit,
   onCancel,
+  className = "font-sans text-md",
 }: {
   initial: string;
   onCommit: (value: string) => void;
   onCancel: () => void;
+  /** The title's own face and size (a Board card's is smaller). */
+  className?: string;
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
@@ -565,198 +608,8 @@ function TitleEditor({
       // change when editing starts (content, not chrome: R4).
       variant="bare"
       size="sm"
-      className="font-sans text-md"
+      className={className}
     />
-  );
-}
-
-// LevelDots (priority/energy glyphs) now lives in ./level-icons.
-
-// ── meta popovers ─────────────────────────────────────────────────────────────
-
-// Closing a row popover hands focus back to the list (onClearCommand). Without
-// this, Radix moves it to the chip once the popover unmounts after a click on
-// the chip itself.
-const keepListFocus = (e: Event) => e.preventDefault();
-
-/**
- * The date column: the one date the row shows (row-layout's `rowDate`), and
- * the way to edit it. A click opens the editor for the date shown; `s` / `d`
- * and the menu open the scheduled or due editor whichever is shown. An empty
- * cell holds its place but offers nothing to click (set a date with the menu,
- * the keys or the panel), so a stray click on the row never opens an editor.
- */
-function DateCell({
-  task,
-  canEdit,
-  command,
-  today,
-  onRequestCommand,
-  onClearCommand,
-  api,
-}: {
-  task: Task;
-  canEdit: boolean;
-  command: "schedule" | "due" | null;
-  /** Today's date key: the labels are worked out against it. */
-  today: string;
-  onRequestCommand: (command: RowCommand) => void;
-  onClearCommand: () => void;
-  api: Pick<TasksModuleApi, "patchTask">;
-}) {
-  const date = rowDate(task, nowOn(today));
-  // At least the column's width; a wider date (another year's) widens it
-  // rather than truncate (call 41).
-  const cell = "flex min-w-19 shrink-0 items-center justify-end";
-  const kind = command ?? (date?.kind === "due" ? "due" : "schedule");
-  // One save when the popover closes (TV-P0): a scheduled time goes through
-  // the reschedule op, so it lands in the task's trail.
-  const current = kind === "schedule" ? task.scheduledAt : task.dueDate;
-  const draft = useDateDraft({
-    value: current ? new Date(current) : null,
-    onChange: (d) =>
-      api.patchTask(
-        task.id,
-        kind === "schedule"
-          ? { scheduledAt: d ? d.toISOString() : null }
-          : { dueDate: d ? d.toISOString() : null },
-      ),
-    withTime: kind === "schedule",
-    open: command !== null,
-    done: onClearCommand,
-  });
-  if (!date && !command) return <span data-col="date" className={cell} aria-hidden />;
-  // With a date, its description names it ("Scheduled …", "Due …").
-  const label = date ? date.description : kind === "due" ? "Due date" : "Scheduled time";
-
-  if (!canEdit) {
-    return (
-      <span data-col="date" className={cell}>
-        {date ? (
-          <DateTip date={date}>
-            <span role="img" aria-label={label} className="flex min-w-0 items-center">
-              <DateMark date={date} />
-            </span>
-          </DateTip>
-        ) : null}
-      </span>
-    );
-  }
-
-  const trigger = (
-    <PopoverTrigger asChild>
-      <button
-        type="button"
-        data-col="date"
-        onClick={(e) => e.stopPropagation()}
-        aria-label={label}
-        className={cn(
-          cell,
-          "rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        )}
-      >
-        {date ? <DateMark date={date} /> : null}
-      </button>
-    </PopoverTrigger>
-  );
-
-  return (
-    <Popover
-      open={command !== null}
-      onOpenChange={(o) => (o ? onRequestCommand(kind) : draft.close())}
-    >
-      {date ? <DateTip date={date}>{trigger}</DateTip> : trigger}
-      <PopoverContent
-        className="w-auto p-0"
-        onClick={(e) => e.stopPropagation()}
-        onCloseAutoFocus={keepListFocus}
-        onEscapeKeyDown={draft.cancel}
-        align="end"
-      >
-        <DatePickerPanel
-          draft={draft}
-          heading={kind === "schedule" ? "Scheduled time" : "Due date"}
-        />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** The full dates behind the short label. */
-function DateTip({ date, children }: { date: RowDate; children: React.ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent>{date.description}</TooltipContent>
-    </Tooltip>
-  );
-}
-
-function BucketPopover({
-  task,
-  inboxId,
-  bucketName,
-  showLabel,
-  canEdit,
-  open,
-  onOpenChange,
-  api,
-}: {
-  task: Task;
-  inboxId: string | null;
-  bucketName: string;
-  /** False where the bucket is implied (Q1-3). The popover stays mounted so the
-   * `b` key can still open it; the label then shows as its anchor. */
-  showLabel: boolean;
-  canEdit: boolean;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  api: Pick<TasksModuleApi, "patchTask">;
-}) {
-  // A menu, not a hand-rolled list (DS-6, visual audit B11): arrow keys and
-  // typeahead come with it. Where the bucket is implied the trigger stays in
-  // the row but takes no width and can't be seen or tabbed to, so opening the
-  // menu with `b` anchors it without moving the row (R6: never `hidden → flex`).
-  return (
-    // Not modal, like the row's date popovers: a trapped focus scope would pull
-    // focus back from the list when Esc hands it there.
-    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
-      <DropdownMenuTrigger asChild disabled={!canEdit}>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          aria-label={`Project: ${bucketName}`}
-          tabIndex={showLabel ? undefined : -1}
-          aria-hidden={showLabel ? undefined : true}
-          data-implied={showLabel ? undefined : ""}
-          className={cn(
-            "flex min-w-0 shrink-3 rounded-sm px-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
-            canEdit && "hover:bg-state-hover",
-            // Takes no width and gives back the row's gap, so nothing shifts.
-            !showLabel && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
-          )}
-        >
-          <BucketLabel name={bucketName} isInbox={task.bucketId === inboxId} />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        className="w-48"
-        onClick={(e) => e.stopPropagation()}
-        onCloseAutoFocus={keepListFocus}
-        align="end"
-      >
-        <DropdownMenuRadioGroup
-          value={task.bucketId ?? ""}
-          onValueChange={(id) => {
-            if (id !== task.bucketId) api.patchTask(task.id, { bucketId: id });
-          }}
-        >
-          {/* The view's projects, read only while the menu is open (TV-D11b). */}
-          <ProjectMenuItems />
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 

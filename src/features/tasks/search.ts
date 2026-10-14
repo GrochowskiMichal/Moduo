@@ -8,11 +8,18 @@ import type { Bucket, Task } from "./model";
 
 export type TasksSearch = {
   id?: string;
+  /** A saved view's link (TV-U8): `/tasks?view=<id>`. */
+  view?: string;
 };
+
+const VIEW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateTasksSearch(search: Record<string, unknown>): TasksSearch {
   const id = typeof search.id === "string" && search.id.length > 0 ? search.id : undefined;
-  return id ? { id } : {};
+  // Only a view id: anything else is dropped, never looked up.
+  const view =
+    typeof search.view === "string" && VIEW_ID.test(search.view) ? search.view : undefined;
+  return { ...(id ? { id } : {}), ...(view ? { view } : {}) };
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────
@@ -94,33 +101,40 @@ export function descriptionText(description: string | null | undefined): string 
   if (!description) return "";
   const cached = textCache.get(description);
   if (cached !== undefined) return cached;
-  const text = (
-    /^\s*</.test(description)
-      ? description
-          // A reference's stored text is never searchable: an older chip kept
-          // a title the reader may not be allowed to see (RF-1).
-          .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
-          .replace(/<[^>]*>/g, " ")
-          .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m)
-      : description
-  ).toLowerCase();
+  const text = descriptionWords(description).toLowerCase();
   if (textCache.size > 2000) textCache.clear();
   textCache.set(description, text);
   return text;
 }
 
 /**
+ * A description's words as it shows them (case kept), for a Board card's
+ * preview (AC7.4): tags dropped, entities decoded, a reference's stored text
+ * left out (it may name an item the reader can't see, RF-1).
+ */
+export function descriptionWords(description: string | null | undefined): string {
+  if (!description) return "";
+  if (!/^\s*</.test(description)) return description;
+  return description
+    .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m);
+}
+
+/**
  * Whether a task matches the search box: every word of the query appears in
- * its title or the text of its description, ignoring case. An empty query
- * matches everything.
+ * its title, the text of its description or the key it was imported under
+ * ("ENG-123", TV-D16, AC3.6; the server's `tasks_search` reads the same),
+ * ignoring case. An empty query matches everything.
  */
 export function taskMatchesQuery(
-  task: Pick<Task, "title" | "description">,
+  task: Pick<Task, "title" | "description" | "importedFrom">,
   query: string,
 ): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}`;
+  const key = task.importedFrom?.key?.toLowerCase() ?? "";
+  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}\n${key}`;
   return words.every((word) => haystack.includes(word));
 }
 

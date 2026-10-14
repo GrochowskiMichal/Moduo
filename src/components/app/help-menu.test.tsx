@@ -57,10 +57,10 @@ afterEach(() => {
 
 const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
-function renderMenu() {
+function renderMenu(onWhatsInTasks?: () => void) {
   render(
     <TooltipProvider>
-      <HelpMenu />
+      <HelpMenu onWhatsInTasks={onWhatsInTasks} />
       <GlobalShortcutsDialog />
     </TooltipProvider>,
   );
@@ -80,6 +80,24 @@ describe("HelpMenu", () => {
     await settle();
     const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
     expect(items).toEqual(["Docs", "Keyboard shortcuts?", "Contact support", "Report a bug"]);
+  });
+
+  it("with Tasks access, What's in Tasks reopens Tasks' welcome once the menu has closed (TV-U17)", async () => {
+    const whatsInTasks = rs.fn();
+    renderMenu(whatsInTasks);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Help" }), { key: "Enter" });
+    await settle();
+    expect(screen.getAllByRole("menuitem").map((el) => el.textContent)).toEqual([
+      "Docs",
+      "Keyboard shortcuts?",
+      "What’s in Tasks",
+      "Contact support",
+      "Report a bug",
+    ]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "What’s in Tasks" }));
+    await settle();
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(whatsInTasks).toHaveBeenCalledTimes(1);
   });
 
   it("opens the docs through the runtime, so desktop uses the system browser", async () => {

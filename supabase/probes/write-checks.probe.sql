@@ -1,4 +1,4 @@
--- Probe for supabase/migrations/20261010120000_tighten_write_checks.sql.
+-- Probe for supabase/migrations/20261010141712_tighten_write_checks.sql.
 --
 -- Runs on the local stack (docs/local-dev.md): `bun run local:reset` loads the
 -- prod schema snapshot and applies the repo's newer migrations. The whole run

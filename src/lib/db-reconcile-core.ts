@@ -37,13 +37,6 @@ export const UNCHECKED = [
  */
 export const ANON_DEFINER_ALLOWED: Record<string, string> = {
   "calendar_public_feed(text)": "public ICS feed; the token is the credential",
-  // OPS-2 group 3 (gotchas/supabase.md): RLS policies for role `public` call these, so
-  // revoking anon turns an anonymous empty read into a permission error. Scope those
-  // policies `TO authenticated` first, then revoke and drop these entries.
-  "profile_plan_tier_text(uuid)": "RLS helper for `public`-role policies (OPS-2 group 3)",
-  "tasks_module_can_access_workspace(uuid)":
-    "RLS helper for `public`-role policies (OPS-2 group 3)",
-  "workspaces_owned_count_for_user(uuid)": "RLS helper for `public`-role policies (OPS-2 group 3)",
 };
 
 /**

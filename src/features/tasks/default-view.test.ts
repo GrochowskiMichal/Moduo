@@ -6,7 +6,6 @@ import {
   openCount,
   resolveDefaultSelection,
   setBucketTimeBlock,
-  showsMyTasks,
   timeBlockByBucket,
 } from "./default-view";
 import { groupsByBucket, makeTask, showBucketPill } from "./helpers";
@@ -78,6 +77,22 @@ describe("resolveDefaultSelection (REPLAN 30: opens where you left it)", () => {
     expect(resolveDefaultSelection({ ...base, lastBucket: "inbox-id" })).toBe("inbox");
   });
 
+  it("a first open follows onboarding: the role's first view (TV-U17)", () => {
+    expect(resolveDefaultSelection({ ...base, lastBucket: null, firstOpen: "upcoming" })).toBe(
+      "upcoming",
+    );
+    expect(resolveDefaultSelection({ ...base, lastBucket: null, firstOpen: "b1" })).toBe("b1");
+    // A place you left still wins, and a gone one isn't a first open.
+    expect(resolveDefaultSelection({ ...base, lastBucket: "b2", firstOpen: "upcoming" })).toBe(
+      "b2",
+    );
+    expect(resolveDefaultSelection({ ...base, lastBucket: "gone", firstOpen: "upcoming" })).toBe(
+      "inbox",
+    );
+    // A first view that isn't there (a project since deleted) is the Inbox.
+    expect(resolveDefaultSelection({ ...base, lastBucket: null, firstOpen: "gone" })).toBe("inbox");
+  });
+
   it("never opens Archived projects or Recently deleted", () => {
     expect(resolveDefaultSelection({ ...base, lastBucket: "archived" })).toBe("inbox");
     expect(resolveDefaultSelection({ ...base, lastBucket: "trash" })).toBe("inbox");
@@ -103,13 +118,6 @@ describe("My tasks (TV-D4, D4-3)", () => {
     ...makeTask({ workspaceId: "w1", bucketId: "b1", title: id, position: id }),
     id,
     ...over,
-  });
-
-  it("shows the row only in workspaces with two or more members", () => {
-    expect(showsMyTasks(0)).toBe(false);
-    expect(showsMyTasks(1)).toBe(false);
-    expect(showsMyTasks(2)).toBe(true);
-    expect(showsMyTasks(5)).toBe(true);
   });
 
   it("scopes to tasks assigned to me across buckets, archived left out like All", () => {

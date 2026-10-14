@@ -6,6 +6,7 @@
 // one person's edit could put back a field a teammate had just changed.
 
 import {
+  agentSessionRowSchema,
   areaRowSchema,
   bucketRowSchema,
   projectStatusRowSchema,
@@ -19,13 +20,16 @@ import {
   taskRowSchema,
   taskSessionRowSchema,
   taskTimeAnswerSchema,
+  taskTimeEntryRowSchema,
   taskTimeTotalsRowSchema,
   taskWaitingRowSchema,
   teamMemberRowSchema,
   teamRowSchema,
+  timeReportRowSchema,
 } from "@contracts/rows";
 import {
   legacyTaskStatus,
+  normalizeAgentSessionState,
   normalizeProjectState,
   normalizeTaskReminderKind,
   normalizeTaskStatus,
@@ -35,6 +39,11 @@ import {
   taskStatusWord,
 } from "@contracts/vocabularies";
 import type {
+  AgentSession,
+  AgentSessionLine,
+  AgentSessionLink,
+} from "../features/spine/agent-session";
+import type {
   Area,
   Bucket,
   ProjectStatus,
@@ -43,16 +52,20 @@ import type {
   TagLink,
   Task,
   TaskCompletion,
+  TaskCycle,
   TaskQueueEntry,
   TaskReminder,
   TaskSession,
+  TaskTimeEntry,
   TaskTimeResult,
   TaskTimeTotals,
   TaskWaitingEntry,
   Team,
   TeamMember,
+  TimeReportRow,
+  TrackTimeInput,
 } from "../features/tasks/model";
-import type { CommentMark } from "./sync/types";
+import type { AttachmentMark, CommentMark } from "./sync/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -435,6 +448,63 @@ export function taskTimeTotalsRowToModel(raw: unknown): TaskTimeTotals {
 }
 
 /**
+ * TV-D14's arguments to `tasks_op_track_time`, only those a save uses, so a
+ * database before TV-D14 still takes every older save (PostgREST matches a
+ * function by the names sent).
+ */
+export function trackTimeExtras(input: TrackTimeInput): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  if (input.on !== undefined && input.on !== null) out.p_on = input.on;
+  if (input.note !== undefined && input.note !== null) out.p_note = input.note;
+  if (input.runId) out.p_run_id = input.runId;
+  if (input.reason) out.p_reason = input.reason;
+  return out;
+}
+
+/** A date column's day (YYYY-MM-DD), or null. */
+function dayOf(value: string | null | undefined): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+}
+
+/** Map one of your own `task_time_entries` rows (TV-D3; TV-D14's columns). */
+export function taskTimeEntryRowToModel(raw: unknown): TaskTimeEntry {
+  const r = requireRow(taskTimeEntryRowSchema, raw, "time entry");
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    kind: r.kind,
+    seconds: r.seconds,
+    startedAt: r.started_at ?? null,
+    endedAt: r.ended_at ?? null,
+    entryOn: dayOf(r.entry_on),
+    note: r.note ?? null,
+    reason: r.reason ?? null,
+    runId: r.run_id ?? null,
+    createdAt: r.created_at,
+  };
+}
+
+/** Map one row of `tasks_time_report` (TV-D14). */
+export function timeReportRowToModel(raw: unknown): TimeReportRow {
+  const r = requireRow(timeReportRowSchema, raw, "time report row");
+  return {
+    entryId: r.entry_id,
+    taskId: r.task_id,
+    taskTitle: r.task_title,
+    projectId: r.project_id ?? null,
+    projectName: r.project_name ?? null,
+    projectIsInbox: r.project_is_inbox === true,
+    userId: r.user_id,
+    isMine: r.is_mine,
+    day: dayOf(r.entry_day) ?? r.entry_day,
+    seconds: r.seconds,
+    kind: r.kind,
+    reason: r.reason ?? null,
+    note: r.note ?? null,
+  };
+}
+
+/**
  * Queue rows in line-up order: by person, then by position compared bytewise
  * (the database column is `COLLATE "C"`), then by id.
  */
@@ -556,6 +626,8 @@ export function bucketRowToModel(raw: unknown): Bucket {
     // TV-U6: the sidebar colour and archiving (absent before its migration).
     color: r.color ?? null,
     archivedAt: r.archived_at ?? null,
+    // TV-U16 (absent before its migration).
+    ...(r.description !== undefined ? { description: r.description ?? "" } : {}),
   };
 }
 
@@ -637,6 +709,28 @@ export function taskSessionRowToModel(raw: unknown): TaskSession {
   };
 }
 
+/**
+ * `tasks_op_history`'s answer as cycles, newest first. Entries that don't read
+ * are dropped (a history is a view, never a reason to fail).
+ */
+export function taskCyclesFromJson(raw: unknown): TaskCycle[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TaskCycle[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    if ((e.kind !== "done" && e.kind !== "skipped") || typeof e.at !== "string") continue;
+    out.push({
+      kind: e.kind,
+      at: e.at,
+      cycle: typeof e.cycle === "string" ? e.cycle : null,
+      by: typeof e.by === "string" ? e.by : null,
+      mySeconds: typeof e.my_seconds === "number" && e.my_seconds > 0 ? e.my_seconds : 0,
+    });
+  }
+  return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
 /** A reminder of a kind this build doesn't know reads as one at its time. */
 export function taskReminderRowToModel(raw: unknown): TaskReminder {
   const r = requireRow(taskReminderRowSchema, raw, "reminder");
@@ -648,6 +742,7 @@ export function taskReminderRowToModel(raw: unknown): TaskReminder {
     kind: normalizeTaskReminderKind(r.kind),
     at: r.at ?? null,
     firedAt: r.fired_at ?? null,
+    suspendedAt: r.suspended_at ?? null,
     updatedAt: r.updated_at,
   };
 }
@@ -665,6 +760,54 @@ export function taskWaitingRowToModel(raw: unknown): TaskWaitingEntry {
     since: r.since,
     createdBy: r.created_by ?? null,
     updatedAt: r.updated_at,
+  };
+}
+
+/** An agent session (TV-D16): its links and earlier lines read leniently. */
+export function agentSessionRowToModel(raw: unknown): AgentSession {
+  const r = requireRow(agentSessionRowSchema, raw, "agent session");
+  const links: AgentSessionLink[] = Array.isArray(r.links)
+    ? (r.links as unknown[]).flatMap((l) => {
+        const v = l as { url?: unknown; label?: unknown } | null;
+        if (!v || typeof v.url !== "string" || !/^https?:\/\//i.test(v.url)) return [];
+        return [
+          typeof v.label === "string" && v.label ? { url: v.url, label: v.label } : { url: v.url },
+        ];
+      })
+    : [];
+  const earlier: AgentSessionLine[] = Array.isArray(r.earlier)
+    ? (r.earlier as unknown[]).flatMap((e) => {
+        const v = e as Record<string, unknown> | null;
+        if (!v || typeof v.at !== "string") return [];
+        return [
+          {
+            at: v.at,
+            state: normalizeAgentSessionState(v.state),
+            note: typeof v.note === "string" ? v.note : null,
+            step: typeof v.step === "number" ? v.step : null,
+            steps: typeof v.steps === "number" ? v.steps : null,
+          },
+        ];
+      })
+    : [];
+  return {
+    id: r.id,
+    workspaceId: r.workspace_id,
+    taskId: r.task_id,
+    userId: r.user_id,
+    agent: r.agent,
+    state: normalizeAgentSessionState(r.state),
+    note: r.note ?? null,
+    step: r.step ?? null,
+    steps: r.steps ?? null,
+    links,
+    earlier,
+    summaryAt: r.summary_at ?? null,
+    summaryPostedAt: r.summary_posted_at ?? null,
+    startedAt: r.started_at,
+    updatedAt: r.updated_at,
+    stoppedAt: r.stopped_at ?? null,
+    ...(r.deleted_at ? { deletedAt: r.deleted_at } : {}),
   };
 }
 
@@ -708,6 +851,27 @@ export function commentMarkRowToModel(raw: unknown): CommentMark {
   return {
     id: r.id,
     taskId: r.entity_id,
+    updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
+    deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
+  };
+}
+
+/** An attachment row → what the shared store's 📎 counts need (AT-3). */
+export function attachmentMarkRowToModel(raw: unknown): AttachmentMark {
+  const r = raw as {
+    id?: unknown;
+    entity_id?: unknown;
+    status?: unknown;
+    updated_at?: unknown;
+    deleted_at?: unknown;
+  };
+  if (typeof r?.id !== "string" || typeof r.entity_id !== "string") {
+    throw new Error("Malformed attachment payload");
+  }
+  return {
+    id: r.id,
+    taskId: r.entity_id,
+    status: typeof r.status === "string" ? r.status : "",
     updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
     deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
   };

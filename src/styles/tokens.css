@@ -455,6 +455,21 @@
   --control-raised:      color-mix(in oklab, var(--foreground) 14%, var(--muted));
   --scroll-thumb:        color-mix(in oklab, var(--foreground) 16%, transparent);
   --scroll-thumb-hover:  color-mix(in oklab, var(--foreground) 32%, transparent);
+  /* The Timeline's quiet structure (TV-TL1, REPLAN 69): hairlines per unit,
+     stronger where a month starts, a faint weekend tint, a dated section's
+     band, the project bar (a neutral fill; the outline when its dates are
+     worked out), a section's segment on it, the 2 px progress line, and a
+     late point's muted tone (never red, 23). Accent stays for the selection,
+     today's line and the done check. */
+  --timeline-grid:        color-mix(in oklab, var(--foreground) 5.5%, transparent);
+  --timeline-grid-strong: color-mix(in oklab, var(--foreground) 13%, transparent);
+  --timeline-weekend:     color-mix(in oklab, var(--foreground) 2.4%, transparent);
+  --timeline-band:        color-mix(in oklab, var(--foreground) 3.2%, transparent);
+  --timeline-bar:         color-mix(in oklab, var(--foreground) 9%, var(--card));
+  --timeline-segment:     color-mix(in oklab, var(--foreground) 16%, var(--card));
+  --timeline-outline:     color-mix(in oklab, var(--foreground) 24%, transparent);
+  --timeline-progress:    color-mix(in oklab, var(--foreground) 52%, transparent);
+  --timeline-late:        color-mix(in oklab, var(--muted-foreground) 46%, var(--card));
 
   /* DEPRECATED legacy selection recipe (an opaque accent tint + an accent
      bar/border). DS-2 moved every consumer to the state layer and
@@ -486,6 +501,9 @@
    size with an invisible ::before, so its glyph never grows. */
 :root {
   --hit-min: 1.5rem; /* 24 */
+  /* How tall the fade is at the foot of a menu that scrolls, while more items
+     wait below (`[data-more-below]`, global.css; TV-U10). */
+  --menu-fade: 1.75rem; /* 28 */
 }
 
 /* ============================================================================
@@ -516,6 +534,10 @@
   /* Calendar grid: height of one hour row. Density-scaled so the grid's
      rhythm follows the density axis like rows/controls do. */
   --cal-hour-h: 3.5rem;  /* 56 */
+  /* Board card width (tasks-v3 default o): fixed per density so the board
+     never reflows as you scroll; the column adds its drop-tint inset. */
+  --board-card-w: 18.5rem;  /* 296 */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 [data-density="compact"] {
@@ -534,6 +556,8 @@
   --icon:     0.9375rem;   /* 15   */
   --icon-lg:  1.125rem;    /* 18   */
   --cal-hour-h: 3rem;      /* 48   */
+  --board-card-w: 17.5rem; /* 280  */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 [data-density="dense"] {
@@ -552,6 +576,8 @@
   --icon:     0.875rem;    /* 14      */
   --icon-lg:  1rem;        /* 16      */
   --cal-hour-h: 2.75rem;   /* 44      */
+  --board-card-w: 16.5rem; /* 264     */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 /* ============================================================================
@@ -677,6 +703,8 @@
   --bar-h:                3rem;    /* 48  — shared height for top + bottom bars */
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
+  --notes-meta-line-space: 2.25rem; /* 36 — room under a note's title for its meta line */
+  --tree-indent:          0.875rem; /* 14  — one level of a nested tree (notes sidebar) */
 
   --bp-sm: 640px;
   --bp-md: 768px;
@@ -888,6 +916,15 @@
   --ring-color-state-selected-edge: var(--state-selected-edge);
   --color-hairline:             var(--hairline);
   --color-control-raised:       var(--control-raised);
+  /* The Timeline (TV-TL1): bg-timeline-band, border-timeline-outline, … */
+  --color-timeline-grid:        var(--timeline-grid);
+  --color-timeline-grid-strong: var(--timeline-grid-strong);
+  --color-timeline-band:        var(--timeline-band);
+  --color-timeline-bar:         var(--timeline-bar);
+  --color-timeline-segment:     var(--timeline-segment);
+  --color-timeline-outline:     var(--timeline-outline);
+  --color-timeline-progress:    var(--timeline-progress);
+  --color-timeline-late:        var(--timeline-late);
   /* Text levels (call 38): text-foreground · text-muted-foreground ·
      text-subtle-foreground. Avatar / team-mark hue fill: bg-label-fill. */
   --color-subtle-foreground:    var(--subtle-foreground);

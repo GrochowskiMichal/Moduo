@@ -48,7 +48,9 @@ export type MetaOutboxEntry = {
     | "archive"
     | "unarchive"
     | "trash"
-    | "restore";
+    | "restore"
+    | "file"
+    | "setFavorite";
   args: Record<string, unknown>;
   queuedAt: number;
 };

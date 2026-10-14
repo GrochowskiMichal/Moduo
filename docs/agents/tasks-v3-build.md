@@ -127,6 +127,6 @@ Paste this into each block helper's prompt, after "Build <BLOCK-ID>".
 
 ## Known loose ends
 
-- **e2e under load:** a full parallel e2e run on a shared workspace fails 2–3 tests, which pass when run alone (offline AC12.2, trust pass AC1.4, Detailed rows, the "sorted project" drop). Give them their own workspace or run them serially before release.
+- **e2e under load:** resolved by TV-POLISH: the `e2e` project runs one spec at a time (`workers: 1`), so the whole suite passes together. The remaining polish lines are in [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md).
 - **Owner account deletion:** deleting an account that owns a workspace fails on the local stack (`tasks_workspace_id_fkey`). Check it against the erasure work (PRIV) before release.
 - **Checkpoint polish:** the 🟠 box's carry-forward notes name the polish items found at checkpoint 1 (U10 truncation, U13 time value and avatars, the menu bottom fade). Each belongs to its block.

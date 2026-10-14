@@ -11,7 +11,7 @@
 // reference (`moduo://task/<id>`), never its title, and the body renders it
 // per reader ("Private item" when they can't open it).
 
-import { ArrowUp, AtSign, CalendarDays } from "lucide-react";
+import { ArrowUp, AtSign, CalendarDays, Check } from "lucide-react";
 import {
   type ReactNode,
   useContext,
@@ -23,7 +23,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
-import { PersonAvatar as KitPersonAvatar } from "@/components/ui/avatar";
+import { PersonAvatar as KitPersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -33,6 +33,7 @@ import {
   type CommentPerson,
   commentBodyWithReferences,
   filterPeople,
+  filterTeams,
   insertMention,
   keptMentionIds,
   mentionQueryAt,
@@ -59,12 +60,12 @@ export function PersonAvatar({
   person,
   className,
 }: {
-  person: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
+  person: (Pick<CommentPerson, "name" | "avatarUrl" | "unnamed"> & { id?: string }) | null;
   className?: string;
 }) {
   return (
     <KitPersonAvatar
-      name={person?.name || "?"}
+      name={person && !person.unnamed ? person.name || "?" : "?"}
       id={person?.id}
       src={person?.avatarUrl}
       size="icon"
@@ -183,6 +184,9 @@ export function CommentCard({
   authorName,
   time,
   timeTitle,
+  meta,
+  actions,
+  footer,
   children,
 }: {
   author: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
@@ -190,6 +194,12 @@ export function CommentCard({
   time: string;
   /** The full date, as a tooltip on the relative time. */
   timeTitle?: string;
+  /** After the time ("edited"). */
+  meta?: ReactNode;
+  /** Hover controls on the author line (react, ⋯). */
+  actions?: ReactNode;
+  /** Under the body (the reactions). */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -198,6 +208,9 @@ export function CommentCard({
       author={authorName}
       time={time}
       timeTitle={timeTitle}
+      meta={meta}
+      actions={actions}
+      footer={footer}
     >
       {children}
     </FeedCard>
@@ -207,11 +220,17 @@ export function CommentCard({
 /** A thing `@` can name in a comment (RF-1): a registry search's answer. */
 export type ComposerThing = { ref: ReferenceRef; label: string; icon: string | null };
 
+/** A team `@` can name in a comment (TV-D13): each of its members hears once. */
+export type ComposerTeam = { id: string; name: string; mark: string; color: string | null };
+
 type ComposerProps = {
   /** Who can be @mentioned (usually active members other than me). */
   people: CommentPerson[];
-  /** Post the comment. Rejects on failure (the text stays). */
-  onSubmit: (body: string, mentionedUserIds: string[]) => Promise<void>;
+  /** Post the comment. Rejects on failure (the text stays). The teams the
+   *  text still names come third (TV-D13). */
+  onSubmit: (body: string, mentionedUserIds: string[], mentionedTeamIds: string[]) => Promise<void>;
+  /** Teams `@` lists after people (TV-D13); none when left out. */
+  teams?: ComposerTeam[];
   placeholder?: string;
   /** The body actually posted (e.g. Notes prefixes a quote). Defaults to the text. */
   prepareBody?: (text: string) => string;
@@ -228,10 +247,19 @@ type ComposerProps = {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
+  /** Editing a comment (TV-U13): the text to start from, with its picked
+   *  people and things, so a save keeps them (`editableComment`). */
+  initial?: { text: string; mentions: PickedMention[]; things: PickedThing[] };
+  /** The send button's name ("Comment", "Save"). */
+  submitLabel?: string;
+  /** Esc with no list open: leave without saving (editing). */
+  onCancel?: () => void;
+  autoFocus?: boolean;
 };
 
 type ListItem =
   | { kind: "person"; key: string; person: CommentPerson }
+  | { kind: "team"; key: string; team: ComposerTeam }
   | { kind: "thing"; key: string; thing: ComposerThing }
   | { kind: "command"; key: string; command: DateCommand };
 
@@ -255,6 +283,7 @@ function composerTriggerAt(
 export function CommentComposer({
   people,
   onSubmit,
+  teams,
   placeholder = "Leave a comment…  @ to mention",
   prepareBody = (t) => t,
   leading,
@@ -262,12 +291,17 @@ export function CommentComposer({
   references,
   disabled = false,
   className,
+  initial,
+  submitLabel = "Comment",
+  onCancel,
+  autoFocus = false,
   ...props
 }: ComposerProps) {
-  const [text, setText] = useState("");
-  const [caret, setCaret] = useState(0);
-  const [mentions, setMentions] = useState<PickedMention[]>([]);
-  const [things, setThings] = useState<PickedThing[]>([]);
+  const [text, setText] = useState(initial?.text ?? "");
+  const [caret, setCaret] = useState(initial?.text.length ?? 0);
+  const [mentions, setMentions] = useState<PickedMention[]>(initial?.mentions ?? []);
+  const [pickedTeams, setPickedTeams] = useState<PickedMention[]>([]);
+  const [things, setThings] = useState<PickedThing[]>(initial?.things ?? []);
   const [thingResults, setThingResults] = useState<{ query: string; items: ComposerThing[] }>({
     query: "",
     items: [],
@@ -309,6 +343,9 @@ export function CommentComposer({
   if (at?.sigil === "@") {
     for (const p of filterPeople(people, at.query)) {
       items.push({ kind: "person", key: `p:${p.id}`, person: p });
+    }
+    for (const t of filterTeams(teams ?? [], at.query)) {
+      items.push({ kind: "team", key: `team:${t.id}`, team: t });
     }
     if (thingQuery && thingResults.query === thingQuery) {
       for (const t of thingResults.items.slice(0, 6)) {
@@ -367,6 +404,9 @@ export function CommentComposer({
         text: `${text.slice(0, at.start)}${inserted}${after}`,
         caret: at.start + inserted.length,
       };
+    } else if (item.kind === "team") {
+      next = insertMention(text, at.start, caret, item.team.name);
+      setPickedTeams((prev) => [...prev, { id: item.team.id, label: item.team.name }]);
     } else if (item.kind === "thing") {
       next = insertMention(text, at.start, caret, item.thing.label);
       setThings((prev) => [...prev, { ref: item.thing.ref, label: item.thing.label }]);
@@ -402,14 +442,17 @@ export function CommentComposer({
     setPosting(true);
     try {
       const stored = references ? commentBodyWithReferences(body, things, mentions) : body;
-      await onSubmit(stored, keptMentionIds(text, mentions));
+      await onSubmit(stored, keptMentionIds(text, mentions), keptMentionIds(text, pickedTeams));
+      // An edit closes its box; a new comment's box empties for the next one.
+      if (initial) return;
       setText("");
       setCaret(0);
       setMentions([]);
+      setPickedTeams([]);
       setThings([]);
       setDismissedAt(null);
     } catch (e) {
-      toast.error("Couldn’t post the comment", {
+      toast.error(initial ? "Couldn’t save the comment" : "Couldn’t post the comment", {
         description: e instanceof Error ? e.message : undefined,
       });
     } finally {
@@ -436,11 +479,11 @@ export function CommentComposer({
                 onClick={startMention}
               />
               <IconButton
-                icon={ArrowUp}
-                label="Comment"
+                icon={initial ? Check : ArrowUp}
+                label={submitLabel}
                 tooltip={
                   <span>
-                    Comment <span className="text-muted-foreground">⌘↵</span>
+                    {submitLabel} <span className="text-muted-foreground">⌘↵</span>
                   </span>
                 }
                 disabled={!canPost}
@@ -452,6 +495,7 @@ export function CommentComposer({
           <FeedComposerInput
             ref={areaRef}
             value={text}
+            autoFocus={autoFocus}
             disabled={disabled}
             placeholder={placeholder}
             aria-label={props["aria-label"] ?? "Comment"}
@@ -484,6 +528,10 @@ export function CommentComposer({
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
                 void post();
+              } else if (e.key === "Escape" && onCancel) {
+                e.preventDefault();
+                e.stopPropagation();
+                onCancel();
               }
             }}
           />
@@ -530,6 +578,17 @@ export function CommentComposer({
                 <>
                   <PersonAvatar person={item.person} />
                   <span className="truncate">{item.person.name}</span>
+                </>
+              ) : item.kind === "team" ? (
+                <>
+                  <TeamMark
+                    name={item.team.name}
+                    id={item.team.id}
+                    letters={item.team.mark}
+                    color={item.team.color}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{item.team.name}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">team</span>
                 </>
               ) : item.kind === "thing" ? (
                 <>

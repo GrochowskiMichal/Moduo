@@ -9,6 +9,7 @@ import {
   registerFocusFlushSink,
   startFocus,
   stopFocus,
+  undoStopFocus,
   useFocusSession,
 } from "../../features/focus/engine";
 import { FocusAwayPrompt } from "../../features/focus/ui/away-prompt";
@@ -78,6 +79,32 @@ describe("FocusSessionChip (the top-bar Focus timer)", () => {
     });
     expect(screen.queryByText("0:30")).toBeNull();
     expect(screen.queryByText("Focus time not saved yet")).not.toBeNull();
+  });
+
+  it("under the Off timer it says Focus, with no clock (62a, TV-F6)", () => {
+    renderTimer();
+    act(() => {
+      bindFocusTask({ id: "t1", title: "Write spec", bucketName: "Inbox", workspaceId: "ws-1" });
+      startFocus("off");
+    });
+    act(() => {
+      rs.advanceTimersByTime(30_000);
+    });
+    const clock = screen.getByRole("button", { name: /^Focus — Write spec · timer off/ });
+    expect(clock.textContent).toBe("Focus");
+  });
+
+  it("stops from the far end, away from Pause, and Undo brings it back (62a)", () => {
+    renderTimer();
+    startOn("Write spec");
+    fireEvent.click(screen.getByRole("button", { name: "Stop Focus" }));
+    expect(getFocusSession().tracking).toBe(false);
+    expect(document.querySelector('[data-slot="focus-timer"]')).toBeNull();
+    act(() => {
+      undoStopFocus();
+    });
+    expect(getFocusSession()).toMatchObject({ tracking: true, running: true });
+    expect(screen.getByRole("button", { name: /^Focus — Write spec/ })).not.toBeNull();
   });
 
   it("pauses and resumes from the timer (call 96)", () => {
