@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import type { AttachmentRecord, ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { getUploadQueue } from "@/lib/uploads";
+import { RightPanel } from "../../../components/app/right-panel";
 import type { WorkspaceMember } from "../../workspaces/types";
 import { useWorkspace, WorkspaceContext } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
@@ -379,4 +380,25 @@ export const ReadOnly: Story = {
 
 export const NothingSelected: Story = {
   args: { task: null },
+};
+
+/**
+ * Hosted as the Tasks page does, at the 280 px floor (round-2b frame 5): the
+ * task's actions in the title row, "Details ▾ ……… Focus ↗ ⋯"; the breadcrumb
+ * line holds only the crumbs and the handle.
+ */
+export const InThePanelAtFloor: Story = {
+  render: (args) => (
+    <div className="h-full w-70 rounded-xl border border-border bg-card p-3">
+      <RightPanel
+        module="tasks"
+        activeId="details"
+        onChange={() => {}}
+        views={{
+          details: () => <TaskDetailPanel {...args} onOpenFullPage={() => {}} />,
+          project: () => null,
+        }}
+      />
+    </div>
+  ),
 };

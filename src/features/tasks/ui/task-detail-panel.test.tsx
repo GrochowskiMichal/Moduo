@@ -35,14 +35,18 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
   }),
 }));
 
+import type { ReactNode } from "react";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+import { RightPanel } from "../../../components/app/right-panel";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
+import { BulkPanel } from "./bulk-panel";
 import { TaskDetailPanel } from "./task-detail-panel";
+import { TaskFullPage } from "./task-full-page";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -438,8 +442,175 @@ describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
   });
 });
 
-describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)", () => {
-  it("has one Focus toggle, in the header beside copy link and ⋯; no full-width button", () => {
+/** The panel the Tasks page hosts it in: "Details ▾" over the task, Project beside it. */
+function renderInRightPanel(
+  t: Task,
+  a: TasksModuleApi,
+  opts: { onOpenFullPage?: () => void } = {},
+) {
+  const taskDetails = () => (
+    <TaskDetailPanel
+      task={t}
+      buckets={[APP]}
+      inbox={INBOX}
+      canEdit
+      onRequestCapture={() => {}}
+      onSelectTask={() => {}}
+      onOpenFullPage={opts.onOpenFullPage}
+      api={a}
+    />
+  );
+  const ui = (activeId: string, details: () => ReactNode) => (
+    <WorkspaceContext.Provider
+      value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
+    >
+      <TooltipProvider>
+        <RightPanel
+          module="tasks"
+          views={{ details, project: () => <p>Project body</p> }}
+          activeId={activeId}
+          onChange={() => {}}
+        />
+      </TooltipProvider>
+    </WorkspaceContext.Provider>
+  );
+  const utils = render(ui("details", taskDetails));
+  return {
+    ...utils,
+    show: (activeId: string, details: () => ReactNode = taskDetails) =>
+      utils.rerender(ui(activeId, details)),
+  };
+}
+
+/** The panel's title row: the one that holds "Details ▾". */
+function titleRow(): HTMLElement {
+  return screen.getByRole("button", { name: /^Panel view: / }).parentElement as HTMLElement;
+}
+
+/** Its right end, where a view's own actions show. */
+function titleActions(): HTMLElement {
+  return titleRow().querySelector("[data-slot=panel-title-actions]") as HTMLElement;
+}
+
+const labels = (scope: HTMLElement) =>
+  within(scope)
+    .getAllByRole("button")
+    .map((b) => b.getAttribute("aria-label"));
+
+async function openMore(scope: HTMLElement = document.body): Promise<HTMLElement> {
+  const more = within(scope).getByRole("button", { name: "More actions" });
+  fireEvent.pointerDown(more, { button: 0, pointerType: "mouse" });
+  return screen.findByRole("menu");
+}
+
+describe("the task's actions sit in the panel's title row (MOD-118 follow-up, round-2b frame 5)", () => {
+  it('reads "Details ▾ … Focus ↗ ⋯"; the breadcrumb row holds only the crumbs and the handle', () => {
+    const t = task({ number: 142 });
+    renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
+    expect(labels(titleActions())).toEqual(["Add to Focus", "Open full page", "More actions"]);
+    // ▶ "Focus on this" went into ⋯: no icon of its own.
+    expect(screen.queryByRole("button", { name: "Focus on this" })).toBeNull();
+
+    const nav = screen.getByRole("navigation", { name: "Location" });
+    const crumbRow = nav.parentElement as HTMLElement;
+    expect(titleRow().contains(nav)).toBe(false);
+    expect([...crumbRow.children]).toEqual([
+      nav,
+      screen.getByRole("button", { name: "Copy MOD-142" }),
+    ]);
+  });
+
+  it("they still work from there: full page, the Focus toggle, ⋯", async () => {
+    const t = task();
+    const onOpenFullPage = rs.fn();
+    const a = api(t, { focusOnTask: rs.fn(() => true) });
+    renderInRightPanel(t, a, { onOpenFullPage });
+    fireEvent.click(within(titleActions()).getByRole("button", { name: "Open full page" }));
+    expect(onOpenFullPage).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(titleActions()).getByRole("button", { name: "Add to Focus" }));
+    expect(a.toggleQueue).toHaveBeenCalledWith("t1");
+
+    const focusOn = within(await openMore(titleActions())).getByRole("menuitem", {
+      name: /Focus on this/,
+    });
+    expect(focusOn.textContent).toContain("⇧F");
+    fireEvent.click(focusOn);
+    expect(a.focusOnTask).toHaveBeenCalledWith("t1");
+
+    const menu = await openMore(titleActions());
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Delete/ }));
+    expect(a.deleteTask).toHaveBeenCalledWith("t1");
+  });
+
+  it("the Project view and a multi-selection show none of the task's actions", () => {
+    const t = task();
+    const { show } = renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
+    expect(titleActions().childElementCount).toBeGreaterThan(0);
+
+    show("project");
+    expect(screen.getByText("Project body")).toBeTruthy();
+    expect(titleActions().childElementCount).toBe(0);
+
+    // A multi-selection swaps Details' body for the shared values (the page's rule).
+    show("details", () => (
+      <BulkPanel
+        tasks={[t, task({ id: "t2", title: "Second" })]}
+        statusById={new Map()}
+        bucketNameById={() => "Moduo App"}
+        sections={[]}
+        teams={[]}
+        tagsByTask={new Map()}
+        canEdit
+        onPick={() => {}}
+      />
+    ));
+    expect(titleActions().childElementCount).toBe(0);
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /to Focus|in Focus/i })).toBeNull();
+  });
+
+  it("on the full page they sit in its header after ↑ ↓ (the prototype's `.fphead`)", () => {
+    const t = task({ number: 142 });
+    render(
+      <WorkspaceContext.Provider
+        value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
+      >
+        <TooltipProvider>
+          <TaskFullPage
+            backLabel="List · Moduo App"
+            position={{ index: 0, total: 3 }}
+            onPrev={null}
+            onNext={() => {}}
+            onClose={() => {}}
+          >
+            <TaskDetailPanel
+              task={t}
+              buckets={[APP]}
+              inbox={INBOX}
+              canEdit
+              onRequestCapture={() => {}}
+              onSelectTask={() => {}}
+              onCloseFullPage={() => {}}
+              layout="page"
+              api={api(t)}
+            />
+          </TaskFullPage>
+        </TooltipProvider>
+      </WorkspaceContext.Provider>,
+    );
+    const header = screen.getByRole("button", { name: "Next task" }).parentElement as HTMLElement;
+    const slot = header.querySelector("[data-slot=full-page-actions]") as HTMLElement;
+    expect(labels(slot)).toEqual(["Add to Focus", "Back to the panel", "More actions"]);
+    const nav = screen.getByRole("navigation", { name: "Location" });
+    expect([...(nav.parentElement as HTMLElement).children]).toEqual([
+      nav,
+      screen.getByRole("button", { name: "Copy MOD-142" }),
+    ]);
+  });
+});
+
+describe("the Focus toggle (U3-3; call 61 renamed the Queue)", () => {
+  it("is one icon, never the old full-width button", () => {
     const a = api(task());
     renderPanel(task(), a);
     const queue = screen.getAllByRole("button", { name: /to Focus|in Focus/i });
@@ -448,16 +619,11 @@ describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)
     expect(queue[0].getAttribute("aria-pressed")).toBe("false");
     expect(screen.queryByText("Commit to Queue")).toBeNull();
     expect(screen.queryByRole("button", { name: /queue/i })).toBeNull();
-    const header = queue[0].parentElement as HTMLElement;
-    expect(within(header).getByRole("button", { name: "More actions" })).toBeTruthy();
-    expect(within(header).getByRole("navigation", { name: "Location" }).textContent).toContain(
-      "Moduo App",
-    );
     fireEvent.click(queue[0]);
     expect(a.toggleQueue).toHaveBeenCalledWith("t1");
   });
 
-  it("reads 'In Focus' once queued, and offers nothing for a done task", () => {
+  it("reads 'In Focus' once queued, and offers nothing for a done task", async () => {
     renderPanel(task(), api(task(), { queuedTaskIds: new Set(["t1"]) }));
     const toggle = screen.getByRole("button", { name: "In Focus" });
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
@@ -465,13 +631,17 @@ describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)
     const done = task({ status: "done" });
     renderPanel(done, api(done));
     expect(screen.queryByRole("button", { name: /Focus/ })).toBeNull();
+    expect(within(await openMore()).queryByRole("menuitem", { name: /Focus/ })).toBeNull();
   });
 
-  it("▶ is Focus on this (call 31): on top of Up next, with the clock", () => {
+  it("⋯ → Focus on this (call 31): on top of Up next, with the clock; not for a viewer", async () => {
     const a = api(task(), { focusOnTask: rs.fn(() => true) });
     renderPanel(task(), a);
-    fireEvent.click(screen.getByRole("button", { name: "Focus on this" }));
+    fireEvent.click(within(await openMore()).getByRole("menuitem", { name: /Focus on this/ }));
     expect(a.focusOnTask).toHaveBeenCalledWith("t1");
+    cleanup();
+    renderPanel(task(), api(task()), null, false);
+    expect(within(await openMore()).queryByRole("menuitem", { name: /Focus on this/ })).toBeNull();
   });
 });
 
