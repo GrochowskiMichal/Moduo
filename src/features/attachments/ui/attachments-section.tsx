@@ -129,9 +129,12 @@ export function useAttachmentsSection({
 /** The strip (thumbnails, file tiles, "+", upload captions) and its viewer. */
 export function AttachmentsSection({
   state,
+  addTile,
   className,
 }: {
   state: AttachmentsSectionState;
+  /** When the "+" tile shows (the strip's `addTile`); a drag over the zone always shows it. */
+  addTile?: "always" | "with-files";
   className?: string;
 }) {
   const { attachments: a, acceptsFiles, available, viewerIndex, setViewerIndex } = state;
@@ -140,6 +143,8 @@ export function AttachmentsSection({
     <>
       <AttachmentStrip
         className={className}
+        addTile={addTile}
+        dropping={state.dropActive}
         records={a.records}
         previews={a.previews}
         uploads={a.uploads}

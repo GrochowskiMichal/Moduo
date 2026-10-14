@@ -109,8 +109,12 @@ export function TaskDescription({
           sourceIcon="task"
           ariaLabel="Description"
           placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
-          className="min-h-6 text-base text-foreground/85"
-          placeholderClassName="right-0 truncate text-base"
+          // Plain text at rest; editing fills a quiet surface, its padding
+          // inside (MOD-115). The negative margin keeps the text where the
+          // title block puts it.
+          surface="soft"
+          className="-my-1 min-h-6 text-base text-foreground/85"
+          placeholderClassName="truncate text-base"
           onCommit={(html) => {
             if (html !== task.description) api.patchTask(task.id, { description: html });
           }}
@@ -134,7 +138,8 @@ export function TaskDescription({
           size="sm"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
-          className="-ms-2 font-sans text-xs font-normal text-muted-foreground"
+          // Its words start with the text above (the soft surface pads 8 px).
+          className="-ms-0.5 font-sans text-xs font-normal text-muted-foreground"
         >
           {expanded ? "Show less" : counts ? `Show more · ${counts}` : "Show more"}
         </Button>

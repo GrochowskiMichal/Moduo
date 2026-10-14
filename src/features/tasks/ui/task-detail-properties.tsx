@@ -348,7 +348,9 @@ function AddPropertyLine({
             aria-label="Add a property"
             className={cn(
               // PropertyValue's quiet control on the sm rung (round-2b `.addprop`).
-              "-ml-1.5 flex min-h-(--ctrl-h-sm) min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 py-0.5",
+              // It pulls out 4 px, not 6: the panel's scroll box pads 4, and
+              // more would clip the hover fill.
+              "-ml-1 flex min-h-(--ctrl-h-sm) min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 py-0.5",
               "font-sans text-sm text-subtle-foreground outline-none",
               "transition-colors duration-(--motion-fade) ease-(--ease-out)",
               "hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active aria-expanded:text-foreground",

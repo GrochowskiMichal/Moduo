@@ -214,6 +214,11 @@ function renderPanel(runtime: ModuoRuntime, canEdit = true) {
 
 const png = (name = "shot.png") => new File(["x"], name, { type: "image/png" });
 
+/** The panel has read the task's files (with none, there's no strip to wait for). */
+async function filesRead(attachments: { listForEntity: { mock: { calls: unknown[] } } }) {
+  await waitFor(() => expect(attachments.listForEntity.mock.calls.length).toBeGreaterThan(0));
+}
+
 function fileTransfer(files: File[], types = ["Files"]) {
   return {
     types,
@@ -252,13 +257,15 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
   });
 
   it("uploads files dropped anywhere on the task, with a drop highlight while dragging", async () => {
-    const { runtime } = fakeRuntime([]);
+    const { runtime, attachments } = fakeRuntime([]);
     const { container } = renderPanel(runtime);
-    await screen.findByRole("list", { name: "Attachments" });
+    await filesRead(attachments);
     const title = screen.getByRole("textbox", { name: "Task title" });
     const file = png();
     fireEvent.dragEnter(title, { dataTransfer: fileTransfer([file]) });
     expect(container.querySelector("[data-drop-active]")).not.toBeNull();
+    // The "+" shows where files land while the drag is over the task (MOD-115).
+    expect(screen.getByRole("button", { name: "Add files" })).toBeTruthy();
     fireEvent.drop(title, { dataTransfer: fileTransfer([file]) });
     expect(container.querySelector("[data-drop-active]")).toBeNull();
     expect(fakeQueue.add).toHaveBeenCalledWith(
@@ -269,9 +276,9 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
   });
 
   it("attaches a pasted screenshot, but leaves a text paste alone", async () => {
-    const { runtime } = fakeRuntime([]);
+    const { runtime, attachments } = fakeRuntime([]);
     renderPanel(runtime);
-    await screen.findByRole("list", { name: "Attachments" });
+    await filesRead(attachments);
     const title = screen.getByRole("textbox", { name: "Task title" });
     fireEvent.paste(title, { clipboardData: fileTransfer([png()], ["text/plain", "Files"]) });
     expect(fakeQueue.add).not.toHaveBeenCalled();
@@ -280,9 +287,9 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
   });
 
   it("takes a paste after a click on blank panel space (the panel holds focus)", async () => {
-    const { runtime } = fakeRuntime([]);
+    const { runtime, attachments } = fakeRuntime([]);
     renderPanel(runtime);
-    await screen.findByRole("list", { name: "Attachments" });
+    await filesRead(attachments);
     const panel = screen.getByRole("region", { name: "Task details" });
     // Focusable by a click, outside the Tab order.
     expect(panel.tabIndex).toBe(-1);
@@ -293,13 +300,26 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
   });
 
   it("picks files through the + tile", async () => {
-    const { runtime } = fakeRuntime([]);
+    const { runtime } = fakeRuntime([rec("a")]);
     const { container } = renderPanel(runtime);
-    await screen.findByRole("list", { name: "Attachments" });
+    await screen.findByRole("button", { name: "Add files" });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = png("picked.png");
     fireEvent.change(input, { target: { files: [file] } });
     expect(fakeQueue.add).toHaveBeenCalledWith([file], expect.anything(), "u1");
+  });
+
+  it("with no files, no strip and no + until files are dragged over (MOD-115)", async () => {
+    const { runtime, attachments } = fakeRuntime([]);
+    renderPanel(runtime);
+    await filesRead(attachments);
+    expect(screen.queryByRole("list", { name: "Attachments" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add files" })).toBeNull();
+    const title = screen.getByRole("textbox", { name: "Task title" });
+    fireEvent.dragEnter(title, { dataTransfer: fileTransfer([png()]) });
+    expect(screen.getByRole("button", { name: "Add files" })).toBeTruthy();
+    fireEvent.dragLeave(title, { dataTransfer: fileTransfer([png()]) });
+    expect(screen.queryByRole("button", { name: "Add files" })).toBeNull();
   });
 
   it("view-only: files open, but there's no + and a drop attaches nothing", async () => {
@@ -347,9 +367,9 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
   });
 
   it("shows an upload's progress in place, and a problem as a caption with its action", async () => {
-    const { runtime } = fakeRuntime([]);
+    const { runtime, attachments } = fakeRuntime([]);
     renderPanel(runtime);
-    await screen.findByRole("list", { name: "Attachments" });
+    await filesRead(attachments);
     const base = {
       userId: "u1",
       target: { workspaceId: "w", entityType: "task", entityId: "t1" },

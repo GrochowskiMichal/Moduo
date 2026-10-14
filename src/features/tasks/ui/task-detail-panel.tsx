@@ -244,10 +244,11 @@ function DetailBody({
       onRevealWaiting={() => setWaitingOpen(true)}
     />
   );
-  // The text starts under the title's, past the toggle and its gap (a
-  // view-only task with no description renders nothing, so no empty gap).
+  // The text starts under the title's: past the toggle and its gap, less
+  // the 8 px the description's soft surface pads inside (MOD-115). A
+  // view-only task with no description renders nothing, so no empty gap.
   const description = (
-    <div className="pl-6 empty:hidden">
+    <div className="pl-4 empty:hidden">
       <TaskDescription
         task={task}
         api={api}
@@ -259,8 +260,10 @@ function DetailBody({
       />
     </div>
   );
-  // A block of its own, 16 px under the description (the stack's gap).
-  const attachments = <AttachmentsSection state={files} />;
+  // A block of its own, 16 px under the description (the stack's gap). Its
+  // "+" tile shows once the task has files, or while files are dragged over
+  // it (MOD-115); dropping and pasting work anywhere on the task as before.
+  const attachments = <AttachmentsSection state={files} addTile="with-files" />;
   const collections = (
     <div className="flex flex-col gap-3">
       {!parent ? (
@@ -384,7 +387,11 @@ function DetailBody({
       {...files.dropZone}
     >
       {header}
-      {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
+      {/* px/py inset so a focused control's ring isn't clipped by this scroll
+          box: the description no longer needs it (its focus is a soft fill),
+          but the title, the toggle, the collections' "+" and the comment box
+          sit at its edges. Some hosts (Notes) wrap the panel in an unpadded
+          scroller, so it can't reach out with a negative margin instead. */}
       <div
         data-drop-active={files.dropActive || undefined}
         className={cn(dropScroll, "px-1 pt-2.5 pb-4")}
