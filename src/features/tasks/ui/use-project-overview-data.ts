@@ -136,6 +136,27 @@ export function useEditableProjects(
   projectIds: readonly string[],
   enabled: boolean,
 ): (projectId: string) => boolean | null {
+  return useEditable("project", workspaceId, projectIds, enabled);
+}
+
+/**
+ * The same for single tasks (Edit on the task: its project's, or its own,
+ * e.g. an assignee's in a project they can only view).
+ */
+export function useEditableTasks(
+  workspaceId: string,
+  taskIds: readonly string[],
+  enabled: boolean,
+): (taskId: string) => boolean | null {
+  return useEditable("task", workspaceId, taskIds, enabled);
+}
+
+function useEditable(
+  kind: "project" | "task",
+  workspaceId: string,
+  projectIds: readonly string[],
+  enabled: boolean,
+): (id: string) => boolean | null {
   const [answers, setAnswers] = useState<{ ws: string; ok: ReadonlyMap<string, boolean> }>(() => ({
     ws: workspaceId,
     ok: new Map(),
@@ -163,12 +184,12 @@ export function useEditableProjects(
     for (const id of fresh) {
       if (!ask) settle(id, true);
       else
-        ask({ kind: "project", id }).then(
+        ask({ kind, id }).then(
           (ok) => settle(id, ok),
           () => settle(id, true),
         );
     }
-  }, [workspaceId, key, enabled]);
+  }, [kind, workspaceId, key, enabled]);
   const known = answers.ws === workspaceId ? answers.ok : null;
-  return useCallback((projectId: string) => known?.get(projectId) ?? null, [known]);
+  return useCallback((id: string) => known?.get(id) ?? null, [known]);
 }

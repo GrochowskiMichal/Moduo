@@ -25,7 +25,7 @@ export function TimelineNoDatePanel({
   projects,
   inboxId,
   canEdit,
-  canEditIn,
+  canMove,
   selectedTaskId,
   onOpen,
 }: {
@@ -35,8 +35,8 @@ export function TimelineNoDatePanel({
   projects: readonly Bucket[];
   inboxId: string | null;
   canEdit: boolean;
-  /** Across projects: may you move this project's tasks (none: all of them)? */
-  canEditIn?: (projectId: string) => boolean;
+  /** Across projects: may you date this task (absent: every one)? */
+  canMove?: (task: Task) => boolean;
   selectedTaskId: string | null;
   onOpen: (taskId: string) => void;
 }) {
@@ -116,7 +116,7 @@ export function TimelineNoDatePanel({
               ) : (
                 <NoDateRow
                   task={item.task}
-                  movable={canEdit && (canEditIn?.(item.task.bucketId) ?? true)}
+                  movable={canEdit && (canMove?.(item.task) ?? true)}
                   selected={selectedTaskId === item.task.id}
                   onOpen={onOpen}
                 />

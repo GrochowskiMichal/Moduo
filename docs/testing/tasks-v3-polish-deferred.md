@@ -53,6 +53,8 @@
 - 🧭 Lines draw only between rows on screen (by design for 2,000 tasks). **Recommend:** keep.
 - 🧭 The No date view has no keyboard way to place a task. **Recommend:** `d` on a No date row opens the date picker, like the canvas.
 - 🔧 Per-project handles at All are asked once per project while the page stays; a grant changed meanwhile shows at the next visit (the server still refuses). **Recommend:** re-ask on the store's access event.
+- 🗄 A task shared to you by hand with Edit inside a project you can only view, and a task in someone else's Inbox you can see but not edit, are judged by their project (only tasks assigned to you are asked one by one): the first shows no handle, the second shows one the server refuses. **Recommend:** a batched "which of these can I edit" read in the release migration train, replacing the per-project and per-task questions.
+- 🧭 ⌥←/→ or ⇧D on a mixed selection moves only the tasks you can edit, and the toast counts those without saying why. **Recommend:** add "· 2 not yours to move" to the toast.
 - 🖼 Visual baselines for the five Timeline stories and the new marks.
 
 ## Multi-select (TV-U12)

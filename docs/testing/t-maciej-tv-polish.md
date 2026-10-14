@@ -6,6 +6,7 @@
 ## Timeline across projects (TL2's view-only handles)
 - [ ] **Do:** as a teammate, make a project with dates and a dated task, and share it with you **view only**; open Tasks → All → Timeline → **Expect:** its bar has no ends to drag and doesn't move when dragged; your own projects' bars still drag _(web)_
 - [ ] **Do:** unfold that project → **Expect:** its tasks' points have no grab cursor; dragging does nothing; your own tasks' points still drag _(web)_
+- [ ] **Do:** as the teammate, assign one of its tasks to you; reload All → **Expect:** that task's point has a handle and ⌥→ moves it (assignment keeps you Edit on it); the others still don't _(web, two accounts)_
 - [ ] **Do:** put the cursor on one of its tasks and press ⌥→, `d`, ⇧D → **Expect:** nothing changes, no "Couldn't save" toast _(web)_
 - [ ] **Do:** open No date (if it has an undated task) → **Expect:** its row isn't draggable; yours are _(web)_
 - [ ] **Do:** the same at My tasks → **Expect:** the same _(web)_
@@ -35,6 +36,7 @@
 ## Tests (automated)
 - [ ] **Do:** `bun run db:test` with other data on the stack (your own reminders, an e2e import) → **Expect:** all 36 files pass _(local)_
 - [ ] **Do:** `bun run e2e -- --project=e2e` → **Expect:** 66 passed, one spec at a time (about 5 minutes) _(local)_
+- [ ] **Do:** after a bare `bun run e2e`, `git status` → **Expect:** if `tests/visual/*-snapshots/` folders appeared, they're unreviewed baselines the run wrote: delete them, don't commit _(local)_
 
 ## Known gaps / not-yet-testable
 - The visual project in a bare `bun run e2e` has no screenshot baselines yet (the visual round); its screenshot specs fail until they're captured.

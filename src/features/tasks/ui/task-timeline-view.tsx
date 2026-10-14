@@ -153,10 +153,15 @@ type Props = {
    */
   canDrag?: boolean;
   /**
-   * Across projects (All, My tasks): may this person move dates in this
-   * project? A project shared view-only shows no handles. Absent: all of them.
+   * Across projects (All, My tasks): may this person move this project's or
+   * section's dates? A project shared view-only shows no handles. Absent: all.
    */
   canDragIn?: (projectId: string) => boolean;
+  /**
+   * The same for a task: its project's answer, or its own (the assignee
+   * keeps Edit on a task in a project they can only view). Absent: all.
+   */
+  canDragTask?: (task: Task) => boolean;
 };
 
 const EVERY_PROJECT = () => true;
@@ -264,6 +269,7 @@ export function TaskTimelineView({
   onOpenNoDate,
   canDrag: canDragProp,
   canDragIn = EVERY_PROJECT,
+  canDragTask = EVERY_PROJECT,
 }: Props) {
   const scopeKey = inbox && selection === inbox.id ? "inbox" : selection;
   const scopeKind = useMemo(() => timelineScopeOf(scopeKey), [scopeKey]);
@@ -664,21 +670,21 @@ export function TaskTimelineView({
   // ── Who may move what (TV-TL2) ──────────────────────────────────────────
   // Across projects, each row asks its own project (TV-TL2): a project shared
   // with you view-only has no handles, its tasks none either.
+  const canMoveTask = useCallback(
+    (task: Task) => canDrag && canDragTask(task),
+    [canDrag, canDragTask],
+  );
   const canDragRow = useCallback(
     (row: TimelineRow) =>
-      canDrag &&
-      (row.kind === "task"
-        ? canDragIn(row.task.bucketId)
-        : row.kind === "section"
-          ? canDragIn(row.projectId)
-          : row.kind === "project"
-            ? canDragIn(row.project.id)
-            : false),
-    [canDrag, canDragIn],
-  );
-  const canMoveTask = useCallback(
-    (task: Task) => canDrag && canDragIn(task.bucketId),
-    [canDrag, canDragIn],
+      row.kind === "task"
+        ? canMoveTask(row.task)
+        : canDrag &&
+          (row.kind === "section"
+            ? canDragIn(row.projectId)
+            : row.kind === "project"
+              ? canDragIn(row.project.id)
+              : false),
+    [canDrag, canDragIn, canMoveTask],
   );
 
   // ── Dependencies (70, 68b) ──────────────────────────────────────────────

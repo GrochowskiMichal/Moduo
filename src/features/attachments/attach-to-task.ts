@@ -93,8 +93,8 @@ export async function attachFilesToTask({
       files,
       { workspaceId, entityType: "task", entityId: taskId },
       userId,
-      // Unread (offline, an older server): the queue tries itself.
-      pool ?? undefined,
+      // Asked and unanswered (offline): null, so the queue doesn't ask again.
+      api ? pool : undefined,
       { awaitTask },
     );
   } catch {

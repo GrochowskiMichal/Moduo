@@ -472,10 +472,13 @@ test("drag, create, keyboard, dependencies", async ({ page }) => {
     .toBe(dayKey(31));
 });
 
-test("at All, a project shared with you view-only has no handles; yours do", async ({ page }) => {
+test("at All, a project shared with you view-only has no handles, but a task of it you're on does", async ({
+  page,
+}) => {
   const mate = await ensureTeammate(ws.id);
   const theirs = { id: crypto.randomUUID(), name: `Their plan ${tag}` };
   const theirTask = crypto.randomUUID();
+  const mine = crypto.randomUUID();
   await rpc(mate, "projects_op_create", {
     p_workspace_id: ws.id,
     p_project: {
@@ -486,10 +489,15 @@ test("at All, a project shared with you view-only has no handles; yours do", asy
       target_on: dayKey(25),
     },
   });
-  await rpc(mate, "tasks_op_create", {
-    p_workspace_id: ws.id,
-    p_task: { id: theirTask, title: `Their task ${tag}`, bucket_id: theirs.id, due_on: dayKey(4) },
-  });
+  for (const [id, title, due] of [
+    [theirTask, `Their task ${tag}`, 4],
+    [mine, `Yours to do ${tag}`, 6],
+  ] as const) {
+    await rpc(mate, "tasks_op_create", {
+      p_workspace_id: ws.id,
+      p_task: { id, title, bucket_id: theirs.id, due_on: dayKey(due) },
+    });
+  }
   // Shared with the dev to view only, not through the workspace's grant.
   await rest("service", `resource_grants?resource_type=eq.bucket&resource_id=eq.${theirs.id}`, {
     method: "DELETE",
@@ -506,6 +514,12 @@ test("at All, a project shared with you view-only has no handles; yours do", asy
       created_by: mate.user.id,
     },
   });
+  // Then one of its tasks is given to the dev: assignment keeps Edit on it.
+  await rpc(mate, "tasks_op_assign", {
+    p_workspace_id: ws.id,
+    p_task_id: mine,
+    p_assignee_id: dev.user.id,
+  });
   try {
     await signInPage(page, dev, ws.id);
     await page.goto("/tasks");
@@ -521,7 +535,7 @@ test("at All, a project shared with you view-only has no handles; yours do", asy
     // Their bar has no ends to drag; yours does.
     await expect(oursRow.locator("[data-timeline-edge]")).toHaveCount(2);
     await expect(theirsRow.locator("[data-timeline-edge]")).toHaveCount(0);
-    // Unfolded: their task's point has no handle; yours have.
+    // Unfolded: their task's point has no handle; yours, and the one you're on, have.
     await theirsRow.getByRole("button", { name: "Unfold" }).click();
     await oursRow.getByRole("button", { name: "Unfold" }).click();
     const point = '[data-timeline-mark="point"]';
@@ -534,6 +548,14 @@ test("at All, a project shared with you view-only has no handles; yours do", asy
       "data-editable",
       "true",
     );
+    await expect(row(page, `task:${mine}`).locator(point)).toHaveAttribute("data-editable", "true");
+    // The keys follow: ⌥→ moves the one you're on, never theirs.
+    await row(page, `task:${theirTask}`).locator('[role="rowheader"]').click();
+    await page.keyboard.press("Alt+ArrowRight");
+    await row(page, `task:${mine}`).locator('[role="rowheader"]').click();
+    await page.keyboard.press("Alt+ArrowRight");
+    await expect.poll(() => dueOf(mine)).toBe(dayKey(7));
+    expect(await dueOf(theirTask)).toBe(dayKey(4));
   } finally {
     const at = new Date().toISOString();
     await rest("service", `tasks?bucket_id=eq.${theirs.id}`, {
@@ -544,5 +566,10 @@ test("at All, a project shared with you view-only has no handles; yours do", asy
       method: "PATCH",
       body: { deleted_at: at },
     });
+    await rest(
+      "service",
+      `resource_grants?resource_id=in.(${theirs.id},${theirTask},${mine})&subject_id=eq.${dev.user.id}`,
+      { method: "DELETE" },
+    );
   }
 });

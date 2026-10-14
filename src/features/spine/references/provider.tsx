@@ -16,12 +16,10 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { findWorkspaceStore } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
-import { finishOutsideTasks } from "../../tasks/check-off";
-import { queueEntriesOf } from "../../tasks/queue";
 import { listenTasksLive } from "../../tasks/realtime";
 import { useWorkspace } from "../../workspaces/workspace-context";
+import { completeReferencedTask } from "./complete-task";
 import { ReferenceStoreProvider } from "./context";
 import type { ResolveContext } from "./resolvers";
 import { isLiveKind, ReferenceStore } from "./store";
@@ -85,35 +83,16 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
                     : null;
                 },
                 getEntities: (refs) => rt.spine.getEntities({ workspaceId, refs }),
+                // Done finishes open subtasks too, through the shared store (call 87).
                 setTaskStatus: canEdit
-                  ? async (taskId, done) => {
-                      // Done goes through the workspace's shared store, like
-                      // every other check-off (call 87): its open subtasks
-                      // finish too, with one Undo. Reopening is the task alone.
-                      const store = done ? findWorkspaceStore(rt, workspaceId) : null;
-                      const snap = store?.getSnapshot() ?? null;
-                      const task = snap?.bundle.tasks.find((t) => t.id === taskId && !t.deletedAt);
-                      if (store && snap && task) {
-                        await finishOutsideTasks({
-                          store,
-                          tasks: rt.tasks,
-                          workspaceId,
-                          task,
-                          copy: snap.bundle.tasks,
-                          lineupBefore: queueEntriesOf(
-                            snap.queue,
-                            latest.current.userId ?? null,
-                          ).map((e) => e.taskId),
-                          sayLone: false,
-                        });
-                        return;
-                      }
-                      await rt.tasks.opSetStatus({
+                  ? (taskId, done) =>
+                      completeReferencedTask({
+                        runtime: rt,
                         workspaceId,
+                        userId: latest.current.userId ?? null,
                         taskId,
-                        status: done ? "done" : "todo",
-                      });
-                    }
+                        done,
+                      })
                   : undefined,
                 now: () => new Date(),
               };
