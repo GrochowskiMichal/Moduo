@@ -428,11 +428,12 @@ describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
     expect((await screen.findByRole("tooltip")).textContent).toBe(
       "A section name long enough to need the ellipsis",
     );
-    // The handle is the task's, outside the crumbs and their chevrons, pushed right.
+    // The handle is the task's, outside the crumbs and their chevrons: the
+    // next thing on the line after the nav, which grows to push it right.
     const handle = screen.getByRole("button", { name: "Copy MOD-142" });
     expect(nav.contains(handle)).toBe(false);
-    expect(nav.parentElement?.contains(handle)).toBe(true);
-    expect(handle.className).toContain("ml-auto");
+    expect(nav.nextElementSibling).toBe(handle);
+    expect(nav.className).toContain("flex-1");
     expect(nav.querySelectorAll(".lucide-chevron-right")).toHaveLength(1);
   });
 });

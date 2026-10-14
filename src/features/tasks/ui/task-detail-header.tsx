@@ -188,8 +188,8 @@ export function TaskDetailHeader({
         ) : null}
       </nav>
       {/* The handle is the task's own, not a place: it sits at the line's
-          end, pushed right and quieter (round-2b `.dcrumb .hdl`), and never
-          shortens. */}
+          end, quieter (round-2b `.dcrumb .hdl`), and never shortens. The
+          crumbs' nav grows to fill the line, which pushes it there. */}
       {handle ? (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -199,7 +199,7 @@ export function TaskDetailHeader({
               aria-label={`Copy ${handle}`}
               className={cn(
                 crumb,
-                "ml-auto shrink-0 whitespace-nowrap text-subtle-foreground tabular-nums",
+                "shrink-0 whitespace-nowrap text-subtle-foreground tabular-nums",
               )}
             >
               {handle}
