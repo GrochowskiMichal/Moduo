@@ -64,7 +64,7 @@ New: `supabase/migrations/<stamp>_chat_v2_foundation.sql`, `<stamp>_chat_v2_conv
 
 ## 6. From earlier blocks
 
-CV-0 spikes 2, 4, 5 (the `updated_at` + keyset design, `chat__v1_to_v2` and corpus, the unaccent wrapper). Spike 5 is landed: `docs/build/chat-v2/CV-0-S5.md` and `docs/build/chat-v2/drafts/search.sql` (its "For CV-1" notes: a Realtime publication column list without `search_tsv`, and `lock_timeout` on the table rewrite). Spikes 2 and 4 land as `docs/build/chat-v2/CV-0-S2.md` and `CV-0-S4.md` with drafts in `docs/build/chat-v2/drafts/`; if one is missing, say so, don't redo it.
+CV-0 spikes 2, 4, 5 (the `updated_at` + keyset design, `chat__v1_to_v2` and corpus, the unaccent wrapper). Spikes 2, 3 and 5 are landed; read the "For CV-1" notes in `docs/build/chat-v2/CV-0-S2.md` (adding `updated_at` without a table rewrite, the indexes, `chat_sync_ids`) and `CV-0-S3.md` (a publication column list doesn't narrow Postgres Changes; re-assert the publication idempotently). Spike 5: `docs/build/chat-v2/CV-0-S5.md` and `docs/build/chat-v2/drafts/search.sql` (its "For CV-1" notes: a Realtime publication column list without `search_tsv`, and `lock_timeout` on the table rewrite). Spike 4 lands as `docs/build/chat-v2/CV-0-S4.md` with drafts in `docs/build/chat-v2/drafts/`; if one is missing, say so, don't redo it.
 
 ## 7. Watch out
 

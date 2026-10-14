@@ -61,7 +61,7 @@ New `src/features/chat/store/` (store, access check, outbox, typing and presence
 
 ## 6. From earlier blocks
 
-CV-2b: `chat_sync_ids`, `chat_people`, `chat_unread_counts`, `chat_op_mark_read/_unread` (message-id arguments), `chat_op_bootstrap`. CV-2a: `chat_op_send` with the client-minted `id`, `chat_op_typing`. CV-1: `updated_at`, `last_read_id`, the three published tables. CV-0 spike 3's numbers and spike 2's design.
+CV-2b: `chat_sync_ids`, `chat_people`, `chat_unread_counts`, `chat_op_mark_read/_unread` (message-id arguments), `chat_op_bootstrap`. CV-2a: `chat_op_send` with the client-minted `id`, `chat_op_typing`. CV-1: `updated_at`, `last_read_id`, the three published tables. CV-0 spike 3's numbers and spike 2's design: read the "For later blocks" sections of `docs/build/chat-v2/CV-0-S3.md` and `CV-0-S2.md` (the store shape, the access check's rule that every conversation the store persists is registered, the binding `select`, the gap fill on re-subscribe, focus and every minute or two). **Transport (orchestrator's choice, deferred to by Maciej):** spike 3 missed the ≤ 500 ms delivery bar by 20–85 ms because the local Realtime reads changes about every 0.5 s. Keep Postgres Changes for message rows as Assumption #17 says, but make the live merge take its input from one adapter so Broadcast from the database can replace it without touching the merge; delivery p95 is re-measured on the real project before release, and that number decides. Rejected: switching to Broadcast now (more triggers and topics than the measured miss justifies).
 
 ## 7. Watch out
 
