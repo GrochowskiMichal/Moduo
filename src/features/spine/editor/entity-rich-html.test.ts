@@ -2,7 +2,7 @@
 // rich html (parse as markup) and foreign/legacy plain text (render verbatim),
 // plus the outgoing-email attribute scrub.
 import { describe, expect, it } from "@rstest/core";
-import { looksLikeRichHtml, stripEntityRefAttrs } from "./entity-rich-html";
+import { looksLikeRichHtml, plainListLine, stripEntityRefAttrs } from "./entity-rich-html";
 
 describe("looksLikeRichHtml", () => {
   it("is false for empty, plain, and foreign text with literal angle brackets", () => {
@@ -36,5 +36,21 @@ describe("stripEntityRefAttrs", () => {
   it("leaves html without chips untouched", () => {
     const html = "<p>plain <b>body</b></p>";
     expect(stripEntityRefAttrs(html)).toBe(html);
+  });
+});
+
+describe("plainListLine (Markdown bullets in plain text)", () => {
+  it("reads a bullet as a list item, keeping the indent and the words", () => {
+    expect(plainListLine("- short")).toBe("• short");
+    expect(plainListLine("* long")).toBe("• long");
+    expect(plainListLine("+ plus")).toBe("• plus");
+    expect(plainListLine("  - nested")).toBe("  • nested");
+    expect(plainListLine("- [ ] a checkbox")).toBe("• [ ] a checkbox");
+  });
+
+  it("leaves anything that isn't a bullet alone", () => {
+    for (const line of ["-5° outside", "*bold*", "---", "- ", "a - b", "1. first", ""]) {
+      expect(plainListLine(line)).toBe(line);
+    }
   });
 });

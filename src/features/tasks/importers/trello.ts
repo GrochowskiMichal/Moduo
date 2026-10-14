@@ -75,8 +75,15 @@ export function readTrello(data: unknown, fileName: string, zone: string): Impor
   for (const m of arr(board.members)) {
     memberNames.set(str(m.id), str(m.fullName).trim() || str(m.username).trim());
   }
-  const memberOf = (id: string) =>
-    personFrom(memberNames.get(id) ?? "") ?? { name: "A Trello member", email: null };
+  // A member the board's list doesn't name gets a number of their own
+  // ("Trello member 1, 2…"), so each is matched to a teammate separately.
+  const unnamed = new Map<string, number>();
+  const memberOf = (id: string) => {
+    const named = personFrom(memberNames.get(id) ?? "");
+    if (named) return named;
+    if (!unnamed.has(id)) unnamed.set(id, unnamed.size + 1);
+    return { name: `Trello member ${unnamed.get(id)}`, email: null };
+  };
   const checklistsOf = new Map<string, Obj[]>();
   for (const cl of arr(board.checklists).sort(byPos)) {
     const card = str(cl.idCard);

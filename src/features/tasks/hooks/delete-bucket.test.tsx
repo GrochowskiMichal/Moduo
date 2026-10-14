@@ -432,6 +432,65 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     );
   });
 
+  it("Move's toast waits for the moves, and a refused move shows none", async () => {
+    const { ids, runtime } = makeServer("a8-");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const update = runtime.tasks.opUpdateTask;
+    runtime.tasks.opUpdateTask = rs.fn(async (input: never) => {
+      await gate;
+      return update(input);
+    });
+    const { result } = await mount(runtime);
+    const archivedToast = () =>
+      toastMock.mock.calls.some((call) => (call as unknown[])[0] === "“X” archived");
+    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    await settle();
+    expect(archivedToast()).toBe(false);
+    release();
+    await waitFor(() => expect(archivedToast()).toBe(true));
+    expect(String(lastToast()[1].description)).toMatch(/moved to Y/);
+
+    toastMock.mockClear();
+    const refused = makeServer("a9-");
+    refused.runtime.tasks.opUpdateTask = rs.fn(async () => {
+      throw new Error("You can't move tasks into that project.");
+    });
+    const second = await mount(refused.runtime);
+    act(() =>
+      second.result.current.archiveBucket(refused.ids.x, {
+        kind: "move",
+        projectId: refused.ids.y,
+      }),
+    );
+    await settle();
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+    expect(archivedToast()).toBe(false);
+  });
+
+  it("Done with Move toasts once the moves landed", async () => {
+    const { ids, runtime } = makeServer("a10-");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const update = runtime.tasks.opUpdateTask;
+    runtime.tasks.opUpdateTask = rs.fn(async (input: never) => {
+      await gate;
+      return update(input);
+    });
+    const { result } = await mount(runtime);
+    const doneToast = () =>
+      toastMock.mock.calls.some((call) => (call as unknown[])[0] === "“X” is done");
+    act(() => result.current.setProjectState(ids.x, "done", { kind: "move", projectId: ids.y }));
+    await settle();
+    expect(doneToast()).toBe(false);
+    release();
+    await waitFor(() => expect(doneToast()).toBe(true));
+  });
+
   it("a refused archive keeps the project and puts the open tasks back", async () => {
     const { ids, runtime } = makeServer("a6-");
     runtime.tasks.updateProject = rs.fn(async () => {

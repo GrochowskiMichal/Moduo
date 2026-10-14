@@ -288,12 +288,13 @@ export function ProjectClientValue({
     );
   }
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-1">
-      <Reference type="contact" id={clientId} display="chip" />
+    // One line: the chip gives way (its name truncates) before the pencil wraps.
+    <span className="flex min-w-0 items-center gap-1">
+      <Reference type="contact" id={clientId} display="chip" className="min-w-0 shrink" />
       {canEdit ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <IconButton icon={Pencil} label="Change client" />
+            <IconButton icon={Pencil} label="Change client" className="shrink-0" />
           </PopoverTrigger>
           {picker}
         </Popover>

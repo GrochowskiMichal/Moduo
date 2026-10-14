@@ -5,7 +5,12 @@
 // the name column holds its resize handle (200–480 px). No text is ever
 // rotated (46a).
 
-import { type PointerEvent as ReactPointerEvent, useContext, useMemo } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 
 import { cn } from "../../../lib/utils";
 import {
@@ -16,11 +21,50 @@ import {
   weekStartOf,
   xOfDay,
 } from "../timeline-scale";
-import { TimelineWindowContext, useTimelineGeometry } from "./timeline-marks";
+import {
+  TimelineViewportContext,
+  TimelineWindowContext,
+  useTimelineGeometry,
+} from "./timeline-marks";
 
 /** Below this width a cell's label would crowd its neighbours: it stays blank. */
 function labelFits(text: string, width: number): boolean {
   return width >= text.length * 7 + 6;
+}
+
+/**
+ * The px of a header cell surely on screen past the name column, given the
+ * first day on screen: a month that has mostly scrolled away under the
+ * column keeps only its last days. That first day is only partly in view
+ * (any sliver of it counts as "on screen"), so it isn't counted.
+ */
+export function shownWidth(cell: HeaderCell, firstDayOnScreen: number, dw: number): number {
+  if (firstDayOnScreen <= cell.start) return (cell.end - cell.start + 1) * dw;
+  return Math.max(0, cell.end - firstDayOnScreen) * dw;
+}
+
+/**
+ * A month's (or year's) name, sticky at the name column's edge. When less of
+ * the month is left on screen than its name needs, the name goes (it would
+ * show only a fragment, "…ber", sliding under the column). It redraws only
+ * when that flips, never on every scroll frame.
+ */
+function TopLabel({ cell, width }: { cell: HeaderCell; width: number }) {
+  const { dw } = useTimelineGeometry();
+  const viewport = useContext(TimelineViewportContext);
+  const text = labelFits(cell.label, width) ? cell.label : cell.label.slice(0, 3);
+  const fits = useSyncExternalStore(viewport.subscribe, () =>
+    labelFits(text, shownWidth(cell, viewport.get().from, dw)),
+  );
+  if (!fits) return null;
+  return (
+    <span
+      className="sticky ps-2 font-sans text-xs font-medium whitespace-nowrap text-muted-foreground"
+      style={{ left: "var(--timeline-name-w)" }}
+    >
+      {text}
+    </span>
+  );
 }
 
 export function TimelineHeader({
@@ -95,12 +139,7 @@ export function TimelineHeader({
                 style={{ left, width }}
               >
                 {labelFits(cell.label.slice(0, 3), width) ? (
-                  <span
-                    className="sticky ps-2 font-sans text-xs font-medium whitespace-nowrap text-muted-foreground"
-                    style={{ left: "var(--timeline-name-w)" }}
-                  >
-                    {labelFits(cell.label, width) ? cell.label : cell.label.slice(0, 3)}
-                  </span>
+                  <TopLabel cell={cell} width={width} />
                 ) : null}
               </div>
             );

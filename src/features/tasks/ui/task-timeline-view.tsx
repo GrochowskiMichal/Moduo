@@ -78,6 +78,7 @@ import {
   weekStartOf,
   xOfDay,
   ZOOM_LABELS,
+  zoomAnchor,
 } from "../timeline-scale";
 import { useToday } from "../use-today";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
@@ -564,7 +565,8 @@ export function TaskTimelineView({
     [range, dw, today, trackWidth],
   );
 
-  // Zoom keeps the day under the pointer (or the middle) where it was.
+  // Zoom keeps the day under the pointer where it was; from the control or
+  // the keys, Today when it's on screen (else the middle).
   const changeZoom = useCallback(
     (next: TimelineZoom, clientX?: number) => {
       const el = scrollerRef.current;
@@ -572,12 +574,13 @@ export function TaskTimelineView({
       if (next === z) return;
       if (el) {
         const left = el.getBoundingClientRect().left + nw;
-        const at = clientX === undefined ? tw / 2 : Math.max(0, Math.min(tw, clientX - left));
-        pending.current = { kind: "day", day: r.start + (el.scrollLeft + at) / w, at };
+        const pointer = clientX === undefined ? undefined : clientX - left;
+        const anchor = zoomAnchor(r, w, el.scrollLeft, tw, today, pointer);
+        pending.current = { kind: "day", ...anchor };
       }
       onDisplayChange({ ...display, timelineZoom: next });
     },
-    [display, onDisplayChange],
+    [display, onDisplayChange, today],
   );
   const changeZoomRef = useRef(changeZoom);
   useLayoutEffect(() => {
@@ -962,7 +965,7 @@ export function TaskTimelineView({
       if (several.length > 0) {
         const movable = several.filter(canMoveTask);
         if (movable.length === 0) return false;
-        writes.shiftTasks(movable, shift);
+        writes.shiftTasks(movable, shift, several.length - movable.length);
       } else if (row?.kind === "task") {
         if (!canMoveTask(row.task)) return false;
         writes.shiftTasks([row.task], shift);
@@ -977,11 +980,10 @@ export function TaskTimelineView({
       case "clear-date": {
         if (!canDrag) return false;
         const several = selectedTasks();
-        const targets = (
-          several.length > 0 ? several : row?.kind === "task" ? [row.task] : []
-        ).filter(canMoveTask);
+        const asked = several.length > 0 ? several : row?.kind === "task" ? [row.task] : [];
+        const targets = asked.filter(canMoveTask);
         if (targets.length === 0) return false;
-        writes.clearDue(targets);
+        writes.clearDue(targets, asked.length - targets.length);
         return true;
       }
       case "fit":

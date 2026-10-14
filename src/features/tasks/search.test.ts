@@ -19,6 +19,12 @@ describe("validateTasksSearch", () => {
   it("drops an empty, missing, or non-string id", () => {
     expect(validateTasksSearch({})).toEqual({});
     expect(validateTasksSearch({ id: "" })).toEqual({});
+  });
+
+  it("keeps a known place to open and drops any other", () => {
+    expect(validateTasksSearch({ place: "upcoming" })).toEqual({ place: "upcoming" });
+    expect(validateTasksSearch({ place: "settings" })).toEqual({});
+    expect(validateTasksSearch({ place: 3 })).toEqual({});
     expect(validateTasksSearch({ id: 42 })).toEqual({});
     expect(validateTasksSearch({ id: ["a"] })).toEqual({});
   });
