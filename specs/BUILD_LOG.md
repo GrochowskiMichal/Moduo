@@ -541,6 +541,7 @@ _Built and landed locally on `t/maciej/tasks-v3-build` (🟠 LOCAL BUILD MODE in
 
 - [x] **TX-1 — Email kit (shared templates, palette, plain text, .ics, Storybook gallery, logo image names, `EMAIL_KINDS`)** · deps: — · _2026-10-08 · `t/maciej/tx-1-email-kit`_ (logo PNGs come from BRAND-1's `public/email/` exports under the size contract in `_shared/email/assets.ts`)
 - [x] **TX-3 — Outbox worker + deliverability (enqueue/cancel, pg_cron + pg_net, retries, suppression webhook, purge, ops alert)** · deps: TX-2 · _2026-10-09 · `t/maciej/tx-3-outbox-worker` (PR #321)_ (live on prod 2026-10-09: `email-worker` v1 + `resend-webhook` v1, migration `20261008233000`, outbox test delivered to hello@; still Maciej's: the Resend dashboard webhook + `RESEND_WEBHOOK_SECRET`, runbook §TX-3 step 4, after a privacy-policy line for the do-not-email list)
+- [x] **TX-5 — Booking emails (C1–C5, .ics, host bell, booking page copy)** · deps: TX-3 · _2026-10-10 · `t/maciej/tx-5-booking-emails` (PR #349)_ (live on prod 2026-10-10: `email-worker` v4, migration `20261010160147`, `booking-public` v24; extra-guest cancel variant OK'd by Maciej; booking page copy reaches guests with the app promotion; live send checks in docs/testing/t-maciej-tx-5-booking-emails.md)
 
 ## Wave D — Dogfood & alpha readiness · _added 2026-07-29 from the whole-project state audit_
 

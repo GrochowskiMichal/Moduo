@@ -24,6 +24,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-14 · Chat v1 per-person sending and typing limits: 10 messages per 10 s and 30 per 60 s per person per workspace (a workspace's apps share one budget), refused with `PT429` (a send waits at most 2 s for the previous one); "typing" at most once per 2.5 s per person and conversation, and a stop only once, to close a start that went out.
 - 2026-10-14 · Chat v1 privacy rules: a conversation's registry and activity rows follow its read rule, typing is one server-written private topic per conversation, `chat_caps_get` answers members only, announcement mode needs a readable channel and never a DM.
 - 2026-10-13 · SEC2: workspaces are created only for the signed-in person, and the free plan's one-workspace limit is enforced in the database.
 - 2026-10-10 · A project's owner, workspace and Inbox flag and a tag's owner are fixed, rows never change workspace, tags and dependencies follow the items they're on, and the Edit an assignment gives goes when it ends.
@@ -332,6 +333,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
 - 2026-10-10 · TX-4: invite-only is a before-user-created hook over three allow sources, a waitlist invite is one queued B1, and a build-updates request outlives the waitlist row
 - 2026-10-09 · TX-3: the outbox queues, retries and suppresses, and the worker's secret lives only in Vault
 - 2026-10-08 · TX-2: sign-in emails go through a Send Email Hook that keeps dashboard invites working, logs without codes, and erases its log with the account

@@ -41,6 +41,7 @@ import {
   type SendResult,
   UPDATES_SENDER_ADDRESS,
 } from "./send.ts";
+import { BOOKING_QUEUED } from "./templates/booking.ts";
 import { opsAlertEmail, parseOpsAlertPayload } from "./templates/ops-alert.ts";
 import { parseWaitlistInvitePayload, waitlistInviteEmail } from "./templates/waitlist-invite.ts";
 
@@ -94,6 +95,7 @@ export type QueuedTemplate = (payload: Record<string, unknown>) => QueuedEmail;
 export const OUTBOX_TEMPLATES: Partial<Record<EmailKind, QueuedTemplate>> = {
   waitlist_invite: (payload) => ({ doc: waitlistInviteEmail(parseWaitlistInvitePayload(payload)) }),
   ops_alert: (payload) => ({ doc: opsAlertEmail(parseOpsAlertPayload(payload)) }),
+  ...BOOKING_QUEUED,
 };
 
 /** The run lease: `email_outbox__run_start` / `email_outbox__run_stop`. */
