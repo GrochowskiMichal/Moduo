@@ -2,8 +2,8 @@
 
 > **Status (2026-10-14): the spec is written ([`specs/chat-v2.md`](../../specs/chat-v2.md), 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14 and the confirmation pass found no blocker or major. **Ready to execute**: CV-0 first.**
 >
-> - **Open (group N, 2026-10-14):** CH76 where huddles are designed · CH77 seams Chat reserves now · CH78 hackathon on site or online.
-> - **Decided:** CH1–CH75. CH24 stays parked; CH20/CH21 are facts.
+> - **Group N decided (2026-10-14):** huddles and the Google Meet replacement are designed together in a Calls re-plan (start prompt: [`calls-replan-prompt.md`](./calls-replan-prompt.md)); Chat reserves five seams (spec §18) and builds nothing for calls; the hackathon is on site.
+> - **Decided:** CH1–CH78. CH24 stays parked; CH20/CH21 are facts.
 > - **Round 3 for Mike:** [research/round-3-database.md](./research/round-3-database.md) (its CV- names were re-cut by the spec; the mapping is in the spec's §Execution blocks).
 > - **Cross-module, sent:** Tasks v3 via BUILD_ORDER's 🟠 box (CH72); Notes, Calendar and the hackathon plan via [proposals.md](./proposals.md); Notes answered (N19).
 > - **Mike's ask:** the tech-stack decision blueprint landed → [research/tech-blueprint.md](./research/tech-blueprint.md), folded into §6 (#2, #3, #6, #7, #18, #19–#22). Open from it: **CH31** (the Supabase plan before the hackathon).
@@ -1126,9 +1126,11 @@ Writing the server rules for every decided call left three behaviours no call se
 
 **What a huddle is, compared with a meeting:** drop-in and audio first; belongs to a conversation; members only (no link, no lobby, no guests); lives while anyone is in it; shows on the sidebar row; screen share optional. One engine serves both.
 
-- **★ CH76 · Where are huddles designed?** **(a) In a re-plan of Moduo Meet ("Calls"): one engine and one call UI for huddles and the Google Meet replacement, planned in its own session while Chat builds; Chat builds nothing for calls now** · (b) fold huddles into Chat v2 now (Chat's build then waits on the call servers, Azure capacity and the desktop's microphone permissions) · (c) build Meet as specced on Oct 6 and add huddles afterwards (that spec predates Tasks v3 and leaves chat's call UI out).
-- **CH77 · May Chat reserve the seams now, with no build?** **(a) Yes: a "Start a huddle" slot in the conversation toolbar (hidden until calls exist); a live-huddle mark on the sidebar row; a quiet line in the stream when a huddle ends ("Huddle · Mike, Anna · 24 min · Notes"); "In a call" as a presence state; a huddle notice held by Focus and quiet hours like every other; the rules for each decided by the Calls re-plan** · (b) reserve nothing; the Calls re-plan adds them to Chat later.
-- **CH78 · Is the hackathon on site or online?** (CH20's question 3, still open.) **(a) On site: nobody needs voice inside Moduo for the first event** · (b) online: voice is a must; until Calls is built, each team gets a pinned Google Meet or Discord link in its workspace for the weekend · (c) unknown: plan as (a), switch to (b) when known.
+- **★ CH76 · Where are huddles designed?** **(a) In a re-plan of Moduo Meet ("Calls"): one engine and one call UI for huddles and the Google Meet replacement, planned in its own session while Chat builds; Chat builds nothing for calls now** · (b) fold huddles into Chat v2 now (Chat's build then waits on the call servers, Azure capacity and the desktop's microphone permissions) · (c) build Meet as specced on Oct 6 and add huddles afterwards (that spec predates Tasks v3 and leaves chat's call UI out). ✅ *(a)*
+- **CH77 · May Chat reserve the seams now, with no build?** **(a) Yes: a "Start a huddle" slot in the conversation toolbar (hidden until calls exist); a live-huddle mark on the sidebar row; a quiet line in the stream when a huddle ends ("Huddle · Mike, Anna · 24 min · Notes"); "In a call" as a presence state; a huddle notice held by Focus and quiet hours like every other; the rules for each decided by the Calls re-plan** · (b) reserve nothing; the Calls re-plan adds them to Chat later. ✅ *(a)*
+- **CH78 · Is the hackathon on site or online?** (CH20's question 3, still open.) **(a) On site: nobody needs voice inside Moduo for the first event** · (b) online: voice is a must; until Calls is built, each team gets a pinned Google Meet or Discord link in its workspace for the weekend · (c) unknown: plan as (a), switch to (b) when known. ✅ *(a)*
+
+✅ **Decided 2026-10-14:** *"all ok, go ahead"*: CH76 (a), CH77 (a), CH78 (a, the hackathon is on site). Written into `specs/chat-v2.md` §18 (the seams) and a start prompt for the Calls re-plan: [`calls-replan-prompt.md`](./calls-replan-prompt.md).
 
 ### F · Visual *(added after round 1 was sent, from the visual audit)*
 
