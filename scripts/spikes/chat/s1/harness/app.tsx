@@ -131,17 +131,20 @@ export function App({ start }: { start: HarnessState }) {
         </span>
         {manual ? (
           <span className="s1-actions">
-            <button
-              type="button"
-              onClick={() =>
-                act((s) => ({
-                  lib: s.lib === "tanstack" ? "legend" : "tanstack",
-                  mount: s.mount + 1,
-                }))
-              }
-            >
-              Switch library
-            </button>
+            {/* Only where the Legend variant exists (t/maciej/cv-0-s1-legend). */}
+            {STREAMS.legend ? (
+              <button
+                type="button"
+                onClick={() =>
+                  act((s) => ({
+                    lib: s.lib === "tanstack" ? "legend" : "tanstack",
+                    mount: s.mount + 1,
+                  }))
+                }
+              >
+                Switch library
+              </button>
+            ) : null}
             <button type="button" onClick={() => act((s) => ({ lo: Math.max(0, s.lo - 50) }))}>
               Prepend 50
             </button>
