@@ -13,7 +13,6 @@ import {
   openQueueCount,
   queueEntriesOf,
   queueMove,
-  queueOrOpen,
   queueTasks,
   withOwnQueue,
   withoutTask,
@@ -97,6 +96,12 @@ describe("queueTasks + openQueueCount", () => {
     // The rail counts open ones only.
     expect(openQueueCount(queued)).toBe(2);
   });
+
+  it("drops a kept row once its task is reopened (a teammate, live)", () => {
+    const tasks = [task("t1"), task("t2")];
+    const queued = queueTasks([entry(ME, "t1", "1")], [entry(ME, "t2", "2")], tasks);
+    expect(queued.map((t) => t.id)).toEqual(["t1"]);
+  });
 });
 
 describe("withOwnQueue / withoutTask", () => {
@@ -161,43 +166,10 @@ describe("queueMove", () => {
 
 describe("claim wording (D4-2)", () => {
   it("names one or more people", () => {
-    expect(claimLabel(["Mike"])).toBe("In Mike’s queue");
-    expect(claimLabel(["Mike", "Ola"])).toBe("In Mike’s and Ola’s queues");
-    expect(claimLabel(["Mike", "Ola", "Sam"])).toBe("In Mike’s, Ola’s and Sam’s queues");
+    expect(claimLabel(["Mike"])).toBe("In Mike’s Focus");
+    expect(claimLabel(["Mike", "Ola"])).toBe("In Mike’s and Ola’s Focus");
+    expect(claimLabel(["Mike", "Ola", "Sam"])).toBe("In Mike’s, Ola’s and Sam’s Focus");
     expect(claimLabel([])).toBe("");
-    expect(alsoInLabel(["Mike"])).toBe("Also in Mike’s queue");
-  });
-});
-
-describe("queueOrOpen (the Home Tasks widget, D4-1)", () => {
-  const tasks = [
-    task("t1", { position: "0000000003" }),
-    task("t2", { position: "0000000001" }),
-    task("t3", { position: "0000000002", status: "done" }),
-    task("t4", { position: "0000000004", bucketId: "b2" }),
-  ];
-
-  it("shows my queue's open tasks in line-up order, not someone else's", () => {
-    const rows = [
-      entry(ME, "t1", "2"),
-      entry(ME, "t3", "1"),
-      entry(ME, "t2", "3"),
-      entry(MIKE, "t4", "1"),
-    ];
-    const { rows: out, heading } = queueOrOpen(tasks, rows, ME);
-    expect(heading).toBe("Queue");
-    expect(out.map((t) => t.id)).toEqual(["t1", "t2"]);
-  });
-
-  it("falls back to the open tasks in list order, headed Open", () => {
-    const { rows: out, heading } = queueOrOpen(tasks, [entry(MIKE, "t1", "1")], ME);
-    expect(heading).toBe("Open");
-    expect(out.map((t) => t.id)).toEqual(["t2", "t1", "t4"]);
-  });
-
-  it("keeps to the widget's buckets", () => {
-    const rows = [entry(ME, "t4", "1")];
-    expect(queueOrOpen(tasks, rows, ME, ["b1"])).toMatchObject({ heading: "Open" });
-    expect(queueOrOpen(tasks, rows, ME, ["b2"]).rows.map((t) => t.id)).toEqual(["t4"]);
+    expect(alsoInLabel(["Mike"])).toBe("Also in Mike’s Focus");
   });
 });

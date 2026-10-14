@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { Hash, ListTree, MessageSquare, Paperclip } from "lucide-react";
-
+import { AtThreeDensities } from "./kit-densities";
 import { MetaCount, MetaCounts } from "./meta-count";
 
 const meta: Meta<typeof MetaCount> = {
@@ -62,5 +62,21 @@ export const OnARow: Story = {
         </MetaCounts>
       </div>
     </div>
+  ),
+};
+
+/** The quiet counts on a row at the three density steps (icons on the icon rung). */
+export const Densities: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex h-(--row-h) w-72 items-center gap-2 rounded-md bg-card px-3">
+        <span className="min-w-0 truncate text-md">Notes: fix black background</span>
+        <MetaCounts>
+          <MetaCount icon={Hash} count={3} label="tags" />
+          <MetaCount icon={Paperclip} count={2} label="attachments" />
+          <MetaCount icon={MessageSquare} count={14} label="comments" />
+        </MetaCounts>
+      </div>
+    </AtThreeDensities>
   ),
 };

@@ -6,7 +6,6 @@ import {
   openCount,
   resolveDefaultSelection,
   setBucketTimeBlock,
-  showsMyTasks,
   timeBlockByBucket,
 } from "./default-view";
 import { groupsByBucket, makeTask, showBucketPill } from "./helpers";
@@ -56,73 +55,47 @@ describe("timeBlockByBucket", () => {
   });
 });
 
-describe("resolveDefaultSelection", () => {
+describe("resolveDefaultSelection (REPLAN 30: opens where you left it)", () => {
   const base = { bucketIds: ["inbox-id", "b1", "b2"], inboxId: "inbox-id" };
 
-  it("prefers the bucket mapped to the current time block", () => {
-    expect(
-      resolveDefaultSelection({
-        ...base,
-        now: at(8), // morning
-        timeBlocks: { morning: "b1" },
-        lastBucket: "b2",
-      }),
-    ).toBe("b1");
+  it("reopens the project you had open", () => {
+    expect(resolveDefaultSelection({ ...base, lastBucket: "b2" })).toBe("b2");
   });
 
-  it("falls back to the last-opened bucket when no time-block matches", () => {
-    expect(
-      resolveDefaultSelection({
-        ...base,
-        now: at(8),
-        timeBlocks: { evening: "b1" }, // wrong slot for the morning `now`
-        lastBucket: "b2",
-      }),
-    ).toBe("b2");
+  it("reopens Focus, Upcoming, My tasks or All when that's where you were", () => {
+    for (const scope of ["today", "upcoming", "mine", "all", "inbox"]) {
+      expect(resolveDefaultSelection({ ...base, lastBucket: scope })).toBe(scope);
+    }
   });
 
-  it("skips a stale time-block bucket that no longer exists", () => {
-    expect(
-      resolveDefaultSelection({
-        ...base,
-        now: at(8),
-        timeBlocks: { morning: "gone" },
-        lastBucket: "b2",
-      }),
-    ).toBe("b2");
+  it("falls back to the Inbox when the last project is gone (or archived)", () => {
+    expect(resolveDefaultSelection({ ...base, lastBucket: "deleted-bucket" })).toBe("inbox");
+    expect(resolveDefaultSelection({ ...base, lastBucket: null })).toBe("inbox");
   });
 
-  it("falls back to Inbox when the last bucket is gone", () => {
-    expect(
-      resolveDefaultSelection({
-        ...base,
-        now: at(8),
-        timeBlocks: {},
-        lastBucket: "deleted-bucket",
-      }),
-    ).toBe("inbox");
+  it("maps the Inbox's own id to the 'inbox' selection", () => {
+    expect(resolveDefaultSelection({ ...base, lastBucket: "inbox-id" })).toBe("inbox");
   });
 
-  it("maps a time-block / last-bucket pointing at the Inbox id to the 'inbox' selection", () => {
-    expect(
-      resolveDefaultSelection({
-        ...base,
-        now: at(8),
-        timeBlocks: { morning: "inbox-id" },
-        lastBucket: null,
-      }),
-    ).toBe("inbox");
+  it("a first open follows onboarding: the role's first view (TV-U17)", () => {
+    expect(resolveDefaultSelection({ ...base, lastBucket: null, firstOpen: "upcoming" })).toBe(
+      "upcoming",
+    );
+    expect(resolveDefaultSelection({ ...base, lastBucket: null, firstOpen: "b1" })).toBe("b1");
+    // A place you left still wins, and a gone one isn't a first open.
+    expect(resolveDefaultSelection({ ...base, lastBucket: "b2", firstOpen: "upcoming" })).toBe(
+      "b2",
+    );
+    expect(resolveDefaultSelection({ ...base, lastBucket: "gone", firstOpen: "upcoming" })).toBe(
+      "inbox",
+    );
+    // A first view that isn't there (a project since deleted) is the Inbox.
+    expect(resolveDefaultSelection({ ...base, lastBucket: null, firstOpen: "gone" })).toBe("inbox");
   });
 
-  it("never opens on the full cross-bucket list", () => {
-    const out = resolveDefaultSelection({
-      ...base,
-      now: at(8),
-      timeBlocks: {},
-      lastBucket: "all",
-    });
-    expect(out).not.toBe("all");
-    expect(out).toBe("inbox");
+  it("never opens Archived projects or Recently deleted", () => {
+    expect(resolveDefaultSelection({ ...base, lastBucket: "archived" })).toBe("inbox");
+    expect(resolveDefaultSelection({ ...base, lastBucket: "trash" })).toBe("inbox");
   });
 });
 
@@ -145,13 +118,6 @@ describe("My tasks (TV-D4, D4-3)", () => {
     ...makeTask({ workspaceId: "w1", bucketId: "b1", title: id, position: id }),
     id,
     ...over,
-  });
-
-  it("shows the row only in workspaces with two or more members", () => {
-    expect(showsMyTasks(0)).toBe(false);
-    expect(showsMyTasks(1)).toBe(false);
-    expect(showsMyTasks(2)).toBe(true);
-    expect(showsMyTasks(5)).toBe(true);
   });
 
   it("scopes to tasks assigned to me across buckets, archived left out like All", () => {

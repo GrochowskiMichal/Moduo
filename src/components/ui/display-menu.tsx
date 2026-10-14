@@ -59,6 +59,8 @@ type DisplayMenuProps<V extends DisplayValues> = {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Where the panel mounts (default: the body); see PopoverContent. */
+  portalContainer?: HTMLElement | null;
 };
 
 function sameValue(a: DisplayValues, b: DisplayValues): boolean {
@@ -124,6 +126,7 @@ function DisplayMenu<V extends DisplayValues>({
   open,
   defaultOpen,
   onOpenChange,
+  portalContainer,
 }: DisplayMenuProps<V>) {
   const idPrefix = React.useId();
   const set = (id: string, next: string | readonly string[]) =>
@@ -141,8 +144,9 @@ function DisplayMenu<V extends DisplayValues>({
       </PopoverTrigger>
       <PopoverContent
         align={align}
+        container={portalContainer}
         aria-label="Display options"
-        className="flex w-80 flex-col rounded-lg border-hairline p-1.5"
+        className="flex w-80 flex-col p-1.5"
         // Focus the panel, not its first control: that's an icon-only
         // segment, whose tooltip would pop up on every open. Tab still
         // reaches the controls in order.

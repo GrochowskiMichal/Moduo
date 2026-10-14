@@ -42,6 +42,7 @@ export default defineConfig({
     "supabase/functions/auth-email-hook/*.test.ts",
     "supabase/functions/email-worker/*.test.ts",
     "supabase/functions/booking-public/*.test.ts",
+    "supabase/functions/push-send/*.test.ts",
     "scripts/brand/*.test.ts",
   ],
   globals: true,

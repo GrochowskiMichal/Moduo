@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
 
+import { dateGroupDay, groupAddState } from "../list-group-add";
 import { isRowControl, listKeyAction, listKeyActionFor, ROW_TITLE_ATTR } from "./list-keys";
 
 type Mods = { meta?: boolean; ctrl?: boolean; alt?: boolean; shift?: boolean };
@@ -36,6 +37,25 @@ describe("listKeyAction (tasks-v2 Q1-1)", () => {
     }
   });
 
+  it("binds the move keys ⌥⇧↑/↓ (TV-U4, the keymap) and nothing else under ⌥", () => {
+    expect(listKeyAction(press("ArrowUp", { alt: true, shift: true }))).toBe("move-up");
+    expect(listKeyAction(press("ArrowDown", { alt: true, shift: true }))).toBe("move-down");
+    // ⌥↑ alone, ⌘⇧↑ and ⌥⇧← are not the List's.
+    expect(listKeyAction(press("ArrowUp", { alt: true }))).toBeNull();
+    expect(listKeyAction(press("ArrowUp", { meta: true, shift: true }))).toBeNull();
+    expect(listKeyAction(press("ArrowUp", { alt: true, shift: true, meta: true }))).toBeNull();
+    expect(listKeyAction(press("ArrowLeft", { alt: true, shift: true }))).toBeNull();
+  });
+
+  it("nests with > and un-nests with < (default k), however they're typed", () => {
+    expect(listKeyAction(press(">", { shift: true }))).toBe("nest");
+    expect(listKeyAction(press("<", { shift: true }))).toBe("unnest");
+    expect(listKeyAction(press(">"))).toBe("nest");
+    // ⌘] / ⌘[ stay the browser's Back and Forward.
+    expect(listKeyAction(press("]", { meta: true }))).toBeNull();
+    expect(listKeyAction(press("[", { meta: true }))).toBeNull();
+  });
+
   it("keeps ⌘⌫, the one modified key the List binds", () => {
     expect(listKeyAction(press("Backspace", { meta: true }))).toBe("delete");
     expect(listKeyAction(press("Backspace", { ctrl: true }))).toBe("delete");
@@ -53,7 +73,7 @@ describe("listKeyAction (tasks-v2 Q1-1)", () => {
     expect(listKeyAction(press("x"))).toBe("toggle-done");
     expect(listKeyAction(press(" "))).toBe("toggle-done");
     expect(listKeyAction(press("e"))).toBe("edit");
-    expect(listKeyAction(press("Enter"))).toBe("edit");
+    expect(listKeyAction(press("Enter"))).toBe("open");
     expect(listKeyAction(press("c"))).toBe("capture");
     expect(listKeyAction(press("b"))).toBe("bucket");
     expect(listKeyAction(press("s"))).toBe("schedule");
@@ -63,6 +83,13 @@ describe("listKeyAction (tasks-v2 Q1-1)", () => {
     expect(listKeyAction(press("ArrowLeft"))).toBe("collapse");
     expect(listKeyAction(press("z"))).toBeNull();
     expect(listKeyAction(press("?", { shift: true }))).toBeNull();
+  });
+
+  it("⇧F is Focus on this (call 31, TV-F7); a bare f stays Filter's", () => {
+    expect(listKeyAction(press("F", { shift: true }))).toBe("focus-on");
+    expect(listKeyAction(press("f", { shift: true }))).toBe("focus-on");
+    expect(listKeyAction(press("f"))).toBeNull();
+    expect(listKeyAction(press("Q", { shift: true }))).toBe("queue");
   });
 });
 
@@ -117,7 +144,7 @@ describe("a row's own controls (tasks-v2 Q1-2)", () => {
       listKeyActionFor({ ...press(key, mods), target }, list);
 
     expect(on(list, " ")).toBe("toggle-done");
-    expect(on(list, "Enter")).toBe("edit");
+    expect(on(list, "Enter")).toBe("open");
     expect(on(list, "k", { meta: true })).toBeNull();
     // A row's toggle keeps Space/Enter; letters still drive the list.
     expect(on(a.toggle, " ")).toBeNull();
@@ -125,7 +152,7 @@ describe("a row's own controls (tasks-v2 Q1-2)", () => {
     expect(on(a.toggle, "x")).toBe("toggle-done");
     // The selected row's title speaks for the row; another row's doesn't.
     expect(on(a.title, " ")).toBe("toggle-done");
-    expect(on(a.title, "Enter")).toBe("edit");
+    expect(on(a.title, "Enter")).toBe("open");
     expect(on(b.title, " ")).toBeNull();
     // Keys typed in a portaled popover (React bubbles them to the list) are ignored —
     // Space, arrows and ⌘⌫ in its date field used to complete/move/delete the task.
@@ -133,5 +160,93 @@ describe("a row's own controls (tasks-v2 Q1-2)", () => {
     expect(on(popoverInput, "ArrowDown")).toBeNull();
     expect(on(popoverInput, "Backspace", { meta: true })).toBeNull();
     expect(on(popoverInput, "x")).toBeNull();
+  });
+});
+
+// tasks-v3 AC3.5, AC11.5 (the AC map's "the v3 keys"): `>` / `<` nest and
+// un-nest, ⇧S opens the status menu, and a group header's "+" adds at the top
+// with the group's value.
+describe("the v3 keys (TV-U10)", () => {
+  it("⇧S opens the status menu; s alone still schedules", () => {
+    expect(listKeyAction(press("S", { shift: true }))).toBe("status");
+    expect(listKeyAction(press("s", { shift: true }))).toBe("status");
+    expect(listKeyAction(press("s"))).toBe("schedule");
+    expect(listKeyAction(press("S", { shift: true, meta: true }))).toBeNull();
+  });
+
+  it("> nests and < un-nests", () => {
+    expect(listKeyAction(press(">", { shift: true }))).toBe("nest");
+    expect(listKeyAction(press("<", { shift: true }))).toBe("unnest");
+  });
+
+  it("a group header's + adds with the group's value", () => {
+    const base = { canEdit: true, today: "2026-10-13", inboxId: "inbox" };
+    // Inside a project: its section, status, priority, person, team, day.
+    const inProject = (groupBy: Parameters<typeof groupAddState>[0]["groupBy"], key: string) =>
+      groupAddState({ ...base, scope: "p1", groupBy, key });
+    expect(inProject("section", "s1")).toEqual({
+      kind: "add",
+      add: { projectId: "p1", sectionId: "s1" },
+    });
+    expect(inProject("section", "none")).toEqual({
+      kind: "add",
+      add: { projectId: "p1", sectionId: null },
+    });
+    expect(inProject("status", "in_progress")).toEqual({
+      kind: "add",
+      add: { projectId: "p1", seed: { status: "in_progress" } },
+    });
+    expect(inProject("status", "backlog")).toMatchObject({ add: { seed: { status: "backlog" } } });
+    // A new task is never made finished: Done and Won't do have no "+".
+    expect(inProject("status", "done")).toEqual({ kind: "none" });
+    expect(inProject("status", "archived")).toEqual({ kind: "none" });
+    expect(inProject("priority", "high")).toMatchObject({ add: { seed: { priority: "high" } } });
+    expect(inProject("priority", "unset")).toMatchObject({ add: { seed: { priority: null } } });
+    expect(inProject("assignee", "u2")).toMatchObject({ add: { seed: { assigneeId: "u2" } } });
+    expect(inProject("assignee", "none")).toMatchObject({ add: { seed: { assigneeId: null } } });
+    expect(inProject("team", "t1")).toMatchObject({ add: { seed: { teamId: "t1" } } });
+    expect(inProject("date", "today")).toMatchObject({ add: { seed: { dueDay: "2026-10-13" } } });
+    expect(inProject("date", "day3")).toMatchObject({ add: { seed: { dueDay: "2026-10-16" } } });
+    // A new task isn't late; Later and No date add with no date.
+    expect(inProject("date", "earlier")).toEqual({ kind: "none" });
+    expect(inProject("date", "later")).toEqual({ kind: "add", add: { projectId: "p1" } });
+  });
+
+  it("the + adds only where the new task shows", () => {
+    const base = { canEdit: true, today: "2026-10-13", inboxId: "inbox" };
+    // All shows no Inbox: only its project groups add.
+    expect(groupAddState({ ...base, scope: "all", groupBy: "status", key: "todo" })).toEqual({
+      kind: "disabled",
+      reason: "Pick a project first",
+    });
+    expect(groupAddState({ ...base, scope: "all", groupBy: "bucket", key: "p2" })).toEqual({
+      kind: "add",
+      add: { projectId: "p2" },
+    });
+    expect(groupAddState({ ...base, scope: "all", groupBy: "bucket", key: "inbox" })).toEqual({
+      kind: "add",
+      add: {},
+    });
+    // My tasks adds to your Inbox, assigned to you (the capture's default).
+    expect(groupAddState({ ...base, scope: "mine", groupBy: "status", key: "todo" })).toEqual({
+      kind: "add",
+      add: { seed: { status: "todo" } },
+    });
+    // Upcoming adds in its days only; read-only and ungrouped add nothing.
+    expect(groupAddState({ ...base, scope: "upcoming", groupBy: "status", key: "todo" })).toEqual({
+      kind: "none",
+    });
+    expect(
+      groupAddState({ ...base, canEdit: false, scope: "p1", groupBy: "status", key: "todo" }),
+    ).toEqual({ kind: "none" });
+    expect(groupAddState({ ...base, scope: "p1", groupBy: "none", key: "all" })).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("a Date group's day counts from today, across a month's end", () => {
+    expect(dateGroupDay("tomorrow", "2026-10-31")).toBe("2026-11-01");
+    expect(dateGroupDay("day6", "2026-12-28")).toBe("2027-01-03");
+    expect(dateGroupDay("later", "2026-10-13")).toBeNull();
   });
 });

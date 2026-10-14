@@ -19,6 +19,9 @@ const toastMock = rs.hoisted(() => {
 });
 rs.mock("sonner", () => ({ toast: toastMock }));
 
+// Live updates (TV-D5) need a socket; these tests drive the hook without one.
+rs.mock("../tasks/realtime", () => ({ listenTasksLive: () => () => {} }));
+
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { makeTask } from "../tasks/helpers";
 import { useTasksModule } from "../tasks/hooks/use-tasks-module";

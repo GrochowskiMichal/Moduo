@@ -4,7 +4,12 @@
   "ignoreFiles": ["node_modules/**", "dist/**", "src-tauri/**", "src/styles/tokens.css"],
   "defaultSeverity": "warning",
   "rules": {
-    "color-no-hex": [true, { "severity": "error" }],
+    "color-no-hex": [
+      true,
+      {
+        "severity": "error"
+      }
+    ],
     "scale-unlimited/declaration-strict-value": [
       ["/color$/", "fill", "stroke", "background-color"],
       {
@@ -18,6 +23,21 @@
           "/^var\\(--/"
         ],
         "severity": "error"
+      }
+    ],
+    "declaration-property-value-disallowed-list": [
+      {
+        "writing-mode": ["/^vertical/", "/^sideways/"],
+        "text-orientation": ["/.*/"],
+        "transform": ["/rotate\\(\\s*-?(90|270)deg/", "/rotate\\(\\s*-?0?\\.(25|75)turn/"],
+        "rotate": ["/^-?(90|270)deg/", "/^-?0?\\.(25|75)turn/"],
+        "font-variant": ["/small-caps/", "/petite-caps/", "/unicase/", "/titling-caps/"],
+        "font-variant-caps": ["/.*caps/", "unicase"],
+        "text-transform": ["uppercase", "capitalize"]
+      },
+      {
+        "severity": "error",
+        "message": "DS-6: text is never rotated (call 46a) and small caps / capitals are for fixed chrome through <Eyebrow> only, never in CSS (call 40). Turn an icon in TSX on the icon itself."
       }
     ],
     "at-rule-no-unknown": [
@@ -60,7 +80,12 @@
     {
       "files": ["src/global.css", "src/features/timetracking/**/*.css"],
       "rules": {
-        "color-no-hex": [true, { "severity": "warning" }],
+        "color-no-hex": [
+          true,
+          {
+            "severity": "warning"
+          }
+        ],
         "scale-unlimited/declaration-strict-value": [
           ["/color$/", "fill", "stroke", "background-color"],
           {

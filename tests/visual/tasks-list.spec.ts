@@ -20,6 +20,11 @@ const STORIES = [
   "completed-all",
   "with-energy",
   "read-only",
+  // TV-U10 (AC11.2, AC3.1, AC1.16): Detailed with handles, status names and
+  // sortable headers; a project by section; a late row.
+  "detailed-rows",
+  "by-section",
+  "late-row",
 ];
 const DENSITIES = ["comfortable", "compact", "dense"] as const;
 const RADII = ["sharp", "soft", "round"] as const;
@@ -43,6 +48,17 @@ test.describe("tasks list — visual snapshots", () => {
   for (const story of STORIES) {
     test(`tasks-list-${story}`, async ({ page }) => {
       await snap(page, story, "theme:dark", `tasks-list-${story}`);
+    });
+  }
+  // Both presets at every density (AC11.2): the heights are Density's.
+  for (const density of DENSITIES) {
+    test(`tasks-list-detailed-${density}`, async ({ page }) => {
+      await snap(
+        page,
+        "detailed-rows",
+        `theme:dark;density:${density}`,
+        `tasks-list-detailed-${density}`,
+      );
     });
   }
   for (const density of DENSITIES) {

@@ -5,12 +5,19 @@
 // DOM or a runtime.
 
 import type { SpineComment } from "@/lib/runtime.types";
+import { formatDate } from "@/lib/time-format";
+import { replaceSlashDates } from "./grammar";
+import { dateUri, referenceUri, splitReferenceText } from "./references/text";
+import type { ReferenceRef } from "./references/types";
 
 /** A person who can be @mentioned in a comment, or who wrote one. */
 export type CommentPerson = {
   id: string;
   name: string;
   avatarUrl: string | null;
+  /** No name of their own ("Member" is a placeholder): the avatar reads "?",
+   *  never the placeholder's initials (call 43). */
+  unnamed?: boolean;
 };
 
 /** A mention picked in the composer: who, and the label typed into the text. */
@@ -35,6 +42,116 @@ export function keptMentionIds(text: string, mentions: PickedMention[]): string[
   const ids = new Set<string>();
   for (const m of mentions) if (mentionStillPresent(text, m.label)) ids.add(m.id);
   return [...ids];
+}
+
+/** A thing picked after `@` in the composer (RF-1): written `@Title` while typing. */
+export type PickedThing = { ref: ReferenceRef; label: string };
+
+/**
+ * The body a comment stores (RF-1, research §8): every picked thing still
+ * written `@Title` becomes its reference (`moduo://task/<id>`) and every
+ * `/today` · `/tomorrow` · `/next week` a date chip (`moduo://date/…`), so
+ * the stored text carries no title for anyone to read, notifications
+ * included. A person mention keeps its `@Name` (people win a name clash).
+ */
+export function commentBodyWithReferences(
+  text: string,
+  things: PickedThing[],
+  people: PickedMention[],
+  now: Date = new Date(),
+): string {
+  const personLabels = new Set(people.map((p) => p.label));
+  // Longest first, so "@Brand guidelines PDF" wins over "@Brand"; things that
+  // share a title keep the order they were picked in (the sort is stable).
+  const byLabel = new Map<string, PickedThing[]>();
+  const picked = [...things]
+    .filter((t) => !personLabels.has(t.label))
+    .sort((a, b) => b.label.length - a.label.length);
+  for (const t of picked) {
+    const group = byLabel.get(t.label) ?? [];
+    if (!group.some((g) => g.ref.type === t.ref.type && g.ref.id === t.ref.id)) group.push(t);
+    byLabel.set(t.label, group);
+  }
+  let out = text;
+  for (const [label, group] of byLabel) {
+    const needle = `@${label}`;
+    let from = 0;
+    // A task "Plan" and a note "Plan": the first "@Plan" is the first picked.
+    let nth = 0;
+    for (;;) {
+      const i = out.indexOf(needle, from);
+      if (i < 0) break;
+      const before = out[i - 1];
+      const after = out[i + needle.length];
+      // "(@Title)" counts too; "name@Title" (an address) doesn't.
+      const atStart = i === 0 || !/\w/.test(before ?? "");
+      const atEnd = after === undefined || !/\w/.test(after);
+      if (atStart && atEnd && !insidePersonMention(out, i, people, label)) {
+        const thing = group[Math.min(nth, group.length - 1)] as PickedThing;
+        nth += 1;
+        const uri = referenceUri(thing.ref);
+        out = `${out.slice(0, i)}${uri}${out.slice(i + needle.length)}`;
+        from = i + uri.length;
+      } else {
+        from = i + 1;
+      }
+    }
+  }
+  return replaceSlashDates(out, dateUri, now);
+}
+
+/**
+ * A stored comment body back as text to edit (TV-U13): each reference this
+ * reader can name becomes `@Title` again, with its picked thing seeded so a
+ * save stores the same reference; one they can't name (private, deleted,
+ * still loading) and every date chip keep their stored form, so an edit never
+ * loses them. People's mentions are already `@Name`: the members named in the
+ * text come back as picked mentions.
+ */
+export function editableComment(
+  body: string,
+  nameOf: (ref: ReferenceRef) => string | null,
+  people: CommentPerson[],
+): { text: string; things: PickedThing[]; mentions: PickedMention[] } {
+  const things: PickedThing[] = [];
+  let text = "";
+  for (const seg of splitReferenceText(body)) {
+    if (seg.kind === "text") text += seg.text;
+    else if (seg.kind === "date") text += dateUri(seg.day);
+    else {
+      const label = nameOf(seg.ref);
+      if (label) {
+        text += `@${label}`;
+        things.push({ ref: seg.ref, label });
+      } else {
+        text += referenceUri(seg.ref);
+      }
+    }
+  }
+  const mentions = people
+    .filter((p) => mentionStillPresent(text, p.name))
+    .map((p) => ({ id: p.id, label: p.name }));
+  return { text, things, mentions };
+}
+
+/**
+ * Whether `@` at `i` starts a picked person's longer name ("@Anna Lee" for a
+ * thing "Anna"). Only a name longer than the thing's title counts: a person
+ * "Anna" never keeps "@Anna's laptop" as text (that would store its title).
+ */
+function insidePersonMention(
+  text: string,
+  i: number,
+  people: PickedMention[],
+  thingLabel: string,
+): boolean {
+  return people.some((p) => {
+    if (p.label.length <= thingLabel.length) return false;
+    const needle = `@${p.label}`;
+    if (!text.startsWith(needle, i)) return false;
+    const after = text[i + needle.length];
+    return after === undefined || !/\w/.test(after);
+  });
 }
 
 /**
@@ -77,6 +194,24 @@ export function filterPeople(people: CommentPerson[], query: string, limit = 6):
     const name = p.name.toLowerCase();
     if (name.split(/\s+/).some((w) => w.startsWith(q))) starts.push(p);
     else if (name.includes(q)) contains.push(p);
+  }
+  return [...starts, ...contains].slice(0, limit);
+}
+
+/** Teams whose name matches the typed query (TV-D13: `@Design` in a comment). */
+export function filterTeams<T extends { name: string }>(
+  teams: readonly T[],
+  query: string,
+  limit = 3,
+): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return teams.slice(0, limit);
+  const starts: T[] = [];
+  const contains: T[] = [];
+  for (const t of teams) {
+    const name = t.name.toLowerCase();
+    if (name.split(/\s+/).some((w) => w.startsWith(q))) starts.push(t);
+    else if (name.includes(q)) contains.push(t);
   }
   return [...starts, ...contains].slice(0, limit);
 }
@@ -141,5 +276,5 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDate(iso, new Date(now));
 }

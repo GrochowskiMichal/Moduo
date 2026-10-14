@@ -32,11 +32,61 @@ async function sourceFiles(dir: string): Promise<string[]> {
   return out;
 }
 
-/** Every quoted string in a file that contains `needle` (class lists, mostly). */
+/**
+ * The string literals in a source file, read the way the parser reads them:
+ * comments are skipped, and a quote or apostrophe that doesn't close on its
+ * own line isn't a string (prose in a comment or in JSX text, "month's").
+ * Pairing quotes across the whole file instead read a comment's apostrophe
+ * as the start of a string and reported the code after it (the false
+ * positive in task-timeline-view.tsx, tasks-v3 TV-U2).
+ */
+function stringLiterals(source: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (c === "/" && next === "/") {
+      const end = source.indexOf("\n", i);
+      if (end === -1) break;
+      i = end;
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      const end = source.indexOf("*/", i + 2);
+      if (end === -1) break;
+      i = end + 2;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1;
+      let text = "";
+      while (j < source.length && source[j] !== c) {
+        if (source[j] === "\\") {
+          text += source.slice(j, j + 2);
+          j += 2;
+          continue;
+        }
+        if (c !== "`" && source[j] === "\n") break;
+        text += source[j];
+        j += 1;
+      }
+      if (source[j] === c) {
+        out.push(text);
+        i = j + 1;
+      } else {
+        i += 1;
+      }
+      continue;
+    }
+    i += 1;
+  }
+  return out;
+}
+
+/** Every string literal in a file that contains `needle` (class lists, mostly). */
 function stringsWith(source: string, needle: RegExp): string[] {
-  return [...source.matchAll(/(["'`])((?:(?!\1)[^\\]|\\.)*)\1/g)]
-    .map((m) => m[2])
-    .filter((s) => needle.test(s));
+  return stringLiterals(source).filter((s) => needle.test(s));
 }
 
 /** True when a class list draws a vertical accent strip pinned to one side. */
@@ -78,6 +128,19 @@ describe("selection guard (DS-2)", () => {
       false,
     );
     expect(isAccentBar("before:absolute before:left-0 before:w-px before:bg-primary")).toBe(false);
+  });
+
+  it("reads strings, not prose: an apostrophe in a comment opens nothing", () => {
+    const source = [
+      "{/* stays at the month's left edge */}",
+      '<span className="absolute bottom-0.5 left-2 w-1 rounded-full bg-primary px-1.5" />',
+      "<p>Don't</p>",
+      'const a = "https://example.com"; // it\'s a link',
+    ].join("\n");
+    expect(stringLiterals(source)).toEqual([
+      "absolute bottom-0.5 left-2 w-1 rounded-full bg-primary px-1.5",
+      "https://example.com",
+    ]);
   });
 
   it("keeps the allowlist honest: every entry still holds a status edge", async () => {

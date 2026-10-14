@@ -12,7 +12,6 @@
 import { FileText, Loader2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Eyebrow } from "@/components/ui/eyebrow";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
@@ -94,8 +93,9 @@ export function LinkedNotesPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
-      <div className="flex items-center justify-between px-1">
-        <Eyebrow>Notes</Eyebrow>
+      {/* No "Notes" heading: the right panel's title row already names the view
+          ("Notes ▾", SH-1), so a second one repeated it (DS-6). */}
+      <div className="flex items-center justify-end px-1 empty:hidden">
         {canEdit ? (
           <button
             type="button"

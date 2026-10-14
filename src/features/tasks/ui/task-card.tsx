@@ -1,69 +1,132 @@
+import { isClosedTask } from "@contracts/vocabularies";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CornerDownRight } from "lucide-react";
-import { useCallback } from "react";
-import { SELECTED_OPTION } from "@/components/ui/selection";
-import { CompleteToggle } from "../../../components/ui/complete-toggle";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuRadioGroup,
-  ContextMenuRadioItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "../../../components/ui/context-menu";
+import { memo, useCallback } from "react";
+import { TeamMark } from "../../../components/ui/avatar";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
+import { ItemCard, ItemCardMeta, ItemCardTitle } from "../../../components/ui/item-card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import { LEVEL_OPTIONS } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { EnergyLevel, PriorityLevel, Task } from "../model";
-import { DEFAULT_ROW_PROPERTIES, rowDate } from "../row-layout";
-import { AssignContextMenu } from "./assign-context-menu";
+import type { Task } from "../model";
+import { DEFAULT_ROW_PROPERTIES, handleLabel, rowDate, rowTime } from "../row-layout";
+import { descriptionWords } from "../search";
+import { type SelectMods, selectModsOf } from "../selection";
+import { nowOn } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { taskDrag } from "./dnd/task-dnd";
 import { EnergyMark, PriorityMark } from "./level-icons";
 import { QueueToggle } from "./queue-toggle";
-import { BucketLabel, DateMark, hasTaskCounts, TaskCounts } from "./task-meta";
+import { sameTaskFacts, type TaskFacts, type TaskRowActions } from "./row-facts";
+import { activateTask, type TaskCommand, TaskContextMenu } from "./task-context-menu";
+import { TaskCounts } from "./task-meta";
+import { TitleEditor } from "./task-row";
+import { DateCell, ProjectMenu, StatusGlyph } from "./task-row-cells";
+
+/** A team's mark, as the card shows it on a task waiting for someone to take it. */
+export type CardTeam = { id: string; name: string; mark: string; color: string | null };
 
 type Props = {
   task: Task;
   bucketName: string;
-  buckets: Array<{ id: string; name: string; isSystem: boolean }>;
   inboxId: string | null;
-  /** Show the bucket tag (when columns are grouped by status, not bucket). */
+  /** Show the project (a board across projects, not grouped by project). */
   showBucket: boolean;
   /** False in My tasks, where every card is mine (D4-4). */
   showAssignee?: boolean;
-  /** Display → "Show on rows". */
+  /** Display → "Show on cards". */
   properties?: readonly string[];
+  /** Display → Rows: Detailed adds the handle and a second meta line. */
+  detailed?: boolean;
+  /** Display → Description: Preview shows two lines of it (AC7.4). */
+  description?: boolean;
+  /**
+   * The status column's name when the board is grouped by status: the card
+   * names its own status only when it differs ("In review" under In
+   * progress, research §5). Null otherwise.
+   */
+  columnStatus?: string | null;
   canEdit: boolean;
-  /** Selection drives the detail rail; available to view-only users too. */
+  /** Selection drives the detail panel; available to view-only users too. */
   selected: boolean;
-  onSelect: () => void;
-  api: TasksModuleApi;
+  editing?: boolean;
+  /** Which inline menu or popover the keyboard or the menu asked for. */
+  command?: TaskCommand | null;
+  /** Callbacks take the task's id, so one function serves every card. A
+   *  click passes its ⇧ / ⌘ (multi-select, TV-U12). */
+  onSelect: (taskId: string, mods?: SelectMods) => void;
+  onStartEdit?: (taskId: string) => void;
+  onEndEdit?: () => void;
+  onRequestCommand?: (taskId: string, command: TaskCommand) => void;
+  onClearCommand?: () => void;
+  /** The card's own facts (row-facts.ts, TV-D11b): it redraws when they change. */
+  facts: TaskFacts;
+  /** The parent's title on a subtask card shown flat (null otherwise). */
+  parentTitle: string | null;
+  /** One object for the life of the board (`useRowActions`). */
+  actions: TaskRowActions;
+  /** Today's date key (`useToday`): the card's date label is worked out against it. */
+  today: string;
+  /** The workspace's task key ("MOD"): Detailed's handle. */
+  taskKey?: string | null;
+  /** Its team, while nobody has taken it (TV-D13): the mark stands in for an avatar. */
+  team?: CardTeam | null;
+  /** Files are dragged over it and it would take them (AT-3; DS-4's DROP_TARGET). */
+  dropTarget?: boolean;
 };
 
-/** A sortable kanban card. Drag reorders within a column; dropping on another
- *  column changes status (or bucket). */
-export function TaskCard({
+const NOOP = () => {};
+
+/**
+ * One task on the Board (tasks-v3 §5, TV-U11): the kit's ItemCard at the
+ * board's fixed width. Standard: the status icon (a click finishes, ⇧S picks)
+ * · the title · one meta line (project where not implied · priority · one
+ * date · counts · the status's own name where it differs from the column ·
+ * the Focus mark on hover · the avatar). Detailed adds the handle and a
+ * second line (tags by name · time · waiting). Display → Description shows
+ * two lines of the description. Drag reorders within a column and moves
+ * between columns; right-click opens the one task menu. Memoised: a card
+ * redraws only when its own props or facts change (TV-D11b).
+ */
+export const TaskCard = memo(TaskCardView, (a: Props, b: Props) => {
+  for (const key of Object.keys(a) as (keyof Props)[]) {
+    if (key !== "facts" && !Object.is(a[key], b[key])) return false;
+  }
+  return Object.keys(a).length === Object.keys(b).length && sameTaskFacts(a.facts, b.facts);
+});
+
+function TaskCardView({
   task,
   bucketName,
-  buckets,
   inboxId,
   showBucket,
   showAssignee = true,
   properties,
+  detailed = false,
+  description = false,
+  columnStatus = null,
   canEdit,
   selected,
+  editing = false,
+  command = null,
   onSelect,
-  api,
+  onStartEdit = NOOP,
+  onEndEdit = NOOP,
+  onRequestCommand = NOOP,
+  onClearCommand = NOOP,
+  facts,
+  parentTitle,
+  actions,
+  today,
+  taskKey = null,
+  team = null,
+  dropTarget = false,
 }: Props) {
+  // Dates redraw when Time & region changes (TV-D14; the card is memoised).
+  useTimeRegion();
   const {
     attributes,
     listeners,
@@ -75,7 +138,7 @@ export function TaskCard({
   } = useSortable({
     id: task.id,
     data: taskDrag(task.id, "board"),
-    disabled: !canEdit,
+    disabled: !canEdit || editing,
   });
   // The card is the sortable node AND its only keyboard activator, so Space/
   // Enter on the queue toggle or a chip inside it stay theirs (tasks-v2 Q1-2).
@@ -86,34 +149,32 @@ export function TaskCard({
     },
     [setNodeRef, setActivatorNodeRef],
   );
+  const closed = isClosedTask(task);
 
   const card = (
-    <div
+    <ItemCard
       ref={setCardRef}
+      // dnd-kit's transform while the column parts for a reorder: geometry,
+      // set by the library each frame (no design value).
       style={{ transform: CSS.Transform.toString(transform), transition }}
       {...attributes}
-      {...(canEdit ? listeners : {})}
+      {...(canEdit && !editing ? listeners : {})}
       role="button"
       aria-pressed={selected}
       data-task-id={task.id}
-      data-done={task.status === "done" || undefined}
-      onClick={onSelect}
+      data-done={closed || undefined}
+      selected={selected}
+      done={closed}
+      dragging={isDragging}
+      onClick={(e) => onSelect(task.id, selectModsOf(e))}
+      onDoubleClick={() => {
+        if (canEdit) onStartEdit(task.id);
+      }}
       className={cn(
-        // Linear-quiet: card = bg-card + hairline on the (transparent) column,
-        // so it reads as a quiet lift off the canvas — not darker than its
-        // column (the old bg-background was the inverted-elevation bug).
-        "group flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors duration-(--motion-fade) ease-(--ease-out)",
-        "select-none",
-        // Done cards fade as a whole (tasks-v2 §6).
-        task.status === "done" && !isDragging && "opacity-50",
-        // Selection = the accent tint + the 32% ring a card always carries
-        // (R5). The old bright accent border read as a white ring on mono.
-        selected ? SELECTED_OPTION : "border-border bg-card hover:border-foreground/30",
-        // whole card is the drag handle (grip removed)
-        canEdit && "cursor-grab active:cursor-grabbing",
-        // hide the source while the DragOverlay clone follows the cursor; the
-        // empty slot stays so neighbours animate apart (insertion indicator).
-        isDragging && "opacity-0",
+        // `group` too: the Focus mark reveals on the card's hover (R6).
+        "group w-(--board-card-w) select-none",
+        canEdit && !editing && "cursor-grab active:cursor-grabbing",
+        dropTarget && DROP_TARGET,
       )}
     >
       <CardBody
@@ -123,101 +184,42 @@ export function TaskCard({
         showBucket={showBucket}
         showAssignee={showAssignee}
         properties={properties}
+        detailed={detailed}
+        description={description}
+        columnStatus={columnStatus}
         canEdit={canEdit}
-        api={api}
+        editing={editing}
+        command={command}
+        onEndEdit={onEndEdit}
+        onRequestCommand={onRequestCommand}
+        onClearCommand={onClearCommand}
+        facts={facts}
+        parentTitle={parentTitle}
+        actions={actions}
+        today={today}
+        taskKey={taskKey}
+        team={team}
       />
-    </div>
+    </ItemCard>
   );
 
-  if (!canEdit) return card;
-
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{card}</ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem onSelect={() => api.toggleDone(task)}>
-          {task.status === "done" ? "Mark not done" : "Mark done"}
-        </ContextMenuItem>
-        {task.status !== "done" && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => api.toggleQueue(task.id)}>
-            {api.queuedTaskIds.has(task.id) ? "Remove from queue" : "Add to queue"}
-          </ContextMenuItem>
-        ) : null}
-        {task.recurrence && task.status !== "done" && task.status !== "archived" ? (
-          <ContextMenuItem onSelect={() => api.skipOccurrence(task.id)}>
-            Skip occurrence
-          </ContextMenuItem>
-        ) : null}
-        <ContextMenuSeparator />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Move to bucket</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.bucketId}
-              onValueChange={(v) => {
-                if (v !== task.bucketId) api.patchTask(task.id, { bucketId: v });
-              }}
-            >
-              {inboxId ? <ContextMenuRadioItem value={inboxId}>Inbox</ContextMenuRadioItem> : null}
-              {buckets
-                .filter((b) => b.id !== inboxId)
-                .map((b) => (
-                  <ContextMenuRadioItem key={b.id} value={b.id}>
-                    {b.name}
-                  </ContextMenuRadioItem>
-                ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <AssignContextMenu task={task} api={api} />
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.priority ?? "none"}
-              onValueChange={(v) =>
-                api.patchTask(task.id, { priority: v === "none" ? null : (v as PriorityLevel) })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Energy</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={task.energyLevel ?? "none"}
-              onValueChange={(v) =>
-                api.patchTask(task.id, { energyLevel: v === "none" ? null : (v as EnergyLevel) })
-              }
-            >
-              <ContextMenuRadioItem value="none">None</ContextMenuRadioItem>
-              {LEVEL_OPTIONS.map((l) => (
-                <ContextMenuRadioItem key={l.value} value={l.value}>
-                  {l.label}
-                </ContextMenuRadioItem>
-              ))}
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <ContextMenuSeparator />
-        <ContextMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <TaskContextMenu
+      task={task}
+      facts={facts}
+      canEdit={canEdit}
+      taskKey={taskKey}
+      actions={actions}
+      onOpen={onSelect}
+      onRename={onStartEdit}
+      onRequestCommand={onRequestCommand}
+    >
+      {card}
+    </TaskContextMenu>
   );
 }
 
-/** The visible body — also rendered standalone inside the DragOverlay. One
- *  quiet meta line under the title (tasks-v2 §6): priority · date · counts ·
- *  bucket where it isn't implied, then the queue mark and the assignee. */
+/** The card's inside — also drawn on its own inside the DragOverlay. */
 export function CardBody({
   task,
   bucketName,
@@ -225,109 +227,238 @@ export function CardBody({
   showBucket,
   showAssignee = true,
   properties = DEFAULT_ROW_PROPERTIES,
+  detailed = false,
+  description = false,
+  columnStatus = null,
   canEdit,
-  api,
+  editing = false,
+  command = null,
+  onEndEdit = NOOP,
+  onRequestCommand = NOOP,
+  onClearCommand = NOOP,
+  facts,
+  parentTitle,
+  actions,
+  today,
+  taskKey = null,
+  team = null,
 }: {
   task: Task;
   bucketName: string;
   inboxId: string | null;
   showBucket: boolean;
-  /** False in My tasks, where every card is mine (D4-4). */
   showAssignee?: boolean;
-  /** Display → "Show on rows" (energy is off by default). */
   properties?: readonly string[];
+  detailed?: boolean;
+  description?: boolean;
+  columnStatus?: string | null;
   canEdit: boolean;
-  api: TasksModuleApi;
+  editing?: boolean;
+  command?: TaskCommand | null;
+  onEndEdit?: () => void;
+  onRequestCommand?: (taskId: string, command: TaskCommand) => void;
+  onClearCommand?: () => void;
+  facts: TaskFacts;
+  parentTitle: string | null;
+  actions: TaskRowActions;
+  today: string;
+  taskKey?: string | null;
+  team?: CardTeam | null;
 }) {
-  const done = task.status === "done";
-  const queued = api.queuedTaskIds.has(task.id);
-  const claimed = (api.queueClaims.get(task.id)?.length ?? 0) > 0;
+  const closed = isClosedTask(task);
   const on = new Set(properties);
-  const date = on.has("date") ? rowDate(task) : null;
+  const now = nowOn(today);
+  const date = on.has("date") ? rowDate(task, now) : null;
+  const dateCommand = command === "schedule" || command === "due" ? command : null;
   // Blocked — computed, ambient: dim + a quiet icon, never red (spec §5c).
-  const blocked = api.blockedTaskIds.has(task.id);
+  const blocked = facts.blockedLabel !== null;
   const { assignees, byId } = useAssignees();
   // Solo workspaces have nobody to tell apart; Unassigned shows nothing.
   const withAssignee =
     on.has("assignee") && showAssignee && assignees.length > 1 && !!task.assigneeId;
   const assigneeName = assigneeLabel(task.assigneeId, byId);
-  // A parent caption on a subtask card rendered flat (Today, or its parent is
-  // off this board).
-  const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
+  // Routed to a team and nobody has taken it yet (TV-D13): the team's mark.
+  const waitingTeam = team && !task.assigneeId && !closed ? team : null;
   const priority = on.has("priority") ? task.priority : null;
   const energy = on.has("energy") ? task.energyLevel : null;
-  const showQueue = !done && task.status !== "archived" && (canEdit || queued || claimed);
-  const hasMeta =
-    !!priority ||
-    !!energy ||
-    !!date ||
-    hasTaskCounts(task, api) ||
-    showBucket ||
-    !!parent ||
-    showQueue ||
-    withAssignee;
+  const showQueue = !closed && (canEdit || facts.queued || facts.claims.length > 0);
+  // The card's own status name where the column doesn't say it.
+  const statusName =
+    (detailed || columnStatus !== null) && facts.statusName !== columnStatus
+      ? facts.statusName
+      : null;
+  const handle = detailed ? handleLabel(taskKey, task.number) : null;
+  const preview = description ? descriptionWords(task.description).replace(/\s+/g, " ").trim() : "";
+  const time = detailed ? rowTime(task) : null;
+  const tagNames = detailed && facts.tags.length > 0;
+  const second = detailed && (tagNames || !!time || !!facts.waiting);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-2">
-      <div className="flex items-start gap-2">
-        <span className="mt-0.5" onPointerDown={(e) => e.stopPropagation()}>
-          <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(task)} />
-        </span>
-        <span
-          className={cn(
-            "min-w-0 flex-1 break-words font-sans text-base leading-snug",
-            // A done card fades as a whole; no muted colour on top.
-            done
-              ? "text-foreground line-through"
-              : blocked
-                ? "text-muted-foreground"
-                : "text-foreground",
-          )}
-        >
-          {task.title || "Untitled"}
-        </span>
-      </div>
+    <>
+      {handle ? (
+        <span className="ps-6 font-sans text-xs text-subtle-foreground tabular-nums">{handle}</span>
+      ) : null}
+      <ItemCardTitle
+        lead={
+          <span onPointerDown={(e) => e.stopPropagation()} className="flex items-center">
+            <StatusGlyph
+              task={task}
+              statusName={facts.statusName}
+              canEdit={canEdit}
+              menuOpen={command === "status"}
+              onMenuOpenChange={(o) => (o ? onRequestCommand(task.id, "status") : onClearCommand())}
+              onActivate={() => activateTask(task, actions)}
+              onPickStatus={(target) => actions.setTaskStatus(task.id, target)}
+            />
+          </span>
+        }
+        className={cn(blocked && !closed && "text-muted-foreground")}
+      >
+        {editing ? (
+          <TitleEditor
+            initial={task.title}
+            className="font-sans text-base"
+            onCommit={(value) => {
+              const next = value.trim();
+              if (next && next !== task.title) actions.patchTask(task.id, { title: next });
+              onEndEdit();
+            }}
+            onCancel={onEndEdit}
+          />
+        ) : (
+          <span className={cn("font-sans", closed && "line-through decoration-subtle-foreground")}>
+            {task.title || "Untitled"}
+          </span>
+        )}
+      </ItemCardTitle>
 
-      {hasMeta ? (
-        <div className="flex min-w-0 items-center gap-2.5 overflow-hidden pl-6 font-sans text-xs whitespace-nowrap text-muted-foreground">
-          <PriorityMark level={priority} />
-          <EnergyMark level={energy} />
-          {date ? <DateMark date={date} className="shrink-0" /> : null}
-          <TaskCounts task={task} api={api} />
-          {showBucket ? (
-            <BucketLabel
-              name={bucketName}
-              isInbox={task.bucketId === inboxId}
-              className="shrink-3"
+      {preview ? (
+        <p
+          data-slot="card-description"
+          className="line-clamp-2 ps-6 font-sans text-xs text-muted-foreground group-data-[done]/card:opacity-50"
+        >
+          {preview}
+        </p>
+      ) : null}
+
+      {/* The one meta line: it wraps rather than cut anything (AC1.16). */}
+      <ItemCardMeta>
+        {showBucket ? (
+          <ProjectMenu
+            task={task}
+            inboxId={inboxId}
+            projectName={bucketName}
+            sectionName={facts.sectionName}
+            variant="inline"
+            canEdit={canEdit}
+            open={command === "bucket"}
+            onOpenChange={(o) => (o ? onRequestCommand(task.id, "bucket") : onClearCommand())}
+            actions={actions}
+          />
+        ) : null}
+        <PriorityMark level={priority} />
+        <EnergyMark level={energy} />
+        {date || dateCommand ? (
+          <DateCell
+            task={task}
+            kind="row"
+            canEdit={canEdit}
+            command={dateCommand}
+            today={today}
+            onRequestCommand={(kind) => onRequestCommand(task.id, kind)}
+            onClearCommand={onClearCommand}
+            actions={actions}
+          />
+        ) : null}
+        <TaskCounts task={task} facts={facts} waitingColumn={detailed} />
+        {statusName ? <span className="shrink-0 whitespace-nowrap">{statusName}</span> : null}
+        {parentTitle !== null ? (
+          <span className="flex min-w-0 items-center gap-1">
+            <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
+            <span className="min-w-0 break-words">{parentTitle}</span>
+          </span>
+        ) : null}
+        <span className="ms-auto flex shrink-0 items-center gap-1.5">
+          {showQueue ? (
+            <QueueToggle
+              task={task}
+              queued={facts.queued}
+              claims={facts.claims}
+              onToggle={actions.toggleQueue}
+              canEdit={canEdit}
+              revealOnHover
             />
           ) : null}
-          {parent ? (
-            <span className="flex min-w-0 shrink-3 items-center gap-1">
-              <CornerDownRight className="size-icon-xs shrink-0 opacity-70" aria-hidden />
-              <span className="truncate">{parent.title || "Untitled"}</span>
+          {withAssignee ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="flex items-center"
+                  role="img"
+                  aria-label={`Assignee: ${assigneeName}`}
+                >
+                  <AssigneeAvatar
+                    assignee={byId(task.assigneeId)}
+                    assigneeId={task.assigneeId}
+                    size="icon"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{assigneeName}</TooltipContent>
+            </Tooltip>
+          ) : waitingTeam ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="flex items-center"
+                  role="img"
+                  aria-label={`For ${waitingTeam.name}, not taken yet`}
+                >
+                  <TeamMark
+                    name={waitingTeam.name}
+                    id={waitingTeam.id}
+                    letters={waitingTeam.mark}
+                    color={waitingTeam.color}
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>For {waitingTeam.name} · not taken yet</TooltipContent>
+            </Tooltip>
+          ) : null}
+        </span>
+        {/* `b` and "Move to project…" open here where the project is implied:
+            an anchor that takes no width and no pointer (R6). */}
+        {!showBucket && canEdit ? (
+          <ProjectMenu
+            task={task}
+            inboxId={inboxId}
+            projectName={bucketName}
+            sectionName={facts.sectionName}
+            variant="implied"
+            canEdit={canEdit}
+            open={command === "bucket"}
+            onOpenChange={(o) => (o ? onRequestCommand(task.id, "bucket") : onClearCommand())}
+            actions={actions}
+          />
+        ) : null}
+      </ItemCardMeta>
+
+      {second ? (
+        <ItemCardMeta>
+          {tagNames ? (
+            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
+              {facts.tags.slice(0, 3).map((t) => (
+                <span key={t.id}>#{t.name}</span>
+              ))}
+              {facts.tags.length > 3 ? <span>+{facts.tags.length - 3}</span> : null}
             </span>
           ) : null}
-          <span className="ml-auto flex shrink-0 items-center gap-1.5">
-            {/* Queue mark — always visible + quiet (marker IS the action): my
-              toggle, or a teammate's ringed avatar for their queue (TV-D4). */}
-            {showQueue ? <QueueToggle task={task} api={api} canEdit={canEdit} /> : null}
-            {withAssignee ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className="flex items-center"
-                    role="img"
-                    aria-label={`Assignee: ${assigneeName}`}
-                  >
-                    <AssigneeAvatar assignee={byId(task.assigneeId)} size="icon" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{assigneeName}</TooltipContent>
-              </Tooltip>
-            ) : null}
-          </span>
-        </div>
+          {time ? <span className="shrink-0 whitespace-nowrap">{time}</span> : null}
+          {facts.waiting ? (
+            <span className="min-w-0 break-words">Waiting {facts.waiting}</span>
+          ) : null}
+        </ItemCardMeta>
       ) : null}
-    </div>
+    </>
   );
 }

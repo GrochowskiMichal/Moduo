@@ -51,12 +51,14 @@ import {
 } from "@/components/ui/select";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ContactDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
+import { formatFullDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import { EntityTagRow } from "../../tags/ui/entity-tag-row";
 import type { ActivityEntry } from "../../tasks/model";
+import { ClientTimeReport } from "../../tasks/ui/client-time-report";
 import { birthdayCountdown } from "../dates";
 import { parseFieldOptions, selectOptionsFor } from "../field-defs";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
@@ -267,12 +269,11 @@ function channelRows(
   });
 }
 
-/** "1988-04-17" → "April 17, 1988" (falls back to the raw value). */
+/** "1988-04-17" → "Apr 17, 1988" / "17 Apr 1988", Time & region's date order
+ *  (TV-D14; falls back to the raw value). */
 function formatDateValue(value: string): string {
   const d = new Date(`${value}T00:00:00`);
-  return Number.isNaN(d.getTime())
-    ? value
-    : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  return Number.isNaN(d.getTime()) ? value : formatFullDate(d);
 }
 
 /** One field group inside the card: a type icon on the first row, then rows.
@@ -896,6 +897,17 @@ export function ContactHub(props: ContactHubProps) {
             onChangeKind={onChangeKind}
             onUnlink={onUnlink}
             onRetry={onRetry}
+          />
+        ) : null}
+
+        {/* The client's work and time, when they're a project's client
+            (TV-D14's report; TV-U16's rollup, AC6.4). */}
+        {!editing && workspaceId ? (
+          <ClientTimeReport
+            workspaceId={workspaceId}
+            contactId={contact.id}
+            contactName={contact.name || "Client"}
+            onOpen={onOpenEntity}
           />
         ) : null}
 

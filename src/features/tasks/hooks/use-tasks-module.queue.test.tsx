@@ -6,6 +6,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { __resetFocusEngineForTest, attachFocusUser, getFocusSession } from "../../focus/engine";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import type { Task, TaskQueueEntry, TasksModuleBundle } from "../model";
@@ -16,6 +17,9 @@ rs.mock("sonner", () => {
   toast.error = (msg: string) => toasts.errors.push(msg);
   return { toast };
 });
+
+// Live updates (TV-D5) need a socket; these tests drive the hook without one.
+rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
 import { useTasksModule } from "./use-tasks-module";
 
@@ -85,7 +89,21 @@ function fakeRuntime(tasks: Task[], queue: TaskQueueEntry[]) {
       rows = rows.filter((r) => !(r.userId === ME && r.taskId === taskId));
       return mine();
     }),
-    opQueueReorder: rs.fn(async () => mine()),
+    // Puts the task right after `afterTaskId` (or first) in my line-up.
+    opQueueReorder: rs.fn(
+      async ({ taskId, afterTaskId }: { taskId: string; afterTaskId: string | null }) => {
+        const order = mine()
+          .map((r) => r.taskId)
+          .filter((id) => id !== taskId);
+        order.splice(afterTaskId ? order.indexOf(afterTaskId) + 1 : 0, 0, taskId);
+        rows = rows.map((r) =>
+          r.userId === ME && r.workspaceId === "w1"
+            ? { ...r, position: `p${String(order.indexOf(r.taskId)).padStart(9, "0")}` }
+            : r,
+        );
+        return mine();
+      },
+    ),
     opQueueMoveToEnd: rs.fn(async () => mine()),
     opSetStatus: rs.fn(async ({ taskId, status }: { taskId: string; status: Task["status"] }) => {
       if (status === "done" || status === "archived")
@@ -168,7 +186,7 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     const { api, hook } = await mount([task("t1")], [row(MIKE, "t1", "1")]);
     act(() => hook.result.current.toggleQueue("t1"));
     await waitFor(() => expect(api.opQueueAdd).toHaveBeenCalledTimes(1));
-    expect(toasts.notes).toEqual(["Also in Mike’s queue"]);
+    expect(toasts.notes).toEqual(["Also in Mike’s Focus"]);
     // Mike's claim stays.
     expect(hook.result.current.queueClaims.get("t1")).toEqual([MIKE]);
   });
@@ -227,6 +245,93 @@ describe("useTasksModule: my queue (TV-D4)", () => {
         afterTaskId: null,
       }),
     );
+  });
+
+  it("Arrange by project saves the whole new order as single moves, then Undo walks it back (TV-F8)", async () => {
+    const { api, hook } = await mount(
+      [task("a"), task("b"), task("c"), task("d")],
+      [row(ME, "a", "a0"), row(ME, "b", "a1"), row(ME, "c", "a2"), row(ME, "d", "a3")],
+    );
+    let saved: boolean | null = null;
+    act(() => {
+      hook.result.current.arrangeQueue(["a", "c", "b", "d"], (partial) => {
+        saved = partial;
+      });
+    });
+    // Shown at once, saved after.
+    expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "c", "b", "d"]);
+    await waitFor(() => expect(saved).toBe(false));
+    act(() => {
+      hook.result.current.arrangeQueue(["a", "b", "c", "d"]);
+    });
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "b", "c", "d"]),
+    );
+    expect(api.opQueueReorder).toHaveBeenCalledTimes(2);
+  });
+
+  it("a move refused partway keeps what was saved, shows the server's order and still offers Undo", async () => {
+    const { api, hook } = await mount(
+      [task("a"), task("b"), task("c"), task("d")],
+      [row(ME, "a", "a0"), row(ME, "b", "a1"), row(ME, "c", "a2"), row(ME, "d", "a3")],
+    );
+    const real = api.opQueueReorder.getMockImplementation();
+    let calls = 0;
+    api.opQueueReorder.mockImplementation(async (input) => {
+      calls += 1;
+      if (calls === 2) throw new Error("That task isn't in your queue.");
+      return real ? real(input) : [];
+    });
+    let saved: boolean | null = null;
+    act(() => {
+      // Two moves: d to the top, then c after d.
+      hook.result.current.arrangeQueue(["d", "c", "a", "b"], (partial) => {
+        saved = partial;
+      });
+    });
+    await waitFor(() => expect(saved).toBe(true));
+    // The first move stands on the server and on screen.
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["d", "a", "b", "c"]),
+    );
+  });
+
+  it("a drop's Undo, run seconds later, puts the line-up back (TV-U4)", async () => {
+    const { api, hook } = await mount(
+      [task("a"), task("b"), task("c")],
+      [row(ME, "a", "000000mh34"), row(ME, "b", "00000168g8"), row(ME, "c", "000001ilsc")],
+    );
+    // The Undo holds the reorder from the drop's render, as a toast does.
+    const reorderAtDrop = hook.result.current.reorderQueue;
+    let saved = false;
+    act(() =>
+      reorderAtDrop(["c", "a", "b"], () => {
+        saved = true;
+      }),
+    );
+    await waitFor(() => expect(saved).toBe(true));
+    act(() => reorderAtDrop(["a", "b", "c"]));
+    await waitFor(() => expect(api.opQueueReorder).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "b", "c"]),
+    );
+  });
+
+  it("the sidebar Queue drop's Undo takes the task out again (TV-U4)", async () => {
+    const { api, hook } = await mount([task("a")], []);
+    const { addToQueue, removeFromQueue } = hook.result.current;
+    let saved = false;
+    act(() =>
+      addToQueue("a", "end", () => {
+        saved = true;
+      }),
+    );
+    await waitFor(() => expect(saved).toBe(true));
+    act(() => removeFromQueue("a"));
+    await waitFor(() =>
+      expect(api.opQueueRemove).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "a" }),
+    );
+    await waitFor(() => expect(hook.result.current.queuedTasks).toEqual([]));
   });
 
   it("Skip in Focus moves the task to the end of my queue", async () => {
@@ -305,5 +410,51 @@ describe("useTasksModule: my queue (TV-D4)", () => {
     await waitFor(() =>
       expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["t-new"]),
     );
+  });
+});
+
+describe("useTasksModule: Focus on this (call 31, TV-F7)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __resetFocusEngineForTest({ alert: () => {} });
+    attachFocusUser(ME);
+  });
+
+  it("puts the task on top of Up next and gives it the one clock", async () => {
+    const { api, hook } = await mount([task("t1"), task("t2")], [row(ME, "t1", "000000mh34")]);
+    let started = false;
+    act(() => {
+      started = hook.result.current.focusOnTask("t2");
+    });
+    expect(started).toBe(true);
+    expect(getFocusSession()).toMatchObject({ taskId: "t2", running: true, tracking: true });
+    await waitFor(() =>
+      expect(api.opQueueAdd).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "t2", at: "top" }),
+    );
+    expect(hook.result.current.focusRefOf("t2")).toEqual({
+      id: "t2",
+      title: "t2",
+      bucketName: "Inbox",
+      workspaceId: "w1",
+    });
+  });
+
+  it("refuses a finished task and a viewer, without a session", async () => {
+    const done = await mount([task("t1", { status: "done" })], []);
+    let started = true;
+    act(() => {
+      started = done.hook.result.current.focusOnTask("t1");
+    });
+    expect(started).toBe(false);
+    expect(done.api.opQueueAdd).not.toHaveBeenCalled();
+    expect(getFocusSession().tracking).toBe(false);
+
+    const viewer = await mount([task("t1")], [], "view");
+    act(() => {
+      started = viewer.hook.result.current.focusOnTask("t1");
+    });
+    expect(started).toBe(false);
+    expect(viewer.api.opQueueAdd).not.toHaveBeenCalled();
+    expect(getFocusSession().tracking).toBe(false);
   });
 });

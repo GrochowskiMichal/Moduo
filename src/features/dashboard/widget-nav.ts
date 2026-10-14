@@ -4,14 +4,26 @@
 
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 
-/** Open a specific entity's hub/page (the same gesture EntityRefChip uses). */
-export function openEntity(type: string, id: string): void {
+/**
+ * Open a specific entity's hub/page (the same gesture EntityRefChip uses);
+ * `workspaceId` opens it in that workspace (a storage alert's Settings → Storage).
+ */
+export function openEntity(type: string, id: string, workspaceId?: string): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type, id } }));
+  window.dispatchEvent(
+    new CustomEvent(ENTITY_OPEN_EVENT, {
+      detail: workspaceId ? { type, id, workspaceId } : { type, id },
+    }),
+  );
 }
 
-/** Open a module page directly (the widget-header "open" affordance). */
-export function openModuleRoute(to: string): void {
+/**
+ * Open a module page directly (the widget-header "open" affordance); `search`
+ * lands on a place in it (Upcoming's "+n more" opens Tasks' Upcoming).
+ */
+export function openModuleRoute(to: string, search?: Record<string, string>): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { to } }));
+  window.dispatchEvent(
+    new CustomEvent(ENTITY_OPEN_EVENT, { detail: search ? { to, search } : { to } }),
+  );
 }

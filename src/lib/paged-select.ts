@@ -35,6 +35,20 @@ export const READ_CAPS = {
   tags: 1000,
   tagLinks: 10000,
   taskRelations: 10000,
+  taskCompletions: 20000,
+  projectStatuses: 10000,
+  // TV-D10
+  areas: 500,
+  sections: 10000,
+  teams: 500,
+  teamMembers: 5000,
+  taskSessions: 20000,
+  taskReminders: 10000,
+  taskWaiting: 10000,
+  /** TV-U8: your saved views and the ones shared with you (200 each at most). */
+  taskViews: 2000,
+  // TV-D16: agent sessions you can see (yours, and teammates' they share).
+  agentSessions: 10000,
   taskQueue: 5000,
   notes: 5000,
   contacts: 10000,
@@ -45,6 +59,16 @@ export const READ_CAPS = {
   emailAccounts: 200,
   emailRefs: 5000,
   attachments: 10000,
+  /** The shared store (TV-D11a): done, Won't do and Backlog tasks, read after the open ones. */
+  closedTasks: 20000,
+  /** Comments on tasks, read for their counts only (id + task). */
+  taskComments: 20000,
+  /** Finished files on tasks, read for the 📎 counts only (id + task; AT-3). */
+  attachmentMarks: 20000,
+  /** One delta read; past it the store reads again from where it stopped. */
+  syncDelta: 5000,
+  /** The store's access check: every live id of a table. */
+  syncIds: 50000,
 } as const;
 
 /** One collection that hit its cap. `null` everywhere else = nothing was cut. */
@@ -162,4 +186,35 @@ export function describeTruncation(t: Truncation): string {
   const shown = t.shown.toLocaleString();
   if (t.total == null) return `${shown} ${t.scope} (of more)`;
   return `${shown} of ${t.total.toLocaleString()} ${t.scope}`;
+}
+
+/**
+ * Read an append-only log past a cursor, to the end (NR-3: the notes update
+ * log). Keyset paging (`id > cursor`), not offsets: rows appended mid-read
+ * land after the cursor and are picked up, never shifted or re-read. No cap —
+ * a log must be read whole or not at all, so the first error returns it with
+ * no rows (the caller's cursor must not move past rows it never applied).
+ */
+export async function readAfterCursor<T, E>(args: {
+  after: number;
+  /** Rows with id > `after`, ascending, at most `limit`. */
+  page: (after: number, limit: number) => Promise<PageResult<T, E>>;
+  idOf: (row: T) => number;
+  /** Override the per-request page size (tests). Clamped to PGRST_MAX_ROWS. */
+  pageSize?: number;
+}): Promise<{ rows: T[]; error: E | null }> {
+  const pageSize = Math.max(1, Math.min(args.pageSize ?? PGRST_MAX_ROWS, PGRST_MAX_ROWS));
+  const rows: T[] = [];
+  let cursor = args.after;
+  for (;;) {
+    const res = await args.page(cursor, pageSize);
+    if (res.error) return { rows: [], error: res.error };
+    const batch = res.data ?? [];
+    rows.push(...batch);
+    if (batch.length < pageSize) return { rows, error: null };
+    const next = args.idOf(batch[batch.length - 1]!);
+    // A page that doesn't advance the cursor would loop forever.
+    if (!(next > cursor)) return { rows, error: null };
+    cursor = next;
+  }
 }

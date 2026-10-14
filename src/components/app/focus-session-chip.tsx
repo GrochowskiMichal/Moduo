@@ -1,10 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
-import { CloudOff, Coffee, Pause, Play } from "lucide-react";
+import { CloudOff, Coffee, Pause, Play, Square } from "lucide-react";
 import { useRef } from "react";
 
 import { formatAwaySpan } from "../../features/focus/away-copy";
 import { formatFocusClock } from "../../features/focus/clock";
-import { toggleFocusRunning, useFocusSession } from "../../features/focus/engine";
+import { stopFocusWithUndo } from "../../features/focus/stop-with-undo";
+import { toggleFocusPause, useFocusTimer } from "../../features/focus/timer";
 import { FocusAwayPrompt, useFullAwayPromptShown } from "../../features/focus/ui/away-prompt";
 import { requestFocusView } from "../../features/focus/view-request";
 import { Button } from "../ui/button";
@@ -20,16 +21,19 @@ const buttonFocus =
  * module you're in, so it sits with the global controls (principle 48b).
  *
  * Quiet on purpose: the clock in secondary text with a small dot ("18:02";
- * "Break 4:12" on a pomodoro break), no box until hovered, and the task only in
- * the tooltip. Hovering swaps the dot for pause (or resume), and a click on the
- * clock opens Focus. Pausing from here reverses the 2026-06-16 lock that kept
- * the controls Focus-only (call 96).
+ * "Break 4:12" on a pomodoro break; just "Focus" when the Timer is Off), no
+ * box until hovered, and the task only in the tooltip. Hovering swaps the dot
+ * for pause (or resume) and shows Stop at the far end, away from Pause (62a);
+ * Stop says "Focus stopped · Undo" for 10 s. A click on the clock opens Focus.
+ *
+ * It reads the one time engine (TV-F6): this device's clock, or a session
+ * another of my devices runs ("on your other device"); pausing or stopping it
+ * here takes it over first.
  *
  * "While you were away" (TV-F1) still waits for an answer from any screen: the
  * timer reads "Away 42m" and a click asks the question in a popover (not on the
- * Focus view, whose Now card asks it already). Stopped
- * with tracked time still unsaved, it says so until the retry lands (F1-7).
- * Renders nothing otherwise.
+ * Focus view, whose Now card asks it already). Stopped with tracked time still
+ * unsaved, it says so until the retry lands (F1-7). Renders nothing otherwise.
  *
  * At the 1024px minimum window the right of the top bar has room for about
  * "1:04:12", so the wordy states shorten until that group (an `@container` in
@@ -37,7 +41,7 @@ const buttonFocus =
  * length, and an icon for "not saved yet". Tooltips and labels say them in full.
  */
 export function FocusSessionChip() {
-  const session = useFocusSession();
+  const timer = useFocusTimer();
   // On the Focus view the Now card already asks "while you were away".
   const awayAskedThere = useFullAwayPromptShown();
   const navigate = useNavigate();
@@ -47,9 +51,9 @@ export function FocusSessionChip() {
     void navigate({ to: "/tasks" });
   };
 
-  if (!session.tracking) {
+  if (!timer.active) {
     // Stopped, but some tracked time hasn't saved yet: keep that visible (F1-7).
-    if (!session.unsaved) return null;
+    if (!timer.unsaved) return null;
     return (
       <Tooltip>
         <TooltipTrigger
@@ -65,19 +69,22 @@ export function FocusSessionChip() {
       </Tooltip>
     );
   }
-  if (!session.taskId) return null;
+  if (!timer.taskId) return null;
 
-  const label = session.taskTitle || "Untitled";
-  const onBreak = session.pomodoro && session.phase === "break";
-  const phaseTip = session.pomodoro ? ` · ${session.phaseLabel}` : "";
-  const state = session.running ? "" : " (paused)";
-  const unsaved = session.unsaved ? " · time not saved yet" : "";
-  const tip = `Focus — ${label}${phaseTip}${state}${unsaved} · click to open`;
-  const away = awayAskedThere ? null : session.away;
+  const label = timer.taskTitle || "Untitled";
+  const off = timer.timer === "off";
+  const onBreak = timer.timer === "pomodoro" && timer.phase === "break";
+  const phaseTip =
+    timer.timer === "pomodoro" ? ` · ${timer.phaseLabel}` : off ? " · timer off" : "";
+  const state = timer.running ? "" : " (paused)";
+  const where = timer.elsewhere ? " · on your other device" : "";
+  const unsaved = timer.unsaved ? " · time not saved yet" : "";
+  const tip = `Focus — ${label}${phaseTip}${state}${where}${unsaved} · click to open`;
+  const away = awayAskedThere ? null : timer.away;
   const awaySpan = away ? formatAwaySpan(away.awaySeconds) : "";
   const awayTip = `You were away ${awaySpan} · Focus — ${label} · click to answer`;
-  const toggleLabel = session.running ? "Pause Focus" : "Resume Focus";
-  const ToggleIcon = session.running ? Pause : Play;
+  const toggleLabel = timer.running ? "Pause Focus" : "Resume Focus";
+  const ToggleIcon = timer.running ? Pause : Play;
 
   const clockClass = `flex h-8 shrink-0 items-center rounded-md pr-1.5 pl-0.5 font-sans text-xs tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) group-hover:text-foreground ${buttonFocus}`;
 
@@ -88,13 +95,13 @@ export function FocusSessionChip() {
     >
       <Tooltip>
         <TooltipTrigger
-          onClick={() => toggleFocusRunning()}
+          onClick={() => toggleFocusPause()}
           aria-label={toggleLabel}
           className={`flex size-6 shrink-0 items-center justify-center rounded-sm hover:text-foreground ${buttonFocus}`}
         >
           {/* At rest: a dot while it runs (a cup on a narrow break), pause while paused. */}
           <span className="flex group-hover:hidden group-has-focus-visible:hidden" aria-hidden>
-            {!session.running ? (
+            {!timer.running ? (
               <Pause className="size-3" />
             ) : onBreak ? (
               <>
@@ -148,14 +155,31 @@ export function FocusSessionChip() {
             aria-label={tip}
             className={clockClass}
           >
-            {onBreak ? (
-              <span className="hidden @2xs:inline">{capitalize(session.phaseLabel)}&nbsp;</span>
-            ) : null}
-            {formatFocusClock(session.bigClock)}
+            {off ? (
+              "Focus"
+            ) : (
+              <>
+                {onBreak ? (
+                  <span className="hidden @2xs:inline">{capitalize(timer.phaseLabel)}&nbsp;</span>
+                ) : null}
+                {formatFocusClock(timer.bigClock)}
+              </>
+            )}
           </TooltipTrigger>
           <TooltipContent>{tip}</TooltipContent>
         </Tooltip>
       )}
+      {/* Stop: at the far end, away from Pause, only on hover (62a). */}
+      <Tooltip>
+        <TooltipTrigger
+          onClick={stopFocusWithUndo}
+          aria-label="Stop Focus"
+          className={`hidden size-6 shrink-0 items-center justify-center rounded-sm hover:text-foreground group-hover:flex group-has-focus-visible:flex ${buttonFocus}`}
+        >
+          <Square className="size-3" aria-hidden />
+        </TooltipTrigger>
+        <TooltipContent>Stop Focus · you can undo</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

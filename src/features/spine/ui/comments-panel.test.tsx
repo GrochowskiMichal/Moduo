@@ -85,8 +85,29 @@ describe("the composer's @ picker", () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: "Enter", metaKey: true });
     });
-    expect(onSubmit).toHaveBeenCalledWith("first line", []);
+    expect(onSubmit).toHaveBeenCalledWith("first line", [], []);
     expect(box.value).toBe("first line");
+  });
+
+  it("lists teams after people (TV-D13) and posts the teams the text still names", async () => {
+    const onSubmit = rs.fn(async () => {});
+    render(
+      <TooltipProvider>
+        <CommentComposer
+          people={PEOPLE}
+          teams={[{ id: "team-ds", name: "Design", mark: "DS", color: null }]}
+          onSubmit={onSubmit}
+        />
+      </TooltipProvider>,
+    );
+    const box = screen.getByRole("textbox", { name: "Comment" }) as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: "ideas @de", selectionStart: 9 } });
+    fireEvent.click(await screen.findByRole("option", { name: /Design/ }));
+    expect(box.value).toBe("ideas @Design ");
+    await act(async () => {
+      fireEvent.keyDown(box, { key: "Enter", metaKey: true });
+    });
+    expect(onSubmit).toHaveBeenCalledWith("ideas @Design ", [], ["team-ds"]);
   });
 });
 
@@ -141,5 +162,36 @@ describe("a comment thread on a task", () => {
       entityIcon: "task",
     });
     expect(result.current.comments.map((c) => c.body)).toEqual(["On it @Mike"]);
+  });
+
+  it("tells the teams a new comment names, after it's saved (TV-D13)", async () => {
+    const addComment = rs.fn(async () => ({ id: "c9", body: "Ideas @Design" }) as SpineComment);
+    const mentionTeams = rs.fn(async () => {});
+    const runtime = {
+      spine: { listComments: rs.fn(async () => []), addComment, mentionTeams },
+    } as unknown as ModuoRuntime;
+    const { result } = renderHook(() =>
+      useCommentThread({
+        runtime,
+        workspaceId: "w",
+        entityType: "task",
+        entityId: "t1",
+        entityLabel: "Hero",
+        entityIcon: "task",
+      }),
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.post({
+        body: "Ideas @Design",
+        mentionedUserIds: [],
+        mentionedTeamIds: ["team-ds"],
+      });
+    });
+    expect(mentionTeams).toHaveBeenCalledWith({ commentId: "c9", teamIds: ["team-ds"] });
+    await act(async () => {
+      await result.current.post({ body: "No team", mentionedUserIds: [] });
+    });
+    expect(mentionTeams).toHaveBeenCalledTimes(1);
   });
 });

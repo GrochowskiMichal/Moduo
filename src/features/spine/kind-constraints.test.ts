@@ -51,6 +51,9 @@ describe("allowedKinds", () => {
 
   it("includes blocks only between work items", () => {
     expect(allowedKinds("task", "project")).toContain("blocks");
+    // A project is linked as its `bucket` (RF-1).
+    expect(allowedKinds("task", "bucket")).toContain("blocks");
+    expect(allowedKinds("contact", "bucket")).toContain("follow-up");
     expect(allowedKinds("task", "task")).toContain("blocks");
     expect(allowedKinds("task", "contact")).not.toContain("blocks");
   });

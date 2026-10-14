@@ -29,3 +29,63 @@ describe("EntityTextEditor commit-on-blur", () => {
     expect(onCommit).not.toHaveBeenCalled();
   });
 });
+
+describe("EntityTextEditor plain-text lists", () => {
+  it("shows an imported Markdown list as bullet lines, and a bare visit writes nothing", () => {
+    const onCommit = rs.fn();
+    render(
+      <EntityTextEditor
+        value={"Cut list:\n- short\n- long"}
+        editable
+        runtime={null}
+        workspaceId={null}
+        source={{ type: "task", id: "t-1" }}
+        ariaLabel="Description"
+        onCommit={onCommit}
+      />,
+    );
+    const box = screen.getByLabelText("Description");
+    expect(box.textContent).toContain("• short");
+    expect(box.textContent).toContain("• long");
+    expect(box.textContent).not.toContain("- short");
+    fireEvent.focus(box);
+    fireEvent.blur(box);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+});
+
+describe("EntityTextEditor files (AT-2: attachments only, no image nodes)", () => {
+  function clipboard(files: File[]) {
+    return { types: ["Files"], files, items: [], getData: () => "" };
+  }
+
+  it("hands pasted files to onFiles instead of inserting them", async () => {
+    const onFiles = rs.fn();
+    render(
+      <EntityTextEditor
+        value=""
+        editable
+        runtime={null}
+        workspaceId={null}
+        source={{ type: "task", id: "t-1" }}
+        ariaLabel="Description"
+        onFiles={onFiles}
+      />,
+    );
+    const box = screen.getByLabelText("Description");
+    const shot = new File(["x"], "shot.png", { type: "image/png" });
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.assign(paste, { clipboardData: clipboard([shot]) });
+    // jsdom has neither event class; Lexical tells them apart by class name.
+    class ClipboardEvent extends Event {}
+    class DragEvent extends Event {}
+    const g = globalThis as Record<string, unknown>;
+    g.ClipboardEvent ??= ClipboardEvent;
+    g.DragEvent ??= DragEvent;
+    Object.setPrototypeOf(paste, (g.ClipboardEvent as typeof ClipboardEvent).prototype);
+    box.dispatchEvent(paste);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(onFiles).toHaveBeenCalledWith([shot]);
+    expect(box.querySelector("img")).toBeNull();
+  });
+});

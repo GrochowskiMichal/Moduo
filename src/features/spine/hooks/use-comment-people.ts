@@ -23,10 +23,12 @@ export function useCommentPeople(): {
   return useMemo(() => {
     const byId = new Map<string, CommentPerson & { active: boolean }>();
     for (const m of members) {
+      const named = !!m.displayName?.trim();
       byId.set(m.userId, {
         id: m.userId,
         name: m.displayName?.trim() || "Member",
         avatarUrl: m.avatarUrl,
+        ...(named ? {} : { unnamed: true }),
         active: m.isActive && !m.removedAt,
       });
     }
@@ -41,7 +43,14 @@ export function useCommentPeople(): {
       nameOf: (id) => byId.get(id)?.name ?? null,
       personOf: (id) => {
         const p = byId.get(id);
-        return p ? { id: p.id, name: p.name, avatarUrl: p.avatarUrl } : null;
+        return p
+          ? {
+              id: p.id,
+              name: p.name,
+              avatarUrl: p.avatarUrl,
+              ...(p.unnamed ? { unnamed: true } : {}),
+            }
+          : null;
       },
     };
   }, [members, userId]);

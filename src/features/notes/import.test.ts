@@ -275,6 +275,9 @@ describe("Notion export hardening (IM-1, AC1–AC5)", () => {
     const first = rowsFor(files);
     const second = rowsFor(files);
 
+    // Importing files the tree: no imported row is an Inbox capture (NR-1).
+    expect(first.every((r) => r.inInbox === false)).toBe(true);
+
     // Same export → the same row ids in the same order, so `notes_op_import`
     // skips every row on the second run instead of inserting a second copy.
     expect(second.map((r) => r.id)).toEqual(first.map((r) => r.id));

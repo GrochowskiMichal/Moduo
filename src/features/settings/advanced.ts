@@ -26,6 +26,115 @@ export type ModuleReadResult =
   | { module: ExportModuleKey; ok: true; data: unknown }
   | { module: ExportModuleKey; ok: false; error: string };
 
+/**
+ * The tasks part of an export: the module bundle (tasks carry their handle
+ * numbers and, since TV-D9, their status, completion and due date; the
+ * bundle's `statuses` are every project's and the workspace default set;
+ * since TV-D10 projects carry their fields, and the bundle has `areas`,
+ * `sections`, `teams` and `teamMembers`) plus every completion (TV-D8),
+ * work session, your own reminders and every Waiting on… entry (TV-D10),
+ * your own Focus runs (TV-F6), your templates and the shared ones,
+ * with their bodies (TV-D15), your own time entries (TV-D14), and your own
+ * agent sessions and import runs (TV-D16),
+ * specs/tasks-v3.md §Assumptions #26. Every new tasks table joins here in
+ * the block that creates it. A cut read joins the bundle's `truncated` list,
+ * never silently.
+ */
+export async function readTasksExport(
+  tasks: {
+    list(workspaceId: string): Promise<object>;
+    listCompletions(
+      workspaceId: string,
+    ): Promise<{ completions: unknown[]; truncated: readonly unknown[] }>;
+    listSessions(
+      workspaceId: string,
+    ): Promise<{ sessions: unknown[]; truncated: readonly unknown[] }>;
+    listReminders(
+      workspaceId: string,
+    ): Promise<{ reminders: unknown[]; truncated: readonly unknown[] }>;
+    listWaiting(
+      workspaceId: string,
+    ): Promise<{ waiting: unknown[]; truncated: readonly unknown[] }>;
+    /** Your templates and the shared ones, with their bodies (TV-D15). */
+    exportTemplates?(
+      workspaceId: string,
+    ): Promise<{ templates: unknown[]; truncated: readonly unknown[] }>;
+    /** Your own time entries, with their days and notes (TV-D14). */
+    exportTimeEntries?(
+      workspaceId: string,
+    ): Promise<{ entries: unknown[]; truncated: readonly unknown[] }>;
+    /** Your own agent sessions and import runs (TV-D16). */
+    listMyAgentSessions?(
+      workspaceId: string,
+    ): Promise<{ sessions: unknown[]; truncated: readonly unknown[] }>;
+    listImports?(
+      workspaceId: string,
+    ): Promise<{ imports: unknown[]; truncated: readonly unknown[] }>;
+  },
+  workspaceId: string,
+  /** TV-F6: your own Focus runs in the workspace (nobody reads anyone else's). */
+  focus?: {
+    listMyRuns(workspaceId: string): Promise<{ runs: unknown[]; truncated: readonly unknown[] }>;
+  },
+): Promise<Record<string, unknown>> {
+  const [
+    bundle,
+    read,
+    sessions,
+    reminders,
+    waiting,
+    runs,
+    templates,
+    time,
+    agentSessions,
+    imports,
+  ] = await Promise.all([
+    tasks.list(workspaceId),
+    tasks.listCompletions(workspaceId),
+    tasks.listSessions(workspaceId),
+    tasks.listReminders(workspaceId),
+    tasks.listWaiting(workspaceId),
+    focus ? focus.listMyRuns(workspaceId) : Promise.resolve({ runs: [], truncated: [] }),
+    tasks.exportTemplates
+      ? tasks.exportTemplates(workspaceId)
+      : Promise.resolve({ templates: [], truncated: [] }),
+    tasks.exportTimeEntries
+      ? tasks.exportTimeEntries(workspaceId)
+      : Promise.resolve({ entries: [], truncated: [] }),
+    tasks.listMyAgentSessions
+      ? tasks.listMyAgentSessions(workspaceId)
+      : Promise.resolve({ sessions: [], truncated: [] }),
+    tasks.listImports
+      ? tasks.listImports(workspaceId)
+      : Promise.resolve({ imports: [], truncated: [] }),
+  ]);
+  const cut = (bundle as { truncated?: unknown }).truncated;
+  return {
+    ...bundle,
+    completions: read.completions,
+    sessions: sessions.sessions,
+    reminders: reminders.reminders,
+    waiting: waiting.waiting,
+    focusRuns: runs.runs,
+    templates: templates.templates,
+    timeEntries: time.entries,
+    agentSessions: agentSessions.sessions,
+    imports: imports.imports,
+    truncated: [
+      ...(Array.isArray(cut) ? cut : []),
+      ...read.truncated,
+      ...sessions.truncated,
+      ...reminders.truncated,
+      ...waiting.truncated,
+      ...runs.truncated,
+      ...templates.truncated,
+      ...time.truncated,
+      ...agentSessions.truncated,
+      ...imports.truncated,
+    ],
+  };
+}
+
 /** One attachment as the export lists it (AT-1, AT1-8). */
 export type AttachmentManifestInput = {
   id: string;
@@ -167,14 +276,46 @@ export function moduoCacheKeysToClear(allKeys: string[]): string[] {
 }
 
 /**
- * Whether an IndexedDB database name belongs to Moduo's Notes v2 sync layer —
- * the meta/outbox DB (`moduo-notes-v2`) and every per-note y-indexeddb doc DB
- * (`moduo:notes-v2:doc:<ws>:<note>`). The reset deletes exactly these; other
- * apps' databases are left alone.
+ * Whether an IndexedDB database name is one of Moduo's own on-device stores:
+ * the notes meta/outbox DB (`moduo-notes-v2`), every per-note y-indexeddb doc DB
+ * (`moduo:notes-v2:doc:<ws>:<note>`) and the upload queue (`moduo-uploads`, AT-2).
+ * The reset deletes exactly these; other apps' databases are left alone.
  */
 export function isModuoIdbName(name: string | null | undefined): boolean {
   if (!name) return false;
-  return name === "moduo-notes-v2" || name.startsWith("moduo:notes-v2:");
+  return (
+    name === "moduo-notes-v2" || name.startsWith("moduo:notes-v2:") || name === "moduo-uploads"
+  );
+}
+
+/**
+ * Why "Reset local cache" is blocked: unsynced note changes and files still
+ * waiting to upload (AT-2) live only on this device, so a reset would lose them.
+ */
+export function resetBlockedMessage(input: {
+  pendingNotes: number;
+  pendingUploads: number;
+  online: boolean;
+}): string {
+  const { pendingNotes, pendingUploads, online } = input;
+  const parts: string[] = [];
+  if (pendingNotes > 0) {
+    parts.push(
+      `${pendingNotes} note ${pendingNotes === 1 ? "change hasn't" : "changes haven't"} synced to the cloud yet`,
+    );
+  }
+  if (pendingUploads > 0) {
+    parts.push(
+      `${pendingUploads} ${pendingUploads === 1 ? "file hasn't" : "files haven't"} finished uploading`,
+    );
+  }
+  const total = pendingNotes + pendingUploads;
+  const lead = `${parts.join(", and ")}. Resetting now would lose ${total === 1 ? "it" : "them"}.`;
+  const files =
+    pendingUploads > 0 ? " A file that can't upload can be retried or dismissed on its task." : "";
+  return online
+    ? `${lead} Wait for them to finish (notes sync in Notes; files upload on their task), then re-check.${files}`
+    : `${lead} Reconnect to the internet so they can finish, then re-check.${files}`;
 }
 
 // ── Diagnostics ──────────────────────────────────────────────────────────────

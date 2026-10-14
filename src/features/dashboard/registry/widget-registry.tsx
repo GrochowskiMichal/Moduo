@@ -19,7 +19,9 @@ import { QuickCaptureWidget } from "../ui/widgets/quick-capture-widget";
 import { RecentlyLinkedWidget } from "../ui/widgets/recently-linked-widget";
 import { ReconnectWidget } from "../ui/widgets/reconnect-widget";
 import { TasksWidget } from "../ui/widgets/tasks-widget";
+import { TeamWidget } from "../ui/widgets/team-widget";
 import { TimetrackingWidget } from "../ui/widgets/timetracking-widget";
+import { UpcomingWidget } from "../ui/widgets/upcoming-widget";
 import { WeatherWidget } from "../ui/widgets/weather-widget";
 import { WIDGET_CATALOG } from "./catalog";
 import type { WidgetComponent, WidgetDefinition } from "./types";
@@ -43,6 +45,9 @@ const WIDGET_COMPONENTS: Record<WidgetType, WidgetComponent> = {
   habits: HabitsWidget,
   pinned: PinnedWidget,
   chat: ChatWidget,
+  // TV-H1:
+  team: TeamWidget,
+  upcoming: UpcomingWidget,
 };
 
 export function getWidgetComponent(type: WidgetType): WidgetComponent {

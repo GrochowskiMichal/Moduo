@@ -38,7 +38,7 @@ const WEB_CAPS: RuntimeCapabilities = {
 };
 
 describe("widget catalog declarations (AC2)", () => {
-  it("has an entry for all 16 widget types", () => {
+  it("has an entry for every widget type", () => {
     expect(Object.keys(WIDGET_CATALOG).sort()).toEqual([...WIDGET_TYPES].sort());
   });
 
@@ -85,12 +85,21 @@ describe("permission + capability gating (AC8)", () => {
     expect(permissionFor("notes", { tasks: "edit", notes: "view" })).toBe("view");
   });
 
-  it("email + time-tracking are unavailable on web, available on desktop", () => {
+  it("email is unavailable on web, available on desktop", () => {
     expect(isTypeAvailable("email", WEB_CAPS)).toBe(false);
-    expect(isTypeAvailable("timetracking", WEB_CAPS)).toBe(false);
     expect(isTypeAvailable("email", DESKTOP_CAPS)).toBe(true);
-    expect(isTypeAvailable("timetracking", DESKTOP_CAPS)).toBe(true);
     expect(isTypeAvailable("tasks", WEB_CAPS)).toBe(true);
+  });
+
+  it("the time widget reads task time, so it's on web too (TV-H1)", () => {
+    expect(isTypeAvailable("timetracking", WEB_CAPS)).toBe(true);
+    expect(permissionFor("timetracking", { tasks: "none", notes: "edit" })).toBe("none");
+  });
+
+  it("Team and Upcoming ride the Tasks lane (TV-H1)", () => {
+    expect(permissionFor("team", { tasks: "view", notes: "none" })).toBe("view");
+    expect(permissionFor("upcoming", { tasks: "none", notes: "edit" })).toBe("none");
+    expect(galleryTypes({ tasks: "none", notes: "edit" }, WEB_CAPS)).not.toContain("team");
   });
 
   it("gallery hides a locked module's widgets (permission none)", () => {
@@ -106,7 +115,7 @@ describe("permission + capability gating (AC8)", () => {
   it("gallery hides platform-unavailable widgets (email on web)", () => {
     const gallery = galleryTypes(ALL_EDIT, WEB_CAPS);
     expect(gallery).not.toContain("email");
-    expect(gallery).not.toContain("timetracking");
+    expect(gallery).toContain("timetracking");
     expect(gallery).toContain("tasks");
   });
 

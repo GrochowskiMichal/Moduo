@@ -182,7 +182,57 @@ export async function reconcileDomain(opts: {
   localValue: Json;
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
-  apply: (value: Json) => void;
+  apply: (value: Json, userId: string) => void;
+}): Promise<void> {
+  try {
+    await reconcileOnce(opts);
+  } finally {
+    markReconciled(opts.domain, opts.userId);
+  }
+}
+
+// ── "Read this session" (TV-U17) ──────────────────────────────────────────────
+// Something that acts once per person (Tasks' welcome) can't trust the local
+// mirror: on a new device it holds defaults until the account's copy arrives.
+// A domain counts as read for a user once a reconcile for them has finished
+// this session, whichever way it went.
+
+const reconciledFor = new Map<SyncDomain, string>();
+const reconciledListeners = new Set<() => void>();
+
+function markReconciled(domain: SyncDomain, userId: string): void {
+  if (reconciledFor.get(domain) === userId) return;
+  reconciledFor.set(domain, userId);
+  for (const listener of reconciledListeners) listener();
+}
+
+/** Whether `domain` has been read from the cloud for `userId` this session. */
+export function isDomainReconciled(domain: SyncDomain, userId: string | null): boolean {
+  return !!userId && reconciledFor.get(domain) === userId;
+}
+
+/** Hear when a domain finishes reading for someone (useSyncExternalStore). */
+export function subscribeReconciled(listener: () => void): () => void {
+  reconciledListeners.add(listener);
+  return () => {
+    reconciledListeners.delete(listener);
+  };
+}
+
+/** Test-only: mark a domain read (or forget every domain with `null`). */
+export function setDomainReconciledForTest(domain: SyncDomain, userId: string | null): void {
+  if (userId === null) reconciledFor.clear();
+  else reconciledFor.set(domain, userId);
+  for (const listener of reconciledListeners) listener();
+}
+
+async function reconcileOnce(opts: {
+  domain: SyncDomain;
+  userId: string;
+  localValue: Json;
+  defaults: Json;
+  sanitizeCloud: (raw: Json) => Json;
+  apply: (value: Json, userId: string) => void;
 }): Promise<void> {
   const { domain, userId, localValue, defaults, sanitizeCloud, apply } = opts;
 
@@ -201,7 +251,7 @@ export async function reconcileDomain(opts: {
     setSyncMeta(domain, { userId, updatedAt, dirty: !ok });
   };
   const adoptCloud = (raw: Json, updatedAt: string) => {
-    apply(sanitizeCloud(raw));
+    apply(sanitizeCloud(raw), userId);
     setSyncMeta(domain, { userId, updatedAt, dirty: false });
   };
 
@@ -221,7 +271,7 @@ export async function reconcileDomain(opts: {
     // A different prior user's values are in local — don't seed them into this
     // user's fresh row. Reset to defaults and seed those.
     const updatedAt = nowIso();
-    apply(defaults);
+    apply(defaults, userId);
     const ok = await pushDomain(domain, defaults, updatedAt);
     setSyncMeta(domain, { userId, updatedAt, dirty: !ok });
   }
@@ -240,7 +290,7 @@ export function useDomainSync(opts: {
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
   /** Merge a cloud-won subset into local state + DOM + mirror. */
-  apply: (value: Json) => void;
+  apply: (value: Json, userId: string) => void;
 }): { pushLocalChange: (syncable: Json) => void } {
   const optsRef = useRef(opts);
   useEffect(() => {

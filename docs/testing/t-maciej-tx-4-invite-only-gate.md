@@ -1,6 +1,6 @@
 # Manual test checklist — TX-4 invite-only gate + waitlist invites
 
-> Generated 2026-10-10 · branch `t/maciej/tx-4-invite-only-gate` · **Live-verified:** partial. The migration ran on the local stack (56 database checks, `supabase/probes/invite-gate.probe.sql`, also run with every new function owned by the non-superuser `postgres` role, as on prod), and a real Auth server (GoTrue v2.197.0, a throwaway container beside the local stack with the hook switched on) was driven through every allow source and the full code sign-in. Nothing is on prod yet: the worker deploy, the migration and the dashboard steps wait for Maciej's OK (docs/email-runbook.md §TX-4).
+> Generated 2026-10-10 · branch `t/maciej/tx-4-invite-only-gate` · **Live-verified:** partial. The migration ran on the local stack (56 database checks, `supabase/probes/invite-gate.probe.sql`, also run with every new function owned by the non-superuser `postgres` role, as on prod), and a real Auth server (GoTrue v2.197.0, a throwaway container beside the local stack with the hook switched on) was driven through every allow source and the full code sign-in. On prod since 2026-10-10 (Maciej's OK): `email-worker` v3 and the migration (history `20261010155652`). The dashboard steps are Maciej's (docs/email-runbook.md §TX-4 steps 4–7).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## Done in the session (agent)
@@ -25,9 +25,9 @@
 
 ## Prod, after Maciej's OK (runbook §TX-4)
 
-- [ ] **Do:** step 1, deploy `email-worker` → **Expect:** `bun run functions:reconcile` clean; the function's version goes up by one.
-- [ ] **Do:** step 2, apply the migration, run its two checks → **Expect:** `invite_only` for `nobody@example.com`; the `waitlist-purge` job at `29 3 * * *`.
-- [ ] **Do:** step 2's checks → **Expect:** `true` for Auth's schema access; triggers `auth_users_no_password` and `on_auth_user_created` on `auth.users`.
+- [x] **Do:** step 1, deploy `email-worker` → **Expect:** `bun run functions:reconcile` clean; the function's version goes up by one. _(2026-10-10: v2 → v3, reconcile clean)_
+- [x] **Do:** step 2, apply the migration, run its two checks → **Expect:** `invite_only` for `nobody@example.com`; the `waitlist-purge` job at `29 3 * * *`. _(2026-10-10: both, plus grants, RLS, and a rolled-back invite + sign-up on prod; prod left clean)_
+- [x] **Do:** step 2's checks → **Expect:** `true` for Auth's schema access; triggers `auth_users_no_password` and `on_auth_user_created` on `auth.users`. _(2026-10-10: as expected)_
 - [ ] **Do:** before step 6, Authentication → Sign In / Providers → Email → "Confirm email" → **Expect:** on. _(dashboard)_
 - [ ] **Do:** step 4, hook on; step 5, dashboard "Send invitation" to an uninvited throwaway → **Expect:** refused with `invite_only`; no new user. _(dashboard)_
 - [ ] **Do:** step 6 (after TX-2 is live), sign-ups on; ask for a code with an uninvited throwaway on app.moduo.app → **Expect:** "Moduo is invite-only right now. Join the waitlist at moduo.app, or ask the person who invited you to use this address."; no email; no user in Authentication → Users. _(web)_

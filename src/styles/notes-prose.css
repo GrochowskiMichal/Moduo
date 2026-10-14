@@ -1,0 +1,386 @@
+/* ═══ Notes prose: ONE typography for the editor and the published page ═══
+ *
+ * (specs/notes-refresh.md NR-3, assumption 23.) The editor's Lexical theme
+ * classes (`.notes-*`) and the elements react-markdown renders on `/p/<token>`
+ * (`.notes-public-prose …`) share every rule below, so a note reads the same
+ * written and published. Tokens only. Editor-only and page-only rules are at
+ * the end, each marked.
+ */
+
+/* Wave-3 editor: the first line IS the title (no separate title field) —
+   the leading TEXT block renders display-sized. Scoped to paragraph/heading
+   so a note starting with a checklist/code/table doesn't blow up 3xl. */
+.notes-editor-v2 [contenteditable] > .notes-p:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h1:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h2:first-child,
+.notes-editor-v2 [contenteditable] > .notes-h3:first-child {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--foreground);
+}
+
+.notes-p,
+.notes-public-prose p {
+  margin: 0 0 0.625rem;
+  color: var(--foreground);
+}
+
+.notes-h1,
+.notes-h2,
+.notes-h3,
+.notes-public-prose h1,
+.notes-public-prose h2,
+.notes-public-prose h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-family: var(--font-display);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--foreground);
+}
+
+.notes-h1,
+.notes-public-prose h1 {
+  font-size: var(--text-3xl);
+}
+
+.notes-h2,
+.notes-public-prose h2 {
+  font-size: var(--text-2xl);
+}
+
+.notes-h3,
+.notes-public-prose h3 {
+  font-size: var(--text-xl);
+}
+
+.notes-quote,
+.notes-public-prose blockquote {
+  margin: 0.75rem 0;
+  border-left: 3px solid var(--border);
+  padding: 0.125rem 0 0.125rem 0.75rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.notes-list-ul,
+.notes-list-ol,
+.notes-checklist,
+.notes-public-prose ul,
+.notes-public-prose ol {
+  margin: 0.5rem 0 0.75rem;
+  color: var(--foreground);
+}
+
+.notes-list-ul,
+.notes-public-prose ul {
+  list-style: disc outside;
+  padding-left: 1.5rem;
+}
+
+.notes-list-ol,
+.notes-public-prose ol {
+  list-style: decimal outside;
+  padding-left: 1.75rem;
+}
+
+.notes-list-item,
+.notes-public-prose li {
+  display: list-item;
+  margin: 0.1875rem 0;
+}
+
+.notes-list-item>.notes-list-ul,
+.notes-list-item>.notes-list-ol {
+  margin-top: 0.25rem;
+}
+
+.notes-list-item .notes-p {
+  margin: 0;
+}
+
+.notes-list-item::marker,
+.notes-public-prose li::marker {
+  color: var(--muted-foreground);
+}
+
+/* Lexical indent can create a parent placeholder list item (no own text) that wraps
+   a nested list. Hide only that placeholder marker; keep real parent markers. */
+.notes-list-item:has(> .notes-list-ul):not(:has(> .notes-p > span[data-lexical-text]:not(:empty))),
+.notes-list-item:has(> .notes-list-ol):not(:has(> .notes-p > span[data-lexical-text]:not(:empty))) {
+  list-style: none;
+}
+
+.notes-list-ul .notes-list-ul {
+  list-style-type: circle;
+}
+
+.notes-list-ul .notes-list-ul .notes-list-ul {
+  list-style-type: square;
+}
+
+.notes-list-ol .notes-list-ol {
+  list-style-type: lower-alpha;
+}
+
+.notes-list-ol .notes-list-ol .notes-list-ol {
+  list-style-type: lower-roman;
+}
+
+.notes-checklist {
+  list-style: none;
+  padding-left: 0;
+}
+
+.notes-list-item-unchecked,
+.notes-list-item-checked {
+  list-style: none;
+  position: relative;
+  padding-left: 1.75rem;
+  margin: 0.25rem 0;
+}
+
+.notes-list-item-unchecked .notes-p,
+.notes-list-item-checked .notes-p {
+  margin: 0;
+}
+
+.notes-list-item-unchecked::marker,
+.notes-list-item-checked::marker {
+  content: "";
+}
+
+/* Mirrors CompleteToggle (round, muted hairline, primary fill when done) so
+ * the /task conversion never morphs the checkbox — "the checkbox IS the task"
+ * has to hold visually. Geometry matches the task-line overlay (left 0.25rem). */
+.notes-list-item-unchecked::before,
+.notes-list-item-checked::before {
+  content: "";
+  position: absolute;
+  left: 0.25rem;
+  top: 0.375rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+  background: transparent;
+  transition: background-color var(--motion-fade) var(--ease-out),
+    border-color var(--motion-fade) var(--ease-out);
+}
+
+.notes-list-item-unchecked:hover::before {
+  border-color: var(--foreground);
+}
+
+.notes-list-item-checked::before {
+  content: "✓";
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+  font-size: var(--text-xs);
+  display: grid;
+  place-items: center;
+}
+
+/* Task lines (NO-5) — a checkbox line that grew up, never a card. The
+ * checkbox/meta chrome renders in the plugin's OVERLAY outside the
+ * contenteditable (Lexical reclaims foreign DOM inside its root); this block
+ * only reserves the gutters the overlay draws into. */
+.notes-task-line {
+  position: relative;
+  margin: 0.25rem 0;
+  padding: 0.125rem 7rem 0.125rem 1.75rem;
+  border-radius: var(--radius-sm);
+  min-height: 1.75rem;
+}
+
+.notes-task-line[data-done="true"] {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+
+.notes-task-line[data-pending="true"] {
+  color: var(--muted-foreground);
+}
+
+/* Inline text formats (DF-13) — Lexical expresses only ONE format via the
+ * element tag; combinations and strikethrough/underline need theme classes. */
+.notes-text-bold {
+  font-weight: 700;
+}
+
+.notes-text-italic {
+  font-style: italic;
+}
+
+.notes-text-strikethrough {
+  text-decoration: line-through;
+}
+
+.notes-text-underline {
+  text-decoration: underline;
+}
+
+.notes-text-underline-strikethrough {
+  text-decoration: underline line-through;
+}
+
+.notes-inline-code,
+.notes-code-block,
+.notes-public-prose code {
+  font-family: var(--font-mono);
+}
+
+.notes-inline-code,
+.notes-public-prose :not(pre) > code {
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.875em;
+}
+
+.notes-code-block,
+.notes-public-prose pre {
+  display: block;
+  white-space: pre;
+  tab-size: 2;
+  overflow-x: auto;
+  line-height: var(--leading-relaxed);
+  font-size: var(--text-sm);
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.875rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+}
+
+.notes-link,
+.notes-public-prose a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  transition: color var(--motion-fade) var(--ease-out);
+}
+
+.notes-link:hover,
+.notes-public-prose a:hover {
+  color: var(--primary-hover);
+}
+
+/* ═══ Notes: Table ═══ */
+
+.notes-table,
+.notes-public-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  table-layout: fixed;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+
+.notes-table-cell,
+.notes-public-prose td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+  min-width: 5rem;
+  font-size: var(--text-sm);
+  color: var(--foreground);
+  line-height: var(--leading-relaxed);
+  background: var(--card);
+  outline: none;
+  position: relative;
+}
+
+.notes-table-cell:focus-within {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+
+.notes-table-cell-header,
+.notes-public-prose th {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+  min-width: 5rem;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground);
+  background: var(--popover);
+  outline: none;
+  text-align: left;
+  position: relative;
+}
+
+.notes-table-cell-header:focus-within {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+
+/* Lexical table selection highlight — token-driven, no raw rgba. */
+.notes-table-cell.selected,
+.notes-table-cell-header.selected {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--ring);
+}
+
+/* Room under the title for the meta line (NR-3): the editor overlays the line
+ * there, outside the contenteditable. */
+.notes-editor-v2[data-meta-line] [contenteditable] > :first-child {
+  margin-bottom: var(--notes-meta-line-space);
+}
+
+/* Dividers (the schema's HorizontalRuleNode draws a bare <hr>). */
+.notes-editor-v2 hr,
+.notes-public-prose hr {
+  margin: 1.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Published page only ── */
+
+.notes-public-prose {
+  color: var(--foreground);
+  line-height: var(--leading-relaxed);
+}
+
+.notes-public-prose > :first-child {
+  margin-top: 0;
+}
+
+.notes-public-prose pre code {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.notes-public-prose table {
+  display: block;
+  overflow-x: auto;
+}
+
+.notes-public-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-lg);
+  margin: 1rem 0;
+}
+
+.notes-public-prose input[type="checkbox"] {
+  margin-right: 0.375rem;
+}

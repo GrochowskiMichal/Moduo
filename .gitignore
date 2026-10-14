@@ -96,3 +96,7 @@ src-tauri/.moduo_keychain_*
 
 # Local Edge Function secrets (template: supabase/functions/.env.example)
 supabase/functions/.env
+
+# Playwright run output (e2e and visual)
+test-results/
+playwright-report/

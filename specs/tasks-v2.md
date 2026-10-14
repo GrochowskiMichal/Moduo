@@ -1,5 +1,7 @@
 # Spec: Tasks v2 — the dogfood rework
 
+> **Superseded by [`specs/tasks-v3.md`](./tasks-v3.md) on 2026-10-10.** Blocks 1–10 of this spec landed and stay as built (TV-Q1, TV-F1, TV-D1–D4, TV-T1, TV-U1, TV-U3, plus DS-1–4 and AT-1; the one exception is TV-D5, block 8, still open, which finishes as tasks-v3 block 1). Blocks 11–21 are re-scoped into v3: the mapping is the "Carried from v2" paragraph under tasks-v3 §Execution blocks, and the dated note of 2026-10-10 in [`specs/BUILD_LOG.md`](./BUILD_LOG.md) closes the old lines. The decisions this spec recorded moved to [`docs/decisions/tasks.md`](../docs/decisions/tasks.md). The body below is kept as history and is not updated.
+
 > Status: **Draft — awaiting designer approval** (all open questions answered 2026-10-08) · Owner: maciej · Source of truth for every product call: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) (T1–T28, U1–U14, decision rounds 1–3b) + the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Companion specs: [`design-state-layer.md`](./design-state-layer.md) (DS-*), [`attachments.md`](./attachments.md) (AT-*) · Supersedes the parts of [`docs/moduo-tasks-feature-spec.md`](../docs/moduo-tasks-feature-spec.md) it changes (Plan/Execute modes, commit-for-today, capture-is-tag-free) · Contract: [`docs/moduo-module-contract.md`](../docs/moduo-module-contract.md)
 
 ## Scope

@@ -1,6 +1,6 @@
 /**
  * Note outline (NO-7, AC8) — the headings TOC for the Outline rail variant,
- * derived from the note's markdown (the live doc's `deriveBody(...).md`). Each
+ * derived from the note's markdown (the live doc's `deriveNoteBody(...).md`). Each
  * `#`..`######` line becomes a TOC entry. Pure + testable; the panel renders
  * the list and a click scrolls the editor to the matching heading.
  */

@@ -26,11 +26,10 @@ describe("runtime row boundary", () => {
     }
   });
 
-  it("rejects an unknown task status so it cannot reach the model", () => {
-    expect(parseOrError(taskRowSchema, { ...validTask, status: "nope" }).success).toBe(false);
-    expect(() => requireRow(taskRowSchema, { ...validTask, status: "nope" }, "task")).toThrow(
-      /Malformed task/,
-    );
+  it("keeps a row whose status this build doesn't know (TV-D8: never drop a row)", () => {
+    // The model reads it through normalizeTaskStatus (task-rows.ts).
+    expect(parseOrError(taskRowSchema, { ...validTask, status: "backlog" }).success).toBe(true);
+    expect(requireRow(taskRowSchema, { ...validTask, status: "nope" }, "task").status).toBe("nope");
   });
 
   it("drops malformed rows from list reads", () => {
@@ -68,9 +67,15 @@ describe("MCP tool args", () => {
     expect(parsed.success).toBe(true);
   });
 
-  it("rejects an invalid status and an oversized missing uuid-like id", () => {
-    expect(parseToolArgs("tasks_set_status", { task_id: "abc", status: "nope" }).success).toBe(
-      false,
+  it("rejects an empty or oversized status and a missing id", () => {
+    // TV-D16: a status is a category word, a project's name or an id, so the
+    // server resolves it; the arguments only bound its size.
+    expect(parseToolArgs("tasks_set_status", { task_id: "abc", status: " " }).success).toBe(false);
+    expect(
+      parseToolArgs("tasks_set_status", { task_id: "abc", status: "x".repeat(121) }).success,
+    ).toBe(false);
+    expect(parseToolArgs("tasks_set_status", { task_id: "MOD-142", status: "In review" }).success).toBe(
+      true,
     );
     expect(parseToolArgs("tasks_get", {}).success).toBe(false);
   });

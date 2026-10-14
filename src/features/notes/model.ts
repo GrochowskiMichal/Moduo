@@ -30,6 +30,18 @@ export type Note = {
   shareMode: "inherit" | "custom";
   /** A workspace grant exists on this note (children may still inherit one). */
   workspaceShared: boolean;
+  /** NR-1: the note sits in the stored Inbox (only ever true for roots).
+   * `null` = the column isn't deployed yet; sections then derive it. */
+  inInbox: boolean | null;
+  /** NR-1: the note opts out of the reading measure. */
+  fullWidth: boolean;
+};
+
+/** A per-user favorite (NR-1): the note it points at, in the user's order. */
+export type NoteFavorite = {
+  noteId: string;
+  position: string;
+  createdAt: string;
 };
 
 export type NotesV2Bundle = {
@@ -67,6 +79,9 @@ export type NotesImportRow = {
   docStateB64?: string | null;
   bodyText?: string;
   bodyMd?: string;
+  /** NR-1: `false` files an imported root straight into Pages; omitted lets
+   * the server decide (a root lands in the Inbox, like any capture). */
+  inInbox?: boolean;
 };
 
 /** snake_case row (any legacy or v2 shape) → `Note`, with v2-column defaults
@@ -90,6 +105,8 @@ export function noteRowToModel(r: any): Note {
     deletedAt: r.deleted_at ?? null,
     shareMode: r.share_mode === "inherit" ? "inherit" : "custom",
     workspaceShared: r.workspace_shared === true,
+    inInbox: typeof r.in_inbox === "boolean" ? r.in_inbox : null,
+    fullWidth: r.full_width === true,
   };
 }
 

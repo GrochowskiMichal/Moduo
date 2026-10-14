@@ -24,7 +24,7 @@ export function dispatchOpenShortcuts(): void {
 /** Human-readable description per shortcut id (the raw labels are terse). */
 const DESCRIPTIONS: Array<{ id: ShortcutId; desc: string }> = [
   { id: "palette", desc: "Search & jump to anything" },
-  { id: "capture", desc: "Quick capture (task by default; /note /event /contact)" },
+  { id: "capture", desc: "Quick capture (a task; ⌘ + a module's number switches the type)" },
   { id: "new-item", desc: "New item in the current module" },
   { id: "new-note", desc: "New note from anywhere" },
   { id: "settings", desc: "Open settings" },

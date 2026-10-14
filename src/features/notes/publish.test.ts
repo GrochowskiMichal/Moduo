@@ -26,6 +26,8 @@ function note(p: Partial<Note> & { id: string }): Note {
     deletedAt: p.deletedAt ?? null,
     shareMode: p.shareMode ?? "custom",
     workspaceShared: p.workspaceShared ?? false,
+    inInbox: p.inInbox ?? null,
+    fullWidth: p.fullWidth ?? false,
   };
 }
 

@@ -8,20 +8,10 @@
 
 import { ArrowDown, Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatWeekdayDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { TimelineRow } from "../timeline";
 
-const DAY_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-});
-const DAY_FMT_YEAR = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-});
 const NEAR_BOTTOM_PX = 120;
 const NEAR_TOP_PX = 240;
 
@@ -32,7 +22,7 @@ function dayLabel(iso: string): string {
   const diff = Math.round((start(today) - start(d)) / 86_400_000);
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
-  return d.getFullYear() === today.getFullYear() ? DAY_FMT.format(d) : DAY_FMT_YEAR.format(d);
+  return formatWeekdayDate(d, today);
 }
 
 export function MessageList({
@@ -213,7 +203,7 @@ export function MessageList({
         type="button"
         onClick={() => scrollToBottom(true)}
         className={cn(
-          "fx-overlay absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-popover px-3 py-1 font-display text-xs text-foreground transition-opacity duration-(--motion-fade)",
+          "absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-popover px-3 py-1 font-display text-xs text-foreground transition-opacity duration-(--motion-fade)",
           showJump || unseen > 0 ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         style={{ boxShadow: "var(--shadow-md)" }}

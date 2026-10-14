@@ -77,6 +77,7 @@ const inbox: Bucket = {
 function renderList({ queue = false }: { queue?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta"), task("c", "Gamma")];
   const api = {
+    loaded: true,
     tasks,
     queuedTaskIds: new Set(queue ? ["a", "b", "c"] : []),
     queueClaims: new Map(),
@@ -86,6 +87,7 @@ function renderList({ queue = false }: { queue?: boolean } = {}) {
     blockedTaskIds: new Set(),
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
+    focusOnTask: rs.fn(() => true),
     patchTask: rs.fn(),
     deleteTask: rs.fn(),
     setTaskParent: rs.fn(),
@@ -102,7 +104,6 @@ function renderList({ queue = false }: { queue?: boolean } = {}) {
           view="list"
           onViewChange={() => {}}
           groupBy="none"
-          onGroupByChange={() => {}}
           buckets={[]}
           inbox={inbox}
           bucketNameById={() => "Work"}
@@ -112,7 +113,6 @@ function renderList({ queue = false }: { queue?: boolean } = {}) {
           onSelectTask={setSelected}
           reorderable={queue}
           onReorder={() => {}}
-          nestable={!queue}
           api={api as never}
         />
       </TooltipProvider>
@@ -136,7 +136,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   it("Queue: Space on a row's queue toggle stays that button's — no keyboard drag, no list action", async () => {
     const { api } = renderList({ queue: true });
     await wait();
-    const toggle = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Remove from queue"]')!;
+    const toggle = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Remove from Focus"]')!;
     toggle.focus();
 
     expect(fireEvent.keyDown(toggle, SPACE)).toBe(true); // not prevented → the browser clicks it
@@ -159,6 +159,15 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
 
     expect(liftedAnything()).toBe(false);
     expect(api.toggleDone).not.toHaveBeenCalled();
+  });
+
+  it("⇧F is Focus on this for the selected row (call 31, TV-F7)", async () => {
+    const { api, grid } = renderList();
+    await wait();
+    expect(selectedTitle()).toBe("Alpha");
+    fireEvent.keyDown(grid, { key: "F", code: "KeyF", shiftKey: true });
+    expect(api.focusOnTask).toHaveBeenCalledWith("a");
+    expect(api.toggleQueue).not.toHaveBeenCalled();
   });
 
   it("a list key pressed on a row button hands focus back, so Space then completes the selected row", async () => {
@@ -216,14 +225,76 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
     grid.focus();
     fireEvent.keyDown(grid, { key: "d", code: "KeyD" });
     await wait();
-    const input = document.querySelector<HTMLInputElement>('[data-slot="popover-content"] input')!;
+    // The picker (TV-P0) focuses its first control; keys there stay the picker's.
+    const inside = document.activeElement as HTMLElement;
+    expect(inside.closest('[data-slot="popover-content"]')).not.toBeNull();
 
-    fireEvent.keyDown(input, SPACE);
-    fireEvent.keyDown(input, { key: "ArrowDown", code: "ArrowDown" });
-    fireEvent.keyDown(input, { key: "Backspace", code: "Backspace", metaKey: true });
+    fireEvent.keyDown(inside, SPACE);
+    fireEvent.keyDown(inside, { key: "ArrowDown", code: "ArrowDown" });
+    fireEvent.keyDown(inside, { key: "Backspace", code: "Backspace", metaKey: true });
 
     expect(api.toggleDone).not.toHaveBeenCalled();
     expect(api.deleteTask).not.toHaveBeenCalled();
     expect(selectedTitle()).toBe("Alpha");
+  });
+});
+
+// TV-P0 (tasks-v3 AC1.5): the list's states besides rows.
+describe("TaskListView states (TV-P0)", () => {
+  function renderStates(opts: { loaded: boolean; filterActive?: boolean }) {
+    const onClearFilters = rs.fn();
+    const api = {
+      loaded: opts.loaded,
+      tasks: [],
+      queuedTaskIds: new Set(),
+      queueClaims: new Map(),
+      subtasksByParent: new Map(),
+      subtaskProgressByTask: new Map(),
+      tagsByTask: new Map(),
+      blockedTaskIds: new Set(),
+    };
+    render(
+      <TooltipProvider>
+        <TaskListView
+          tasks={[]}
+          scopeTitle="Work"
+          selection="b1"
+          view="list"
+          onViewChange={() => {}}
+          groupBy="none"
+          buckets={[]}
+          inbox={inbox}
+          bucketNameById={() => "Work"}
+          canEdit
+          onRequestCapture={() => {}}
+          selectedTaskId={null}
+          onSelectTask={() => {}}
+          filterActive={opts.filterActive}
+          onClearFilters={onClearFilters}
+          api={api as never}
+        />
+      </TooltipProvider>,
+    );
+    return { onClearFilters };
+  }
+
+  it("shows a skeleton before the first load, never an empty message", () => {
+    renderStates({ loaded: false });
+    expect(screen.getByRole("status", { name: "Loading tasks" })).toBeTruthy();
+    expect(screen.queryByText(/Nothing here yet|No tasks/)).toBeNull();
+  });
+
+  it("an empty filter says “No tasks match”, and Clear filters clears it", () => {
+    const { onClearFilters } = renderStates({ loaded: true, filterActive: true });
+    expect(screen.getByText("No tasks match")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it("an empty scope names it and teaches capture", () => {
+    renderStates({ loaded: true });
+    expect(screen.getByText("No tasks in Work")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a task" })).toBeTruthy();
+    expect(screen.queryByText("Nothing here yet")).toBeNull();
   });
 });

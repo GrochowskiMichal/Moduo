@@ -358,9 +358,12 @@ export function useNotesTaskBridge({
       revertMintIfJustMinted,
       restoreDetachedTasks,
       openTaskDetail: onOpenTaskDetail,
+      fileCount: (taskId) => tasksApi.attachmentCounts?.get(taskId) ?? 0,
     }),
     [
       tasksApi.canEdit,
+      // A file added or deleted anywhere redraws the lines' 📎 marks (AT-3).
+      tasksApi.attachmentCounts,
       noteId,
       tasksById,
       getTask,

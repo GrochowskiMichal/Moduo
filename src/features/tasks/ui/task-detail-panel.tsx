@@ -1,43 +1,59 @@
-// The task detail panel (tasks-v2 §9, comp §1 + §5 option C): one view of the
-// right panel (hosted by Tasks, Calendar, Notes and Email), never the panel
-// itself. Top to bottom: the header (bucket breadcrumb, queue toggle, copy link,
-// ⋯), the checkbox + title, an auto-height description, the properties, the
-// collections (Subtasks, Blocked by, Blocks, Linked: label · count · +), then
-// comments & activity and the metadata line. Edits go through the module api
-// (field-level `patchTask`); comments through the spine's `comments_op_add`.
+// The task's details (Tasks v3 §9, research views-board-detail §7–12): one
+// view of the right panel (hosted by Tasks, Calendar, Notes and Email), and
+// the full page in the centre (call 32). Top to bottom: the header (project
+// › section, handle, a claims slot, queue, ⤢, ⋯), the status toggle and the
+// title, the agent session line's slot, the Done / Won't do line, the
+// properties, the description (folded at ~8 lines in the panel) and its
+// attachments (AT-2: files pasted or dropped anywhere on the task attach to
+// it), the collections (Subtasks, Waiting on, Blocked by, Blocks, Linked),
+// then one feed. On the full page the properties take a column of their own on the
+// right once there's room, and the description never folds.
+//
+// States: nothing selected (inside a project the page shows the Project
+// view instead), a deleted task ("Deleted task", Restore when you can edit),
+// a task you can't see ("Private item"), read-only (values inert, the
+// composer stays).
 
-import { CircleDashed, ListChecks, Plus, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
+import { Ban, Check, Lock, RotateCcw, Trash2 } from "lucide-react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
+import {
+  AttachmentsSection,
+  useAttachmentsSection,
+} from "@/features/attachments/ui/attachments-section";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { createLinkWithToast } from "@/features/spine/ui/drop-link-toast";
-import { EntityHub } from "@/features/spine/ui/entity-hub";
-import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
-import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
+import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "../../../components/ui/command";
+import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
-import { IconButton } from "../../../components/ui/icon-button";
-import { Input } from "../../../components/ui/input";
+import { DROP_TARGET } from "../../../components/ui/drag-visuals";
+import { EmptyState } from "../../../components/ui/empty-state";
 import { Kbd } from "../../../components/ui/kbd";
-import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Separator } from "../../../components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { formatDate } from "../../../lib/time-format";
+import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
-import { EntityLinkPicker } from "../../contacts/ui/entity-link-picker";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
-import { wouldCreateCycle } from "../helpers";
+import { useReference } from "../../spine/references/context";
+import { activityActorName } from "../activity";
+import { useAssignees } from "../assignees";
+import { feedTime } from "../feed";
 import { useTaskTimeShare } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task } from "../model";
+import { type ActivityEntry, type Bucket, isUnsavedTaskId, type Task } from "../model";
+import { AgentSessionLines } from "./task-agent-session";
+import { TaskDescription } from "./task-description";
+import {
+  BlockedBySection,
+  BlocksSection,
+  LinkedSection,
+  SubtasksSection,
+  sayUnlinkFailed,
+  WaitingSection,
+} from "./task-detail-collections";
 import { TaskDetailHeader } from "./task-detail-header";
 import { TaskDetailProperties } from "./task-detail-properties";
 import { TaskFeed } from "./task-feed";
@@ -48,18 +64,29 @@ type Props = {
   inbox: Bucket | null;
   canEdit: boolean;
   onRequestCapture: () => void;
-  /** Move the app-level task selection (subtask ↔ parent navigation). */
+  /** Move the page's task selection (a duplicate opens there). */
   onSelectTask: (id: string) => void;
+  /** Open a task in the panel on top of this one ("← item", call 65a): a
+   *  subtask, a blocker, the parent. Defaults to selecting it. */
+  onOpenTask?: (id: string) => void;
   api: TasksModuleApi;
-  /** Spine runtime — when present (with a workspace), the linked-entity hub
-   * (DF-8) and comments render. Optional so callers that don't wire the spine
-   * degrade to the plain inspector. */
+  /** Spine runtime: the linked items, comments and the feed. Optional so a
+   *  host that doesn't wire the spine gets the plain inspector. */
   runtime?: ModuoRuntime | null;
   workspaceId?: string | null;
-  /** Open a linked entity from the hub. Defaults to the app-wide deep-link
-   * event; callers that can select in place (Tasks, Calendar, Email, Notes)
-   * pass their own. */
+  /** Kept for hosts that pass it; Linked cards open through the page's
+   *  reference host (RF-1) since TV-U13. */
   onOpenEntity?: (ref: EntityRef) => void;
+  /** ⤢: show the task as the full page (Tasks only). */
+  onOpenFullPage?: () => void;
+  /** ⤡: back from the full page to the panel. */
+  onCloseFullPage?: () => void;
+  /** "page": the full page's two-column layout; the description never folds. */
+  layout?: "panel" | "page";
+  /** Who "is on this" (claims): TV-F7 fills it. */
+  claimSlot?: ReactNode;
+  /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
+  onSaveAsTemplate?: (task: Task) => void;
 };
 
 /**
@@ -69,38 +96,14 @@ type Props = {
  */
 export const TASK_DETAIL_REFRESH_EVENT = "moduo:task:detail:refresh";
 
-/** The entity types "Linked +" offers (tasks relate to tasks through Blocked by). */
-const LINKABLE_TYPES = ["note", "contact", "company", "event"];
-
-export function TaskDetailPanel({
-  task,
-  buckets,
-  inbox,
-  canEdit,
-  onRequestCapture,
-  onSelectTask,
-  api,
-  runtime = null,
-  workspaceId = null,
-  onOpenEntity,
-}: Props) {
+export function TaskDetailPanel(props: Props) {
+  const { task, canEdit, onRequestCapture } = props;
+  // Every date and time in the panel redraws when Time & region changes (TV-D14).
+  useTimeRegion();
   if (!task) return <DetailEmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />;
   // Key on id so every local draft (title, revealed rows, feed fold) resets
   // when the selection changes.
-  return (
-    <DetailBody
-      key={task.id}
-      task={task}
-      buckets={buckets}
-      inbox={inbox}
-      canEdit={canEdit}
-      onSelectTask={onSelectTask}
-      api={api}
-      runtime={runtime}
-      workspaceId={workspaceId}
-      onOpenEntity={onOpenEntity}
-    />
-  );
+  return <DetailBody key={task.id} {...props} task={task} />;
 }
 
 function DetailBody({
@@ -109,24 +112,20 @@ function DetailBody({
   inbox,
   canEdit,
   onSelectTask,
+  onOpenTask,
   api,
-  runtime,
-  workspaceId,
-  onOpenEntity,
-}: {
-  task: Task;
-  buckets: Bucket[];
-  inbox: Bucket | null;
-  canEdit: boolean;
-  onSelectTask: (id: string) => void;
-  api: TasksModuleApi;
-  runtime: ModuoRuntime | null;
-  workspaceId: string | null;
-  onOpenEntity?: (ref: EntityRef) => void;
-}) {
-  // Subtasks are one level (spec §11): a live parent makes this a subtask, and
-  // only top-level tasks offer the subtask list.
+  runtime = null,
+  workspaceId = null,
+  onOpenFullPage,
+  onCloseFullPage,
+  layout = "panel",
+  claimSlot,
+  onSaveAsTemplate,
+}: Props & { task: Task }) {
+  // Subtasks are one level (spec §1): a live parent makes this a subtask, and
+  // only top-level tasks have a Subtasks collection.
   const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
+  const openTask = onOpenTask ?? onSelectTask;
   const mySeconds = useTaskTimeShare(
     runtime,
     workspaceId,
@@ -135,44 +134,52 @@ function DetailBody({
     task.timeSpentSeconds,
   );
   const done = task.status === "done";
+  const waiting = api.waiting.filter((w) => w.taskId === task.id);
+  const [waitingOpen, setWaitingOpen] = useState(false);
+  const bucket = buckets.find((b) => b.id === task.bucketId) ?? null;
+  // Full access to the project deletes anyone's comment (the server decides;
+  // the owner is the one we can tell here).
+  const canRemoveAny =
+    canEdit && !!bucket && !bucket.isSystem && bucket.ownerId === api.currentUserId;
+  const projects = buckets.filter((b) => !b.isSystem && !b.archivedAt);
+  // A task still on its way to the server (a `tmp-` id) has no files, links
+  // or comments to read yet: those reads wait for its real id (the body
+  // remounts on it, keyed above), so nothing asks the server about an id it
+  // never heard of (a new person's teaching tasks open the panel at once).
+  const readRuntime = isUnsavedTaskId(task.id) ? null : runtime;
 
-  // ── linked-entity hub (DF-8: Tasks joins the spine) ──────────────────────────
+  // ── attachments (AT-2): one self-contained section ─────────────────────────
+  const files = useAttachmentsSection({
+    runtime: readRuntime,
+    // The task's own workspace: that's where its files live.
+    workspaceId: workspaceId ? task.workspaceId || workspaceId : null,
+    entity: { type: "task", id: task.id },
+    userId: api.currentUserId ?? null,
+    canEdit,
+    // Live (AT-3): a teammate's upload or delete shows without reopening.
+    refreshStamp: api.attachmentStamps?.get(task.id) ?? null,
+  });
+  const dropScroll = cn(
+    "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
+    files.dropActive && DROP_TARGET,
+  );
+
+  // ── linked items (DF-8, as reference cards since TV-U13) ───────────────────
   const hubFocus: EntityRef = { type: "task", id: task.id };
-  const hub = useEntityHub(runtime, workspaceId, hubFocus);
+  const hub = useEntityHub(readRuntime, workspaceId, hubFocus);
   const hubReload = hub.reload;
-  const showHub = !!runtime && !!workspaceId;
-  // A drag-onto-hub link is persisted by the enclosing page's DndContext; re-pull
-  // so the new edge shows without a re-select (NO-7b parity).
+  const showHub = !!readRuntime && !!workspaceId;
   useEffect(() => {
     if (!showHub) return;
     const onRefresh = () => hubReload();
     window.addEventListener(TASK_DETAIL_REFRESH_EVENT, onRefresh);
     return () => window.removeEventListener(TASK_DETAIL_REFRESH_EVENT, onRefresh);
   }, [showHub, hubReload]);
-  const openLinkedEntity =
-    onOpenEntity ??
-    ((ref: EntityRef) =>
-      window.dispatchEvent(
-        new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }),
-      ));
-  const onChangeLinkKind =
-    canEdit && runtime && workspaceId
-      ? (link: EntityLink, kind: RelationKind) =>
-          void runtime.spine
-            .setLinkKind({ workspaceId, linkId: link.id, relationKind: kind })
-            .then(hubReload)
-      : undefined;
-  const onUnlink =
-    canEdit && runtime && workspaceId
-      ? (link: EntityLink) =>
-          void runtime.spine.deleteLink({ workspaceId, linkId: link.id }).then(hubReload)
-      : undefined;
-  const linkedCount = hub.sections.reduce((n, s) => n + s.count, 0);
+  const linkedRows = hub.sections.flatMap((s) => s.rows);
   const linkEntity = (ref: EntityRef, label: string, icon: string | null) => {
     if (!runtime || !workspaceId) return;
     void (async () => {
-      // An edge that already exists isn't news: a fresh Undo toast on it would
-      // delete a link the person didn't make just now (FX-9 parity).
+      // An edge that already exists isn't news (FX-9 parity).
       try {
         const links = await runtime.spine.listLinks({
           workspaceId,
@@ -203,116 +210,217 @@ function DetailBody({
     })();
   };
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TaskDetailHeader
+  const title = (
+    <div className="flex items-start gap-2">
+      <CompleteToggle
+        done={done}
+        disabled={!canEdit}
+        onToggle={() => api.toggleDone(task)}
+        className="mt-1"
+      />
+      <TitleField
         task={task}
-        parent={parent}
-        buckets={buckets}
-        inbox={inbox}
         canEdit={canEdit}
         api={api}
-        onSelectTask={onSelectTask}
+        size={layout === "page" ? "page" : "lead"}
       />
+    </div>
+  );
+  const closedLine =
+    task.status === "archived" ? (
+      <WontDoLine canEdit={canEdit} onReopen={() => api.patchTask(task.id, { status: "todo" })} />
+    ) : taskCategoryOf(task) === "done" ? (
+      <DoneLine task={task} />
+    ) : null;
+  const properties = (
+    <TaskDetailProperties
+      task={task}
+      api={api}
+      canEdit={canEdit}
+      mySeconds={mySeconds}
+      projects={projects}
+      waitingShown={waiting.length > 0 || waitingOpen}
+      onRevealWaiting={() => setWaitingOpen(true)}
+    />
+  );
+  const description = (
+    <>
+      <TaskDescription
+        task={task}
+        api={api}
+        canEdit={canEdit}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        foldable={layout === "panel"}
+        onFiles={files.onEditorFiles}
+      />
+      <AttachmentsSection state={files} className="mt-1" />
+    </>
+  );
+  const collections = (
+    <div className="flex flex-col gap-3">
+      {!parent ? (
+        <SubtasksSection task={task} canEdit={canEdit} onOpenTask={openTask} api={api} />
+      ) : null}
+      {waiting.length > 0 || waitingOpen ? (
+        <WaitingSection
+          task={task}
+          entries={waiting}
+          canEdit={canEdit}
+          api={api}
+          defaultOpen={waitingOpen && waiting.length === 0}
+        />
+      ) : null}
+      <BlockedBySection task={task} canEdit={canEdit} onOpenTask={openTask} api={api} />
+      <BlocksSection task={task} onOpenTask={openTask} api={api} />
+      {showHub ? (
+        <LinkedSection
+          rows={linkedRows}
+          status={hub.status}
+          canEdit={canEdit}
+          runtime={runtime}
+          workspaceId={workspaceId}
+          onLink={linkEntity}
+          onUnlink={(row) => {
+            if (!runtime || !workspaceId) return;
+            void runtime.spine
+              .deleteLink({ workspaceId, linkId: row.link.id })
+              .then(hubReload)
+              .catch(sayUnlinkFailed);
+          }}
+          onRetry={hubReload}
+        />
+      ) : null}
+    </div>
+  );
+  const feed = (
+    <TaskFeed
+      task={task}
+      api={api}
+      runtime={readRuntime}
+      workspaceId={workspaceId}
+      canRemoveAny={canRemoveAny}
+    />
+  );
+  const header = (
+    <TaskDetailHeader
+      task={task}
+      parent={parent}
+      buckets={buckets}
+      inbox={inbox}
+      canEdit={canEdit}
+      api={api}
+      onOpenTask={openTask}
+      onSelectTask={onSelectTask}
+      onOpenFullPage={onOpenFullPage}
+      onCloseFullPage={onCloseFullPage}
+      claimSlot={claimSlot}
+      onSaveAsTemplate={onSaveAsTemplate ? () => onSaveAsTemplate(task) : undefined}
+    />
+  );
+
+  if (layout === "page") {
+    // Two columns once the centre is wide enough (≈880 px); one below.
+    return (
+      // A drop or paste anywhere on the task attaches the files; the
+      // description editor hands its own to `onFiles` (Lexical owns those).
+      <section
+        aria-label="Task details"
+        className="@container flex h-full min-h-0 flex-col"
+        data-layout="page"
+        {...files.dropZone}
+      >
+        {header}
+        <div
+          data-drop-active={files.dropActive || undefined}
+          className={cn(dropScroll, "px-1 pt-3 pb-6")}
+        >
+          <div className="flex flex-col gap-6 @4xl:flex-row @4xl:items-start">
+            <div className="flex min-w-0 max-w-180 flex-1 flex-col gap-5">
+              <div className="flex flex-col gap-1.5">
+                {title}
+                <AgentSessionLines
+                  taskId={task.id}
+                  workspaceId={task.workspaceId}
+                  sessions={api.agentSessions}
+                  userId={api.currentUserId}
+                  runtime={runtime}
+                />
+              </div>
+              <div className="flex flex-col gap-3 @4xl:hidden">
+                {closedLine}
+                {properties}
+              </div>
+              <div className="pl-6">{description}</div>
+              {collections}
+              <Separator className="bg-hairline" />
+              {feed}
+            </div>
+            <aside
+              aria-label="Properties"
+              className="hidden w-70 shrink-0 flex-col gap-3 @4xl:sticky @4xl:top-0 @4xl:flex"
+            >
+              {closedLine}
+              {properties}
+            </aside>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    // A drop or paste anywhere on the task attaches the files; the description
+    // editor hands its own to `onFiles` (Lexical owns those events).
+    <section
+      aria-label="Task details"
+      className="@container flex h-full min-h-0 flex-col"
+      data-layout="panel"
+      {...files.dropZone}
+    >
+      {header}
       {/* px/py inset so a focused field's ring isn't clipped by this scroll box */}
-      <div className="pane-scroll min-h-0 flex-1 overflow-y-auto px-1 pt-2.5 pb-4">
+      <div
+        data-drop-active={files.dropActive || undefined}
+        className={cn(dropScroll, "px-1 pt-2.5 pb-4")}
+      >
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-start gap-2">
-              <CompleteToggle
-                done={done}
-                disabled={!canEdit}
-                onToggle={() => api.toggleDone(task)}
-                className="mt-1"
-              />
-              <TitleField task={task} canEdit={canEdit} api={api} />
-            </div>
-            {/* Description: no reserved box; `@` / `/` link entities inline (DF-23). */}
-            {canEdit || task.description.trim() ? (
-              <div className="pl-6">
-                <EntityTextEditor
-                  value={task.description}
-                  editable={canEdit}
-                  runtime={runtime}
-                  workspaceId={workspaceId}
-                  source={{ type: "task", id: task.id }}
-                  sourceLabel={task.title}
-                  sourceIcon="task"
-                  ariaLabel="Description"
-                  placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
-                  className="min-h-6 text-base text-foreground/85"
-                  placeholderClassName="text-base"
-                  onCommit={(html) => {
-                    if (html !== task.description) api.patchTask(task.id, { description: html });
-                  }}
-                />
-              </div>
-            ) : null}
+            {title}
+            <AgentSessionLines
+              taskId={task.id}
+              workspaceId={task.workspaceId}
+              sessions={api.agentSessions}
+              userId={api.currentUserId}
+              runtime={runtime}
+            />
           </div>
-
-          <TaskDetailProperties task={task} api={api} canEdit={canEdit} mySeconds={mySeconds} />
-
-          <div className="flex flex-col gap-2">
-            {!parent ? (
-              <SubtasksSection
-                task={task}
-                canEdit={canEdit}
-                onSelectTask={onSelectTask}
-                api={api}
-              />
-            ) : null}
-            <BlockedBySection task={task} canEdit={canEdit} onSelectTask={onSelectTask} api={api} />
-            <BlocksSection task={task} onSelectTask={onSelectTask} api={api} />
-            {showHub && (canEdit || linkedCount > 0 || hub.status === "error") ? (
-              <div>
-                <CollectionHeader
-                  label="Linked"
-                  count={linkedCount}
-                  action={
-                    canEdit ? (
-                      <EntityLinkPicker
-                        runtime={runtime}
-                        workspaceId={workspaceId}
-                        types={LINKABLE_TYPES}
-                        placeholder="Link a note, contact, event…"
-                        emptyLabel="Nothing to link."
-                        trigger={<IconButton icon={Plus} label="Link something" />}
-                        onPick={(c) => {
-                          if (c.kind === "entity") linkEntity(c.ref, c.label, c.icon);
-                        }}
-                      />
-                    ) : null
-                  }
-                />
-                {linkedCount > 0 || hub.status === "error" ? (
-                  <EntityHub
-                    variant="rail"
-                    status={hub.status}
-                    sections={hub.sections}
-                    canEdit={canEdit}
-                    onOpen={openLinkedEntity}
-                    onChangeKind={onChangeLinkKind}
-                    onUnlink={onUnlink}
-                    onRetry={hubReload}
-                  />
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
+          {closedLine}
+          {properties}
+          <div className="pl-6">{description}</div>
+          {collections}
           <Separator className="bg-hairline" />
-
-          <TaskFeed task={task} api={api} runtime={runtime} workspaceId={workspaceId} />
+          {feed}
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
 // ── title ─────────────────────────────────────────────────────────────────────
 
 /** The title, wrapping and growing with its text; Enter or blur saves, Esc reverts. */
-function TitleField({ task, canEdit, api }: { task: Task; canEdit: boolean; api: TasksModuleApi }) {
+function TitleField({
+  task,
+  canEdit,
+  api,
+  size,
+}: {
+  task: Task;
+  canEdit: boolean;
+  api: TasksModuleApi;
+  size: "lead" | "page";
+}) {
   const [title, setTitle] = useState(task.title);
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -356,309 +464,133 @@ function TitleField({ task, canEdit, api }: { task: Task; canEdit: boolean; api:
         }
       }}
       className={cn(
-        detailTitleVariants({ size: "lead" }),
+        detailTitleVariants({ size }),
+        size === "page" && "font-semibold leading-snug tracking-tight",
         "min-w-0 flex-1 resize-none overflow-hidden rounded-md bg-transparent outline-none",
         "focus-visible:ring-2 focus-visible:ring-ring/50",
-        task.status === "done" && "text-muted-foreground",
+        isClosedTask(task) && "text-muted-foreground",
       )}
     />
   );
 }
 
-// ── collections ───────────────────────────────────────────────────────────────
+// ── state lines ───────────────────────────────────────────────────────────────
 
-/** Every collection's header: label · count · + (comp §1). */
-function CollectionHeader({
-  label,
-  count,
-  action,
-}: {
-  label: string;
-  count: React.ReactNode;
-  action?: React.ReactNode;
-}) {
+/** "Done Oct 9 by Alex" (the completion record, call 77). */
+function DoneLine({ task }: { task: Task }) {
+  const { byId, currentUserId } = useAssignees();
+  const by = task.completedBy
+    ? task.completedBy === currentUserId
+      ? "you"
+      : ((byId(task.completedBy)?.fullName || byId(task.completedBy)?.name) ?? null)
+    : null;
+  const when = task.completedAt ? formatDate(task.completedAt) : null;
   return (
-    <div className="flex h-(--ctrl-h-sm) items-center gap-1.5 font-display text-sm font-medium text-foreground">
-      <span>{label}</span>
-      <span className="font-sans font-normal text-muted-foreground tabular-nums">{count}</span>
-      {action ? <span className="ml-auto flex items-center">{action}</span> : null}
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted px-2 py-1.5 font-sans text-sm text-muted-foreground">
+      <Check className="size-icon-sm shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1">
+        Done{when ? ` ${when}` : ""}
+        {by ? ` by ${by}` : ""}
+      </span>
     </div>
   );
 }
 
-function SubtasksSection({
-  task,
+/**
+ * A Won't do task reads as one, with Reopen right there (TV-P0, AC1.4):
+ * Won't do ends a task without doing it, and it can always come back.
+ */
+function WontDoLine({ canEdit, onReopen }: { canEdit: boolean; onReopen: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-muted px-2 py-1.5 font-sans text-sm text-muted-foreground">
+      <Ban className="size-icon-sm shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1">Won’t do</span>
+      {canEdit ? (
+        <Button variant="ghost" size="sm" onClick={onReopen}>
+          <RotateCcw aria-hidden />
+          Reopen
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A link to a task you can't open (TV-P0, AC1.10): "Private item", never
+ * another task in its place, no title, no project, never "Inbox".
+ */
+export function PrivateItemPanel({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
+      <Lock className="size-icon text-muted-foreground" aria-hidden />
+      <p className="font-display text-sm text-foreground">Private item</p>
+      <p className="text-xs text-muted-foreground">
+        Ask someone in its project to share it with you.
+      </p>
+      <Button variant="ghost" size="sm" className="mt-1" onClick={onBack}>
+        Back to your tasks
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * A task that is gone (TV-U13, research §12): the registry tells a deleted
+ * one ("Deleted task" · who and when · Restore when you can edit) from one
+ * you can't see ("Private item"). Anything else reads as private: nothing
+ * about the task leaks either way.
+ */
+export function TaskGonePanel({
+  taskId,
+  api,
   canEdit,
-  onSelectTask,
-  api,
+  onBack,
 }: {
-  task: Task;
+  taskId: string;
+  api: TasksModuleApi;
   canEdit: boolean;
-  onSelectTask: (id: string) => void;
-  api: TasksModuleApi;
+  onBack: () => void;
 }) {
-  const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
-  const subtasks = api.subtasksByParent.get(task.id) ?? [];
-  const progress = api.subtaskProgressByTask.get(task.id);
-
-  if (subtasks.length === 0 && !canEdit) return null;
-
-  const submit = () => {
-    const next = draft.trim();
-    if (next) api.addSubtask(task.id, next);
-    setDraft("");
-  };
-
+  const state = useReference({ type: "task", id: taskId });
+  const [deletion, setDeletion] = useState<ActivityEntry | null>(null);
+  const { loadActivity, currentUserId } = api;
+  const deleted = state?.status === "deleted";
+  useEffect(() => {
+    if (!deleted) return;
+    let live = true;
+    void loadActivity(taskId)
+      .then((rows) => {
+        if (live) setDeletion(rows.find((r) => r.op === "tasks.delete") ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [deleted, loadActivity, taskId]);
+  if (!deleted) return <PrivateItemPanel onBack={onBack} />;
   return (
-    <div>
-      <CollectionHeader
-        label="Subtasks"
-        count={progress && progress.total > 0 ? `${progress.done}/${progress.total}` : 0}
-        action={
-          canEdit ? (
-            <IconButton icon={Plus} label="Add subtask" onClick={() => setAdding(true)} />
-          ) : null
-        }
-      />
-      {subtasks.length > 0 ? (
-        <div className="flex flex-col">
-          {subtasks.map((subtask) => (
-            <SubtaskRow
-              key={subtask.id}
-              subtask={subtask}
-              canEdit={canEdit}
-              onSelect={() => onSelectTask(subtask.id)}
-              api={api}
-            />
-          ))}
-        </div>
+    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
+      <Trash2 className="size-icon text-muted-foreground" aria-hidden />
+      <p className="font-display text-sm text-foreground">Deleted task</p>
+      {deletion ? (
+        <p className="text-xs text-muted-foreground">
+          {activityActorName(deletion, currentUserId)} deleted this · {feedTime(deletion.createdAt)}
+        </p>
       ) : null}
-      {canEdit && adding ? (
-        <Input
-          autoFocus
-          size="sm"
-          value={draft}
-          placeholder="Add a subtask…"
-          aria-label="New subtask title"
-          className="mt-1"
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit(); // stays open for rapid entry
-            } else if (e.key === "Escape") {
-              setDraft("");
-              setAdding(false);
-            }
-          }}
-          onBlur={() => {
-            submit();
-            setAdding(false);
-          }}
-        />
-      ) : null}
+      <div className="mt-1 flex gap-1">
+        {canEdit ? (
+          <Button variant="secondary" size="sm" onClick={() => void api.restoreTask(taskId)}>
+            <RotateCcw aria-hidden />
+            Restore
+          </Button>
+        ) : null}
+        <Button variant="ghost" size="sm" onClick={onBack}>
+          Back to your tasks
+        </Button>
+      </div>
     </div>
   );
 }
-
-function SubtaskRow({
-  subtask,
-  canEdit,
-  onSelect,
-  api,
-}: {
-  subtask: Task;
-  canEdit: boolean;
-  onSelect: () => void;
-  api: TasksModuleApi;
-}) {
-  const done = subtask.status === "done";
-  const queued = api.queuedTaskIds.has(subtask.id);
-  return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
-      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
-      <button
-        type="button"
-        onClick={onSelect}
-        className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
-          done ? "text-muted-foreground line-through" : "text-foreground",
-        )}
-      >
-        {subtask.title || "Untitled"}
-      </button>
-      {/* individually queueable: start a scary task through its smallest step */}
-      {(canEdit && !done) || queued ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              disabled={!canEdit}
-              aria-label={queued ? "Remove from queue" : "Add to queue"}
-              aria-pressed={queued}
-              onClick={() => api.toggleQueue(subtask.id)}
-              className={cn(
-                "flex size-5 shrink-0 items-center justify-center rounded transition-opacity duration-(--motion-fade) ease-(--ease-out)",
-                "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                queued
-                  ? "text-primary"
-                  : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground",
-              )}
-            >
-              <ListChecks className="size-icon-sm" aria-hidden />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>{queued ? "Queued. Click to remove" : "Add to queue"}</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </div>
-  );
-}
-
-function BlockedBySection({
-  task,
-  canEdit,
-  onSelectTask,
-  api,
-}: {
-  task: Task;
-  canEdit: boolean;
-  onSelectTask: (id: string) => void;
-  api: TasksModuleApi;
-}) {
-  // Edges, never a stored status (spec §5c).
-  const blockers = api.blockersByTask.get(task.id) ?? [];
-  if (blockers.length === 0 && !canEdit) return null;
-  return (
-    <div>
-      <CollectionHeader
-        label="Blocked by"
-        count={blockers.length}
-        action={canEdit ? <BlockerPicker task={task} api={api} /> : null}
-      />
-      {blockers.map((blocker) => (
-        <RelatedTaskRow
-          key={blocker.id}
-          task={blocker}
-          onSelect={() => onSelectTask(blocker.id)}
-          onRemove={canEdit ? () => api.removeBlocker(task.id, blocker.id) : undefined}
-        />
-      ))}
-    </div>
-  );
-}
-
-function BlocksSection({
-  task,
-  onSelectTask,
-  api,
-}: {
-  task: Task;
-  onSelectTask: (id: string) => void;
-  api: TasksModuleApi;
-}) {
-  const dependents = api.dependentsByTask.get(task.id) ?? [];
-  if (dependents.length === 0) return null;
-  return (
-    <div>
-      <CollectionHeader label="Blocks" count={dependents.length} />
-      {dependents.map((d) => (
-        <RelatedTaskRow key={d.id} task={d} onSelect={() => onSelectTask(d.id)} />
-      ))}
-    </div>
-  );
-}
-
-/** A quiet related-task row: click-through title, optional ✕ (removes the
- * edge, never the task). Done tasks render struck through. */
-function RelatedTaskRow({
-  task,
-  onSelect,
-  onRemove,
-}: {
-  task: Task;
-  onSelect: () => void;
-  onRemove?: () => void;
-}) {
-  const closed = task.status === "done" || task.status === "archived";
-  return (
-    <div className="group flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover">
-      <CircleDashed className="size-icon-sm shrink-0 text-muted-foreground/70" aria-hidden />
-      <button
-        type="button"
-        onClick={onSelect}
-        className={cn(
-          "min-w-0 flex-1 truncate text-left font-sans text-base",
-          closed ? "text-muted-foreground line-through" : "text-foreground",
-        )}
-      >
-        {task.title || "Untitled"}
-      </button>
-      {onRemove ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="Remove dependency"
-              onClick={onRemove}
-              className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover:opacity-100"
-            >
-              <X className="size-icon-sm" aria-hidden />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Remove dependency (keeps the task)</TooltipContent>
-        </Tooltip>
-      ) : null}
-    </div>
-  );
-}
-
-/** Searchable picker for a new blocker: open, live tasks only; tasks that
- * would close a cycle are left out (the hook + DB trigger backstop). */
-function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
-  const [open, setOpen] = useState(false);
-  const currentBlockerIds = new Set((api.blockersByTask.get(task.id) ?? []).map((b) => b.id));
-  const candidates = api.tasks.filter(
-    (t) =>
-      t.id !== task.id &&
-      t.status !== "done" &&
-      t.status !== "archived" &&
-      !currentBlockerIds.has(t.id) &&
-      !wouldCreateCycle(t.id, task.id, api.taskRelations),
-  );
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <IconButton icon={Plus} label="Add blocker" />
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-0" align="end">
-        <Command>
-          <CommandInput placeholder="Blocked by…" />
-          <CommandList>
-            <CommandEmpty>No matching open tasks.</CommandEmpty>
-            <CommandGroup>
-              {candidates.map((t) => (
-                <CommandItem
-                  key={t.id}
-                  value={`${t.title || "Untitled"} ${t.id}`}
-                  onSelect={() => {
-                    api.addBlocker(task.id, t.id);
-                    setOpen(false);
-                  }}
-                >
-                  <span className="min-w-0 flex-1 truncate">{t.title || "Untitled"}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-// ── empty / teaching state ─────────────────────────────────────────────────────
 
 function DetailEmptyState({
   canEdit,
@@ -668,22 +600,24 @@ function DetailEmptyState({
   onRequestCapture: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 px-2 text-center">
-      <p className="font-display text-sm text-foreground">No task selected</p>
-      <p className="text-xs text-muted-foreground">Pick a task to see and edit its details here.</p>
-      {canEdit ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Press <Kbd>c</Kbd> to{" "}
-          <button
-            type="button"
-            onClick={onRequestCapture}
-            className="underline-offset-2 hover:text-foreground hover:underline"
-          >
-            capture
-          </button>{" "}
-          a new one.
-        </p>
-      ) : null}
-    </div>
+    <EmptyState
+      title="Select a task"
+      description="↑↓ to move · ⏎ to open"
+      hint={
+        canEdit ? (
+          <>
+            Press <Kbd>c</Kbd> to {/* A link inside the sentence: a Button would break the line. */}
+            <button
+              type="button"
+              onClick={() => onRequestCapture()}
+              className="rounded-sm underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              capture
+            </button>{" "}
+            a new one.
+          </>
+        ) : undefined
+      }
+    />
   );
 }

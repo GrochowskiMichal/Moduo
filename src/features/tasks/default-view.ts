@@ -1,22 +1,13 @@
-// Default-view logic for the Tasks module (spec §9).
+// Default-view logic for the Tasks module.
 //
-// On opening Tasks we never drop the user into the full cross-bucket list.
-// Instead we resolve, in order:
-//   1. the bucket mapped to the current time-of-day block (if any time-blocks
-//      are defined for this workspace), then
-//   2. the last-opened bucket, then
-//   3. the Inbox.
-// The view (List / Board) restores to whatever was used last.
-//
-// Time-blocks are a quiet, opt-in planning aid: a user assigns a bucket to a
-// slot via that bucket's "…" menu in the rail. At most one bucket per slot.
-// No editor surface beyond that menu — the feature stays invisible until used.
-//
-// Time-blocks are workspace data (the `task_time_blocks` table, loaded through
-// `runtime.tasks.getTimeBlocks` alongside the bundle). The rest of the state
-// here — mode / selection / grouping — is a per-device view preference and
-// stays in localStorage.
+// Tasks opens where you left it (REPLAN 30, TV-U6): the last sidebar place
+// you had open (a project, the Inbox, Focus, Upcoming, My tasks or All), else
+// the Inbox. The first open follows onboarding (TV-U17). "Open at" (a project
+// per time of day) is retired from the sidebar; its data stays until TV-D7.
+// The view (List / Board) restores to whatever was used last. Mode, selection
+// and grouping are per-device view preferences in localStorage.
 
+import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
 import { type Task, TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
 
 export { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot };
@@ -64,63 +55,63 @@ export function timeBlockByBucket(map: TimeBlockMap): Map<string, TimeBlockSlot>
   return out;
 }
 
+/** The sidebar places Tasks can reopen besides a project (REPLAN 30). */
+export const REOPENABLE_SCOPES = ["inbox", "today", "upcoming", "mine", "all"] as const;
+
 type ResolveParams = {
-  now?: Date;
-  timeBlocks: TimeBlockMap;
-  /** "inbox" | bucketId from a prior session, or null. */
+  /** The sidebar place you had open last (a scope or a project id), or null. */
   lastBucket: string | null;
-  /** Every live bucket id (user buckets + Inbox). */
+  /** Every live project id (the Inbox's too). */
   bucketIds: string[];
   inboxId: string | null;
+  /** Where a first open goes (the role's first view, TV-U17); else the Inbox. */
+  firstOpen?: string | null;
 };
 
+function reopenable(place: string | null | undefined, bucketIds: string[]): place is string {
+  if (!place) return false;
+  return (REOPENABLE_SCOPES as readonly string[]).includes(place) || bucketIds.includes(place);
+}
+
 /**
- * Resolve which selection to open Tasks on. Returns "inbox" or a concrete
- * bucketId — never "all" / "today" (spec §9.4: never the full list first).
+ * Where Tasks opens: where you left it, when that's still there (REPLAN 30);
+ * a first open follows onboarding (the role's first view, TV-U17); else the
+ * Inbox. A project that's gone, archived or out of reach falls back.
  */
 export function resolveDefaultSelection({
-  now = new Date(),
-  timeBlocks,
   lastBucket,
   bucketIds,
   inboxId,
+  firstOpen,
 }: ResolveParams): string {
-  const known = new Set(bucketIds);
-
-  // 1. Time-block mapped bucket for the current slot (if it still exists).
-  const slotBucket = timeBlocks[currentTimeBlockSlot(now)];
-  if (slotBucket && known.has(slotBucket)) {
-    return slotBucket === inboxId ? "inbox" : slotBucket;
-  }
-
-  // 2. Last-opened bucket (if it still exists). "inbox" is always valid.
-  if (lastBucket === "inbox") return "inbox";
-  if (lastBucket && known.has(lastBucket)) {
-    return lastBucket === inboxId ? "inbox" : lastBucket;
-  }
-
-  // 3. Fallback.
-  return "inbox";
+  // A first open has nothing remembered; a remembered place that's gone is
+  // still not a first open.
+  const place = reopenable(lastBucket, bucketIds)
+    ? lastBucket
+    : !lastBucket && reopenable(firstOpen, bucketIds)
+      ? firstOpen
+      : null;
+  if (!place) return "inbox";
+  return place === inboxId ? "inbox" : place;
 }
 
-// ── My tasks (tasks-v2 §1, TV-D4) ────────────────────────────────────────────
-
-/** The "My tasks" rail row exists only where there's someone else to tell apart. */
-export function showsMyTasks(activeMemberCount: number): boolean {
-  return activeMemberCount >= 2;
-}
+// ── My tasks (tasks-v2 §1, TV-D4; in every workspace since TV-U15) ──────────
 
 /**
  * The "My tasks" scope: tasks assigned to me, across buckets. Like All it
- * leaves archived tasks out and keeps done ones (TV-U1 hides completed tasks
- * everywhere by default).
+ * leaves Won't do tasks out and keeps done ones (TV-U1 hides completed tasks
+ * everywhere by default); Backlog sits out too (TV-D9, REPLAN 53: the folded
+ * "Backlog · n" line is TV-U15's).
  */
 export function myTasksScope(tasks: Task[], userId: string | null): Task[] {
   if (!userId) return [];
-  return tasks.filter((t) => t.assigneeId === userId && t.status !== "archived");
+  return tasks.filter(
+    (t) => t.assigneeId === userId && t.status !== "archived" && !isBacklogTask(t),
+  );
 }
 
-/** Open (not done, not archived) tasks in a list: a rail row's count. */
+/** Open (To do / In progress) tasks in a list: a rail row's count. Backlog,
+ *  Done and Won't do don't count. */
 export function openCount(tasks: Task[]): number {
-  return tasks.filter((t) => t.status !== "done" && t.status !== "archived").length;
+  return tasks.filter((t) => isOpenTask(t)).length;
 }

@@ -4,9 +4,11 @@ export const SETTINGS_SECTION_IDS = [
   "billing",
   "workspace",
   "access",
+  "storage",
   "integrations",
   "apikeys",
   "preferences",
+  "timeregion",
   "focus",
   "advanced",
   "about",
@@ -17,8 +19,11 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 // The grouped nav (DF-19a). Every section id lives in exactly one group; the
 // nav renders groups in this order, sections in each group's `ids` order.
 export const SETTINGS_GROUPS = [
-  { label: "Personal", ids: ["account", "billing", "appearance", "preferences", "focus"] },
-  { label: "Workspace", ids: ["workspace", "access", "integrations", "apikeys"] },
+  {
+    label: "Personal",
+    ids: ["account", "billing", "appearance", "preferences", "timeregion", "focus"],
+  },
+  { label: "Workspace", ids: ["workspace", "access", "storage", "integrations", "apikeys"] },
   { label: "App", ids: ["advanced", "about"] },
 ] as const satisfies ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[] }>;
 
@@ -64,6 +69,18 @@ export function pendingOpenSettings(now: number = Date.now()): SettingsOpenDetai
 /** The user dismissed the modal — a sticky dispatch must not re-open it. */
 export function clearPendingOpenSettings() {
   pendingOpen = null;
+}
+
+export const SETTINGS_CLOSE_EVENT = "moduo:settings:close";
+
+/**
+ * Close Settings from inside it, on the way somewhere else (Storage's task
+ * name opens that task). Like a dismissal, it disarms a sticky open.
+ */
+export function dispatchCloseSettings() {
+  pendingOpen = null;
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(SETTINGS_CLOSE_EVENT));
 }
 
 export function isSettingsSectionId(value: unknown): value is SettingsSectionId {

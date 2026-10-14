@@ -1,16 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  useNotificationDetails,
+  useNotificationReferenceNames,
+} from "../features/spine/hooks/use-notification-labels";
 import {
   groupNotifications,
   type NotificationGroup,
   notificationDeepLink,
   notificationDeepLinkNoun,
+  notificationSubject,
   notificationSummary,
+  withNoticeDetails,
 } from "../features/spine/notifications";
 import { type OverdueItem, selectOverdueTasks } from "../features/spine/overdue-inbox";
 import { ENTITY_OPEN_EVENT } from "../lib/entity-open";
 import { usePreferencesValue } from "../lib/preferences";
 import { useShortcut } from "../lib/shortcuts";
+import { useStoreSnapshot, useWorkspaceStore } from "../lib/sync/react";
+import { formatDate } from "../lib/time-format";
 import { undoToast } from "../lib/undo-toast";
 import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
@@ -36,42 +44,33 @@ function relativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 /**
- * DF-21e — the opt-in overdue section. Fetches the workspace's tasks and derives
- * the passive drifted set, but ONLY when the user opted in AND the bell is open —
- * so the default (off) user pays nothing, and an opt-in user re-derives on each
- * open (so a task done/rescheduled elsewhere drops out). Never touches the badge.
+ * DF-21e — the opt-in overdue section: the passive drifted set, derived from
+ * the workspace's shared store (TV-D11a) — no read of its own, and live, so a
+ * task done or rescheduled elsewhere drops out. Only while the user opted in
+ * AND the bell is open. Never touches the badge.
  */
 function useOverdueInbox(enabled: boolean, open: boolean): OverdueItem[] {
   const { runtime, userId } = useAuth();
-  const { selectedWorkspaceId } = useWorkspace();
-  const [items, setItems] = useState<OverdueItem[]>([]);
-
-  useEffect(() => {
-    if (!enabled) {
-      setItems([]); // toggled off → clear immediately (vanishes, AC9)
-      return;
-    }
-    if (!open || !runtime || !selectedWorkspaceId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const bundle = await runtime.tasks.list(selectedWorkspaceId);
-        if (!cancelled) setItems(selectOverdueTasks(bundle.tasks, { enabled: true, userId }));
-      } catch {
-        if (!cancelled) setItems([]); // degrade quietly — the section just stays empty
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, open, runtime, selectedWorkspaceId, userId]);
-
-  return items;
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  const store = useWorkspaceStore(
+    runtime,
+    userId,
+    selectedWorkspaceId,
+    enabled && open && modulePermissions.tasks !== "none",
+  );
+  const { bundle } = useStoreSnapshot(store);
+  // Toggled off → empty at once (vanishes, AC9).
+  return useMemo(
+    () => (store ? selectOverdueTasks(bundle.tasks, { enabled: true, userId }) : NO_OVERDUE),
+    [store, bundle.tasks, userId],
+  );
 }
+
+const NO_OVERDUE: OverdueItem[] = [];
 
 export function NotificationCenter() {
   const { userId } = useAuth();
@@ -100,15 +99,29 @@ export function NotificationCenter() {
   const { notifications: notificationPrefs } = usePreferencesValue();
   const overdueItems = useOverdueInbox(notificationPrefs.overdueTasks, open);
 
-  const groups = useMemo(() => groupNotifications(notifications), [notifications]);
+  const rawGroups = useMemo(() => groupNotifications(notifications), [notifications]);
   const inviteGroups = useMemo(
     () => groupNotifications(workspaceInvitations),
     [workspaceInvitations],
   );
-  const historyGroups = useMemo(
+  const rawHistoryGroups = useMemo(
     () => groupNotifications(notificationHistory),
     [notificationHistory],
   );
+  // Notices name their items by id (TV-P0, TV-D16): every card's task, a
+  // comment's text and an unblocking task are looked up for this reader, and
+  // only what they can still see is filled in.
+  const rawAll = useMemo(() => [...rawGroups, ...rawHistoryGroups], [rawGroups, rawHistoryGroups]);
+  const details = useNotificationDetails(rawAll);
+  const groups = useMemo(() => withNoticeDetails(rawGroups, details), [rawGroups, details]);
+  const historyGroups = useMemo(
+    () => withNoticeDetails(rawHistoryGroups, details),
+    [rawHistoryGroups, details],
+  );
+  const allGroups = useMemo(() => [...groups, ...historyGroups], [groups, historyGroups]);
+  const labels = details.labels;
+  // A comment's excerpt names its references per reader (RF-1: "Private item").
+  const referenceName = useNotificationReferenceNames(allGroups);
   const badge = Math.min(unreadCountWorkspace, BADGE_CAP);
 
   const handleOpenChange = useCallback(
@@ -139,7 +152,7 @@ export function NotificationCenter() {
         setHistoryOpen(false);
         window.dispatchEvent(
           new CustomEvent(ENTITY_OPEN_EVENT, {
-            detail: { type: link.entityType, id: link.entityId },
+            detail: { type: link.entityType, id: link.entityId, workspaceId: link.workspaceId },
           }),
         );
       }
@@ -236,7 +249,12 @@ export function NotificationCenter() {
             <p
               className={`flex-1 text-sm ${unread ? "font-medium text-foreground" : "text-foreground"}`}
             >
-              {notificationSummary(group, userId)}
+              {notificationSummary(
+                group,
+                userId,
+                notificationSubject(group, labels),
+                referenceName,
+              )}
               {group.count > 1 ? (
                 <span className="ml-1 text-xs text-muted-foreground">×{group.count}</span>
               ) : null}
@@ -271,7 +289,7 @@ export function NotificationCenter() {
         </Card>
       );
     },
-    [activateGroup, handleDismiss, userId],
+    [activateGroup, handleDismiss, userId, labels, referenceName],
   );
 
   // Cap the passive overdue list so a big backlog never becomes a wall (quiet-core);

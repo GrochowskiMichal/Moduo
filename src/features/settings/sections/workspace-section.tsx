@@ -20,10 +20,13 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { normalizeWorkspaceIcon } from "../../branding/image-asset";
 import { clearWorkspaceLogo, uploadWorkspaceLogo } from "../../branding/upload-image";
+import { departureLines } from "../../tasks/project-overview";
 import { WorkspaceMark, WorkspaceMarkPicker } from "../../workspaces/ui/workspace-mark";
 
+import { useDepartureSummary } from "../access/departure";
 import { dispatchOpenSettings } from "../settings-events";
 import { SettingsSectionShell } from "./section-shell";
+import { TaskKeyField } from "./task-key-field";
 
 /** A labelled cluster (eyebrow above a card), mirroring the other settings sections. */
 function WsGroup({ label, children }: { label: string; children: ReactNode }) {
@@ -48,6 +51,7 @@ export function WorkspaceSection() {
     leaveWorkspace,
     renameWorkspace,
     updateWorkspaceBranding,
+    setTaskKey,
     softDeleteWorkspace,
     createWorkspace,
     selectWorkspace,
@@ -64,6 +68,17 @@ export function WorkspaceSection() {
   const [renaming, setRenaming] = useState(false);
   const [leaveConfirm, setLeaveConfirm] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  // What leaving hands on (AC5.6, REPLAN 78): read only while asking.
+  const { userId } = useAuth();
+  const myName = members.find((m) => m.userId === userId)?.displayName?.trim() || "Member";
+  const leaveSummary = useDepartureSummary(leaveConfirm ? userId : null);
+  const leaveLines = departureLines(leaveSummary, {
+    first: myName,
+    self: true,
+    receiver: "the workspace owner",
+    owner: "the workspace owner",
+    fromName: myName,
+  });
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -297,6 +312,15 @@ export function WorkspaceSection() {
             </div>
           </WsGroup>
 
+          {/* Task handles, MOD-142 (TV-D8). */}
+          <WsGroup label="Tasks">
+            <TaskKeyField
+              taskKey={selectedWorkspace.taskKey}
+              canEdit={isOwner}
+              onSave={(key) => setTaskKey(selectedWorkspace.id, key)}
+            />
+          </WsGroup>
+
           {/* People, roles and invites moved to Members and access (PERM-2). */}
           <WsGroup label="People">
             <div className="flex items-center justify-between gap-3">
@@ -334,6 +358,11 @@ export function WorkspaceSection() {
                       Leave <span className="font-semibold">{selectedWorkspace.name}</span>? You'll
                       lose access until someone invites you again.
                     </p>
+                    <ul className="flex list-disc flex-col gap-0.5 pl-4 text-xs text-muted-foreground">
+                      {leaveLines.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"

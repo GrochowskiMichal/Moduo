@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 
+import type { Section, Task } from "../model";
 import { TaskListView } from "./task-list-view";
 import {
   BUCKETS,
@@ -17,6 +18,34 @@ import {
 // shade and accent from the toolbar.
 
 const appTasks = TASKS.filter((t) => t.bucketId === "b-app");
+
+/** Handles for the Detailed stories (the server numbers tasks). */
+const numbered = (tasks: Task[]) => tasks.map((t, i) => ({ ...t, number: 140 + i }));
+
+const SECTIONS: Section[] = [
+  {
+    id: "s-design",
+    workspaceId: "w",
+    projectId: "b-app",
+    name: "Design",
+    position: 1,
+    startsOn: null,
+    endsOn: "2026-10-24",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    id: "s-build",
+    workspaceId: "w",
+    projectId: "b-app",
+    name: "Build",
+    position: 2,
+    startsOn: null,
+    endsOn: null,
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  },
+];
 
 function Interactive(props: React.ComponentProps<typeof TaskListView>) {
   const [selected, setSelected] = useState<string | null>(props.selectedTaskId);
@@ -43,7 +72,6 @@ const meta = {
     view: "list",
     onViewChange: () => {},
     groupBy: "none",
-    onGroupByChange: () => {},
     buckets: BUCKETS,
     inbox: INBOX,
     bucketNameById,
@@ -70,6 +98,58 @@ export const AllByBucket: Story = {
 /** All, flat: the bucket shows as dot + name text, never a pill. */
 export const AllFlat: Story = {
   args: { tasks: TASKS, scopeTitle: "All", selection: "all", groupBy: "status" },
+};
+
+/** Display → Group by → Date: Earlier · Today · Tomorrow · five day names · Later · No date. */
+export const ByDate: Story = {
+  args: { tasks: TASKS, scopeTitle: "All", selection: "all", groupBy: "date" },
+};
+
+/** Display → Rows → Detailed (TV-U10): the handle before the title, then
+ *  Project › Section, the status name, Due, Next session, time, the
+ *  assignee's name and Updated, under sortable headers; every column as wide
+ *  as its widest value, the title the one flexible track. Switch Density to
+ *  see the three heights (AC11.2's visual baselines are a human capture). */
+export const DetailedRows: Story = {
+  args: {
+    tasks: numbered(TASKS).map((t, i) => (i % 3 === 0 ? { ...t, sectionId: "s-design" } : t)),
+    rows: "detailed",
+    completed: "all",
+    taskKey: "MOD",
+    order: "due",
+    sections: SECTIONS,
+    onSort: () => {},
+    api: stubApi(numbered(TASKS), { sections: SECTIONS }),
+  },
+};
+
+/** A project grouped by Section (its default, TV-U10): "No section" first,
+ *  each section with "2 of 5" and its end date, the "+" always there, the
+ *  folded "Backlog · n" and "+ Add section" at the end. */
+export const BySection: Story = {
+  args: {
+    groupBy: "section",
+    sections: SECTIONS,
+    tasks: appTasks.map((t, i) => ({
+      ...t,
+      sectionId: i % 2 === 0 ? "s-design" : i % 3 === 0 ? "s-build" : null,
+      ...(i === 1 ? { statusCategory: "backlog" as const } : {}),
+    })),
+    onAddSection: () => {},
+    onRenameSection: () => {},
+    onDeleteSection: () => {},
+  },
+};
+
+/** A late row (REPLAN 23): muted, never red; hover or select it for
+ *  Move · Won't do · Break down over the end of its title. */
+export const LateRow: Story = {
+  args: {
+    tasks: appTasks.map((t, i) =>
+      i === 0 ? { ...t, dueOn: "2026-01-05", dueDate: "2026-01-05T00:00:00.000Z" } : t,
+    ),
+    selectedTaskId: appTasks[0]?.id ?? null,
+  },
 };
 
 /** Display → Completed: All — done rows dim as a whole except the checkbox. */

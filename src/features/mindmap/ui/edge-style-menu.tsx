@@ -43,7 +43,7 @@ export function EdgeStyleMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-40 w-[min(220px,calc(100vw-24px))] rounded-xl border border-[#2a2a2a] bg-[#141414]/95 p-2 shadow-2xl backdrop-blur-xl"
+      className="fixed z-40 w-[min(220px,calc(100vw-24px))] rounded-xl border border-[#2a2a2a] bg-[#141414]/95 p-2 shadow-2xl"
       style={{ left: menu.x, top: menu.y }}
       role="dialog"
       aria-label="Connection style menu"

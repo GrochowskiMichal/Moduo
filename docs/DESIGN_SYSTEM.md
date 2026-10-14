@@ -208,12 +208,17 @@ drives **both** roles to one family — so display vs. body differ by weight,
 size, and `tabular-nums`, not by typeface. The role split is kept so a distinct
 display face can return later without touching component code:
 
-- **Primary = `font-display`** — structure & app chrome: headings, section /
-  eyebrow labels, control labels, **buttons**, menu / select triggers, and
-  titles (task titles, page titles, the capture title + description).
+- **Primary = `font-display`** — structure & app chrome: page headings,
+  section / group / collection headers, control labels, **buttons**, menu /
+  select triggers.
 - **Secondary = body** (the default; use `font-sans` to force it back where a
-  primary ancestor would otherwise win) — content & context: dates, counters,
-  row meta / badges, contextual descriptions, the capture-modal footer.
+  primary ancestor would otherwise win) — content & context: **item titles**
+  (tasks, notes, threads: content, not chrome), select values, descriptions,
+  dates, counters, row meta / badges.
+- **An inline editor keeps the face and size of the text it edits** (DS-6): a
+  15 px body title stays a 15 px body title while you type in it.
+- This section used to file item titles under display while R4 and the ladder
+  section below filed them under body; R4 wins (DS-6, the §5.1 fix list #15).
 
 Rules:
 - **Buttons are always primary.** The `Button` primitive sets `font-display` in
@@ -310,13 +315,16 @@ Established during the Tasks rebuild; **reusable across modules** (Notes adopts 
   `CompleteToggle`, `EmptyState`. `TagChip` v2 = colored `#` + neutral name (no
   dot/pill); active filter chip = full-hue.
 
-### Motion (Session 11)
-Restrained + a **fade/micro-blur** signature. Tokens are load-bearing — no raw
+### Motion (Session 11; foundations re-set by SH-1, 2026-10-10)
+Quiet and quick, **no blur** (tasks-v3 call 81). Tokens are load-bearing — no raw
 ms/cubic. `--motion-fade` for opacity/color (survives reduced-motion at ~80ms);
-`--motion-*`/`--ease-*` for movement (zeroed under reduced-motion). `--blur-veil`
-for overlay/popover/mode-shift fade+blur-in (→0 reduced). One sanctioned delight:
-the check-off `.check-pop`. Reveal-on-hover **reserves space + fades opacity**
-(never `hidden`→`flex`, which reflows). No spring-heavy / sparkle / glow motion.
+`--motion-fast/base/slow` (100/180/280 ms) + `--ease-out`/`--ease-in` for
+movement (zeroed under reduced-motion). Four shared patterns in `global.css`:
+`.motion-panel`, `.motion-pop` (in the floating primitives), `.motion-row`,
+`.motion-view`; reduced motion leaves only opacity. No `backdrop-filter`. One
+sanctioned delight: the check-off `.check-pop`. Reveal-on-hover **reserves
+space + fades opacity** (never `hidden`→`flex`, which reflows). No spring-heavy /
+sparkle / glow motion. Full rule: DESIGN_RULES.md R6.
 
 ### Accent-usage policy (Session 11)
 Accent (`--primary`/`--ring`) appears ONLY on: (1) one primary action per surface
@@ -327,6 +335,36 @@ done-check; (5) status marks (chat attention, unread, calendar focus edge, today
 drop targets). The current destination of a rail or nav is neutral
 (`bg-state-active`), not selected. Segmented toggles, priority/energy, and chrome stay
 **neutral**. Verified AA on all 8 accents. Full rule: DESIGN_RULES.md R5.
+
+## North-star kit (DS-6, tasks-v3 block 8)
+
+The primitives every module builds on (re-plan §5.2; one-line contracts in
+`.design/tasks-v3/research/visual-audit.md` §C). Each lives in
+`src/components/ui/`, is listed in `src/components/ui/kit.ts`, and has a
+`Densities` story that renders it at the three density steps through
+`AtThreeDensities` (`kit-densities.tsx`). `kit.test.ts` fails on a missing
+story; `tests/visual/kit.spec.ts` opens each one and reads its tokens.
+
+| Group | Primitive (file) |
+| --- | --- |
+| Lists and cards | `Row` + `RowLead` / `RowTitle` / `RowMeta` / `RowColumns` / `RowColumn` (row) · `ItemCard` + `ItemCardTitle` / `ItemCardMeta` (item-card; the shadcn `Card` stays the panel box) · `GroupHeader` (group-header) · `MetaCount(s)` (meta-count) |
+| Properties | `PropertyRow` / `PropertyValue` (property-row) · `CollectionHeader` (collection-header) |
+| Navigation and toolbars | `NavRow` / `NavSectionHeader` (nav-row) · `Toolbar` (grammar: `title + count … Search · Filter · Display \| view switch \| one primary`, all ghost but the primary) · `FilterBar` (filter-bar) · `DisplayMenu` (display-menu) |
+| Chips and pickers | `Chip` / `ChipButton` / `PickerPill` (chip): one chip; rest = hairline ring, set = `state-active` fill |
+| Feedback and history | `EmptyState` (`size="page" \| "inline"`) · `FeedItem` / `FeedCard` / `FeedComposer` / `FeedComposerInput` (feed) |
+| Inputs and progress | `DateField` + `TimeInput` (date-field) · `NumberInput` (input) · `Progress` (neutral fill, `md` 6 px / `sm` 2 px) |
+| Identity | `PersonAvatar` (round, two initials, stable hue keyed on the id; `name={null}` = dashed "unassigned") · `TeamMark` (rounded square, two letters) · `initialsOf` / `teamLettersOf` / `avatarHue` (avatar) |
+| Shared recipes | `SELECTED_ROW` / `SELECTED_OPTION` (selection.ts) · `FLOATING_SURFACE` (surface.ts) · `DROP_TARGET` / `DRAG_SOURCE` (drag-visuals) · `.hit-min` (global.css) |
+
+Tokens DS-6 added: `--subtle-foreground` (`text-subtle-foreground`, the
+tertiary text level), `--state-selected-hover`, `--label-fill`
+(`bg-label-fill`, avatar hues), `--text-3xs` (avatar initials on the icon
+rung), `--ctrl-h-xs` (inline chips, 24 / 22 / 20), `--hit-min` (24 px).
+
+**Tasks-only** (stay in `features/tasks/ui`): priority / energy glyphs, the
+queue toggle and claims, the "N completed" line, the Timeline, run surfaces,
+the drift mark. Other modules adopt the kit when each is rebuilt; DS-5's sweep
+of them was retired (guards only).
 
 ## Open questions / future work
 

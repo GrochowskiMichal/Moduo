@@ -3,7 +3,7 @@
 // assignee avatar out (D4-4).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const PEOPLE = {
   u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
@@ -22,9 +22,11 @@ rs.mock("../assignees", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { setRunClaims } from "../../focus/claims";
 import { makeTask } from "../helpers";
 import type { Task } from "../model";
-import { QueueToggle } from "./queue-toggle";
+import { QueueToggle, withoutPeopleOnIt } from "./queue-toggle";
+import { type TaskFacts, taskFactsOf } from "./row-facts";
 import { TaskBoardView } from "./task-board-view";
 import { CardBody } from "./task-card";
 import { TaskListView } from "./task-list-view";
@@ -50,16 +52,44 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function api(queued: string[], claims: Record<string, string[]>) {
   return {
+    loaded: true,
     queuedTaskIds: new Set(queued),
     queueClaims: new Map(Object.entries(claims)),
     toggleQueue: rs.fn(),
   };
 }
 
+/** A row's facts with nothing on it but the queue. */
+function facts(a: ReturnType<typeof api>, t: Task): TaskFacts {
+  return taskFactsOf(t, {
+    ...a,
+    blockedTaskIds: new Set(),
+    blockersByTask: new Map(),
+    tagsByTask: new Map(),
+    subtaskProgressByTask: new Map(),
+    statusById: new Map(),
+  });
+}
+
+const noActions = {
+  toggleDone: rs.fn(),
+  patchTask: rs.fn(),
+  toggleQueue: rs.fn(),
+  skipOccurrence: rs.fn(),
+  setTaskParent: rs.fn(),
+  deleteTask: rs.fn(),
+} as never;
+
 function renderToggle(t: Task, a: ReturnType<typeof api>, canEdit = true) {
   return render(
     <TooltipProvider>
-      <QueueToggle task={t} api={a} canEdit={canEdit} />
+      <QueueToggle
+        task={t}
+        queued={a.queuedTaskIds.has(t.id)}
+        claims={a.queueClaims.get(t.id) ?? []}
+        onToggle={a.toggleQueue}
+        canEdit={canEdit}
+      />
     </TooltipProvider>,
   );
 }
@@ -68,7 +98,7 @@ describe("QueueToggle (D4-1, D4-2)", () => {
   it("is my plain toggle when nobody has the task queued", () => {
     const a = api([], {});
     renderToggle(task("t1"), a);
-    const button = screen.getByRole("button", { name: "Add to queue" });
+    const button = screen.getByRole("button", { name: "Add to Focus" });
     expect(button.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(button);
     expect(a.toggleQueue).toHaveBeenCalledWith("t1");
@@ -77,7 +107,7 @@ describe("QueueToggle (D4-1, D4-2)", () => {
   it("shows Mike's claim when the task is in his queue, and still adds it to mine", () => {
     const a = api([], { t1: ["u2"] });
     renderToggle(task("t1"), a);
-    const button = screen.getByRole("button", { name: "Add to queue. In Mike’s queue" });
+    const button = screen.getByRole("button", { name: "Add to Focus. In Mike’s Focus" });
     // The ringed avatar stands in for the queue icon.
     expect(button.querySelector('[data-slot="avatar"]')).toBeTruthy();
     fireEvent.click(button);
@@ -87,13 +117,13 @@ describe("QueueToggle (D4-1, D4-2)", () => {
   it("names everyone who has it queued", () => {
     renderToggle(task("t1"), api([], { t1: ["u2", "u3"] }));
     expect(
-      screen.getByRole("button", { name: "Add to queue. In Mike’s and Ola’s queues" }),
+      screen.getByRole("button", { name: "Add to Focus. In Mike’s and Ola’s Focus" }),
     ).toBeTruthy();
   });
 
   it("when it's in mine too, shows my toggle with Mike's claim beside it", () => {
     const { container } = renderToggle(task("t1"), api(["t1"], { t1: ["u2"] }));
-    const button = screen.getByRole("button", { name: "Remove from queue. Also in Mike’s queue" });
+    const button = screen.getByRole("button", { name: "Remove from Focus. Also in Mike’s Focus" });
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(button.querySelector('[data-slot="avatar"]')).toBeNull();
     // The claim stays visible next to the toggle (decoration: the label says it).
@@ -112,7 +142,7 @@ describe("QueueToggle (D4-1, D4-2)", () => {
   it("view-only members see the claim without an action", () => {
     renderToggle(task("t1"), api([], { t1: ["u2"] }), false);
     expect(screen.queryByRole("button")).toBeNull();
-    expect(screen.getByRole("img", { name: "In Mike’s queue" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "In Mike’s Focus" })).toBeTruthy();
   });
 
   it("renders nothing for a view-only member when nobody has it queued", () => {
@@ -121,21 +151,42 @@ describe("QueueToggle (D4-1, D4-2)", () => {
   });
 });
 
+describe("'is on this' on rows (TV-F7: one avatar per person)", () => {
+  afterEach(() => act(() => setRunClaims(null, new Map())));
+
+  it("someone whose session is on it shows once, with the live dot, not again as a claim", () => {
+    act(() => setRunClaims("w", new Map([["t1", ["u2"]]])));
+    renderToggle(task("t1"), api([], { t1: ["u2", "u3"] }));
+    const button = screen.getByRole("button", {
+      name: "Add to Focus. Mike is on this. In Ola’s Focus",
+    });
+    // One avatar in the cell (Mike's, live), never Mike twice.
+    expect(button.querySelectorAll('[data-slot="avatar"]')).toHaveLength(1);
+    expect(button.querySelector('[data-slot="claim-live"]')).toBeTruthy();
+  });
+
+  it("a claim for another workspace never shows", () => {
+    act(() => setRunClaims("other", new Map([["t1", ["u2"]]])));
+    renderToggle(task("t1"), api([], {}));
+    expect(screen.getByRole("button", { name: "Add to Focus" })).toBeTruthy();
+  });
+
+  it("drops the people on it from the Focus claims", () => {
+    expect(withoutPeopleOnIt(["u2", "u3"], ["u2"])).toEqual(["u3"]);
+    const same = ["u3"];
+    expect(withoutPeopleOnIt(same, ["u2"])).toBe(same);
+    expect(withoutPeopleOnIt(same, [])).toBe(same);
+  });
+});
+
 describe("TaskRow in My tasks (D4-4)", () => {
   function renderRow(showAssignee: boolean) {
     const t = task("t1", { assigneeId: "u1" });
-    const rowApi = {
-      tagsByTask: new Map(),
-      subtaskProgressByTask: new Map(),
-      blockedTaskIds: new Set(),
-      ...api([], {}),
-    };
     return render(
       <TooltipProvider>
         <TaskRow
           task={t}
           bucketName="Work"
-          buckets={[]}
           inboxId={null}
           showBucket={false}
           selected={false}
@@ -148,7 +199,9 @@ describe("TaskRow in My tasks (D4-4)", () => {
           onClearCommand={() => {}}
           onRequestCommand={() => {}}
           showAssignee={showAssignee}
-          api={rowApi as never}
+          facts={facts(api([], {}), t)}
+          actions={noActions}
+          today="2026-10-01"
         />
       </TooltipProvider>,
     );
@@ -173,6 +226,8 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     subtaskProgressByTask: new Map(),
     tagsByTask: new Map(),
     blockedTaskIds: new Set(),
+    blockersByTask: new Map(),
+    statusById: new Map(),
     toggleDone: rs.fn(),
     patchTask: rs.fn(),
     deleteTask: rs.fn(),
@@ -200,7 +255,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
   it("the List leaves the avatar out in My tasks and keeps it in All", () => {
     render(
       <TooltipProvider>
-        <TaskListView {...shared("mine")} groupBy="none" onGroupByChange={() => {}} />
+        <TaskListView {...shared("mine")} groupBy="none" />
       </TooltipProvider>,
     );
     expect(screen.getAllByRole("row")).toHaveLength(2);
@@ -208,7 +263,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     cleanup();
     render(
       <TooltipProvider>
-        <TaskListView {...shared("all")} groupBy="none" onGroupByChange={() => {}} />
+        <TaskListView {...shared("all")} groupBy="none" />
       </TooltipProvider>,
     );
     expect(avatars()).toBe(2);
@@ -217,7 +272,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
   it("the Board leaves the avatar out in My tasks and keeps it in All", () => {
     render(
       <TooltipProvider>
-        <TaskBoardView {...shared("mine")} boardGroupBy="status" onBoardGroupByChange={() => {}} />
+        <TaskBoardView {...shared("mine")} boardGroupBy="status" />
       </TooltipProvider>,
     );
     expect(screen.getByText("Task t1")).toBeTruthy();
@@ -225,7 +280,7 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     cleanup();
     render(
       <TooltipProvider>
-        <TaskBoardView {...shared("all")} boardGroupBy="status" onBoardGroupByChange={() => {}} />
+        <TaskBoardView {...shared("all")} boardGroupBy="status" />
       </TooltipProvider>,
     );
     expect(avatars()).toBe(2);
@@ -241,7 +296,10 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
           showBucket={false}
           showAssignee={showAssignee}
           canEdit={false}
-          api={viewApi as never}
+          facts={facts(api([], {}), tasks[0])}
+          parentTitle={null}
+          actions={noActions}
+          today="2026-10-01"
         />
       </TooltipProvider>
     );

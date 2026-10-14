@@ -6,6 +6,9 @@
 // `new Date()` — `now` is injected) so snippet-format.test.ts can pin every
 // relative phrase. snippet-projectors.builtin.ts wires these to the registry.
 
+import { isOpenTaskStatus } from "@contracts/vocabularies";
+
+import { formatDate, formatTime } from "../../lib/time-format";
 import type {
   EmailSnippetMeta,
   EventSnippetMeta,
@@ -17,6 +20,7 @@ const DAY_MS = 86_400_000;
 
 /** Sentence-case labels for the fixed task lifecycle statuses. */
 const TASK_STATUS_LABEL: Record<string, string> = {
+  backlog: "Backlog",
   todo: "To do",
   in_progress: "In progress",
   done: "Done",
@@ -46,7 +50,7 @@ export function relativeDayLabel(iso: string, now: Date): string {
   if (delta === -1) return "yesterday";
   // Within the next 6 days, a weekday name reads fastest ("Fri").
   if (delta > 1 && delta < 7) return WEEKDAY[then.getDay()];
-  return then.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDate(then, now);
 }
 
 /** A quiet "…ago"/"in…" clock label for recency ("just now" · "3 days ago"). */
@@ -77,7 +81,7 @@ export function relativeTimeAgo(iso: string, now: Date): string {
 
 /** "2:00 PM" from a timestamptz (local clock). */
 function clockLabel(d: Date): string {
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return formatTime(d);
 }
 
 /**
@@ -90,7 +94,7 @@ function clockLabel(d: Date): string {
  */
 export function formatTaskSnippet(meta: TaskSnippetMeta, now: Date): string | null {
   const statusLabel = TASK_STATUS_LABEL[meta.status] ?? null;
-  const finished = meta.status === "done" || meta.status === "archived";
+  const finished = !isOpenTaskStatus(meta.status);
   const parts: string[] = [];
   if (statusLabel) parts.push(statusLabel);
   if (!finished && meta.dueDate) {

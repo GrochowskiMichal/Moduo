@@ -84,14 +84,69 @@ describe("buildMentionCandidates", () => {
   ];
   const people = [{ memberId: "u-mike", label: "Mike" }];
 
-  it("@ includes people after entities", () => {
+  it("@ lists people first, then things (the grammar, call 33)", () => {
     const out = buildMentionCandidates({
       trigger: "mention",
       query: "m",
       entities,
       people,
     });
-    expect(out.map((c) => c.kind)).toEqual(["entity", "entity", "person"]);
+    expect(out.map((c) => c.kind)).toEqual(["person", "entity", "entity"]);
+  });
+
+  it("/ lists the date commands first, then projects, then things", () => {
+    const out = buildMentionCandidates({
+      trigger: "ref",
+      query: "to",
+      entities,
+      projects: [{ type: "project", id: "p1", label: "Acme rebrand", icon: "project" }],
+      commands: [
+        { id: "today", label: "Today", word: "today" },
+        { id: "tomorrow", label: "Tomorrow", word: "tomorrow" },
+      ],
+    });
+    expect(out.map((c) => (c.kind === "entity" ? c.ref.type : c.kind))).toEqual([
+      "command",
+      "command",
+      "project",
+      "contact",
+      "task",
+    ]);
+  });
+
+  it("lists a project once, its live name first, even when the registry has it too", () => {
+    const out = buildMentionCandidates({
+      trigger: "mention",
+      query: "acme",
+      entities: [{ type: "bucket", id: "p1", label: "Acme (old name)", icon: "project" }],
+      projects: [{ type: "bucket", id: "p1", label: "Acme rebrand", icon: "project" }],
+    });
+    expect(out.map((c) => (c.kind === "entity" ? c.label : c.kind))).toEqual(["Acme rebrand"]);
+  });
+
+  it("in prose, `/` creates only behind the type's word (`/task …`)", () => {
+    const base = {
+      trigger: "ref" as const,
+      entities: [],
+      createType: "task",
+      canCreate: true,
+      createNoun: true,
+    };
+    expect(buildMentionCandidates({ ...base, query: "tmp then" })).toEqual([]);
+    expect(buildMentionCandidates({ ...base, query: "task Order frames" })).toEqual([
+      { kind: "create", entityType: "task", label: "Order frames" },
+    ]);
+  });
+
+  it("# lists tags only", () => {
+    const out = buildMentionCandidates({
+      trigger: "tag",
+      query: "des",
+      entities,
+      people,
+      tags: [{ id: "g1", name: "design", color: "violet" }],
+    });
+    expect(out).toEqual([{ kind: "tag", tagId: "g1", label: "design", color: "violet" }]);
   });
 
   it("/ref excludes people and offers create on no exact match", () => {
