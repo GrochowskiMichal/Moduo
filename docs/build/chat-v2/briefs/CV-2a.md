@@ -52,7 +52,7 @@
 
 ## 4. Decisions that bind it
 
-**Already live, not on this branch:** `supabase/migrations/20261014090000_chat_privacy_rules.sql` (local stack and prod; on `origin/maciej` once PR #365 merges; don't fetch it here) holds the live `chat_op_typing(p_channel_id uuid, p_parent_id uuid default null, p_stop boolean default false)`, `perm_can_see_entity`'s chat branches, `chat_caps_get`, `share_op_announce`. Round-3 §2.3's draft `chat_op_typing(channel, stopped)` differs: **the live signature wins**, don't redo it, only fold it into this block's test.
+**Already live and on the build branch** (merged 217d1a62): `supabase/migrations/20261014090000_chat_privacy_rules.sql` (local stack and prod) holds the live `chat_op_typing(p_channel_id uuid, p_parent_id uuid default null, p_stop boolean default false)`, `perm_can_see_entity`'s chat branches, `chat_caps_get`, `share_op_announce`. Round-3 §2.3's draft `chat_op_typing(channel, stopped)` differs: **the live signature wins**, don't redo it, only fold it into this block's test.
 
 **Redefine from the live bodies** (round-3 §2.3, §2.25 c; #3, #4, #12, #15, #25):
 - `chat_op_send(id, channel, body, reply_to_id)`: the client-minted `id` is the idempotency key (a retry returns the stored row); v2 stored form (≤ 8,000 stored characters, references included, refused with the count, nothing partial); mentions, teams and `@channel` read **from the text on the server**, never from the client (`@channel` without "Mention everyone" is stored as plain text); the excerpt built on the server; a reply joins the root's chain (`parent_id` = root, `reply_to_id` = what it quotes) and keeps `reply_count`, `last_reply_at`, `reply_user_ids`; the sender's `last_read_id` moves to it; announcement channels take managers' posts only; event lines (`kind = 'event'`) pass `share_chat_message_guard`, which reads the parsed `@channel` flag, not words. Reopening a wrapped chain arrives with CV-12.
@@ -66,7 +66,7 @@
 
 ## 5. Files
 
-New: `supabase/migrations/<stamp>_chat_v2_core_ops.sql` (#35 names one file for "CV-2"; 2a's file applies before 2b starts and applied files are never edited, so **2b needs its own file: the orchestrator names it**); `supabase/tests/chat_ops.test.sql` (messages half), `chat_wrappers.test.sql`. v1 origins: `20261006150000_chat_module.sql`, `20261008124000_chat_agent_post_checks_creator.sql` (`share_chat_message_guard`). Client: `src/lib/runtime.chat.web.ts` and `src/features/chat/hooks/use-chat-module.ts` call v1 signatures: keep v1's screens working through the wrappers; CV-3 re-scopes them.
+New: `supabase/migrations/<stamp>_chat_v2_core_ops.sql` (#35 names one file for "CV-2"; 2a's file applies before 2b starts and applied files are never edited, so **2b has its own file, `<stamp>_chat_v2_conversation_ops.sql`**); `supabase/tests/chat_ops.test.sql` (messages half), `chat_wrappers.test.sql`. v1 origins: `20261006150000_chat_module.sql`, `20261008124000_chat_agent_post_checks_creator.sql` (`share_chat_message_guard`). Client: `src/lib/runtime.chat.web.ts` and `src/features/chat/hooks/use-chat-module.ts` call v1 signatures: keep v1's screens working through the wrappers; CV-3 re-scopes them.
 
 ## 6. From earlier blocks
 

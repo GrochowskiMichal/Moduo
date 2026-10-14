@@ -41,7 +41,7 @@ How the Chat v2 build runs, so anyone can pick it up. The spec is [specs/chat-v2
 4. **Migration:** write it in `supabase/migrations/` with a provisional stamp, starting every redefined function from its **live body** (`select pg_get_functiondef(…)`). Apply it to the local stack with `psql -v ON_ERROR_STOP=1 -f` **only when your brief says you hold the migration turn**; otherwise hand back with "migration ready" and the orchestrator applies it in order. Run `bun run db:test chat` after applying. Never `supabase migration up`, never `local:reset`, never the cloud project.
 5. **Review:** one `validator` round on your diff, giving it your brief's path and the range. Fix every BLOCKER and MAJOR; if anything was fixed, a second round on the delta only, with the first findings. Tier-2 blocks (migrations, RLS, contracts, `moduo-mcp`): one `/code-review high` and one security scan of the block's diff, at the end.
 6. **Record:** fill `docs/build/chat-v2/<ID>.md` from the [template](../build/chat-v2/_template.md): what you delivered, the tests proving each AC, your agent's choices (who · what · why · rejected), gotchas, notes for later blocks, the manual checklist, anything to verify before release. Edit no other record file.
-7. **Hand back:** commit (trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`), `git push origin t/maciej/cv-<id>-<kebab>`, and return at most 150 words: the branch and head, verify result, validator result, migration state, what's deferred and to which block.
+7. **Hand back:** commit (trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`), `gh auth switch --user En5hi && git push origin t/maciej/cv-<id>-<kebab>` (in one command: another session keeps switching `gh` to an account that can't push here), and return at most 150 words: the branch and head, verify result, validator result, migration state, what's deferred and to which block.
 
 **Security findings** never go into commits, records or docs (the repo is public): tell the orchestrator in the hand-back.
 
@@ -70,4 +70,4 @@ On a usage-limit error the orchestrator notes the reset time, sleeps in the back
 
 ## Where it stands
 
-Kept current by the orchestrator. **2026-10-14:** the build branch is cut; the kit is in (`scripts/agent/quiet.sh`, this runbook, the record template); CV-0's spikes and the briefs are next.
+Kept current by the orchestrator. **2026-10-14:** the build branch is cut; the kit is in (`scripts/agent/quiet.sh`, this runbook, the record template); the v1 privacy rules are merged in (217d1a62); CV-0 spike 5 (search) and the briefs CV-1…CV-23 are landed; spikes 2, 3 and 4 are building.

@@ -48,7 +48,7 @@
 
 ## 4. Decisions that bind it
 
-**Already live, not on this branch:** `supabase/migrations/20261014090000_chat_privacy_rules.sql` (local stack and prod; on `origin/maciej` once PR #365 merges; don't fetch it here): `perm_can_see_entity`'s chat branches, the per-conversation typing topic with `chat_op_typing(p_channel_id uuid, p_parent_id uuid default null, p_stop boolean default false)` as its only writer, `chat_caps_get`, `share_op_announce`. Reusable once PR #365 lands (neither is on this branch): `supabase/probes/chat-typing.probe.ts`, `supabase/tests/chat_privacy.test.sql`. **Start from those live bodies, don't redo them**: read each in the catalog, build only what the row lists and the catalog lacks. `chat_can_read_channel` still requires the plan; dropping that is yours (CH4a).
+**Already live and on the build branch** (merged 217d1a62): `supabase/migrations/20261014090000_chat_privacy_rules.sql` (local stack and prod): `perm_can_see_entity`'s chat branches, the per-conversation typing topic with `chat_op_typing(p_channel_id uuid, p_parent_id uuid default null, p_stop boolean default false)` as its only writer, `chat_caps_get`, `share_op_announce`. Reusable, both on the build branch: `supabase/probes/chat-typing.probe.ts`, `supabase/tests/chat_privacy.test.sql`. **Start from those live bodies, don't redo them**: read each in the catalog, build only what the row lists and the catalog lacks. `chat_can_read_channel` still requires the plan; dropping that is yours (CH4a).
 
 - **Columns** (round-3 §2.1, §2.2; #1–#3, #11): messages `updated_at` (stamp trigger, `clock_timestamp()`), `format_version`, `body_text`, `search_tsv` (generated: `simple` + `chat__unaccent`), `reply_to_id`, `v1_thread_reply`, `kind` + `event`, `mentioned_team_ids`, `mentions_everyone`, `api_key_id`; channels `updated_at`, `is_default`, `deleted_at/by`; members `last_read_id`, `left_at`, `removed_by`, `updated_at`; new empty `chat_catchup` and `chat_chain_mutes` (own-rows RLS, ops-only writes, grants re-stated; `chat_catchup` published). Chain, decision, move, link and emoji columns are later blocks'.
 - **Vocabularies** (#29), `@contracts` array + Zod + `parse*`/`normalize*`/`is*` and a CHECK in the same migration: `CHAT_MESSAGE_KINDS`, `CHAT_EVENT_TYPES` (`moved_out`, `moved_in`), `CHAT_CATCHUP_REASONS` (round-3 §2.2), `CHAT_CATCHUP_DONE_HOW` (`done`, `read`, `bell`, `closed`).
@@ -64,7 +64,7 @@ New: `supabase/migrations/<stamp>_chat_v2_foundation.sql`, `<stamp>_chat_v2_conv
 
 ## 6. From earlier blocks
 
-CV-0 spikes 2, 4, 5 (the `updated_at` + keyset design, `chat__v1_to_v2` and corpus, the unaccent wrapper); the orchestrator gives the paths; if one is missing, say so, don't redo it.
+CV-0 spikes 2, 4, 5 (the `updated_at` + keyset design, `chat__v1_to_v2` and corpus, the unaccent wrapper). Spike 5 is landed: `docs/build/chat-v2/CV-0-S5.md` and `docs/build/chat-v2/drafts/search.sql` (its "For CV-1" notes: a Realtime publication column list without `search_tsv`, and `lock_timeout` on the table rewrite). Spikes 2 and 4 land as `docs/build/chat-v2/CV-0-S2.md` and `CV-0-S4.md` with drafts in `docs/build/chat-v2/drafts/`; if one is missing, say so, don't redo it.
 
 ## 7. Watch out
 

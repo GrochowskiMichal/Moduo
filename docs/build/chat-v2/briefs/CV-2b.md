@@ -74,7 +74,7 @@
 
 ## 5. Files
 
-New: a migration file for these ops (2a's file is applied by now and applied files are never edited; **the orchestrator names it**); `supabase/tests/chat_counts.test.sql`; extend `supabase/tests/chat_ops.test.sql` (conversations half: every op as owner, admin, manager, member, viewer, outsider, a key). v1 origin: `20261006150000_chat_module.sql` (`chat_unread_counts`, `share_chat_channel_guard`). v1's client (`src/lib/runtime.chat.web.ts`, a hot file) calls v1 signatures like `chat_op_mark_read(channel, at)`: keep v1's screens working until CV-3.
+New: `supabase/migrations/<stamp>_chat_v2_conversation_ops.sql` (2a's file is applied by now and applied files are never edited; orchestrator's choice of name); `supabase/tests/chat_counts.test.sql`; extend `supabase/tests/chat_ops.test.sql` (conversations half: every op as owner, admin, manager, member, viewer, outsider, a key). v1 origin: `20261006150000_chat_module.sql` (`chat_unread_counts`, `share_chat_channel_guard`). v1's client (`src/lib/runtime.chat.web.ts`, a hot file) calls v1 signatures like `chat_op_mark_read(channel, at)`: keep v1's screens working until CV-3.
 
 ## 6. From earlier blocks
 
