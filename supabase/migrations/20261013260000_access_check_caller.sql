@@ -27,7 +27,7 @@
 
 -- One transaction: the policies are set aside and put back inside it.
 BEGIN;
--- The policy swap locks 16 tables briefly; give up rather than queue.
+-- The policy swap locks 17 tables briefly; give up rather than queue.
 SET LOCAL lock_timeout = '5s';
 
 -- ── 0. Preflight ────────────────────────────────────────────────────────────
@@ -52,11 +52,12 @@ END
 $pre$;
 
 -- ── 1. Set aside the policies that call can_access ──────────────────────────
--- Expected (2026-10-13): attachments.attachments_select,
+-- Expected (2026-10-14): attachments.attachments_select,
 -- buckets.buckets_workspace_access, calendar_events.calendar_events_owner_read,
 -- calendars.calendars_read, companies.companies_workspace_read,
 -- contact_group_members.contact_group_members_read,
 -- contact_groups.contact_groups_read, contacts.contacts_workspace_read,
+-- note_favorites.note_favorites_own_read (Notes refresh, on prod since 10-13),
 -- note_updates.note_updates_workspace_read, notes.notes_workspace_read,
 -- project_statuses.project_statuses_read, storage.objects.attachments_object_select,
 -- task_completions.task_completions_read, task_relations.task_relations_delete,
@@ -93,6 +94,7 @@ DECLARE
     'calendar_events.calendar_events_owner_read', 'calendars.calendars_read',
     'companies.companies_workspace_read', 'contact_group_members.contact_group_members_read',
     'contact_groups.contact_groups_read', 'contacts.contacts_workspace_read',
+    'note_favorites.note_favorites_own_read',
     'note_updates.note_updates_workspace_read', 'notes.notes_workspace_read',
     'project_statuses.project_statuses_read', 'storage.objects.attachments_object_select',
     'task_completions.task_completions_read', 'task_relations.task_relations_delete',

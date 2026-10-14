@@ -304,7 +304,9 @@ BEGIN
                                'SELECT count(*) FROM public.link_suggestion_declines',
                                'SELECT count(*) FROM public.exposed_slot_links'] LOOP
     r := test.as_anon(v_sql);
-    PERFORM test.ok(r = 'ok', 'an anonymous read is an empty result, not an error: ' || split_part(v_sql, '.', 2), r);
+    -- exposed_slot_links grants anon nothing on prod (42501); the others read empty.
+    PERFORM test.ok(r = 'ok' OR (v_sql LIKE '%exposed_slot_links' AND r LIKE '%42501%'),
+      'an anonymous read is an empty result or refused, never a policy error: ' || split_part(v_sql, '.', 2), r);
   END LOOP;
 END;
 $$;
