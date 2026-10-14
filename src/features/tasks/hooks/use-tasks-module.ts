@@ -3069,12 +3069,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           refused(write, e, "Couldn't archive the project.");
           revert();
         });
-      undoToast(`“${existing.name}” archived`, {
-        description: note ?? "It’s in the sidebar’s ⋯ → Archived projects.",
-        onUndo: () => {
-          void unarchiveBucket(id);
-          revert();
-        },
+      // The toast waits for the moves it names (a refused move says so instead).
+      void movesDone.then((moved) => {
+        if (!moved) return;
+        undoToast(`“${existing.name}” archived`, {
+          description: note ?? "It’s in the sidebar’s ⋯ → Archived projects.",
+          onUndo: () => {
+            void unarchiveBucket(id);
+            revert();
+          },
+        });
       });
     },
     [
@@ -3135,12 +3139,16 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           refused(write, e, "Couldn't save the project.");
           revert();
         });
-      undoToast(`“${existing.name}” is done`, {
-        ...(note ? { description: note } : {}),
-        onUndo: () => {
-          void editProject(id, { status: previous }, { status: previous });
-          revert();
-        },
+      // The toast waits for the moves it names (a refused move says so instead).
+      void movesDone.then((moved) => {
+        if (!moved) return;
+        undoToast(`“${existing.name}” is done`, {
+          ...(note ? { description: note } : {}),
+          onUndo: () => {
+            void editProject(id, { status: previous }, { status: previous });
+            revert();
+          },
+        });
       });
     },
     [

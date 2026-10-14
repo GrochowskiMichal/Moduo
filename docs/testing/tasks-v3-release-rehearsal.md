@@ -2,6 +2,15 @@
 
 > Last run 2026-10-14 on `t/maciej/tv-release-fixes` (from `t/maciej/tasks-v3-build` at `363fc9e6`, AT-3 and TV-U18 included). It used a throwaway Supabase stack only: the shared local stack (54321/54322) was read with read-only sessions and never written, and the cloud project was not touched. The first run on `d6d9f649` found the problems that §2 lists as fixed.
 
+## Released 2026-10-14
+
+- **One more replay first,** on a prod snapshot refreshed that morning, in prod order with TV-SEC1 added after file 28.
+  - It caught one thing: Notes' `note_favorites_own_read` policy, live on prod since 10-13, also calls `can_access`. SEC1 now expects 18 policies.
+  - Two test-base notes: the base needs prod's two `storage.buckets` rows, and `access_check.test.sql` accepts a refused anonymous read of `exposed_slot_links`, because prod grants `anon` nothing there.
+- **Prod also had** Notes' `20261014120000_notes_agent_writes` (NR-6, from `mike`). No release file touches its objects.
+- **Before the push:** 22 read-only checks of prod's rows against everything the release validates, all at 0.
+- **The push:** a single `supabase db push --include-all --skip-vault` from a scratch folder (decision 2026-10-14 in decisions/workflow.md), so prod's history has the file versions.
+
 ## Summary
 
 | Question | Answer |
@@ -62,7 +71,7 @@ Prod also has migrations this branch doesn't carry:
 - develop's `20261009210000_api_key_expiry` (applied in the SQL editor, so not in the history);
 - develop's `20261010090000_api_key_expiry_in_sql`;
 - develop's `20261013120000_notes_refresh_organize`;
-- TX-5's `20261010160000_tx5_booking_bell` (history `20261010160147`).
+- TX-5's bell migration, renamed on 2026-10-14 to its prod version: `20261010160147_tx5_booking_bell`.
 
 **The release: 32 files, in this order:**
 

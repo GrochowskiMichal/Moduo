@@ -2,9 +2,9 @@
 
 > Written 2026-10-14 by the TV-POLISH batch (`t/maciej/tv-polish`). Every "Polish later" line in the `docs/testing/t-maciej-*.md` checklists and every known item was either fixed in that batch (see [t-maciej-tv-polish.md](./t-maciej-tv-polish.md)) or is listed here: one line each, with a recommendation.
 > **Why deferred:** 🧭 needs a product or design call · 🗄 needs a migration · 🔧 engineering that isn't quick or safe enough for a polish batch (data flow, sync, performance) · 🖼 the visual round · 🧪 test debt.
+> **2026-10-14, polish batch 2** (`t/maciej/tv-polish-2`): the lines it fixed are gone from this file (one, the view-only overview, was found already so) (see [t-maciej-tv-polish-2.md](./t-maciej-tv-polish-2.md) and decisions/tasks.md PL2-…); every 🗄 line now says "→ next release train (needs a migration)".
 
 ## Attachments everywhere (AT-3)
-- 🔧 Settings → Storage: a file's task name doesn't open the task. **Recommend:** add a "close Settings" event (`settings-events.ts`) and make the task name a link that closes Settings and opens the task.
 - 🔧 Calendar's day columns redraw on every file change (the whole counts map is passed in); ⌘K reads counts only when results change; your own upload re-reads the strip twice. **Recommend:** pass each column its own counts; debounce the strip's re-read.
 - 🔧 Focus's Now card reads each subtask's files on open. **Recommend:** read the store's counts (`attachmentCounts`), like the List.
 - 🧭 Timeline: a point's hover text could add "· 2 files". **Recommend:** yes, after the visual round (one more word on every hover).
@@ -13,14 +13,14 @@
 ## Time entries and report (TV-D14)
 - 🔧 The Print… layout stays mounted up to two minutes when the desktop's print dialog doesn't report closing. **Recommend:** verify on a signed desktop build first; unmount on `afterprint` or on the next focus.
 - 🔧 Removing an entry reads your entries twice. **Recommend:** skip the second read when the total's change came from your own removal.
-- 🔧 Undo after removing a Focus entry logs it back as plain logged time (its run and start are lost). **Recommend:** a restore op that un-deletes the row instead of re-adding it (🗄 if the op doesn't exist yet).
+- 🔧 Undo after removing a Focus entry logs it back as plain logged time (its run and start are lost). **Recommend:** a restore op that un-deletes the row instead of re-adding it (🗄: no such op exists yet). → next release train (needs a migration)
 - 🧭 Two projects you can't see show as two sections both called "Private project" in a whole-workspace report. **Recommend:** merge them into one "Private projects" section.
 - 🔧 Chat's memoised message rows show a Time & region change only at their next redraw. **Recommend:** subscribe the rows to `useTimeRegion`, as the Timeline's rows do.
-- 🗄 `tasks_time_totals`' "since" dates a logged entry at UTC midnight. **Recommend:** date it in the saved zone, in the release migration train.
+- 🗄 `tasks_time_totals`' "since" dates a logged entry at UTC midnight. **Recommend:** date it in the saved zone, in the release migration train. → next release train (needs a migration)
 - 🔧 A very long report re-reads the server function per 1,000-row page. **Recommend:** a keyset page parameter on the report read when a busy year shows up in practice.
 
 ## Focus extras (TV-F8)
-- 🗄 Bell and OS copy for a check-back still says "Reminder". **Recommend:** a reminder kind `check_back` with its own words.
+- 🗄 Bell and OS copy for a check-back still says "Reminder". **Recommend:** a reminder kind `check_back` with its own words. → next release train (needs a migration)
 - 🔧 The panel's Details ▾ menu shows no count for In flight. **Recommend:** a count slot in the panel registry's view entry.
 - 🧭 "Offer quick tasks along the way" is long for the menu. **Recommend:** check at 90–125% zoom in the visual round; if it wraps, "Offer quick tasks".
 - 🧭 The meeting divider reads "attending" as "on my own calendar". **Recommend:** use attendance once events carry it (Calendar v2).
@@ -37,10 +37,8 @@
 - 🔧 Time widget: a running session's unsaved seconds aren't added live; the week edge can differ near midnight in another zone; the report re-reads on every tracked total that moves. **Recommend:** add the running session's seconds on a 1-minute tick; debounce the re-read.
 - 🔧 Tasks widget: a check-off in flight shows Done with the old status id; no Undo grouping for several quick check-offs. **Recommend:** group check-offs within 3 s into one toast.
 - 🔧 Team widget: Chat's "now" line is read once on mount; a person row isn't clickable. **Recommend:** subscribe to Chat's registration; link a person to a "their tasks" filter once Tasks has one.
-- 🔧 Upcoming widget: "+n more" opens Tasks, not Upcoming. **Recommend:** a `?place=upcoming` link (the Tasks search only takes `id` and `view` today).
 
 ## Timeline (TV-TL1, TV-TL2)
-- 🔧 The header's month name can show a fragment ("…ber") under the name column's edge. **Recommend:** hide a label whose month is narrower on screen than its name.
 - 🔧 A phase that began off screen has no name until you scroll back. **Recommend:** a sticky label inside `overflow-clip` segments (see gotchas/ui.md first).
 - 🔧 Indent and the hint offset are inline styles. **Recommend:** move them to classes if the kit grows a tree-indent token.
 - 🧪 Year zoom's frame time isn't measured. **Recommend:** add a Year step to `tests/perf/tasks-timeline-2k.spec.ts`.
@@ -53,14 +51,12 @@
 - 🧭 Lines draw only between rows on screen (by design for 2,000 tasks). **Recommend:** keep.
 - 🧭 The No date view has no keyboard way to place a task. **Recommend:** `d` on a No date row opens the date picker, like the canvas.
 - 🔧 Per-project handles at All are asked once per project while the page stays; a grant changed meanwhile shows at the next visit (the server still refuses). **Recommend:** re-ask on the store's access event.
-- 🗄 A task shared to you by hand with Edit inside a project you can only view, and a task in someone else's Inbox you can see but not edit, are judged by their project (only tasks assigned to you are asked one by one): the first shows no handle, the second shows one the server refuses. **Recommend:** a batched "which of these can I edit" read in the release migration train, replacing the per-project and per-task questions.
-- 🧭 ⌥←/→ or ⇧D on a mixed selection moves only the tasks you can edit, and the toast counts those without saying why. **Recommend:** add "· 2 not yours to move" to the toast.
+- 🗄 A task shared to you by hand with Edit inside a project you can only view, and a task in someone else's Inbox you can see but not edit, are judged by their project (only tasks assigned to you are asked one by one): the first shows no handle, the second shows one the server refuses. **Recommend:** a batched "which of these can I edit" read in the release migration train, replacing the per-project and per-task questions. → next release train (needs a migration)
 - 🖼 Visual baselines for the five Timeline stories and the new marks.
 
 ## Multi-select (TV-U12)
 - 🧭 The bar's row is wider than an 800 px window. **Recommend:** keep (the app's minimum is 1024 px).
 - 🔧 The panel's header still says "Details ▾" over "4 tasks". **Recommend:** a title override in the panel registry.
-- 🔧 The Board's card drag preview doesn't count the others ("+3"). **Recommend:** reuse the List's count chip.
 - 🧭 Triage keys (Accept, Snooze) aren't offered on a selection. **Recommend:** yes, as bulk actions on the Inbox only.
 - 🧭 Upcoming's day drop moves only the row you hold. **Recommend:** move the selection when the held row is in it.
 - 🔧 A task whose field write saved but whose status or assignee was refused stays half-changed, and Undo doesn't put back the part that saved. **Recommend:** record the saved part in the Undo set.
@@ -79,7 +75,6 @@
 
 ## Importers (TV-U18)
 - 🔧 A task the server matches to an earlier import the app hadn't read gets the file's place and status. **Recommend:** read the earlier import's rows before the preview.
-- 🧭 Trello members missing from the board's member list all read "A Trello member". **Recommend:** one picker per missing id, labelled "Trello member 1, 2…".
 - 🧭 The project's name can't be changed in the preview. **Recommend:** an editable name field in the preview.
 - 🧭 Section dates (Jira epics' due dates, Linear milestones' targets) aren't carried. **Recommend:** carry them as section end dates.
 
@@ -90,7 +85,6 @@
 - 🔧 A failed preferences read counts as "read" (the welcome can open). **Recommend:** mark the domain ready only after a real answer.
 - 🧪 The e2e doesn't check the developer's Detailed rows; no test for the shared-browser guard. **Recommend:** add both to `tests/onboarding.spec.ts` / `lib/preferences` tests.
 - 🧭 Resending a starter with a deleted id answers with the deleted row (the app never does it). **Recommend:** keep.
-- 🔧 A workspace with only archived projects counts as empty for the teaching tasks; switching workspace mid-seeding sends the rest to the new one. **Recommend:** count archived projects; capture the workspace id once at the start.
 - 🔧 `TASKS_ROLES` lives in `features/tasks/onboarding.ts`, not `@contracts`. **Recommend:** move it (preferences JSON only, no CHECK needed).
 - 🧭 Closing the role question counts as Skip for good, and there's no place to change the role. **Recommend:** a "Your role" line in the Settings rebuild.
 - 🖼 Visual baselines for the welcome dialog.
@@ -98,13 +92,11 @@
 ## Project overview (TV-U16)
 - 🔧 Files re-read only when the project's task list changes; each open reads the workspace's whole attachment list. **Recommend:** a per-project files read, refreshed on the store's attachment counts.
 - 🔧 "Done this month" uses the device's month but dates completions in the saved zone; left open across midnight on the 1st it shows last month. **Recommend:** use the saved zone's month and re-read on the day change.
-- 🗄 The server trims only trailing spaces from a description; the app trims all trailing whitespace. **Recommend:** match the app in the release migration.
-- 🗄 With an archived default project, `teams__route_project`'s message still says "give the team a default project". **Recommend:** "The team's default project is archived."
-- 🔧 Done or Archive with Move shows its toast before the moves land. **Recommend:** await the moves, then toast.
+- 🗄 The server trims only trailing spaces from a description; the app trims all trailing whitespace. **Recommend:** match the app in the release migration. → next release train (needs a migration)
+- 🗄 With an archived default project, `teams__route_project`'s message still says "give the team a default project". **Recommend:** "The team's default project is archived." → next release train (needs a migration)
 - 🧭 A starter template's description now lands on the project. **Recommend:** Maciej reads the three starter descriptions once.
 - 🔧 The ⌘K "Archived" tag reads the store when results arrive, not live. **Recommend:** keep (search results are short-lived).
 - 🔧 The overview's helpers each scan the workspace's task list. **Recommend:** filter the project's tasks once and pass them in.
-- 🔧 A view-only reader's overview is briefly editable-looking while access is asked. **Recommend:** render read-only until the answer.
 - 🧪 No tests for the hub rollup's rendering, the ⌘K tag, archived deep links or the dimmed rows. **Recommend:** stories with structure checks.
 
 ## Saved views (TV-U8)
@@ -114,6 +106,9 @@
 - 🧭 A former member named only on tasks you can't see can't be kept in a saved filter. **Recommend:** the chip says "Former member · can't be saved".
 - 🔧 Copy link on the desktop app may need the hosted web origin. **Recommend:** verify on a signed desktop build; use `app.moduo.app` there.
 - 🖼 Visual baselines for the Views group and the unsaved-changes line.
+
+## Database hygiene (→ next release train, needs a migration)
+- 🔧 `tasks__editable(uuid)` and `projects__editable(uuid)` are executable by signed-in users, though no policy, view or app code calls them any more (rehearsal §5). **Recommend:** revoke both from `authenticated`.
 
 ## e2e and SQL tests (known items 1–2)
 - 🔧 Every e2e spec signs in as `dev@moduo.local` in one shared workspace, so the e2e project now runs one spec at a time (`workers: 1`, about 5 minutes). **Recommend:** if the suite grows past ~10 minutes, give each spec its own workspace (a `workspaceFor(spec)` helper in `tests/support/local-stack.ts`, with cleanup that soft-deletes) and lift the limit.

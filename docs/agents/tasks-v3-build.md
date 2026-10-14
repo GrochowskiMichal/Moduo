@@ -2,6 +2,8 @@
 
 How the Tasks v3 build runs, so anyone can pick it up: Maciej, Mike, or an agent session either of them starts. The spec is [specs/tasks-v3.md](../../specs/tasks-v3.md). The rules and every carry-forward note live in the 🟠 box at the top of the "Tasks v3" section of [specs/BUILD_ORDER.md](../../specs/BUILD_ORDER.md). Finished blocks are in [specs/BUILD_LOG.md](../../specs/BUILD_LOG.md), and decisions in [docs/decisions/tasks.md](../decisions/tasks.md).
 
+> **Closed 2026-10-14: Tasks v3 is released** (prod database, functions, `develop`, `prod-app`; see BUILD_LOG "Tasks v3 release"). This runbook is the record of how v3 was built. New Tasks work branches off `maciej` the normal way, and visual and functional follow-ups go through the dogfood board in the shared Moduo workspace.
+
 ## Where it stands (2026-10-11)
 
 **Landed** on `t/maciej/tasks-v3-build` and merged into `maciej`:

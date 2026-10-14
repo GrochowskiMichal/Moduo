@@ -17,8 +17,13 @@ export function openEntity(type: string, id: string, workspaceId?: string): void
   );
 }
 
-/** Open a module page directly (the widget-header "open" affordance). */
-export function openModuleRoute(to: string): void {
+/**
+ * Open a module page directly (the widget-header "open" affordance); `search`
+ * lands on a place in it (Upcoming's "+n more" opens Tasks' Upcoming).
+ */
+export function openModuleRoute(to: string, search?: Record<string, string>): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: { to } }));
+  window.dispatchEvent(
+    new CustomEvent(ENTITY_OPEN_EVENT, { detail: search ? { to, search } : { to } }),
+  );
 }

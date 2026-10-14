@@ -10,7 +10,17 @@ export type TasksSearch = {
   id?: string;
   /** A saved view's link (TV-U8): `/tasks?view=<id>`. */
   view?: string;
+  /** A place to open, once (Home's Upcoming "+n more"): `/tasks?place=upcoming`. */
+  place?: TasksPlace;
 };
+
+/** The places a link may open by name; anything else is dropped. */
+export const TASKS_PLACES = ["upcoming"] as const;
+export type TasksPlace = (typeof TASKS_PLACES)[number];
+
+function isTasksPlace(value: unknown): value is TasksPlace {
+  return typeof value === "string" && (TASKS_PLACES as readonly string[]).includes(value);
+}
 
 const VIEW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,7 +29,8 @@ export function validateTasksSearch(search: Record<string, unknown>): TasksSearc
   // Only a view id: anything else is dropped, never looked up.
   const view =
     typeof search.view === "string" && VIEW_ID.test(search.view) ? search.view : undefined;
-  return { ...(id ? { id } : {}), ...(view ? { view } : {}) };
+  const place = isTasksPlace(search.place) ? search.place : undefined;
+  return { ...(id ? { id } : {}), ...(view ? { view } : {}), ...(place ? { place } : {}) };
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────

@@ -501,6 +501,54 @@ describe("validator round", () => {
   });
 });
 
+describe("a task the server doesn't have yet (tmp- id)", () => {
+  function readers() {
+    const { runtime, spine } = fakeRuntime();
+    const listLinks = rs.fn(async () => []);
+    const listForEntity = rs.fn(async () => []);
+    Object.assign(spine, { listLinks });
+    Object.assign(runtime, { attachments: { listForEntity, status: async () => null } });
+    return { runtime, listComments: spine.listComments, listLinks, listForEntity };
+  }
+
+  it("reads no comments, links or files until it has its real id", async () => {
+    const r = readers();
+    const t = task({ id: "tmp-6f1c" });
+    renderPanel(t, api(t), r.runtime);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(r.listComments).not.toHaveBeenCalled();
+    expect(r.listLinks).not.toHaveBeenCalled();
+    expect(r.listForEntity).not.toHaveBeenCalled();
+    // The title and properties still show at once.
+    expect(screen.getByRole("textbox", { name: "Task title" })).toBeTruthy();
+  });
+
+  it("reads them once the saved task replaces it", async () => {
+    const r = readers();
+    const temp = task({ id: "tmp-6f1c" });
+    const view = renderPanel(temp, api(temp), r.runtime);
+    const saved = task({ id: "t1" });
+    view.rerender(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={saved}
+          buckets={[APP]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={api(saved)}
+          runtime={r.runtime}
+          workspaceId="w"
+        />
+      </TooltipProvider>,
+    );
+    await waitFor(() => expect(r.listComments).toHaveBeenCalled());
+    await waitFor(() => expect(r.listLinks).toHaveBeenCalled());
+    await waitFor(() => expect(r.listForEntity).toHaveBeenCalled());
+  });
+});
+
 describe("reordering subtasks (TV-U10)", () => {
   const parent = task({ id: "p", position: "0000000010" });
   const one = task({ id: "s1", title: "First step", parentId: "p", position: "0000000020" });

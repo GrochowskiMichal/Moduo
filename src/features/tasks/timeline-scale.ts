@@ -202,6 +202,28 @@ export function drawWindow(visible: { from: number; to: number }): { from: numbe
   return { from, to };
 }
 
+/**
+ * What a zoom holds still: a point in days (fractional, from the range's
+ * frame) and the track x it keeps. The day under the pointer for a ⌘-scroll;
+ * from the zoom control or the keys, Today when it's on screen (else the
+ * middle), so zooming in never pushes Today off the edge it sat near.
+ */
+export function zoomAnchor(
+  range: TimelineRange,
+  dayWidth: number,
+  scrollLeft: number,
+  trackWidth: number,
+  today: number,
+  pointerX?: number,
+): { day: number; at: number } {
+  if (pointerX === undefined) {
+    const todayAt = dayCenterX(range, dayWidth, today) - scrollLeft;
+    if (todayAt >= 0 && todayAt <= trackWidth) return { day: today + 0.5, at: todayAt };
+  }
+  const at = pointerX === undefined ? trackWidth / 2 : Math.max(0, Math.min(trackWidth, pointerX));
+  return { day: range.start + (scrollLeft + at) / dayWidth, at };
+}
+
 /** Where the scroll sits with `day` a quarter of the way across (REPLAN 69). */
 export function scrollLeftFor(
   range: TimelineRange,

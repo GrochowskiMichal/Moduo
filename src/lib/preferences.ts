@@ -57,7 +57,8 @@ export type NotificationType =
   | "teams"
   | "agents"
   | "overdueTasks"
-  | "storage";
+  | "storage"
+  | "bookings";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
@@ -71,6 +72,7 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "agents",
   "overdueTasks",
   "storage",
+  "bookings",
 ];
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -87,6 +89,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   overdueTasks: false,
   // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
   storage: true,
+  // Someone booked or canceled on one of your booking links (TX-5).
+  bookings: true,
 };
 
 /** module_activity `op` → the quiet-set toggle that governs it. An op absent from
@@ -119,6 +123,8 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "tasks.handed_back": "assigned",
   "attachments.storage_80": "storage",
   "attachments.storage_95": "storage",
+  "calendar.booking_create": "bookings",
+  "calendar.booking_cancel": "bookings",
 };
 
 /** The switch that governs a feed row. A comment that names you is a
@@ -283,6 +289,7 @@ const notificationPrefsSchema = z
       agents: z.boolean().catch(true),
       overdueTasks: z.boolean().catch(false),
       storage: z.boolean().catch(true),
+      bookings: z.boolean().catch(true),
     }),
   )
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });

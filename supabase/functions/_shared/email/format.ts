@@ -5,7 +5,15 @@
  * writes the same thing.
  */
 
-import { zonePlace } from "../../../../src/features/calendar/booking/sentence.ts";
+// The formatters live with the booking page's, so the page and the emails
+// write a time identically (specs/transactional-email.md T15).
+export {
+  dateLong,
+  dayLong,
+  dayShort,
+  time24,
+  zoneLabel,
+} from "../../../../src/features/calendar/booking/sentence.ts";
 
 const LOCALE = "en-GB";
 
@@ -39,58 +47,4 @@ export function isValidTimeZone(zone: unknown): zone is string {
 /** The zone to write in (canonical), falling back when the one we were given is unusable. */
 export function usableTimeZone(zone: unknown, fallback = "UTC"): string {
   return canonicalTimeZone(zone) ?? canonicalTimeZone(fallback) ?? "UTC";
-}
-
-const formatters = new Map<string, Intl.DateTimeFormat>();
-/** Bounds the cache even if callers pass zones straight from a request (variants of one zone each get a key). */
-const MAX_FORMATTERS = 512;
-
-/** One formatter per zone and shape, reused across calls (building one is the expensive part). */
-function formatter(zone: string, shape: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  const key = `${zone}|${shape}`;
-  let fmt = formatters.get(key);
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(LOCALE, { ...options, timeZone: zone });
-    if (formatters.size >= MAX_FORMATTERS) formatters.clear();
-    formatters.set(key, fmt);
-  }
-  return fmt;
-}
-
-function parts(date: Date, zone: string, shape: string, options: Intl.DateTimeFormatOptions) {
-  const out: Record<string, string> = {};
-  for (const part of formatter(zone, shape, options).formatToParts(date)) {
-    out[part.type] = part.value;
-  }
-  return out;
-}
-
-/** "Friday 16 October" */
-export function dayLong(date: Date, zone: string): string {
-  const p = parts(date, zone, "dayLong", { weekday: "long", day: "numeric", month: "long" });
-  return `${p.weekday} ${p.day} ${p.month}`;
-}
-
-/** "Fri 16 Oct" */
-export function dayShort(date: Date, zone: string): string {
-  const p = parts(date, zone, "dayShort", { weekday: "short", day: "numeric", month: "short" });
-  return `${p.weekday} ${p.day} ${p.month}`;
-}
-
-/** "8 October 2026" */
-export function dateLong(date: Date, zone: string): string {
-  const p = parts(date, zone, "dateLong", { day: "numeric", month: "long", year: "numeric" });
-  return `${p.day} ${p.month} ${p.year}`;
-}
-
-/** "14:00" */
-export function time24(date: Date, zone: string): string {
-  const p = parts(date, zone, "time24", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-  return `${p.hour}:${p.minute}`;
-}
-
-/** "Warsaw time", or "UTC". */
-export function zoneLabel(zone: string): string {
-  const place = zonePlace(zone);
-  return place === "UTC" ? "UTC" : `${place} time`;
 }

@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import type { LargestAttachment, StorageStatus } from "../../../lib/runtime.types";
+import { SETTINGS_CLOSE_EVENT } from "../settings-events";
 import {
   LARGEST_SHOWN,
   meterLine,
@@ -152,6 +154,23 @@ describe("the largest files", () => {
     expect(rows[1]?.textContent).toContain("Task mine · You");
     expect(screen.getByRole("button", { name: "Delete big.png" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Delete mine.png" })).toBeNull();
+  });
+
+  it("a file's task name closes Settings and opens that task", async () => {
+    renderView(fakeRuntime({ files: [file("big")] }), "editor");
+    const opened: unknown[] = [];
+    let closed = 0;
+    const onOpen = (e: Event) => opened.push((e as CustomEvent).detail);
+    const onClose = () => {
+      closed += 1;
+    };
+    window.addEventListener(ENTITY_OPEN_EVENT, onOpen);
+    window.addEventListener(SETTINGS_CLOSE_EVENT, onClose);
+    fireEvent.click(await screen.findByRole("button", { name: "Task big" }));
+    window.removeEventListener(ENTITY_OPEN_EVENT, onOpen);
+    window.removeEventListener(SETTINGS_CLOSE_EVENT, onClose);
+    expect(closed).toBe(1);
+    expect(opened).toEqual([{ type: "task", id: "t-big" }]);
   });
 
   it("Delete moves the file to the trash and reads the list again", async () => {

@@ -43,7 +43,7 @@ import { useAssignees } from "../assignees";
 import { feedTime } from "../feed";
 import { useTaskTimeShare } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { ActivityEntry, Bucket, Task } from "../model";
+import { type ActivityEntry, type Bucket, isUnsavedTaskId, type Task } from "../model";
 import { AgentSessionLines } from "./task-agent-session";
 import { TaskDescription } from "./task-description";
 import {
@@ -142,10 +142,15 @@ function DetailBody({
   const canRemoveAny =
     canEdit && !!bucket && !bucket.isSystem && bucket.ownerId === api.currentUserId;
   const projects = buckets.filter((b) => !b.isSystem && !b.archivedAt);
+  // A task still on its way to the server (a `tmp-` id) has no files, links
+  // or comments to read yet: those reads wait for its real id (the body
+  // remounts on it, keyed above), so nothing asks the server about an id it
+  // never heard of (a new person's teaching tasks open the panel at once).
+  const readRuntime = isUnsavedTaskId(task.id) ? null : runtime;
 
   // ── attachments (AT-2): one self-contained section ─────────────────────────
   const files = useAttachmentsSection({
-    runtime,
+    runtime: readRuntime,
     // The task's own workspace: that's where its files live.
     workspaceId: workspaceId ? task.workspaceId || workspaceId : null,
     entity: { type: "task", id: task.id },
@@ -161,9 +166,9 @@ function DetailBody({
 
   // ── linked items (DF-8, as reference cards since TV-U13) ───────────────────
   const hubFocus: EntityRef = { type: "task", id: task.id };
-  const hub = useEntityHub(runtime, workspaceId, hubFocus);
+  const hub = useEntityHub(readRuntime, workspaceId, hubFocus);
   const hubReload = hub.reload;
-  const showHub = !!runtime && !!workspaceId;
+  const showHub = !!readRuntime && !!workspaceId;
   useEffect(() => {
     if (!showHub) return;
     const onRefresh = () => hubReload();
@@ -292,7 +297,7 @@ function DetailBody({
     <TaskFeed
       task={task}
       api={api}
-      runtime={runtime}
+      runtime={readRuntime}
       workspaceId={workspaceId}
       canRemoveAny={canRemoveAny}
     />

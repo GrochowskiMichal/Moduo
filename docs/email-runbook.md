@@ -211,3 +211,29 @@ where kind = 'waitlist_invite' order by created_at desc limit 20;
 - **Let nobody new in:** Authentication → Sign In / Providers → "Allow new users to sign up" off. Existing users keep signing in; invitees wait.
 - **The hook misbehaves** (for example every new sign-up fails): switch sign-ups off first, then the hook (Auth Hooks → Before User Created → Enable off). Never leave sign-ups on with the hook off: then anyone can create an account.
 - **Stop B1** without touching the rest of the queue: `alter table public.waitlist disable trigger waitlist_enqueue_invite;` (and `enable` to resume). Rows already queued still go out; cancel them with `select public.email_cancel('B1:');`.
+
+## TX-5 · Booking emails: going live
+
+All agent steps, each needing Maciej's OK in the session, in this order. The worker goes first: `booking-public` starts queueing the five booking kinds the moment it's deployed, and a worker without their templates only retries them (for up to ~80 minutes).
+
+1. ✅ (2026-10-10, v4, deployed from `t/maciej/tx-5-booking-emails` at db2cb7e8 = `maciej` eeed2460 with TX-4 + TX-5) **Worker** (agent, with OK), **from `maciej` after TX-5 has merged** (and after TX-4 too, if TX-4 has merged by then). A function deploy replaces the whole bundle, and TX-4 adds its own template to the same registry: a deploy from either task branch drops the other block's kinds, and their queued emails retry for ~80 minutes, then fail. Check first that no newer worker is live (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`, then compare with the last deploy recorded here):
+   ```bash
+   supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+2. ✅ (2026-10-10, history version `20261010160147`; both ops carry `notify_user_ids`, grants service_role only) **Migration** `20261010160147_tx5_booking_bell.sql` (renamed from `20261010160000` to its prod version on 2026-10-14) (agent, with OK): the host's bell. Check:
+   ```sql
+   select position('notify_user_ids' in prosrc) > 0 from pg_proc where proname in ('booking_op_commit', 'booking_op_release');
+   ```
+   Expect two `true` rows. Until it's applied, bookings still work; the host just gets no bell line.
+3. ✅ (2026-10-10, v24; `functions:reconcile` OK; smoke: unknown slug and token answer 404) **Booking function** (agent, with OK):
+   ```bash
+   supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+   then `bun run functions:reconcile`. From here on `booking-public` sends nothing itself (the old `sendGuestEmail` and its `RESEND_FROM` are gone).
+4. **Booking page copy** ships with the app (develop → staging-app → prod-app). Until then the confirmation keeps saying a calendar invite is coming on Zoom-only links.
+5. **Live check:** book a slot on a Google-connected link and on a Zoom-only link (docs/testing/ checklist for TX-5), cancel each, and read the rows:
+   ```sql
+   select kind, status, attempts, last_error, dedupe_key from public.email_outbox
+   where kind like 'booking_%' order by created_at desc limit 20;
+   ```
+

@@ -199,6 +199,46 @@ describe("useTasksWelcome", () => {
     expect(currentPreferences().tasksOnboarding.seeded["ws-1"]).toBeTruthy();
   });
 
+  it("never seeds a workspace whose only projects are archived", async () => {
+    setDomainReconciledForTest("preferences", ME);
+    const api = fakeApi({ archivedBuckets: [{ id: "old" }], archivedTasks: [task("t0", ME)] });
+    renderWelcome(api, { isOwner: true });
+    await flush();
+    await flush();
+    expect(
+      (api as unknown as { createTask: ReturnType<typeof rs.fn> }).createTask,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("stops seeding when the workspace changes mid-way", async () => {
+    setDomainReconciledForTest("preferences", ME);
+    let release: () => void = () => {};
+    const createTask = rs.fn(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(null);
+        }),
+    );
+    const api = fakeApi({ createTask });
+    const view = renderHook(
+      ({ ws }) =>
+        useTasksWelcome({
+          api,
+          runtime: null,
+          workspaceId: ws,
+          isOwner: true,
+          onFirstView: () => undefined,
+        }),
+      { initialProps: { ws: "ws-1" } },
+    );
+    await flush();
+    expect(createTask).toHaveBeenCalledTimes(1);
+    view.rerender({ ws: "ws-2" });
+    await act(async () => release());
+    await flush();
+    expect(createTask).toHaveBeenCalledTimes(1);
+  });
+
   it("never seeds a workspace someone else prepared", async () => {
     setDomainReconciledForTest("preferences", ME);
     const api = fakeApi({ tasks: [task("t1", "organiser")], buckets: [{ id: "p1" }] });
