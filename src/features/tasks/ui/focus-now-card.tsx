@@ -336,7 +336,7 @@ function FoldedDescription({ html }: { html: string }) {
       <div
         ref={boxRef}
         className={cn(
-          "font-sans text-sm leading-relaxed text-muted-foreground",
+          "font-sans text-sm leading-relaxed break-words text-muted-foreground",
           !expanded && "max-h-36 overflow-hidden",
           !expanded && folds && "mask-b-from-60%",
         )}

@@ -618,7 +618,8 @@ export function FocusView({
       data-slot="focus-view"
     >
       {header}
-      <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
+      {/* Never sideways (MOD-119): a long word or line stays inside the column. */}
+      <div className="pane-scroll min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto">
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
           {notice && noticeHere ? (
             <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} />

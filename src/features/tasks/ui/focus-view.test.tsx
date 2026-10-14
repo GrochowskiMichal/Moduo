@@ -585,6 +585,44 @@ describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
     expect(within(card).getByText("Claude · Writing tests · step 3 of 5 · just now")).toBeTruthy();
   });
 
+  it("a long agent note stays on one line, shortened, never pushing Focus sideways (MOD-119)", () => {
+    const now = new Date().toISOString();
+    const note = `Prod desktop build published to ${"the-release-channel-".repeat(8)}latest`;
+    const session: AgentSession = {
+      id: "s1",
+      workspaceId: WS,
+      taskId: "t1",
+      userId: USER,
+      agent: "Claude",
+      state: "needs_you",
+      note,
+      step: null,
+      steps: null,
+      links: [],
+      earlier: [],
+      summaryAt: null,
+      summaryPostedAt: null,
+      startedAt: now,
+      updatedAt: now,
+      stoppedAt: null,
+    };
+    renderView(fakeApi([task("t1"), task("t2")], { agentSessions: [session] }));
+    const card = screen.getByRole("region", { name: "Now" });
+    const line = card.querySelector('[data-slot="agent-session-line"]') as HTMLElement;
+    expect(line.className).toContain("flex-nowrap");
+    expect(line.className).not.toContain("flex-wrap ");
+    expect(line.className).toContain("min-w-0");
+    // The full text on hover; the words that can run long cut with an ellipsis.
+    expect(line.getAttribute("title")).toBe(`Claude · Needs you: ${note} · just now`);
+    const shortened = line.querySelector(".truncate");
+    expect(shortened?.textContent).toContain(note);
+    expect(shortened?.className).toContain("min-w-0");
+    // And the screen itself never scrolls sideways.
+    const scroller = document.querySelector('[data-slot="focus-view"] .pane-scroll') as HTMLElement;
+    expect(scroller.className).toContain("min-w-0");
+    expect(scroller.className).toContain("overflow-x-clip");
+  });
+
   it("a lined-up task that waits is In flight, not Up next; the line opens the panel", () => {
     const onShowInFlight = rs.fn();
     const waiting: TaskWaitingEntry = {

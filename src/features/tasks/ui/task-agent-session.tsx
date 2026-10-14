@@ -154,22 +154,44 @@ function AgentSessionLine({
     }
   };
 
+  const text = agentLineText(session, now, who);
+  // Who and what (the note an agent writes can run long) shorten with an
+  // ellipsis; the step and the age, the links and the buttons stay whole.
+  const head = parts.slice(0, 2);
+  const tail = parts.slice(2);
   return (
     <div data-slot="agent-session" data-state={session.stoppedAt ? "stopped" : session.state}>
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 font-sans text-xs text-muted-foreground">
-        <span className="sr-only">{agentLineText(session, now, who)}</span>
-        {parts.map((part, i) => (
+      {/* One line that never wraps or widens its column (MOD-119): Focus's
+          Now card scrolled sideways on a long "needs you: …". */}
+      <div
+        data-slot="agent-session-line"
+        title={text}
+        className="flex min-w-0 flex-nowrap items-center gap-x-1.5 font-sans text-xs text-muted-foreground"
+      >
+        <span className="sr-only">{text}</span>
+        <span aria-hidden className="min-w-0 truncate">
+          {head.map((part, i) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.
+              key={i}
+              className={cn(
+                i === 0 && "font-medium text-foreground",
+                i === 1 && "ms-1.5",
+                i === 1 && loud && "text-foreground",
+              )}
+            >
+              {i > 0 ? `· ${part}` : part}
+            </span>
+          ))}
+        </span>
+        {tail.map((part, i) => (
           <span
             // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.
             key={i}
             aria-hidden
-            className={cn(
-              "whitespace-nowrap",
-              i === 0 && "font-medium text-foreground",
-              i === 1 && loud && "text-foreground",
-            )}
+            className="shrink-0 whitespace-nowrap"
           >
-            {i > 0 ? `· ${part}` : part}
+            {`· ${part}`}
           </span>
         ))}
         {session.links.map((link) => (
@@ -178,7 +200,7 @@ function AgentSessionLine({
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-0.5 whitespace-nowrap text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             · {linkWords(link)}
             <ArrowUpRight className="size-icon-xs" aria-hidden />
@@ -190,7 +212,7 @@ function AgentSessionLine({
             size="sm"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="h-auto px-1 py-0 text-xs text-muted-foreground"
+            className="h-auto shrink-0 px-1 py-0 text-xs text-muted-foreground"
           >
             {open ? "Fold" : hasSummary ? "Summary" : `${session.earlier.length} earlier`}
           </Button>
@@ -204,7 +226,7 @@ function AgentSessionLine({
                 aria-label="Clear this line"
                 disabled={busy}
                 onClick={clear}
-                className="hit-min size-4 text-muted-foreground"
+                className="hit-min size-4 shrink-0 text-muted-foreground"
               >
                 <X className="size-icon-xs" aria-hidden />
               </Button>
@@ -214,7 +236,7 @@ function AgentSessionLine({
         ) : null}
       </div>
       {open ? (
-        <div className="mt-1 flex flex-col gap-1 border-l border-hairline pl-2 font-sans text-xs text-muted-foreground">
+        <div className="mt-1 flex min-w-0 flex-col gap-1 border-l border-hairline pl-2 font-sans text-xs break-words text-muted-foreground">
           {session.earlier.map((line) => (
             <span key={`${line.at}-${line.state}`}>
               {[line.note ?? line.state, stepWords(line)].filter(Boolean).join(" · ")}
