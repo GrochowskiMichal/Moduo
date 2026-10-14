@@ -71,6 +71,18 @@ export function clearPendingOpenSettings() {
   pendingOpen = null;
 }
 
+export const SETTINGS_CLOSE_EVENT = "moduo:settings:close";
+
+/**
+ * Close Settings from inside it, on the way somewhere else (Storage's task
+ * name opens that task). Like a dismissal, it disarms a sticky open.
+ */
+export function dispatchCloseSettings() {
+  pendingOpen = null;
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(SETTINGS_CLOSE_EVENT));
+}
+
 export function isSettingsSectionId(value: unknown): value is SettingsSectionId {
   return (SETTINGS_SECTION_IDS as readonly unknown[]).includes(value);
 }

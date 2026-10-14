@@ -17,6 +17,7 @@ import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Progress } from "../../../components/ui/progress";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { getRuntime } from "../../../lib/runtime";
 import type { LargestAttachment, ModuoRuntime, StorageStatus } from "../../../lib/runtime.types";
 import { formatDate } from "../../../lib/time-format";
@@ -27,7 +28,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { fileIconFor } from "../../attachments/files";
 import type { WorkspaceMember, WorkspaceRole } from "../../workspaces/types";
-import { dispatchOpenSettings } from "../settings-events";
+import { dispatchCloseSettings, dispatchOpenSettings } from "../settings-events";
 import { SettingsSectionShell } from "./section-shell";
 
 /** How many of the largest files the list shows. */
@@ -250,9 +251,17 @@ export function StorageSectionView({ runtime, workspaceId, role, userId, members
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-foreground">{f.fileName}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {[f.taskTitle.trim() || "Untitled task", who, when]
+                      <button
+                        type="button"
+                        onClick={() => openFileTask(f.taskId)}
+                        className="rounded-sm text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {f.taskTitle.trim() || "Untitled task"}
+                      </button>
+                      {[who, when]
                         .filter(Boolean)
-                        .join(" · ")}
+                        .map((part) => ` · ${part}`)
+                        .join("")}
                     </p>
                   </div>
                   <span className="shrink-0 font-sans text-xs tabular-nums text-muted-foreground">
@@ -281,6 +290,14 @@ export function StorageSectionView({ runtime, workspaceId, role, userId, members
         ) : null}
       </Group>
     </SettingsSectionShell>
+  );
+}
+
+/** A file's task name leaves Settings for that task (it opens in Tasks). */
+function openFileTask(taskId: string) {
+  dispatchCloseSettings();
+  window.dispatchEvent(
+    new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "task", id: taskId } }),
   );
 }
 

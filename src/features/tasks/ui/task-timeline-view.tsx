@@ -965,7 +965,7 @@ export function TaskTimelineView({
       if (several.length > 0) {
         const movable = several.filter(canMoveTask);
         if (movable.length === 0) return false;
-        writes.shiftTasks(movable, shift);
+        writes.shiftTasks(movable, shift, several.length - movable.length);
       } else if (row?.kind === "task") {
         if (!canMoveTask(row.task)) return false;
         writes.shiftTasks([row.task], shift);
@@ -980,11 +980,10 @@ export function TaskTimelineView({
       case "clear-date": {
         if (!canDrag) return false;
         const several = selectedTasks();
-        const targets = (
-          several.length > 0 ? several : row?.kind === "task" ? [row.task] : []
-        ).filter(canMoveTask);
+        const asked = several.length > 0 ? several : row?.kind === "task" ? [row.task] : [];
+        const targets = asked.filter(canMoveTask);
         if (targets.length === 0) return false;
-        writes.clearDue(targets);
+        writes.clearDue(targets, asked.length - targets.length);
         return true;
       }
       case "fit":

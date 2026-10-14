@@ -2,10 +2,12 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   clearPendingOpenSettings,
+  dispatchCloseSettings,
   dispatchOpenSettings,
   isSettingsSectionId,
   PENDING_OPEN_TTL_MS,
   pendingOpenSettings,
+  SETTINGS_CLOSE_EVENT,
   SETTINGS_SECTION_IDS,
 } from "./settings-events";
 
@@ -51,6 +53,21 @@ describe("pending-open buffer (cold-load /settings deep link)", () => {
     dispatchOpenSettings({ section: "billing" }, { sticky: true });
     expect(pendingOpenSettings(Date.now() + PENDING_OPEN_TTL_MS + 1)).toBeNull();
     // Expiry clears the buffer for later in-TTL reads too.
+    expect(pendingOpenSettings()).toBeNull();
+  });
+});
+
+describe("dispatchCloseSettings (Storage's task name leaves Settings)", () => {
+  it("tells the modal to close and disarms a sticky open", () => {
+    dispatchOpenSettings({ section: "storage" }, { sticky: true });
+    let closed = 0;
+    const onClose = () => {
+      closed += 1;
+    };
+    window.addEventListener(SETTINGS_CLOSE_EVENT, onClose);
+    dispatchCloseSettings();
+    window.removeEventListener(SETTINGS_CLOSE_EVENT, onClose);
+    expect(closed).toBe(1);
     expect(pendingOpenSettings()).toBeNull();
   });
 });
