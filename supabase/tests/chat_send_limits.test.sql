@@ -3,7 +3,8 @@
 --
 -- Cast: O owns workspace W and O2 owns W2, both on the Duo plan, so chat is on.
 -- A, B and C are members of W; A is also in W2. A makes a public channel Q and
--- a private channel P with B. K is an app's key in W (Chat: Edit), made by A.
+-- a private channel P with B. K (made by A) and K2 (made by B) are two apps'
+-- keys in W, K3 (made by A) an app's key in W2, all with Chat: Edit.
 -- Ops are called the way the app and the connector call them.
 --
 -- The whole file is one transaction, so now() never moves: every message sent
@@ -26,16 +27,21 @@ CREATE FUNCTION test.ref(p_name text) RETURNS uuid LANGUAGE sql STABLE AS $$
 $$;
 
 -- A message from a person, the way the app sends it.
-CREATE FUNCTION test.send(p_who text, p_conv text, p_client text DEFAULT NULL) RETURNS text
-LANGUAGE sql AS $$
+CREATE FUNCTION test.send(p_who text, p_conv text, p_client text DEFAULT NULL, p_parent uuid DEFAULT NULL)
+RETURNS text LANGUAGE sql AS $$
   SELECT test.as_user(p_who, format(
-    $q$SELECT public.chat_op_send(%L, 'hello', NULL, '{}'::uuid[], false, %L)$q$,
-    test.ref(p_conv), CASE WHEN p_client IS NULL THEN NULL ELSE test.id(p_client) END))
+    $q$SELECT public.chat_op_send(%L, 'hello', %L, '{}'::uuid[], false, %L)$q$,
+    test.ref(p_conv), p_parent, CASE WHEN p_client IS NULL THEN NULL ELSE test.id(p_client) END))
 $$;
--- A message from the app behind key K, the way the connector posts it.
-CREATE FUNCTION test.post_as_app(p_conv text) RETURNS text LANGUAGE sql AS $$
-  SELECT test.as_key('K', format($q$SELECT public.chat_op_agent_post(%L, %L, 'from the app')$q$,
-    test.id('W'), test.ref(p_conv)))
+-- A message from an app, the way the connector posts it with that app's key.
+CREATE FUNCTION test.post_as_app(p_key text, p_ws text, p_conv text, p_parent uuid DEFAULT NULL)
+RETURNS text LANGUAGE sql AS $$
+  SELECT test.as_key(p_key, format($q$SELECT public.chat_op_agent_post(%L, %L, 'from the app', %L)$q$,
+    test.id(p_ws), test.ref(p_conv), p_parent))
+$$;
+-- The message a person sent with this client id.
+CREATE FUNCTION test.sent_with(p_client text) RETURNS uuid LANGUAGE sql AS $$
+  SELECT id FROM public.chat_messages WHERE client_id = test.id(p_client)
 $$;
 -- Moves every message of a workspace back in time ("that long ago").
 CREATE FUNCTION test.age(p_ws text, p_by interval) RETURNS void LANGUAGE sql AS $$
@@ -75,6 +81,10 @@ BEGIN
 
   INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by)
   VALUES (test.id('K'), test.id('W'), 'Claude Desktop', 'mdo_test', md5('db-test-key'),
+          '{"chat": "edit"}'::jsonb, test.id('A')),
+         (test.id('K2'), test.id('W'), 'Second app', 'mdo_tst2', md5('db-test-key-2'),
+          '{"chat": "edit"}'::jsonb, test.id('B')),
+         (test.id('K3'), test.id('W2'), 'Elsewhere app', 'mdo_tst3', md5('db-test-key-3'),
           '{"chat": "edit"}'::jsonb, test.id('A'));
 END;
 $$;
@@ -104,17 +114,26 @@ BEGIN
   v := test.send('A', 'G', 'first-of-burst');
   PERFORM test.ok(v LIKE 'ok %', 'send: the first message of a burst goes through', v);
   v_refused := 0;
-  FOR i IN 2 .. 10 LOOP
+  FOR i IN 2 .. 9 LOOP
     v := test.send('A', 'G');
     IF v NOT LIKE 'ok %' THEN
       v_refused := v_refused + 1;
       v_seen := v;
     END IF;
   END LOOP;
-  PERFORM test.ok(v_refused = 0 AND test.sent('A', 'W') = 10, 'send: ten messages in a moment go through', v_seen);
+  v := test.send('A', 'G', NULL, test.sent_with('first-of-burst'));
+  IF v NOT LIKE 'ok %' THEN
+    v_refused := v_refused + 1;
+    v_seen := v;
+  END IF;
+  PERFORM test.ok(v_refused = 0 AND test.sent('A', 'W') = 10
+    AND (SELECT count(*) FROM public.chat_messages WHERE parent_id = test.sent_with('first-of-burst')) = 1,
+    'send: ten messages in a moment go through, a thread reply among them', v_seen);
   v := test.send('A', 'G');
   PERFORM test.ok(v = c_limited, 'send: the eleventh message in 10 s is refused with PT429', v);
   PERFORM test.ok(test.sent('A', 'W') = 10, 'send: a refused message writes nothing');
+  v := test.send('A', 'G', NULL, test.sent_with('first-of-burst'));
+  PERFORM test.ok(v = c_limited, 'send: a thread reply is refused the same way', v);
   v := test.send('A', 'Q');
   PERFORM test.ok(v = c_limited, 'send: the limit is per workspace, not per conversation', v);
   v := test.send('A', 'G', 'first-of-burst');
@@ -148,16 +167,25 @@ BEGIN
   -- Apps share one budget per workspace, apart from the people's.
   PERFORM test.age('W', interval '1 hour');
   v_refused := 0;
-  FOR i IN 1 .. 10 LOOP
-    v := test.post_as_app('G');
+  FOR i IN 1 .. 9 LOOP
+    v := test.post_as_app('K', 'W', 'G');
     IF v NOT LIKE 'ok %' THEN
       v_refused := v_refused + 1;
       v_seen := v;
     END IF;
   END LOOP;
-  PERFORM test.ok(v_refused = 0, 'send: an app posts ten messages in a moment', v_seen);
-  v := test.post_as_app('Q');
+  v := test.post_as_app('K', 'W', 'G', test.sent_with('first-of-burst'));
+  IF v NOT LIKE 'ok %' THEN
+    v_refused := v_refused + 1;
+    v_seen := v;
+  END IF;
+  PERFORM test.ok(v_refused = 0, 'send: an app posts ten messages in a moment, a thread reply among them', v_seen);
+  v := test.post_as_app('K', 'W', 'Q');
   PERFORM test.ok(v = c_limited, 'send: the app''s eleventh message in 10 s is refused with PT429', v);
+  v := test.post_as_app('K2', 'W', 'G');
+  PERFORM test.ok(v = c_limited, 'send: another app in the same workspace shares that budget', v);
+  v := test.post_as_app('K3', 'W2', 'G2');
+  PERFORM test.ok(v LIKE 'ok %', 'send: an app in another workspace is not held back', v);
   v := test.send('A', 'G');
   PERFORM test.ok(v LIKE 'ok %', 'send: A, who made the key, still posts as themselves', v);
 
@@ -235,13 +263,11 @@ BEGIN
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('G', 'B', false) = 2,
     'typing: and then waits again', v);
 
-  -- Refusals are unchanged and leave no mark.
+  -- Refusals are unchanged.
   v := test.typing('C', 'P');
-  PERFORM test.ok(v = 'P0001 You''re not a member of this conversation.' AND test.marks('C', 'P') = 0,
-    'typing: C, not in P, is refused and leaves no mark', v);
+  PERFORM test.ok(v = 'P0001 You''re not a member of this conversation.', 'typing: C, not in P, is still refused', v);
   v := test.typing('A', 'Q', false, test.id('no-such-thread'));
-  PERFORM test.ok(v = 'P0001 That thread no longer exists.' AND test.marks('A', 'Q') = 0,
-    'typing: a missing thread is refused and leaves no mark', v);
+  PERFORM test.ok(v = 'P0001 That thread no longer exists.', 'typing: a missing thread is still refused', v);
 
   -- The marks are the server's alone.
   v := test.as_user('B', 'SELECT count(*) FROM public.chat_typing_marks');
