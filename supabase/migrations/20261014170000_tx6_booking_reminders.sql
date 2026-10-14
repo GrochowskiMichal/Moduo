@@ -20,7 +20,10 @@
 --    host's. Disconnecting a calendar account tombstones its events too: the
 --    trigger runs at commit (deferred), sees the account gone, and does nothing.
 -- 5. The event's time changes (a Moduo edit or a Google reschedule synced in):
---    the booking's times follow, and its reminders move with them.
+--    the booking's times follow, and its reminders move with them. A change to
+--    the link's "Remind guests" re-queues its upcoming bookings' reminders.
+-- 6. None of these triggers can fail the write that fired them: an error is a
+--    WARNING in the logs, and the booking keeps its state.
 --
 -- Dedupe keys carry the moment they were queued, so a re-queue (an undo, a
 -- move) never collides with the cancelled row before it, which would make
@@ -105,21 +108,26 @@ BEGIN
   v_send := b.start_at - make_interval(mins => v_minutes);
   IF v_send <= now() THEN RETURN 0; END IF;
   FOR r IN SELECT * FROM public.booking__recipients(b) LOOP
-    PERFORM public.email_enqueue(
-      'booking_guest_reminder', r.email, NULL,
-      b.email_context || jsonb_build_object(
-        'bookingId', b.id::text,
-        'start', public.booking__iso(b.start_at),
-        'end', public.booking__iso(b.end_at),
-        'at', public.booking__iso(v_send),
-        'sendAt', public.booking__iso(v_send),
-        'reminderMinutes', v_minutes,
-        'recipient', r.recipient
-      ),
-      format('C7:%s:%s:%s', b.id, v_stamp, r.email),
-      v_send
-    );
-    v_count := v_count + 1;
+    BEGIN
+      PERFORM public.email_enqueue(
+        'booking_guest_reminder', r.email, NULL,
+        b.email_context || jsonb_build_object(
+          'bookingId', b.id::text,
+          'start', public.booking__iso(b.start_at),
+          'end', public.booking__iso(b.end_at),
+          'at', public.booking__iso(v_send),
+          'sendAt', public.booking__iso(v_send),
+          'reminderMinutes', v_minutes,
+          'recipient', r.recipient
+        ),
+        format('C7:%s:%s:%s', b.id, v_stamp, r.email),
+        v_send
+      );
+      v_count := v_count + 1;
+    EXCEPTION WHEN OTHERS THEN
+      -- One unusable address skips that email, never the rest.
+      RAISE WARNING 'booking email to one recipient skipped (%): % %', p_booking_id, SQLSTATE, SQLERRM;
+    END;
   END LOOP;
   RETURN v_count;
 END;
@@ -142,19 +150,24 @@ BEGIN
   -- Nobody is told about a meeting that already started.
   IF b.start_at <= now() THEN RETURN 0; END IF;
   FOR r IN SELECT * FROM public.booking__recipients(b) LOOP
-    PERFORM public.email_enqueue(
-      'booking_guest_host_cancelled', r.email, NULL,
-      b.email_context || jsonb_build_object(
-        'bookingId', b.id::text,
-        'start', public.booking__iso(b.start_at),
-        'end', public.booking__iso(b.end_at),
-        'at', public.booking__iso(b.host_cancelled_at),
-        'recipient', r.recipient
-      ),
-      format('C6:%s:%s:%s', b.id, extract(epoch FROM b.host_cancelled_at)::bigint, r.email),
-      b.host_cancelled_at + interval '2 minutes'
-    );
-    v_count := v_count + 1;
+    BEGIN
+      PERFORM public.email_enqueue(
+        'booking_guest_host_cancelled', r.email, NULL,
+        b.email_context || jsonb_build_object(
+          'bookingId', b.id::text,
+          'start', public.booking__iso(b.start_at),
+          'end', public.booking__iso(b.end_at),
+          'at', public.booking__iso(b.host_cancelled_at),
+          'recipient', r.recipient
+        ),
+        format('C6:%s:%s:%s', b.id, extract(epoch FROM b.host_cancelled_at)::bigint, r.email),
+        b.host_cancelled_at + interval '2 minutes'
+      );
+      v_count := v_count + 1;
+    EXCEPTION WHEN OTHERS THEN
+      -- One unusable address skips that email, never the rest.
+      RAISE WARNING 'booking email to one recipient skipped (%): % %', p_booking_id, SQLSTATE, SQLERRM;
+    END;
   END LOOP;
   RETURN v_count;
 END;
@@ -174,6 +187,10 @@ BEGIN
   ELSIF OLD.status = 'confirmed' AND NEW.status IS DISTINCT FROM 'confirmed' THEN
     PERFORM public.email_cancel('C7:' || NEW.id::text);
   END IF;
+  RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  -- An email problem never undoes the booking change that caused it.
+  RAISE WARNING 'slot_bookings__email_follow(%): % %', NEW.id, SQLSTATE, SQLERRM;
   RETURN NULL;
 END;
 $$;
@@ -256,6 +273,11 @@ BEGIN
     PERFORM public.booking__queue_reminders(b.id);
   END IF;
   RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  -- Deferred to commit: an error here would roll back the host's calendar edit
+  -- or a whole calendar sync. The booking keeps its state; nothing is emailed.
+  RAISE WARNING 'calendar_events__booking_follow(%): % %', NEW.id, SQLSTATE, SQLERRM;
+  RETURN NULL;
 END;
 $$;
 
@@ -271,6 +293,41 @@ CREATE CONSTRAINT TRIGGER calendar_events_booking_follow
     OR OLD.end_time IS DISTINCT FROM NEW.end_time
   )
   EXECUTE FUNCTION public.calendar_events__booking_follow();
+
+-- ---- the host changes a link's reminder ------------------------------------
+-- Already-booked meetings follow the new setting: their queued reminders are
+-- cancelled and queued again (none when the link is now off).
+
+CREATE OR REPLACE FUNCTION public.exposed_slot_links__reminder_follow()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id uuid;
+BEGIN
+  FOR v_id IN
+    SELECT b.id FROM public.slot_bookings b
+    WHERE b.slot_id = NEW.slot_id AND b.status = 'confirmed' AND b.start_at > now()
+  LOOP
+    PERFORM public.email_cancel('C7:' || v_id::text);
+    PERFORM public.booking__queue_reminders(v_id);
+  END LOOP;
+  RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  -- Saving the link always works; the old reminders stay as they were.
+  RAISE WARNING 'exposed_slot_links__reminder_follow(%): % %', NEW.id, SQLSTATE, SQLERRM;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS exposed_slot_links_reminder_follow ON public.exposed_slot_links;
+CREATE TRIGGER exposed_slot_links_reminder_follow
+  AFTER UPDATE ON public.exposed_slot_links
+  FOR EACH ROW
+  WHEN (OLD.guest_reminder_minutes IS DISTINCT FROM NEW.guest_reminder_minutes)
+  EXECUTE FUNCTION public.exposed_slot_links__reminder_follow();
 
 -- ---- the guest cancel marks its booking first ------------------------------
 -- 20261010160147_tx5_booking_bell.sql's body, plus the first UPDATE.
@@ -346,5 +403,6 @@ REVOKE ALL ON FUNCTION public.booking__queue_reminders(uuid) FROM PUBLIC, anon, 
 REVOKE ALL ON FUNCTION public.booking__queue_host_cancel(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.slot_bookings__email_follow() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.calendar_events__booking_follow() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.exposed_slot_links__reminder_follow() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.booking__queue_reminders(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.booking__queue_host_cancel(uuid) TO service_role;

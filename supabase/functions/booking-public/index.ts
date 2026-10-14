@@ -868,17 +868,26 @@ Deno.serve(async (req: Request) => {
     calendar_synced: true,
     updated_at: new Date().toISOString(),
   };
-  const withContext = await db
-    .from("slot_bookings")
-    .update({
-      ...confirmed,
-      email_context: emailContext(facts, { cancelUrl, rebookUrl: `${origin}/book/${encodeURIComponent(link.slug)}` }),
-    })
-    .eq("id", bookingId);
+  const context = emailContext(facts, { cancelUrl, rebookUrl: `${origin}/book/${encodeURIComponent(link.slug)}` });
+  const withContext = {
+    ...(await db
+      .from("slot_bookings")
+      .update({ ...confirmed, email_context: context })
+      .eq("id", bookingId)),
+    context,
+  };
   if (withContext.error) {
-    // Deployed before its migration (no email_context column): confirm without it.
     console.error("[booking-public] confirm with email context failed:", withContext.error.code, withContext.error.message);
-    await db.from("slot_bookings").update(confirmed).eq("id", bookingId);
+    const missingColumn =
+      (withContext.error.code === "PGRST204" || withContext.error.code === "42703") &&
+      withContext.error.message.includes("email_context");
+    // Deployed before its migration: confirm without the context. Anything
+    // else: try the same update once more, so a passing hiccup keeps it.
+    const retry = await db
+      .from("slot_bookings")
+      .update(missingColumn ? confirmed : { ...confirmed, email_context: withContext.context })
+      .eq("id", bookingId);
+    if (retry.error) await db.from("slot_bookings").update(confirmed).eq("id", bookingId);
   }
 
   await queueEmails(

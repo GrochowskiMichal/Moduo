@@ -1,3 +1,4 @@
+import { GUEST_REMINDER_MINUTES, type GuestReminderMinute } from "@contracts/vocabularies";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SELECTED_OPTION } from "@/components/ui/selection";
@@ -62,15 +63,23 @@ export type LinkDraft = {
  */
 export const COLLECTIVE_LINKS_ENABLED = false;
 
-export type GuestReminderMinutes = 60 | 1440 | null;
+export type GuestReminderMinutes = GuestReminderMinute | null;
 
 /** New and existing links start at 24 hours (specs/transactional-email.md Q36). */
 export const DEFAULT_GUEST_REMINDER_MINUTES: GuestReminderMinutes = 1440;
 
+const REMINDER_LABEL: Record<GuestReminderMinute, string> = {
+  60: "1 hour before",
+  1440: "24 hours before",
+};
+
 const REMINDER_OPTIONS: { value: string; minutes: GuestReminderMinutes; label: string }[] = [
   { value: "off", minutes: null, label: "Off" },
-  { value: "60", minutes: 60, label: "1 hour before" },
-  { value: "1440", minutes: 1440, label: "24 hours before" },
+  ...GUEST_REMINDER_MINUTES.map((minutes) => ({
+    value: String(minutes),
+    minutes,
+    label: REMINDER_LABEL[minutes],
+  })),
 ];
 
 const NOTICE_OPTIONS = [

@@ -2,6 +2,7 @@
 // calendars count as busy, and the guest questions. Video is Google Meet,
 // Zoom, or the guest's choice of the two; Moduo video stays visible, disabled.
 
+import { normalizeGuestReminderMinutes } from "@contracts/vocabularies";
 import { Copy, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
@@ -108,8 +109,7 @@ function emptyDraft(): Draft {
 
 /** The saved reminder: off (null), 1 hour or 24 hours; anything else reads as the default. */
 export function reminderFromRow(value: number | null | undefined): GuestReminderMinutes {
-  if (value === null) return null;
-  return value === 60 || value === 1440 ? value : DEFAULT_GUEST_REMINDER_MINUTES;
+  return normalizeGuestReminderMinutes(value);
 }
 
 /** PostgREST's answer when a written column doesn't exist (the migration isn't applied yet). */

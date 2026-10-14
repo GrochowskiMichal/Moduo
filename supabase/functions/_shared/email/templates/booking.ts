@@ -407,6 +407,7 @@ export function parseBookingPayload(payload: Record<string, unknown>): BookingEm
       })
     : [];
   const optional = (key: string) => text(payload, key, false) || undefined;
+  const sendAt = optional("sendAt");
   return {
     bookingId: text(payload, "bookingId"),
     linkName: text(payload, "linkName", false),
@@ -431,7 +432,7 @@ export function parseBookingPayload(payload: Record<string, unknown>): BookingEm
     note: optional("note") ?? null,
     answers,
     reminderMinutes: typeof payload.reminderMinutes === "number" ? payload.reminderMinutes : undefined,
-    sendAt: optional("sendAt") && !Number.isNaN(Date.parse(text(payload, "sendAt"))) ? text(payload, "sendAt") : undefined,
+    sendAt: sendAt && !Number.isNaN(Date.parse(sendAt)) ? sendAt : undefined,
   };
 }
 

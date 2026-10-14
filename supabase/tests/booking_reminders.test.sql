@@ -176,6 +176,55 @@ SET CONSTRAINTS ALL DEFERRED;
 SELECT test.ok(test.booking_status('10') = 'cancelled' AND test.queued('booking_guest_host_cancelled', '10') = 0,
   'deleting a meeting that already started releases it but emails nobody');
 
+-- ---- undo after someone took the freed time ----------------------------------
+
+SELECT test.booking('11', 'slot-L', date_trunc('minute', now()) + interval '11 days');
+UPDATE public.calendar_events SET deleted_at = now() WHERE id = test.id('E11');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+INSERT INTO public.slot_bookings (id, slot_id, slot_slug, start_at, end_at, attendee_name, attendee_email, status)
+VALUES (test.id('B11b'), 'slot-L', 'tx6', date_trunc('minute', now()) + interval '11 days',
+        date_trunc('minute', now()) + interval '11 days 30 minutes', 'Priya Nair', 'priya@nair.dev', 'confirmed');
+UPDATE public.calendar_events SET deleted_at = NULL WHERE id = test.id('E11');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok(test.booking_status('11') = 'cancelled' AND test.queued('booking_guest_host_cancelled', '11') = 2,
+  'an undo after someone booked the freed time leaves the booking cancelled, and C6 still goes');
+
+-- ---- a move onto another booking's start -------------------------------------
+
+SELECT test.booking('12', 'slot-L', date_trunc('minute', now()) + interval '12 days');
+SELECT test.booking('13', 'slot-L', date_trunc('minute', now()) + interval '13 days');
+UPDATE public.calendar_events SET start_time = start_time + interval '1 day', end_time = end_time + interval '1 day'
+WHERE id = test.id('E12');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok((SELECT start_at FROM public.slot_bookings WHERE id = test.id('B12')) = date_trunc('minute', now()) + interval '12 days'
+  AND (SELECT deleted_at IS NULL AND start_time = date_trunc('minute', now()) + interval '13 days' FROM public.calendar_events WHERE id = test.id('E12')),
+  'a move onto another booking''s start keeps the event edit and the booking''s slot record');
+
+-- ---- the host changes the link's reminder ---------------------------------------
+
+SELECT test.booking('14', 'slot-L60', date_trunc('minute', now()) + interval '14 days');
+UPDATE public.exposed_slot_links SET guest_reminder_minutes = 1440 WHERE id = test.id('L60');
+SELECT test.ok((SELECT count(*) FROM public.email_outbox WHERE kind = 'booking_guest_reminder' AND status = 'queued'
+                  AND payload->>'bookingId' = test.id('B14')::text
+                  AND send_after = date_trunc('minute', now()) + interval '13 days') = 2,
+  'switching a link from 1 h to 24 h moves its upcoming reminders');
+UPDATE public.exposed_slot_links SET guest_reminder_minutes = NULL WHERE id = test.id('L60');
+SELECT test.ok(test.queued('booking_guest_reminder', '14') = 0, 'switching a link off cancels its upcoming reminders');
+
+-- ---- an email problem never blocks the calendar --------------------------------
+
+SELECT test.booking('15', 'slot-LOFF', date_trunc('minute', now()) + interval '15 days');
+UPDATE public.slot_bookings SET guest_emails = '["not an address"]'::jsonb WHERE id = test.id('B15');
+UPDATE public.calendar_events SET deleted_at = now() WHERE id = test.id('E15');
+SET CONSTRAINTS ALL IMMEDIATE;
+SET CONSTRAINTS ALL DEFERRED;
+SELECT test.ok(test.booking_status('15') = 'cancelled' AND test.queued('booking_guest_host_cancelled', '15') = 1
+  AND (SELECT deleted_at IS NOT NULL FROM public.calendar_events WHERE id = test.id('E15')),
+  'an unusable guest address skips only that email; the delete and the booker''s C6 go through');
+
 -- ---- internals stay internal ---------------------------------------------------
 
 SELECT test.ok(NOT has_function_privilege('authenticated', 'public.booking__queue_reminders(uuid)', 'EXECUTE')
