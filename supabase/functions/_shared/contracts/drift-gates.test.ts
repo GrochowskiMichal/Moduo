@@ -18,6 +18,10 @@ import {
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
+  CHAT_CATCHUP_DONE_HOW,
+  CHAT_CATCHUP_REASONS,
+  CHAT_EVENT_TYPES,
+  CHAT_MESSAGE_KINDS,
   COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
   DATE_ORDERS,
@@ -121,6 +125,17 @@ describe("cross-runtime drift guards", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261008233000_email_outbox_worker.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`reason IN (${inList(EMAIL_SUPPRESSION_REASONS)})`);
+  });
+
+  it("chat v2 vocabularies match the …_chat_v2_foundation CHECKs (CV-1)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_foundation.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (kind IN (${inList(CHAT_MESSAGE_KINDS)}))`);
+    expect(sql).toContain(`(event ->> 'type') IN (${inList(CHAT_EVENT_TYPES)})`);
+    expect(sql).toContain(`CHECK (reason IN (${inList(CHAT_CATCHUP_REASONS)}))`);
+    expect(sql).toContain(`done_how IN (${inList(CHAT_CATCHUP_DONE_HOW)})`);
   });
 
   it("content author kinds match the chat_messages and comments CHECKs", () => {
