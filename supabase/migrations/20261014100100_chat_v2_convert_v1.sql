@@ -18,6 +18,11 @@
 -- Channel names (v1 slugs) stay until someone renames them. v1 agent posts keep
 -- their null author and read as "<key name> (app)".
 --
+-- Order: right after the foundation and before any v2 op (CV-2a's migration),
+-- in the same release; steps 2–4 can't tell a v1 setting from a v2 choice, so it
+-- refuses once v2 data exists. It ships with the v2 ops: v1's own notes-to-self
+-- (chat_op_open_dm) can't open a deleted conversation.
+--
 -- It refuses, before changing anything, a v1 body holding U+0001/U+0002 (the
 -- converter's markers) or one that would grow past 8,000 characters; check prod
 -- read-only before the release train (docs/build/chat-v2/CV-1.md).
@@ -38,9 +43,6 @@ BEGIN
 
   IF EXISTS (SELECT 1 FROM public.chat_messages WHERE format_version = 1) THEN
     RAISE EXCEPTION 'chat v1 → v2: messages are still in the v1 form.';
-  END IF;
-  IF EXISTS (SELECT 1 FROM public.chat_messages WHERE parent_id IS NOT NULL AND NOT v1_thread_reply) THEN
-    RAISE EXCEPTION 'chat v1 → v2: a v1 thread reply is not flagged.';
   END IF;
   IF EXISTS (SELECT 1 FROM public.chat_members m JOIN public.chat_channels c ON c.id = m.channel_id
               WHERE c.kind = 'channel' AND c.deleted_at IS NULL AND m.notify_level = 'all') THEN

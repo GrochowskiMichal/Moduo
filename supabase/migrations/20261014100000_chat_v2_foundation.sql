@@ -29,8 +29,10 @@
 -- Every redefined function starts from its live body (2026-10-14). Grants are
 -- re-stated and asserted at the end.
 
--- Fail fast instead of queueing the app behind the table rewrite (search_tsv is a
--- stored generated column: one rewrite of chat_messages, ~0.8 s per 100,000 rows).
+-- Fail fast instead of queueing the app behind the rewrites: the backfill rewrites
+-- every message and membership row once, and search_tsv (a stored generated
+-- column) rewrites chat_messages again (~0.8 s per 100,000 rows each locally).
+-- Every backfilled row also reaches v1's Realtime subscribers as an UPDATE.
 SET LOCAL lock_timeout = '5s';
 
 -- ── 1. Search plumbing and the stored form ──────────────────────────────────
@@ -748,7 +750,7 @@ ALTER TABLE public.chat_members
   ALTER COLUMN updated_at SET DEFAULT clock_timestamp(),
   ALTER COLUMN updated_at SET NOT NULL;
 
--- One table rewrite. Queries must say `deleted_at IS NULL` to use the index below.
+-- The second rewrite of chat_messages. Queries must say `deleted_at IS NULL` to use the index below.
 ALTER TABLE public.chat_messages
   ADD COLUMN IF NOT EXISTS search_tsv tsvector
   GENERATED ALWAYS AS (
@@ -778,8 +780,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chat_channels_name_trimmed'
                   AND conrelid = 'public.chat_channels'::regclass) THEN
     -- Names as typed (CH3a): trimmed, 1–80 characters (the length CHECK exists).
+    -- NOT VALID: new and changed names are checked; existing v1 slugs are trimmed by
+    -- construction, and CV-23 validates it once prod is checked.
     ALTER TABLE public.chat_channels ADD CONSTRAINT chat_channels_name_trimmed
-      CHECK (name IS NULL OR name = btrim(name));
+      CHECK (name IS NULL OR name = btrim(name)) NOT VALID;
   END IF;
 END;
 $$;
@@ -813,8 +817,11 @@ BEGIN
 END;
 $fn$;
 
+-- Named to fire after the write guards (BEFORE triggers run in name order), so a
+-- refused write doesn't pay for the parse; zz_stamp_updated_at still runs last.
 DROP TRIGGER IF EXISTS chat_messages_body_text ON public.chat_messages;
-CREATE TRIGGER chat_messages_body_text
+DROP TRIGGER IF EXISTS zx_body_text ON public.chat_messages;
+CREATE TRIGGER zx_body_text
   BEFORE INSERT OR UPDATE OF body, format_version ON public.chat_messages
   FOR EACH ROW EXECUTE FUNCTION public.chat__messages_body_text();
 
@@ -1043,6 +1050,32 @@ CREATE POLICY entity_links_workspace_read ON public.entity_links FOR SELECT TO a
          AND (target_type NOT IN ('chat_channel', 'chat_message')
               OR public.perm_can_see_entity(workspace_id, target_type, target_id)));
 
+-- Announcement mode is a write: it asked the plan only through the read rule,
+-- which no longer does, so it asks chat_op__guard itself (from its live body,
+-- 20261014090000; CV-11's chat_op_set_announcement replaces it).
+CREATE OR REPLACE FUNCTION public.share_op_announce(p_channel_id uuid, p_on boolean)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_channel public.chat_channels;
+BEGIN
+  SELECT * INTO v_channel FROM public.chat_channels WHERE id = p_channel_id;
+  IF v_channel.id IS NULL OR NOT public.chat_can_read_channel(p_channel_id) THEN
+    RAISE EXCEPTION 'That channel is gone.';
+  END IF;
+  PERFORM public.chat_op__guard(v_channel.workspace_id);
+  IF v_channel.kind <> 'channel' THEN
+    RAISE EXCEPTION 'Direct messages can''t be announcement-only.';
+  END IF;
+  IF NOT (
+    public.chat_has_cap(v_channel.workspace_id, auth.uid(), 'manage_any')
+    OR EXISTS (SELECT 1 FROM public.chat_channel_managers m WHERE m.channel_id = p_channel_id AND m.user_id = auth.uid())
+  ) THEN
+    RAISE EXCEPTION 'Only a channel manager can change this.' USING ERRCODE = '42501';
+  END IF;
+  UPDATE public.chat_channels SET managers_only = coalesce(p_on, false) WHERE id = p_channel_id;
+END;
+$$;
+
 -- ── 7. Realtime (§2.7) ──────────────────────────────────────────────────────
 
 -- The workspace's presence topic (chat:<workspace id>): members of a workspace
@@ -1118,6 +1151,29 @@ DECLARE
   v_tz text;
   v_title constant text := 'Notes to self (from Chat)';
 BEGIN
+  -- It converts v1's data and runs once, right after the foundation and before
+  -- any v2 op: steps 2–4 can't tell a v1 setting from one a person chose in v2.
+  -- So it refuses once the v2 ops are in (CV-2a flips format_version's default
+  -- to 2) or anything only a v2 op writes exists.
+  IF (SELECT pg_get_expr(d.adbin, d.adrelid)
+        FROM pg_catalog.pg_attrdef d
+        JOIN pg_catalog.pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
+       WHERE d.adrelid = 'public.chat_messages'::regclass AND a.attname = 'format_version')
+     IS DISTINCT FROM '1'
+     OR EXISTS (SELECT 1 FROM public.chat_members m
+                 WHERE m.left_at IS NOT NULL
+                   AND (p_workspace_id IS NULL OR m.workspace_id = p_workspace_id))
+     OR EXISTS (SELECT 1 FROM public.chat_messages m
+                 WHERE (m.kind <> 'message' OR m.reply_to_id IS NOT NULL OR m.api_key_id IS NOT NULL
+                        OR m.mentioned_team_ids <> '{}')
+                   AND (p_workspace_id IS NULL OR m.workspace_id = p_workspace_id))
+     OR EXISTS (SELECT 1 FROM public.chat_catchup k
+                 WHERE k.reason <> 'level_reset'
+                   AND (p_workspace_id IS NULL OR k.workspace_id = p_workspace_id))
+     OR EXISTS (SELECT 1 FROM public.chat_chain_mutes x
+                 WHERE p_workspace_id IS NULL OR x.workspace_id = p_workspace_id) THEN
+    RAISE EXCEPTION 'chat__convert_v1: v2 data is already here; the conversion runs right after the foundation, before the v2 ops (CV-2a).';
+  END IF;
   -- Refuse what the converter can't carry, before anything changes.
   IF EXISTS (SELECT 1 FROM public.chat_messages m
               WHERE m.format_version = 1
@@ -1267,12 +1323,19 @@ BEGIN
   )
   SELECT count(*) INTO v_registered FROM ins;
 
-  -- 7. The bell's old excerpts, rewritten so they draw like new ones; the marker
-  --    in the payload says it's done.
+  -- 7. The bell's old excerpts: one that holds a v1 token (written from a raw
+  --    body) is rewritten so it draws like new ones; one the v1 client wrote as
+  --    plain text (names already in) keeps its text, which the converter would
+  --    only escape. The marker in the payload says it's done.
   WITH up AS (
     UPDATE public.module_activity a
-       SET payload = jsonb_set(a.payload, '{excerpt}',
-                               to_jsonb(public.chat__v1_to_v2(a.payload ->> 'excerpt')))
+       SET payload = CASE
+                       WHEN a.payload ->> 'excerpt'
+                            ~ '<@[0-9a-fA-F-]{36}>|<!channel>|<moduo:[a-z_]{1,32}:'
+                         THEN jsonb_set(a.payload, '{excerpt}',
+                                        to_jsonb(public.chat__v1_to_v2(a.payload ->> 'excerpt')))
+                       ELSE a.payload
+                     END
                      || '{"format_version": 2}'::jsonb
      WHERE a.op IN ('chat.mention', 'chat.reply')
        AND jsonb_typeof(a.payload -> 'excerpt') = 'string'
@@ -1302,50 +1365,64 @@ $fn$;
 -- in every workspace (their own workspaces' rows go with those anyway), and the
 -- preview counts both. "Nobody else is in it" (a DM or private channel that goes)
 -- and the handover of a channel they managed alone count only people who haven't
--- left. Patched into the live body by anchored replace.
+-- left. Patched into the live body by anchored replace, one patch at a time: a
+-- patch whose text is already there is skipped, so a re-run only adds what's
+-- missing, and an anchor that isn't there exactly once stops the migration.
 DO $erase$
 DECLARE
   v_def text := pg_get_functiondef('public.account_erase_workspace_data(uuid, boolean)'::regprocedure);
   v_new text;
-  a text;
-BEGIN
-  IF position('chat_catchup' IN v_def) > 0 THEN
-    RETURN; -- re-run
-  END IF;
-  FOREACH a IN ARRAY ARRAY[
+  v_anchor text[] := ARRAY[
     'v_time_notes integer;',
     '  v_counts := jsonb_build_object(',
     '''time_notes_cleared'', v_time_notes',
     'DELETE FROM public.chat_channels c WHERE c.id = ANY (v_channel_del);',
     'WHERE cm.channel_id = c.id AND cm.user_id <> p_user',
-    'WHERE cm.channel_id = r.id AND cm.user_id <> p_user'
-  ] LOOP
-    IF (length(v_def) - length(replace(v_def, a, ''))) / length(a) <> 1 THEN
-      RAISE EXCEPTION 'account_erase_workspace_data isn''t the body this migration expects (%); redefine it by hand.', a;
-    END IF;
-  END LOOP;
-  v_new := replace(v_def, 'v_time_notes integer;',
+    'WHERE cm.channel_id = r.id AND cm.user_id <> p_user',
+    'WHERE cm.channel_id = r.id AND cm.user_id = v_owner'
+  ];
+  v_patch text[] := ARRAY[
     'v_time_notes integer;'
-    || E'\n  v_chat_catchup integer;'
-    || E'\n  v_chat_mutes integer;');
-  v_new := replace(v_new, '  v_counts := jsonb_build_object(',
+      || E'\n  v_chat_catchup integer;'
+      || E'\n  v_chat_mutes integer;',
     '  -- Chat v2 (CV-1): their Catch up items and the chains they stopped following.'
-    || E'\n  SELECT count(*) INTO v_chat_catchup FROM public.chat_catchup x WHERE x.user_id = p_user;'
-    || E'\n  SELECT count(*) INTO v_chat_mutes FROM public.chat_chain_mutes x WHERE x.user_id = p_user;'
-    || E'\n\n  v_counts := jsonb_build_object(');
-  v_new := replace(v_new, '''time_notes_cleared'', v_time_notes',
+      || E'\n  SELECT count(*) INTO v_chat_catchup FROM public.chat_catchup x WHERE x.user_id = p_user;'
+      || E'\n  SELECT count(*) INTO v_chat_mutes FROM public.chat_chain_mutes x WHERE x.user_id = p_user;'
+      || E'\n\n  v_counts := jsonb_build_object(',
     '''time_notes_cleared'', v_time_notes,'
-    || E'\n    ''chat_catchup_deleted'', v_chat_catchup,'
-    || E'\n    ''chat_chain_mutes_deleted'', v_chat_mutes');
-  v_new := replace(v_new, 'DELETE FROM public.chat_channels c WHERE c.id = ANY (v_channel_del);',
+      || E'\n    ''chat_catchup_deleted'', v_chat_catchup,'
+      || E'\n    ''chat_chain_mutes_deleted'', v_chat_mutes',
     'DELETE FROM public.chat_channels c WHERE c.id = ANY (v_channel_del);'
-    || E'\n  DELETE FROM public.chat_catchup x WHERE x.user_id = p_user;'
-    || E'\n  DELETE FROM public.chat_chain_mutes x WHERE x.user_id = p_user;');
-  v_new := replace(v_new, 'WHERE cm.channel_id = c.id AND cm.user_id <> p_user',
-    'WHERE cm.channel_id = c.id AND cm.user_id <> p_user AND cm.left_at IS NULL');
-  v_new := replace(v_new, 'WHERE cm.channel_id = r.id AND cm.user_id <> p_user',
-    'WHERE cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL');
-  EXECUTE v_new;
+      || E'\n  DELETE FROM public.chat_catchup x WHERE x.user_id = p_user;'
+      || E'\n  DELETE FROM public.chat_chain_mutes x WHERE x.user_id = p_user;',
+    'WHERE cm.channel_id = c.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
+    'WHERE cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
+    'WHERE cm.channel_id = r.id AND cm.user_id = v_owner AND cm.left_at IS NULL'
+  ];
+  -- Text only the patched body holds, one per patch.
+  v_done text[] := ARRAY[
+    'v_chat_catchup integer;',
+    'SELECT count(*) INTO v_chat_catchup',
+    '''chat_catchup_deleted''',
+    'DELETE FROM public.chat_catchup x',
+    'cm.channel_id = c.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
+    'cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL',
+    'cm.user_id = v_owner AND cm.left_at IS NULL'
+  ];
+  k integer;
+BEGIN
+  v_new := v_def;
+  FOR k IN 1 .. cardinality(v_anchor) LOOP
+    CONTINUE WHEN position(v_done[k] IN v_new) > 0;
+    IF (length(v_new) - length(replace(v_new, v_anchor[k], ''))) / length(v_anchor[k]) <> 1 THEN
+      RAISE EXCEPTION 'account_erase_workspace_data isn''t the body this migration expects (%); redefine it by hand.',
+        v_anchor[k];
+    END IF;
+    v_new := replace(v_new, v_anchor[k], v_patch[k]);
+  END LOOP;
+  IF v_new <> v_def THEN
+    EXECUTE v_new;
+  END IF;
 END;
 $erase$;
 
@@ -1386,7 +1463,8 @@ BEGIN
   -- The read rules the policies call.
   FOREACH fn IN ARRAY ARRAY[
     'chat_can_read_channel(uuid)',
-    'chat_realtime_topic_allowed(text)'
+    'chat_realtime_topic_allowed(text)',
+    'share_op_announce(uuid, boolean)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated, service_role', fn);

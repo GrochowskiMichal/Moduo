@@ -148,6 +148,10 @@ BEGIN
   v := test.as_user('B', format($q$SELECT public.chat_op_send(%L, 'still?', NULL, '{}'::uuid[], false, NULL, NULL)$q$,
     test.ref('P')));
   PERFORM test.ok(v = 'P0001 Chat is available on the Duo and Team plans.', 'plan off: writing still needs the plan', v);
+  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('P')));
+  PERFORM test.ok(v = 'P0001 Chat is available on the Duo and Team plans.'
+                  AND NOT (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('P')),
+    'plan off: announcement mode, a write, needs the plan too', v);
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
 
   -- B leaves P (v2 stamps the row instead of deleting it).

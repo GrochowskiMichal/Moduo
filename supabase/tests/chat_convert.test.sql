@@ -419,10 +419,10 @@ BEGIN
     (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:1'))
       = 'Hey moduo://person/' || test.id('B') || ' look *now*'
     AND (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:2')) = 'Agreed, cut it to one line.'
-    AND (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:3')) = '*only italic*'
+    AND (SELECT payload ->> 'excerpt' FROM public.module_activity WHERE id = test.id('bell:3')) = '_only italic_'
     AND (SELECT bool_and(payload ->> 'format_version' = '2') FROM public.module_activity
           WHERE workspace_id = test.id('W') AND op IN ('chat.mention', 'chat.reply')),
-    'AC13.7: the bell''s old excerpts are rewritten (and marked) so they redraw');
+    'AC13.7: an excerpt with v1 tokens is rewritten; a plain-text one keeps its text; all are marked');
 
   -- ── Twice: a second run changes nothing ──
   CREATE TEMP TABLE before_rerun ON COMMIT DROP AS SELECT * FROM test.row_versions();
@@ -466,5 +466,38 @@ BEGIN
   PERFORM test.ok(v_msg LIKE '%1 v1 message(s) would be longer than 8,000 characters%'
                   AND (SELECT format_version FROM public.chat_messages WHERE id = test.id('W2:m1')) = 1,
     'refuse: a body that would grow past 8,000 characters, leaving it as it was', v_msg);
+END;
+$$;
+
+-- ── It runs before the v2 ops, never after: v2 data stops it ────────────────
+DO $$
+DECLARE
+  v_msg text;
+BEGIN
+  UPDATE public.chat_messages SET body = 'fine', format_version = 1 WHERE id = test.id('W2:m1');
+  INSERT INTO public.chat_chain_mutes (user_id, root_id, workspace_id) VALUES (test.id('A'), test.id('W2:m1'), test.id('W2'));
+  BEGIN
+    PERFORM public.chat__convert_v1(test.id('W2'));
+    v_msg := 'converted';
+  EXCEPTION WHEN OTHERS THEN
+    v_msg := SQLERRM;
+  END;
+  PERFORM test.ok(v_msg LIKE '%v2 data is already here%'
+                  AND (SELECT format_version FROM public.chat_messages WHERE id = test.id('W2:m1')) = 1,
+    'refuse: a row only a v2 op writes (a chain mute) stops the conversion', v_msg);
+  DELETE FROM public.chat_chain_mutes WHERE workspace_id = test.id('W2');
+
+  ALTER TABLE public.chat_messages ALTER COLUMN format_version SET DEFAULT 2;
+  BEGIN
+    PERFORM public.chat__convert_v1(test.id('W2'));
+    v_msg := 'converted';
+  EXCEPTION WHEN OTHERS THEN
+    v_msg := SQLERRM;
+  END;
+  ALTER TABLE public.chat_messages ALTER COLUMN format_version SET DEFAULT 1;
+  PERFORM test.ok(v_msg LIKE '%v2 data is already here%',
+    'refuse: once the v2 ops are in (format_version defaults to 2)', v_msg);
+  PERFORM test.ok(public.chat__convert_v1(test.id('W2')) ->> 'bodies' = '1',
+    'refuse: with neither, it converts');
 END;
 $$;

@@ -19,14 +19,20 @@ INSERT INTO public.chat_channels (id, workspace_id, kind, name, is_private, dm_k
   (test.id('c:W2'), test.id('W2'), 'channel', 'general', false, NULL),
   -- Private channels E is in: with F, who left (it goes), and with G, still here (it stays).
   (test.id('c:left'), test.id('W'), 'channel', 'with-f', true, NULL),
-  (test.id('c:kept'), test.id('W'), 'channel', 'with-g', true, NULL);
+  (test.id('c:kept'), test.id('W'), 'channel', 'with-g', true, NULL),
+  -- E manages it alone; the owner O was in it and left, G is still in it.
+  (test.id('c:hand'), test.id('W'), 'channel', 'handover', true, NULL);
 INSERT INTO public.chat_members (channel_id, user_id, workspace_id, left_at) VALUES
   (test.id('c:W'), test.id('E'), test.id('W'), NULL),
   (test.id('c:W'), test.id('F'), test.id('W'), NULL),
   (test.id('c:left'), test.id('E'), test.id('W'), NULL),
   (test.id('c:left'), test.id('F'), test.id('W'), now()),
   (test.id('c:kept'), test.id('E'), test.id('W'), NULL),
-  (test.id('c:kept'), test.id('G'), test.id('W'), NULL);
+  (test.id('c:kept'), test.id('G'), test.id('W'), NULL),
+  (test.id('c:hand'), test.id('O'), test.id('W'), now()),
+  (test.id('c:hand'), test.id('E'), test.id('W'), NULL),
+  (test.id('c:hand'), test.id('G'), test.id('W'), NULL);
+INSERT INTO public.chat_channel_managers (channel_id, user_id) VALUES (test.id('c:hand'), test.id('E'));
 INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body) VALUES
   (test.id('m:1'), test.id('W'), test.id('c:W'), test.id('F'), 'one'),
   (test.id('m:2'), test.id('W'), test.id('c:W'), test.id('F'), 'two'),
@@ -69,6 +75,10 @@ BEGIN
     NOT EXISTS (SELECT 1 FROM public.chat_channels WHERE id = test.id('c:left'))
     AND EXISTS (SELECT 1 FROM public.chat_channels WHERE id = test.id('c:kept')),
     'erase: the channel only a former member shared with E goes; the one G is in stays');
+  PERFORM test.ok(
+    (SELECT array_agg(user_id) FROM public.chat_channel_managers WHERE channel_id = test.id('c:hand'))
+      = ARRAY[test.id('G')],
+    'erase: a channel E managed alone goes to G, still in it, not to the owner who left it');
 
   -- The rows also go with the profile (account deletion's cascade).
   DELETE FROM auth.users WHERE id = test.id('F');
