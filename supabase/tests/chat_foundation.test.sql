@@ -395,3 +395,46 @@ BEGIN
     'parity: … and once the workspace is deleted (nobody reads, the owner included)', test.read_rule_mismatches());
 END;
 $$;
+
+-- ── A long code fence reads as code, never an error (the trigger runs on every write) ──
+DO $$
+BEGIN
+  PERFORM test.ok(public.chat__body_text(repeat('`', 300) || E'\nfoo\n' || repeat('`', 301)) = 'foo'
+                  AND public.chat__body_text(repeat('`', 300) || E'\nfoo') = 'foo',
+    'body_text: a fence of 300 backticks reads its code (closed or not)');
+END;
+$$;
+
+-- ── Every SECURITY DEFINER function this block adds or redefines pins its
+--    search_path and is executable by no one it shouldn't be (no PUBLIC grant,
+--    never anon; signed-in people only for the read rules and the announce op) ──
+DO $$
+DECLARE
+  v_bad text;
+BEGIN
+  SELECT string_agg(p.oid::regprocedure::text, ', ') INTO v_bad
+    FROM pg_proc p
+   WHERE p.oid IN (
+           'public.chat__can_read_channel_as(uuid, uuid)'::regprocedure,
+           'public.chat_can_read_channel(uuid)'::regprocedure,
+           'public.spine__visible_to(uuid, text, uuid, uuid)'::regprocedure,
+           'public.chat_realtime_topic_allowed(text)'::regprocedure,
+           'public.share_op_announce(uuid, boolean)'::regprocedure,
+           'public.chat__convert_v1(uuid)'::regprocedure,
+           'public.chat__messages_body_text()'::regprocedure,
+           'public.account_erase_workspace_data(uuid, boolean)'::regprocedure)
+     AND (NOT p.prosecdef
+          OR NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%')
+          OR p.proacl IS NULL
+          OR EXISTS (SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE')
+          OR has_function_privilege('anon', p.oid, 'EXECUTE'));
+  PERFORM test.ok(v_bad IS NULL, 'definers: search_path pinned, no PUBLIC or anon EXECUTE', v_bad);
+  SELECT string_agg(f, ', ') INTO v_bad
+    FROM unnest(ARRAY['chat__can_read_channel_as(uuid, uuid)', 'spine__visible_to(uuid, text, uuid, uuid)',
+                      'chat__convert_v1(uuid)', 'chat__messages_body_text()',
+                      'account_erase_workspace_data(uuid, boolean)', 'chat__body_text(text)',
+                      'chat__v1_to_v2(text)', 'chat__unaccent(text)']) AS f
+   WHERE has_function_privilege('authenticated', 'public.' || f, 'EXECUTE');
+  PERFORM test.ok(v_bad IS NULL, 'definers: the server-only helpers are not callable by signed-in people', v_bad);
+END;
+$$;

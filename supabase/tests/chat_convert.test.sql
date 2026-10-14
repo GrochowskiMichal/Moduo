@@ -361,6 +361,13 @@ BEGIN
     AND NOT public.can_access('note', v_note.id, 'view', test.id('O'))
     AND NOT EXISTS (SELECT 1 FROM public.resource_grants WHERE resource_type = 'note' AND resource_id = v_note.id),
     'AC13.3: the note is private: C reads it, A and the owner don''t');
+  PERFORM test.ok(
+    test.value_as('C', format($q$SELECT count(*)::text FROM public.notes WHERE id = %L$q$, v_note.id)) = '1'
+    AND test.value_as('A', format($q$SELECT count(*)::text FROM public.notes WHERE id = %L$q$, v_note.id)) = '0'
+    AND test.value_as('O', format($q$SELECT count(*)::text FROM public.notes WHERE id = %L$q$, v_note.id)) = '0'
+    AND test.value_as('A', format($q$SELECT count(*)::text FROM public.entities WHERE entity_id = %L$q$, v_note.id)) = '0'
+    AND test.value_as('O', format($q$SELECT count(*)::text FROM public.entities WHERE entity_id = %L$q$, v_note.id)) = '0',
+    'AC13.3: through RLS, only C reads the note and its registry row (not A, not the workspace owner)');
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.entities WHERE entity_type = 'note' AND entity_id = v_note.id
                             AND label = 'Notes to self (from Chat)'),
     'AC13.3: the note is in the registry');

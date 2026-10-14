@@ -424,7 +424,11 @@ BEGIN
       v_size := length(m[1]);
       v_body := '{}';
       i := i + 1;
-      WHILE i <= n AND v_lines[i] !~ ('^ {0,3}`{' || v_size || ',}[ \t]*$') LOOP
+      -- The closing fence: a run at least as long, alone on its line (compared by
+      -- length: a regex bound `{N,}` past 255 is an error).
+      WHILE i <= n LOOP
+        m := regexp_match(v_lines[i], '^ {0,3}(`+)[ \t]*$');
+        EXIT WHEN m IS NOT NULL AND length(m[1]) >= v_size;
         v_body := v_body || v_lines[i];
         i := i + 1;
       END LOOP;

@@ -27,7 +27,7 @@
 | AC13.1–13.7 | `supabase/tests/chat_convert.test.sql` · "v1 → v2, twice" (spike 4's 68 pairs, every token, notes to self, thread counts, levels, slugs, General, excerpts, zero rows on the second run, refusals) + the full round trip below |
 | AC12.8 (its tables) | `supabase/tests/chat_erasure.test.sql` · "export and erasure": preview counts, delete, others untouched, the profile cascade. The export half is CV-22's (`src/features/chat/export.test.ts`) |
 
-`bun run db:test chat`: 5 files, 34 + 9 + 44 + 60 + 19 checks. Full `bun run db:test`: 42 files pass. `bun run verify` green.
+`bun run db:test chat`: 5 files, 35 + 9 + 47 + 60 + 19 checks (the foundation file also asserts every definer this block adds or redefines pins its search_path and grants no PUBLIC or anon EXECUTE). Full `bun run db:test`: 42 files pass. `bun run verify` green.
 
 ## Converter run (round-3 §2.6 round trip)
 
@@ -66,6 +66,7 @@
 
 - **(supabase)** A nested `SECURITY DEFINER` + `SET search_path` call inside a function an RLS policy calls per row costs ~100 µs a row; a 3,032-row read went 406 ms → 26 ms by writing the rule out. Keep per-row read rules free of definer hops, and guard the copy with a parity test.
 - **(supabase)** plpgsql character loops are ~100× slower than the same loop in JS: a scan the client can afford per character (`](` looking for its `)`) became 4.4 s for 8,000 characters. Bound every look-ahead in a trigger-time parser.
+- **(supabase)** A regex bound past 255 (`` `{300,} ``) is an error ("invalid repetition count"), not a no-match: compare run lengths instead of building `{N,}` from data.
 - **(supabase)** `text[] || 'literal'` resolves the literal as an array and fails ("malformed array literal"): cast it, `o || '['::text`.
 - **(supabase)** `perm_members_resolve` recomputes `workspace_members.perms` on update: a test that removes a permission by hand must bypass the trigger (`session_replication_role = replica`).
 - **(supabase)** The shared stack has functions owned by `supabase_admin` (applied by `stack.sh`): redefine as `supabase_admin` locally; prod's role is `postgres`.
