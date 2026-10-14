@@ -1,4 +1,4 @@
-// The hand-made v1 fixture of spike 4 (65 bodies) and what the drafted `chat__v1_to_v2`
+// The hand-made v1 fixture of spike 4 (68 bodies) and what the drafted `chat__v1_to_v2`
 // (docs/build/chat-v2/drafts/chat_v1_to_v2.sql) made of each body on the local
 // stack, 2026-10-14: [id, v1 body, v2 body]. CV-1 asserts its migration's
 // function against these pairs; ./v1-compare.test.ts checks every pair draws
@@ -110,4 +110,11 @@ export const V1_FIXTURE: ReadonlyArray<readonly [string, string, string]> = [
   ["f63", "see https://x.com/[a] ok", "see [https://x.com/\\[a](https://x.com/[a)] ok"],
   ["f64", "a\n  > b", "a\n  \\> b"],
   ["f65", "**bold https://x.com/a* x**", "**bold [https://x.com/a\\*](https://x.com/a*) x**"],
+  ["f66", "hey**<!channel>**", "hey **@channel**"],
+  ["f67", "a~~<!channel> now~~", "a ~~@channel now~~"],
+  [
+    "f68",
+    "see https://x.com/?r=moduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6 ok",
+    "see https://x.com/?r=moduo\\://task/d037b0b7-4125-415d-bef9-72662d6b58e6 ok",
+  ],
 ];

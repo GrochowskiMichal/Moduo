@@ -19,6 +19,8 @@ const EXPECTED_DIFFERENT: Record<string, string> = {
   f46: "a fence without a break after its first word",
   f47: "a fence without a break after its first word",
   f48: "one-line fences",
+  f66: "@channel opening bold glued to a word gets a space so it stays a token",
+  f67: "@channel opening strike glued to a word gets a space so it stays a token",
 };
 
 describe("chat__v1_to_v2 on the v1 fixture", () => {

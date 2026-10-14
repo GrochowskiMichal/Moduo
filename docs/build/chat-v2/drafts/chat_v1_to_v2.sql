@@ -91,9 +91,11 @@ begin
     elsif m[2] is not null then
       v_out := v_out || 'moduo://person/' || lower(m[2]);
     elsif m[3] is not null then
-      -- v2's @channel needs a token start; chr(1) marks the end for the caller.
+      -- v2's @channel needs a token start, across emphasis too. chr(2) marks one
+      -- that opens this (maybe nested) text, chr(1) its end; the caller adds
+      -- the spaces where a word is glued on either side.
       v_out := v_out
-        || case when v_out = '' or v_out ~ '[[:space:]]$' then '' else ' ' end
+        || case when v_out = '' then chr(2) when v_out ~ '[[:space:]]$' then '' else ' ' end
         || '@channel' || chr(1);
     elsif m[4] is not null then
       v_out := v_out || 'moduo://' || m[4] || '/' || lower(m[5]);
@@ -101,7 +103,7 @@ begin
       -- v1 drew the whole URL as a link: v2 must not read syntax inside it,
       -- and must link exactly these characters. Where v2's bare-URL rule would
       -- cut elsewhere, write the link out: `[url](url)`.
-      v_url := regexp_replace(m[6], '([\\*`~\[\]])', '\\\1', 'g');
+      v_url := replace(regexp_replace(m[6], '([\\*`~\[\]])', '\\\1', 'g'), 'moduo://', 'moduo\://');
       if m[6] ~ '[*_~}]$'
         or m[6] ~ '\\'
         or v_out ~ '[A-Za-z0-9]$'
@@ -209,8 +211,10 @@ begin
     end if;
     v_out := array_to_string(v_parts, E'\n\n');
   end if;
-  -- A converted @channel glued to a word gets a space after it, too.
+  -- A converted @channel glued to a word gets a space after it, too, and one
+  -- before the emphasis it opens (`hey**<!channel>**` → `hey **@channel**`).
   v_out := regexp_replace(v_out, chr(1) || '(?=[A-Za-z0-9_-])', ' ', 'g');
-  return replace(v_out, chr(1), '');
+  v_out := regexp_replace(v_out, '([^[:space:]*~])((?:\*\*|~~|\*)+)' || chr(2), '\1 \2', 'g');
+  return replace(replace(v_out, chr(1), ''), chr(2), '');
 end
 $fn$;
