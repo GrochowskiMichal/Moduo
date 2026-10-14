@@ -3,6 +3,15 @@
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist/web",
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "staging-landing": true,
+      "prod-landing": true,
+      "staging-app": true,
+      "prod-app": true
+    }
+  },
   "rewrites": [
     {
       "source": "/book",
@@ -63,6 +72,26 @@
       "source": "/terms",
       "has": [{ "type": "host", "value": "www.moduo.app" }],
       "destination": "/terms.html"
+    },
+    {
+      "source": "/dpa",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/dpa.html"
+    },
+    {
+      "source": "/dpa",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/dpa.html"
+    },
+    {
+      "source": "/aup",
+      "has": [{ "type": "host", "value": "moduo.app" }],
+      "destination": "/aup.html"
+    },
+    {
+      "source": "/aup",
+      "has": [{ "type": "host", "value": "www.moduo.app" }],
+      "destination": "/aup.html"
     },
     {
       "source": "/((?!assets|favicon|manifest|sw\\.|app\\.html|landing\\.html).*)",

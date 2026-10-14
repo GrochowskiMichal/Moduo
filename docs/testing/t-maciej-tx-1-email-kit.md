@@ -8,7 +8,7 @@
 - [ ] **Do:** compare the light card with A1 in `.design/transactional-email/email-set.html` → **Expect:** same copy word for word: "Your sign-in code", "Enter this code in Moduo to sign in.", the code 482913 in a grey box with wide spacing, "It works once, for 10 minutes. …", the footer reason line, the Ringdove address and a Privacy link. _(web)_
 - [ ] **Do:** look at the logo spot → **Expect:** the drawn moduo lockup, dark on the light card and light on the dark card. Storybook loads it from `public/email/` (BRAND-1's export); real emails will load it from app.moduo.app/email once the app is deployed with it. _(web)_
 - [ ] **Do:** open **Email → Transactional emails → Single**, switch Mode between light, dark and text in the controls → **Expect:** the same email in each look; the light one stays light even if Storybook itself is dark. _(web)_
-- [ ] **Do:** read the plain-text card → **Expect:** every sentence of the email, the code on its own line, "Privacy: https://www.moduo.app/privacy" written out, no HTML tags. _(web)_
+- [ ] **Do:** read the plain-text card → **Expect:** every sentence of the email, the code on its own line, "Privacy: https://moduo.app/privacy" written out, no HTML tags. _(web)_
 
 ## The ratified copy file
 - [ ] **Do:** open `.design/transactional-email/email-set.html` (or the "Moduo email set" artifact) → **Expect:** the example host is Anna Carter (not Anna Kowalska), guest booking emails end with "Scheduled with Moduo", cancel emails say "canceled" (American spelling), and the founder email says "Reply any time." _(web)_

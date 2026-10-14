@@ -13,6 +13,7 @@
 
 import { registerCodeHighlighting } from "@lexical/code-prism";
 import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
+import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
 import { CollaborationPluginV2__EXPERIMENTAL } from "@lexical/react/LexicalCollaborationPlugin";
@@ -42,14 +43,14 @@ import {
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
+import { $noteText, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
-import { $createPageRowNode } from "../editor/nodes/page-row-node";
-import { NOTE_EDITOR_NODES } from "../editor/note-nodes";
 import {
   INSERT_ENTITY_CHIP_EVENT,
   INSERT_PAGE_ROW_EVENT,
@@ -62,9 +63,14 @@ import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
-import { deriveBody } from "../sync/doc-text";
+import { NOTE_EDITOR_NODES } from "../editor/schema/nodes";
+import { $createPageRowNode } from "../editor/schema/page-row-node";
+import { installNoteNodeViews } from "../editor/views";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
+
+// The schema nodes draw through the view registry (NR-3); fill it once.
+installNoteNodeViews();
 
 type Props = {
   engine: NotesSyncEngineV2;
@@ -78,6 +84,15 @@ type Props = {
   seedWelcome?: boolean;
   /** Live module data + actions for page-rows and /page (NO-4). */
   bridge: NotesEditorBridge;
+  /** Put the caret in the note on open (a fresh capture, NR-2). */
+  autoFocus?: boolean;
+  /** The refreshed shell (NR-3): the column's width comes from the host (the
+   * reading measure or Full width), not from the editor. */
+  bare?: boolean;
+  /** Drawn under the title line (the meta line). */
+  belowTitle?: ReactNode;
+  /** Drawn after the document (the Linked-from footer). */
+  footer?: ReactNode;
 };
 
 function CodeHighlightingPlugin() {
@@ -134,8 +149,8 @@ function ListTabIndentationPlugin() {
   return null;
 }
 
-/** Debounced first-line-title derivation straight off the Y.Doc — editor-
- * independent, so remote edits retitle too. */
+/** Debounced first-line-title derivation on every doc change (remote edits
+ * retitle too). */
 function TitleDerivationPlugin({
   doc,
   onTitleDerived,
@@ -146,6 +161,7 @@ function TitleDerivationPlugin({
   // The callback rides a ref: an inline prop would re-run the effect on every
   // page re-render (sync-status flips…), tearing down the pending debounce
   // timer before it can ever fire (caught in NO-3 live-verify).
+  const [editor] = useLexicalComposerContext();
   const callbackRef = useRef(onTitleDerived);
   callbackRef.current = onTitleDerived;
   useEffect(() => {
@@ -153,7 +169,9 @@ function TitleDerivationPlugin({
     const onUpdate = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
-        callbackRef.current(firstLineTitle(deriveBody(doc).text));
+        // The live editor already holds the doc's state (the binding applies
+        // remote edits too): read its text, no clone, no markdown conversion.
+        callbackRef.current(firstLineTitle(editor.getEditorState().read($noteText)));
       }, TITLE_DEBOUNCE_MS);
     };
     doc.on("update", onUpdate);
@@ -163,6 +181,48 @@ function TitleDerivationPlugin({
     };
   }, [doc]);
   return null;
+}
+
+/**
+ * Draws `children` right under the document's first block (the title line).
+ * Lexical owns every node inside the contenteditable and reclaims foreign DOM
+ * there (the NO-5 trap), so this is an overlay NEXT TO it: the first block
+ * reserves the room (`data-meta-line` in global.css) and the overlay is placed
+ * at its bottom edge, re-measured on every editor update and every resize
+ * (a title that wraps to a second line pushes the line down with it).
+ */
+function BelowTitleSlot({ children }: { children: ReactNode }) {
+  const [editor] = useLexicalComposerContext();
+  const [top, setTop] = useState<number | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const first = editor.getRootElement()?.firstElementChild as HTMLElement | null;
+        setTop(first ? first.offsetTop + first.offsetHeight : null);
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    const unregisterRoot = editor.registerRootListener((root, prev) => {
+      if (prev) observer.unobserve(prev);
+      if (root) observer.observe(root);
+      measure();
+    });
+    const unregisterUpdate = editor.registerUpdateListener(measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      unregisterRoot();
+      unregisterUpdate();
+      observer.disconnect();
+    };
+  }, [editor]);
+  if (top === null) return null;
+  return (
+    <div className="absolute inset-x-0 px-6 pt-1" style={{ top }}>
+      {children}
+    </div>
+  );
 }
 
 /** The sidebar's "+ child" mirrors into the OPEN parent as a page-row — via
@@ -316,16 +376,34 @@ export function NoteEditor({
   onTitleDerived,
   seedWelcome = false,
   bridge,
+  autoFocus = false,
+  bare = false,
+  belowTitle,
+  footer,
 }: Props) {
   const { userId, runtime } = useAuth();
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
+  // Mount as soon as the local copy has loaded (NR-3 honest provider): the
+  // cached doc paints and edits at once while the pull runs underneath. An
+  // EMPTY cache waits for the pull instead: mounting the binding on an empty
+  // doc makes Lexical append a paragraph that syncs into Yjs and pushes, so a
+  // note opened on a new device would gain a stray empty block.
   const [ready, setReady] = useState(false);
+  // The first pull has settled: only then may the welcome seed look at an
+  // "empty" doc (before it, empty may just mean "not pulled yet").
+  const [booted, setBooted] = useState(false);
 
   useEffect(() => {
     let active = true;
     setReady(false);
+    setBooted(false);
+    void session.cacheReady.then(() => {
+      if (active && session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0) setReady(true);
+    });
     void session.booted.then(() => {
-      if (active) setReady(true);
+      if (!active) return;
+      setReady(true);
+      setBooted(true);
     });
     return () => {
       active = false;
@@ -393,16 +471,32 @@ export function NoteEditor({
   }
 
   return (
-    <div className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto bg-background">
+    <div
+      data-meta-line={belowTitle ? "" : undefined}
+      className={cn(
+        "pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto",
+        bare && "flex flex-col",
+      )}
+    >
       <NotesEditorBridgeContext.Provider value={bridge}>
         <LexicalCollaboration key={`collab-${noteId}`}>
           <LexicalComposer initialConfig={initialConfig} key={noteId}>
             <RichTextPlugin
               contentEditable={
-                <ContentEditable className="mx-auto min-h-full w-full max-w-3xl px-6 pb-24 pt-10 text-base leading-relaxed text-foreground outline-none" />
+                <ContentEditable
+                  className={cn(
+                    "w-full px-6 pt-10 text-base leading-relaxed text-foreground outline-none",
+                    bare ? "flex-1 pb-12" : "mx-auto min-h-full max-w-3xl pb-24",
+                  )}
+                />
               }
               placeholder={
-                <div className="pointer-events-none absolute left-1/2 top-10 w-full max-w-3xl -translate-x-1/2 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
+                <div
+                  className={cn(
+                    "pointer-events-none absolute top-10 px-6 font-display text-3xl font-semibold text-muted-foreground/60",
+                    bare ? "inset-x-0" : "left-1/2 w-full max-w-3xl -translate-x-1/2",
+                  )}
+                >
                   Untitled
                 </div>
               }
@@ -460,10 +554,13 @@ export function NoteEditor({
             />
             <SyncFromYjsPlugin doc={session.doc} />
             <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
-            <WelcomeSeedPlugin enabled={seedWelcome && editable} />
+            <WelcomeSeedPlugin enabled={seedWelcome && editable && booted} />
+            {autoFocus && editable ? <AutoFocusPlugin /> : null}
+            {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
           </LexicalComposer>
         </LexicalCollaboration>
       </NotesEditorBridgeContext.Provider>
+      {footer ? <div className="w-full px-6">{footer}</div> : null}
     </div>
   );
 }

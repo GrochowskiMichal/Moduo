@@ -703,6 +703,8 @@
   --bar-h:                3rem;    /* 48  — shared height for top + bottom bars */
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
+  --notes-meta-line-space: 2.25rem; /* 36 — room under a note's title for its meta line */
+  --tree-indent:          0.875rem; /* 14  — one level of a nested tree (notes sidebar) */
 
   --bp-sm: 640px;
   --bp-md: 768px;
