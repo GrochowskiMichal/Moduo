@@ -71,7 +71,7 @@ Prod also has migrations this branch doesn't carry:
 - develop's `20261009210000_api_key_expiry` (applied in the SQL editor, so not in the history);
 - develop's `20261010090000_api_key_expiry_in_sql`;
 - develop's `20261013120000_notes_refresh_organize`;
-- TX-5's `20261010160000_tx5_booking_bell` (history `20261010160147`).
+- TX-5's bell migration, renamed on 2026-10-14 to its prod version: `20261010160147_tx5_booking_bell`.
 
 **The release: 32 files, in this order:**
 

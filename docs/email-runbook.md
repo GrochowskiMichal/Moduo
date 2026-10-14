@@ -220,7 +220,7 @@ All agent steps, each needing Maciej's OK in the session, in this order. The wor
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
-2. ✅ (2026-10-10, history version `20261010160147`; both ops carry `notify_user_ids`, grants service_role only) **Migration** `20261010160000_tx5_booking_bell.sql` (agent, with OK): the host's bell. Check:
+2. ✅ (2026-10-10, history version `20261010160147`; both ops carry `notify_user_ids`, grants service_role only) **Migration** `20261010160147_tx5_booking_bell.sql` (renamed from `20261010160000` to its prod version on 2026-10-14) (agent, with OK): the host's bell. Check:
    ```sql
    select position('notify_user_ids' in prosrc) > 0 from pg_proc where proname in ('booking_op_commit', 'booking_op_release');
    ```
