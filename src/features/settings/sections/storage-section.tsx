@@ -254,7 +254,7 @@ export function StorageSectionView({ runtime, workspaceId, role, userId, members
                       <button
                         type="button"
                         onClick={() => openFileTask(f.taskId)}
-                        className="rounded-sm text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-block max-w-full truncate rounded-sm align-bottom text-foreground/80 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {f.taskTitle.trim() || "Untitled task"}
                       </button>

@@ -28,7 +28,7 @@ Screen-only, no migration: the seven Tasks gaps the local walkthrough found (`do
   - Rejected: always the middle (the bug); always Today (a jump when you've scrolled away from it).
 - **PL2-5 · Markdown bullets in plain text read as "•" lines** → `spine/editor/entity-rich-html.ts` `plainListLine`, `entity-text-editor.tsx`
   - Who: agent's choice, deferred to by Maciej, 2026-10-14.
-  - Decision: when a stored description is plain text (imports, agents, older rows), a line starting "- ", "* " or "+ " shows as "• …", indent kept; nothing is written until the person edits it.
+  - Decision: when a stored description is plain text (imports, agents, older rows), a line starting "- ", "* " or "+ " shows as "• …", indent kept; nothing is written until the person edits it. The same editor shows Calendar's event notes, so a synced event's "- " lines read as bullets too (and an edit saves the "•").
   - Why: the description editor is deliberately not a block editor (DF-23), so a list from an importer or an agent showed raw "- " lines.
   - Rejected: list nodes in the description editor (a block editor by the back door); converting in the importers only (misses agents' text and rows already imported).
 - **PL2-6 · The `@ # /` menu keeps inside its dialog** → `spine/editor/mention-menu-plugin.tsx` `menuLeftWithin`

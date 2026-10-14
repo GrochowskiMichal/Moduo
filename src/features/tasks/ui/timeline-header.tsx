@@ -33,12 +33,14 @@ function labelFits(text: string, width: number): boolean {
 }
 
 /**
- * The px of a header cell still on screen past the name column, given the
+ * The px of a header cell surely on screen past the name column, given the
  * first day on screen: a month that has mostly scrolled away under the
- * column keeps only its last days.
+ * column keeps only its last days. That first day is only partly in view
+ * (any sliver of it counts as "on screen"), so it isn't counted.
  */
 export function shownWidth(cell: HeaderCell, firstDayOnScreen: number, dw: number): number {
-  return Math.max(0, cell.end - Math.max(cell.start, firstDayOnScreen) + 1) * dw;
+  if (firstDayOnScreen <= cell.start) return (cell.end - cell.start + 1) * dw;
+  return Math.max(0, cell.end - firstDayOnScreen) * dw;
 }
 
 /**

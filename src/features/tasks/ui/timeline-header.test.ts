@@ -12,9 +12,12 @@ describe("shownWidth", () => {
     expect(shownWidth(OCTOBER, 90, 24)).toBe(31 * 24);
   });
 
-  it("is only the days left once the month scrolls under the name column", () => {
-    // At Month (24 px a day), the 29th onward: 2 days, too narrow for "October".
-    expect(shownWidth(OCTOBER, 129, 24)).toBe(48);
+  it("is only the whole days left once the month scrolls under the name column", () => {
+    // At Month (24 px a day), from a sliver of the 29th: the 30th and 31st, too
+    // narrow for "October".
+    expect(shownWidth(OCTOBER, 128, 24)).toBe(48);
+    // At Week (120 px a day), a sliver of the 31st alone shows no name.
+    expect(shownWidth(OCTOBER, 130, 120)).toBe(0);
   });
 
   it("is nothing once the month has gone", () => {

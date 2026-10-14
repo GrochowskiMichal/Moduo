@@ -470,6 +470,27 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     expect(archivedToast()).toBe(false);
   });
 
+  it("Done with Move toasts once the moves landed", async () => {
+    const { ids, runtime } = makeServer("a10-");
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const update = runtime.tasks.opUpdateTask;
+    runtime.tasks.opUpdateTask = rs.fn(async (input: never) => {
+      await gate;
+      return update(input);
+    });
+    const { result } = await mount(runtime);
+    const doneToast = () =>
+      toastMock.mock.calls.some((call) => (call as unknown[])[0] === "“X” is done");
+    act(() => result.current.setProjectState(ids.x, "done", { kind: "move", projectId: ids.y }));
+    await settle();
+    expect(doneToast()).toBe(false);
+    release();
+    await waitFor(() => expect(doneToast()).toBe(true));
+  });
+
   it("a refused archive keeps the project and puts the open tasks back", async () => {
     const { ids, runtime } = makeServer("a6-");
     runtime.tasks.updateProject = rs.fn(async () => {
