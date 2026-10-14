@@ -18,7 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
+import { formatFullDate } from "../../../lib/time-format";
 import { useWorkspace } from "../../../providers/workspace-provider";
+import { departureLines } from "../../tasks/project-overview";
 import {
   canManageMember,
   cellState,
@@ -41,6 +43,7 @@ import {
   PersonAvatar,
   SaveBar,
 } from "./access-ui";
+import { useDepartureSummary } from "./departure";
 import {
   PermissionMatrix,
   PersonCell,
@@ -86,6 +89,15 @@ export function PersonEditor({
   const [focusKey, setFocusKey] = useState<PermissionKey | null>(null);
   const [confirm, setConfirm] = useState<"remove" | "owner" | null>(null);
   const [busy, setBusy] = useState(false);
+  // What they leave behind (AC5.6, REPLAN 78): read only while asking.
+  const departure = useDepartureSummary(confirm === "remove" ? member.userId : null);
+  const leaving = departureLines(departure, {
+    first,
+    self: false,
+    receiver: "you",
+    owner: actorIsOwner ? "you" : "the workspace owner",
+    fromName: member.displayName?.trim() || "Member",
+  });
 
   useEffect(() => {
     setRoleId(member.roleId);
@@ -189,11 +201,7 @@ export function PersonEditor({
             ) : null}
           </>
         }
-        subtitle={
-          member.joinedAt
-            ? `Joined ${new Date(member.joinedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}`
-            : undefined
-        }
+        subtitle={member.joinedAt ? `Joined ${formatFullDate(member.joinedAt)}` : undefined}
         actions={
           isWorkspaceOwner ? null : (
             <Select
@@ -312,9 +320,16 @@ export function PersonEditor({
             <DialogDescription>
               {confirm === "owner"
                 ? `${first} gets full control, including billing and deleting the workspace. You become an Admin. Only ${first} can undo this.`
-                : `${first} loses access to this workspace right away. Anything they created stays. You can invite them again later.`}
+                : `${first} loses access to this workspace right away. Nothing they made is lost. You can invite them again later.`}
             </DialogDescription>
           </DialogHeader>
+          {confirm === "remove" ? (
+            <ul className="flex list-disc flex-col gap-1 pl-5 font-sans text-sm text-muted-foreground">
+              {leaving.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setConfirm(null)}>
               Cancel

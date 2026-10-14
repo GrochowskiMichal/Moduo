@@ -1,12 +1,14 @@
-// Connective-tissue spine — the EntityRefNode as browser editors use it: the
-// schema from `entity-ref-schema.ts` plus its chip view (NR-3 schema/view
-// split). Importing this module installs the view, so every editor that
-// renders chips (Notes, entity text, email compose) imports from here;
+// Connective-tissue spine — the Lexical entity-ref node (block CT-4), now the
+// Reference node (RF-1), as browser editors use it: the React-free schema from
+// `entity-ref-schema.ts` (NR-3 schema/view split) plus its view, the Reference
+// primitive from ../references/reference-node.tsx. Same node type
+// ("entity-ref"), so Notes' documents, its markdown transformer, email compose
+// and every stored task/event description keep working; a version-1 node reads
+// as a chip. Importing this module installs the view, so every editor that
+// renders references (Notes, entity text, email compose) imports from here;
 // headless code imports the schema file and never loads React.
 
-import { EntityRefChip } from "../ui/entity-ref-chip";
-import { EntityRefNode } from "./entity-ref-schema";
-import { registerNodeView } from "./node-views";
+import { installReferenceView } from "../references/reference-node";
 
 export {
   $createEntityRefNode,
@@ -15,28 +17,11 @@ export {
   type SerializedEntityRefNode,
 } from "./entity-ref-schema";
 
-/** Draw the chip and deep-link on click (`moduo:entity:open`, routed by the
- * host page). */
+/** Draw entity-ref nodes as the Reference primitive (link · chip · card). The
+ * Notes editor calls it with its other views; importing this module already
+ * has. Idempotent. */
 export function installEntityRefView(): void {
-  registerNodeView(EntityRefNode.getType(), (node) => {
-    const {
-      __entityType: type,
-      __entityId: id,
-      __label: label,
-      __icon: icon,
-    } = node as EntityRefNode;
-    return (
-      <EntityRefChip
-        type={type}
-        label={label}
-        icon={icon}
-        onClick={() => {
-          if (typeof window === "undefined") return;
-          window.dispatchEvent(new CustomEvent("moduo:entity:open", { detail: { type, id } }));
-        }}
-      />
-    );
-  });
+  installReferenceView();
 }
 
 installEntityRefView();

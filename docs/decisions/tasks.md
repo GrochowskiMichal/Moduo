@@ -2,6 +2,3246 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · TV-POLISH Tasks v3 polish batch — the agent's choices (deferred to by Maciej)
+
+The one polish batch after the module's blocks (no migration): the known items from the orchestrator and the quick, safe lines of every checklist's "Polish later". What wasn't quick or needs a call is in [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **PL-1 · The e2e specs run one at a time** → `playwright.config.ts` (`projects[e2e].workers = 1`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the e2e project runs one spec file at a time (about five minutes for the 65 tests); no retries.
+  - Why: every spec signs in as the seed person in one workspace, so parallel files read each other's rows (a bell's newest 50 notices, a project's order, the offline queue's sync line); serially the suite passes together. Retries would hide exactly that.
+  - Rejected: a workspace per spec (every spec's setup and cleanup rewritten; worth it only if the serial run grows past ~10 minutes, listed in the deferred file); retries.
+- **PL-2 · SQL tests set the shared stack's other rows aside** → `supabase/tests/notifications.test.sql`, `ops_parity.test.sql`, `agent_sessions.test.sql`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a test that runs a whole-database job (the reminder sender, the push claim) suspends everyone else's pending reminders and deliveries inside its rolled-back run, the way `sessions.test.sql` already did; a check that nothing was written looks only at the test's own workspaces.
+  - Why: the local stack is shared (Maciej's own reminders, e2e imports); a test must pass whatever else is on it.
+  - Rejected: asserting global counts after cleaning the database first (never touch other people's rows).
+- **PL-3 · At All and My tasks, each project asks for its own Edit** → `use-project-overview-data.ts` `useEditableProjects`, `tasks-plan-view.tsx`, `task-timeline-view.tsx` (`canDragIn`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (closes TL2's "Polish later").
+  - Decision: when the Timeline shows several projects, the page asks `templates_can_copy('project', id)` once per project you don't own (all at once, kept while the page stays); a project you can only view has no handles on its bar or its sections, and its tasks none unless the task itself says yes: a task assigned to you in such a project is asked once by itself (`templates_can_copy('task', id)`; assignment there usually keeps you Edit, but not when the project was narrowed after the assignment). Without a handle, its No date row doesn't drag and ⌥←/→, `d`, ⇧D skip it. Your own projects and Inboxes aren't asked (a task you handed on stays yours to move; the server decides). Unanswered = no handle, like inside a project.
+  - Why: the server refuses those saves ("Couldn't save the project."); no migration means no batched access read, and a workspace has tens of projects, not thousands.
+  - Rejected: a question for every task (hundreds of calls; only the ones assigned to you in a view-only project are asked); "assigned to you = movable" without asking (the server refuses when the project was narrowed after the assignment: found by the e2e); a new batched RPC (a migration, out of this batch).
+- **PL-4 · ⇧L opens a late task's mark** → `timeline-keys.ts`, `timeline-deps-layer.tsx` `ContradictionMark`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: with the cursor on a late-marked task you can edit, ⇧L opens the mark's popover (why, and "Move to …"); Esc or the move hands the keys back to the canvas. The mark itself stays out of the tab order.
+  - Why: the canvas is one roving-cursor grid; a tab stop per mark would break ↑↓. L for "late"; ⇧ because bare `l` is the rows' Tags letter (keymap.md).
+  - Rejected: a tab stop on each mark; folding it into `d`'s date picker (two jobs in one popover).
+- **PL-5 · A No date drag over the name column says "Drop on a day"** → `use-timeline-drop.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the drag preview reads "Drop on a day" while it's over the name column, where nothing lands; letting go there still does nothing.
+  - Why: the drop has no day there; saying so is clearer than a silent no-op.
+  - Rejected: landing on the first visible day (a guess the person didn't make); a droppable narrowed to the track (no visible difference).
+- **PL-6 · A reference's tick outside Tasks finishes open subtasks** → `check-off.ts` `finishOutsideTasks`, `spine/references/provider.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (call 87 everywhere).
+  - Decision: ticking a task's reference card in Notes, the bell or Home goes through the workspace's shared store with Home's helper (now shared): the open subtasks finish too and "Done · also 2 subtasks" offers one Undo that restores the Focus place; a lone tick says nothing (the card shows it and can be unticked). Reopening stays the task alone. Without the store or the task in it, the old op runs.
+  - Why: the Tasks page and Home already finish subtasks; one rule everywhere.
+  - Rejected: a toast for every lone tick (noise on a card that already shows Done).
+- **PL-7 · A storage alert opens Settings → Storage in the workspace that raised it; a drop's toast offers the owner Upgrade** → `spine/notifications.ts`, `app-chrome.tsx`, `attachments/attach-to-task.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (closes AT-3's two MINORs).
+  - Decision: the notice's link carries its workspace and the app switches to it first when it's one of yours; a row or card drop reads the pool once before queueing, and when a bigger plan would take the files the owner gets "Upgrade" beside "Free up space" (or "Open"), as the task's strip offers it.
+  - Why: the pool is the workspace owner's; the toast didn't know who owned it.
+  - Rejected: Upgrade as the toast's main button (Free up space is the step that works on any plan).
+- **PL-8 · Small ones** → `import-dialog.tsx`, `use-timeline-writes.tsx`, `storage-section.tsx`, `use-bulk-actions.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the import dialog shows no × while an import runs (Stop is the way out); cancelling the repeat question that "Also move…" raised gives the first move its Undo back ("Moved · The ones that wait on it stay where they are."); Settings → Storage says "Showing the 50 largest files." when the list is full; `@` and `#` open the selection's pickers however they're typed (⌥/AltGr layouts), only ⌘ keeps them the app's.
+  - Why: each is a dead end or a missing Undo the checklists named.
+  - Rejected: making × act as Stop (a close button that keeps the dialog open reads as broken).
+
+## 2026-10-14 · TV-U18 Native importers — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 35 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, §Assumptions #20; REPLAN 28, 35, 74; AC2.6, AC3.6, AC4.7; the engine from TV-D16) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **U18-1 · One dialog from the sidebar's ⋯, read in the app, with a preview** → `importers/ui/import-dialog.tsx`, `bucket-rail.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the hairline ⋯ → "Import tasks…" (Tasks edit) opens one dialog: drop or pick a file (the service is recognised from the file); the preview reads "7 tasks, 1 project, 2 skipped", lists each project (new, or the one an earlier run filled), the statuses with a category to confirm, two choices (include finished tasks; assign the tasks nobody is on to me, on by default for Todoist), and "On the way in" (what was skipped and why, what doesn't come across); Import shows a bar with Stop; the end says what the server made, what it refused, and offers "Undo this import". "Your imports" (your last eight runs, Undo each) sits under the drop zone. Settings → Tasks takes it when the Settings rebuild lands.
+  - Why: the spec places no importer screen; the sidebar's ⋯ already holds New project and Templates, and a hackathon organiser needs to see exactly what a prepared plan will make before it lands.
+  - Rejected: a page of its own (a new selection for one rare job); a wizard of several screens.
+- **U18-2 · The limits: 10 MB a file, 2,000 tasks an import, 20 comments a task** → `importers/plan.ts`, `read.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a bigger file is refused with its size and the limit ("export one project or board at a time"); past 2,000 tasks the first 2,000 in the export's order come in and the rest are counted as skipped ("over the 2,000-task limit"); a task keeps its last 20 comments, the older ones are counted. Files are parsed in the browser; nothing is sent before Import.
+  - Why: one op per task (TV-D16's engine; the run's row is locked per task, so the server takes them one after another) keeps an import of a couple of thousand tasks to a few minutes with a bar and Stop; a Trello board with its history is the biggest export.
+  - Rejected: refusing a file over the task limit (an organiser would have to split by hand).
+- **U18-3 · How each service maps** → `todoist.ts`, `trello.ts`, `linear.ts`, `jira.ts`, `asana.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (within §15).
+  - Decision: **Todoist CSV**: one project named after the file, `section` rows → sections, `note` rows → comments (before any task: the project's description), INDENT → subtasks, "@label" → tags, PRIORITY 1/2/3 → high/medium/low, DATE in words through capture's own reader, DURATION → estimate, DEADLINE → the due date when there's no DATE. **Trello JSON**: the board → a project, open lists → statuses (category guessed from the name, confirmed in the preview), cards → tasks, checklist items → subtasks, labels → tags (an unnamed label by its colour), comments → comments, archived cards and lists left out. **Linear CSV**: issue ID kept as the key, its project (else its team) → the project, project milestone → section, workflow state → a status in the category its Completed/Canceled/Started columns say. **Jira CSV**: issue key kept, an epic → a section named after it (its stories are its tasks, its own text stays in Jira), sub-tasks → subtasks, the status in Jira's Status Category (a Won't-Do-like resolution → Won't do), Original Estimate → estimate. **Asana CSV**: Task ID kept, Section/Column → section, "Parent task" (a name) → subtask, Completed At → done, Assignee Email → the person.
+  - Why: §15's list (Trello lists become statuses with a confirmed category; sections stay sections; deeper subtasks flatten).
+  - Rejected: Jira epics as parent tasks (every story's sub-tasks would flatten into the epic).
+- **U18-4 · A re-run updates words and dates; where a task lives and its state stay** → `importers/run.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (refines D16-8 for the native importers).
+  - Decision: importing a file again finds your live tasks with those keys and updates them through the same op (title, description, and the due date, time, repeat, priority and estimate when the file has them; tags added); their project, section, parent, status, assignee and comments stay as they are in Moduo. Their project is reused (the one most of them are in, unless it's archived); missing tasks are made there. The preview waits until the app has read every task you can see (closed ones and archived projects' included) before deciding what's new, and reads it again at Import; if the server still finds an earlier import of a task the app took for new, the end says so ("already here from an earlier import: the file updated them, place and status included"). Undo of a run, then importing again, makes them anew. The people pickers and "nobody is on it" count new tasks only.
+  - Why: an organiser re-imports an updated plan after people started working; a re-run mustn't undo their progress or moves. Nothing is ever duplicated (the engine's key rule).
+  - Rejected: the file wins everywhere (it would reset statuses and refile tasks people moved); a stable project id per file (a re-import after Undo would hit the deleted project).
+- **U18-5 · Priorities map to Moduo's three; a level with no match keeps its word as a tag** → `plan.ts` `priorityOf`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Urgent/Highest/Critical → High, Lowest/Trivial → Low, each also tagged with its own word ("urgent"); High/Medium/Low as they are; labels → tags by name (made when missing; a tag name is cut to 50 characters).
+  - Why: tasks have a priority field with no Urgent (§2); the tag keeps what the source said.
+  - Rejected: priorities only as tags (the field would stay empty, and grouping by priority would show nothing).
+- **U18-6 · Assignees are matched in the app and picked by hand; nothing is looked up** → `plan.ts` `suggestAssignees`, the preview's "People in the file"
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (the orchestrator's privacy call).
+  - Decision: the preview lists each person the file names ("jan@acme.com · 12 tasks", "Maya Chen · maya@example.com") with a member picker (names, as every assignee picker shows them; people who can't take tasks aren't offered). The picker starts on the person when the app already knows them: your own email or name, or a name exactly one member has; otherwise on Unassigned. Members' emails aren't readable in the app, so an email matches only your own, and the server is never asked who an email belongs to. Tasks nobody is on in the file stay unassigned, or go to you with the tick (on by default for Todoist).
+  - Why: a server lookup would let a member confirm which guessed emails belong to the workspace's members, which the app never shows them; the organiser maps a prepared plan's people once, by hand.
+  - Rejected: a server function mapping emails to members (built, then removed before landing); matching on a name two members share.
+- **U18-7 · Repeats only where Moduo's repeats can follow them** → `importers/dates.ts` `wordsDue`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (D12's rules).
+  - Decision: a date in words is read by capture's reader whole or not at all; a repeat with an end the rule doesn't carry ("until Dec 15", "for 3 weeks") or one it can't read ("every 3rd workday") goes into the description as "Repeats in Todoist: …" and is counted in "On the way in". Start dates are left out and counted (§15). Moments (Trello, checklists) land on the date and time they were in your Time & region zone; written dates and wall times stay as written.
+  - Why: a half-read repeat would repeat wrongly forever; the text keeps it for the person to set by hand.
+  - Rejected: dropping unreadable repeats silently.
+- **U18-8 · A comment says who wrote it and where, and still goes with Undo** → `run.ts` `commentBody`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: an imported comment is yours, opening with "Riley Ortiz · in Trello · Oct 6, 2026" (Jira's account ids are never shown); after a task's comments the run sends the task once more by its key, so the run's own comments don't count as a change made after it and Undo still removes the task (`supabase/tests/import_native.test.sql`). A teammate on a commented task is assigned only in that re-send, so the comments notify nobody and the assignment groups like any other.
+  - Why: comments are logged on the task after the run wrote it, which Undo reads as "edited since".
+  - Rejected: comments as part of the description (the spec says comments stay comments).
+- **U18-9 · "Imported from" in the panel's ⋯** → `task-detail-header.tsx`, `importedFromLine`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: an imported task's ⋯ menu reads "Imported from Linear · ENG-123" and copies the id; Todoist's CSV has no ids, so its tasks read "Imported from Todoist" alone. Search finds the id (D16-11).
+  - Why: the header is full; the id is for finding and copying, not for every glance.
+  - Rejected: a property row in the panel.
+
+## 2026-10-14 · AT-3 Attachments everywhere + Settings → Storage — the agent's choices (deferred to by Maciej)
+
+Built in attachments block 3 ([specs/attachments.md](../../specs/attachments.md) AT3-1–AT3-4; the "From AT-2" carry-forward) on the local stack, with migration `20261013272000_attachments_everywhere`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **AT3D-1 · File marks join the shared store** → `sync/store.ts`, `sync/types.ts`, `runtime.web.ts` (SYNC_SOURCES), `features/tasks/live.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the store keeps one mark per finished file on a task (id, task, status, stamps; never a name, path or size), read as a delta table under RLS, live on its own Realtime channel, dropped with its task; the snapshot carries `attachmentCounts` and `attachmentStamps`. Every 📎 mark reads the counts; an open strip reads its list again when its task's stamp moves. `CACHE_VERSION` 6.
+  - Why: one live feed serves the counts on every surface and the open strip (AT2V3-4), with the access check that already drops rows you stop seeing.
+  - Rejected: a counts read per surface (not live, one more read each); a per-panel channel.
+- **AT3D-2 · Where the 📎 mark sits (the Timeline's in the name column, not on a bar)** → `task-meta.tsx`, `timeline-row.tsx`, `focus-now-card.tsx`, `focus-up-next.tsx`, `in-flight-panel.tsx`, `task-block-chip.tsx`, `calendar-grid.tsx`, `tasks-widget.tsx`, `upcoming-widget.tsx`, `task-line-plugin.tsx`, `global-command-palette.tsx`, `task-capture.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the kit's `MetaCount` (paperclip + count, "1 file", hidden at 0) after the tags and before comments on rows and cards; beside the title in the Timeline's name column, and beside the title on the track when the name column is folded (⇧[); on the Focus Now card's meta line, each Up next line and each In flight card; on calendar task blocks (and their hover text) and due chips; on Home's Tasks and Upcoming widget rows; beside a note task line's details chip; on ⌘K task results; the capture's file chips carry the paperclip.
+  - Why: the spec's list ("timeline bar (wide bars; tooltip on narrow ones)") predates TV-TL1, where a task is a point, never a bar: the title beside it is the one place a mark reads at every zoom. One look everywhere.
+  - Rejected: a mark on the point's tooltip only (invisible without hovering); a mark on project bars (a project's files aren't a thing).
+- **AT3D-3 · Rows and cards take file drops with one listener and say what happened** → `ui/row-drop.ts`, `attachments/attach-to-task.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the List's and the Board's container find the row or card under the pointer by `data-task-id` and light it with the shared drop look (only the entered and the left row redraw); the view's edit access decides; a drop queues the files for that task and one quiet toast says it ("Attaching shot.png · on “Fix login”", a refused file named in the same line, a full pool with Free up space, Open selects the task); refused files are dismissed from the queue once the toast has said why.
+  - Why: rows have no strip to show progress or problems; memoised rows must not redraw for a drag elsewhere.
+  - Rejected: a listener per row; a silent drop; leaving refused tiles waiting on the task.
+- **AT3D-4 · Capture: the task first, then its files, even offline** → `capture/task-capture.tsx`, `capture/capture-hooks.ts`, `attachments/capture.ts`, `uploads/queue.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a screenshot pasted into the title or the description, or files dropped on the capture (folders left out), become chips; Create makes the task, then queues the files for it. A task captured offline waits in the store's outbox and its files wait with it (`awaitTask`: "the task is gone" reads as "still syncing" for a day). With a template the files go on the task it makes; with a pasted list, on the list's first task. The seam now hands `userId` and `task: {id, queued} | null`.
+  - Why: AT3-2 ("the task is always created; the chip retries until attached"); offline the files were dropped before.
+  - Rejected: uploading before the task exists; refusing files offline.
+- **AT3D-5 · An unfinished upload lets its space go at once** → migration `20261013272000`, `uploads/queue.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (the AT-2 server follow-up, done here).
+  - Decision: `attachments_op_abandon` (only the uploader, only an unfinished upload): with nothing stored the row goes; with bytes stored it turns failed and holds only what it stored until the daily purge. The queue calls it on Dismiss, on Retry after a failure, on a refusal, before beginning again, and for a begin answered after a Dismiss.
+  - Why: a retried or dismissed upload held its whole declared size in the owner's pool for up to 24 h.
+  - Rejected: deleting a row whose bytes are stored (they'd stop counting while still in storage); keeping the 24 h wait.
+- **AT3D-6 · Settings → Storage: the pool for owners and admins, the files for everyone** → `settings/sections/storage-section.tsx`, `attachments_largest`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (the pool's audience per the orchestrator's ruling).
+  - Decision: a Workspace-group section after Members and access. Owners and admins see the meter ("9 MB of 2 GB used", each side in its own unit under a gigabyte; emphasis from 80%, never red), the plan, the per-file limit and its reach, and the over-limit banner (the owner gets Upgrade). Everyone sees the 50 largest finished files on tasks they can see (name · task · who · when · size), with Delete only where they may edit the task, and Undo. No count or total of files anywhere on the page.
+  - Why: the pool adds up files across every workspace the owner has, which a member may not see; the list runs under the reader's own access, so it shows nothing hidden.
+  - Rejected: the meter for everyone (spec text); building the list from the whole-workspace `attachments.list` read (no Delete rights, every row read).
+- **AT3D-7 · The 80/95% notices open Settings → Storage** → `spine/notifications.ts`, `app-chrome.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the storage alerts (on the workspace, which no page opens) deep-link as `settings` / `storage`; the entity-open host opens Settings there, for the bell and Home's activity widget alike.
+  - Why: AT3-4; the card did nothing before.
+  - Rejected: a special case in the bell only.
+- **AT3D-8 · Filter → Has attachments reads the store's counts** → `ui/use-tasks-filters.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the filter counts from `attachmentCounts`; the full attachments read it made each time it was turned on is gone.
+  - Why: the comment there asked for it; one source for the 📎 and the filter.
+  - Rejected: keeping both reads.
+
+## 2026-10-14 · TV-H1 Home widgets for Tasks — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 32 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §18, AC4.5; decision 12 below; Chat's CH70 from the 🟠 box) on the local stack, no migration. Plain and functional on the existing grid: the widgets' own visual round comes after all modules (Maciej's call).
+
+- **H1-1 · One "Team" widget, with a slot Chat fills** → `ui/widgets/team-widget.tsx`, `dashboard/team-now.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (CH70 is Maciej's).
+  - Decision: each person's row is avatar · name · Chat's "now" line · Tasks' load line. The "now" line is a component Chat registers with `registerTeamNowLine` (props `workspaceId`, `userId`, `size`); until then the row shows the load only.
+  - Why: CH70 ("one Team widget, not two"); a component keeps Chat's presence reads and live updates in Chat, and the widget never learns more about a person than the line says.
+  - Rejected: a data seam (a map of statuses passed in); a second widget.
+- **H1-2 · What a person's load counts** → `features/tasks/home.ts` `teamLoad`, `loadLine`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (decision 12's list is Maciej's).
+  - Decision: "Focus 3 · ~2h · 1 in progress · 1 waiting · 2 due this week", zeros left out, "Nothing lined up" when empty. Focus is their open lined-up tasks and the sum of those estimates; in progress, waiting (an open task with any Waiting on… entry) and due this week are tasks assigned to them. Due this week means due by the last day of Time & region's week, late ones included. Backlog never counts. The rows are the members who can take tasks, plus anyone else who still has load, me first, then by name. Every count is over the reader's own copy, so a task the reader can't see adds nothing.
+  - Why: decision 12 (ownership, never surveillance); late work is still this week's load; a viewer with nothing assigned is noise.
+  - Rejected: tracked time or runs per person; counting only tasks due inside the week; listing viewers with no load.
+- **H1-3 · Teams in the Team widget** → `team-widget.tsx`, `config-forms.tsx` `TeamConfig`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the widget's ⋯ picks Everyone (the default) or one team; a team shows only its members. Teams with unclaimed work follow the people as "Design · 2 unclaimed" (only the picked team's when one is picked). A team that's gone falls back to Everyone.
+  - Why: REPLAN 54 ("the team-load widget can show teams"); D13's routing makes unclaimed work the team's load.
+  - Rejected: a row per team instead of per person.
+- **H1-4 · The time widget reads your task time this week** → `ui/widgets/timetracking-widget.tsx`, `home.ts` `weekTime`, `dashboard-data-context.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (tasks-v2 §17 set "my entries").
+  - Decision: the widget keeps its type id `timetracking`, so placed widgets carry over, and works on web and desktop. It shows "6h 30m · this week · 1h 15m today" and your tasks by time (the project too at L). It reads TV-D14's report for Time & region's week and zone and keeps only your own rows, even for the workspace owner, whose report also carries teammates who share. It reads again when a tracked total in the store moves, on a new day, and when Time & region changes. The desktop window tracker stays dormant.
+  - Why: decision 12 keeps per-person time off Home; the report already hides tasks the reader can't see.
+  - Rejected: a new widget type; an "and 3h shared with you" line for the owner; live unsaved seconds of a running session (polish later).
+- **H1-5 · The Tasks widget says Focus, in Focus's order** → `ui/widgets/tasks-widget.tsx`, `home.ts` `focusOrOpen`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (F7-10 left the heading to this block).
+  - Decision: headed "Focus": the task a session is on first, then Up next, in Focus's own order; "Now" marks that row only while a session runs. With nothing lined up it's "Open", as before, without unassigned work routed to a team you're not in (Upcoming's rule).
+  - Why: call 61 ("the Queue is called Focus"); a head-of-line "Now" with no clock running would read as running.
+  - Rejected: always labelling the head "Now"; changing what Open lists beyond the team rule.
+- **H1-6 · Call 87 on Home goes through the store with the module's rule** → `features/tasks/check-off.ts`, `home.ts` `subtasksToFinish`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Home mounts no Tasks module, so the check-off can't route through it, as TV-U13's note asked. Instead the rule of which subtasks a finishing parent takes along lives once in `subtasksToFinish`; the module's `finishOpenSubtasks` and Home both call it. Home sends each status through `store.sendStatus`. Every check-off on Home gets an Undo, since the row leaves at once: "Done", or "Done · also 2 subtasks". Undo puts back each task that is still done, by its own status, and puts the task back in your Focus where it was. The place comes from the server's answer, not the copy.
+  - Why: one rule, two callers; a check-off from Home should be as reversible as one in Tasks.
+  - Rejected: mounting `useTasksModule` on Home (its catch-up ops and listeners); no Undo for a lone check-off. Known gap: while the write is in flight, the row shows Done with its old status id, and it leaves the widget at once anyway.
+- **H1-7 · Upcoming on Home is Upcoming, as a glance** → `ui/widgets/upcoming-widget.tsx`, `home.ts` `upcomingForHome`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Upcoming's coverage, order, day groups and "when" words, open tasks only, and only the days with work. Rows open the task; "+n more" opens Tasks.
+  - Why: the spec's Upcoming widget; a widget is read, not dropped onto.
+  - Rejected: empty days; drops; a link straight to Upcoming (it would need a new `/tasks` search param, outside this block).
+- **H1-8 · Widget group labels in people's words are sentence case** → `widget-primitives.tsx` `WidgetGroupLabel`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a team's name and Upcoming's day names head their groups in sentence case; small caps stay for fixed chrome (`WidgetSectionLabel`: "Focus", "Open").
+  - Why: call 40, which `lint:tw` enforces.
+  - Rejected: adding the expressions to the small-caps allowlist.
+
+## 2026-10-14 · TV-F8 Along the way, meeting divider, pace, In flight — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 24 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.6–8.8, AC8.10, AC3.4's line in Focus; REPLAN 10, 52, 57, 59a, 62a, 63, 64, call 5's reshape of TV-F4) on TV-F7's screen and TV-F6's one engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F8-1 · A check-back is one of my reminders; no new notice kind** → TV-F8 (`focus-hand-off.tsx` `checkBackAt`, `inFlightItems`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (TV-D12's note expected "a delivery kind").
+  - Decision: Hand off's check-back is a personal `at` reminder on the task (`addReminder`), so it arrives on its own through TV-D12's sender (bell, OS, browser; ids only; held back in Backlog/Won't do) and is turned off by removing it (§13's "Turned off by: the check-back"). In flight reads a check-back as any reminder of mine on the task timed after the wait began; the card brightens once one has passed with none ahead; "Check back tomorrow" adds the next one.
+  - Why: §13's check-back row has the reminder's exact shape (you, OS/browser/bell, at its time, on its own, no switch); a new kind meant a migration on the shared sender for a notice that reads the same.
+  - Rejected: a `check_back_at` column on `task_waiting` with its own cron and `notice_deliveries` kind. Known limit: the bell and OS notice say "Reminder", not "Check back" (Polish later).
+- **F8-2 · Hand off W = Waiting on…; the task stays lined up and sits in In flight until the wait clears** → TV-F8 (`HandOffPopover`, `focusLineup(…, inFlight)`, `followStep`'s `inFlight`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (call 5: "In flight becomes the run's view of hand-offs").
+  - Decision: W (or the card's Hand off) asks who or what you're waiting on (a member, or typed text), an optional check-back (None · 30m · 2h · Tomorrow 9:00 · Next week 9:00, by Time & region's week start) and where you left off (a comment "Where I left off: …"); the task keeps its place in Focus, but any lined-up task with a Waiting on… entry leaves Now and Up next (the session's own task excepted) and the run follower never picks one as next; the session moves on; "Waiting on … · In flight" with Undo (the entry and the check-back go; the session comes back).
+  - Why: when the wait clears by itself (D12-9) the task is back in Up next where it was; Undo is just removing the entry.
+  - Rejected: taking it out of Focus (a cleared wait would lose it), a person picker only (most waits are on "the client's files").
+- **F8-3 · In flight lists my hand-offs, my lined-up tasks that wait, and my agents' work** → TV-F8 (`inFlightItems`, `in-flight-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (52, the prototype's frame 1).
+  - Decision: open tasks with a Waiting on… entry I added (from Focus or the panel's field), my lined-up tasks that wait on anything, and tasks my own live agent sessions are on ("Claude · Writing tests · 2m ago"); cards that need me first (a passed check-back, my agent needs me / is ready / failed), then the longest-waiting. A click opens the task as "← In flight"; Pick up ends the wait (every entry on it) and puts it at the top of Focus, with Undo; a due card offers "Check back tomorrow".
+  - Why: hand-offs and delegated agent runs are the same "out of my hands" state (decision 6).
+  - Rejected: a teammate's hand-offs, a count badge in colour (rule 45).
+- **F8-4 · In flight is chosen, not forced: Focus keeps Now's Details; a line opens it** → TV-F8 (`InFlightLine`, `openInFlight`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (F7-6 kept Details until In flight existed).
+  - Decision: In flight is the panel's alongside view (⌥3, before No date's ⌥4). Focus keeps showing Now's Details; under Up next "2 in flight · 1 to check" opens the panel on In flight (the panel too, if it's closed).
+  - Why: switching the panel on entering Focus would hide Now's comments and files, and a click on an Up next row would land on a panel that doesn't show it.
+  - Rejected: In flight as Focus's default view (the prototype's frame 1).
+- **F8-5 · The moment between two tasks: one offer in Now's place, the break first** → TV-F8 (`focus-between.tsx`, `betweenOffers`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (57, 59a, 62, 62a).
+  - Decision: after Done or Hand off, when the next task is in another project and the switch is on, one task from the project you're leaving: open, To do/In progress, 15 minutes or less, yours or nobody's, not lined up, not blocked, not waiting; high priority, then soonest due, then smallest. Once per change (leaving Acme for the same next task never asks twice); never with nothing next. Take it ⏎ lines it up on top (with a session, it gets the clock); Not now Esc. Under Pomodoro, when a work block has ended (the break waits, paused) "Take a 5-minute break ⏎ · Skip Esc" comes first; Skip starts a fresh work block (`skipFocusBreak`, in the one engine). The session already moved to the next task, so a few seconds of reading land on it.
+  - Why: "only in the moment between two tasks, never a standing line"; one answer each.
+  - Rejected: holding the clock while the offer shows (a second clock state), offering at Skip (you chose to move on).
+- **F8-6 · Three Not-nows: Shrink · Move · Let go** → TV-F8 (`along-the-way.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (57; Mike's research: "shrink it, give it a new place, or let it go").
+  - Decision: Not now is counted per task on this device (per person and workspace); from the third, the next offer of that task reads Shrink (its Details open, to split off a first step) · Move (to Backlog, Undo) · Let go (Won't do, Undo) · Not now. Any of them resets the count.
+  - Why: a skip count is nobody else's business; losing it on another device costs one more plain offer.
+  - Rejected: synced counts, "never offer again" as Let go (it would hide the task, not decide it).
+- **F8-7 · Arrange by project: Now's project first, then high priority, your order inside** → TV-F8 (`arrangeByProject`, `arrangedQueue`, `queueMoves`, module `arrangeQueue`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (57, 62).
+  - Decision: Up next grouped by project; the group of Now's project first (no switch at all), then groups holding a high-priority task, then the rest as they first appear; order kept inside each group; Now and anything else lined up keep their slots. The header offers "Arrange by project · n fewer switches" from two saved, ⋯ whenever it saves one; "Arranged by project" with Undo. It's saved as single moves through the existing queue op, chained.
+  - Why: "groups your line-up by project, keeps your order inside each, puts high priority first, explains itself, can be undone".
+  - Rejected: sorting high priority to the very top across projects (it would add switches back), a new bulk-reorder op (a migration for a rare action).
+- **F8-8 · The meeting divider: my own timed events, within two hours or the line-up** → TV-F8 (`nextMeeting`, `meetingSlot`, `use-next-meeting.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (64).
+  - Decision: the next timed, not cancelled event on my own calendar (owner = me; a shared calendar's aren't mine to attend) starting within two hours, or within the line-up's estimates when they run longer; "── 2:30 PM · Acme call ──" after the tasks that fit by their estimates (Now's remaining estimate first); an unknown estimate stops the count there (no estimates: the top). Calendar is read on opening Focus and every five minutes; a failed read means no divider.
+  - Why: 64's rules; owner-only stands in for "attending" until events carry attendance.
+  - Rejected: a line above the task (64 removed it), every meeting of the day.
+- **F8-9 · Your usual pace: the last 30 tasks you finished, from ten** → TV-F8 (`features/focus/pace.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (10, 63).
+  - Decision: the ratio of tracked time to estimate over the newest 30 tasks you finished that had an estimate and at least a minute tracked (clamped to ⅕–5×); from ten, Up next's header adds "≈ 1h 20m at your usual pace" for its estimates (rounded to 5 minutes). Never under Timer: Off; Settings turns it off. It reads the task's whole tracked total (yours and anyone's), which is a person's own on a personal task.
+  - Why: personal, never changes an estimate (10).
+  - Rejected: the done line too (the same number twice on one screen), a server read of your own entries (one more round trip per Focus open).
+- **F8-10 · Settings → Focus: the Timer and the two switches, then Pomodoro** → TV-F8 (`focus-section.tsx`, F7-17)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: "Timer and offers" (Timer Per task · Pomodoro · Off; Count down the estimate, Per task only; Offer quick tasks along the way; Show my usual pace), then "Pomodoro" (lengths, auto-start, sound). Settings sets the defaults; Focus's ⋯ changes them and the running session (63). It stays under Personal until the Settings rebuild makes Tasks → Focus.
+  - Why: one section, built once (F7-17).
+  - Rejected: a new Settings → Tasks section now (the rebuild's).
+- **F8-11 · New in Focus (C) with no session becomes the Now card: right as is** → TV-F8 (TV-F7's open question)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: without a session, the Now card *is* the head of Up next shown big, so "new at the top of Up next" landing on the card is what the key promises; with a session it lands right after Now (Up next reorders around Now since F7). Nothing is plumbed into capture.
+  - Why: the alternative (insert after Now) needs the Now id through the capture context for no visible difference.
+  - Rejected: plumbing the Now id into `capture-create.ts`.
+## 2026-10-13 · TV-SEC1 The access check answers only for the caller unless called from a server function — the agent's choices (deferred to by Maciej)
+
+Built as a follow-up data block (migration `20261013260000_access_check_caller`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **SEC1-1 · Two forms of `can_access`: the caller's (three arguments) and the rules (four, server only)** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (shape proposed by the orchestrator).
+  - Decision: `can_access(type, id, min)` is what clients, row-level security policies and any code asking about the caller use; it always answers for `perm_actor_id()` (the signed-in person or a key's person) and takes no person. `can_access(type, id, min, user)` holds the rules; only SECURITY DEFINER functions (as their owner) and the service role call it. It has no default, so a three-argument call always means the caller's form. Policies keep their text and call the three-argument form.
+  - Why: the client surface takes no person at all, so nothing depends on telling a client's request from a server function's; every server helper keeps its call unchanged.
+  - Rejected: one function that decides from `current_user` whether to answer about someone else (an invoker layer over a definer; correct, but every reader has to know who `current_user` is in each context); renaming the server form (about 80 callers re-cut).
+- **SEC1-2 · The caller's form answers false for an item that doesn't exist or isn't theirs; the rules' form refuses a client outright** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the three-argument form returns a boolean (policies and `coalesce(…, false)` callers expect one); a client calling the four-argument form gets 42501.
+  - Rejected: answering false on the four-argument form (it would look like a working call).
+- **SEC1-3 · Helpers that answer about a named person are for server functions; the assign warning is for people who can assign** → TV-SEC1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: only server functions and the service role call `share_direct_rank`, `perm_ceiling_rank` and `chat_is_workspace_member` (no policy, view or app code does). `share_assign_preview` names a person by design, so it answers to someone with Edit on the project or on a live task in it, about someone who works in the project's workspace.
+  - Why: the same rule as the access check wherever a helper takes a person.
+  - Rejected: removing the assign warning; a caller's form for each helper (no client needs them).
+
+## 2026-10-13 · TV-TL2 Timeline interactions — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 26 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6, AC9.6–9.8; REPLAN 70, 68b, 71; research `.design/tasks-v3/research/timeline-competitors.md` §4–5; the carry-forwards from TV-TL1, TV-U12, TV-U15 and RF-1) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **TL2-1 · A selection moves together; spans move one at a time** → `use-timeline-canvas.ts`, `use-timeline-writes.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: dragging a selected task's point (TV-U12's selection: ⇧/⌘-click, ⇧↑↓, ⌘A) moves every selected task the same number of days, as one write with one Undo ("Moved 3 tasks 3 days later"); ⌥←/→ does the same. Bars, bands and diamonds always move alone.
+  - Why: 70 ("select several and they move together"); a project and a phase are different things to move, and the bulk bar already covers mixed edits.
+  - Rejected: no multi-drag on the Timeline; dragging a mixed selection of tasks, sections and projects.
+- **TL2-2 · The canvas drags with plain pointer events; only No date's drop uses the page's drag context** → `use-timeline-canvas.ts`, `use-timeline-drop.tsx`, `tasks-plan-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one set of listeners on the scroller finds what a press grabbed by the marks' data attributes; the day is always the one under the raw pointer, read against the canvas as it is (an edge scroll or a grown range can't drift it). A task from the No date view is a dnd-kit drag in the page's one context (DF-22) onto one droppable, the whole canvas; the day comes from the pointer at the drop. The old tray source is now `"no-date"`.
+  - Why: horizontal-only drags with a live date label don't fit dnd-kit's sortable model; a cross-pane drag does.
+  - Rejected: a nested drag context for the Timeline (the panel is outside it); per-day droppables.
+- **TL2-3 · A drag only changes dates** → `use-timeline-canvas.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: drags are horizontal; moving the pointer to another row changes nothing about project, section or assignee. A press that doesn't travel 4 px is a click (it selects).
+  - Why: 70 ("nothing drags between groups, so dragging never reassigns").
+  - Rejected: dropping a point on another section's row to refile it.
+- **TL2-4 · Clicking a day dates only a row that has no date; a ghost shows what it will set** → `timeline-marks.tsx` `CreateGhost`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a task row with no point (Show → No date), a section with no dates and a project with no bar show a dashed ghost under the pointer ("Set due · Fri, Oct 17", "Ends …", a bar); a click sets the task's due date, the section's end date, or a project bar as long as the zoom suggests (Week 7, Month 14, Quarter 30, Year 90 days); dragging along the row draws a section's range or a project's bar. A row with a date selects on click as before.
+  - Why: 70 and research §4 (Notion's phantom, Jira's 7/14/30 days); on a dated row a click must still select.
+  - Rejected: a click anywhere setting the date (it would fight selection); task start dates.
+- **TL2-5 · Dragging an outlined bar gives the project its dates** → `use-timeline-canvas.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: an outline (worked out from its work) moves or resizes like a solid bar; on drop the project gets both a start and a target and the bar turns solid. Its phases and tasks keep their own dates.
+  - Why: 68a: the outline means "no dates of its own yet"; a drag is the person setting them.
+  - Rejected: an inert outline; moving the work inside with it (silent cascades, 70).
+- **TL2-6 · Every change is one store write and one Undo, through the existing engines** → `hooks/use-bulk-ops.ts`, `hooks/use-tasks-module.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: tasks (one or a selection) save through `bulkWrite`, which gained `scheduledAt` (`tasks_op_reschedule`, the shown session moving with it) and a toast follow-up link; sections through the new `setSectionDates`, projects through `setProjectDates`, each with an Undo that keeps a newer change.
+  - Why: the carry-forward ("one begin/settle and one Undo per drag"); TV-U12's engine already says "3 of 4 changed" and undoes per task.
+  - Rejected: a Timeline-only write path.
+- **TL2-7 · A hollow point moves its work session, time of day kept** → `timeline-drag.ts` `planShift`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a task with only sessions moves the session it shows by whole days at the same clock time (the reschedule op moves the session that started at the old time; the canvas moves it at once).
+  - Why: TL1's note and gotchas/ui.md (a view placing rows by the session mirror moves it through the reschedule op).
+  - Rejected: giving the task a due date when its hollow point is dragged.
+- **TL2-8 · A repeat asks; "Also move" takes occurrences** → `use-timeline-writes.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: dragging, ⌥-moving or dating a repeat's point asks TV-U15's question (Just this one · Change the pattern); a selection with repeats asks once for all. The tasks "Also move" brings along move just their occurrence, without asking.
+  - Why: TV-D12's two ways; a follow-up shouldn't open a dialog of its own.
+  - Rejected: always moving the pattern.
+- **TL2-9 · "Also move the n that wait on this" only when a task moves later** → `timeline-deps.ts` `waitingOn`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: after a move later, the toast offers to move its open, dated, direct dependents by the same days (a link in the toast; they're read as they are when clicked, a repeat among them asks). That second write's Undo puts both moves back (the first toast closes when the link is used). Moving earlier offers nothing.
+  - Why: 70 ("never silently moves the ones after it; it offers"); moving earlier can't make anything contradict.
+  - Rejected: research §5's automatic push; chains of dependents.
+- **TL2-10 · Lines for the selected or hovered task; Display → Dependencies: Off · Selected · All** → `display.ts`, `timeline-deps-layer.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Selected by default (the selected task's and the hovered one's lines); All draws every line between rows on screen; Off hides lines and marks. A short path from the blocker's point into the waiting one's; a waiting task due first gets it backwards, dashed, in the late tone; the same day is a hook. Lines never reach a task the reader doesn't have: a relation whose other end isn't in their copy draws nothing (not even "Private item": in the copy a hidden blocker can't be told from a deleted one). A finished blocker Show done hides draws nothing.
+  - Why: 70 and 68b; RF-1's rule that nothing reveals what you can't see; research's "lines only for on-screen items" at 2,000 tasks.
+  - Rejected: always-on lines; a "Private item" stub.
+- **TL2-11 · A contradicting date is a quiet mark with one fix** → `timeline-deps-layer.tsx` `ContradictionMark`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: an open task due before an open task it waits on gets a small late-tone mark left of its point; hover: "Waits on “Export logo files”, due Nov 7, after this"; a click offers "Move to Nov 8" (the day after its latest blocker). Someone who can't edit sees the words only. Off with Dependencies → Off.
+  - Why: 68b ("mirrors, not walls").
+  - Rejected: refusing the date; a red mark.
+- **TL2-12 · The selected task's undrawn ends show as stubs** → `timeline-deps-layer.tsx` `DepStubs`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Fix nav · no date", "↗ Website · Fix nav" (another project), "↗ Fix nav" (filtered out or folded away): what it waits on left of its point, what waits on it right; only for one selected task.
+  - Why: 68b's table of arrows with nowhere to go.
+  - Rejected: lines to a folded group's header (more drawing for the same fact).
+- **TL2-13 · The keys** → `timeline-keys.ts`, `task-timeline-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⌥←/→ (⌥⇧ a week) moves the cursor row's dates (a task, a section's range or end, a project's bar) or a selection's; `d` opens the due picker at the row; ⇧D clears due dates; ⇧T fits the selection (scrolls to it; zooms out only if it doesn't fit, never in); ⇧↑↓ extends and ⌘A selects every task row; Esc clears a selection, then the cursor. With several selected, the bulk bar's keys come first (d its date picker, Space, ⌫…) except the view's date and cursor keys.
+  - Why: keymap.md "Timeline" and rules 1–2.
+  - Rejected: F for fit (Filter's).
+- **TL2-14 · Who sees handles** → `tasks-plan-view.tsx` (`timelineCanDrag`), `task-timeline-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: drags, ghosts, resize ends, ⌥-moves and the No date list's drag need Edit: the workspace's, and inside a project the project's own (one question, D15-11's). Without it nothing offers a drag. Across projects (All, My tasks…) the workspace's Edit decides and the server checks each write.
+  - Why: the carry-forward ("don't let them drag and then get refused"); one access question per project at All would be dozens of calls.
+  - Rejected: asking per project or per task on every place.
+- **TL2-15 · No date is a right-panel view beside the Timeline** → `panel-views.ts`, `timeline-no-date-panel.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "No date · n" opens the panel (if closed) on No date (group *alongside*, offered only while the Timeline shows): the place's open tasks with no date and no session, by project (Inbox first), searchable, drawn as a virtual list; drag one onto a day; a click opens its details. Display → Show → No date (rows on the canvas) stays.
+  - Why: 70, 72 and research §4 ("a panel on the right").
+  - Rejected: the bottom tray (48b).
+- **TL2-16 · Edge scroll is horizontal and speeds up** → `timeline-drag.ts` `autoScrollStep`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: within 48 px of the canvas's left or right edge (or past it) the view scrolls by itself, up to 24 px a frame, faster the closer the pointer.
+  - Why: 70; drags are horizontal, so vertical scrolling would only lose your row.
+  - Rejected: a fixed speed.
+
+## 2026-10-13 · TV-U13b Follow-ups from landed blocks — the agent's choices (deferred to by Maciej)
+
+The orchestrator's follow-up block after TV-U12, TV-U13, TV-D12, TV-U15, TV-D16 and TV-U16 ([BUILD_ORDER.md](../../specs/BUILD_ORDER.md) "From TV-U13b"), built on the local stack with no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U13b-1 · A selection dropped on Focus only adds; blocked ones go in and are named** → TV-U13b (`bulkQueue(ids, { mode: "add" })`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (a review of TV-U12's code).
+  - Decision: a drop on the sidebar's Focus row adds the selected open tasks not in Focus yet and never takes any out (the bar's Q stays the toggle). A selection never opens the one-task "Blocked by" offer; a blocked task is added as "Queue anyway" would, and the toast says so ("“Ship it” is blocked by an open task.", or "2 of them are blocked by open tasks.").
+  - Why: a drop is an "add" gesture; the frontier offer is about one task and would stack dialogs for a selection.
+  - Rejected: the toggle (a drop could empty Focus), one frontier dialog per blocked task, leaving blocked ones out silently.
+- **U13b-2 · A partly saved bulk edit is named and undone, never rolled back on its own** → TV-U13b (`bulkWrite`'s `partial`, `BulkRefusal.partial`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a task's first op saves (a move, a field) and a later one is refused (status, assignee), it counts as not changed ("3 of 4 changed"), the toast names it ("“X” changed only in part: …"), and the one Undo puts back the part that saved, with the rest of the batch.
+  - Why: each op is the task's own permission check, so a half-change is real; hiding it (the old behaviour) left it un-undoable.
+  - Rejected: an automatic rollback of the saved part (a second write that can fail too, and a surprise), counting it as changed.
+- **U13b-3 · The Inbox's agent chip reads the task's own trail, with no new column** → TV-U13b (`runtime.tasks.listAgentCaptures`, `use-agent-captures.ts`)
+  - Who: agent's choice, deferred to by Maciej (offered by the orchestrator), 2026-10-13.
+  - Decision: "via Claude Desktop" comes from the task's `tasks.create` row in `module_activity` when a key made it (D16 already writes "Alex · via Claude Desktop" there): one batched read of the Inbox's tasks (100 ids a request), once per task while the Inbox is open, kept in memory. Someone else's agent reads "from Mike via Cursor". The trail's read policy answers only tasks the reader can see, so a key's name reaches exactly the people who already see it in the trail (`supabase/tests/agent_followups.test.sql`).
+  - Why: no migration while Maciej tests, one source of truth for "via", no change to `tasks` (every sync path, column grants, templates and Duplicate copying it).
+  - Rejected: a `tasks.created_via` column written by `tasks_op_create_with` and the key path (a migration on the hottest table for one chip; it also freezes the key name on the row a second time).
+- **U13b-4 · The panel's repeat follow-ups sit where the value is** → TV-U13b (`RepeatHistory`, `ReminderValue`, `TaskDetailProperties`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-D12's asks).
+  - Decision: the cycle history is a quiet "n done · last Oct 6" beside the Repeat value, opening the cycles (newest first; who closed each; only your own time), read when opened, so viewers see it too. A paused reminder reads "· Paused" in the Reminder value and list; once the task is To do or In progress the list offers "Restore the reminder", else it says how it comes back. Moving a repeat's Due in the panel asks "Just this one · Change the pattern" through Upcoming's dialog; clearing the date or a one-off saves at once, and like every property edit it has no Undo toast.
+  - Why: each answer belongs to the value it explains; one dialog for every "move a repeat" gesture.
+  - Rejected: the history inside the Repeat picker (editors only), a History row of its own, an Undo toast on the panel's move.
+- **U13b-5 · MCP reads and writes a project's description** → TV-U13b (`moduo-mcp` `shapeProject`, `projects_create`, `projects_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-U16's connector follow-up).
+  - Decision: `projects_list` carries `description` (plain text, when set); `projects_create` and `projects_update` take it (null clears); the project ops check Edit, as for the app.
+  - Why: the project read is the list; descriptions are a project's brief and usually short.
+  - Rejected: a separate `projects_get` tool, a shortened description in the list.
+
+## 2026-10-13 · TV-U8 Saved views — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 21 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC11.1, AC4.8; REPLAN 29b–29e, 29d, §3's role table). Migration `20261013250000_task_views`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U8-1 · A view can be shared with the workspace** → TV-U8 (`task_views.shared`, `task_views__sees`)
+  - Who: the orchestrator's brief for this block (2026-10-13), built as the agent's choice; it supersedes the 2026-10-08 call "saved views are personal; sharing later, on top of PERM sharing".
+  - Decision: a view is yours until you share it with the workspace (⋯ → Share with the workspace; needs Tasks edit). A shared view reaches everyone with Tasks there, a project view only people who can see that project, and it reads as gone once its maker leaves the workspace. It keeps a filter, never results: each reader sees only what their own access shows through it, and My tasks and Upcoming are each reader's own.
+  - Why: a team's "Waiting on client" or "Sprint board" is shared work; a boolean share is the templates' proven shape (TV-D15) and leaks nothing a reader couldn't see.
+  - Rejected: sharing with chosen people through PERM grants (more machinery than a lens needs; later if asked); copying a shared view's results.
+- **U8-2 · Only the maker changes a view; the owner or an admin can take a shared one down** → TV-U8 (`task_views_op_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator kept the exception).
+  - Decision: the maker renames, saves, re-shares, moves and deletes; anyone else who sees a shared view can pin it, copy its link and "Save as new view…"; the workspace's owner or an admin can also Stop sharing a shared, live view they can see, and nothing more (no delete, no restore, no edit: follow-up `20261013271000`, 2026-10-14). Putting a view in front of the workspace (sharing it, restoring a shared one) and changing what a shared view shows need Tasks edit; a maker without it can still delete it, or keep it as their own.
+  - Why: templates' precedent; a workspace needs a way to tidy shared views, and a take-down that only unshares leaves the view with its maker, who decides whether it goes.
+  - Rejected: anyone editing a shared view (one person's change rewrites everyone's lens); an admin deleting or restoring someone else's view (it would bring back what its maker deleted).
+- **U8-3 · A view keeps one place: All, My tasks, Upcoming or a project** → TV-U8 (`TASK_VIEW_SCOPES`, `viewScopeOf`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Save as view…" (the toolbar's ⋯) saves the place's Filter and Display (layout, Group by, Board grouping and lanes, order, Completed, subtasks, rows, Show on rows); a view saved in a project keeps that project (29d). The Inbox, Focus, Won't do, Archived and Recently deleted don't save. The selection (multi-select) and the search are never saved.
+  - Why: 29d ("a view saved inside a project simply keeps that project as a filter"); the Inbox is each person's private place.
+  - Rejected: project tabs (29d is no); views of the Inbox.
+- **U8-4 · Changes to an open view wait for Save** → TV-U8 (`use-tasks-display.tsx`, `ViewChangesLine`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: changing an open view's Filter or Display shows "Unsaved changes · Save · Save as new view… · Revert" under the toolbar (someone else's view: no Save). The changes stay while you move around this session, never on the device: a reload, or the view saved on another device, opens as saved. A place (All, a project) still remembers its own Filter and Display on the device.
+  - Why: v2's "Save changes"; a device copy of a view's changes would drift from the view saved elsewhere.
+  - Rejected: saving every change at once (a shared view would change under everyone); keeping drafts on the device.
+- **U8-5 · No counts on view rows** → TV-U8 (`bucket-rail.tsx` `ViewRow`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a view's row carries its name only; the open view's title counts what it shows ("Done last week" counts its done tasks).
+  - Why: a count per view runs that view's filter over every task on each change (the 10,000-task budget); §3 gives counts to projects and areas.
+  - Rejected: counts on every view row (later as a deferred count if wanted).
+- **U8-6 · The Views group: yours in your order, then the shared ones** → TV-U8 (`sidebarViews`, `task_views_op_move`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: between Pinned and the projects, under a "Views" header only when there's one, collapsible (29e); your views in your order (⋯ → Move up / Move down), then views shared with you by name; no glyphs, an empty icon slot keeps the names in line with the projects' (29c B). Pin puts a view in Pinned beside pinned projects (`preferences.tasksSidebar.pinned[ws]` holds `view:<id>`).
+  - Why: 29b, 29c, 29e as decided.
+  - Rejected: drag to reorder views (Move up/down first); a "Shared" mark (no glyphs).
+- **U8-7 · Seeded views per role, and "Done last week" for everyone** → TV-U8 (`views.ts` `ROLE_SEED_VIEWS`, `seedViewsFor`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: once per person and workspace, after onboarding decided (the role answered or skipped, or the welcome stepped aside), each person gets their role's views: student Today (mine, due today or earlier); developer This week (mine, due this week); PM Waiting (All, waiting on anything) and Due this week (All, by due date); founder Waiting on people; client work Waiting on client (waiting on an email reply or something else); creator Pipeline (All as a Board by status) and Publish dates (All with a due date, by Date); and everyone "Done last week" (All: Status is Done, Completed is Last week). The student's "Upcoming" and the developer's "Mine" aren't seeded: they're sidebar rows now. A seeded view deleted never comes back (the server keeps one per person, workspace and seed key; `preferences.tasksOnboarding.viewsSeeded` stamps it first and only moves forward).
+  - Why: REPLAN §3's column and AC4.8; §3's table predates Upcoming and My tasks as sidebar rows.
+  - Rejected: seeding per workspace for its creator (❓34 seeds views per person); re-seeding when the role changes (a role changes defaults only).
+- **U8-8 · Filter gains Completed and Waiting on** → TV-U8 (`filters.ts`, `day-buckets.ts` `completedFilterValues`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Completed: Today · This week · Last week · This month · Not completed (the week from Time & region; a Completed day shows done tasks whatever Display → Completed says); Waiting on: Anything · A teammate · An email reply · An agent · Something else · Not waiting.
+  - Why: "Done last week" and the "Waiting on …" seeds need them; spec §2 names Filter → Completed.
+  - Rejected: a date range for Completed (later); Group by Completed (later).
+- **U8-9 · Folds follow the person** → TV-U8 (`folds.ts`, `preferences.tasksFolds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (TV-U10 handed it over).
+  - Decision: the List's folded groups and the Board's folded columns and lanes live in the synced preferences per workspace, place (or view) and grouping; a burst of folds is one write a moment later; the newest 300 Lists and Boards keep theirs. A saved view keeps its own folds apart from its place. Old per-device folds aren't carried over.
+  - Why: TV-U10's note ("sync them with the views"); TV-U15's snoozes are the precedent (synced, no table).
+  - Rejected: folds in the view row (one person's fold would fold everyone's shared view); a table.
+- **U8-10 · Views sync on the store's reads, not live** → TV-U8 (`SYNC_TABLES` views, read whole)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the store reads `task_views` whole on every sync (opening Tasks, coming back to the window, a reconnect); the table isn't published to Realtime.
+  - Why: who sees a shared view moves with project sharing and membership, which bump no stamp; views change rarely; the local stack has no publication.
+  - Rejected: a Realtime channel for views (a channel naming an unpublished table silences the others).
+- **U8-11 · A view's link** → TV-U8 (`?view=<id>`, `useSavedViews`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⋯ → Copy link gives `/tasks?view=<id>`; it opens the view once, then leaves the URL (a reload reopens where you are); a view you can't open says "That view isn't available · It was deleted, or it isn't shared with you", the same words either way.
+  - Why: v2's U8-3; the same answer for hidden and missing.
+  - Rejected: mirroring the open view in the URL all the time (the `?id=` mirror already owns the URL).
+- **U8-12 · A filter keeps only this workspace's ids** → TV-U8 (`task_views__check_filters`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a saved filter keeps the app's words and only people, teams and tags of the same workspace (a person: a member, or the assignee of a task the saver can see); Display keeps only words. Anything else is refused with one answer.
+  - Why: a shared view must carry nothing a reader couldn't see.
+  - Rejected: storing any string (a view could carry ids from elsewhere).
+
+## 2026-10-13 · TV-TL1 Timeline rebuild I — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; REPLAN 67–71, 68a, 46a, 48b; research `.design/tasks-v3/research/timeline-competitors.md`; prototype round-2a frames 4–5) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **TL1-1 · The bottom tray is gone now; "No date · n" shows the undated tasks as rows until TV-TL2** → `task-timeline-view.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the tray (a bottom strip) is removed with the old view. "No date · n" sits on the Timeline's own bar and toggles Display → Show → No date: undated open tasks get rows (no mark) in their groups. TV-TL2 rewires the button to the panel's No date view and adds click-a-day to set a date.
+  - Why: 48b (no edge strips) and 70 (the tray goes); the old tray's drag-to-schedule belonged to the old bar model.
+  - Rejected: keeping the tray until TL2; a button that does nothing until then.
+- **TL1-2 · Zoom: Week 120, Month 24, Quarter 10, Year 3 px a day, remembered per scope** → `timeline-scale.ts` `DAY_WIDTH`, Display `timelineZoom`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: about 900 px of canvas shows a week and a bit, five weeks, a quarter, most of a year. All opens at Quarter, a project at Month, everything else at Month (67). The zoom lives in the scope's Display (it was one value per workspace); ⌘/Ctrl-scroll (or a pinch) and bare −/= step it, keeping the day under the pointer (or the middle) in place.
+  - Why: the old Month (40 px) showed under four weeks and Quarter (14 px) didn't fit a quarter; whole pixels keep day lines crisp.
+  - Rejected: continuous zoom (the header's units change per level); one zoom for every scope.
+- **TL1-3 · A project bar is solid only when both its start and target are set** → `timeline-rows.ts` `projectBarOf`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: otherwise it's an outline (over the faintest fill, so a bar wider than the screen still reads as one) from the earliest to the latest of its dated sections, its open tasks' points and the one date it has; no dated work, no bar. Done tasks never widen it. The bar and its 2 px progress line (done of all its top-level tasks, Won't do aside) are the project's own, whatever Filter or search shows below it.
+  - Why: 68 ("solid when you set the dates; an outline when worked out from its tasks"), research §2 ("done items never widen the range").
+  - Rejected: a half-solid bar for a project with only one date (research's "solid from the date you set") — two looks for one rule.
+- **TL1-4 · Rows keep the project's manual order; elsewhere tasks sort by date** → `timeline-rows.ts` `taskRows`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: inside a project (and in a project expanded at All) tasks follow the List's manual order within their sections, No section first; My tasks, Upcoming, the Inbox and the other task scopes group by project (the Inbox first) or by assignee, earliest date first, undated last.
+  - Why: a row never jumps when TV-TL2 drags its date; the prototype keeps the project's order.
+  - Rejected: a chronological staircase inside projects.
+- **TL1-5 · A mark off to one side shows a hint at that edge; the canvas never jumps sideways under the cursor** → `timeline-marks.tsx` `OffscreenHint`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "‹ Oct 2" or "Nov 30 ›" (quiet, at the row's edge, for points, bars, bands and diamonds); a click scrolls there. ↑↓ and a selection from the panel only scroll up and down; a deep link still centres its point (the page's reveal).
+  - Why: research §3 ("off-screen arrows with dates", Linear and Notion); scattered dates made ↑↓ swing the canvas left and right.
+  - Rejected: scrolling to each row's mark as the cursor moves.
+- **TL1-6 · Quarter's weeks are labelled by their first day, by your week start** → `timeline-scale.ts` `bottomTier`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "5 · 12 · 19" under the month, weeks starting where Time & region starts them (TV-D14); the Due per week counts use the same weeks.
+  - Why: ISO week numbers ("W42", the prototype) read a day off for anyone whose week starts on Sunday.
+  - Rejected: ISO week numbers.
+- **TL1-7 · The cursor stops on projects, sections and tasks; nothing selected is allowed** → `task-timeline-view.tsx`, `tasks-plan-view.tsx` (the selection backstop)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ↑↓/jk move over project, section and task rows; on a project or section the task selection clears (the page no longer picks a task for you in the Timeline); ←/→ fold, ⏎ opens a task's full page or a project's own Timeline from All, Space completes a task or folds a header, t scrolls to today, Esc clears, ⇧[ hides the name column. ⌥←/→, D and ⇧T are TV-TL2's.
+  - Why: at All the rows are projects; the keymap's Timeline table.
+  - Rejected: a cursor on task rows only (nothing to move at All).
+- **TL1-8 · The Timeline's Display** → `display.ts` `timelineControls`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Group by (All: Area · None; a project: Section · Assignee · None; elsewhere: Project · Assignee · None) · Show done (the List's Completed: Hidden · 7 days · All) · Colour by (None by default; Project across projects; Status) · Show (No date · Sessions · Repeats · Due per week) · Subtasks (Hidden by default · Nested). Dependencies' "Show all" comes with TV-TL2's lines. The student role turns Due per week on (`ROLE_DEFAULTS.duePerWeek`).
+  - Why: 71's list; one grammar with the List and Board.
+  - Rejected: a Display entry that does nothing until TL2.
+- **TL1-9 · Sections say their counts and dates; a filter lists only what matches** → `timeline-rows.ts`, `timeline-words.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Design · 2 of 5 · Oct 13–24", "Build · by Nov 7" (counts only when the section has tasks; a shared month or year said once). With a filter or search, All lists only the projects with a match and a project only the sections with one.
+  - Why: 68a's "one word per kind"; a search listing seven empty phases read as noise.
+  - Rejected: listing every section under a search.
+- **TL1-10 · Titles take an ellipsis in the name column; counts and dates never do** → `timeline-row.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the column is 280 px, resizable 200–480 (per device), ⇧[ hides it and the titles then sit beside their marks.
+  - Why: rows have fixed heights (36/32/28) for the canvas to line up; the resize is the fix for a long title.
+  - Rejected: wrapping titles (rows of uneven height break the timeline's rhythm).
+- **TL1-11 · Points are neutral by default** → `timeline-marks.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: grey points; the selected one the brightest mark with a ring; late in the muted late tone; done as the accent's check; a repeat with its mark and, with Show repeats, ghost points for the coming ones; a project's hue only on its dot, its bar's 3 px cap, and points when Colour by Project is on.
+  - Why: 69 ("accent only for the selection, today's 1 px line and the done check"), the prototype.
+  - Rejected: colouring points by project by default.
+
+## 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 33 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC5.5–5.6's UI half, AC6.4, AC6.6; REPLAN 16, 17, 78; the carry-forwards from TV-U6, TV-U13, TV-D13, TV-D14 and TV-D15; migration `20261013240000_project_description_team_defaults`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U16-1 · The overview reads top-down for someone opening a prepared project cold** → TV-U16 (`ui/project-panel.tsx`, `project-overview.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the hackathon angle).
+  - Decision: name · Status, Start, Target, Lead, Client (the optional three hidden until set, "+ Start · Lead · Client") · the description · progress and "Done this month · n · Xh" · Next up (started work first, then by due date, then the project's own order; five, "and n more open") · Sections ("2 of 5", end date) · People (the lead, then whoever has open work) · Waiting (longest first) · Files · Lately · Time report, Copy as text, Duplicate…, Archive…. Everything is read from the reader's own copy, so a reader sees only what they can. Clicking a task in any list opens it in Details. Its fields, state, Archive… and Duplicate… show as editable only with Edit on that project (asked once per project through `templates_can_copy`), not just Tasks edit in the workspace. Past moments read as days (Today · Yesterday · Oct 9, the Chat re-plan's rule 41), never "2h ago". Chat's two places (the linked conversation and the project's decisions, CH11/CH13/CH52) are empty slots under the description, filled by Chat's blocks.
+  - Why: REPLAN 16's computed fields, ordered for orientation ("what is this, how far, what's next, who's on it").
+  - Rejected: a project page (AGENTS.md rule 7; the panel is the overview), separate tabs for the computed parts.
+- **U16-2 · "Done this month" counts completions; the hours are the time report's** → TV-U16 (`doneInRange`, `useProjectTime`), AC6.6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every completion of the project's tasks this month (each cycle of a repeat, a reopened one taken back; a done task from before completions were kept counts by its `completedAt`), dated in the saved zone; the hours are the sum of `timeReport` rows for this month on this project (signed, never below zero, only time the reader may see), over the same month as the report sheet. The hours re-read when the project's tracked totals move.
+  - Why: spec §2.1 ties "Done this month" to the completion record; one source for hours keeps the overview and the report from ever disagreeing.
+  - Rejected: counting done tasks by status alone (misses repeats), server totals.
+- **U16-3 · A project has a description, plain text, written only through the project ops** → TV-U16 (`buckets.description`, `buckets__description_guard`), TV-D15 (templates carry it)
+  - Who: agent's choice, deferred to by Maciej (agreed with the orchestrator), 2026-10-13.
+  - Decision: a column (up to 20,000 characters, '' for none) set by `projects_op_create` / `projects_op_update`, which need Edit; a direct write to the row keeps the old value (the Time & region pattern). Plain text shown as written, edited in place (⌘⏎ or leaving saves, Esc drops). "Save as template" and "Duplicate project…" now keep it, and a template's description lands on the project made from it.
+  - Why: TV-D15 left the choice ("show the template body's, or add the column"); only a column gives every prepared project its words.
+  - Rejected: showing a template body's description (only template-born projects would have one), rich text (no mentions or embeds asked for; plain text keeps MCP and copy simple).
+- **U16-4 · Marking a project Done with open work asks once, like Archive** → TV-U16 (`setProjectState`, `closeOpenWork`, `ArchiveProjectDialog intent="done"`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 78; TV-U6's U6-4 left it here).
+  - Decision: the overview's Status is the only place to change a project's state. Done with open work (Backlog too) asks "n open tasks — Won't do · Move · Keep"; Won't do and Move run as task edits first (Move sends the open tops, subtasks follow), then the state saves on the project's chain, so an Undo always lands after it and puts the state and the tasks back. Keep only changes the state: REPLAN 16, Done never hides or closes tasks. Done needs Edit (Archive needs Full). On hold and Done sidebar rows read one step quieter.
+  - Why: one rule for closing a project, whichever way it's closed.
+  - Rejected: asking also for On hold (nothing to decide), a server op that also edits tasks (U6-4's reason).
+- **U16-5 · Someone leaving: the confirm says where things go, in numbers where the reader can see them** → TV-U16 (`departureSummary`, `departureLines`, Settings → Members, Leave workspace), AC5.6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Remove and Leave list: Inbox tasks go back to their makers, the rest to the remover (to the owner when you leave); their open tasks become unassigned, and a team's go back to the team (counted from the reader's copy, archived projects included); the projects they lead lose their lead; the teams they leave; projects only they can see go to the owner, named "From Name (archived) …". The server does all of it (TV-D13, PRIV-2); nothing new is asked.
+  - Why: REPLAN 78 "shows what they leave behind"; the remover can't see another person's Inbox or private projects, so those are rules in words, never counts.
+  - Rejected (deferred): offering "hand on to someone / Recently deleted" for their private projects. It needs a server path that hands over projects the remover can't see; PRIV-2's hand-on to the owner stays. A follow-up if wanted.
+- **U16-6 · Archived stays findable: ⌘K tags it, and its links open** → TV-U16 (palette, `linkable` in `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 78).
+  - Decision: a ⌘K result whose task or project is archived carries an "Archived" tag; a link to an archived task (⌘K, a notice, a chip) opens its project read-only with the task selected, and the panel's Project view shows that project, marked Archived, with nothing to edit.
+  - Why: All's search already did (U6-5); ⌘K and links silently dropped them.
+  - Rejected: hiding archived results from ⌘K.
+- **U16-7 · An archived project is never a team's default** → TV-U16 (`teams__check_project`, `teams__route_project`, teams panel), TV-D13's follow-up
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: naming an archived project as a default is refused; a default archived later counts as none when a task is routed (it asks for a project, as the capture already did), and works again once unarchived. Settings shows "<name> (archived)" and says what that means.
+  - Why: routing into a read-only project would hide the task.
+  - Rejected: clearing the default when a project is archived (an Unarchive couldn't bring it back).
+- **U16-8 · A client's hub rolls up their work** → TV-U16 (`clientRollup`, the hub's Work section), AC6.4
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: for a contact who is the client of live projects the reader can see: those projects with their open counts, the next three tasks by date, what waits (longest first), "n open tasks", and the time report over all of them. Waiting is "tasks in their projects that wait on anything": Waiting on has no contact kind yet.
+  - Why: REPLAN 75/AC6.4 "rolls up tasks, waiting and time".
+  - Rejected: a contact kind for Waiting on (a data change, not this block's).
+- **Known limits (TV-U16, revisitable):** Files re-read only when the project's task list changes; the hours re-read when tracked totals move, not on every entry edit; the project's description isn't in MCP yet (TV-D16).
+
+## 2026-10-13 · TV-D16 Agents and MCP v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 31 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §12, §13's agent row, §Assumptions #14, #15, #20, #26; REPLAN 6, 7, 35, 51, 52, 74; migration `20261013220000_agents_imports_mcp`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change. The tool surface is in [docs/moduo-mcp-connector.md](../moduo-mcp-connector.md).
+
+- **D16-1 · The trail names the person and the key: "Alex · via Claude Desktop"** → TV-D16 (`module_activity_log`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (REPLAN 52's wording).
+  - Decision: a key's trail rows carry the label "<person> · via <key name>" as their snapshot, for every module; the key's name alone when the person has no name. Notices an agent writes about its own state are labelled with the agent's name.
+  - Why: one place, so the app's trail, notification cards, contact hubs and MCP's own `tasks_activity` all read it without a client change; the label is a snapshot like the key's name was.
+  - Rejected: a new "on behalf of" column the app joins to a name (every renderer changes; old rows unaffected either way).
+- **D16-2 · One live session per task and key, updated in place** → TV-D16 (`agent_sessions`, `tasks_op_agent_report`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a report states the current line: its note and step replace the last ones (the last 20 lines fold under it), links stay until new ones come, the agent's name stays once given (default: the key's name); reporting `working` after `ready` or `failed` starts a new run (earlier lines, links and summary cleared). Keys only, with Tasks edit and edit access to the task.
+  - Why: "status, not conversation" (52): one line and a short history, never a log to scroll.
+  - Rejected: one row per report; letting a person post a status (their words go in comments).
+- **D16-3 · Private by default; the switch shows the line, never the summary** → TV-D16 (`agent_sessions__shown`, `agent_session_summaries`, Settings → Preferences → Agents)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (52's "private to whoever started it").
+  - Decision: only the session's person reads it until they turn on "Show my agent work to teammates"; then anyone who can see the task does, while the person can still see it. The hand-back summary lives in its own table only its person reads, until "Post as comment" makes it their comment. The switch sits in Settings → Preferences (a group "Agents") until Settings has a Tasks section; switching it bumps the person's sessions and tells teammates' copies to re-check, so a line disappears at once.
+  - Why: a column grant can't hide a value from Realtime; a separate table can.
+  - Rejected: column-level grants on the summary; a per-session share toggle.
+- **D16-4 · One notice per loud change, to the person who started it; one switch** → TV-D16 (`tasks.agent_status`, delivery kind `agent`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§13's agent row).
+  - Decision: a change into needs you · ready for review · failed writes one bell notice on the person's own Inbox (like a reminder; it opens the task) and one OS / browser notice; the same state again is quiet. The bell's "Your agents" switch mutes both (the OS notice is skipped on the server). The notice gate only lets it reach someone who can see the task it names.
+  - Why: §13's "That key's notifications" for the usual one or two keys, with one switch.
+  - Rejected: a switch per key (added when someone has several agents worth telling apart).
+- **D16-5 · A session adds no trail row and no Waiting entry** → TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: status reports write nothing to the trail (the trail already has the agent's writes); a "Waiting on" this agent that a person added clears at needs you · ready · failed (a teammate who added it hears it came back; its person hears only the agent), and when the key is revoked.
+  - Why: an automatic "Waiting on Claude" would show a private session to everyone who sees the task.
+  - Rejected: adding Waiting on when an agent starts (REPLAN 6's wording) until sharing is on.
+- **D16-6 · Rows say "working" and "needs you"; the line says everything** → TV-D16 (`agentRowMark`, `task-agent-session.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the row's quiet mark ("Claude · working", "Claude · needs you") shows on open tasks only; ready, failed and stopped show on the task's line ("Claude · Ready for review: Draft is up · step 3 of 5 · 2m ago · PR #42 ↗"), with "No update for 40m" after 30 quiet minutes while working (never a notice), "Stopped (key revoked)", earlier lines and the summary folded, and an × for its person to clear the line.
+  - Why: the row is for what's happening now; a finished run's details belong on the task.
+  - Rejected: a mark for every state on rows.
+- **D16-7 · "Imported from" is unique per person, not per workspace** → TV-D16 (index `tasks_imported_from_key`, `tasks_op_create`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (refines D10-14).
+  - Decision: a live task's import key is unique among the tasks its creator made in the workspace.
+  - Why: a re-run finds what you made; two people importing the same shared source don't collide, and a collision never tells you a task you can't see exists.
+  - Rejected: per workspace (D10-14's first cut).
+- **D16-8 · Re-run by key, Undo what nobody touched** → TV-D16 (`tasks_op_create_with`, `imports_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74).
+  - Decision: creating with a key you already used on a live task of yours updates that task (fields, added tags; reminders and work sessions only on create), in or out of a run; a run records what it made or updated. "Undo this import" sends the run's created tasks that have no activity after the run wrote them to Recently deleted (subtasks first), then the sections and projects it made that are left empty and unchanged since the run's last write (they keep no trail, so their own last change decides); a project with a section left stays. Rows it only updated stay as they are; anything the person can no longer see isn't counted. Runs are their person's alone (keys or the app), and finishing or undoing one needs Tasks edit like beginning it. The whole create (task, tags, reminders, sessions, the run's row) is one transaction, and a run's projects and sections are made through it. A task Undo removed that comes back from Recently deleted after the import made its key again returns unlinked from the source (the newer task keeps the key).
+  - Why: "a second run updates, creates nothing new; Undo removes exactly the first run's rows that weren't edited since" (spec edge case); soft deletes keep 30 days to change your mind.
+  - Rejected: restoring the old values of updated rows; deciding a task's "edited since" from `updated_at` (triggers move it; tasks have a trail); refusing the restore.
+- **D16-9 · Tags by name through one op** → TV-D16 (`tasks_op_tag`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: add and take off by name in any case; a missing name becomes a workspace tag when the person may make tags; needs edit access to the task; one trail line ("tagged this “exam” and untagged “week1”").
+  - Why: agents had no way to tag, and a raw `tag_links` write as the service role would skip the app's checks.
+  - Rejected: raw writes from the connector.
+- **D16-10 · The v3 tool names, under the Tasks key scope; the old names stay** → TV-D16 (`modules/tasks.ts`, `ops-manifest.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (#14).
+  - Decision: `projects_*`, `sections_*`, `areas_*`, `statuses_list`, `teams_list`, `templates_*`, `imports_*` and the new `tasks_*` tools are the Tasks module's (a Tasks key reaches them); `tasks_today`, `tasks_commit`, `tasks_uncommit`, `tasks_skip_today` and `tasks_list_buckets` stay, marked deprecated in the manifest and their descriptions, until TV-D7. `tasks_comment` needs Links: Edit too (it's a spine comment). Every task argument takes a handle or a uuid; status takes a category word, a project's name or an id; finishing a task finishes its open subtasks the person can edit (call 87, connector-side).
+  - Why: #14's list; one key scope for one module's work.
+  - Rejected: a separate "projects" key scope.
+- **D16-11 · Search answers keys** → TV-D16 (`tasks_search` re-cut)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the search RPC checks the module permission (a key's scope capped by its person) instead of a person-only check; the task gate per match is unchanged. A task's import key is searched with its title and description, on the server and in the app's own copy, so "ENG-123" finds it in the search box, ⌘K and MCP alike; MCP also finds a handle.
+  - Why: under a key it returned nothing; AC3.6 ("ENG-123 is findable after import").
+  - Rejected: keeping MCP on its old substring query (it filled its limit before the gate); a connector-only key lookup (the app wouldn't find it).
+- **D16-12 · The import end-to-end test runs locally; the real connector run is a release step** → TV-D16 (`scripts/mcp-import-roundtrip.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (74's "tested end to end with Claude + Todoist's connector before it's announced").
+  - Decision: a script imports a Todoist-shaped project through the local connector with a real key (dates, labels, a repeat, a subtask, a reminder), re-runs it, undoes, posts a session and finishes a parent, in a disposable workspace it removes; Claude with Todoist's own connector is on the release checklist.
+  - Why: no Claude or Todoist account belongs in a local build; the script exercises the same HTTP surface.
+  - Rejected: skipping the end-to-end check until release.
+- **D16-13 · Erasure clears a key's trail label with the key** → TV-D16 (`account_erase_workspace_data`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§Assumptions #26).
+  - Decision: when a person's data is erased, the trail rows their keys wrote in workspaces they don't own lose their label, as their own rows do; the trail then reads "An API client".
+  - Why: D16-1 puts the person's name in a key's label.
+  - Rejected: keeping the key's name (it's the person's own text too).
+- **D16-14 · A teammate's agent line says whose agent it is** → TV-D16 (`agentWho`, the panel line, the row mark)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: your own sessions read "Claude · …"; a teammate's shared one reads "Anna's Claude · …" on the line and "Anna's Claude · working" on the row (first name on rows), "A teammate's …" when the reader can't name them. Clearing a line is its person's, in the app; a key can't.
+  - Why: an agent names itself, so a shared line shouldn't read as a person.
+  - Rejected: the agent's name alone everywhere.
+- **D16-15 · Runs, run rows and summaries keep no soft delete** → TV-D16 (`imports`, `import_rows`, `agent_session_summaries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (§Assumptions #27).
+  - Decision: these three are read on demand by their person (never delta-synced), so they carry `workspace_id` but no `deleted_at` (and `import_rows` no `updated_at`); a run is never deleted by hand, its rows go with it, and a new run replaces a session's summary.
+  - Why: #27's columns exist so the delta sync sees every change; nothing syncs these.
+  - Rejected: columns nothing reads or writes.
+- **D16-16 · Every agent and import read follows the task** → TV-D16 follow-up (`20261013268000_agents_privacy_fix`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's audit; the reminder and team notices at the orchestrator's ask).
+  - Decision: the bell's Inbox notices (an agent's state, a reminder, a team notice) name their task by id only, and the app names it through the entity registry, which answers only while the reader can see it (`notificationSubject`, `unnamedTaskTargets`); an OS / browser notice row and a hand-back summary are readable (and sent live) to their person only while they can see the task; a key's trail label names only a key of the row's own workspace; a run's summary answers only the run's person.
+  - Why: a person can lose access to a task after a notice or summary about it was written.
+  - Rejected: copying the task's title into the notice (it outlives the reader's access).
+- **D16-17 · The sibling ops write through the plain ones** → TV-D16 follow-up (`tasks_op_create_with`, `tasks_op_update_with`, `imports_op_project_create` / `_section_create`; `supabase/tests/ops_parity.test.sql`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's parity ask).
+  - Decision: each "_with" or import op makes its core write through `tasks_op_create`, `tasks_op_update`, `projects_op_create` or `sections_op_create` and only adds its extras, so every check (project edit, section and status of the project, teams, assignees, recurrence bounds, key scopes) is the plain op's; `tasks_op_tag` keeps the app's tag rules (edit access to the task, a tag of this workspace, making tags needs the right). An id that's already there gets the plain op's answer and nothing more: no tags, reminders or work sessions, and never a place in an import run. Both paths file into an archived project alike (the plain op allows it).
+  - Why: two paths to one write drift apart unless one calls the other.
+  - Rejected: re-checking each rule in the sibling.
+- **D16-18 · A key's comment keeps the key's name as its author** → (`comments_op_add`, unchanged)
+  - Who: agent's choice, confirmed by the orchestrator, 2026-10-13.
+  - Decision: a comment written through a key reads "Claude Desktop" as its author, as before.
+  - Why: comments are read only by people who can see their item, the same rule as the trail's "via" label.
+  - Rejected: hiding the key's name on comments.
+- **D16-19 · Every bell notice names its item by id** → TV-D16 follow-up (`20261013269000_notice_ids_only`; `withNoticeDetails`, `useNotificationDetails`, `runtime.spine.getCommentExcerpts`)
+  - Who: agent's choice, at the orchestrator's ask, 2026-10-14.
+  - Decision: no notice carries a task's title, a note's title or a comment's text: assigned, completed, unblocked (the finished task by `blocker_id`), team check-back, waiting resolved, mentioned, a note's mention, and the comment notices (`comment_id`), as reminders, team notices and agents' notices already did (D16-16). The bell and Home's Activity widget name tasks through the entity registry and quote a comment through the comments' read policy, each for the reader, so a card about something they can no longer see reads "assigned this to you", "left a comment", "unblocked this". A deleted project's name stays on its notice (`tasks.project_deleted`: its readers could see it when it was deleted). The task trail shows "unblocked this" without the other task's name.
+  - Why: a notice outlives its reader's access to what it's about; an unblocking task can be one its reader never saw.
+  - Rejected: re-checking access in the bell's read for each kind (every new kind would have to remember it).
+- **D16-20 · A deleted project's notice keeps its name** → (`projects_op_delete`, `tasks.project_deleted`, unchanged)
+  - Who: agent's choice, confirmed by the orchestrator, 2026-10-14.
+  - Decision: "deleted “Website” · your task is in your Inbox" keeps the project's name in the notice.
+  - Why: it goes only to people who could see the project when it was deleted, and once it's gone the registry can't name it.
+  - Rejected: "deleted a project" with no name.
+
+## 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 16 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.9, AC4.6; REPLAN 82, 82a, 82b, defaults a and e; prototype round-2b frame 1, Bulk). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U12-1 · The keys stay as ratified, not as first typed** → TV-U12 (`use-bulk-actions.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the build brief quoted his first message: del, f, ⏎, ⇧2, ⇧3).
+  - Decision: the bar's row is Complete `Space` · Focus `Q` · Assign `@` · Tag `#` · Date `D` · Delete `⌫`, then More ▾ (Move `B` · Status `⇧S` · Section · Priority `P` · Waiting · Team), then "4 selected · Esc", as 82b decided; `a` and `l` alias `@` and `#`, `i` assigns to you, `x` completes, bare ⌫/Del deletes only with two or more selected (⌘⌫ too).
+  - Why: 82b resolved the collisions in his message: ⏎ opens and F is Filter (⇧F is "Focus on this").
+  - Rejected: ⏎ to complete and F for Focus (both already taken).
+- **U12-2 · The selection is a set beside the cursor** → TV-U12 (`selection.ts`, `ui/use-task-selection.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a click selects one task (the cursor: the panel, the URL and the keys follow it); ⌘/Ctrl-click adds or takes out one, starting from the cursor; ⇧-click and ⇧↑↓ (⇧J/⇧K) select the range from the anchor (the last ⌘-clicked task, else the cursor) in the view's order, folded groups left out; ⌘A selects every task the view shows; Esc and a plain click or arrow go back to one. The set lives in the page and lasts within one place and one layout; a task that leaves the scope leaves it, and rows scrolled away stay in it.
+  - Why: Finder's and Linear's grammar; the cursor stays the one thing the panel, the deep link and the keys already follow (TV-D11b's rows stay memoised: a row gets a boolean).
+  - Rejected: a separate checkbox column (spec: no checkboxes); a range that adds to an earlier ⌘-selection (Finder replaces it).
+- **U12-3 · One mode mechanism, and triage yields to a selection** → TV-U12 (`bottom-bar-mode.ts`, `inbox-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the selection owns the bar through TV-U15's `useBottomBarModeOwner` (the same six-then-More row); while two or more are selected in the Inbox, the triage row and its keys 1 · 2 · 3 · H step aside and come back when the selection goes. A viewer gets the note alone ("4 selected · Esc"), no actions.
+  - Why: 82b's one pattern for every mode; one mode at a time.
+  - Rejected: triage keys acting on a selection (Duplicate needs one original per task; left for later).
+- **U12-4 · Every bulk change is one write and one Undo, each task checked on its own** → TV-U12 (`hooks/use-bulk-ops.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every row shows the change at once (one store write); each task then goes through its own server op (so its own permission check), four at a time; the ones that saved stay, a refused one goes back. The toast says the change ("Moved 4 tasks to Website"), or "3 of 4 changed" with "“Pricing copy” is read-only to you." (one refused task is named; it's in your selection, so yours to see; several are counted; a subtask brought along is never named). One Undo puts back every field the batch changed unless it changed again since ("Undo kept a newer change to 1 task."), and a check-off's queue places. A lost connection stops sending and says Offline.
+  - Why: default a ("one Undo for the batch"), the spec's read-only edge case, and the store's one-write rule.
+  - Rejected: one server call for the batch (no per-task op exists; a new op would be a migration); N separate writes with N toasts.
+- **U12-5 · What each bulk verb does** → TV-U12 (`bulk.ts` `planBulk`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Complete finishes the open ones and their open subtasks (call 87; "· also 2 subtasks"), or reopens them all when every one is closed; Focus adds the ones not in your Focus at its end, or takes them all out when all are in it; Tag adds a tag to the ones without it, or takes it off when all have it (a typed new name makes the tag); Status by a project's own name when one project is selected, by category across projects (each takes its project's first of it); Section only within one project (dimmed otherwise); Move files into a project at its end, in order, a subtask going with a selected parent; Waiting on adds the person or the words to each (skipping a task already waiting on that person); Date: Today · Tomorrow · Next week · A day later · A week later (each from its own date; a dateless task counts from today) · Pick a date… · No date; a task that already has the value is skipped.
+  - Why: default e (Date, Status, Section, Waiting, Team) and Linear's toggles; 87 for finishing parents.
+  - Rejected: a second Complete that only finishes (a selection of closed tasks would do nothing).
+- **U12-6 · A repeat under a bulk Date moves just this occurrence by default** → TV-U12 (`repeat-move-dialog.tsx`, lifted from Upcoming)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a selection holds repeating tasks with a due date, a date asks "Just these · Change the pattern" (Upcoming's dialog, now shared); Just these moves each repeat's one occurrence (`tasks_op_move_occurrence`), Change the pattern moves its rule with it; No date never asks.
+  - Why: the spec's edge case ("default the occurrences").
+  - Rejected: always changing the pattern.
+- **U12-7 · The panel's "n tasks · Mixed"** → TV-U12 (`bulk-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with two or more selected the right panel shows Details as "4 tasks": the first eight titles with their status icons ("and n more"), then Status · Assignee · Priority · Due · Project · Section · Tags · Team with the shared value, "Mixed" or "None"; a value opens the same picker as the bar; "A change here applies to all 4. One Undo covers it."
+  - Why: call 82 and the prototype's Bulk frame.
+  - Rejected: editing values inline in the panel (the pickers are one set for the bar, the keys and the panel).
+- **U12-8 · Pickers are one search dialog** → TV-U12 (`bulk-picker.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Assign, Tag, Date, Move, Status, Section, Priority, Waiting on and Team open one search dialog (as the Inbox's "File in…"), and focus goes back to the List or the Board when it closes.
+  - Why: a key or the bar has nothing on screen to anchor a popover to.
+  - Rejected: popovers anchored to the bar's buttons (no anchor for the keys).
+- **U12-9 · Right-clicking, and dragging, a selected task act on the selection** → TV-U12 (`selection-menu.tsx`, `dnd/multi-drop.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (82a's "the same menu as right-clicking a selection"; TV-U4's carry-forward).
+  - Decision: the one context menu, opened on a task of a selection, lists the selection's verbs; right-clicking a task outside it acts on that task alone. Dragging a selected row or card moves the selection: the held task's drop is planned as always, the others take the same change and line up right behind it (a project move: the project's end, in order); a parent never nests and a task never nests under itself. The sidebar's project, Focus and My tasks rows take a selection too. The drag preview counts the others ("+3").
+  - Why: one gesture for one change; one write, one Undo.
+  - Rejected: Upcoming's day drop for a selection (it moves the held row only; its own Move all… covers many).
+- **U12-10 · The Board grouped by Waiting on** → TV-U12 (deferred here by TV-U11; `board-columns.ts` `waitingColumns`, `dnd/board-drop.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Display → Group by → Waiting on gives a column per person or thing waited on (people with their avatar, by name), a task under the newest of its waits, then "Not waiting"; empty columns hide; a drop into a column adds that wait (with Undo, a selection too), and "Not waiting" takes no drop (a wait ends when what it waits on arrives, or from the panel).
+  - Why: tasks-v3 §5 lists Waiting among the Board's groupings; a wait isn't a field, so a drop adds an entry rather than moving the card off its others.
+  - Rejected: a drop into "Not waiting" clearing every wait (destructive from a drag).
+- **U12-11 · The Inbox's cursor follows the List's own order** → TV-U12 (TV-U15's carry-forward; `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List and the Board write the order they draw into a ref the page reads; after a triage the cursor moves to the next row as shown, grouped or not.
+  - Why: a grouped Inbox's next row isn't the flat order's.
+  - Rejected: re-deriving the List's groups in the page.
+
+## 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 29 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §14, §Assumptions #17, #18, #26; REPLAN 75, 76, default f; migrations `20261013200000_user_preferences_time_region` and `20261013201000_time_entries_add`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **D14-1 · Time & region is plain columns on `user_preferences`, written by one op and read by one** → TV-D14 (`user_op_set_time_region`, `user_time_region`, `src/lib/time-region.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `time_zone` (TV-D8's), `time_zone_manual`, `week_start`, `hour_cycle`, `date_order` and `share_time_with_owner`; NULL follows the device. Only the ops write them: a trigger keeps a direct write's old values (a new row starts from the defaults), so every value has passed the op's checks. The app keeps a copy per person (localStorage, for the first paint), reads the server's at every sign-in and when the section opens, and every module reads it through `getResolvedTimeRegion()` / `useTimeRegion()`.
+  - Why: spec #17 names the columns; the server needs the zone and the share switch; a synced prefs domain would let a prefs push carry a stale copy over op-written columns.
+  - Rejected: a field in the synced `preferences` jsonb (D12-6's route for mutes), per-module settings.
+- **D14-2 · Clocks on screen stay the device's; the saved zone is the clock your day runs on** → TV-D14 (`engineZone`, `tasks_time_report`'s `p_zone`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: times show in the device's zone (as before); the saved zone decides when repeats roll over, how reminders and due times are read (TV-D8/D12), the repeat preview in the app, and which day a time report puts an entry on. Week start, the 12/24-hour clock and the date order change every displayed date: Tasks, Focus, comments and date chips, snippets and the bell, the Calendar (hours, chips, the range, quick create, spoken repeats), the Clock widget, Email (detail dates, snooze labels and hints), Chat (times, day headers, channel dates), Contacts' dates and Settings' "Joined" / "Last used". Booking pages (a guest's view in the host's zone), ICS and the email list's compact "13Oct" keep their own formats.
+  - Why: the app reads every date-only value as a device-local midnight; re-zoning only some displays would put due dates on the wrong day across zones.
+  - Rejected: formatting every moment in the saved zone (an app-wide refactor; the Calendar rebuild can take it on).
+- **D14-3 · The zone is the person's; a device elsewhere asks once** → TV-D14 (`syncTimeRegion`, `TimeRegionPrompt`, `user_op_set_time_zone` re-cut)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the first sign-in on a current build adopts the device's zone silently (as TV-D8's sign-in write did) and marks it the person's; afterwards a device in another zone asks once per zone and device: "Your computer is on New York time now." · Use New York time · Keep Tokyo. Picking a zone in Settings counts as answering. An older build's sign-in write no longer moves a zone that is the person's.
+  - Why: REPLAN 76's travel prompt; a silent follow-the-device would move repeats and reminders while travelling.
+  - Rejected: an "Automatic" zone mode, asking at every sign-in.
+- **D14-4 · One week start; Calendar's own isn't carried over** → TV-D14 (`day-buckets.ts`, `use-calendar-prefs.ts`, `grammar.ts`, `date-field.tsx`, `calendar.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Filter → This week, the Calendar's weeks, `/next week`, the date picker's "Next week" and its month grid follow Time & region (the device's first day by default, Monday when the engine has no week data). `calendar.weekStartsOn` isn't copied: nothing ever let anyone change it, so it only held the old default. Date grouping stays rolling (TV-U2).
+  - Why: REPLAN 76 ("Calendar's own week-start setting moves here").
+  - Rejected: carrying a value nobody chose (it would pin Monday for everyone who opened the Calendar).
+- **D14-5 · "Add time…" is one quick line; your entries are listed under it** → TV-D14 (`tasks_op_track_time` add/edit/remove, `time-entries.ts`, `TaskTimeEntries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "2h yesterday call with Anna": the length first, then an optional day (today, yesterday, a weekday, a date), then the note; one minute to 24 hours, up to 13 months back, never after tomorrow. A logged entry is kind `manual` with its day. Logged and Focus entries can be edited (length, note; a logged entry's day) and removed (Undo logs it back); an edit sends only what changed, so a note never rounds a Focus stretch to the minute, and a Focus stretch keeps its end (a new length moves its start, so it never ends after now). Adjustments keep their Undo; give-backs are labelled and fixed. Only your own entries change, and only with Edit on the task: "or someone with Edit" is read as the gate on adding, never a licence to change a teammate's hours.
+  - Why: the spec's "2h · yesterday · note"; Harvest and Toggl log the same way.
+  - Rejected: three separate fields, editing teammates' entries.
+- **D14-6 · Your entries sit behind the task gate** → TV-D14 (`task_time_entries_read_own`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: you read your own entries only on tasks you can still see; your time on a task taken away from you isn't in your list, your report or your export until the task comes back.
+  - Why: TV-D10-fix's rule for everything on a task; a report must never reveal a hidden task.
+  - Rejected: REPLAN 75's "your own time is always yours to export" for hidden tasks (it would show their titles).
+- **D14-7 · The report reads one row per entry, and the app groups them** → TV-D14 (`tasks_time_report`, `time-report.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: rows on tasks the reader can see, dated in the reader's zone; your own always; a teammate's only for the workspace owner and only while that teammate shares; waiting time and the dateless legacy totals never; a project or client report reads only projects the reader can see, and a project the reader can't see has no name ("Private project"). Lines sum their entries (a give-back nets out) and never go below zero; rounding is per line, up to the next quarter hour.
+  - Why: TV-H1, TV-U16 and TV-D16 reuse the same rows; billing rounds up.
+  - Rejected: server-side totals, rounding to the nearest quarter, rounding the total.
+- **D14-8 · One share switch, with the owner, in Time & region** → TV-D14 (`share_time_with_owner`, Settings → Time & region → Tracked time)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: off by default; it applies in every workspace you're in; owners see your entries (length, day, note) only on tasks they can see; turning it off takes them away at once.
+  - Why: REPLAN 75 (no surveillance unless you opt in); there is no Settings → Tasks yet.
+  - Rejected: a switch per workspace (the spec names one column).
+- **D14-9 · The report opens from the Project panel and a client's hub** → TV-D14 (`ProjectPanel`, `ClientTimeReport`, `TimeReportSheet`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Project panel gains Time report and Copy as text (TV-U16 fills the rest); a contact who is the client of a project you can see gets a "Time" section in their hub. The sheet: period (this/last week, this/last month, last 30 days, picked dates), by task or by day, round to 15 minutes, the total, Export CSV, Export PDF.
+  - Why: REPLAN 75 ("a sheet from a project's overview and a client's hub").
+  - Rejected: a report page (AGENTS.md rule 7).
+- **D14-10 · Export PDF is the print layout through the system print dialog** → TV-D14 (`PrintRoot`, `lib/print.ts`, `print_page`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one light layout whatever the theme (the client, the period and the total on top, lines with notes, who tracked it where more than one person did, "Made with Moduo"); the browser's print, or on the desktop a `print_page` command (WKWebView ignores `window.print()`). The CSV holds the sheet's lines, hours as a decimal and as a duration, with cells a spreadsheet won't run as formulas.
+  - Why: spec #18 (no PDF service for one document).
+  - Rejected: a server PDF renderer, a PDF library in the bundle.
+- **D14-11 · Getting a list out: the view's ⋯** → TV-D14 (`ViewExportMenu`, `list-export.ts`), default f
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a ⋯ beside Display: Copy as text · Export view as CSV · Print…, on the tasks the view shows (scope, filter, Display) in its order. A selection's "Copy as text" is the row menu's (TV-U10) until TV-U12's multi-select. The data export gains your own time entries.
+  - Why: default f; the toolbar's controls stay where they were.
+  - Rejected: an export page, items inside the Display menu.
+- **D14-12 · Focus saves stamp their run; give-backs say what they are** → TV-D14 (`time-sink.ts`, `giveBackTime`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a save carries the open (or just ended) run of its workspace; the server keeps it only when it is the caller's own run there. A takeover's give-back carries its run and `reason = give_back`.
+  - Why: TV-F6's asks; the entries list labels give-backs.
+  - Rejected: stamping runs on the device only.
+- **D14-13 · Erasure clears your notes; the seconds stay** → TV-D14 (`account_erase_workspace_data`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: deleting an account clears the person's notes on time entries in workspaces they don't own (counted in the preview as `time_notes_cleared`); the seconds stay in each task's total and the profile cascade forgets whose they were (TV-D3).
+  - Why: §Assumptions #26; a note is the person's words.
+  - Rejected: deleting the entries (teams would lose real time from their totals).
+- **Known limits (TV-D14, revisitable):** times on screen don't follow a saved zone that differs from the device's (D14-2); a second device learns a changed setting at its next sign-in or when the section opens; Intl week data is missing on some engines (then Monday).
+
+## 2026-10-13 · TV-U17 Onboarding and welcome (tasks-v3 block 34) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 34 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §16, AC2–AC7 defaults, AC11.1; REPLAN 34, 9, 30, 61, 66, 48b). Migration `20261013230000_templates_starter` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U17-1 · The role question opens Tasks' welcome, not workspace setup** → TV-U17 (`ui/tasks-welcome-dialog.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "What will you run in Moduo?" is the welcome's first page, asked once per person the first time Tasks opens (six answers and Skip; closing it counts as Skip). Then the basics. Everyone gets it, including people who join a prepared workspace.
+  - Why: REPLAN 34 ("the role question first, then Tasks' welcome"); every default it sets is a Tasks default; the workspace setup screen stays one step.
+  - Rejected: asking on the workspace setup screen (only people who create a workspace would see it, never someone joining a prepared one).
+- **U17-2 · Once per person: synced preferences, read before deciding, only ever forward** → TV-U17 (`preferences.ts` `tasksOnboarding`, `prefs-sync.ts`, `ui/use-tasks-welcome.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the role, when it was answered, when the welcome first showed and which workspaces were seeded live in the synced preferences. The welcome decides only after this session has read the person's preferences (`usePreferencesReady`) and the task store has reached the server; it counts as seen the moment it shows; taking the cloud's copy never undoes "seen" or an answer this device knows (`mergeOnboardingForward`, same person only).
+  - Why: "per person, never per device"; a new device's mirror holds defaults until the account's copy arrives, and the preferences sync as one blob, last write wins.
+  - Rejected: localStorage (per device); a table (a migration for four fields).
+- **U17-3 · Someone who already made tasks here never gets the welcome** → TV-U17 (`onboarding.ts` `welcomeDecision`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: if the person created any task in this workspace, the welcome is marked seen quietly and the role isn't asked. Anyone can open it from the sidebar's ⋯ or Help.
+  - Why: "stay out of the way for experienced people": everyone using Tasks today would otherwise get a first-run dialog for a module they know.
+  - Rejected: showing it to everyone once at release.
+- **U17-4 · Teaching tasks only for the owner of an empty workspace** → TV-U17 (`onboarding.ts` `shouldSeedWorkspace`, `teachingTaskTitles`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when the welcome first opens for someone who owns this workspace and it holds no tasks and no projects, three tasks go into their Inbox, once per workspace: "Press ⌘⇧K anywhere to capture a task", "Type @, # or / in a task's name to assign, tag or date it", "Press Q on this task to line it up in Focus" (the capture keys as this device writes them).
+  - Why: REPLAN 34 ("seeded once, for whoever creates the workspace"); the empty states already teach each view's gesture (TV-U15), these are the gestures to try.
+  - Rejected: seeding for everyone (it would fill every hackathon attendee's Inbox in a prepared workspace).
+- **U17-5 · Starter templates are built on the server from a key** → TV-U17 (`20261013230000_templates_starter`, `STARTER_TEMPLATES` in `@contracts/vocabularies`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the key, not a body, was the orchestrator's ask).
+  - Decision: `project_templates_op_starter(workspace, {id, starter})` makes Project kickoff (a PM), Monthly close (a founder or ops), Client onboarding (client work) or Episode (a creator, with Ideas · Planned · Drafting · Editing · Published) from a body the server writes. It's the caller's, private, never shareable, needs Tasks edit, refuses API keys, and a resend makes nothing twice. The welcome says where it is ("… is in your templates: the sidebar's ⋯, then New project from template…").
+  - Why: REPLAN 9 is yes, so the role's starter template is in; a body the server writes can't point at anyone's items.
+  - Rejected: an op that stores a body the app sends; saving a template from a throwaway project and deleting it (activity and a Recently deleted row for nothing).
+- **U17-6 · What a role sets** → TV-U17 (`onboarding.ts` `ROLE_DEFAULTS`, `default-view.ts`, `display.ts`, `view-prefs.ts`), TV-U8
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: REPLAN §3's table. The first view opens on answering and on any first open later (nothing remembered on that device): Upcoming (student), the Inbox (developer, founder), the first project as its Board (PM, creator; All while there's none), All (client work: every project's tasks, project by project). Developers start on Detailed rows wherever a view remembers no Display of its own. The seeded saved views wait for TV-U8 (`ROLE_DEFAULTS[role].views`).
+  - Why: defaults only, never a feature on or off (REPLAN 34).
+  - Rejected: writing Detailed into every view's saved Display (a later role change couldn't tell a choice from a default).
+- **U17-7 · The welcome's pages and words** → TV-U17 (`ui/tasks-welcome-dialog.tsx`, `ui/focus-empty-state.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the basics: "Welcome to Tasks" and three lines (⌘⇧K captures from anywhere and lands in your Inbox; click a task or press ⏎ to open it; Focus works through what's next, one task at a time) with Explore on my own and Learn more. Then three steps, each a clip, a title and a sentence or two: "Above the line is yours", "Line things up in Focus" (the Focus empty state's own words, `FOCUS_WHAT_IT_IS` and `FocusKeyHints`), "@, # and / work everywhere" (Maciej's line). Back · Next (Done on the last) · three dots · Close always · Esc. The dialog takes focus itself, so no answer looks picked. No celebration.
+  - Why: REPLAN 34 as decided 2026-10-10; under a minute for someone new.
+  - Rejected: a fourth step; a toast or confetti on Done.
+- **U17-8 · Clips are frames of the whole window, recorded by script** → TV-U17 (`tests/clips/welcome-clips.spec.ts`, `public/welcome/`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a Playwright script drives the real app in a tidy sample workspace and saves 3–4 frames per step (the whole 1280 × 720 window, bottom bar included, shrunk to 960 px JPEGs, ~55 KB each); the dialog cross-fades them every 1.8 s and shows the first frame under reduced motion; a frame that won't load hides the clip, not the words. Re-run the script when the UI changes.
+  - Why: REPLAN 34 ("recorded from the real app by script") and 48b (show the 3×3 with the bottom bar); still frames play in every webview.
+  - Rejected: Playwright's WebM video (no ffmpeg here to make MP4, and WebM in the desktop app's WebKit is unproven); drawn illustrations (they go stale).
+- **U17-9 · Reopening it** → TV-U17 (`bucket-rail.tsx`, `help-menu.tsx`, `welcome-request.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "What's in Tasks" at the end of the sidebar hairline's ⋯ and in Help (after Keyboard shortcuts, only with Tasks access; from another page it opens Tasks first). Both open the basics, never the role question.
+  - Why: REPLAN 34 ("reopened from the module's ⋯ menu and from Help"); SH-0's Help is global.
+  - Rejected: a Settings switch to "show the welcome again".
+
+## 2026-10-13 · TV-U11 Board v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 15 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §5, AC4.2, AC7.1, AC7.4, AC11.6; REPLAN 22, 22a, 53a, 53b, 85, 86, defaults n and o; research views-board-detail.md §1–6). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U11-1 · Which status columns a board shows** → TV-U11 (`board-columns.ts` `statusColumns`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one project's board (and the Inbox's, on the workspace default set) shows the project's own statuses in category order, each with its category's icon; Backlog is always there (folded), Won't do and hidden statuses only while a card needs them or Filter → Status asks. Boards across projects show the five categories (Backlog and Won't do only when they have cards), or the shared names when every project in view has exactly the same set (and it isn't just the five usual names). A task whose status isn't read yet sits in its category's first.
+  - Why: 53a ("+ Add status", names per project, categories across projects) and U2-4 (Won't do shows only when asked); a status set nobody has read must never lose a card. Won't do tasks sit out of every scope until Filter → Status asks (TV-P0), so an always-there Won't do button would read "0" on a project full of them, and a folded button takes no drops anyway (53b): the way to Won't do stays the status menu, ⇧S and the late fixes.
+  - Rejected: always five category columns on a project board (In review would vanish into In progress); a Won't do button on every board (it would miscount).
+- **U11-2 · Folding: any column, a 32 px button, remembered per device** → TV-U11 (`FoldedColumn`, `use-board-folds.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every column's ⋯ has Fold; a folded column is the 53b button (mark · count · chevron, hover names it), never a drop target; Backlog and Won't do start folded; a section's button shows two letters. A folded column opens while the selected card is in it (a deep link, the panel), without changing what you chose. Folds are remembered per person, workspace, scope and grouping on this device (the List's U10-7 rule; lanes per lane kind). Folding or unfolding hands the keys back to the board.
+  - Why: 53b, research §2; "Fold" sits in the prototype's ⋯.
+  - Rejected: synced folds now (preferences sync is TV-U8's lane); a folded column that still takes drops (53b says unfold first).
+- **U11-3 · Group by and which columns hide** → TV-U11 (`display.ts` `boardGroupsFor`, `board-columns.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Status (always the default, 86) · Section (inside a project) · Assignee · Team (once there are teams) · Priority · Project and Area (across projects, Area once there are areas), remembered per scope. Statuses, sections and priorities always show; people, teams, projects and areas hide when empty behind "n hidden · Show" at the board's end. Column order is the List's (No section first; Unassigned, No team last). An area column takes no drops (the area is the project's); a viewer's or a former member's column takes none either.
+  - Why: call 22 and default o; one order for List and Board.
+  - Rejected: Waiting on as a grouping now (a drop there adds a Waiting on entry, not a field through `dropTask`; → TV-U12 with the bulk Waiting edit); "No assignee" first (the List puts it last).
+- **U11-4 · Lanes** → TV-U11 (`buildBoardLanes`, `LaneBoard`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Display → Lanes: None · Assignee · Priority · Project (across projects) · Team; only lanes with cards; each lane header folds; the column headers stay on top and the board scrolls as one; a cell draws 20 cards, then "+ n more". A drop into another lane writes the lane's field, into another lane and column both, with one Undo; Project lanes never move a task to another project.
+  - Why: call 85 and research §3 (a move between projects stays a deliberate Move).
+  - Rejected: virtualizing lane cells (20 per cell bounds them); Section lanes (85 didn't list them).
+- **U11-5 · The card** → TV-U11 (`task-card.tsx` on the kit `ItemCard`, `--board-card-w`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one width per density (296 / 280 / 264 px, a token); the status icon leads (U10-1's click and ⇧S); Standard: title and one meta line (project where not implied, priority, one date, counts, the status's own name where the column doesn't say it, the Focus mark on hover, the avatar, or a team's mark on a task nobody has taken yet); Detailed adds the handle above the title and a second line (tag names, time, Waiting on); Display → Description: Hidden · Preview shows two lines of plain text (a reference's stored title left out).
+  - Why: research §1 and default o; the team mark is TV-D13's "routed, waiting for a claim".
+  - Rejected: flexing widths (the board reflowed); the description as rich text (cards stay one face).
+- **U11-6 · One context menu, and its commands on a card** → TV-U11 (`task-context-menu.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List row's menu moved into one component used by rows and cards (Timeline bars join with TV-TL1); on a card, Rename edits the title in place, Status… opens at the icon, Schedule… / Set due date… at the card's date, Move to project… at its project (an anchor that takes no width when the project is implied).
+  - Why: §5 "one context menu for rows, cards and bars".
+  - Rejected: the old card menu (no Rename, Status, dates or Copy link).
+- **U11-7 · The Board's keys** → TV-U11 (`board-keys.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List's map with the arrows sideways: ↑↓ (j/k) in a column, ←→ to the nearest card of the next column with cards; ⌥⇧↑/↓ reorder in the cell (manual order in one project only, else "Sorted by … · Back to manual order"); ⌥⇧←/→ move the card to the next unfolded column that takes it, keeping its place, with Undo; ⏎ opens the full page, `e` edits, Space finishes, `c` opens the capture with the selected card's column value (else the first column that adds). A key that moves the selection off screen scrolls its column into view. `>` / `<` stay the List's.
+  - Why: research §4 and U4's carry-forward (⌥⇧←→ were TV-U11's).
+  - Rejected: h/l for columns (not in the keymap).
+- **U11-8 · A column's "+" files into its own status** → TV-U11 (`statusAdd`, the capture seed's `statusId`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the "+" follows U10-6's rule (All: "Pick a project first"; Done and Won't do: none); on a status that isn't its category's first where the task files (the project's own set; the Inbox's, the workspace default, on the Inbox's board and for My tasks' shared names), the capture carries it by id with a chip naming it, used only if the task still files where the capture was opened (else that place's first of the category), never kept in a draft. The server takes a default-set status for an Inbox task (`tasks__status_in_set`).
+  - Why: default n ("adds with the group's value filled in"); a new task in In review must not land in In progress.
+  - Rejected: a status picker in the capture (the chip is enough; More → Status is TV-U13's panel).
+- **U11-9 · Undo puts a status back by id** → TV-U11 (`drop-write.ts` `undoWrite`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Undo compares the exact status (key and id), so In progress → In review (one category) is undone; a newer change by someone else is still kept.
+  - Why: found live: Undo of a same-category move did nothing.
+  - Rejected: —
+- **U11-10 · Board tests find the Board's own columns** → TV-U11 (`data-board-column` on each column's section)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: each column's section carries its name; the perf gate and the dnd e2e locate `section[data-board-column="…"]`. This fixes AC12.4's "a card drags out of a 1,200-card column", which failed since TV-U13 because the panel is a section that also says "To do".
+  - Why: the orchestrator's carry-over from TV-U15 (the test failed with and without U15).
+  - Rejected: renaming the panel's landmark (the panel's semantics are right).
+
+## 2026-10-13 · TV-U15 Upcoming, Inbox, My tasks, All (tasks-v3 block 20) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC2.2, AC2.1, AC3.3, AC5.2, AC11.3, AC11.5; REPLAN 83, 84, 20, 20a, 29, 82b, defaults b, h, r–t; research views-list-upcoming.md §6–9; prototype round-2b frames 2, 3, 7). No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U15-1 · The four views are the List with seams, not new lists** → TV-U15 (`ui/list-extensions.ts`, `task-list-view.tsx`), TV-U11, TV-U12, TL1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the List takes a view's own grouping (`grouping`: its groups, empty ones kept, its header line and action, what a drop into a group does, its "+", its row date words), groups added around its own (`extraGroups`: on top or at the end, a limit with "Show n more", folded), the view's keys first (`onViewKey`), "Take it" and source words as row facts (`takeable`, `source`, through `TaskFacts`), a teaching `emptyState`, a `note` under the toolbar, `defaultFolded`, `groupSub` and `countEvery`. Upcoming, the Inbox, My tasks, All and Won't do are hooks that hand the List these (`upcoming-view.tsx`, `inbox-view.tsx`, the plan view's wiring).
+  - Why: TV-U10's "reuse the rows, groups, columns and states, don't fork them"; rows stay memoised (D11b) because every new thing a row shows is a fact.
+  - Rejected: an Upcoming list of its own (a second set of rows, keys and drops to keep in step).
+- **U15-2 · Upcoming: one row per task at its row date; missed and late are words, not colours** → TV-U15 (`upcoming.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the row stands on its next session or its due date, whichever comes first by day (`rowDateOf`, the List's rule, on the session mirror); a session that ended with the task open reads "missed 2:00 PM" (in Today when it was today, in Earlier before), a passed due date "Oct 8 · late"; inside a day only a time shows ("3:00 PM · 45m", "due 5:00 PM", "due Thu"); timed rows first, then priority, then the sidebar's project order. Covered: your dated tasks and unassigned ones, minus Backlog, Won't do and unassigned tasks routed to a team you're not in; a task done today or later stays in its day behind "N completed · show". The seven days always show (an empty one takes drops); Earlier and Later only with work; Later has no month dividers yet. Headers: "Today · Tue, Oct 13 · 3 · ~1h", "Thu · Oct 15 · 2", the total being sessions' lengths and estimates.
+  - Why: call 83 and research §6; reading sessions from the mirror keeps a move's optimistic row and its echo the same row.
+  - Rejected: reading `task_sessions` for placement (a moved session would sit on its old day until the task's echo).
+- **U15-3 · Moving between days: the row's own date moves; a repeat asks first** → TV-U15 (`upcoming-view.tsx`, `use-tasks-module.ts` `moveOccurrence`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a drop on a day (its header or rows), ⌥←/→ (a day), ⌥⇧←/→ (a week) and `t` (Today) move a due date to the day, or a session to the day at the same time and length (the reschedule op, so the trail says so); never before today; Earlier takes no drop, Later opens a day picker; Earlier's header has "Move all…" (Today · Tomorrow · Next week · Pick…). A repeat asks "Move “…” to Thu: Just this one · Change the pattern · Cancel" (TV-D12's `tasks_op_move_occurrence`, or `changePatternRule` saved with the date); "Move all…" asks once for every repeat in it. One Undo per move, which never overwrites a newer change (it checks the row still stands where the move put it, compared as a moment: the server writes "…+00:00" where the app wrote "…Z"). Pick… never lands on a past day.
+  - Why: research §6 and TV-D12's carry-forward (27 g).
+  - Rejected: moving both dates of a non-repeating task (only the date the row stands for moves; the other shows in its own cell).
+- **U15-4 · Upcoming's New dates the task today; Display is the view's** → TV-U15 (`tasks-plan-view.tsx`, `display.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: New and ⌘N in Upcoming open the capture due today (into your Inbox); a day's "+" names its day; Earlier and Later have no "+". Display offers Layout, Completed, Rows and Show on rows (no Group by, Order by or Subtasks: its days and order are fixed, dated subtasks flat with "↳ Parent").
+  - Why: a task made in Upcoming should land where you are looking (TV-U14's "here").
+  - Rejected: a dateless New (it would vanish from the view at once).
+- **U15-5 · Inbox triage: four keys, one bottom-bar row, snoozes in preferences** → TV-U15 (`inbox-triage.ts`, `inbox-view.tsx`, `bottom-bar-mode.ts`, `preferences.ts` `tasksInbox`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: 1 · 2 · 3 · H work only in the Inbox, on a top-level task, and the bottom bar's centre shows "Accept 1 · Decline 2 · Duplicate 3 · Snooze H" while one is selected. **Accept** opens "File “…” in…" (your projects, searchable) and files it assigned to you in one write with Undo. **Decline** makes your own task Won't do (Undo); someone else's asks for a one-line note, comments "Declined by Maciej: …" and assigns it back to its maker, and TV-D13's hand-over moves it into their Inbox; no Undo (it's no longer yours to take back). **Duplicate of…** copies the duplicate's comments into one comment on the task you pick ("Merged “…” into this task." with who wrote each), moves its links there, links the two, then marks it Won't do (Undo reopens it; the copies stay). Links move first and the comment goes last, so a retry never posts it twice; a failure says what moved. **Snooze**: Tomorrow · Next week (next Monday) · Pick a day…; the snooze is the person's (`user_preferences.preferences.tasksInbox`, synced, at most 500 per workspace), it comes back on top on its day or as soon as its comment stamp moves, H on a snoozed task brings it back, and a snooze whose task left the Inbox is forgotten, but only once a read reached the server this session and online (a device copy can lack a task snoozed elsewhere), never across a workspace switch; a snooze holds while its task's comments aren't read yet. After each action the cursor moves to the next row shown (Filter, search and order applied).
+  - Why: default b and research §7; the Inbox is personal, so a per-person snooze needs no table and no migration.
+  - Rejected: a snooze column on tasks (a migration for a personal state); moving comments on the server (no op; a data-lane job if it's ever wanted); Decline's Undo (the task is in someone else's Inbox by then).
+- **U15-6 · Where an Inbox task came from: "from Mike" now, email and agent chips later** → TV-U15 (`inboxSourceLabel`), TV-D16, a later email read
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a task someone else made reads "from Mike" after its title; your own says nothing. The email's "From: …" chip and an agent's "via Claude Desktop" need a read of links and create activity per row, so they wait (the agent's for TV-D16, the email's for a batched links read).
+  - Why: one read per row would break D11b's budget; the store has neither.
+  - Rejected: `listLinks` per Inbox row.
+- **U15-7 · Empty views teach the one gesture** → TV-U15 (`view-empty-states.tsx`, `inbox-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Inbox "Inbox is clear · New captures from anywhere, email and your agents land here, newest on top." with Capture a task, "⌘⇧K captures from anywhere in Moduo" and "n snoozed · show"; Upcoming "Nothing dated yet · Tasks with a due date or a work session show here, by day." with Add a task for today and the date-words hint; My tasks "Nothing assigned to you" with Add a task and the `c` / `@` hint; All "No projects yet" naming New project (or "No open tasks in your projects"); Won't do "Nothing marked Won't do · Reopen brings one back". A cleared Inbox shows its state even with finished rows left, and Won't do shows the skeleton until closed tasks arrive.
+  - Why: the hackathon brief (Inbox and My tasks are a new person's first look); research §9's wording.
+  - Rejected: a celebration or a streak on zero Inbox (research §7).
+- **U15-8 · My tasks: always there, by status in its own order, the team block on top** → TV-U15 (`my-tasks.ts`, `bucket-rail.tsx`), TV-D13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: My tasks shows in every workspace (tasks-v3 §3; tasks-v2's two-member rule retired); its scope includes your Backlog (folded behind its group, U10-12); under Order by: Manual it orders by date, then priority, waiting tasks last in each group. On top, per team you're in, "For Design · 2 unclaimed" with the team's mark: up to five rows then "Show n more", each with Take it (TV-D13's claim op, which refuses a task somebody took first; "Taken · it's yours" only once the server took it), with Undo while it's still yours (Undo gives it back to the team, which tells its other members once, D13's rule); its "+" routes a new task to the team; it folds like any group and is absent when nothing is unclaimed.
+  - Why: call 84 and 54, research §8.
+  - Rejected: Created and Subscribed tabs (a filter chip says "Created by me").
+- **U15-9 · All: your projects, never your Inbox, area by area** → TV-U15 (`my-tasks.ts` `allView`, `allProjectOrder`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: All lists every task in projects you can see and never your Inbox (its sidebar count too), project by project in the sidebar's order; a project's header names its area and "On hold" / "Done" ("Acme rebrand · Client work · On hold"), and On hold and Done projects start folded. One sticky level.
+  - Also (TV-D13's ask): a task you made that sits in someone else's Inbox reads "Mike's Inbox" where its project shows (rows, All's group), never "Private project": a task you see in a project you can't, made by you and assigned to someone else, can only be that (20a).
+  - Why: research §8 and 20.
+  - Rejected: Area › Project as two sticky header levels (the virtual stack pins one header; a nested sticky is its own block).
+- **U15-10 · Won't do is a list in the sidebar's ⋯** → TV-U15 (`bucket-rail.tsx` `WONTDO_SELECTION`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the hairline's ⋯ opens "Won't do · n": every Won't do task by project, each group counting all of its tasks, no "+"; the crossed icon and the panel's Reopen bring one back.
+  - Why: tasks-v3 §2 ("a reachable list with Reopen") without a permanent sidebar row (98).
+  - Rejected: only Filter → Status (reachable, but not findable).
+- **U15-11 · The bottom bar's modes (82b)** → TV-U15 (`components/app/bottom-bar-mode.ts`), TV-U12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a page owns the bar's centre while a mode applies (`useBottomBarModeOwner`): its first six actions with their keys, then More ▾, then a quiet note ("4 selected · Esc"); one mode at a time, cleared when the page lets go. The Inbox's triage row is the first; TV-U12's multi-select row is the next.
+  - Why: 82b's one pattern for every mode.
+  - Rejected: Tasks drawing its own bar (the 3×3 layout has one bottom bar).
+
+## 2026-10-13 · TV-D13 follow-up: who changes a team
+
+Migration `20261013210000_teams_access_fix` (redefines `teams_op_update` and `teams_op_remove_member` only); tests `supabase/tests/teams_access.test.sql`. Supersedes the "edits teams and their members" half of TV-D10's teams entry and D13-1's "change their people".
+
+- **D13-11 · A team's creator, the owner or an admin changes it** → TV-D13 follow-up (`teams_op_update`, `teams_op_remove_member`, `canManage` in `teams-panel.tsx`)
+  - Who: the orchestrator's call for Maciej after a review of the landed block, 2026-10-13; the default-project detail is the agent's choice (below).
+  - Decision: renaming a team, changing its letters or colour, and taking someone else out of it are for the team's creator, the workspace owner or an admin (a team whose creator's account was erased: the owner or an admin). Anyone who works on tasks still makes teams and adds people (default t, ratified), and anyone in a team can leave it. Settings shows the fields read-only to everyone else, with one line saying who can change them.
+  - Why: a team is someone's setup; letting any editor rename it or take people out of it lets one person quietly undo another's. Adding people stays open because a team grants nothing (D13-1).
+  - Rejected: keeping every edit open (TV-D10's choice); admin-only teams (TV-D10 rejected it; it blocks "any member sets up a team").
+- **D13-12 · A team's default project** → TV-D13 follow-up (`teams_op_update`)
+  - Who: agent's choice, confirmed for building, revisitable, 2026-10-13.
+  - Decision: the new default must be a project the person can edit (as before). While a team has none, anyone who can edit a project may name it; replacing or clearing one that's set needs the creator, the owner or an admin, or Edit on the project it names now. A default whose project was deleted counts as none. Settings enables the picker for those who manage the team, or while there's no default; it can't tell a project the person can't open from a deleted one, so there a set default reads "Not available" and stays locked for everyone else (stricter than the server, never looser).
+  - Why: otherwise someone with Edit on an unrelated project could point a team's routing at it. Routing itself still files a task into the default only when the router can edit it, else it's refused without naming the project (TV-D10).
+  - Rejected: default changes for managers only (it blocks a member setting up a new team's project); Edit on the new project alone (the redirect above).
+
+## 2026-10-13 · TV-F7 Focus screen v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 23 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.1–8.5, AC8.9; REPLAN 31, 61–66, 62a, 63, 65a; prototype round-2a frames 1–3) on TV-F6's one time engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F7-1 · Focus is a place in the sidebar; the Plan · Focus switch and the Execute view are gone** → TV-F7 (`tasks-plan-view.tsx`, `bucket-rail.tsx`, `ui/focus-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (checkpoint-1 note "TV-F7").
+  - Decision: the sidebar's Focus (scope id `today`, unchanged) opens the Focus screen; there is no mode. The top-bar timer and "Open Focus" select it; a device left in the old Focus mode opens Focus once, then the stored mode is dropped.
+  - Why: one name for the list and the doing (61); two ways to the same line-up confused (List of the queue vs the Execute card).
+  - Rejected: keeping a List/Board of the queue under Focus beside the screen.
+- **F7-2 · Now is the session's task, else the head of Up next; Start puts the clock on it** → TV-F7 (`focus-screen.ts` `focusLineup`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with a session in this workspace (here or read through from another device), the card is its task, wherever it sits in the line-up (a reorder never moves the clock); otherwise the first open lined-up task with a Start pill. Start is "Focus on this" with your default Timer. Done and Skip move a running session (`moveFocusTo`, taking it over first when another device runs it) and never start one; Done on the last one ends it.
+  - Why: spec verbs Start · Pause · Done · Stop; the empty state's "then press Start"; F6-6's run rules.
+  - Rejected: Now = always the head of Up next (a drag would move the clock), starting on screen entry (Focus never pushes, 66).
+- **F7-3 · The pill reads this sitting; its note compares everything tracked with the estimate** → TV-F7 (`pillReading`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (F6-4 left the composition to F7).
+  - Decision: the clock is the time on the task this sitting (the top bar's number); the note is "of ~45m" when nothing was tracked before, "~12m left" when something was, and a neutral "+5m" past the estimate. "Count down the estimate" shows what's left, then "+m:ss"; without an estimate it counts up. Paused: "▶ Paused · 18:02".
+  - Why: one number per job (62), and the estimate is the task's, not the sitting's.
+  - Rejected: the task's whole total as the clock (it disagrees with the top bar), comparing the sitting alone with the estimate (wrong on a task started yesterday).
+- **F7-4 · Start lives on the card for every Timer; Pomodoro's pill moves to the header once started** → TV-F7 (`focus-now-card.tsx`, `PomodoroPill`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: before a session the card's top-right pill is "▶ Start" (its tooltip names the Timer); running, Per task keeps a pill there, Pomodoro shows "Focus 24:58" / "Break 4:12" beside ⋯, Off shows none.
+  - Why: the eye is on the card; one place to begin for a first-time person.
+  - Rejected: Start in the header under Pomodoro (hunting for it).
+- **F7-5 · The ⋯ menu: Timer ▸ · Show what's done · Stop** → TV-F7 (`FocusMenu`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (63's list, minus TV-F8's items).
+  - Decision: Timer ▸ Per task (Count down the estimate under it), Pomodoro (Lengths ▸ 25 / 5 · 50 / 10 · 90 / 15 · Other lengths… → Settings → Focus), Off; Show/Hide what's done this session; a hairline; Stop, alone, with "Focus stopped · Undo". No key for Stop or Pause (the keymap: pill and ⋯ only). Arrange by project and Offer quick tasks join with TV-F8, which builds them.
+  - Why: lengths as presets keep inputs out of a menu (a menu that opens a focusing surface is a known trap); the rest lives in Settings.
+  - Rejected: number inputs inside the menu; showing F8's items disabled.
+- **F7-6 · The panel in Focus: Now's details by default; a subtask stacks on top** → TV-F7 (`FocusView`'s selection effect, `openTaskInPanel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (In flight, the panel's second view, is TV-F8's).
+  - Decision: opening Focus selects Now (unless the open task is lined up here, a link to it); the panel follows Now as it changes, until you click an Up next row or a scheduled row. A subtask opens as "← Now" on the panel's stack (65a) with its parent above and ▶ Focus on this; the card marks it.
+  - Why: until In flight exists, Now's own comments, files and properties are what the panel can add; the stack keeps the way back.
+  - Rejected: an empty panel until something is clicked.
+- **F7-7 · Keys on the screen: ⏎ Done · S Skip · C new at the top · ⇧F on a focused subtask or row** → TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (keymap's Focus table; Hand off W is F8's).
+  - Decision: they act only while the screen holds focus (it is focusable: a click on its empty parts focuses it; it takes focus when it opens with nothing else focused and when the last Done removes the button you used; Start hands focus to the timer pill, so a second ⏎ pauses, which is undoable, instead of finishing the task), never from the sidebar, the panel, a text field, a menu or a dialog; a focused button keeps its own ⏎. ⌥⇧↑/↓ on a focused Up next row moves it.
+  - Why: ⏎ is Done for the focused task (65a) and Done has no Undo without subtasks, so a stray ⏎ must never finish a task (the validator's case: focus fell to the page after Start).
+  - Rejected: window-wide keys, or keys "from nowhere" (⏎ in the panel or after a click elsewhere would finish the task).
+- **F7-8 · ⇧F from any task says where the session went** → TV-F7 (`focusOnTask` in the module, the page's wrapper)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⇧F in the List, "Focus on this" in a row's or card's menu, and the panel header's ▶ put the task on top of Up next with the one clock (Calendar's recipe). Away from Focus a toast "Focusing on “…”" offers Open Focus for 8 s; in Focus the card shows it. Viewers and finished tasks don't get it. The blocked-task frontier offer (§5c) stays on single adds (Q, the toggles, the empty state's "+"); ⇧F, "Line up all n" and Remove's Undo skip it: each is an explicit choice or a restore.
+  - Why: call 31 starts a run without building a line-up first; switching screens on a keypress would be abrupt.
+  - Rejected: jumping to Focus on ⇧F.
+- **F7-9 · One avatar per person: "is on this" supersedes that person's Focus claim** → TV-F7 (`queue-toggle.tsx` `useFocusMarks`, `withoutPeopleOnIt`, the header's `QueueButton`)
+  - Who: agent's choice, deferred to by Maciej (the orchestrator decided it for this block), 2026-10-13.
+  - Decision: the panel header shows each person once: a live Focus run ("Mike is on this") replaces the same person's queue-claim avatar. Rows and cards follow the same rule inside their fixed cell: the claim avatar gains the quiet live dot and the label says "Mike is on this".
+  - Why: two avatars of one person read as two people; the cell width keeps the List's columns aligned.
+  - Rejected: showing both.
+- **F7-10 · "Queue" becomes "Focus" in the app's words** → TV-F7 (call 61: words only; data and MCP keep "queue")
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Add to Focus" / "Remove from Focus" / "In Focus", "In Mike's Focus" / "Also in Mike's Focus", the filter "In my Focus", "Added to Focus", the rail's "n lined up". The panel header's toggle became an icon (pressed when it's in your Focus), next to ▶: "Add to Focus" as text squeezed the breadcrumb to a letter per line at 390 px. Left for later: the Home widget's "Queue" heading (TV-H1) and the activity trail's "queued this" (a trail wording pass).
+  - Why: 61 ("every other place the app says Queue follows").
+  - Rejected: renaming the code and the database (61 keeps them).
+- **F7-11 · Up next: the line-up's order, numbered, dividers only across projects** → TV-F7 (`upNextLines`, `focus-up-next.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Up next · 4 · ~1h" (the estimates there are), a divider with the project's name and dot at each project change when the line-up spans two or more projects (read out to screen readers), ~estimates, hover ▶ and × (Undo). Drag or ⌥⇧↑/↓ reorders with Undo as a move inside the whole line-up (`upNextMove`): the task goes right after the Up next task it now follows, or, at the top, right before the one it now precedes; Now and everything else keep their places, wherever Now sits (a capture during a session lands above it). A line-up's last task says "Last one. Nothing else is lined up."
+  - Why: 62's dividers make a switch visible before you make it; one project needs none.
+  - Rejected: sorting by project (that's TV-F8's undoable Arrange).
+- **F7-12 · Subtask marks: notes · files · links** → TV-F7 (`useSubtaskMarks`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "notes" when a subtask has a description; files and links counted per subtask (at most 20, best effort, once per card).
+  - Why: 65a's "1 file · 2 links · notes"; no batch count exists yet (AT-3 adds 📎 everywhere).
+  - Rejected: a new server count for one card.
+- **F7-13 · What the old card had and the new one doesn't** → TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: manual "Add time / Set total" leave the card (the panel's Time row and TV-D14's "Add time…"); tags leave the card (62's one quiet line); "Back to Plan" goes with the mode; "while you were away" stays on the card.
+  - Why: 62's quiet card; nothing is lost that the panel doesn't hold.
+  - Rejected: keeping the old card's ⋯ popover.
+- **F7-14 · The empty state teaches, first use first** → TV-F7 (`focus-empty-state.tsx`, `scheduledToday`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (66, with the hackathon priority).
+  - Decision: "Line up what you'll do next, then press Start.", one line on what Focus is ("one task at a time, the rest in Up next; the timer is yours to use or turn off"), Q and ⇧F, then today's scheduled tasks as rows (my sessions today, or a scheduled time when no session is known for a task that's mine or nobody's; Backlog, finished and lined-up ones out) with "+" and "Line up all n" in time order, or a line on scheduling; "New task C". Viewers see the hints without the actions. Exported for TV-U17.
+  - Why: three ways in (66); the welcome builds on it.
+  - Rejected: a summary line instead of rows (66 asked for rows).
+- **F7-15 · The done line counts the session** → TV-F7 (`doneLineText`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the run's finished tasks (the ended run's until the next start), else what you checked off here since the list loaded; "· 1h 12m" only when timed and at least a minute; Show lists them, struck through, with their project.
+  - Why: 62a's "2 done · 1h 12m · Show".
+  - Rejected: counting the day's done tasks.
+- **F7-16 · The card says why it changed under you** → TV-F7 (`NoticeLine`; F6-6's `notice`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (spec edge case "Done by Sam · Next").
+  - Decision: when the session moved on by itself (a teammate finished Now, it was deleted or unshared), a quiet line above the card says so ("Mike completed “…”.") until you Start, Done, Skip or dismiss it; the follower's toast stays.
+  - Why: a toast can be missed; the card changing with no reason reads as a bug.
+  - Rejected: holding the card on the finished task until ⏎.
+- **F7-17 · The Settings Timer UI is TV-F8's** → TV-F8
+  - Who: the orchestrator, 2026-10-13 (the block brief), recorded as agent's choice, deferred to by Maciej.
+  - Decision: Settings → Tasks → Focus (Timer, Count down the estimate) moves to TV-F8 with the rest of that section ("Offer quick tasks along the way", usual pace); until then the ⋯ menu changes the Timer everywhere (63) and "Other lengths…" opens Settings → Focus for the Pomodoro lengths.
+  - Why: one Settings section, built once with all its switches.
+  - Rejected: a Timer-only section now.
+
+## 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §13, §15, §17, AC5.1's server half, AC5.2, AC5.6's server half, AC5.7; REPLAN 20, 20a, 54, 94, 95, defaults s and t; migrations `20261013150000_teams_routing` and `20261013170000_teams_mention_once`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D13-1 · Routing grants no access** → TV-D13 (`can_access` unchanged for teams, `tasks_op_claim`)
+  - Who: agent's choice, deferred to by Maciej (agreed with the orchestrator), 2026-10-13.
+  - Decision: a team member sees a task routed to the team only where they could see it anyway (a project shared with them, an assignment); being in a team, joining one, or having a task routed to it opens nothing. Taking a team's task needs Edit on it already. Settings says so where the default project is picked ("Pick one the team can open").
+  - Why: spec §54 and §Out of scope: "teams here only route"; sharing a project with a whole team is its own Tier-2 permissions spec. It also keeps default t safe: since a team grants nothing, any member may make teams and change their people. (Narrowed 2026-10-13 by D13-11: renaming and taking people out are now for the creator, the owner or an admin.)
+  - Rejected: a team rule in `can_access` (Edit for live members), and team-origin grants on each routed task; both turn membership into a share that bypasses project privacy.
+- **D13-2 · Taking a team's task** → TV-D13 (`tasks_op_claim`, `claimTask`, `unclaimedForMe`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a live member of the task's team who can edit it takes an open (To do / In progress) unclaimed task in one op; it becomes theirs and keeps its team; the row is locked, so of two people taking it at once the second hears "Someone already took this task."; taking one you have is a no-op; a hidden task reads "Task not found", like a missing one. Giving it back is the ordinary unassign (it tells the team again, D13-4). No "unclaim" op.
+  - Why: AC5.2 "Take it claims"; one click, no race.
+  - Rejected: claiming Backlog or closed tasks; a separate unclaim op.
+- **D13-3 · An unfiled task given to someone goes to their Inbox (20, 20a)** → TV-D13 (`tasks__hand_to_inbox`, `tasks_op_assign`, `tasks_op_create`, `can_access`)
+  - Who: agent's choice, deferred to by Maciej (TV-U14 and TV-U13 left the server half here), 2026-10-13.
+  - Decision: assigning a top-level task that sits in your own Inbox to someone else moves it, with the subtasks you can edit, into their Inbox; a task made for someone with no project lands there too. Only your own unfiled tasks move this way (one in someone else's Inbox stays put, whoever assigns it). Its creator keeps Edit on it while it sits in someone else's Inbox ("Created by me"), for that task alone, ending when it's filed. Who may assign and the grant an assignment gives (PERM-1) are unchanged.
+  - Why: REPLAN 20 point 3 and 20a; "an unfiled task that belongs to someone else belongs to nobody" unless it moves, and the delegator must not lose it.
+  - Also: account erasure hands such a task back to its creator, the same as a plain removal (it used to be taken for private when nobody held a grant on it); an edit that assigns and sets a status applies the status first; the app drops a task it handed out of its own sight (someone else's task re-delegated) instead of waiting for the access check; and an Inbox task edited and assigned in one gesture sends the edit first, then the assignment.
+  - Rejected: a creator grant (it would outlive the Inbox), moving tasks out of other people's Inboxes.
+- **D13-4 · "Routed to your team": each member's own notice, once per hour** → TV-D13 (`tasks_notify_spine`, op `tasks.routed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a task with nobody on it gets a team, or a team task is given back, each other member who can see it gets a notice of their own, hung on their own Inbox (like TV-D12's reminders), so nobody else reads it and it never names a task its reader can't see. One person's (or key's) routings to one team within the hour gather on each member's notice while that member hasn't read or dismissed it ("routed 4 tasks to Design"). A task routed with an assignee calls nobody. The op's own trail line says it was routed, so `tasks.routed` is a notice only.
+  - Why: default s; per-reader rows are the only way a gathered notice can't disclose another task.
+  - Also: only a task still to do (To do / In progress) calls the team; Backlog is parked (no notice, no check-back, not in the unclaimed block; it can still be taken, and moving it to To do doesn't call the team: a known limit). Whoever routed can read the rows they wrote (the notice table's actor rule): they learn which members could see the task, which a project's editor knows anyway; accepted.
+  - Rejected: one row for the team on the task (its readers saw the ids and count of other tasks), a notice for already-claimed tasks, writing the notices as Moduo (the card would lose who routed).
+- **D13-5 · The check-back** → TV-D13 (`tasks__team_check_backs`, cron `tasks-team-check-backs`, `team_routed_at`, `team_check_back_at`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every 15 minutes, an open team task still unclaimed 3 days after it became the team's, or from 9:00 on the day before it's due (its creator's clock), sends its creator one check-back (from Moduo), at least an hour after the routing; once per stretch (routing it again or giving it back re-arms it); nothing for a creator who can't see it or has left, nor in an archived project. People can't write the two columns.
+  - Why: default s names the creator; 9:00 the day before reads as a check-back, not a ping a minute after routing.
+  - Known limit: a team task reopened from Done keeps its routing clock, so a 3-day check-back can follow soon after.
+  - Rejected: the router instead of the creator; checking back on Backlog.
+- **D13-6 · `@Team` in a comment** → TV-D13 (`comments_op_mention_teams`, the composer's `@` list, op `comments.team_mention`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the task comment box lists teams after people; after posting (or editing) the app tells the server which teams the text still names, and each member who can see the item hears once: never the author, nobody the comment already reached (named in person, told as a participant, or through a team before), a person in two named teams once. A separate op, so U13's `comments_op_add` stays as it is; a failure there leaves the comment saved and says so.
+  - Why: §13 "One notice each"; spec edge "everyone else in the team hears once; the author doesn't".
+  - Rejected: a team parameter on `comments_op_add` (a second signature on a function another block owns).
+- **D13-7 · "Your teams" is one switch** → TV-D13 (`preferences.ts`, Settings → Preferences)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: §13's "your team's mute" is one `teams` switch covering routed tasks, `@Team` mentions and the check-back on your own team task; tasks back from someone who left go under Assigned to me.
+  - Why: one more line in an existing list is easy to understand; mutes stay a read-side filter (D12-6).
+  - Rejected: a mute per team (another list to manage).
+- **D13-8 · Settings → Members and access → Teams** → TV-D13 (`teams-panel.tsx`, `access-section.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a "Teams · n" group in the access rail (mark, name, people count; "New team" for Tasks editors); a team's pane says in one line what teams do, then name, letters (blank = from the name), colour (Automatic or one of the six avatar hues), default project, people (add/remove), and Delete for its creator, the owner or an admin. A delete waits out its Undo before reaching the server, so Undo brings back the team and its tasks' routing. Read from and written through the shared store.
+  - Why: §17 "Members → Teams"; easy for people new to Moduo (the hackathon's prepared workspaces).
+  - Rejected: a separate Teams section in the nav, deleting at once with a restore that can't give tasks their team back.
+- **D13-9 · Team marks keep a stable colour** → TV-D13 (`TeamMark color`, `teamHue`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a team's mark uses the colour picked for it, else one worked out from its id (the same everywhere, unchanged by a rename); gray and red are kept for "nobody" and errors.
+  - Why: 95 "a stable colour".
+  - Rejected: storing a default colour on create (two sources of the same answer).
+- **D13-10 · Someone leaving the workspace (AC5.6, the server half)** → TV-D13 (`teams_member_removed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: their team memberships end, projects they led lose their lead, and their Inbox is handed on: tasks others created go back to those creators' Inboxes (if they still work on tasks here), the rest to whoever removed them (else the owner), subtasks with their task, one quiet notice per person who received something (never the remover). What they had taken from a team goes back to the team (PRIV-2 unassigns). Private projects still go to the owner as PRIV-2 does; asking to hand them on first is TV-U16's.
+  - Why: "nothing is orphaned" (§15); an Inbox nobody can open orphans its tasks.
+  - Rejected: sending private projects to Recently deleted here (TV-U16's prompt decides).
+## 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 14 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §4, AC11.2–11.5, AC3.5, AC1.5; research views-list-upcoming.md §1–3, §9; defaults i–n). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U10-1 · The status icon is the row's lead: a click finishes, on a closed task it reopens** → TV-U10 (`task-row-cells.tsx` `StatusGlyph`, `task-row.tsx` `activateGlyph`), TV-U11 (cards)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the category's icon replaces the checkbox. A click finishes from any open category (In progress and Backlog too); on Done or Won't do it reopens to To do; Space and `x` do the same; right-click, ⇧S and the row menu's "Status…" open the status menu (the project's names by category) at the icon. Done's check is the accent's colour; Backlog and Won't do the quietest.
+  - Why: default k; the server keeps no earlier status to go back to, and To do is where a reopened task usually belongs. It also fixes U2-7 (Space on a Won't do task marked it Done).
+  - Rejected: reopening to "the previous status" (nothing records it); a status menu on click.
+- **U10-2 · Each column is as wide as its widest value in view, shared by rows and headers** → TV-U10 (`row-layout.ts` `columnWidths`, `--tl-col-*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the list works out each sized column's width in `ch` from the words every listed row will show (never narrower than its header label) and sets it as a CSS variable on the frame; rows and the Detailed header read it, so nothing in a column truncates and a row never redraws for a width. The title is the only flexible track (the checkpoint-1 fix). Project › Section stops growing at 32ch (waiting at 24, a first name at 18): longer words wrap inside the cell.
+  - Why: call 41 (dates, times and counts never truncate) and checkpoint 1 (titles truncating in a mostly empty row came from fixed minimum widths on cells empty in that row).
+  - Rejected: fixed widths per column (truncation or waste); measuring text with a canvas (the `ch` estimate is close and costs nothing).
+- **U10-3 · Detailed drops whole columns to keep the title 200 px; "+n" explains, it doesn't open Display** → TV-U10 (`fitColumns`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: in research §1's order (Updated → time → Next session → waiting → status name → Project › Section → assignee name → handle), measured against the frame in 16 px steps with the face's real `ch`. The header's "+n" tooltip says how many and how to get them back (widen the window, close a panel).
+  - Why: the Display menu can't be opened from outside it; a tooltip says the same thing without a second control.
+  - Rejected: a horizontal scroll (the 3×3 layout has no room for one); opening Display from "+n" (a new seam on the menu for one link).
+- **U10-4 · Sortable headers: ascending → descending → the view's own order** → TV-U10 (`display.ts` `nextHeaderSort`, `orderDir`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Title, Status, Priority, Due, Next session and Updated sort; the direction is stored in Display beside Order by (and resets when Order by changes in the menu); Order by gains Title and Status. A sort in a project still says "Sorted by … · Back to manual order".
+  - Why: research §3; one sort state for the menu and the headers.
+  - Rejected: sorting by project, assignee, time or waiting (not in Order by; each would need its own rule).
+- **U10-5 · A project groups by section; with no sections it is the plain list ending in "+ Add section"** → TV-U10 (`display.ts`, `helpers.ts`, `task-list-parts.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Section is every project's default (offered only inside one project); a project without sections shows no headers and takes drops like an ungrouped list; "No section" comes first (Todoist's top of the project); a section's header reads "1 of 4" (done of all) and "· ends Oct 24"; its ⋯ has Rename… and Delete section (its tasks stay, under No section; Undo brings the section back with its tasks in it). Team is offered once the workspace has teams.
+  - Why: stored Display prefs would freeze a "None" default for a project that later gains sections; the "+ Add section" line is the List's way to make the first one.
+  - Rejected: defaulting to Section only once sections exist (the default is read once per scope).
+- **U10-6 · A group's "+" stays visible and opens the one capture with the group's value** → TV-U10 (`list-group-add.ts`), TV-U14's capture seed
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the spec's "stays visible" over research's fade. It fills in the section, status category, priority, person, team or due day (Later and No date: no date; Earlier, Done and Won't do: no "+", a new task is neither late nor finished); the capture seed gained `teamId`, `dueDay` and `status`. A seeded status shows in the capture as a removable chip and is never kept in the draft (a restored draft never files into a status unasked). In All, groups other than projects show the "+" disabled with "Pick a project first" (the task would land in your Inbox, which All doesn't list); My tasks adds to your Inbox, assigned to you; Upcoming adds only in its days.
+  - Why: default n and U14-1 (one capture for every way in); a "+" whose task vanishes from view reads as broken.
+  - Rejected: an inline add row (a second capture); filing All's "+" into a guessed project.
+- **U10-7 · Backlog folds behind a line at each group's end; grouped by status it's its own folded group** → TV-U10
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Backlog · n" with a chevron ends each group (or the list); a selected Backlog task opens its line and stays in it, so j/k walk the opened line in order (only a task checked off here, or a parent with open subtasks, comes out of it). Everything else starts open; what you fold is remembered per person, workspace, view and grouping on this device.
+  - Why: 53b and research §2 (everything starts open, which fixes "only the first group opens").
+  - Rejected: synced folds now (research says synced; preferences sync is TV-U8's lane), one Backlog line per list only.
+- **U10-8 · A late row's fixes lie over the end of its title on hover or selection** → TV-U10 (`LateFixes`, `break-down.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Move (the due picker), Won't do, Break down (selects the task and opens the panel's subtask line; a subtask has no Break down). They fade in over the title cell's end on the row's own surface, so nothing reflows and nothing is reserved.
+  - Why: a reserved invisible slot (R6's usual answer) cut late titles short all the time, checkpoint 1's complaint again.
+  - Rejected: a reserved slot; replacing the date column.
+- **U10-9 · Offline: a clock on waiting rows; other edits keep saying "Offline"** → TV-U10 (`store.ts` `pendingTaskIds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a 12 px clock in the counts while a capture or check-off of that task waits on the device; edits that can't wait keep TV-D11a's "Offline" toast instead of disabling every control; the top bar already says "Offline · n waiting to sync".
+  - Why: default g; a disabled control hides why, the toast says it.
+  - Rejected: disabling the row's controls with a tooltip each.
+- **U10-10 · States: a still skeleton after 300 ms; "No tasks match · 214 hidden by 2 filters"; read-only "View only"** → TV-U10 (`task-view-states.tsx`, `plan-view-header.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: research §9: nothing for 300 ms, then eight still rows; filtered to nothing names how many are hidden, with Clear filters (no "Edit filters": Filter can't be opened from outside); read-only says "View only" after the title, has no New, and right-click offers Open · Copy link · Copy as text.
+  - Why: AC1.5 and research §9.
+  - Rejected: a shimmer (research: no shimmer).
+- **U10-11 · A long menu fades at its foot while more waits below** → DS-6's kit (`menu-scroll.ts`, `[data-more-below]`, `--menu-fade`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every dropdown and context menu (and their sub-menus) marks itself while it can scroll further; a mask fades the last 28 px, so the cut-off item reads as "there's more".
+  - Why: checkpoint 1's menu note; a mask needs no colour, so every surface and theme fades the same.
+  - Rejected: a gradient overlay (needs the surface's colour per theme).
+- **U10-13 · A parent's subtasks keep their own order; a drag or ⌥⇧↑/↓ moves one among them anywhere** → TV-U10 (`subtask-order.ts`, `drop-mode.ts`, the panel's `SubtasksSection`), handed over by TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: subtasks list in their own order under the parent in every view, so moving one among its siblings always writes a place, sorted view or across projects (the List's nested rows and the panel's list: the whole row drags, ⌥⇧↑/↓ on a focused subtask moves it and keeps the focus; one Undo each). Joining another parent in a sorted view still only nests. A place next to a task whose key another project's task shares now lands on the asked side (the nearest different key bounds it).
+  - Why: default m is about the view's own order; a subtask list doesn't follow it, so "Sorted by … · Back to manual order" refused a move that would visibly work. The shared-key case put a dragged subtask one place off on the local stack.
+  - Rejected: a grip on each subtask (the whole row is how the List drags too); the keyboard sensor's Space-to-lift (⌥⇧↑/↓ is the List's way).
+- **U10-14 · ⏎ opens the selected task full; `e` edits its title** → TV-U10 (`list-keys.ts`, `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ⏎ on the List opens the selected task's full page (TV-U13's; Esc brings the List back); `e` edits the title in place; a host without a full page keeps ⏎ as edit.
+  - Why: decision 22 ("⏎ opens and `e` edits") and the panel's "↑↓ to move · ⏎ to open": with the panel already showing the selected task, opening it means the full page.
+  - Rejected: ⏎ focusing the panel (a second way to Tab there).
+- **U10-12 · Left to their blocks** → TV-U13, TV-U11, TV-U15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: call 87 (finishing a parent finishes its subtasks) stays TV-U13's per the 🟠 box (it built it); the Board keeps ascending sorts (it ignores the List's direction) for TV-U11; My tasks' folded Backlog line needs its scope to include your Backlog tasks (TV-U15); files in the counts wait for AT-3; "Claude · working" for TV-D16.
+  - Why: one block per session; each sits with the block that owns its surface.
+  - Rejected: —
+
+## 2026-10-13 · TV-F6 Focus salvage + one time engine — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 22 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, §Assumptions #11, #26; REPLAN 62a, 63, 66, §6.10, round 3 §L; migrations `20261008235243_focus_runs` (#323's, history) and `20261013130000_focus_runs_v3`) on the local stack. Salvaged from #323 (`origin/t/maciej/tv-f2-queue-run`): the run's server record, cross-device takeover, claims, the run rules. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **F6-1 · #323's migration is history under prod's version; the re-cut is a new file** → TV-F6 (`20261008235243_focus_runs.sql`, `20261013130000_focus_runs_v3.sql`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the orchestrator's correction to round 3: the file was applied to prod on 2026-10-09).
+  - Decision: #323's file goes in byte-for-byte as `20261008235243_focus_runs.sql` (every function matches the local catalog); the Timer re-cut, the task gate on claims, the publication and grants, and erasure are a new migration. AC13.4's "its migration never applied as written" can't hold any more; the salvage list stands.
+  - Why: applied migrations are history (AGENTS.md rule 5); prod's version keeps local replays and prod in one order.
+  - Rejected: editing the old file, a fresh `focus_runs` table.
+- **F6-2 · Timer: Per task · Pomodoro · Off on the run, changeable mid-run** → TV-F6 (`focus_runs.mode`, `FOCUS_TIMER_MODES`, `focus_runs__apply`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `mode` is `per_task | pomodoro | off` (default Per task), a save can change it, a new timer starts its rhythm over (only Pomodoro has phases); a Stopwatch run reads as Per task. Off records nothing and shows no clock, but the session is on: Done, Skip and "is on this" still work.
+  - Why: 62a and 63 ("off means off"); one schema reversal, made before anything reads the column.
+  - Rejected: Elapsed · Countdown · Off (63's first wording; Countdown is the client option "Count down the estimate" under Per task).
+- **F6-3 · The run follows the one engine; Stop waits out its Undo** → TV-F6 (`features/focus/run.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: whatever starts a session (Focus, ⇧F, Calendar's ▶, Home's pomodoro) starts or continues the run in that task's workspace; the timer, pauses, phases and Now are saved as they change and every minute; Stop ends the run everywhere only after the 10 s "Focus stopped · Undo", and Undo inside it keeps the same run. A run this device holds that no clock here runs (Stop, then a reload inside the window) ends instead of coming back. Only the tab that runs the clock speaks for a browser.
+  - Why: one clock for every surface (§6.10); 62a's Undo; a run that resurrects after a reload would count time nobody tracked.
+  - Rejected: #323's explicit "Start run" (the only entry point), ending at once on Stop.
+- **F6-4 · Per task's clock is the Now task's time this session** → TV-F6 (`FocusSession.taskSeconds`, `bigClock`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the top-bar timer, the Calendar block and Focus show one number per job (62): Pomodoro's countdown, the Now task's own clock (from 0 when another task becomes Now; carried to another device through `phase_started_at`), or "Focus" with no clock under Off. The task's saved total stays the task's `timeSpentSeconds`; TV-F7 composes "18:02 of ~45m" and the countdown option.
+  - Why: the pill is "this task" and the bottom line "the whole session" (62).
+  - Rejected: the session's time in the pill (it repeats the bottom line).
+- **F6-5 · Claims behind the task gate, polled by the shell** → TV-F6 (`focus_claims`, `features/focus/claims.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `focus_claims` answers only for a task the caller sees and the runner still sees (`tasks__visible` / `tasks__visible_to`), only for a running run seen in the last 3 minutes, never the caller's own; Off still claims, paused doesn't. The app shell polls the selected workspace once a minute while visible; the detail panel's header shows them (`TaskClaimMark`, small avatars and a quiet dot, the words in the tooltip, in U13's claim slot); `useTaskClaim` + `onThisLabel` are there for TV-F7's rows and screen.
+  - Why: "is on this" is about doing, not timing; a runner who lost a task mustn't advertise it.
+  - Rejected: Realtime for claims (each person reads only their own runs), polling only while Tasks is open.
+- **F6-6 · The run rules run app-wide** → TV-F6 (`FocusRunFollower`, `followStep`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when Now is finished (by anyone), Won't do, deleted, unshared or taken out of Up next, the session moves to the next open task with its rhythm, or ends when Up next runs out; someone else finishing it, or it going away, says so in a quiet toast (and the run's notice for TV-F7); finishing it yourself counts in "n done". A task that was never in Up next isn't moved for being absent from it, and a missing task waits while closed tasks may still be loading.
+  - Why: #323's rules ran only while Tasks was open; 62 "a session also ends by itself when Up next runs out".
+  - Rejected: moving on only while the Focus view is open.
+- **F6-7 · Calendar's ▶ is "Focus on this"** → TV-F6 (`calendar-page-view.tsx`, `use-block-focus.ts` deleted)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: ▶ puts the task on top of Up next and gives it the one clock (a running session moves to it with its rhythm; none starts with your default timer); its Pause and Stop are the engine's, Stop with Undo instead of "47m logged to …"; the clock shows on the task's block that holds now, else its nearest.
+  - Why: call 66 ("the same one clock"); three clocks lost time (P0 #6).
+  - Rejected: keeping the Calendar's own stopwatch.
+- **F6-8 · The Calendar lens: my work sessions are blocks; due-only tasks are all-day chips** → TV-F6 (`lens.ts` `taskBlocks`, `dueChipsByDay`; AC2.3, AC7.3)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: each of my sessions is its own block and dragging it moves that session (`tasks_op_session_update`, the person kept); a teammate's session stays in their calendar; a scheduled task with no session known shows from its row as before. Later and Remove on a session's block act on that session (Remove's Undo puts one back at the same times). Your own due-only tasks (assigned to you, or yours as creator while unassigned; spec §18) with nothing in your calendar are chips in the all-day lane on their due day (Won't do hidden, done shown done; a teammate's session on it is in their calendar, not yours); clicking one opens the task.
+  - Why: REPLAN 25 (several blocks per task, each someone's) and 1.3 ("due-only tasks never reach the calendar grid"); the Month view stays Calendar's.
+  - Rejected: one block per task from the mirrored schedule, every visible task's due chip (teammates' would crowd your lane).
+- **F6-9 · Home's pomodoro runs the same session** → TV-F6 (`pomodoro-widget.tsx`, `config-forms.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the widget shows and controls the running session (Pause, Stop with Undo); idle, Start runs a Pomodoro on the top of Up next and is off with nothing lined up; its lengths are your Focus lengths (the widget's settings edit them).
+  - Why: one clock; a pomodoro with no task records nothing anywhere.
+  - Rejected: a task-less pomodoro, per-widget lengths.
+- **F6-10 · The Timer setting lives in the synced Focus prefs** → TV-F6 (`FocusPrefs.timer`, `countdownEstimate`; the execute view's ⋯)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `timer` (default Per task) and `countdownEstimate` join the synced Focus prefs; a new session starts with `timer`; changing it changes your default and the running session (63). Until TV-F7's ⋯ menu and Settings → Tasks → Focus, today's Focus card ⋯ has the three-way Timer.
+  - Why: "the menu changes them everywhere" (63).
+  - Rejected: a per-run choice only (#323).
+- **F6-11 · The run records the task, not the calendar block** → TV-F6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: no `now_session_id` on `focus_runs`; the Calendar marks the task's nearest block.
+  - Why: nothing reads it yet; ▶ needs the task.
+  - Rejected: a session column now.
+- **F6-12 · Capture's default (P0 #9) is already built** → TV-P0 (P0-7), TV-U14 (`queueTop`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: New in Focus lands in Up next (P0-7, U14's `queueTop`); #323's "during a run, a capture anywhere queues" (F2-5) is dropped for call 90 (⌘N files where you are).
+  - Why: call 90 decides it; two rules would disagree in a project.
+  - Rejected: queueing every capture while a session runs.
+- **F6-13 · One sink; saved totals go into the store copy** → TV-F6 (`time-sink.ts`, `use-focus-time-saver.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Tasks module's unregistered sink (kept since P0-13) is deleted; the app shell's sink puts each saved total straight into the workspace's store copy (`patchCopy`) instead of a window event a mounted list listens for.
+  - Why: the D11a note ("time totals land through `store.patchCopy`"); every surface reads the store.
+  - Rejected: keeping two sinks.
+- **F6-14 · Focus runs are erased and exported** → TV-F6 (`account_erase_workspace_data`, `readTasksExport`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: erasure deletes a person's runs in workspaces they don't own (counted in the preview as `focus_runs_deleted`); leaving a workspace already takes them; the export carries your own runs as `focusRuns`.
+  - Why: §Assumptions #26.
+  - Rejected: relying on the profile cascade alone (the preview wouldn't say so).
+- **F6-15 · A run read through stops counting three minutes past its device's last save** → TV-F6 (`readRunClock`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: on another device the clock and the session's time run on from the record only for the claims window (3 minutes) after the controlling device's last save, then stand still.
+  - Why: a laptop that slept or died keeps no clock; never an inflated number.
+  - Rejected: counting on forever (#323 capped only the focused time).
+- **F6-16 · Time saved before a takeover was heard is given back** → TV-F6 (`overlapAfter`, `relinquishFocus`, `giveBackTime`; AC8.11)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator).
+  - Decision: when another device took the run at T, the device that lost it takes back its unsaved time after T (#323) and gives back what it had already saved after T with one negative adjustment through `tasks_op_track_time`, keyed by run and T so a resend counts once; at most 5 minutes (T is the server's clock, the overlap this device's). The overlap never reaches back past the moment this device took the sitting up (start, takeover, Undo), so time it adopted from another device is never given back. A failed give-back is resent with the same key on the next look. A takeover of this device's that hasn't reached the server yet (offline) isn't undone by a copy naming a device that had the run before it: the take is sent again (a refused one isn't). Known limit: if you then keep working on the other device without acting on its session (no pause, no Done), the offline device's resend still wins when it comes back, and the time both ran meanwhile isn't given back.
+  - Why: the engine saves every minute whether or not it has heard of the takeover; those seconds were counted on both devices.
+  - Rejected: holding saves until control is re-confirmed (a save per minute would wait on a run read), accepting the gap.
+- **F6-17 · A new session inside Stop's Undo window ends the stopped run first** → TV-F6 (`run.ts` `reconcile`, `undoStopKeepingRun`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the review).
+  - Decision: only Undo carries the stopped run on; any other start inside the 10 s ends it at once with its own numbers, then starts a new run.
+  - Why: a fresh session reusing the stopped run would overwrite its 25 minutes with zeros; a start in another workspace would end it on the server before its final numbers got there.
+  - Rejected: continuing the same run for any start inside the window.
+- **Known limits (TV-F6, revisitable):** signing out inside Stop's Undo window leaves the run open until this device next signs in (it's ended then; teammates stop seeing it after 3 minutes); if Calendar's ▶ can't put the task on Up next, the run rules may move the session to the next lined-up task.
+
+## 2026-10-13 · TV-D15 Templates and Duplicate project (tasks-v3 block 30) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, AC4.4, AC7.2; REPLAN 9 and 79; §Assumptions #19 and #26). Migration `20261013160000_templates` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D15-1 · A template is a saved body, and the template is edited as itself in the centre** → TV-D15 (`task_templates`, `project_templates`, `templates/ui/template-editor.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: per §Assumptions #19, two tables holding the keep-set as a jsonb body. "Edit template" opens it in the centre the way a task's full page opens (call 32), marked *Template*, with dates as days from the start. A task template shows its task (title, project, due, priority, estimate, tags, description) and its subtasks. A project template shows its statuses (rename), sections (name, start and end in days) and tasks (title, section, due in days, subtasks). Changes are kept until Save. Editing never changes what was made from it.
+  - Why: hidden template rows in `tasks`/`buckets` would get handles, show up in search, `@` and counts, send notices and fire reminders, and every reader would need an exclusion. A body has none of that and can be applied in any workspace.
+  - Rejected: template projects and tasks as hidden live rows, and feeding the live task panel a fake task.
+- **D15-2 · One copy engine, with the target workspace as its seam** → TV-D15 (`project_templates__body_of` → `project_templates__apply_body`; app `templates/ops.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (the hackathon ask: dependable, fast copies, and a later "copy into N workspaces").
+  - Decision:
+    - "Duplicate project…" reads the live project the way a project template would, then applies the result.
+    - The body uses positions, not row ids, for its own statuses, sections, tasks and parents. People, teams, tags and links are resolved again on every apply: a tag by name when its id isn't in the target workspace; anyone or anything that isn't there is left out.
+    - `apply_body` takes the target workspace and is the server's own: an op, or later a provisioning job, calls it once per workspace, as a person who may add projects there.
+    - Every task goes through `tasks_op_create`, so handles, the registry and activity all hold. One op makes the whole copy, and the app settles it in one `store.begin` → `settle`. Locally, 200 tasks take about 240 ms.
+  - Why: one tested path for both features, and the next step (N workspaces) is a loop, not a rewrite.
+  - Rejected: building a multi-workspace copy now (it has its own planning session); a client-side copy task by task (slow, not atomic).
+- **D15-3 · What a copy keeps and what stays with the original** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13, within REPLAN 9 and 79.
+  - Decision: these come along:
+    - from a project (Duplicate or a project template): its statuses (names, categories, hidden), sections with their dates, and the open tasks (Backlog, To do, In progress) with their open subtasks. An In progress task starts again at the first To do status.
+    - from a task template: the task and every subtask, all open.
+    - on every copied task: description, priority, energy, estimate, due date and time as offsets, tags, dependencies among the copied tasks, and links to notes and contacts the whole workspace can see.
+    These never come along: comments, activity, files (AT-2's attachments, per REPLAN 9 "files in v1"), tracked time, work sessions, reminders, Waiting on, queue places, completions, claims, grants and person shares, and repeats. A repeat's pointer and history belong to its run, and a copied repeat would start firing for whoever it's assigned to.
+  - Why: the template keeps the work and drops the run (REPLAN 9); a copy must not notify or remind anyone on the original's behalf (TV-D12's rule).
+  - Rejected: copying repeats with a reset pointer; copying files.
+- **D15-4 · People on a copy** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "Keep who's assigned" (on by default, shown only when someone is assigned) keeps a person only where they can take tasks; otherwise the copy is unassigned, never yours by default. A task routed to a team keeps its team and starts unclaimed with a fresh routing (TV-D13's columns reset by its trigger). A task template's subtasks keep their people; the task itself takes capture's Assign when one is picked.
+  - Why: a hackathon's organizer must not end up assigned in every team's copy; a "next season" copy wants the same people.
+  - Rejected: always keeping people, and assigning everything to the copier.
+- **D15-5 · Who sees templates and copies** → TV-D15 (`templates_op_update`, `templates__sources_full`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after a security review of the first cut).
+  - Decision:
+    - A template is its maker's until shared with the workspace. Saving one needs Tasks edit in the workspace and only takes what the saver can see; a hidden task's title or description never reaches a body. (Since D15-11, saving and duplicating need Edit on the source.)
+    - Sharing a template, and changing a shared one, check again that the person has Full access to every project or task it was saved from and that each is still there (`source_ids`, which readers can't see).
+    - A template saved from a project the workspace can't see asks before it's shared ("This includes n tasks from a private project. Share?"). While it stays private, a project made from it is private.
+    - A copy of a project the workspace can't see is private.
+    - Only the maker edits a template; the workspace's owner or an admin can also stop sharing or delete a shared one. An API key can save and use templates but never shares, edits or deletes them.
+    - A hidden template and a missing one get the same answer, and so do a hidden project and a missing one.
+  - Why: a shared template shows its contents to every Tasks reader, so sharing one is sharing what it copied (§15's edge case and REPLAN 79's "never shares its contents by itself").
+  - Rejected: trusting a flag set at save time; copying the source's sharing onto the copy.
+- **D15-6 · One date** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - A project's dates count from its start, or from its first date when it has no start. Duplicate and New project from template ask one "Starts on", today by default, and only when there are dates.
+    - A task template counts from its task's due date, or from the day it was saved when it had none. The one date asked is Due; in capture that's the Due pill.
+    - With no date, nothing is dated.
+  - Why: REPLAN 9 ("asks for one date") and 79 ("shifts every date from a new start date you pick").
+  - Rejected: a date per section.
+- **D15-7 · Where it all lives** → TV-D15, Settings rebuild
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - A project's ⋯: Duplicate… and Save as template…, before Archive.
+    - The task panel's ⋯: Save as template…, under Duplicate.
+    - The sidebar's hairline ⋯: New project from template… beside New project, and Templates beside Archived projects. Templates is a centre page listing project and task templates, with Use… and a ⋯ for share, stop sharing and delete (Undo).
+    - Capture: `/template` and More → Template… pick a task template. It shows as a "Template: …" chip, fills the title and the template's project, and keeps a typed description and subtasks aside until the chip is removed.
+      - Only Assign stays, plus Due when the template counts from its due date. A template that counts from its start starts today.
+      - Words that set anything else (tags, priority, dates, a team, links) make Create say so, rather than drop them.
+      - Create makes the task on the server; the capture waits for it and stays open, chip and all, if the server refuses.
+    - The page moves to Settings → Tasks → Templates when that section exists.
+  - Why: no Settings → Tasks yet (D9's precedent: the default statuses open from the Inbox's ⋯); no gallery (REPLAN 9).
+  - Rejected: a template gallery, and capture filling only the title, description and subtask lines (that would lose the keep-set).
+- **D15-8 · Templates aren't in the shared store** → TV-D15 (`templates/templates-store.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: one small list per workspace, shared by every surface, read when a picker or the page opens and after each template op, wiped on sign-out; a body is read only when a template is opened. The `updated_at`/`deleted_at` columns make a synced table cheap later.
+  - Why: templates aren't work items, bodies can be large, and nobody needs another person's template edits live.
+  - Rejected: a `SyncRows` table for templates.
+- **D15-9 · Small rules** → TV-D15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - Deleting a template is soft, with Undo; templates deleted more than 30 days ago go for good on their owner's next save.
+    - A template or a copy holds up to 2,000 open tasks, with a body up to 2 MB. Over the limit, it says so, counting only what you can see.
+    - Projects have no description column yet, so a project template's body carries its own description (empty from a project) for TV-U16 to show.
+    - A resend (same client-minted id) answers only with something the caller made.
+    - Erasure deletes a person's templates, shared ones too. The data export carries yours and the shared ones with their bodies.
+  - Why: the same shapes as the rest of v3 (Recently deleted, idempotent ops, §Assumptions #26).
+  - Rejected: a hard delete without Undo.
+- **D15-11 · Copying needs Edit on the source** → TV-D15 follow-up (`20261013190000_templates_edit_to_copy`, `templates_can_copy`)
+  - Who: agent's choice (the Tasks v3 orchestrator's call on TV-D15's residual), deferred to by Maciej, 2026-10-13.
+  - Decision:
+    - "Duplicate project…" and "Save as template" (a project's or a task's, even one kept for yourself) need Edit on what they copy.
+    - A task template takes only the subtasks you can edit.
+    - Without Edit, the dialog says so ("You need edit access to this project to copy it." / "…to this task to save it as a template.") instead of offering the action. The app asks `templates_can_copy` when the dialog opens, and the server checks again on the copy.
+    - Using a template that's shared with you is unchanged: it needs Tasks edit in the workspace, as any new task does.
+  - Why: a copy is its maker's, and a copy made from view-only access could later be shared to people the source never reached.
+  - Rejected: keeping view-level duplication as "equivalent to copy-paste" (D15-5's first cut); hiding the menu items per project (the client doesn't know per-project edit access without asking).
+- **D15-10 · Known limits, kept on purpose** → TV-D15, a later migration if they matter
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (from the validator's review).
+  - Decision:
+    - The workspace's owner or an admin can undo the delete of a shared template within its 30 days, even when its owner deleted it. It was shared, so nothing new is shown; recording who deleted it would need another migration.
+    - A copy's dependencies and its replacement statuses are written inside the apply op (with the cycle trigger and `perm_enforce_write`), not through the status and dependency ops, so they add no activity rows of their own; each task's `tasks.create` row is there.
+    - A hand-edited body that interleaves status categories gets per-run positions (the editor never reorders statuses).
+  - Why: none of these shows anything to anyone who couldn't see it, and each costs a migration that would hold up the block.
+  - Rejected: a follow-up migration before the release.
+
+## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC11.7–11.8, AC1.16, AC3.1, AC3.7; REPLAN 32, 56, 65a, 72a, 87, 88, 89, 20a, defaults p and q). Migration `20261013100000_comment_reactions_edits` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U13-1 · Who may comment, edit, delete and react: one item gate for every comment op, and for reading** → TV-U13 (`comments__item_level`), TV-D12 (re-cut `comments_op_add` and the comments read policy from the live catalog)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (after two security reviews of the first cut).
+  - Decision: a comment's item is a task (`tasks__visible`, Full through `can_access 'full'`; `task_project` reads as a task but never takes the Full path), a note (`can_access`), or one of the known spine types (seeing it); an unknown type is nobody's. Reading comments (and so their reactions), adding, editing, deleting, restoring and reacting all ask it. Edit: the author only. Delete and Undo: the author, or Full access to the task or note. React: whoever can comment there (the spine guard + seeing the item), so a workspace viewer can't, a view-only share can. An app over an API key comments as its creator but can't edit, delete, restore or react. Hidden and missing answer the same refusal. A mention, and a participant's notice, reach only people who can see the item.
+  - Why: read and write can never disagree; a reaction is a lightweight comment and follows the same rule; the old add op let a member comment on an item hidden from them.
+  - Rejected: per-op checks against `perm_can_see_entity` (it reads an unknown type as visible to the workspace) and reactions for anyone who can read.
+- **U13-2 · Reactions are six words, live through the comment's stamp, and never notify** → TV-U13 (`COMMENT_REACTIONS`, `comment_reactions`, `comments_op_react`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (88 decided the six).
+  - Decision: stored as `thumbs_up · check · eyes · pray · heart · smile` (a closed vocabulary with its CHECK and drift gate), shown as 👍 ✅ 👀 🙏 ❤️ 😄; a react writes no activity row; it moves the comment's `updated_at`, so the store's comment marks change and an open feed re-reads (`commentStamps`), instead of a Realtime channel of its own.
+  - Why: the store already hears comments live; one more published table would mean another channel for six emoji.
+  - Rejected: storing the emoji characters, and a `comment_reactions` Realtime listener.
+- **U13-3 · Delete is soft with an 8 s Undo; edits show "edited"; an edit names only new people** → TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: delete sets `deleted_at` (the Undo restores it; no tombstone in the feed); `comments.add/edit/delete/restore` rows stay in the trail; an edit notifies only someone named for the first time (`comments.edit`), and its excerpt is the new text. Editing turns stored references the reader can name back into `@Title` and keeps one they can't (and date chips) as stored, so an edit never loses them.
+  - Why: research §9; nobody hears about the same mention twice.
+  - Rejected: a hard delete (no Undo across a reload) and re-notifying everyone named.
+- **U13-4 · The feed: merged changes, folded runs, All · Comments per person on this device** → TV-U13 (`feed.ts` `shapeFeed`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (default q).
+  - Decision: one person's changes within 10 minutes of the first merge ("changed due, priority and 2 more", click to see each); a run of more than two change lines between comments folds into "Show n earlier changes", and the run after the last comment shows its latest five. The All · Comments switch is remembered per person in local storage.
+  - Why: research §9; the switch is a reading habit, not a setting worth syncing yet.
+  - Rejected: tabs (Jira's All · Comments · History · Work log) and a synced preference.
+- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: header (project › section pickers, handle, the claims slot, queue, ⤢, ⋯) · status toggle + title · the agent session line's slot (52's placement, not the spec list's) · Done/Won't do line · properties (Status, Assignee + Team, Priority, Due + time, Tags; "+ Energy · Scheduled · Reminder · Estimate · Repeat · Waiting on") · description · Subtasks · Waiting on · Blocked by · Blocks · Linked (reference cards, five then "Show n more") · the feed. Copy link moved into ⋯ beside Copy branch name; ⋯ shows for viewers too (copying only).
+  - Why: the spec's order with REPLAN 52's decided spot for the agent line.
+  - Rejected: research §7's "description before properties".
+- **U13-6 · Pickers open in place inside their popover** → TV-U13 (`task-detail-pickers.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Scheduled lists the sessions ("Thu 2:00 PM · 1h", then "+2"); Add and Move show the date panel inside the same popover, with a length and "Mine / the assignee's" (nobody else, TV-D10-fix); resizing keeps the start and the person. Reminder offers 1 hour / 1 day before due (when there's a due date) and "At a time…"; Estimate has 15m · 30m · 45m · 1h · 2h · 4h or typed, plus Tracked. Repeat: presets, Custom (every n days/weeks/months/years, weekdays, a day of the month or the nth weekday, an end, "count from when it's done") and one summary line ("Every 3rd Friday, until Dec 15"); a repeat set on a task with no dates gives it its first occurrence as the due date.
+  - Why: a popover opened from inside another loses its clicks; due and scheduled move together (27c), so due is the repeat's anchor now that sessions are separate.
+  - Rejected: nested DateField popovers, and anchoring a repeat on a session.
+- **U13-7 · Inbox assign asks for a project; "Keep unfiled" just assigns** → TV-U13, TV-D13 (the server move to the assignee's Inbox, 20)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (20a decided; AC5.1).
+  - Decision: picking someone else for a task in your Inbox shows "Assign to Mike · in" with the projects and "Keep unfiled"; a project assigns and files in one edit. Keep unfiled assigns only: the task stays in your Inbox (granted to Mike) until the server moves it.
+  - Why: don't show a move the server doesn't make.
+  - Rejected: moving it client-side.
+- **U13-8 · Call 87 runs in the app for now** → TV-U13 (`finishOpenSubtasks`), TV-D16 (MCP), TV-D7 (a server cascade if wanted)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (87 decided).
+  - Decision: the checkbox, a status pick, a check-off (Focus), a reference chip's check and a Board drop into Done finish the task's open subtasks too, with one toast "Done · also 2 subtasks" whose Undo puts each back to the status it had (only while it's still done). A repeating parent keeps its subtasks open (TV-D12 resets them per cycle); MCP's complete and the Home widget's check-off don't cascade yet (TV-D16, TV-H1).
+  - Why: `tasks__apply_status` is being re-cut by TV-D12; redefining it here would be overwritten.
+  - Rejected: a server cascade in this block.
+- **U13-9 · Project view and the full page** → TV-U13, TV-U16 (the full overview)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (defaults p, 32).
+  - Decision: "Project" registers next to Details; it shows on its own when nothing is selected inside a project and while a task fills the centre (the Details entry then reads "Shown in the centre"). Its content is the project's name, status, dates, lead, progress ("1 of 3 done · 2 open") and sections; TV-U16 builds the rest. The full page is state on the same route: "← List · Acme rebrand", "3 of 18" with ↑ ↓ / k j, ⤡, Esc or ⌘[ back; properties take a 280 px column once the centre is about 900 px wide. No key opens it (b is Move to project).
+  - Why: default p, call 32; the keymap has no free key for it.
+  - Rejected: a route of its own (AGENTS.md rule 7).
+- **U13-10 · Your own avatar without a display name reads your email's name** → TV-U13 (`withOwnName`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13 (checkpoint 1).
+  - Decision: the member list names you by your email's local part when your profile has no name (the top bar's rule), so every avatar of yours reads two of your initials; someone else without a name reads "?", never "ME" from a "Member" placeholder.
+  - Why: rule 43; the local seed account has no display name.
+  - Rejected: fixing each avatar consumer separately.
+
+## 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 27 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §2 "Reminders" and "Repeats", §13, §Assumptions #5, #16, #26; REPLAN 24, 27 a–i, 73, 80; migrations `20261013110000_notifications_v3`, `20261013111000_recurrence_moves_dst` `20261013140000_reminders_repeats_fixes` and `20261013145000_recurrence_edit_checks`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D12-1 · Reminders are delivered by one minute job, and only while they make sense** → TV-D12 (`tasks__fire_reminders`, `tasks__notice`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: every minute the sender claims due reminders; one is delivered only while its person sees the task, the task is To do or In progress and its project isn't archived; anything else that's due is retired unsent. The bell notice is written as "Moduo" and hangs on the person's own Inbox (the task id rides in it, the card opens the task), with the title read for that person at send time.
+  - Why: "one precise notice" (REPLAN 24); a reminder is its person's alone (D10F-3), and a notice on the task would show in a shared task's trail; the cron path has no person, and `module_activity_log` needs one.
+  - Rejected: every five minutes (late by up to five), the notice on the task itself.
+- **D12-2 · Backlog and Won't do suspend reminders; bringing the task back asks** → TV-D12 (`task_reminders.suspended_at`, `tasks_op_reminders_restore`, the "Restore the reminder?" toast)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: entering Backlog or Won't do suspends every person's unfired reminders on the task (a reminder added there starts suspended); reminders already on parked tasks were marked suspended once; moving it back to To do or In progress offers "Restore the reminder?" to whoever moves it (if they can edit it and are online), if they had one; Restore brings back everyone's when they can edit the task (else their own), only those still ahead.
+  - Why: the spec's edge case; a reminder whose time passed meanwhile would otherwise fire at once.
+  - Rejected: deleting them (nothing to restore), restoring by itself.
+- **D12-3 · A person's devices hear a notice through one table; the browser through Web Push** → TV-D12 (`notice_deliveries`, `push_subscriptions`, `push-send`, `NoticeDeliveries`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the sender writes one `notice_deliveries` row per notice (RLS: its person only; published), which a running app hears on a channel filtered by person, in any workspace: the desktop shows an OS notification when it isn't in front and a toast when it is, the web a toast; both refresh the bell. Browsers that opted in get it from `push-send` (VAPID and aes128gcm on WebCrypto, no library), kicked by the database only when Vault holds the function's URL and secret.
+  - Why: neither `module_activity` nor `notification_state` is published (and shouldn't be); a local stack must never call a deployed function by accident.
+  - Rejected: email and a calendar feed (REPLAN 73), a hard-coded function URL like the email worker's.
+- **D12-4 · The desktop app keeps running in the menu bar, on by default** → TV-D12 (`src-tauri/src/lib.rs`, `keepInMenuBar`, `set_keep_in_menu_bar`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: closing the window hides it; a menu-bar icon (Open Moduo · Quit Moduo) and the Dock bring it back; the first quit says once "Reminders won't arrive while Moduo is quit"; Settings → Preferences → Reminders turns it off (closing then quits as before).
+  - Why: REPLAN 73's answer; the notice once, so quitting stays a deliberate act.
+  - Rejected: "Open at login" now (later), asking on every quit.
+- **D12-5 · A browser's notices are its signed-in person's only** → TV-D12 (`push_op_subscribe`, `public/push-sw.js`, `public/push-display.js`, `forgetBrowserPush`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a subscription stays its maker's (another person's registration of the same endpoint is refused, and the app then makes the browser a fresh one); signing out unsubscribes the browser and tells the server; the page tells the worker who's signed in, and a notice for anyone else shows a plain line; a push carries ids and the task's title cut to 80 characters, never a description or comment.
+  - Why: one browser can be shared; the words of a notice are the person's.
+  - Rejected: re-pointing an endpoint to whoever signed in last.
+- **D12-6 · The table's switches live in the synced preferences, as they did** → TV-D12 (`src/lib/preferences.ts`, Settings → Preferences)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: Assigned to me (assignments, and tasks handed into your Inbox when a project is deleted), Mentions (a comment naming you, an `@` in a task's description, a note mention), Comments (any other comment notice), Waiting (an unblocked task, a Waiting on… that came in; replaces "Task unblocked", whose saved value it takes), Completed by someone else and Due & follow-up kept; a reminder has no switch (the reminder turns it off). Mutes stay a read-side filter.
+  - Why: spec §Assumptions #16 names a `notification_prefs` column, but the mutes already sync in `preferences.notifications` and gotchas/spine.md forbids a second classifier.
+  - Rejected: a new column and a server-side filter.
+- **D12-7 · Assignments gather per person and hour; every assignment keeps its trail line** → TV-D12 (`tasks_notify_spine`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the first assignment of an hour from one person (or key) to one person is the notice; later ones add to its count and task list while it's unread and not dismissed ("<name> assigned you 12 tasks"); once read, the next one is a new notice. Every assignment still logs its own `tasks.assigned` row.
+  - Why: AC5.7 "twelve assignments make one notice", and the trail (TV-D1) needs one line per task.
+  - Rejected: grouping only in the bell (twelve rows would still be twelve unread), one row for many tasks (the trail would lose them).
+- **D12-8 · `@person` in a description notifies on pick; comment and mention notices reach only people who can see the item** → TV-D12 (`tasks_op_mention`, `module_activity_gate_recipients`, `spine__visible_to`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the description editor offers people in its `@` menu and, on a pick, calls `tasks_op_mention` (edit access; people who can see the task; once per person and task in 10 minutes), like notes. Whoever writes a `comments.add`, `notes.mention` or `tasks.mentioned` row, its recipients are narrowed at that moment to people who can see the item.
+  - Why: RF-1 stores no person in a description, so there's nothing to diff on save; a notice carries an excerpt or a title.
+  - Rejected: parsing descriptions on save, gating only in the read.
+- **D12-9 · Waiting on… clears when it comes in** → TV-D12 (`tasks__waiting_came_in` and its triggers on `comments` and `email_refs`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: a person entry clears when that person comments on the task; an email entry when its thread's ref gets a newer message from someone other than its owner; whoever added it gets one quiet notice (switch: Waiting) if they still see the task; agent entries are TV-D16's.
+  - Why: AC5.3; email lives on the device, so the server sees only what the email engine reports into a thread's ref.
+  - Rejected: matching every inbound message's sender (the server never sees them).
+- **D12-10 · "Completed by someone else" and the opt-in overdue list stay** → TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: §13 doesn't list a completion notice to the creator, and says a passed due date notifies nobody; both stay as they are: the completion notice was Maciej's call (2026-10-08), and the overdue list is an opt-in view inside the bell, never badged.
+  - Why: removing either is a product change §13 didn't ask for in so many words.
+  - Rejected: dropping them silently.
+- **D12-11 · Repeats read in the task's zone, on both sides** → TV-D12 (`tasks__rrule_next_in` / `_prev_in`, `recurrence-engine.ts`, `src/lib/zoned-time.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the engines still work in floating time (D8-5); DTSTART and UNTIL are read as the zone's wall clock (assignee's, else creator's; the app uses the device's) and answers read back in it, resolving a skipped or repeated hour the way Postgres does. UTC is unchanged.
+  - Why: a 9:00 repeat must stay at 9:00 after the clocks change; preview and server must agree.
+  - Rejected: a DST-aware rewrite of the engine itself (the 2,300-rule parity sweep would need redoing).
+- **D12-12 · Which date a repeat sits on, and how its dates move** → TV-D12 (`tasks__occurrence_of`, `tasks__shift_dates`, `tasks__roll_over`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the occurrence is the due date when it's on the rule's pattern, else the work session when that is, else the due date, else the session. When it comes back or catches up, every date moves by the same days (a session sitting on the occurrence lands exactly on the new one); a repeat whose session comes before its due date comes back on the session's day, and one with a "1 day before" reminder the day before (so the reminder re-arms every cycle); a repeat with no date gets a due date, no longer a calendar block; a rule only the app reads keeps the session-on-occurrence model.
+  - Why: "due and scheduled move together, keeping their gap" (27 c); a date alone is a due date (spec §10).
+  - Rejected: `scheduled_at` alone (due never moved), the due date always first (a session-based rule with a later due would jump).
+- **D12-13 · Subtasks reset each cycle** → TV-D12 (`tasks__roll_over`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: when a repeat comes back, its Done and Won't do subtasks go to the first To do status; their completions stay in the history; Backlog subtasks stay.
+  - Why: 27 e, a weekly checklist; Won't do this week isn't Won't do next week.
+  - Rejected: Done only.
+- **D12-14 · Move just this one, change the pattern, skip** → TV-D12 (`tasks_op_move_occurrence`, `changePatternRule`, `tasks__rule_changed`, `tasks_op_skip_occurrence`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: "just this one" moves the due date or the session (the other by the same days) and remembers the pattern's slot (`movedFrom`, `movedDays`), so completing counts from the pattern and the next cycle is back on it; "change the pattern" is the app's rule rewrite (DTSTART, a weekly rule's one weekday, a monthly rule's day) saved through `tasks_op_update`, and any rule change works the pointer out again on the server; skip is worked out on the server (the app's datetimes only for a rule it alone reads); both skip and "just this one" go through `tasks__guard_edit` (edit access on the task, like every other change to one task). The prompts belong to the drag surfaces (TL2, U15, the Calendar).
+  - Why: 27 g; the server owns the pointer (D8).
+  - Rejected: a second task for a moved occurrence.
+- **D12-15 · A repeat's history is a read** → TV-D12 (`tasks_op_history`), TV-U13 (the panel)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: done cycles (from `task_completions`) and skipped ones (from the trail), newest first, each with who did it and the reader's own tracked seconds in that cycle; misses are never listed.
+  - Why: 27 d; each person sees only their own time.
+  - Rejected: a `kind` column on `task_completions` (every reader of completions would have to learn it).
+- **D12-16 · An old build's local midnight at 11:00 UTC is the next day** → TV-D12 (`tasks__due_on_of`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: with no saved zone, 11:00 UTC reads as UTC+13's midnight (New Zealand in summer, Samoa, Tonga), not UTC-11's.
+  - Why: far more people; noon stays the mirror's own value, so UTC+12 can't be told apart (known limit, TV-D7).
+  - Rejected: leaving it.
+- **D12-17 · Ghosts, the picker and the summary line are the views'** → Calendar rebuild, TV-U13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `occurrencesBetween` gives the Calendar its faint future occurrences (none for a repeat after completion); the picker and its summary line are TV-U13's (row 17).
+  - Why: the Calendar is rebuilt later; Tasks provides.
+  - Rejected: drawing ghosts on today's calendar grid.
+
+## 2026-10-13 · AT-2 on v3: the attachments section, toasts over dialogs, uploads in a read-only build — the agent's choices (deferred to by Maciej)
+
+Finished in tasks-v3 block 2 ([specs/attachments.md](../../specs/attachments.md) AT2-1–AT2-6, decisions 3, 7–11; REPLAN §8 L, #327) on the local stack. The pipeline's own decision is in [decisions/data.md](data.md) (2026-10-10 · AT-2). Each below is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **AT2V3-1 · The attachments section is one self-contained piece a panel places** → AT-2 (`attachments-section.tsx`), TV-U13, the full-page task (32)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: `useAttachmentsSection` owns the files, the drop/paste zone (spread on the panel root, focusable by a click so ⌘V lands there), the drop highlight state and the viewer; `<AttachmentsSection>` draws the strip and the viewer under the description.
+  - Why: TV-U13 rebuilds the panel in parallel; four touch points are cheaper to carry than forty inline lines.
+  - Rejected: leaving it inline in `task-detail-panel.tsx` (U13 would re-derive it); a context provider (one more layer for one consumer).
+- **AT2V3-2 · A toast is pressable above a modal and never closes it** → AT-2 (`dialog.tsx`, `sonner.tsx`), every dialog
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the Toaster is `pointer-events-auto` and `DialogContent` ignores outside presses on `[data-sonner-toaster]`; so Delete's Undo in the viewer restores the file and the viewer stays open.
+  - Why: a modal sets `pointer-events: none` on the body, so a press on a toast only closed the dialog and the Undo never ran (caught live).
+  - Rejected: closing the viewer on Delete (Undo would work, but deleting the second of three files would throw you out); a guard in the viewer only (every dialog that raises an Undo has the same trap).
+- **AT2V3-3 · In a read-only build, uploads wait** → AT-2 (`queue.ts`, `uploads/index.ts`, `min-build.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: below `min_build` the queue starts nothing and a step refused then leaves the file queued with its server row and sent bytes; the tile reads "Waiting…" and the app's own "Update Moduo" says why. `storage_status` is listed as a read; resumable upload paths count as writes in `isWriteRequest` (classification only: uploads go over XHR, outside the guarded fetch, and begin/finalize are the guarded writes).
+  - Why: "the upload failed · Retry" was wrong there, and every Retry re-began and abandoned a pending row.
+  - Rejected: routing uploads through the guarded fetch (TUS and progress need XHR); a separate read-only caption (the banner already says it).
+- **AT2V3-4 · The panel reads a task's files when it opens; live updates come with AT-3** → AT-2, AT-3
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the strip reads `listForEntity` on open (and after this device's uploads); another person's upload shows on the next open. AT-3 wires `attachments` (in the Realtime publication since TV-D11b) into the store for the 📎 counts and refreshes an open strip from it; capture's file seam (`registerCaptureAttachments`) is AT-3's too (AT3-2).
+  - Why: REPLAN §8 L ("fine, on demand"); one listener for counts and strip belongs with the counts.
+  - Rejected: a per-panel Realtime channel now (a second live path AT-3 would replace).
+- **AT2V3-5 · Preview links are re-checked every minute while a strip is open** → AT-2 (`use-attachments.ts`, `attachment-strip.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: an open strip asks the link cache every minute and when the window comes back; only links within a minute of their hour are signed again, and a broken thumbnail tries again on a fresh link.
+  - Why: a panel can stay open past the hour (desktop), and every thumbnail turned into a file tile for the rest of the session.
+  - Rejected: longer preview links (spec decision 11 keeps them at 1 h); re-signing on every image error (a loop on a file that's really gone).
+- **AT2V3-6 · Begin's pool pre-check weighs the original alone** → AT-2 (`queue.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-13.
+  - Decision: the device's "storage is full" pre-check compares used + pending + the batch so far + this file's original, as `attachments_op_begin` does; earlier files in the same drop count with their previews.
+  - Why: counting the preview too parked files the server would take for 5 minutes near the limit.
+  - Rejected: no pre-check (a refused begin per file in a big drop).
+- **AT2V3-7 · "Free up space" on a full pool arrives with Settings → Storage (AT-3)** → AT-2 (AT2-4's text), AT-3
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the first AT-2 session), recorded 2026-10-13.
+  - Decision: until AT-3, a full pool's line shows the facts, Upgrade for the owner, and the file retries by itself; the strip's `onFreeUpSpace` is wired when the largest-files list exists.
+  - Why: the action would open a screen that doesn't exist yet.
+  - Rejected: a dead link, or building the Storage list inside AT-2.
+- **Deferred (server, a P1 ops block):** a re-begun, refused or dismissed upload leaves its old pending row counted in `storage__unsettled_bytes` until the 24 h sweep, and `attachments_op_delete` doesn't release it; an op that abandons one's own unfinished upload would free the space at once. Not needed for AT-2's ACs; noted in the 🟠 box ("From AT-2").
+
+## 2026-10-11 · TV-D11b virtualization, the 10k fixture, the grant feed — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 12 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #8, AC12.3, AC12.4; REPLAN 37 and §6.11; the TV-D11a deferrals; migration `20261011120000_tasks_sync_feed_search`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D11B-1 · Short lists draw whole; long ones draw what's on screen** → TV-D11b (`virtual-stack.tsx`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the List virtualizes from 120 drawn items (rows, group headers, group ends), each Board column from 40 cards, through one `VirtualStack` (TanStack Virtual, items measured once drawn, 8 items of overscan); below that every item is drawn in plain flow. Group headers stick while their group scrolls (TanStack's pattern: the active header stays drawn, in flow, `sticky`); a dragged row or card stays drawn wherever the list scrolls; a selection moved by keys or a deep link is scrolled into view once.
+  - Why: mounting about 120 rows costs well under the 200 ms budget, and short lists keep find-in-page, exact drag measuring and tests without layout; at 10,000 tasks a view switch went from 1.1–1.4 s to about 47 ms.
+  - Rejected: virtualizing every list (more moving parts where nothing is gained); a floating header that copies the group's label (two copies of its controls).
+- **D11B-2 · The Queue's line-up is drawn whole** → TV-D11b, TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the reorderable Queue (a sortable list) isn't virtualized.
+  - Why: it's one person's line-up (tens of tasks), and dnd-kit's sortable animates only items that are drawn.
+  - Rejected: virtualizing it now.
+- **D11B-3 · Rows and cards take their own facts and one actions object, never the module API or the project list** → TV-D11b (`row-facts.ts`, `project-choices.tsx`), every block that touches `TaskRow` / `TaskCard`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a row or card is memoised and gets its task, its facts (queued, claims, blocked label, tags, subtask progress, status name; compared by value), id-taking callbacks that keep their identity, and `useRowActions(api)` (one object whose calls go to the newest API). The projects a row's "Move to project" menu offers come from a context only the open menu reads. Editing one task redraws one row; a project added or renamed redraws none (`task-list-view.redraw.test.tsx`).
+  - Why: the API object is new after every change anywhere, and the project list as a prop froze the page for about 5 s with 224 projects (found in TV-U6).
+  - Rejected: a stable proxy over the API (the React Compiler caches what a component reads from a stable object, so rows would go stale); a memo comparator that ignores the API (stale closures).
+- **D11B-4 · The server searches only while the device copy can't answer alone** → TV-D11b (`store.searchTasks`, `coversSearch`, `use-tasks-filters.tsx`), TV-U2
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the views search the copy at once; while closed tasks are still loading, or a read was cut at its ceiling, the store also asks `tasks_search` (250 ms after typing stops) for ids, reads the rows it lacks into the copy, and those match by id. Once the copy holds every task, no request is made.
+  - Why: with everything on the device the copy's search is instant and finds the same tasks; the server is there for what the copy doesn't have.
+  - Rejected: asking the server on every search (a request per pause, the same answer); the RPC answering whole rows (a second shape for a task beside the store's).
+- **D11B-5 · `tasks_search` checks text first, then the task gate, as SECURITY DEFINER** → TV-D11b (migration 5), TV-D16 (MCP `tasks_search` can call it)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: every word (up to 8) must appear in the title or the description's text (HTML tags, entities and a reference's stored text treated as in the app), plain substring (`%` and `_` are characters), newest change first, `tasks__visible_to` on each match until 200 (at most 500) are found; nothing for someone who can't view Tasks in the workspace.
+  - Why: under RLS a non-leakproof `ILIKE` runs after `can_access` on every row: about 2 s for 10,000 tasks on the local stack.
+  - Rejected: an invoker function or a PostgREST `ilike` (2 s); a `pg_trgm` index (an extension for prod for one feature, while a 10,000-row text scan is tens of milliseconds).
+- **D11B-6 · Hard deletes leave tombstones; the three tables delta** → TV-D11b (`sync_tombstones`, `readTombstonedChanges`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `task_queue`, `tag_links` and `task_relations` keep deleting for real; an AFTER DELETE trigger writes (table, row id, workspace, when) into `sync_tombstones` (kept 7 days, readable by the workspace's Tasks members), the three tables get a server-stamped `updated_at`, and the store reads their changes like any delta table. A database without the migration answers whole (`whole: true`) and the store applies it as a whole read.
+  - Why: they were read whole on every sync (tag links run to thousands at 10,000 tasks); soft deletes would change unique keys, every op and every old build's delete.
+  - Rejected: soft deletes on the three tables; a tombstone column per table.
+- **D11B-7 · The grant feed is its own append-only table, `access_changes`** → TV-D11b (migration 4, `store.noteAccessChanges`), TV-D13, TV-U16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: triggers write one row per change in who sees what (a project or task share made, changed or removed: the member or the whole workspace; a task moved project: the workspace; a member's role or a role's permissions: that member or the workspace), naming the thing, never its contents; kept 2 days; RLS shows a member their rows and the workspace's. The store hears it live (its own Realtime channel) and reads it with every delta; a task row → that task is read by id (shown, or dropped with its own rows); anything wider → the whole access check. The session's first read only takes the cursor (the session's first access check covers what came before).
+  - Why: a share of one task used to wait up to 10 minutes; Realtime can't filter deletes (a `resource_grants` delete would reach every client of every workspace with only its id), while inserts into a feed are filtered per subscriber by RLS.
+  - Rejected: publishing `resource_grants` (REPLICA IDENTITY FULL still sends only the key under RLS); working out per member in the trigger who could see a moved task before.
+- **D11B-8 · New Realtime tables listen on channels of their own** → TV-D11b (`realtime.ts` `LIVE_SIDE_TABLES`), every block that publishes a table
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `task_completions` and the grant feed each have a channel; the main one keeps TV-D5/D11a's tables.
+  - Why: a probe on the local stack: a channel that names a table outside the publication (or missing) says SUBSCRIBED and then delivers nothing for any of its tables, so a build ahead of its database would lose every live update.
+  - Rejected: adding them to the main channel.
+- **D11B-9 · The device copy stays one record, written whole; closed tasks still load straight after** → TV-D11b (measured), D11a's seams kept
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: no per-row IndexedDB and no on-demand closed tasks yet.
+  - Why: at 10,000 tasks the copy is about 10.8 MB, its clone and write take about 30 ms of main thread (throttled, not per change), and the first rows show in about 1.4 s with the rest following in the background.
+  - Rejected: per-row records and lazy closed tasks (cost without a measured need).
+- **D11B-10 · The perf gate is `bun run perf` on the local stack, not CI** → TV-D11b (`tests/perf/tasks-10k.spec.ts`, `docs/local-dev.md`), a CI block with a stack
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `bun run perf` seeds the 10,000-task fixture (its own person and workspace, idempotent) and runs the `perf` Playwright project: open a task, search, switch List ↔ Board (median of three under 200 ms each), lists and columns draw only a screenful, a card drags out of a 1,200-card column, a project change never blocks the page for 200 ms. Too slow and stack-bound for `verify`.
+  - Why: CI has no Supabase stack and runs no e2e; the measurements need a real browser and the fixture.
+  - Rejected: a fake-runtime perf test in `verify` (it wouldn't measure what a person waits for).
+- **D11B-11 · The Timeline isn't virtualized here** → TV-TL1 (AC9.9, `tests/perf/tasks-timeline-2k.spec.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the block row named Timeline rows too; TV-TL1 rebuilds the Timeline with endless virtualized scroll, so the switch to it (about 290 ms at 10,000 tasks) is logged by the perf spec, not budgeted.
+  - Why: virtualizing a view that is about to be rebuilt is throwaway work.
+  - Rejected: virtualizing today's Timeline.
+
+## 2026-10-11 · TV-U14 Capture v3 (tasks-v3 block 19) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 19 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10, AC10.1–10.5, AC10.8, AC5.1, AC5.4; REPLAN 33, 33a, 90, 90b, 91–94, 20a, default g; TV-U7 superseded). No migrations. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U14-1 · One capture for every way in; ⌘N passes "here"** → TV-U14 (`dispatchOpenCapture(request)`), TV-U10 (the group "+" passes its section), TV-U11 (Board `c`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: ⌘⇧K, ⌘N, "+ New", `c` and Calendar's "New task" all open the app's capture as Task. ⌘⇧K passes nothing (your Inbox); the Tasks page passes its project, the section of the task selected in it, and "top of Up next" in Focus or the Queue. A capture already open keeps what it has. The Tasks page's own modal is gone.
+  - Why: two capture windows had drifted (one parsed tags, one didn't); one body keeps the grammar, the pills and the draft the same everywhere.
+  - Rejected: keeping a Tasks-only modal for ⌘N (TV-U7's shape).
+- **U14-2 · The title is a one-line Lexical editor with RF-1's three menus; date words are marked, not turned into tokens** → TV-U14 (`title-editor.tsx`, `MentionMenuPlugin` `candidatesFor` / `onPick` / `onMenuChange`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `@ # /` picks become chips at text size (the kit Chip, active fill) and their pill fills at once; the capture adds people (you as "Name (you)"), teams, sections and its `/` commands (priority, estimate, remind, repeat, due, schedule) to the menus. Recognised date words get the active fill and a dotted underline through the CSS Custom Highlight API, so they stay plain words until saved.
+  - Why: one tokenizer and one menu for capture and prose (33); turning "tomorrow" into a chip mid-typing fights "tomorrow 3pm".
+  - Rejected: a plain input with an overlay (a second grammar implementation) and live date chips.
+- **U14-3 · What leaves the title, and the order of Esc** → TV-U14 (`parse/capture-tokens.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a person, team, tag, date or `/` command leaves the title for its pill; a project leaves at once for the destination row ("@Acme rebrand moved into the destination"); a contact, note, email, event or task stays in the title as its name (titles are plain text) and becomes a `mentions` link. One value per field: a second token turns the first back into words, and so does setting the pill by hand. A token or a hand-set date beats date words, which then stay words. Esc closes a menu, then turns the token just made back into words, else keeps the last date phrase as words, then closes and keeps the draft.
+  - Why: research §2's rules made concrete; a title is read by rows, search, notices, MCP and exports, which all expect text.
+  - Rejected: storing chips inside titles (every title reader would have to parse markup).
+- **U14-4 · No project: `@person` stays unfiled with the slot showing; `@team` takes its default or waits** → TV-U14, TV-D13 (the server half of 20)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: with someone else assigned and no project, the destination reads "No project ▾" and the footer "Unfiled · Mike finds it in My tasks" (the server keeps it in your Inbox and grants it to Mike; moving it to Mike's Inbox, 20, isn't on the server yet). A team with a default project fills it in ("Design requests (team default)"); without one the row reads "Pick a project", Create is off and ⏎ opens the picker.
+  - Why: don't promise what the server doesn't do; 94 as decided.
+  - Rejected: "Goes to Mike's Inbox" while it doesn't.
+- **U14-5 · The "From:" item is linked as `spawned-from`, task → item** → TV-U14 (`src/lib/capture-source.ts`; Email, Notes, Calendar and Contacts publish their open item)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (93: linked by default).
+  - Decision: the chip shows "From: <its title>", × or ⌫ removes it, and on create it becomes a `spawned-from` link (origin `manual`), like Email's "Create task". An email thread joins the registry only when the link is kept. A pasted list links each top-level task; subtasks don't.
+  - Why: the email → task precedent; `spawned-from` is what the hub groups as "where this came from".
+  - Rejected: `references` (loses the direction) and a new link origin (a migration).
+- **U14-6 · New captures go on top; a pasted list keeps its order on top; subtasks take only the place and the person** → TV-U14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default h).
+  - Decision: a capture is placed before the first task of its destination (keys split evenly, so 500 pasted lines stay short keys). Typed subtasks and pasted subtasks get the parent's project, section and assignee (a team task's are nobody's, like it), nothing else, unless the line names its own person; a subtask of a parent still waiting offline waits behind it. Pasted top-level lines get the pills, a line's own `@ # /` and date words win, and a line with its own `@team` goes to that team's default project.
+  - Why: the newest thing is usually the next thing (h); a subtask with the parent's due date would read late twice.
+  - Rejected: appending at the end (what the old quick capture did).
+- **U14-7 · Paste a list: an inline panel, a preview, 500 at most, one Undo** → TV-U14 (`parse/paste-list.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: two or more lines in the title show "Create n tasks? · Create n · Keep as one · Cancel" with each line as it will be made ("Book taxi · Due Oct 12"); bullets, numbers and `[ ]` go, `[x]` lines are skipped and counted, deeper indents flatten to subtasks, lines past 500 are counted and left out. Saves go six at a time, parents first; one Undo deletes the batch, subtasks first.
+  - Why: research §4 with the spec's cap (500 beats the research's 200).
+  - Rejected: a second modal, and pointing to an import past 200 lines.
+- **U14-8 · Captures go through the shared store; offline they wait under their own ids** → TV-U14, TV-D11a (the store and its outbox)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default g).
+  - Decision: one task goes through `store.sendCreate`; many (a pasted list, a task's subtasks) are shown under one store write and settled in one step, so every screen redraws once. With the connection gone (before or on the way) they wait in the store's outbox under the ids minted here and are sent in order (parents first) once it's back: "Waiting to sync · Inbox", no duplicate. Their links, reminder and waiting entries follow once they're sent, while the app stays open. A refusal puts the capture back (only when nothing landed). ⌘N in Focus lines the task up at the top through the store's line-up (offline: at the end, when it's sent).
+  - Why: one write path and one queue for every Tasks surface (D11a); a task-by-task store write redrew the whole list twice per task (a 12-line paste took seconds per wave in dev and could exhaust a tab's memory).
+  - Rejected: the capture's own "Try again" with the same ids (it dropped subtasks whose parent had landed) and writing past the store.
+
+- **U14-9 · One draft per person and workspace, ids only** → TV-U14 (`capture-draft.ts`), the sign-out path, account deletion
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (the orchestrator's privacy review).
+  - Decision: Esc, a click outside or another overlay keeps the draft on the device under the person and the workspace; any open restores it ("Draft restored · Clear"); creating clears it. It keeps typed words and ids, never a linked item's, person's, team's or tag's name (looked up again on restore: an item the person can no longer open reads "Private item" and leaves the title and the links), never the "From:" item or files. Every draft goes on sign-out; a deleted account's go with it.
+  - Why: a second person on the device, or a lost permission, must never see a title through a draft.
+  - Rejected: one draft per workspace (another person on the device saw it) and storing names.
+- **U14-11 · A refused capture is kept apart and comes back by "Restore"** → TV-U14 (`capture-draft.ts` slot `refused`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (the orchestrator's review round 2).
+  - Decision: when the server refuses a capture with nothing saved, it goes straight back into the capture if that's open and empty; otherwise it's kept in its own slot on the device (same rules as the draft: per person and workspace, ids and the person's own words, a refused pasted list included, wiped on sign-out) and the toast offers "Restore", which puts it into the open capture or opens one with it. The next open with no draft brings it back by itself. A list that saved only in part says "n of m saved" with one Undo for what saved.
+  - Why: the refused capture never overwrites what's being typed now, and typing never overwrites it.
+  - Rejected: writing it over the draft (one of the two was lost either way).
+
+- **U14-10 · The pills and More** → TV-U14 (`capture-pills.tsx`), TV-D15 (templates), AT-2/AT-3 (files)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Assign (people, Unassigned, teams), Due, Tags (existing; new ones by `#`), Priority (no Urgent), More (Scheduled, Reminder, Estimate presets, Repeat presets, Waiting on people). What More holds joins the row as chips with ×; the row wraps for now. "Template…" and `/template` show only once a template provider registers (TV-D15); pasted or dropped files go to a registered upload handler (AT-2/AT-3), else a toast says to add them on the task. The description is a plain text field that grows to about six lines (⌘⏎ creates more there): there's no task yet for its mentions to link from.
+  - Why: 91; seams instead of buttons that do nothing.
+  - Rejected: the rich description editor in capture, and the "+n" overflow before the kit has it.
+## 2026-10-11 · TV-D10-fix sessions, reminders and Waiting on behind the task's gate — the agent's choices (deferred to by Maciej)
+
+A follow-up to TV-D10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) block 10, §Assumptions #4, #24; REPLAN 24, 25, default d; migration `20261011110000_task_sessions_access`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D10F-1 · One gate for a task, on every path** → TV-D10-fix (`tasks__visible` / `tasks__editable` for the caller, `tasks__visible_to` / `tasks__editable_to` for a given person), TV-D12, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: like D10-15 for projects, the task gate wraps `can_access` on the task, and every path to sessions, reminders and Waiting on asks it: the three tables' RLS (and so Realtime), every op (an op answers "not found" about a row of a task you can't see), the `scheduled_at` / `duration_minutes` trigger, the reminder sender and the booking busy read. `sessions_access.test.sql` runs each path for a viewer, a member without access to a private project and a view-only member.
+  - Why: the service role (booking, the cron sender, MCP) bypasses RLS, so a gate that lives only in the policies doesn't hold there.
+  - Rejected: inline `can_access` calls per path (they drift, D10-15).
+- **D10F-2 · A work session goes in your own calendar or the task's assignee's; moving, resizing and removing keep its person** → TV-D10-fix (`tasks__check_session_person`, `tasks__session_legacy`), TV-U13 / TV-F6 / Calendar (the sessions UI offers you and the assignee only)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: adding a session or handing one over takes you, or the task's current assignee (scheduling their work), and only an assignee who sees the task and can work on tasks; a write of `scheduled_at` (an old build, the app's picker) makes a new session the assignee's when they may hold it (see the task, can work on tasks), else the writer's; system work (the repeat engine's catch-up, which runs from anyone's app) never uses the caller: the creator's when they may hold it, else nobody's; anyone who can edit the task moves, resizes or removes any of its sessions, and the session stays its person's.
+  - Why: a session blocks its person's booking links, so only they, or whoever plans the assignee's work, may put one there; an editor can already reschedule and unschedule the task, and a former assignee's leftover blocks need clearing.
+  - Rejected: anyone who can work on tasks (TV-D10's rule); only your own sessions for moves and removals (the picker and Unschedule act on the shown session, whoever's it is, and a backfilled block of a former assignee would be stuck).
+- **D10F-3 · Reminders stay settable by anyone who can see the task** → TV-D10-fix (`tasks_op_reminder_add`, `tasks__fire_reminders`), D10-10, TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: D10-10 holds (view is enough, always for yourself); a reminder is read only by its person while they see the task; one whose person no longer sees the task is retired at its time without a notice (the sender's claim marks only the others for delivery).
+  - Why: a reminder is the caller's own row, read by nobody else, and changes nothing on the task; a notice names the task, so it waits on access at send time.
+  - Rejected: edit for reminders (would take "Remind me" away from viewers and protect nothing).
+- **D10F-4 · Booking reads a host's busy times through one server function** → TV-D10-fix (`tasks__busy_sessions`, `_shared/booking-sessions.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `booking-public` calls `tasks__busy_sessions` (service role only), which answers start and end times of the host's live sessions on open tasks they can see; the closed categories live in that SQL (drift gate against `TASK_CLOSED_CATEGORIES`); a failed read blocks nothing.
+  - Why: the same gate as every other path, and nothing but times can leave.
+  - Rejected: keeping the table read with a second visibility check in TypeScript.
+- **D10F-5 · A write another trigger makes skips the project edit gate only when it is a foreign key's clear** → TV-D10-fix (`buckets__area_sync`, `buckets__project_check`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: at trigger depth > 1 the gate is skipped only for clearing a project's area (label untouched), lead or client; any other nested change asks `projects__editable`.
+  - Why: a foreign key's SET NULL by a signed-in person (a profile or contact deleted for good) must not fail, and that's all the exception was for; trigger depth alone says nothing about who started the write.
+  - Rejected: dropping the exception (those deletes would fail), and a session flag set by the system path (a foreign key action can't set one).
+## 2026-10-11 · TV-U6 Sidebar v3 — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 13 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, §15, Edge cases "Structure moves"; REPLAN 13–16, 20, 29, 29a–e, 30, 78, 98; migration `20261011100000_projects_archive_trash`, #328's unapplied `20261009140000` renumbered and re-scoped) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U6-1 · A project delete routes whole task trees: a tree with any open work goes to its top task's assignee's Inbox** → TV-U6 (`projects_op_delete`), TV-U16 (member removal)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: "open" is anything not finished, so Backlog counts; a task and its subtasks travel together (a finished step of an open task goes with it, an open step of a finished task keeps the whole tree open); the top task's assignee gets it, or the deleter when it's unassigned or the assignee can no longer work on tasks there; everything else goes with the project to Recently deleted in one batch.
+  - Why: REPLAN 78 moves "only open tasks"; trashing parked (Backlog) work silently, or splitting a step from its parent across two Inboxes, are both trust failures.
+  - Rejected: To do / In progress only (Backlog would vanish), routing each subtask to its own assignee (splits trees), #328's "all tasks to the deleter's Inbox or all to the trash" radio.
+- **U6-2 · One quiet notice per person, hung on their own Inbox, naming the project only to someone who could see it** → TV-U6 (`tasks.project_deleted`), TV-D12 (the notification table's mute)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: each person (never the deleter) whose Inbox received work gets one notice with how many tasks; it points at their Inbox, so they can read it even when the project was private to others; the title is the project's name only when they could view the project, else none ("a project").
+  - Why: REPLAN 80's batching (one notice, not one per task); a notice on the deleted project would be unreadable for an assignee who only saw their task, and naming it would leak a private project's name (P0 #10's rule).
+  - Rejected: a notice per task, the project as the notice's entity.
+- **U6-3 · Restore takes back moved tasks only when nobody touched them since, into the section and status they had** → TV-U6 (`tasks_op_trash_restore`, `buckets.trash_moved*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a moved task comes back when it still sits in an Inbox and its `updated_at` is no later than the moment the delete's moves ended (`trash_moved_at`, `clock_timestamp()`); it returns to its section and status when they still exist. A team task's team isn't put back (moving into an Inbox drops it, TV-D10). Only the server writes the trash columns (`tasks__trash_columns_guard`): a Restore runs as system work over what they name.
+  - Why: the Edge case says "returns moved tasks only if they haven't been edited since"; #328's "still in an Inbox" would yank back a task someone already re-planned.
+  - Rejected: restoring every moved task, recording a copy of each task.
+- **U6-4 · Archiving needs Full access, like deleting; Won't do and Move run as task edits first, and Undo reverts them** → TV-U6 (`projects_op_update` `archived_at`, `buckets__archive_check`), TV-U16 (the Done prompt)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: archive and unarchive need Full on the project (the op and a trigger for raw writes); a project with open work asks "n open tasks — Won't do · Move · Keep" (Move asks for a project and moves the open tops, their subtasks follow); one with none archives at once with Undo. Undo unarchives and puts each task back (its own status by id, or the project it came from). The dialogs ask `share_op_state` first and say "Only people with full access to … can …" instead of offering a button that fails.
+  - Why: archiving hides a shared project from everyone, which is a delete in all but name (research round 3's call).
+  - Rejected: Edit access (anyone could hide a teammate's project), one server op that also edits tasks (the task ops already carry status, subtask and queue rules).
+- **U6-5 · Archived projects ride apart in the bundle; Tasks shows them in Archived projects and in All's search** → TV-U6 (`splitArchived`, `ArchivedProjectsView`, `searchExtra`), TV-D11a, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the shared store's snapshot (`buildSnapshot`, TV-D11a) keeps archived projects and their tasks in `archivedBuckets` / `archivedTasks`, so Home, the Calendar and contact hubs skip them without knowing (an archive shows on every surface the moment it's made); Tasks joins them back: Archived projects (from the ⋯) lists them, one opens read-only with an Unarchive banner, and search in All finds their tasks, grouped under "<name> · Archived". The connector leaves them out of lists and queues unless `include_archived`, and `tasks_search` finds them marked `project_archived`.
+  - Why: REPLAN 78: "Search still finds them, labelled 'Archived'"; #328 hid them from search and MCP entirely.
+  - Rejected: hiding them everywhere (#328), keeping them in every surface's lists.
+- **U6-6 · Customize and Pin follow the person; collapse is remembered per person on the device** → TV-U6 (`preferences.tasksSidebar`, `updatePreferences`), TV-U8 (pinned views)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: hidden rows (Focus, Upcoming, My tasks, All) and pinned projects per workspace live in the synced `preferences` domain, written through `updatePreferences` and pushed by the one sync owner (`<PreferencesSync/>`), never a second reconcile loop; collapsed groups (Pinned, each area) are kept in localStorage per person and workspace. Pinned shows live projects only, so a deleted project leaves it and a Restore brings its pin back (no unpin on delete: a refused delete would lose it).
+  - Why: pins and hidden rows are deliberate and should follow you to another device; a collapse is a frequent, light toggle and every synced write is the whole preferences object.
+  - Rejected: everything in localStorage (pins wouldn't follow you), everything synced (a write per click on a chevron).
+- **U6-7 · Upcoming opens an interim scope; Focus is the Queue's sidebar name; Plan · Focus stays for TV-F7** → TV-U6, TV-U15, TV-F7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Upcoming is a scope of your dated tasks and unassigned ones (open, not Backlog), grouped by Date and ordered by due (spec §8's coverage rule) until TV-U15 builds the screen; the sidebar's Focus row is the Queue scope renamed (the title reads "Focus"); the Plan · Focus switch above the sidebar stays until TV-F7 rebuilds the screen.
+  - Why: the row exists now (REPLAN 29) and must open something honest; removing the switch is F7's.
+  - Rejected: linking Upcoming to the Calendar, hiding the row until U15.
+- **U6-8 · Tasks reopens where you left it; "Open at" is gone from the sidebar** → TV-U6 (`resolveDefaultSelection`), TV-D7 (drops the time blocks)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (REPLAN 30).
+  - Decision: the last place (a project, the Inbox, Focus, Upcoming, My tasks or All; never Archived projects or Recently deleted) reopens, else the Inbox; a place picked in the sidebar before the first load answered wins. The time-of-day step and the "Open at" submenu are gone; the per-person time blocks stay in the data until TV-D7.
+  - Why: REPLAN 30 retires "Open at"; the old rule never reopened All, My tasks or the Queue.
+  - Rejected: keeping the time-of-day landing with no way to set it.
+- **U6-9 · Areas from the sidebar: the hairline's ⋯ makes them, their header's ⋯ edits them, Move up/down reorders them** → TV-U6 (`areas_op_*` via the runtime)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: "New area…" (the hairline's ⋯, or a project's Area submenu, which then files the project there) makes a workspace area; an area's header has + (a new project in it) and ⋯: New project, Rename, Colour, Move up, Move down, Delete area (Undo restores it and re-files its projects). Projects reorder by drag (into another area by dropping on one of its projects) or move through Area. An area's colour is stored and shown in its menu only (the header stays plain, as in the prototype).
+  - Why: areas have a name, colour and order (REPLAN 15); headers are dragged rarely and Move up/down is keyboard-reachable.
+  - Rejected: drag-to-reorder areas (another drag type in the page's one DndContext), a colour dot on area headers.
+- **U6-10 · Project and area writes are writes on the shared store; `hidden-buckets.ts` is gone** → TV-U6 on TV-D11a (`use-tasks-module.ts`, `sync/store.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: TV-D11a landed while this block ran, so the sidebar's writes moved onto it: a rename, colour, area or place is a `store.begin` patch settled by `projects_op_update`'s row; an archive patches `archivedAt` (and takes the project's queue rows out); a delete removes the project and shows its own open work in your Inbox (`projectDeletePlan`), then reads what changed (`syncNow`) before its overlay goes; a Restore reads what came back the same way; area ops settle with the areas the op answers (a delete reads first, since it re-files projects). Writes to one project still go out in order (`chainProjectOp`). The cached copy's version is 3 (projects carry colour and archive stamp). An archive's Undo, or a refused archive, puts the open tasks back through the newest task ops (the ones from the archive's render saw the old rows). Archive with Move sends the moves first and archives only once they've landed (archiving takes what's still in the project out of queues). After a delete settles, the tasks that went out of your sight (a teammate's Inbox) are dropped from the copy at once, not at the next access check. A task of an archived project is read-only everywhere (a row in All's search too): an edit says "Unarchive “X” to change its tasks."
+  - Why: D11a's rule: one copy, every write an overlay, a refusal puts back only its own fields; the old module-level pending-change store existed only because every surface read on its own.
+  - Rejected: keeping `hidden-buckets.ts` beside the store (two sources of "what's pending"), a whole reload after each project op.
+- **U6-11 · A delete's notices stay after an Undo; Delete forever is a person's own hard delete** → TV-U6, TV-D12 (notification table)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the delete goes to the server at once (so a refused one says so at once), and its notices with it; an Undo restores the work but doesn't take a notice back (it opens the person's Inbox, `bucket` routes to /tasks). Delete forever (`tasks_op_trash_purge`, Full access, from Recently deleted only) hard-deletes what's in the trash, an exception to spec Assumption #27's "hard deletes only in the purge job" that the person asks for by name; store copies had already dropped those rows when they were soft-deleted. Each moved top task's trail says why it changed project (`tasks.update` with `reason: project_deleted`).
+  - Why: holding the delete until the toast closes (#328) loses a refusal and makes Undo a timer; Recently deleted without Delete forever leaves a person no way to clear something now.
+  - Rejected: retracting notices on Undo (a second notice is noisier than a stale one), no Delete forever.
+
+## 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #27; REPLAN §6.6, §6.11, call 37, default g) on the local stack; no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D11a-1 · A thin IndexedDB wrapper, not Dexie** → TV-D11a (`src/lib/sync/cache.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: one `moduo-sync` database, one record per person and workspace (`<user>:<workspace>`) holding each table's rows and cursor, the outbox and whether the Done tasks are in; written whole, 800 ms after the last change and on `pagehide`; no IndexedDB → no copy (the store reads the server).
+  - Why: the store reads and writes the copy whole, so none of Dexie's indexes or queries would be used, and the spec rejects one more runtime; the `SyncCache` seam is where per-row storage goes if TV-D11b's 10k fixture needs it.
+  - Rejected: Dexie (unused query layer, ~40 KB); localStorage (5 MB cap, synchronous).
+- **D11a-2 · The device copy is one person's, holds no secrets, and goes on sign-out** → TV-D11a (`attachSyncUser`, auth-provider, account deletion)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (hardened at the orchestrator's request the same day).
+  - Decision: keyed by person and workspace; a real sign-out (choosing Sign out, even when auth-js can't end the session offline, or the `SIGNED_OUT` event, including a forced one after a revoked refresh token, where waiting captures go too: accepted, the device may no longer be theirs) and account deletion wipe every copy and the remembered workspace list; another person signing in wipes every copy but theirs; a session that is merely missing (an expired token that couldn't refresh offline) stops the stores but keeps the copy and its waiting captures; a workspace no longer on your list (left, removed, deleted) loses its copy when the list comes back; rows only (no token, key or session), comments as id + task + stamps (no text), no time entries or agent sessions; rows you lost access to leave the copy at the access check (D11a-6).
+  - Why: a shared or handed-on laptop must never show one account's private projects to the next; but a capture made on a plane must survive a token that expired before Wi-Fi came back. The copy is a convenience, the server keeps the truth.
+  - Rejected: keeping copies across sign-out for a faster next sign-in; wiping whenever the session reads null (it lost offline captures, found by the validator).
+- **D11a-3 · Open tasks first, the rest straight after, not on demand** → TV-D11a (`readFirst`, `restLoaded`, `whenRest`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a first load reads To do and In progress (and the small tables), shows them, then reads Done, Won't do and Backlog, completions and comment counts; from then on the copy has everything and later reads are deltas. A link to a closed task, and a hub's linked Done task, wait for the rest.
+  - Why: the Board's Done column, the completed fold, counts and Undo already read closed tasks; once they're on the device the cost is paid once.
+  - Rejected: closed tasks only when a view asks (every view would need a loading state for them; TV-D11b can add it with the server search).
+- **D11a-4 · Deltas by the server's stamp, read from a few minutes early, paged by key** → TV-D11a (`syncRead`, `readByKey`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: each table's cursor is the newest `updated_at` a read returned (never the device clock); the next read asks for `updated_at >= cursor − 5 min`, soft-deleted rows included, paged by (`updated_at`, `id`); the queue, tag links and relations (hard deletes, no stamp) are read whole every time; a read past its ceiling reads on from where it stopped.
+  - Why: a save that commits after a read with an earlier stamp would be lost by a strict `>`; offset pages shift when a row is saved mid-read; re-reading five minutes of changes costs little.
+  - Rejected: `updated_at > cursor` with offset paging; a server `sync_since` RPC (needs a migration: noted for TV-D11b).
+- **D11a-5 · Writes are ops laid over the copy; a refusal takes back only its own fields** → TV-D11a (`begin` / `settle` / `fail`, the hook)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: every edit shows at once as an op (op id) on top of the rows the server sent; its answer becomes the row unless the copy already holds a strictly newer one; a Realtime row lands only if strictly newer (an equal stamp is our echo); a refusal drops the op (toast, no reload); a lost connection drops it too and says "Offline"; a teammate's newer write wins once our op settles; a delete leaves a mark (the deleted row's stamp, and when) so no older version and no read already on its way brings the row back, while a restore (newer) does. TV-D5's hold-while-saving gate and the refetch-discard are no longer used by the hook.
+  - Why: AC12.8 (one field rolls back, nothing reloads) and "your own pending write is skipped on echo" fall out of one rule set.
+  - Rejected: reloading after any error (the old hook), a server op-id column for echo matching (a migration).
+- **D11a-6 · Rows you can no longer see are dropped by comparing ids** → TV-D11a (`checkAccess`, `syncIds`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: after the first delta of a session and then at most every 10 minutes, the live ids of tasks, projects, statuses, completions, comments and tags are compared with the copy; what the server no longer returns leaves the device (with a task, its comment marks and completions).
+  - Why: RLS hides a row you lost access to, so no delta and no Realtime event ever reports it.
+  - Rejected: never (stale private rows on the device); every read (a full id scan each time).
+- **D11a-7 · Offline: what waits, and what says "Offline"** → TV-D11a (the outbox, the hook)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: captures (the list's add, ⌘⇧K, Home's quick capture, Focus's New, which also queues it once sent) and any status-only change (the checkbox, `x`, Won't do, a status pick) wait on the device under their own ids and go in order when the network is back; a capture is created under the id it was given, so a resend is the same task; everything else says "Offline · This change needs a connection…"; the top bar shows "Offline" and "n waiting to sync" left of the Focus timer. A tag typed in an offline capture is not kept.
+  - Why: default g; the create op is idempotent on its id and a repeated status is a no-op on the server (both checked on the local stack).
+  - Rejected: queuing every edit (conflicts the queue can't resolve without the field-level merge TV-D11b+ may add).
+- **D11a-8 · The store lives in the app shell for the whole session** → TV-D11a (`TasksSyncStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the selected workspace's store starts when the shell does (with Tasks access) and keeps its Realtime link and outbox running whichever module is open; every surface holds it too while mounted.
+  - Why: every page opens warm, captures sync from anywhere, and Home, the bell and the hubs need no read of their own.
+  - Rejected: a store only while a Tasks surface is mounted (each page would start cold again).
+- **D11a-9 · The workspace list is remembered for an offline launch** → TV-D11a (`features/workspaces/remembered-workspaces.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the person's workspace list (names, roles, module access) is kept in localStorage; with no network at launch it opens from it (at once when the browser says it's offline) and reads the real list when the network is back; forgotten on sign-out.
+  - Why: without a selected workspace nothing opens, not even the Tasks device copy.
+  - Rejected: the offline open only after the app had loaded online once in the session.
+- **D11a-10 · The store's reads skip the client's retries; the store retries itself** → TV-D11a (`syncReadTable` `.retry(false)`, `scheduleRetry`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: store reads fail at once on a lost connection; the store says "Offline" and tries again after 3 s, doubling to 20 s, and at once on the browser's `online` event or a Realtime rejoin.
+  - Why: postgrest-js retries a failed GET three times (1 + 2 + 4 s), so "Offline" would show 7 s late and the first offline open would wait that long.
+  - Rejected: keeping the client's retries (a long silent wait), a fixed 20 s retry (a short blip would read as offline for 20 s).
+- **D11a-12 · Everything is read whole again once a day** → TV-D11a (`fullReadMs`, `fullReadAt` in the copy)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a session whose copy was last read whole more than 24 h ago reads everything again (open tasks first, the rest after, the copy shown meanwhile) instead of a delta; a new field a later build reads also needs `CACHE_VERSION` bumped, which drops every copy.
+  - Why: a delta never re-reads a row the server changed without a new stamp (TV-D9's backfills ran with the stamp trigger off) or fills a field a newer build reads.
+  - Rejected: a server "sync epoch" (a migration); never (the copy could drift for good).
+- **D11a-13 · What sharing shows or hides reaches the copy without a stamp** → TV-D11a (`SYNC_TABLES`, `checkAccess`, `syncRead({ ids })`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: projects, areas, teams and members are read whole every sync (small; an area shows while one of its projects does); every other table is a delta, and the access check compares each delta table's live ids both ways: what the server no longer returns leaves the device, what it returns that the copy lacks (shared with you since, an old stamp) is read by id. The check runs after a session's first delta, every 10 minutes, and at once when the projects you can see change. All reads are plain selects under RLS, so TV-D10's `projects__visible` / `areas__visible` and `can_access` decide every row.
+  - Why: a grant or a revoke touches no row of the shared tables, so no delta and no Realtime event reports it.
+  - Rejected: reading every table whole (2,400 statuses on every return to the window, measured on the dev workspace); a server sync RPC that knows grants (a migration: TV-D11b).
+- **D11a-14 · A copy that can't be refreshed says so** → TV-D11a (`syncError`, `TasksSyncStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: when a read the server refuses (an ended trial, a revoked session) fails after the copy is on screen, the rows stay, the top bar says "Not up to date" (click to try again) and the store retries with backoff; a first load with nothing to show is still an error.
+  - Why: yesterday's copy must never pass for live; a wall over rows that are still useful would be worse.
+  - Rejected: silently keeping the copy (found in review); replacing the list with an error.
+- **D11a-11 · Smaller calls** → TV-D11a
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: Home's quick capture keeps its plain behaviour (no date parsing) through the store; the full data export (Settings → Advanced) keeps its own complete read (an action, not a screen); the repeat roll-over is asked after the first read of a session that reaches the server and on Retry, once per load across all surfaces (`claimCatchUp`); comment counts come from comment ids per task (`commentCounts` on the hook) for TV-U10/U13 to show.
+  - Why: no visible change where none was asked for; one roll-over per load as before.
+  - Rejected: routing the export through the store (an export must be the server's complete answer at that moment, never a device copy that may be mid-sync).
+## 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #4, #12, #20, #24, #26, #27; REPLAN 13–20a, 24, 25, 54, 94, 95, default d; migrations `20261010180000_areas_projects_sections`, `20261010181000_task_sessions_reminders_waiting`, `20261010182000_teams`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D10-1 · The estimate gets its own column, `tasks.estimate_minutes`** → TV-D10, TV-U13 (the picker), TV-D7 (drops `duration_minutes`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: the spec makes `duration_minutes` the mirror of the next work session, and D7 drops it, so the estimate moves to `estimate_minutes` (backfilled from `duration_minutes`). While a task is unscheduled the two are one value both ways (builds before TV-D10 read `duration_minutes` as the estimate); once it's scheduled, `duration_minutes` is the block's length and a calendar drop or resize never touches the estimate; when the last session goes, `duration_minutes` goes back to the estimate. The app reads `estimateOf(task)` and the panel writes `estimateMinutes`. Known limit: an old build's estimate edit on a scheduled task resizes the block only.
+  - Why: without it the mirror would overwrite every estimate the day a task has two sessions of different lengths ("the estimate no longer doubles as block length", REPLAN 25).
+  - Rejected: keeping the estimate in `duration_minutes` and not mirroring the length (a ratified line of the spec), or leaving the split to a UI block (the UI lanes don't add migrations).
+- **D10-2 · The "next" session is the earliest that hasn't ended, else the latest; the mirror moves on writes and every 15 minutes** → TV-D10 (`tasks__next_session`, `tasks-session-mirror` cron), TV-F6/Calendar (read sessions directly)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `scheduled_at` / `duration_minutes` show that session (a 30-minute session on a task with no duration leaves `duration_minutes` empty, the app's default block); with none left `scheduled_at` clears and `duration_minutes` goes back to the estimate. A job moves the mirror on when a session ends with a later one waiting. The mirror's own write never counts as scheduling (a Backlog task stays in Backlog when a session is removed); adding or moving a session through the ops does, through the status path.
+  - Why: an old build's drift and its calendar block should follow the work still ahead; all past means the task drifted.
+  - Rejected: the earliest session (it would sit in the past forever) and a mirror that refreshes only on writes (Monday's session would read as drifted on Tuesday with Wednesday's ahead).
+- **D10-3 · A write of `scheduled_at` edits the session it showed; clearing it removes that session only through an op** → TV-D10 (`tasks__session_legacy`, the `tasks.session_op` flag in `tasks_op_update` / `tasks_op_unschedule`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: an old build's move, the app's schedule picker, the repeat engine and Reschedule all move the shown session (keeping its length unless `duration_minutes` changed too), or make the first one, which belongs to the assignee (who does the work, so whose booking links it blocks), else the scheduler; the session op defaults to the caller and never takes nobody. A raw `scheduled_at = NULL` never deletes a session; the mirror puts the time back. The current app's picker keeps writing `scheduled_at` (single-session semantics) until a sessions UI exists.
+  - Why: a whole-row save from a build before TV-D1 can carry a stale null, the same trap as TV-D2's queue mirror (gotchas/spine.md); builds since TV-D8 clear through the ops.
+  - Rejected: mirroring removals from raw writes (a stale save would delete planned calendar blocks) and moving the earliest session on an old build's write (the move would land on a past session and look reverted).
+- **D10-4 · A workspace area is everyone's; an area made from a label follows its projects** → TV-D10 (`areas.shared`, `areas.created_by`, `areas__visible`, `projects_op_file`), TV-U6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: an area made with `areas_op_create` (the new sidebar) is a workspace area every Tasks reader sees. One made from a label (the backfill, an old build's label write, the rail's Section menu through `projects_op_file`) is seen by its maker and by whoever can see one of its live projects, so it stays hidden from everyone else once its projects are gone. Names are unique only among the areas a person can see: a hidden area's name neither blocks nor is joined (filing under that name makes the person's own), so one person can see two areas of one name (builds before TV-D10 merge them by label); ops answer only with visible areas and read a hidden one as missing. A backfilled area's maker is the owner of the first project carrying the label; whoever deletes an area sees it while it's deleted, to undo. Label areas left with no project linger, seen by their maker only.
+  - Why: a rail label lived only on the projects it was typed on, so a label used only on private projects was never seen by teammates; turning it into a workspace-wide name would have published it, also after the project was deleted or moved out.
+  - Rejected: workspace-wide areas (the leak), visibility "while empty" (it published a private label the moment its project went), unique names across the workspace (a "name taken" answer confirms a hidden area), and areas with their own sharing (REPLAN 15: no permissions).
+- **D10-15 · One gate for project data on every path** → TV-D10 (`projects__visible` / `projects__editable` for the caller, `projects__visible_to` / `projects__editable_to` / `areas__visible_to` for a given person)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: every path that reads or writes project data or what hangs off a project asks the same helpers: the sections and areas policies (and so Realtime), the project, area and section ops, the section, area and project-field checks on raw writes (edit), the time blocks, a team's default project (editing it to set it or route into it); areas themselves need Tasks at Edit; a task's sessions and Waiting on follow the task's own access. `structure.test.sql` runs each read path as a member without access ("Every path to the same data") and each write as a viewer, a member without access and a member with view only ("Writes: each needs edit").
+  - Why: one path checked more loosely than its siblings was how a private name could come through; a single helper can't drift.
+  - Rejected: inline `can_access` calls at each path.
+
+- **D10-5 · Areas and sections: deleting one clears the link; restoring brings back the container, not the members** → TV-D10 (`areas_op_update`, `sections_op_update`), TV-U6 (Undo)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: deleting an area makes its projects area-less (system work, so a project the deleter can't edit follows too) and records which (`areas_detached`, never sent to the app); restoring it (Undo) puts back every one of those still area-less, private ones included. Deleting a section moves its tasks, deleted ones included, to "No section" in the same project; a restored section comes back empty.
+  - Why: the spec's edge cases say exactly that, and keeping dangling links would make every reader filter deleted containers.
+  - Rejected: keeping `area_id` / `section_id` on the members and hiding deleted containers at read time, and an Undo that re-files what the app held (it can't hold the private projects the delete took out).
+- **D10-6 · `group_label` follows the area both ways, removals included** → TV-D10 (`buckets__area_sync`, `areas__mirror_labels`), TV-D7 (drops `group_label`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: whichever of `area_id` and `group_label` a write changes leads; an old build's label write lands in (or makes) the area of that name, and clearing it leaves the area; renaming an area relabels its projects.
+  - Why: an old build's "No section" must keep working; a stale whole-row save can move a project between areas, but that's a sidebar grouping, cheap to fix, unlike a lost work session (D10-3).
+  - Rejected: ignoring label removals (the old build's explicit choice would bounce back).
+- **D10-7 · Projects: fields checked on every write path; the Inbox has none** → TV-D10 (`buckets__project_check`, `projects_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a lead is anyone in the workspace (any role; a viewer can lead); a client is a live contact of the workspace the setter can see; a target can't precede the start; status is Active · On hold · Done (`PROJECT_STATES`, lax on read). The "bucket" calls stay as aliases (`upsertBucket` is the old raw save and the fallback); the app's create, rename and rail "Section" menu go through the project ops. No project activity yet (TV-U16's overview owns it).
+  - Why: a raw write from an old build or a client mustn't set what the op would refuse.
+  - Rejected: checks in the ops only.
+- **D10-8 · Sections: a range or an end date, ordered by `after`, no unique names** → TV-D10 (`sections_op_*`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: a section has an end date, or a start and an end; positions are integers renumbered by the ops (like statuses); two sections may share a name ("Week 1" in two courses' copies); a task moved to another project (an old build, a parent carrying its subtasks) lands in "No section" there.
+  - Why: imports bring duplicate list names; a start without an end has nothing to draw on the Timeline.
+  - Rejected: fractional keys computed by the client (sections are few and the ops serialize them).
+- **D10-9 · Work sessions are busy for booking links through the busy list, on for every link** → TV-D10 (`exposed_slot_links.busy_calendar_ids` gets `"tasks"`, `_shared/booking-sessions.ts`, the link editor's "Work sessions from Tasks")
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (default d).
+  - Decision: the switch is a pseudo-calendar id in the existing busy list, added to every existing link and to the default; the booking function reads the host's live sessions on open tasks (Done and Won't do don't block) and returns only the times.
+  - Why: the busy list is the link's existing per-link picker, and an old app or function ignores the id (no deploy order to manage).
+  - Rejected: a new boolean column (a client fallback and a deploy order for one switch).
+- **D10-10 · Reminders are each person's own, set by anyone who can see the task; relative ones remind at 09:00 for a date-only due** → TV-D10 (`task_reminders`, `tasks__reminder_at`, the sender stub), TV-D12 (delivery, Backlog cancels)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: kinds `at` (any number, at most 10 per task and person), `day_before`, `hour_before` (one each); a relative reminder fires at the due time the day before / an hour before in the task's zone, or 09:00 / 08:00 for a date-only due, follows due changes and fires again when moved into the future; the stub (every 5 minutes) only stamps `fired_at` on To do / In progress tasks.
+  - Why: "Remind me" is personal, so a viewer may set one; a date-only due has no time to count back from.
+  - Rejected: one reminder per task (Todoist allows several) and delivering anything before TV-D12.
+- **D10-11 · Waiting on… entries name items by id; only a typed note stores words** → TV-D10 (`task_waiting`), TV-U13 (the list renders through references)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: kinds person (a workspace member), email (a thread the adder can open), agent (an API key of the workspace) and text (≤ 200 characters); the same person, email or agent twice is one entry; `since` defaults to now; the trail says "is waiting on someone / an email / an agent / “note”".
+  - Why: an email's subject must never reach a teammate who can't open it; the panel resolves names through references ("Private item").
+  - Rejected: a free label on every entry.
+- **D10-12 · Teams: members who can work on tasks; any editor makes one; a team task never sits in an Inbox** → TV-D10 (`teams`, `team_members`, `tasks__team_check`, `teams__route_project`), TV-D13 (claims, settings, marks UI)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11 (defaults s–t, REPLAN 94–95).
+  - Decision: Tasks at Edit makes and edits teams and their members; members must be able to work on tasks; only the creator, the owner or an admin deletes (and restores) one, which takes it off its tasks; names are unique per workspace in any case; the mark is the initials of the first two words, else the first letter and the next consonant (Design DS, Development DV), editable to one or two letters; colour optional (TV-D13 picks the stable default). A team's default project is one the setter can edit; routing a task in an Inbox (or with no project) files it into the team's default project when the router can edit it, else it's refused ("needs a project", never a word about the project); a team task moved into an Inbox (by hand, today's project delete, an old build, erasure) leaves its team. Removing a member changes no task. (Narrowed 2026-10-13 by TV-D13 follow-up D13-11 and D13-12: editing a team and taking people out are for the creator, the owner or an admin; replacing a set default needs one of them or Edit on it.)
+  - Why: routing hides nothing, so the bar to make a team is low, and a viewer can't take a routed task.
+  - Rejected: auto-adding the creator as a member, allowing team tasks in an Inbox (the team couldn't see them), and refusing a move into an Inbox (a project's delete would fail over one team task).
+- **D10-13 · Time blocks move to each person's preferences, in their own column** → TV-D10 (`user_preferences.task_time_blocks`, `tasks_op_set_time_blocks`), TV-D7 (drops `task_time_blocks`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: `{workspace id: {slot: project}}`, written only by the op (like TV-D8's `time_zone`), keeping only projects the person can see; every member got the workspace's map; an old build's write to the table lands in the writer's own map.
+  - Why: a synced prefs domain is pushed whole from localStorage and would overwrite a server write (gotchas/supabase.md §Prefs sync).
+  - Rejected: a key inside `user_preferences.preferences`.
+- **D10-14 · `imported_from` is `{source, key}`, unique among live tasks of a workspace** → TV-D10, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-11.
+  - Decision: an open source name (≤ 40) and key (≤ 200); a second live task with the same key is refused; a deleted task frees its key; settable on create only.
+  - Why: a re-run finds what it made; deleting an imported task and re-importing should bring it back as new.
+  - Rejected: a closed source vocabulary now (TV-D16 decides the importers) and uniqueness over deleted tasks.
+
+## 2026-10-10 · TV-D9 statuses, completion, dates — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 9 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #3, #4, #24, #26–#28; migrations `20261010170000_project_statuses`, `20261010171000_tasks_completion_due_on`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D9-1 · Every project gets its own copy of the default statuses when it's made** → TV-D9 (`project_statuses__seed`, AFTER INSERT on `buckets`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a new project copies the workspace default set at once, and existing projects were backfilled the same way; the Inbox (a system project) has no rows and uses the default set itself; changing the default never touches existing projects.
+  - Why: a task's status always points into its own project's set, so moves, renames and deletes stay local and need no copy-on-first-edit remapping.
+  - Rejected: projects inheriting the default until first edited (every read would have to fall back, and the first edit would have to remap every task).
+- **D9-2 · "The first status of a category" is the first visible one** → TV-D9 (`tasks__first_status`, `firstStatusOf`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: visible statuses first, then by position; a hidden one is used only when the whole category is hidden.
+  - Why: a creator's pipeline hides To do and Won't do; a repeat coming back or a deleted status's tasks shouldn't land in a hidden column when a visible one exists.
+  - Rejected: position alone (tasks would vanish into hidden statuses).
+- **D9-3 · Hidden is not empty: a category keeps at least one live status, hidden or not** → TV-D9 (`project_statuses_op_delete`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: deleting a category's last status is refused ("Rename or hide this one instead"); hiding every status of a category is allowed.
+  - Why: the five categories carry the app's behaviour and must always resolve; a pipeline without a To do column is still a pipeline.
+  - Rejected: refusing to hide the last visible status (the creator example needs it).
+- **D9-4 · A status keeps its category; a category's word names only a status of that category** → TV-D9 (`project_statuses_op_update`, `project_statuses__check_name`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: statuses rename, hide and reorder inside their category but never move to another; a name like "Done" or "To do" is refused for a status of another category.
+  - Why: moving a status across categories would silently complete or reopen its tasks; a word that reads as a category could never be reached by name.
+  - Rejected: free category changes with a bulk remap.
+- **D9-5 · Status by id, then a category word, then the project's name; anything else is refused with the list** → TV-D9 (`tasks__resolve_status`), TV-D16 (MCP)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the ops read a status id from the project's set, a category word in any spelling (backlog, To do, in_progress, Won't do, the old archived), or one of the project's names in any case; a category word keeps a status already in that category ("in_progress" on a task In review stays In review); an unknown word is refused with "This project's statuses: …".
+  - Why: old clients and agents send category words and must keep working whatever a project names its statuses; the project's own vocabulary is what its people type.
+  - Rejected: names before category words (a project naming something "done" could hijack the app's checkbox).
+- **D9-6 · The category is stored on the task too** → TV-D9 (`tasks.status_category`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a trigger keeps `status_category` beside `status_id` and the legacy `status`; the client and MCP read the category from the row.
+  - Why: a Realtime payload, a delta sync and an assignee who can't see the project's statuses all need the category without a join.
+  - Rejected: deriving it client-side from the statuses list (hidden projects would lose it).
+- **D9-7 · Backlog is neither open nor closed** → TV-D9 (`isOpenTask`, `isClosedTask`, `isBacklogTask` in `@contracts/vocabularies`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the one "is open" rule is To do and In progress, so every count, My tasks, the Calendar's Due soon and strip, drift, late and Focus suggestions leave Backlog out by default; "closed" is Done and Won't do; a backlog task still blocks, can still be queued (it then moves to To do) and shows unfinished in the contact hub.
+  - Why: the spec's list of where Backlog sits out is nearly every place that asked "is it open"; one rule beats a second exclusion at each site.
+  - Rejected: treating Backlog as open and adding "and not backlog" everywhere.
+- **D9-8 · Lists, boards and Filter → Status group by a status key: the legacy value, with Backlog as its own** → TV-D9 (`StatusKey`, `statusKeyOf`), TV-U10/TV-U11 (per-project columns)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: keys are todo · in_progress · done · archived · backlog; the List puts Backlog last, the Board first (shown only when it has tasks); drops write the key's category and their Undo puts the exact status back by id.
+  - Why: saved filters and drop code keep their values; Backlog stops reading as To do.
+  - Rejected: switching every key to the five categories now (saved filters would break; TV-U11 replaces the board columns anyway).
+- **D9-9 · Status writes go out as words every database takes** → TV-D9 (`taskStatusWord`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a category is sent as its legacy word (Won't do as "archived"), Backlog as "backlog"; a named status goes by id; the date goes as `due_on`, falling back to the old instant when the op doesn't know the field.
+  - Why: the app can be deployed before the migration (the merge-before-apply window) and Won't do must keep working there.
+  - Rejected: sending the new category tokens (refused by a database before TV-D9).
+- **D9-10 · Queuing or scheduling a backlog task moves it to To do on the server; assigning or dating it only offers** → TV-D9 (`tasks__status_sync`, `tasks_queue__backlog_to_todo`, the hook's "Move to To do" toast)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a schedule (any write path) and a queue row (the op, the legacy commit mirror) move a backlog task to the first To do, with a trail line; queuing needs edit on the task; the roll-over leaves backlog repeats alone; moving a queued task to Backlog takes it out of every queue.
+  - Why: REPLAN 53 says so, and doing it in the database covers the app, MCP and old builds alike.
+  - Rejected: client-only moves (agents and old builds would leave scheduled tasks in Backlog).
+- **D9-11 · The due date is a date; due_date mirrors it as noon UTC; a due time is the assignee's clock** → TV-D9 (`tasks__due_sync`, `tasks__due_on_of`, `tasks__due_at`), TV-D12 (reminders), TV-U13 (the picker)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a new write sets `due_on` (and `due_date` = noon UTC of it); an old build's write of `due_date` sets `due_on` from the writer's zone (a local midnight there), else noon UTC as its own date, else the nearest UTC day; the backfill read every stored due date the same way with the task person's zone and rewrote `due_date` to noon UTC; a due time is the clock time in the task's zone (assignee, else creator, else UTC).
+  - Why: the same calendar date for everyone (AC12.5); noon UTC reads as that date for old builds from UTC-11 to UTC+11; reminders fire relative to the assignee's zone.
+  - Rejected: changing `due_date`'s type in place (breaks old builds) and a writer-zone due time (no zone is stored with it). Known limit: old builds at UTC+12 to +14 read the noon mirror as the next day until TV-D7.
+- **D9-12 · Completion is stamped by the trigger on every path; history rows by the ops, plus old builds' direct writes** → TV-D9 (`tasks.completed_at/completed_by`, `tasks__completion_record`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: entering Done stamps when and who (the API key's person for an agent), leaving clears both, clients can't write them; an old build's raw status write to done also records a completion row (a raw insert done doesn't; the create op does); backfill: the latest completion, else the trail's last "→ done", else the last edit, with the backfills' triggers off so `updated_at` isn't re-stamped.
+  - Why: "Done this month" and "Completed" need the real time; the row answers "when", the history answers "which cycles".
+  - Rejected: stamping only in `tasks__apply_status` (old builds' completions would be missing).
+- **D9-13 · The late flag is computed, never stored** → TV-D9 (`tasks__late`, `tasks_late`), TV-U10/TV-D12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: late = To do or In progress with a due time passed, or a due date before today in the task's zone; `tasks_late(t)` is a PostgREST computed field (`select=*,late:tasks_late`) that reads the stored row and answers only for a task the caller can see.
+  - Why: a stored flag would need a job to flip it at every midnight and would wake Realtime for every late task.
+  - Rejected: a `late` column kept by the roll-over.
+- **D9-14 · The workspace default statuses open from the Inbox's ⋯ until a Settings → Tasks section exists** → TV-D9 ("Default statuses…"), the Settings rebuild
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: owners and admins get "Default statuses…" in the Inbox row's menu (the Inbox uses that set); projects get "Statuses…" in their ⋯ and "+ Add status" at the end of their board grouped by status, which opens the editor with an In progress field ready.
+  - Why: Settings has no Tasks section yet, and adding one is an IA change outside this block; the Inbox is where that set is used.
+  - Rejected: a row in Settings → Workspace (another wiring, outside the module).
+
+## 2026-10-10 · RF-1 References (tasks-v3 block 18) — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 18 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §10–11, Assumptions #13; GR-0 folded in and retired) with no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **RF-1-1 · The entity-ref node grew into the Reference node in place** → RF-1 (`spine/references/reference-node.tsx`; `editor/entity-ref-node.tsx` re-exports it)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: same Lexical type `entity-ref`, JSON version 2 with `display: link | chip | card` (a version-1 node is a chip) and an optional label; it always renders the Reference, which resolves what the reader may see and never trusts a stored title inside the app.
+  - Why: Notes' documents, its materializer and markdown transformer, email compose and every stored description keep working with no conversion, and Notes becomes a host by registering nothing new.
+  - Rejected: a second node type (Notes would register two, and old chips would keep rendering their stored titles).
+- **RF-1-2 · A task description stores `{type, id, display}` only; Notes and email compose keep their labels** → RF-1 (`MentionMenuPlugin` `storeLabel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: references written from the description editor carry no title (their span holds only the type's word for older builds); Notes (not rebuilt) and email compose (the recipient needs words) keep writing the label they had.
+  - Why: research §8: "no title is stored beside a reference"; a teammate who can read the task but not the item never receives its name, and search stops matching it.
+  - Rejected: rewriting stored descriptions server-side (a migration the data lane owns; old chips lose their title the next time the description is edited).
+- **RF-1-3 · Privacy is the module table's row-level security, read per kind** → RF-1 (`runtime.spine.previews`, `src/lib/runtime.web.previews.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: each kind reads its own table in one batched select (tasks, buckets, notes, calendar_events, contacts/companies, email_refs, tags); a row that doesn't come back is "Private item", with no title and no type in the answer at all; a row with `deleted_at` is "Deleted task".
+  - Why: those policies are `can_access`, so the app and MCP agree; projects aren't in the registry and the registry's fallback for unknown types is module-level, which would show a private project's name. So a project reference is stored as type `bucket` (the registry's per-item check), never `project`.
+  - Rejected: the registry label as the source (wrong for projects) and a `can_access` call per reference (one round trip each).
+- **RF-1-4 · Lazy, batched, cached, live** → RF-1 (`spine/references/store.ts`, `provider.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: one store per person and workspace in the app shell; references asked for in one tick go out as one read per kind; a chip reads chip facts, the hover card reads card facts when it opens; tasks, projects and tags stay live through the Tasks Realtime link (held only while one is on screen); everything re-reads when the window comes back or an answer is five minutes old; a loading reference is a fixed-width blank with no title.
+  - Why: research §8 (one batched read per view, hover on intent, Realtime clears the cache); notes, events, contacts and emails have no Realtime feed, and adding one is a migration.
+  - Rejected: a fetch per reference, and showing a stored title while loading (it would flash a private one).
+- **RF-1-5 · Defaults and "Show as"** → RF-1
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a reference inserted alone on its line is a card (and the caret moves to a new line), in running text a chip; "Show as: Link · Chip · Card" sits under it until the next keystroke; later it is in a chip's or link's hover card and behind a card's ⋯; tags are links only; in comments references are chips.
+  - Why: call 55's defaults; the research's "fades on the next keystroke, later in the hover's ⋯".
+  - Rejected: a permanent "Show as" row on every editable card (noisy).
+- **RF-1-6 · Opening: the page's panel stack, else full** → RF-1 (`ReferenceHostProvider`; Tasks wires `usePanelStack`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a click opens the item in the page's right panel as "← item" where the page hosts a stack (Tasks today: a task shows its own detail, anything else its card with "Open in …"); ⌘/Ctrl-click opens it full through the entity-open route; pages without a stack (Notes, Calendar, Email until rebuilt) open full on a click; selecting another task clears the stack.
+  - Why: 72a, and Notes is otherwise untouched until its rebuild.
+  - Rejected: building a generic item renderer for every module now.
+- **RF-1-7 · Comments store references as `moduo://type/id`** → RF-1 (`commentBodyWithReferences`, `CommentBody`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the composer stays a text box: `@` lists people, then things; a picked thing reads `@Title` while typing and is stored as its URI (`moduo://task/<id>`, Notes' existing convention), `/today` · `/tomorrow` · `/next week` as `moduo://date/…`; the body renders them per reader, and the bell names them per reader ("Private item"); a handle in a comment links itself at render time.
+  - Why: notifications excerpt the body server-side (`comments_op_add`), so only a stored form without titles keeps them out of the bell; no migration.
+  - Rejected: a rich-text comment composer (a larger change to a surface Notes shares) and storing `@Title` (leaks into the excerpt).
+- **RF-1-8 · The grammar's details** → RF-1 (`spine/grammar.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a symbol counts only at a word start; `#123` is a number; `/` must be followed by a non-space (`a / b` stays text); `/` queries run to the type's word plus a four-word title and create only behind that word (`/task Order frames from printer`), so Enter on a sentence's `/` never makes something; "next week" is the coming Monday until Time & region; in capture `/today`-family commands set the due date and win over date words; in prose a date chip reads "Today"/"Tomorrow" while true, else the date; `#tag` in prose is a link that goes nowhere yet (no tag page); typed handles link themselves only for the workspace's current key and only as you type (stored text is never converted); `/` creates only tasks ("New task “…”", filed with the open task); `@person` in a description isn't offered until it can notify (TV-D12).
+  - Why: 33, 33a, 92; capture stays TV-U14's beyond the date commands.
+  - Rejected: auto-converting date words or handles already in stored text.
+- **RF-1-9 · No migration; what still needs the server** → RF-1, TV-D12, data lane
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: deleted contacts and events read "Private item" (their `can_access` hides deleted rows from everyone, owner included), and so does anything purged from the trash; notes/events/contacts/emails refresh on return or age, not live; a description's `@person` doesn't notify.
+  - Why: each needs a migration or a new op, which this block was told not to write while TV-D9 owns the database.
+  - Rejected: a reference RPC written here (reported instead).
+
+## 2026-10-10 · TV-D8 server ops, registry, handles, recurrence, tolerance — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 5 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #1, #2, #5, #6, #9; migrations `20261010160001_tasks_ops_registry_handles`, `20261010161000_tasks_recurrence_server`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **D8-1 · The registry follows every task through a trigger, not only the ops** → TV-D8 (`tasks__registry_sync`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: register on create, re-label on rename, tombstone on delete and revive on restore, on every write path (the ops and old builds' raw writes until TV-D7); `entities.handle` carries `KEY-number` so search finds handles.
+  - Why: old builds keep writing raw until TV-D7, and a rename from them must still reach search (AC1.1); one place instead of every op.
+  - Rejected: registering only inside `tasks_op_create`/`_update` (old builds' tasks would stay unfindable until D7).
+- **D8-2 · The task key can be changed again; every old key stays an alias** → TV-D8 (`workspace_op_set_task_key`, Settings → Workspace → Task key)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the spec says the owner "edits it once"; read as "a rare edit", not "only one").
+  - Decision: the owner changes it any time; numbers never change; a handle typed with an old key still finds its task (search maps it to the current key).
+  - Why: a typo on a one-shot edit would be permanent, and the research call already keeps old keys as aliases (Plane's bug).
+  - Rejected: a lock after the first edit.
+- **D8-3 · Numbers come from a trigger and a guarded counter on the workspace** → TV-D8 (`tasks__number_assign`, `workspaces.task_number_last`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a genuine insert takes the next number whatever the writer sent; an upsert of an existing row keeps its number (old builds save whole rows); only `tasks__next_number` moves the counter, which never goes below the highest number in use.
+  - Why: numbers are never reused and old builds' saves must not burn them.
+  - Rejected: a per-workspace sequence object (one object per workspace) and `max(number)+1` (reuses numbers after a purge).
+- **D8-4 · A done repeat comes back at its assignee's midnight, never on the day it was done** → TV-D8 (`tasks__pointer_on_complete`, `tasks__roll_over`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: completing skips any occurrence still on today's date (the assignee's zone, else the creator's, else UTC); the roll-over reopens it at local midnight of the next occurrence's day, at that occurrence; an open repeat that missed a whole day moves to today's occurrence ("missed occurrences don't exist").
+  - Why: AC1.2, and a repeat is a day's worth of work: checking off yesterday's at 8 AM counts for today.
+  - Rejected: reopening at the occurrence's instant (the old client rule that reopened tasks the same day).
+- **D8-5 · The server reads rules the way rrule.js does (UTC from DTSTART)** → TV-D8 (engine), TV-D12 (DST-aware parity)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: occurrences are computed in UTC wall-clock from DTSTART, exactly like the app's preview, filtering calendar days the way rrule.js does (WEEKLY honours BYMONTHDAY; in MONTHLY/YEARLY plain and ordinal weekdays must both match); a rule outside the subset keeps the app's pointer, and a completed one comes back at that pointer.
+  - Why: the "Done — next: …" preview and the server must agree today; parity is tested case by case against rrule.js, and a 2,300-rule random sweep (counted, UNTIL, ordinals, month days) matched exactly.
+  - Rejected: evaluating in the assignee's zone now (preview and server would disagree across DST until TV-D12 changes both).
+- **D8-6 · Repeat rules are bounded on write and in the engine** → TV-D8 (`tasks__recurrence_problem`, CHECK `tasks_recurrence_bounded`, the engine's day scan and 20-year horizon, the roll-over's batch and time budget)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: INTERVAL and COUNT 1–1000, UNTIL and DTSTART between 1900 and 2200, a rule ≤ 500 characters, refused by the ops and a CHECK; the engine scans calendar days in one set-based query (a counted rule from its start, anything else from the day asked about), never past 20 years ahead, and stops at the first day it needs, so a call costs a few milliseconds and under 30 ms at worst; the 15-minute job handles at most 2,000 tasks in 60 seconds; a completed repeat whose rule has ended is marked (`nextOccurrence: null`), an open one with no occurrence within 20 years either side, or sitting on the last occurrence of a rule that has ended, is marked for that rule (`endedRule`), and a rule stored before the bounds and outside them is never a candidate, so the job's candidates shrink.
+  - Why: a stored rule must never make a status change or the shared job slow, and a counted rule must stay exact however sparse (a step cap made long counted rules read as ended).
+  - Rejected: unbounded RFC rules (no one writes INTERVAL=5000 on purpose) and a period walk with a step cap (bounded, but wrong for sparse counted rules).
+- **D8-7 · The roll-over writes its trail line as "Moduo"** → TV-D8
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `tasks.catch_up` rows with actor_type `agent`, no actor id, label "Moduo" ("Moduo reopened this for … (recurrence)").
+  - Why: nobody did it; the old client pass put it on whoever opened the app.
+  - Rejected: no trail line (a repeat coming back would be silent) and a new actor type (CHECK change for one label).
+- **D8-8 · The old catch-up op answers old builds with the server's rows** → TV-D8 (`tasks_op_catch_up`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: it ignores the client's items, runs the workspace's roll-over as system work, and returns what changed plus the tasks named, as the server has them, filtered to what the caller can see; new builds call it with `[]` after a full load (only when the workspace has repeats).
+  - Why: old builds keep calling it on load; this puts their optimistic reopen back instead of storing it.
+  - Rejected: making it a no-op (old builds would show a wrong reopen until the next refetch).
+- **D8-9 · A "blocks" link between two tasks is a dependency, with a dependency's rules** → TV-D8 (`entity_links__blocks_to_relations`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: making one needs edit on the waiting task and view on the other (a member with Links but without Tasks edit is refused); a loop is refused; changing the kind or deleting the link ends the dependency; existing links were turned into dependencies unless that made a loop.
+  - Why: AC1.14, one store (REPLAN §6.5).
+  - Rejected: a "blocks" link that only some members can make blocking.
+- **D8-10 · Old builds: the minimum version is the app version, enforced in the Supabase client's fetch** → TV-D8 (`src/lib/min-build.ts`, `MinBuildBanner`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `app_settings.min_build` is compared with the version Settings → About shows (semver); below it every table write, RPC and upload is refused with one message and a strip says "Update Moduo" (desktop: Check for updates; web: Reload); sign-in, reads, the RPCs listed as reads (`READ_RPCS`, sorted by what the database marks them) and Edge Functions pass; a test fails when the app calls an RPC nobody has sorted; it starts at "0.0.0".
+  - Why: one place catches every write path; nothing to remember per feature.
+  - Rejected: a header the database checks (builds before D8 never send it).
+- **D8-11 · Unknown statuses show as their nearest one** → TV-D8 (`normalizeTaskStatus`, `isOpenTaskStatus`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `backlog` reads as To do, `wont_do` as Won't do, anything else unknown as To do; one "is open" rule in `@contracts/vocabularies` used across the app and MCP.
+  - Why: a row is never dropped (REPLAN §6.3), and an unknown state should stay in view.
+  - Rejected: hiding unknown rows (the old behaviour) and treating them as done.
+- **D8-12 · The trail leads with the server's create line; description typing is one line per stretch** → TV-D8 (`feed.ts`, `tasks_op_update`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: when a `tasks.create` row exists it replaces the synthetic "created this" (so an agent's create names its key); repeated description saves by the same person within 10 minutes, with nothing else in between, log once.
+  - Why: every edit is logged now; the trail must stay a quiet mirror (Pillar 3).
+  - Rejected: logging every save (description autosave would flood the trail).
+- **D8-13 · MCP gets `tasks_create` and `tasks_update` now; the full surface stays TV-D16's** → TV-D8, TV-D16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: minimal create/update tools on the ops (fields, project, parent, assignee on create); status and assignee keep their own tools; handles lead every task in results.
+  - Why: AC12.1 says agents create and edit through the ops; D16 adds status-by-name, teams, sessions, imports and handle arguments.
+  - Rejected: waiting for D16 (agents would keep no way to capture).
+- **D8-14 · A task you can't see reads as missing in every op answer; a parent's delete and move never trip over someone else's subtask** → TV-D8 (`tasks_op_update`, the one-task ops, `tasks__check_parent`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: every op on one task (edit, status, commit, uncommit, skip-today, reschedule, unschedule, skip occurrence) answers "Task not found" for a task the caller can't see, even when nothing would change; a parent must be a task the caller can see (same words when it's missing); deleting a parent promotes all its live subtasks, including ones the deleter can't edit, and answers only with those they can see; moving a parent carries the subtasks the mover can edit, and anyone else's stays in its project (this narrows TV-P0's "a subtask never stays behind" to the subtasks that are yours to move; the app puts a left-behind one back).
+  - Why: an op answers with full rows and specific refusals, so it must never answer about a task the caller couldn't read; a subtask outliving its parent is the server's consequence of the delete, and moving someone's private step into a shared project would expose it.
+  - Rejected: refusing the delete or the move when a subtask isn't editable (a private step would block your own task, and the refusal would hint it exists), and carrying it anyway (it would show up in the new project).
+- **D8-15 · Completion history follows what was actually done** → TV-D8 (`task_completions`, `tasks__record_completion`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a task created done (an import) records a completion; done → To do or In progress, and done → Won't do, take back the latest completion (it didn't stand); one completion per cycle.
+  - Why: the history answers "when was this really done", which a Won't do contradicts.
+  - Rejected: keeping a completion after Won't do (two answers for one cycle).
+## 2026-10-10 · TV-U4 (tasks-v3 block 7): drag and drop — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 7 (#329 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.4, AC13.3, default m, calls a, 20, 39, k) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U4-1 · Manual order lives in a project or the Inbox only; All, My tasks and the Queue's board never write a position** → TV-U4 (`src/features/tasks/order.ts`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a drag or ⌥⇧↑/↓ reorders only in a project's or the Inbox's view under Order by: Manual. Sorted, the view shows "Sorted by due date · Back to manual order" under the toolbar, the drag shows the note where the line would be, and the drop writes nothing and asks with a toast ("Sorted by due date" · Back to manual order). Across projects (All, My tasks, the Queue's Board) a drag only changes the field of the group it lands in (status, priority, assignee, project), keeping the task's place; a slot in its own group is no drop, with no note. This includes All grouped by project, where research §3 had "drag inside each project group".
+  - Why: default m and AC11.4 say cross-project views never write positions; one rule for every cross-project view is easier to learn than "All by project only". TV-U10 can add the in-group reorder for All by project if the List rebuild wants it.
+  - Rejected: #329's reorder in every list; reorder inside All's project groups.
+- **U4-2 · A move into another project that wasn't placed goes to that project's end** → TV-U4 (`dropTask`, `bucketEndPosition`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a sidebar project row, a Board project column or a List project group (across projects) moves the task to the end of the project's manual order, its subtasks following (Won't do and done ones too). The view itself never chose that place, so U4-1 holds. A subtask moved to another project on its own comes out of its parent (a subtask lives in its parent's project); nesting under a task in another project moves the child there.
+  - Why: keeping the old key would land the task somewhere random in the new project's order; Todoist and Asana file a moved task at the end.
+  - Rejected: keeping the old position; asking where.
+- **U4-3 · A project task is never dropped into the Inbox** → TV-U4 (`railDropAction`, `canMoveInto`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the Inbox sidebar row stays a droppable that never accepts (so a release over it lands nowhere instead of on the Board's nearest column); the Inbox group in All grouped by project and the Inbox column of the Board take no task from a project either. Inbox → project, and the Inbox's own order, still drag.
+  - Why: the edge case "a shared task never turns private by a drop" (REPLAN 20).
+  - Rejected: Inbox row only (the group and column would leak the same way).
+- **U4-4 · Undo on every drop, never over a newer change** → TV-U4 (`useTasksModule.dropTask`, `drop-write.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: every drop and move key saves through one `dropTask`: its writes go one after another (field write, then the status op, then the assign op), and only once all landed does the toast say what happened ("Moved to Website", "Moved to In progress", "Assigned to you", "Moved under “Plan launch”", "Moved up") with the 8 s Undo. A failed drop says why and offers no Undo. Undo puts back each field the drop changed unless it changed since, and then says "Undo kept a newer change to “…”". The rail's Queue drop has Undo too (out of the queue); Queue reorders by drag or ⌥⇧↑/↓ undo to the previous line-up. A drop into Done that moved a task out of a queue doesn't requeue it on Undo (the server's rule since TV-D2).
+  - Why: call a; #329's "Moved to X" showed even when the move failed, and its parent + status went as two writes at once.
+  - Rejected: Undo by reload; an Undo that overwrites whatever is there.
+- **U4-5 · The drop targets: Won't do yes, a day no, a former member no** → TV-U4 (`groupAccepts`), TV-U15, TV-D7
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a drop into the Won't do group (List) or column (Board) marks it Won't do, with Undo (TV-U2 left that to this block); a Date group takes no cross-group drop (Upcoming's drag-to-reschedule is TV-U15's); an assignee group of someone who can't take tasks takes none. Done drops still finish only the task: 87's "finish its open subtasks too" goes with the status op rework (TV-D7/TV-D9).
+  - Why: each is either a write the drop can make cleanly today or another block's.
+  - Rejected: refusing Won't do drops; guessing a date field from a Date group.
+- **U4-6 · The keys: `>` `<`, ⌥⇧↑/↓; the Board's keys wait** → TV-U4 (`list-keys.ts`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `>` makes the selected task a subtask of the row above (one level; across projects it moves there), `<` brings a subtask out to the top level right after its parent (where the order is manual), ⌥⇧↑/↓ move it one place among its siblings (manual order only; the Queue moves in its line-up); every one has Undo. ⌥⇧←/→ (across columns) and Group by Assignee/Priority on the Board come with the Board rebuild (TV-U11), which brings the Board's keyboard cursor.
+  - Why: default k and the keymap's move keys; the Board has no keyboard cursor yet to hang them on.
+  - Rejected: ⌘] / ⌘[ (Back and Forward), ⌘↑/↓.
+- **U4-7 · The drag preview sits beside the pointer in the List** → TV-U4 (`overlayBesideCursor`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the List's drag preview is a 256 px title chip just below-right of the pointer, so it never covers the row it points at (the line, the nest tint, the sorted note); the Board's card and the Queue's row keep their place under the grab (their collisions measure the dragged box). Screen readers hear titles and row or column names, never ids.
+  - Why: call 39's one drag preview has to leave the drop target visible.
+  - Rejected: #329's full-width preview at the grab offset.
+
+## 2026-10-10 · DS-6 (tasks-v3 block 8): the north-star kit, the fix list and the lint guards
+
+- **Group headers are sentence case as typed, never small caps** → DS-6 (`src/components/ui/group-header.tsx`, `NavSectionHeader`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (follows call 40 and both prototypes' `.ghead`).
+  - Decision: `GroupHeader` (list groups, board columns, timeline lanes, Upcoming's days) and the rail's `NavSectionHeader` show the name as typed at 13 px medium with the count in the tertiary level; `Eyebrow` small caps stay for fixed chrome only.
+  - Why: a group is usually named by a person (a project, a status, a team), and call 40 says people's words are never capitalised; the visual audit's "eyebrow + plain count" contract predates that call.
+  - Rejected: building GroupHeader on `eyebrowVariants` as the audit's §C wrote it.
+- **Three readable text levels: the tertiary one is `--subtle-foreground`** → DS-6 (`tokens.css` §5b, DESIGN_RULES R11)
+  - Who: agent's choice within call 38, deferred to by Maciej, 2026-10-10.
+  - Decision: `color-mix(in oklab, var(--muted-foreground) 86%, transparent)`, about 6:1 on dark, the prototypes' `--text-3`; translucent, so it reads the same on card, background and popover. The kit uses it for counts, timestamps and hints; existing `/70`-style fades elsewhere are left for each module's rebuild.
+  - Why: call 38 left the exact step to round 2; 86% keeps a visible step below secondary (8.5:1) while staying well above 4.5:1.
+  - Rejected: `/75` of muted (≈ 5:1, too close to the line on light); a sweep of every fade now (DS-5's sweep is retired).
+- **Avatars: two initials on a hue keyed by id; teams first letter + next consonant** → DS-6 (`src/components/ui/avatar.tsx`)
+  - Who: agent's choice within calls 43 and 95, deferred to by Maciej, 2026-10-10.
+  - Decision: people take first + last word ("Maciej Grzywacz" → MG) or a single word's first two letters ("Maciej" → MA, "Mike" → MI); teams take two words' initials or a single word's first letter and next consonant (Design → DS, Development → DV), editable later (`letters`, TV-D10); the hue is an FNV hash of the id (name as fallback) over six label hues (gray means no one, red reads as an error); initials sit on the hue mixed 48% into the card (`--label-fill`) in the foreground colour; the icon rung uses a new 9 px step (`--text-3xs`).
+  - Why: call 95's own examples (DS, DV) need the consonant rule for teams; a person's single name must still tell Maciej from Mike; keying on the id keeps a colour through a rename.
+  - Rejected: one letter on a hue (the audit's fallback: Maciej and Mike can still collide); the 18% `--label-surface` tint (too faint at 16 px).
+- **One floating surface: hairline edge, control radius, `motion-pop`** → DS-6 (`src/components/ui/surface.ts`, `global.css`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (the prototypes' `.menu`).
+  - Decision: popover, dropdown and context menus, select lists and tooltips share `FLOATING_SURFACE` (`rounded-md border-hairline bg-popover` + `motion-pop`); FilterBar and DisplayMenu lose their `rounded-lg` override; the tooltip leaves tw-animate for `motion-pop`, which now also answers Radix's `delayed-open` / `instant-open`; dropdown and context menus cap at the height Radix measures on their side and scroll inside. Inline cards (a comment, the composer) keep `rounded-lg`: they are cards, not floating.
+  - Why: AC14.3's "two floating-surface recipes"; the prototypes draw menus at the control radius with a hairline.
+  - Rejected: `rounded-lg` for every floating surface (rounder than any prototype menu).
+- **The guards live in `lint:tw` and `lint:css`; small caps fail closed** → DS-6 (`scripts/check-text-rules.ts`, `.stylelintrc.json`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: rotated text (any `writing-mode`, a 90° / 270° turn anywhere but on an icon's own tag, inline `rotate:` included) and small caps on people's words (an `Eyebrow`, menu label or `WidgetSectionLabel` with an expression child, a `Field label` / `CommandGroup heading` expression, `eyebrowVariants()` outside the primitives, `capitalize`, `font-variant` small caps) fail `lint:tw` unless the site is on the reviewed allowlist, where each entry excuses exactly one site; the CSS forms fail `lint:css`. Known people's words in other modules (a CalDAV account name in Settings and the calendar rail, an email sender in a row menu, the booking host's name) are listed as debt for their rebuilds; a test keeps Tasks out of that list and checks each file has exactly as many sites as entries.
+  - Why: the spec's `lint:controls` never landed on this line (the control-sizing branch is not an ancestor), and a third linter would duplicate `lint:tw`'s walk; a fail-closed allowlist is the only static check that can't miss a new name.
+  - Rejected: a denylist of "user-looking" property names (misses the next one); fixing the three other-module sites now (DS-5's sweep is retired).
+- **Native date, time and number inputs give way to `DateField`, `TimeInput` and `NumberInput`** → DS-6 (`date-field.tsx`, `input.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `TimeInput` is a token text field that shows "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur and steps 15 minutes on ↑ / ↓; `NumberInput` takes digits only, clamps and steps; DateField's trigger reads "Oct 16, 3:00 PM" (call 41). Tasks adopts them now; Calendar, Email, Contacts, Settings and the dashboard keep their native inputs until each is rebuilt. Inside a date picker (TV-P0's save-once draft) the time field is "live": a time that looks finished ("3pm", "15:30", "1530") goes into the draft as you type, so a click outside that closes the picker before any blur keeps it, and clearing the field puts back the time from before you typed (an empty field never saves a stray digit).
+  - Why: the fix list's "native inputs"; a native time field draws browser chrome inside token UI and ignores the 12-hour grammar.
+  - Rejected: keeping `<Input type="time">` inside DateField (still the browser's own control).
+
+## 2026-10-10 · TV-U2 (tasks-v3 block 6): toolbar, Filter, Display, search — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 6 (#330 re-scoped; [specs/tasks-v3.md](../../specs/tasks-v3.md) AC11.2–11.3, AC1.4, AC13.3) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **U2-1 · Group by is Status · Priority · Assignee · Date · Project · None until sections and teams exist** → TV-U2 (`helpers.ts` `GROUP_BYS`, `display.ts`), TV-D10/TV-U10 (Section, Team)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: default l's order with the two missing dimensions left out until TV-D10 creates their data; "None" stays, listed last; Project only across projects; the stored key stays `bucket` until TV-D7. Defaults: All by project, My tasks by status (84), a project, the Inbox and the Queue ungrouped (a project's default becomes Section once it has sections).
+  - Why: a Section or Team choice today would put every task in one "No section" group; None is how a flat project list is asked for.
+  - Rejected: listing Section and Team now; dropping None.
+- **U2-2 · The Date grouping is rolling, and its five days are named in full** → TV-U2 (`dateGroupOf`, `dateGroupLabel`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Earlier · Today · Tomorrow · the next five days ("Saturday" … "Wednesday") · Later · No date, from the row's date (next session or due, whichever is first by day); "This week" stays only in Filter → Due date / Scheduled.
+  - Why: call 83; rolling days never depend on where the week starts, so Time & region (TV-D14) changes nothing here; a header reads as a word, not a column value.
+  - Rejected: "Sat"-style headers; week-based groups.
+- **U2-3 · Rows: Detailed shows what today's row can carry; the rest waits for the kit Row** → TV-U2 (`row-layout.ts`, `task-row.tsx`), TV-U10, TV-U11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Display → Rows: Standard · Detailed, remembered per view (scope), Standard by default. Detailed adds the status name, "1h 20m / ~4h", the assignee's first name and the project on every row; handle, Project › Section, Due and Next session as two columns, waiting, updated and sortable headers come with TV-U10 on DS-6's Row. The Board has no Rows control until TV-U11's cards. The preset is stored per scope only: RESEARCH 2's user-level default (with per-view overrides) and "developers start on Detailed" arrive with onboarding's role question (TV-U17), which will set that default.
+  - Why: a preset that changes nothing would be a lie, and building the full Detailed anatomy on the row that TV-U10 replaces would build it twice.
+  - Rejected: Rows as a placebo control; the full anatomy now.
+- **U2-4 · A Status filter decides the Board's status groups** → TV-U2 (`statusesLetThrough`, `task-board-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "Status is Won't do" shows one Won't do group; "is not Done" shows To do and In progress; without a Status filter the Board shows To do · In progress · Done, plus Won't do only while a kept Won't do card (TV-P0) is on it. Won't do cards fade and strike through like their rows.
+  - Why: AC1.4 — with three fixed columns the Won't do cards sat off-screen to the right of three empty ones.
+  - Rejected: always three columns; a Won't do column on every board.
+- **U2-5 · A link lands on its task past saved filters, and never clears them** → TV-U2 (`useTasksFilters` `keepTaskId`, `tasks-plan-view.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a deep-linked task (and the selected task just marked Won't do) stays listed, with its parent, past the filters and search it arrived under, while it's selected; changing either lets them decide again. DF-1's "clear the filters that hide the target" is gone. New pre-fills from the filters on screen only (never in Focus) and never names someone who can't take the task.
+  - Why: filters are saved per scope now (#330), so clearing them on a link erased a saved setup, and only the scope you were leaving; the target's own scope could still hide it and the link landed on another task (the validator's MAJOR). Keeping it is how Display already treats a linked completed task (TV-U1).
+  - Rejected: clearing the target scope's saved filters; clearing them in memory only.
+- **U2-6 · "Yesterday" stays in the one grammar; #330's second date formatter is gone** → TV-U2 (`day-buckets.ts` is Filter-only now), DS-6/TV-D14 (owners of 41)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the verdict's "drop Yesterday" was about #330's duplicate formatter, which is deleted; `src/lib/time-format.ts` keeps "Yesterday" as TV-P0 built and tested it.
+  - Why: one grammar, changed in one place by the blocks that own it.
+  - Rejected: changing the shared grammar from a toolbar block.
+- **U2-7 · Left for later blocks** → TV-U4, TV-U10, DS-6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the Board's drag-while-sorted toast keeps #330's words until TV-U4 builds default m ("Sorted by due · Back to manual order" with its action), and a drop on the Won't do group has no Undo until TV-U4's "Undo on every drop"; the checkbox on a listed Won't do task still marks it Done (research §1: clicking a Won't do glyph reopens it, TV-U10's status glyph); a task just checked off under a filter that excludes it leaves at once, and a linked task kept past the filters leaves once you move off it, while Display's opened-here keep lasts until the scope changes (TV-U10's "stays listed" should make the two one rule); the DisplayMenu/FilterBar primitive stories still show v2's words (Bucket, Time, Archived), and the DropdownMenu primitive doesn't scroll, so a long project picker is cut off at the window's edge (DS-6).
+  - Why: each is those blocks' own work, and DS-6 is rebuilding the primitives in parallel.
+  - Rejected: half of m's copy without its button.
+
+## 2026-10-10 · TV-P0 trust pass — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 3 ([specs/tasks-v3.md](../../specs/tasks-v3.md) AC1.3–1.12, 1.15–1.16) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
+
+- **P0-1 · A bare hour is daytime: 1–6 means the afternoon** → TV-P0 (`parse/capture-parser.ts`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "at 5" is 5 PM and "at 5:30" is 17:30; 7–11 stay morning, 12 is noon; an explicit am/pm, a 24-hour hour ("at 17") or a zero-padded clock ("05:30") is taken as typed. With no day named, today if it's still ahead, else tomorrow.
+  - Why: REPLAN P0 #3 asks for daytime; 1–6 AM is almost never what a task means, 7 is split (wake vs dinner), so it stays morning.
+  - Rejected: 1–7 PM (turns "wake at 7" into the evening); always the next occurrence (chrono's default, the bug).
+- **P0-2 · Only a clear date phrase is a date** → TV-P0
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a phrase is read as a date only if it names a day ("3 May", "tomorrow"), a weekday or a clock time; a month or a year alone stays a word ("Send March report"). A date typed with a repeat starts the repeat there ("tomorrow 3pm every week"); "every month … on the 1st" repeats on the 1st, and the words in between stay. The connective before a date ("by", "on", "at", "due", "from") goes with it.
+  - Why: AC1.3, "keeps the words people typed".
+  - Rejected: a word list of month names to skip (misses "Dec 15" vs "December plan" the same way).
+- **P0-3 · "Won't do" reads as one, and stays in view until you move on** → TV-P0 (label), TV-U2 (the Filter → Status list), TV-D7 (the stored value)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the label is "Won't do" (and "To do" for todo) everywhere now; the ⋯ item says "Won't do"; the panel shows a "Won't do · Reopen" line; the trail says "marked this Won't do" / "reopened this". A task you mark Won't do, or open from a link, stays listed (struck and dimmed, like a done one) and selected until you change scope. The Queue is the exception: a Won't do task leaves every queue on the server, so it leaves the line-up at once (reopen it from All or its link).
+  - Why: AC1.4; Reopen was unreachable because the task vanished the moment it was archived.
+  - Rejected: waiting for TV-U2's Filter → Status to make them reachable (the panel was the trap, not the list).
+- **P0-4 · The three empty states** → TV-P0; DS-6 standardises them on the kit
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a skeleton until the first load answers (later reloads keep the rows); "No tasks match · Clear filters" when a filter hides everything; "No tasks in <scope>" + Add a task + "press c" for an empty scope.
+  - Why: AC1.5 and spec §8 "States for every view".
+  - Rejected: keeping "Nothing here yet" for the truly empty case (it read as broken when it flashed).
+- **P0-5 · A notice names its task, in quotes** → TV-P0; TV-D12 rebuilds the notice table
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: "Mike assigned “Draft the brief” to you", "Ola commented on “Q4 plan”: “looks good”". The name is the title the event carried (assigned, completed, unblocked); a comment's notice, which carries only an excerpt, looks the task up in the entity registry (RLS-checked, so a task you can't see is never named). Only the sentence's own "this" is replaced, never one in the user's words.
+  - Why: AC1.7. No schema change: the triggers already store the title.
+  - Rejected: a server-side label join in `notifications_list` (a migration in a no-migration block).
+- **P0-6 · Moving a parent moves all its subtasks** → TV-P0
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: done subtasks too, to the project the parent actually landed in; one write per subtask; no Undo (bulk Undo is TV-U12's).
+  - Why: AC1.8; a subtask left behind showed at the top level of the old project.
+  - Rejected: moving open subtasks only (splits a finished checklist across projects).
+- **P0-7 · New in Focus or the Queue goes to the end of Up next** → TV-P0; the top of Up next stays TV-U14's (call 90)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: ⌘N / New / `c` while in Focus or the Queue scope creates the task and queues it at the end of my line-up.
+  - Why: AC1.9 says "lands in Up next"; call 90's "top of Up next" comes with capture v3.
+  - Rejected: the top now (two queue ops racing, and it would take the Now card's place).
+- **P0-8 · "Private project", and a "Private item" panel for links you can't open** → TV-P0; RF-1 tells deleted from private
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a task in a project you can't see shows its project as "Private project" (lock icon) wherever a project name shows; its deep link opens it in All. A link someone followed (notification, chip, widget) to a task you can't open shows "Private item · This task isn't shared with you, or it no longer exists · Back to your tasks" in the panel; a stale id that only returns on refresh or back/forward clears quietly.
+  - Why: AC1.10; the old fallback labelled it Inbox and the deep link landed on another task.
+  - Rejected: "Deleted task" vs "Private item" now (the client can't tell them apart without the registry, RF-1).
+- **P0-9 · Date pickers keep a draft and save once** → TV-P0; DS-6's DateField builds on it
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: a date-only pick saves and closes; with a time, the day and time are a draft saved when the picker closes or on Enter, and Esc throws the draft away. Rows use the same picker as the panel (presets, calendar, time). A scheduled time on its own goes through the reschedule/unschedule op, so it's in the trail from any surface; a due date stays a field write until TV-D8's update op.
+  - Why: AC1.12; typing "10:30" in the old native input fired four writes.
+  - Rejected: debouncing the native input (still several writes, still not in the trail).
+- **P0-10 · Two initials, from the person's own name** → TV-P0; DS-6 adds the stable colour and the team squares
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: first and last name's initials, or a one-word name's first two letters; never from the picker's "Me"; "?" for someone without a name. The icon-rung avatar gets a `--text-3xs` (9 px) token so two letters fit at 16 px.
+  - Why: AC1.15 and call 43.
+  - Rejected: bumping row avatars to 20 px (changes every row's column widths before TV-U10).
+- **P0-11 · The one grammar lives in `src/lib/time-format.ts` now** → TV-P0; TV-D14 feeds it Settings → Time & region
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: call 41's forms; a day and a time join as "Tomorrow, 3:00 PM"; past dates read absolute ("Oct 6"), except Yesterday; the trail and the meta line use "Oct 6, 12:07 PM"; Focus's running total shows seconds under a minute. Day order and 12/24 h follow the device.
+  - Why: AC1.15; the spec puts the module at D14, but the grammar is P0's.
+  - Rejected: per-surface Intl formatters (the source of the drift).
+- **P0-12 · Nothing truncates in the panel, on cards or in Calendar's Tasks panel** → TV-P0; rows and the rail follow in TV-U10/TV-U6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: property values and names wrap between words (never mid-word), a value's note ("passed") wraps under it, card meta wraps to a second line, a date keeps its full width (a row's date column grows for another year's date).
+  - Why: AC1.16 and calls 41, 89.
+  - Rejected: call 42's "+n" for card meta now (DS-6's, with the kit's MetaCount).
+- **P0-13 · Focus time saves from the app shell** → TV-P0; TV-F6 builds the one time engine
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: the engine's save sink is registered once in the app chrome and writes straight through `tasks_op_track_time` (the server keeps the total and answers "gone"); a mounted Tasks page shows each saved total. The module's old sink stays, unregistered, with its tests, for TV-F6.
+  - Why: AC1.6; time tracked on Notes waited until Tasks was opened again.
+  - Rejected: keeping the Tasks module mounted in the background (loads every task on every page).
+## 2026-10-10 · SH-1 (tasks-v3 block 4): the shell's panel dropdown, capture registry and motion
+
+- **⌘⇧K keeps capturing notes, events and contacts: provisional types until each module is rebuilt** → SH-1 (`src/lib/capture-registry.ts`, `features/{notes,calendar,contacts}/capture-type.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: Task is the type the capture opens as; Notes, Calendar and Contacts register the one-line captures ⌘⇧K already made with "/note", "/event", "/contact", now picked with ⌘2 / ⌘4 / ⌘6 or the type chip; "/note" in a title is just text (90b). With only Task registered, ⌘2–7 do nothing (proven by a test registry).
+  - Why: the spec's "Task registered" read literally would have removed three captures that work today (DF-20), and 90a's point was that capture shouldn't lock the workflow into tasks.
+  - Rejected: Task only until each rebuild (a visible regression); keeping the "/note" prefix (90b: one way per job).
+- **A task opened from a note is an item, not a tab** → SH-1 (`src/routes/pages/notes-page.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Notes' old transient "Task" tab shows as "← task title" over the view (back arrow, Esc, or picking a view closes it); Email's permanent Task tab stays a registered view; every other tab registers unchanged (ids, labels, saved choice).
+  - Why: 72a — references open as items, so the menu only lists hand-picked views; it was already an opened reference in all but name.
+  - Rejected: registering "Task" as a Notes view that appears and disappears (the menu would change shape).
+- **One registered view = a plain title** → SH-1 (`src/components/app/right-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: Tasks (Details) and Contacts (Notes) show the view's name with no chevron; the menu appears once a second view registers. Calendar lists Detail · Notes, a hairline, then Tasks (alongside); Email and Notes are all *about this*.
+  - Why: a one-entry menu is a dead click; the title row still names the panel (72a).
+  - Rejected: a menu with one checked entry.
+- **⌥1–9 pick the view at that menu position; Esc steps back one item** → SH-1 (`src/lib/panel-registry.ts`, `right-panel.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (keymap rules 4 and 8).
+  - Decision: matched on `event.code` (macOS types ¡ ™ £ for ⌥1–3); never from a field, never while a dialog that doesn't hold the panel is open; after "back", focus lands on the title row.
+  - Why: the same keys work in every module because positions come from the registry; a modal or a typing field must never move the panel behind it.
+  - Rejected: Ctrl+digit (Ctrl is ⌘ on Windows); per-module hard-coded keys.
+- **Motion: opacity on the fade token, movement on fast/base/slow, no blur anywhere** → SH-1 (`tokens.css` §12, `global.css` "Motion patterns", DESIGN_RULES R6)
+  - Who: agent's choice within Maciej's call 81 (2026-10-10).
+  - Decision: `--motion-slow` 280 ms; two new tokens, `--motion-shift` (panel travel) and `--motion-grow` (popover start scale), go neutral under reduced motion so each pattern becomes a plain fade; `.motion-pop` replaces the blur motif in popover, menu, select and dialog and grows from Radix's origin; a side panel slides in only when toggled, not when a page mounts; every `backdrop-blur` is gone.
+  - Why: one rule makes "reduced motion = opacity only" hold for both the OS setting and Settings → Motion without per-pattern exceptions; blur was left out for performance (81).
+  - Rejected: per-pattern reduced-motion overrides (they drift); animating panels on every module switch (noise).
+- **The spec's e2e capture test becomes component tests** → SH-1 (`src/components/app/capture-shell.test.tsx`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10.
+  - Decision: `tests/capture.spec.ts`'s ⌘⇧K / ⌘1–7 cases run as component tests in `bun run verify` (with the app's real global key handler); the e2e file waits for an e2e harness on the local stack (TV-U14 owns ⌘N → here).
+  - Why: `tests/` has no e2e login on the local stack yet, and an e2e file that always skips proves nothing.
+  - Rejected: an `E2E_APP_URL`-gated spec like `e2e/tasks/timeline.spec.ts` (never runs unattended).
+
+## 2026-10-10 · TV-D5 finished (tasks-v3 block 1): a quiet refetch never runs the repeat catch-up
+
+- **The client repeat catch-up runs after a full load only** → TV-D5 (`src/features/tasks/hooks/use-tasks-module.ts`, the `loadStamp` bump in `loadImpl`)
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: opening Tasks, a reload or a workspace switch reopens due repeats as before; coming back to the window or reconnecting refetches without it, unless that refetch is the first read of the workspace that worked (the app opened offline).
+  - Why: #315 refetches on every return, and the pass would reopen a repeat checked off on Home or by MCP the same day (P0 #2); TV-D8's server roll-over replaces the client pass.
+  - Rejected: landing TV-D8's server fix first (it depends on this block); keeping the pass on reconnect (a reconnect hits the same bug).
+
+## 2026-10-10 · Tasks v3 re-plan (calls 13–98, defaults a–u, §6)
+
+[specs/tasks-v3.md](../../specs/tasks-v3.md) supersedes tasks-v2 as the plan of record and says only *what* to build; the entries below are the *why*. Source: [.design/tasks-v3/REPLAN.md](../../.design/tasks-v3/REPLAN.md) §8 (numbers are stable, never reused); calls 1–12 are in [.design/tasks-dogfood/RESEARCH-2026-10.md](../../.design/tasks-dogfood/RESEARCH-2026-10.md).
+Format (Maciej, 2026-10-10): who · decision · why · rejected, four lines at most. "Agent's choice, deferred to by Maciej" entries are confirmed for building and may be reconsidered.
+
+### 2026-10-10 · Tasks v3 re-plan — structure (13–20a, 28, 87)
+
+- **13 · The container is called "Project"** → TV-U6, TV-D10 (`buckets` keeps its name until TV-D7; MCP aliases kept)
+  - Who: Maciej, 2026-10-09.
+  - Decision: "Project" everywhere in the UI, MCP and docs; the schema renames only at the cleanup.
+  - Why: every target role says project (or course); a client can be told "your project"; the spine already calls it one.
+  - Rejected: "bucket" (nobody's word; Planner uses it for a column).
+- **14 · The shape: Area → Project → Section** → TV-D10, TV-U6, TV-U10
+  - Who: Maciej, 2026-10-10 (re-asked "what do areas and sections do?").
+  - Decision: three levels with distinct jobs; only the project is required; a task never sits in an area, a section never spans projects.
+  - Why: areas tidy the sidebar once projects multiply, sections tidy a project once tasks multiply; a new user sees just Inbox and projects.
+  - Rejected: areas as containers with permissions (candidate B) and tasks on several lists (C).
+- **15 · Areas = today's rail sections, made real** → TV-D10 (`areas` from `group_label`), TV-U6
+  - Who: Maciej, 2026-10-09 ("ok, but explain why").
+  - Decision: an area has name, colour, order; hidden until created; no permissions, no page, no tasks inside; the rail's "Section" becomes "Area".
+  - Why: they already exist as a text label copied onto every bucket; grouping is the first thing every tool adds after projects; kept light so "area or project?" never comes up.
+  - Rejected: keeping the label-per-bucket hack (renaming means relabelling every bucket; nothing else can use it).
+- **16 · What a project carries** → TV-D10, TV-U16
+  - Who: Maciej, 2026-10-09.
+  - Decision: description, status Active · On hold · Done, target date, colour, area, client link, sections; computed progress, time, files, waiting, activity; Archive stays separate.
+  - Why: On hold and Done only change the overview, a dimmed row and MCP, so they never hide tasks; archive is about visibility, not the work.
+  - Rejected: a "health" / "at risk" field and status-update posts (alarm framing).
+- **17 · An optional project Lead** → TV-D10
+  - Who: Maciej, 2026-10-09.
+  - Decision: yes, optional and hidden until set.
+  - Why: PMs and agencies ask "whose project is this?"; cheap.
+  - Rejected: no lead at all (at ≤5 people assignees answer it, but it costs nothing to offer).
+- **18 · Sections inside a project** → TV-D10, TV-U10, TV-U11, TV-TL1
+  - Who: Maciej, 2026-10-09 (reworded by 53a on 2026-10-10).
+  - Decision: ordered, optional, datable parts of a project (phases, weeks, sprints, milestones, topics); never stages of work.
+  - Why: a dated section is a Timeline phase marker with progress; imports land Todoist sections and Trello lists here; stages belong to statuses (53a).
+  - Rejected: grouping the Board by tag (tags aren't exclusive, a card could sit in two columns).
+- **19 · No separate milestone or sprint object** → TV-D10, TV-TL1
+  - Who: Maciej, 2026-10-09.
+  - Decision: a dated section *is* the milestone, phase or sprint; a saved view covers the rest; a due-only task is a point (re-worded by 68).
+  - Why: one object fewer to learn; the Timeline draws sections as bands and diamonds.
+  - Rejected: milestone and sprint tables of their own.
+- **20 · The Inbox is personal; the sidebar shows the split with a hairline** → TV-U6, TV-U15
+  - Who: Maciej, 2026-10-10 (re-asked "why private?").
+  - Decision: per-person Inbox for captures; your block above a hairline, the workspace block below; "Only you see your Inbox…"; assigning an unfiled task moves it to that person's Inbox; filing makes it the project's.
+  - Why: captures are half-thoughts and people capture freely only in private; in a shared pile nobody owns the sorting; privacy lives on projects.
+  - Rejected: small "You" / "Workspace" labels (B; read as clutter, the welcome explains the split) and a shared team intake (deferred until outside intake exists).
+- **20a · Handing an unfiled task to someone asks for a project** → TV-U14, TV-U15
+  - Who: Maciej, 2026-10-10.
+  - Decision: "Assign to Mike · in [Bugs ▾]" in one picker; "Keep unfiled" allowed, then "Created by me" keeps sight of it.
+  - Why: an unfiled task that belongs to someone else belongs to nobody; the founder pair hits "where did it go?" daily.
+  - Rejected: Todoist's "no assigning in the Inbox" and a silent move into a private Inbox (trust bug P0 #10).
+- **28 · Subtasks stay one level** → TV-U18 (deeper levels flatten on import)
+  - Who: Maciej, 2026-10-09.
+  - Decision: one level, as today; imports flatten.
+  - Why: keeps rows, Focus and the panel simple; the vocabulary already says a subtask is never a parent.
+  - Rejected: nested trees.
+- **87 · Finishing a task finishes its open subtasks, with one Undo** → TV-U10, TV-F7
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: the same everywhere (List, Board, Focus's Done, agents); the toast names them: "Done · also 2 subtasks · Undo".
+  - Why: Todoist does this; Linear's opt-in leaves orphans that look unfinished.
+  - Rejected: leaving subtasks open.
+
+### 2026-10-10 · Tasks v3 re-plan — statuses, dates, repeats (21–27, 53, 53a, 53b, 68b, 77)
+
+- **21 · Four statuses; "Archive" on a task becomes "Won't do"** → TV-P0 (label), TV-D9, TV-D7 (value); superseded in part by 53/53a
+  - Who: Maciej, 2026-10-09.
+  - Decision: To do · In progress · Done · Won't do plus the Waiting field; won't-do tasks get a list and Reopen; "Archive" is kept for projects.
+  - Why: "archived" on a task read as hidden, not finished-without-doing; the label changes now, the stored value at TV-D7.
+  - Rejected: a fifth "Waiting" status (decided in research call 5: the field route).
+- **22 · Board columns from any grouping** → TV-U11
+  - Who: Maciej, 2026-10-09.
+  - Decision: status (default), section, assignee, priority, waiting-on; remembered per project.
+  - Why: one Display grammar for List and Board.
+  - Rejected: —
+- **22a · Custom columns are sections** → TV-U11
+  - Who: Maciej, 2026-10-10.
+  - Decision: "+ Add section" on a section board; rename, reorder, ⋯ → Rename · Set date · Delete (tasks go to "No section"); the UI never says "column"; cross-project boards use shared fields only.
+  - Why: a column field per board would be a hidden custom field (Notion's trap); a section belongs to one project.
+  - Rejected: a separate column field per board; renaming statuses (then re-decided by 53a).
+- **23 · A quiet "late" state for passed due dates** → TV-D9 (server flag), TV-U10
+  - Who: Maciej, 2026-10-09.
+  - Decision: muted, never red; grouped under Earlier; always offers Move · Won't do · Break down; "Rescheduled N×" goes.
+  - Why: alarm colours and debt framing are what "complete but calm" rules out.
+  - Rejected: red overdue, reschedule counters.
+- **24 · Reminders** → TV-D12
+  - Who: Maciej, 2026-10-09.
+  - Decision: "Remind me at…" plus 1 day / 1 hour before due; one precise notification, exempt from the digest.
+  - Why: a reminder is the one notification that must land on time (channels in 73).
+  - Rejected: —
+- **25 · Several work sessions per task** → TV-D10 (`task_sessions`), TV-U13
+  - Who: Maciej, 2026-10-09.
+  - Decision: a task can be scheduled into several calendar blocks; the estimate stops doubling as the block length.
+  - Why: real work on one task spans several sittings; one `scheduled_at` forced a fake single block.
+  - Rejected: one scheduled time per task.
+- **26 · Due dates on the Calendar** → spec §18 (Calendar contract; Calendar-module work)
+  - Who: Maciej, 2026-10-09.
+  - Decision: due-only tasks as all-day chips; Calendar gets a Month view.
+  - Why: students and PMs plan by the month; a due date is a day, not a time.
+  - Rejected: —
+- **27 · Recurrence: one task that comes back, with method a–i** → TV-D8 (server roll-over), TV-D12 (a–i), TV-U13 (picker)
+  - Who: Maciej, 2026-10-09 (parity) and 2026-10-10 (a–i, all of them).
+  - Decision: keep the cycling row; add RRULE rules, repeat-after-completion, due and scheduled moving together, completion history, subtasks resetting, ghosts on the Calendar, move-one/change-pattern, server roll-over, a picker with one summary line.
+  - Why: the copy model piles up overdue copies and duplicates links; the parts people miss from it are history and rules, which the cycling row can carry.
+  - Rejected: a new copy per occurrence (Linear, Asana, Jira), rotating or per-occurrence assignees.
+- **53 · Backlog: a fifth status, named "Backlog"** → TV-D9, TV-U11, TV-U10
+  - Who: Maciej, 2026-10-10 (the status); the word was his "50/50, your call" → agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: Backlog · To do · In progress · Done · Won't do; a backlog task keeps its details, sits out of counts, My tasks, Upcoming, Focus suggestions, drift, late and reminders, folded at the end; queuing or scheduling moves it to To do.
+  - Why: ideas crowd every active view; Linear, Jira and Plane use the word, so imports map one to one; 53a lets a project rename it "Someday".
+  - Rejected: a "someday" flag (odd mixes like someday + in progress) and a section named Backlog (no behaviour, still clutters counts).
+- **53a · Statuses per project, inside five fixed categories** → TV-D9 (`project_statuses`, `status_id`), TV-U11, TV-U13
+  - Who: Maciej, 2026-10-10 (round 2b), with his icon rule.
+  - Decision: each project renames, adds, hides and reorders statuses inside Backlog · To do · In progress · Done · Won't do; new projects start from the workspace default; icons belong to the category only (dotted · empty · half · check · crossed) and nobody edits them.
+  - Why: "done" has to mean one thing for Focus, counts, cross-project boards and agents, while other products let projects name their stages; stages leave sections and become statuses.
+  - Rejected: free-form statuses (every view would need telling what "Shipped" means) and one global custom list (projects differ).
+- **53b · A folded Board column is a small button, never rotated text** → TV-U11
+  - Who: Maciej, 2026-10-10 (round 2b), his version.
+  - Decision: icon · count · chevron stacked, ~32 px wide, in the column's place; hover shows "Backlog · 6"; drops work once unfolded; Backlog starts folded; the List keeps its "Backlog · 6" line.
+  - Why: Backlog shouldn't be a big always-visible panel; sideways text reads ~80 % slower (46a).
+  - Rejected: a full-height folded column with a horizontal header (the agent's first fix) and rotated labels.
+- **68b · Dates that contradict a dependency are shown, never prevented** → TV-TL2
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: a backwards arrow in the late tone, a "Waits on X, due after this" mark, one-click "Move to Nov 8"; loops stay refused by the database; stubs for undated, cross-project, hidden and same-day blockers.
+  - Why: dates and dependencies are both facts people set, in either order; "mirrors, not walls".
+  - Rejected: refusing the date.
+- **77 · A record of what got done, and when** → TV-D9 (`completed_at` / `completed_by`, per-cycle history)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: every completion stores when and who, per cycle; Filter/Group by Completed; "Done this month · 14 · 22h" on the project overview; a seeded "Done last week" view for PMs and founders.
+  - Why: repeat history, the client hub, the weekly review and the time report all need it, and "last 7 days" was guessing from `updated_at`; the trail tells one task's story but can't answer "what got done last week".
+  - Rejected: keeping the `updated_at` guess.
+
+### 2026-10-10 · Tasks v3 re-plan — navigation and views (29–30, 32, 82b–86, 88, 98)
+
+- **29 · The rail's smart views** → TV-U6
+  - Who: Maciej, 2026-10-09 (order renamed by 61).
+  - Decision: Inbox · Focus · Upcoming · My tasks · All, then Views, then areas and projects; Upcoming = your dated tasks plus unassigned ones in projects you can see.
+  - Why: Focus is what I'll do next in my order, Upcoming is what's dated; the two had never been told apart.
+  - Rejected: "Open at" (the time-of-day bucket, 30) and a workspace-wide "today".
+- **29a · Customize sidebar** → TV-U6
+  - Who: Maciej, 2026-10-10.
+  - Decision: a ⋯ shows or hides Focus, Upcoming, My tasks and All; the Inbox is always shown; built-ins can't be reordered.
+  - Why: every teammate's sidebar reads the same.
+  - Rejected: reorderable built-ins.
+- **29b · Pin to sidebar** → TV-U6
+  - Who: Maciej, 2026-10-10.
+  - Decision: "Pin to sidebar" in any project's or view's ⋯ adds it to a Pinned group that exists only once something is pinned; never suggested or pre-filled.
+  - Why: a short path to the few things you live in, without a standing empty group.
+  - Rejected: a pre-filled or suggested Pinned group.
+- **29c · No glyphs on views** → TV-U6
+  - Who: Maciej, 2026-10-10 (he asked to be proven wrong; the agent changed its recommendation to B).
+  - Decision: B — no glyph; view names align with project names; in Pinned, projects keep their colour dot and views show nothing.
+  - Why: most views are lists, so a column of identical glyphs is decoration; the "Views" header already says what they are.
+  - Rejected: A, an automatic layout glyph per view.
+- **29d · Saved views live in one place** → TV-U8
+  - Who: Maciej, 2026-10-10.
+  - Decision: no project tabs; a view saved inside a project keeps that project as a filter and lives in the sidebar's Views group.
+  - Why: one place to look; tabs could be added later without migrating anything if long Views lists show up.
+  - Rejected: views saved inside a project as tabs next to List · Board · Timeline.
+- **29e · Collapsible groups, one header style** → TV-U6
+  - Who: Maciej, 2026-10-10.
+  - Decision: Pinned, Views and each area collapse (remembered per person, open by default); sentence case, secondary text, a chevron; area headers show the open count; no small-caps labels; a fresh workspace has no headers.
+  - Why: one header style for every grouping (consistency item 7); headers only when there's something in them.
+  - Rejected: small-caps group labels.
+- **30 · Landing** → TV-U6
+  - Who: Maciej, 2026-10-09.
+  - Decision: retire "Open at"; Tasks opens where you left it; the first open follows onboarding.
+  - Why: a time-of-day bucket was a solo-planner assumption nobody used.
+  - Rejected: —
+- **32 · A full-page task view** → TV-U13
+  - Who: Maciej, 2026-10-09.
+  - Decision: expand a task from the panel into the whole centre, same route; the panel then shows Project; the description never folds.
+  - Why: long descriptions and subtask-heavy work need room (56).
+  - Rejected: a new route (AGENTS.md rule 7).
+- **82b · Multi-select: a short action row with keys, plus More** → TV-U12
+  - Who: Maciej, 2026-10-10 (round 2d/2e), his version.
+  - Decision: when a bottom-bar mode is active (triage, multi-select), the centre shows at most six actions with their keys, then More ▾: Complete `Space` · Focus `Q` · Assign `@` · Tag `#` · Date `D` · Delete `⌫`; "4 selected · Esc"; the panel's "4 tasks · Mixed" stays.
+  - Why: triage already works this way and he wanted it kept; `@` and `#` match the app grammar; Space (not Enter) completes because Enter opens; Q (not F) because F is Filter.
+  - Rejected: 82, a full row of twelve verbs ("that much horizontally stacked text"), and 82a, "New" turning into one "Actions · 4" menu.
+- **83 · One date grouping everywhere, by day** → TV-U2, TV-U15
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: Earlier · Today · Tomorrow · the next five day names · Later (+ No date outside Upcoming); day headers carry count and time; one row per task at its next session or due date; no week strip.
+  - Why: "This week" is one day long on a Saturday; the Board layout and the Calendar already give day columns and the grid.
+  - Rejected: a "This week" group (stays as a filter) and a week strip on top.
+- **84 · My tasks groups by status, In progress first** → TV-U2, TV-U15
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: the team block on top, then In progress · To do · Backlog folded; date grouping one Display choice away.
+  - Why: Upcoming already answers "when"; My tasks answers "what am I in the middle of".
+  - Rejected: date groups (the round-1c prototype).
+- **85 · Swimlanes: one level, off by default** → TV-U11
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: Display → Lanes: none · assignee · priority · project (across projects) · team; each folds, empty lanes hide; built after the Board basics.
+  - Why: Linear, Jira, GitHub, Notion, ClickUp and now Asana all have them; a second axis has to stay calm and fast.
+  - Rejected: nested lanes, lanes on by default.
+- **86 · Boards always open grouped by status** → TV-U11
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: status is always the default; Section is one Display choice away and remembered per project.
+  - Why: since 53a sections are phases and weeks, so "Week 1–12" would open as twelve columns.
+  - Rejected: 22a's "a project with sections opens grouped by section".
+- **88 · Reactions on comments: six, fixed, never notifying** → TV-U13
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: 👍 ✅ 👀 🙏 ❤️ 😄; hover shows who; nobody adds their own.
+  - Why: they replace "ok" / "thanks" comments and the notifications those send.
+  - Rejected: a free emoji picker (the same rule as icons) and no reactions (the gap audit's "not planned").
+- **98 · Archived projects and Recently deleted have no permanent rows** → TV-U6
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: both open from the sidebar's ⋯ next to Customize sidebar; archived projects show in search labelled "Archived"; a delete's Undo toast links to Recently deleted.
+  - Why: two standing rows at the bottom are the label clutter he dislikes (29e).
+  - Rejected: #328's two permanent sidebar rows.
+
+### 2026-10-10 · Tasks v3 re-plan — shell and the right panel (48b, 72, 72a, 89, 96, 81)
+
+- **48b · The layout is the product's skeleton** → SH-1, spec §19 (a founding rule, in Maciej's words)
+  - Who: Maciej, 2026-10-10.
+  - Decision: top bar global · middle the module · bottom bar the module's tools and each panel's toggle; left overview · centre surface · right context; no edge strips, rails or extra columns.
+  - Why: "it's the love for this layout that made me work on Moduo"; switching inside a panel happens in its own title row.
+  - Rejected: anything that adds a fourth column or a side strip.
+- **72 · One way to switch the right panel, for every module** → SH-1
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: B — the panel's title row is a dropdown that names the view and switches it; everything below follows.
+  - Why: four segments already crowd a 300 px panel, and the words drift between modules; B adds no width and holds unlimited views.
+  - Rejected: A, a slim icon strip on the window's right edge (the agent's recommendation; it breaks the 3×3 layout, 48b) and C, icon tabs in the header (fits about five).
+- **72a · How the dropdown works** → SH-1 (panel view registry; replaces `RightPanelSwitcher`)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: "Details ▾" lists this module's hand-picked views (about six at most) in two groups, *about this* and *alongside*; references open as items with the title becoming the item's name and a back arrow; collapse/expand stay in the bottom bar; Tasks: Details · Project / In flight, plus No date on the Timeline.
+  - Why: items open as a stack, so nothing makes the menu grow (his "20-item list" worry).
+  - Rejected: references as extra views in the menu.
+- **89 · The right panel is never narrower than 280 px** → SH-1 (a shell change for every module)
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: minimum 280 px; values wrap; the label column narrows from 96 to 76 px under 320 px.
+  - Why: at 240 px a value gets ~110 px, which is where "Wed, …" and "0m of …" come from; at 1,024 px the centre keeps ~450 px.
+  - Rejected: keeping the 240 px minimum and truncating.
+- **96 · Help and the running Focus timer move to the top bar** → SH-0 (its own session)
+  - Who: Maciej, 2026-10-10 (round 2e).
+  - Decision: top right: Focus timer (quiet "18:02" with a dot, only while running; hover pauses, click opens Focus) · Help (Docs, Keyboard shortcuts, Contact support, Report a bug) · bell · avatar; the bottom bar's centre becomes Search · Quick capture · New.
+  - Why: the top bar is global and a session runs whichever module you're in (48b); he wanted Help "even more quiet", next to the bell.
+  - Rejected: the timer chip in the bottom bar and a keyboard button there.
+- **81 · Motion: foundations now, no blur, signature moments last** → SH-1, DS-6 (tokens)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: three durations (~100 / 180 / 280 ms), one easing family (ease-out in, quicker ease-in out), four patterns, reduced motion → opacity only; no `backdrop-filter`; signature moments after the modules are done.
+  - Why: motion lives inside components, so adding it after the rebuilds would mean touching each module again; blur is expensive in the desktop webview and "performance comes first".
+  - Rejected: blur-based transitions now (may return later on hovers and small interactions only, if it costs nothing).
+
+### 2026-10-10 · Tasks v3 re-plan — Focus (10, 31, 57, 59, 59a, 60, 61–66)
+
+- **10 · Calibrated estimates** → TV-F8
+  - Who: Maciej, 2026-10-09.
+  - Decision: after ~10 finished tasks with both an estimate and tracked time, "≈ 7h 30m at your usual pace" in Up next's header and the run summary; personal, never changes estimates, can be turned off.
+  - Why: the planning fallacy is among the most replicated findings; TV-D3's entries make actuals available; a mirror, not a wall.
+  - Rejected: auto-adjusting estimates.
+- **31 · "Focus on this" from any task** → TV-F7
+  - Who: Maciej, 2026-10-09.
+  - Decision: ⇧F, the ⋯ menu or the detail header's ▶ puts the task on top and starts a run.
+  - Why: a run shouldn't require building a line-up first; `f` is already Filter, so ⇧F.
+  - Rejected: —
+- **57 · "Along the way" in runs** → TV-F8
+  - Who: Maciej, 2026-10-10.
+  - Decision: at a project change in a run, one offer of a ≤15-minute task from the project you're leaving ("Take it · Not now"), only in the moment between two tasks; three Not-nows → Shrink · Move · Let go; "Arrange by project" in Up next's header.
+  - Why: doing a small task while you're already in a project saves a switch for anyone (48a); task-switch costs are well established.
+  - Rejected: a standing suggestion line on the screen.
+- **59 → 59a · One switch, "Offer quick tasks along the way"** → TV-F8, Settings → Tasks → Focus
+  - Who: Maciej, 2026-10-10 (59 with "I don't fully understand the consequences"; 59a in round 2b).
+  - Decision: one switch, on by default, also in Focus's ⋯; reminders always fire; nothing is suggested outside Focus; nothing changes by itself over time.
+  - Why: with 58 parked and 60 dropped, "Everywhere" had nothing left in it; a task boundary in a run is the cheapest moment to interrupt.
+  - Rejected: Off · During runs · Everywhere (59) and modes that fade as habits form; "Everywhere" may return as a second option after the module rebuilds.
+- **60 · No more ADHD-specific exploration this round** → (none)
+  - Who: Maciej, 2026-10-10.
+  - Decision: not now; the first-step card, the quick sweep and meeting prep stay in REPLAN §10 for later.
+  - Why: 48a, 57 and 59a close enough of the gap.
+  - Rejected: exploring the three in round 2.
+- **61 · The Queue becomes "Focus"** → TV-F7 (words only; the database and MCP keep "queue")
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: the sidebar item is Focus; the line-up inside is Up next; verbs Start · Pause · Done · Stop; "Add to Focus" keeps the `Q` key.
+  - Why: "Queue" and "Upcoming" both read as "what's coming" while the feature is about doing; six of thirteen tools call the doing surface Focus, none calls the list Queue.
+  - Rejected: keeping "Queue".
+- **62 · One quiet header; the timer sits on the task it times** → TV-F7
+  - Who: Maciej, 2026-10-10 (round 2b: "I like this layout much much more").
+  - Decision: header "Focus ⋯" only; one timer pill on the Now card with Pause inside it; Stop in ⋯ and the top-bar timer with "Stopped · Undo" for 10 s; leaving the view never stops a session; the Now card's top line is project › section · due.
+  - Why: "Running" and the timer repeated each other; a Pause next to End run is risky; every tool checked puts pause on the timer and none a bare End beside it.
+  - Rejected: the two-line header with progress and a bare End-run button.
+- **62a · Timer: Per task · Pomodoro · Off** → TV-F6 (`focus_runs.mode` re-cut), TV-F7
+  - Who: Maciej, 2026-10-10 (round 2c; Pomodoro was his idea, kept).
+  - Decision: Per task (default) is the pill on the card, with an optional countdown of the estimate; Pomodoro puts the rhythm pill in the header beside ⋯ with lengths in the same menu and breaks offered between tasks; time is still recorded per task.
+  - Why: nothing was cut from the old screen, only moved (the before/after table in REPLAN 62a); the card carries no second clock.
+  - Rejected: a run-level timer separate from the task's.
+- **63 · Time tracking is optional, and Off means off** → TV-F7, Settings → Tasks → Focus
+  - Who: Maciej, 2026-10-10 (round 2b/2c), with the ⋯ menu as listed.
+  - Decision: Off shows no pill and records nothing while Start, Done, Skip and Hand off still work; the ⋯ menu is Timer ▸ · Arrange by project · Offer quick tasks ✓ · Show what's done · ─ · Stop.
+  - Why: a task's total time is visible to everyone who can see the task, so quietly recording for someone who turned the clock off would feel like being watched.
+  - Rejected: recording quietly anyway (Amazing Marvin, a one-person app).
+- **64 · The next meeting is a divider inside Up next** → TV-F8
+  - Who: Maciej, 2026-10-10 (round 2b: "it's great").
+  - Decision: "── 2:30 PM · Acme call ──" where the meeting falls by your estimates; only for events you attend within ~2 hours or before the line-up runs out.
+  - Why: no tool checked puts the next event above the task; "2 quick tasks fit" was the "Everywhere" idea 59a removed.
+  - Rejected: the "18 min until Acme call · 2 quick tasks fit" line above the task.
+- **65 → 65a · Subtasks in Focus: the focused task stays, a subtask opens its own details in the panel (C)** → TV-F7
+  - Who: Maciej, 2026-10-10 (round 2b rejected A and B; round 2c took C).
+  - Decision: the Now card keeps the task with its subtasks as an unordered checklist with small marks; click a subtask → its own details in the right panel with a parent breadcrumb; ⇧F makes a subtask the focus; ⏎ is Done for the focused task.
+  - Why: "subtasks are not necessarily ordered as steps… we'd force users to build less complex subtasks"; the same click-opens-details rule as List, Board and Timeline.
+  - Rejected: A, steps you work through one at a time (the agent's recommendation) and B, the current step unfolded inline.
+- **66 · Focus stays visible for everyone, with three ways in** → TV-F7
+  - Who: Maciej, 2026-10-10 (round 2b), with his change.
+  - Decision: visible by default for every role (hideable in Customize sidebar); a line-up, one big task via ⇧F, or today's scheduled tasks shown as real rows with "+" each and "Line up all 3"; the empty state teaches all three.
+  - Why: "useful enough that we shouldn't hide it from users that just started"; people who plan by calendar need a way in too.
+  - Rejected: hiding Focus per role and a one-line "Line up today's 3" summary.
+
+### 2026-10-10 · Tasks v3 re-plan — Timeline (67–71, 68a; 68b above)
+
+- **67 · Rows follow the scope: projects across the workspace, tasks inside a project** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: All/area → area headers then one row per project (bar, dated sections, progress line; expand ▸ to tasks), opening at Quarter; inside a project → the project row, sections and tasks, opening at Month; subtasks hidden by default; an optional "Due per week" count, on for students.
+  - Why: this is the PM's roadmap (Linear, Jira, GitHub, Basecamp draw projects as bars) and the student's term at a glance.
+  - Rejected: today's flat lanes of task bars with no project level.
+- **68 · Tasks are points; projects and sections are spans** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b: "I really like it").
+  - Decision: a task is a 12 px circle on its due day (hollow on its next session, muted when late, hidden when done); a section with one date is a diamond, a range a band; a project is a bar (solid when set, outlined when worked out); the fade goes.
+  - Why: Moduo tasks have no start date, and inventing one is ClickUp's complaint; most "bars" today are fades pretending to be spans.
+  - Rejected: task bars with a start date and Jira's "date unknown" fade.
+- **68a · Section dates on their own row; a project may have no dates** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2c: "looks much much better").
+  - Decision: every section has a header row and its date shows there (range = band, end only = diamond); dates are set by the chip, ⋯ → Set dates or dragging; one word per kind: tasks are due, sections end, projects have a target; an undated project's bar is outlined from its contents.
+  - Why: the prototype drew a task-less section at the bottom where it looked like a stray task; the cost of "no task bars" (Gantt-trained PMs) is accepted, duration lives on phases and sessions.
+  - Rejected: a third date field on tasks.
+- **69 · Anatomy: a name column, slim bars, quiet structure** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: a sticky resizable name column (280 px; ⇧[ hides it); rows 36/32/28 px, bars 24/22/20 px with a 3 px colour cap and a 2 px progress line; a two-tier sticky header with a Today pill; hairline grid, weekend tint; Week · Month · Quarter · Year with ⌘-scroll; endless virtualized scroll opening with today a quarter across.
+  - Why: titles in a column are never cut by a bar (Asana's fix); monday's taller bars halved the rows that fit.
+  - Rejected: labels beside bars, small-caps lane headers, a fixed window.
+- **70 · Undated tasks, and working on the canvas** → TV-TL2
+  - Who: Maciej, 2026-10-10 (round 2b).
+  - Decision: the bottom tray goes ("No date · 12" opens the panel's No date view); click an empty spot to set a due date or draw a project bar; the whole canvas takes drops; drag points, diamonds and bars; multi-move; edge scroll; keyboard ↑↓ ⌥←/→ ⇧ D T; dependency lines only for the selected item plus "Show all"; "Also move the 3 that wait on this" is offered, never automatic.
+  - Why: today's 8 px drop strip and fixed window made dragging unreliable; nothing drags between groups so dragging never reassigns.
+  - Rejected: the chip tray and silent cascading moves.
+- **71 · Display options, and what's left out on purpose** → TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b), after asking what each omission costs.
+  - Decision: Display = Group by · Show done · Colour by · Dependencies · Show sessions · Show repeats · Subtasks · Due per week; out: baselines, critical path, auto-scheduling, workload lanes, scenarios, hidden weekends, red health, packed lanes, task start dates, an Inbox lane, drag-to-reassign.
+  - Why: those are what make Jira, monday and ClickUp timelines heavy, or they're traps (auto-scheduling moves dates without you; workload reads as surveillance); none is ruled out for good.
+  - Rejected: a Gantt feature set.
+
+### 2026-10-10 · Tasks v3 re-plan — capture, references, teams (33, 33a, 54–56, 90–95)
+
+- **33 · Capture follows the app grammar exactly** → TV-U14, RF-1
+  - Who: Maciej, 2026-10-10.
+  - Decision: `@` mentions (a person assigns, a project files, a thing links), `#` tags, `/` commands; plain words for dates, highlighted and undoable; `#CS 201` matching a project offers "@CS 201"; literal symbols stay text.
+  - Why: the first draft used `#` for projects and added `!`, breaking "@ anything · # tag · / command".
+  - Rejected: Todoist's `#project` and a fourth symbol.
+- **33a · Date commands everywhere; a recognised date leaves the title** → TV-U14, RF-1
+  - Who: Maciej, 2026-10-10 (with his follow-up: the date doesn't stay as text).
+  - Decision: `/today`, `/tomorrow`, `/next week`, `/date`, `/due …`, `/schedule …`; in capture they set the date and leave the title on save; in prose they insert a date chip; in an existing title only `/` commands act.
+  - Why: under our grammar `@tom` would mix Tom with Tomorrow, so dates belong under `/`; renaming a task must never change its date by surprise.
+  - Rejected: `@` for dates (Notion, Google Docs) and keeping the date words in the title.
+- **54 · Teams of people: routing now, permissions later** → TV-D10 (`teams`, `tasks.team_id`), TV-D13
+  - Who: Maciej, 2026-10-10.
+  - Decision: named groups from Settings → Members; a task gets an optional team next to its one assignee; members see "For Design · 2 unclaimed" and claim with a click; `@Design` routes in capture and sends one digest from a comment; sharing a project with a team is a later permissions spec.
+  - Why: "give it to Design" when you don't know who; access changes the permission model (Tier 2) and gets its own spec.
+  - Rejected: "Groups" (clashes with Group by) and `@Design` pinging each member like @channel.
+- **55 · References: one spine primitive for links, chips, cards and previews** → RF-1 (absorbs GR-0)
+  - Who: Maciej, 2026-10-10.
+  - Decision: four presentations, live updates, "Show as: Link · Chip · Card" after inserting, per-type previews defined by each module, and "Private item" with no title or preview for anything you can't see; Tasks builds the primitive, Notes and Chat adopt it when rebuilt.
+  - Why: grammar and presentation in one spec can't contradict each other; seven chip languages exist today.
+  - Rejected: per-module ad-hoc chips.
+- **56 · Long descriptions fold at ~8 lines with counts** → TV-U13
+  - Who: Maciej, 2026-10-10.
+  - Decision: "Show more · 2 tasks · 1 email"; editing shows all; a card is never cut; every mentioned item is also in Linked; rows and cards never show the description (hover preview shows three lines; a Board "Description preview" option, off); the full page never folds.
+  - Why: nothing gets lost and the panel stays scannable.
+  - Rejected: descriptions on rows and cards.
+- **90 · Two ways to capture, two destinations** → TV-U14
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: ⌘⇧K always files to your Inbox and never asks where; ⌘N, "+ New" and `c` file where you are (project, section, the top of Up next).
+  - Why: the Things split (Quick Entry vs New To-Do); muscle memory for the global key.
+  - Rejected: one capture that asks where every time.
+- **90a → 90b · One global capture for every module; ⌘+number switches its type** → TV-U14, SH-1 (capture type registry)
+  - Who: Maciej, 2026-10-10 (round 2e; 90b is his idea).
+  - Decision: ⌘⇧K opens as Task; while open, ⌘1–7 switch the capture's type to that module (⌘1 does nothing); a type chip shows it; typing `/note` keeps its prose meaning; each module registers its type and destination.
+  - Why: "aren't we locking the global workflow into tasks alone?"; the same keys mean "module" everywhere, so nothing new to learn.
+  - Rejected: 90a's switching by typing `/note` as the first word.
+- **91 · Capture shows four pills, with the destination on top** → TV-U14
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: Assign (people and teams) · Due · Tags · Priority · ⋯ More (scheduled, reminder, estimate, repeat, waiting on, template); a destination row "Inbox ▾" / "Acme rebrand › Design ▾"; ⏎ creates, ⌘⏎ creates more.
+  - Why: eight pills were noise; the destination is where 20a's empty project slot shows.
+  - Rejected: —
+- **92 · What leaves the title, and what stays** → TV-U14
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: tokens that set a property (person, team, project, tag, date, `/` command) leave the title on save; tokens that link a thing (contact, note, email, event, task) stay as chips.
+  - Why: "Call @Anna about @Acme rebrand" keeps reading as a sentence.
+  - Rejected: —
+- **93 · The thing you're looking at rides along, linked by default** → TV-U14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (round 2e: "connections are super important"; confirmed for building; may be reconsidered).
+  - Decision: capturing while an email, note, event or contact is open links it in every case, ⌘⇧K included, as a visible "From: …" chip that one key removes.
+  - Why: a suggestion keeps far fewer links because people skip optional steps; a missed link is silent, a wrong one is visible and removable; privacy holds through "Private item".
+  - Rejected: suggest-only for ⌘⇧K (the agent's revised version; calmer for unrelated thoughts). Revisit if dogfooding shows many removed links.
+- **94 · A task routed to a team needs a project** → TV-U14, TV-D13
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: a team can name a default project; without one, capture asks for a project before ⏎.
+  - Why: unfiled tasks are private (20) and a routed task has to be visible to the team (54).
+  - Rejected: a shared "Requests" intake (deferred with 20).
+- **95 · Team marks: a rounded square with two letters** → TV-D13
+  - Who: Maciej, 2026-10-10 (round 2d).
+  - Decision: people are round, teams are rounded squares; two automatic letters (DS, DV) and a stable colour; letters editable, nothing picked from a list.
+  - Why: solves the "D" clash from round 1c without an icon picker.
+  - Rejected: picked icons.
+
+### 2026-10-10 · Tasks v3 re-plan — agents, switching, onboarding (9, 34–36, 51, 52, 58, 79)
+
+- **9 · Templates, the minimal version** → TV-D15
+  - Who: Maciej, 2026-10-10 (re-asked "prove that this solves problems").
+  - Decision: "Save as template" on a real task keeps the work (subtasks with details, tags, priority, estimate, dependencies, lasting links, dates as offsets) and drops the run (comments, time, done states, repeats, one-off links, files); the template task is the editor; "From template…" asks for one date; a small list in Settings → Tasks.
+  - Why: consultants, agencies and creators list it as a must, every tool we replace has it, and checklists cut forgotten steps; no editor or gallery keeps it from becoming "system-building as procrastination".
+  - Rejected: deferring until the Duplicate data shows repeated procedures; variables, automations, a gallery.
+- **34 · Onboarding: one role question, then a per-module welcome** → TV-U17
+  - Who: Maciej, 2026-10-09 (role question) and 2026-10-10 (welcome, with two changes).
+  - Decision: the role question sets defaults only; each module shows a first-open welcome once per person: basics, "Learn more" (up to three clip steps recorded by script) / "Explore on my own", reopenable from ⋯; Tasks' steps: above the line is yours · line things up in Focus · `@` `#` `/`.
+  - Why: completion is highest around three steps; "a feature worth showing doesn't have to be unusual" (so not "Show me what's different"); step 3 should cover all three symbols.
+  - Rejected: modal tours, forced steps, ten-item checklists, roles turning features on or off.
+- **35 · Import: through your AI first, then native importers** → TV-D16, TV-U18
+  - Who: Maciej, 2026-10-09.
+  - Decision: "bring Todoist / Linear / Trello through your AI" right after MCP writes; then Todoist CSV → Trello JSON → Linear/Jira/Asana CSV; old IDs stay findable.
+  - Why: no importer to build per service, and every service with an AI connector works on day one (74).
+  - Rejected: native importers first.
+- **36 · Mobile stays out of scope** → (none)
+  - Who: Maciej, 2026-10-09.
+  - Decision: capture on the phone goes through your AI app (MCP); not mentioned on the pricing page.
+  - Why: desktop-first; phones get their own plan once the desktop app is done (73).
+  - Rejected: —
+- **51 · How an agent's changes are recorded** → TV-D16, TV-F8
+  - Who: Maciej, 2026-10-10.
+  - Decision: no comment per change; every write is an attributed trail row ("Claude, via Alex's key, set due → Fri"); one hand-back summary, kept with the private session until "Post as comment"; comments only when a person asks.
+  - Why: the trail is complete, uneditable and doesn't bury people's comments (Linear's and GitHub's precedent).
+  - Rejected: a comment per change.
+- **52 · Moduo shows agent status, not conversation** → TV-D16 (`agent_sessions`), TV-F8
+  - Who: Maciej, 2026-10-10 (re-asked: "agent work shouldn't be forced public").
+  - Decision: five fields (state, note, step n of m, links, times) in one line under the title and a quiet "Claude · working" on rows; no reply box; private by default with "Show my agent work to teammates"; the trail always says "Alex · via Claude Desktop" (the key's name).
+  - Why: agent tools change monthly, so drawing their questions and diffs means chasing other products forever; one line plus one mark needs no change when the agents change.
+  - Rejected: a question/approval UI in Moduo, transcripts, and the plain "Alex" trail from the prototype.
+- **58 · Cues: "Remind me when…"** → parked
+  - Who: Maciej, 2026-10-10.
+  - Decision: parked; time-based reminders (24) go ahead.
+  - Why: its triggers live in projects, contacts, threads and meetings, which may be rebuilt soon.
+  - Rejected: building cues now.
+- **79 · "Duplicate project…" and project templates** → TV-D15
+  - Who: Maciej, 2026-10-10 (round 2b), with his addition of project templates.
+  - Decision: Duplicate copies sections, statuses and open tasks with dates shifted from a new start; "Save as template" on a project keeps description, sections, statuses and open tasks with offsets; the template is its own editor; yours until shared with the workspace.
+  - Why: repeat projects (next term, season 2, every client onboarding) are a must for PMs and agencies; "if someone always goes through the same phases".
+  - Rejected: Duplicate only, with project templates waiting for evidence.
+
+### 2026-10-10 · Tasks v3 re-plan — the visual rules every module inherits (38–46a)
+
+- **38 · Three readable text levels plus one decorative** → DS-6
+  - Who: Maciej, 2026-10-10 (re-asked "won't fewer greys impair structure?").
+  - Decision: primary, secondary (8.5:1), tertiary (≥4.5:1, a new step) as app-wide tokens, plus one decorative level for things that carry no information; states (done, past, disabled) are treatments, not colours; a lint guard blocks new fades.
+  - Why: the /60, /50, /40 steps measured 2–3.5:1 and were hiding information, not structuring it; Primer, Material and Apple all use three.
+  - Rejected: keeping ad-hoc opacity fades.
+- **39 · One interaction language** → DS-6, TV-U4 (drag visuals)
+  - Who: Maciej, 2026-10-09.
+  - Decision: hover = fill everywhere; one selection tint, focus ring, drop target and drag preview.
+  - Why: the visual audit found surfaces answering the same gesture differently.
+  - Rejected: —
+- **40 · Never capitalise people's words** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: names appear as typed; every grouping header uses one sentence-case style; small caps only for fixed chrome labels.
+  - Why: small-caps group headers were showing project names (consistency item 7).
+  - Rejected: small-caps headers that carry user text.
+- **41 · One date, time and duration grammar** → DS-6, TV-D14 (`time-format`)
+  - Who: Maciej, 2026-10-09.
+  - Decision: Today · Tomorrow · Mon · Oct 16 · Oct 16, 2027 · 3:00 PM · 45m · 1h 30m · 4h; dates, times and counts never truncate.
+  - Why: the audit found truncated dates in the panel, on cards and in Calendar.
+  - Rejected: —
+- **42 · Titles give way first** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: meta drops whole items behind "+n", never fragments.
+  - Why: a fragment ("Wed, …") reads as broken.
+  - Rejected: —
+- **43 · Avatars: two initials plus a stable per-person colour** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: never "M" for "Me".
+  - Why: one initial can't tell teammates apart.
+  - Rejected: —
+- **44 · Density applies to everything** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: cards, menus, tabs and pills follow the density setting, not only rows.
+  - Why: a dense list beside comfortable menus reads as two apps.
+  - Rejected: —
+- **45 · One chip, one count language** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: one chip component and one way to show a count ("· 3", never a coloured badge).
+  - Why: seven chip languages exist today (55).
+  - Rejected: —
+- **46 · An accent budget** → DS-6
+  - Who: Maciej, 2026-10-09.
+  - Decision: selection > today/now > done check > queued; queued becomes neutral.
+  - Why: the accent only means something when few things carry it.
+  - Rejected: an accented queue mark.
+- **46a · Text is never rotated** → DS-6, TV-U11, TV-TL1
+  - Who: Maciej, 2026-10-10 (round 2b, following his 53b answer).
+  - Decision: no sideways labels anywhere: folded columns, Timeline lanes, chart axes.
+  - Why: horizontal text reads ~80 % faster than text turned 90° (Yu et al. 2010), worse still with astigmatism.
+  - Rejected: rotated folded-column labels.
+
+### 2026-10-10 · Tasks v3 re-plan — principles and ceilings (37, 47–50, 48a)
+
+- **37 · A performance target: instant at 10,000 tasks** → TV-D11a, TV-D11b
+  - Who: Maciej, 2026-10-09 ("a scale bar? what do you mean?").
+  - Decision: opening a task, searching and switching views under ~200 ms in a 10,000-task workspace; a copy on the device, delta sync, open tasks first, server search, virtualized lists; each code layer evolves, consolidates or rebuilds per the table in REPLAN 37.
+  - Why: today ~10 screens each download every task and stop at 5,000; it decides whether "replace Linear/Jira" holds in month six.
+  - Rejected: a backend from scratch (weeks of migration and permission re-testing for nothing new) and keeping per-screen refetch.
+- **47 · Tasks' bar in the brief** → spec §Scope (PRODUCT_BRIEF §6 edited when the spec lands)
+  - Who: Maciej, 2026-10-09.
+  - Decision: "complete for students, developers, PMs and small teams", with the deliberately-not-built list as non-goals.
+  - Why: a stated ceiling stops the module from drifting toward Jira.
+  - Rejected: —
+- **48 · Principle wording** → spec §Scope
+  - Who: Maciej, 2026-10-09.
+  - Decision: ADHD becomes a design lens, not the target user; "Defaults decide; options are few, named and easy to find."
+  - Why: the research found the ADHD-first framing narrowed who the module was built for.
+  - Rejected: ADHD as the named target user.
+- **48a · ADHD features serve everyone** → every later call states it
+  - Who: Maciej, 2026-10-10 (in his words).
+  - Decision: "The ADHD solutions in our app always have to serve non-ADHD people as well, not work as a trade."
+  - Why: a founding rule; every proposal from here on says whether someone without ADHD would want it.
+  - Rejected: features that help one group at the other's cost.
+- **49 · A trust pass before new features** → TV-P0, TV-D8
+  - Who: Maciej, 2026-10-09.
+  - Decision: REPLAN §7 P0 (search, repeats, parser, won't-do reach, loading states, time saves, notifications, deep links…) comes first.
+  - Why: bugs that lose data or hide tasks undo any new feature.
+  - Rejected: features first.
+- **50 · Named target roles; founder-led sales in, quota reps out** → spec §Scope
+  - Who: Maciej, 2026-10-09 (the role list) and 2026-10-10 (sales).
+  - Decision: the six roles plus researchers and ops generalists; founder-led sales and small-team business development are a target; follow-ups that resurface move from P4 to P3.
+  - Why: Contacts already makes Moduo a light CRM; quota-carrying reps have a mandated CRM with forecasting and dialers Moduo shouldn't chase.
+  - Rejected: sales reps as spillover (the first draft) and chasing Salesforce/HubSpot.
+
+### 2026-10-10 · Tasks v3 re-plan — gaps nobody had named (73–78, 80)
+
+- **73 · Reminders reach you when Moduo is closed: desktop tray plus browser notifications** → TV-D12
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: the desktop app keeps running in the menu bar when its window closes; opt-in browser notifications on the web; reminders fire in any workspace.
+  - Why: a 4 pm reminder was lost with the laptop shut; too many emails teach people to ignore the important ones.
+  - Rejected: email reminders and a private calendar feed (Google refreshes feeds every 12–24 h and drops alerts); phones get their own plan later.
+- **74 · "Import through your AI" can do what 35 promises** → TV-D16
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: agents create projects, sections, areas and statuses, file tasks with dates, repeats and tags, keep an "imported from" key, re-run as updates, and "Undo this import" ships on day one; paste-a-list is the no-AI fallback; tested end to end with Claude + Todoist's connector before it's announced.
+  - Why: the cheapest first way in (no importer per service), but call 7's tools only dropped tasks into the Inbox and a second run duplicated everything; it needs only Tasks' own tools, not the other modules.
+  - Rejected: native importers first.
+- **75 · Time you can bill: entries, "Add time…", a report with PDF and CSV** → TV-D14
+  - Who: Maciej, 2026-10-10 (round 2c), with his addition of the PDF.
+  - Decision: every tracked stretch is an entry; "Add time…" with date and note; a report sheet from a project's overview and a client's hub (period · by task or day · totals · 15-minute rounding); teammates' time reaches the owner only with "Share my tracked time with the workspace owner"; Export PDF (one branded printable layout) · CSV; no rates or invoices.
+  - Why: time by client is what lets freelancers drop Toggl or Harvest; a designed document is what gets sent to a client (his years of Jira and Clockify exports); no-surveillance holds through the opt-in.
+  - Rejected: CSV only; invoicing inside Moduo.
+- **76 · One "Time & region" setting for the whole app** → TV-D14 (`profiles.time_zone …`), Settings → General
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: time zone, week start, 12/24 h and date order, defaulting from the device; a due date is the same date for everyone, times and reminders are moments in each viewer's zone, a repeat rolls over at its assignee's midnight; Calendar's week-start setting moves here; a travel prompt once.
+  - Why: nothing decided whose clock counts (Email forced 24 h, Tasks hard-coded Monday); it's small and should land before the date work spreads.
+  - Rejected: per-module time settings.
+- **78 · When people and projects go away** → TV-U6 (delete), TV-U16 (done/archive prompt), TV-D13 (teams)
+  - Who: Maciej, 2026-10-10 (round 2c).
+  - Decision: removing a member sends Inbox tasks others created back to their creators and the rest to the remover, clears Lead, hands private projects on or to Recently deleted; Done or archive with open tasks asks once "Won't do · Move · Keep"; archived projects never remind or repeat but stay searchable; deleting a project moves only open tasks, with one quiet notice per assignee.
+  - Why: only "their tasks become unassigned" (PRIV-2) was decided; v3 adds private projects, Lead, teams, templates and views that need an owner.
+  - Rejected: fanning every task of a deleted project into private Inboxes silently (20's rule) and #328's radio choice.
+- **80 · One notification table** → TV-D12, spec §13
+  - Who: Maciej, 2026-10-10 (round 2c: "happy to go with your suggestion").
+  - Decision: the spec carries event → who → where → grouped or alone → mute switch; one action on many tasks sends one notice; reminders and check-backs reach you in any workspace; §3's "never changes" line is struck.
+  - Why: each call had decided its own notification on the side, so nobody could check that the whole stays quiet.
+  - Rejected: per-feature notification rules.
+
+### 2026-10-10 · Tasks v3 re-plan — defaults a–u (agent's choices, deferred to by Maciej: "I trust you with them"; confirmed for building; may be reconsidered)
+
+- **a · Undo on every change** → TV-U4, TV-TL2, TV-U12
+  - Decision: every change from a list, board, timeline, key or the bulk bar shows Undo for 8 s and ⌘Z works while it shows; creating many at once undoes as one; Undo never overwrites a teammate's later change.
+  - Why: no confirm dialogs; a wrong drop costs one key.
+  - Rejected: "are you sure?" prompts.
+- **b · Inbox triage keys** → TV-U15
+  - Decision: Accept files and assigns to you; Decline hands it back with a note; "Duplicate of…" merges comments and links then marks Won't do; Snooze hides until a date; 1 · 2 · 3 · H; one key map table covers every v3 concept.
+  - Why: Linear's keys, because A and D already mean Assign and Due.
+  - Rejected: —
+- **c · Several workspaces** → spec §Edge cases
+  - Decision: one workspace with private projects is the intended setup, and onboarding says so; reminders and the Focus timer reach you in any workspace; no "move to another workspace".
+  - Why: cross-workspace moves would need every reference re-checked.
+  - Rejected: —
+- **d · Work sessions and booking links** → spec §18 (Calendar contract)
+  - Decision: scheduled sessions count as busy for your booking links, with a switch per link; teammates see "Busy", never the title.
+  - Why: a planned session is time you've committed.
+  - Rejected: —
+- **e · Bulk actions** → TV-U12
+  - Decision: the bulk bar gains Date (+1 day · Next week · Pick…), Status, Section, Waiting on and Team, under one Undo.
+  - Why: the gap audit found bulk editing stopped at assign and tag.
+  - Rejected: —
+- **f · Getting a list out** → not yet placed in a block (flagged)
+  - Decision: "Copy as text" on any selection, view or project overview; "Export view as CSV" and a print layout; the full export covers every new object.
+  - Why: a list has to paste cleanly into email or Slack.
+  - Rejected: —
+- **g · Capture offline** → TV-D11a
+  - Decision: until full offline, everything opens read-only from the device copy; captures and check-offs queue and send when back ("2 waiting to sync"); other edits say "Offline".
+  - Why: the first step toward offline that the device copy (§6.11) makes cheap.
+  - Rejected: full offline editing now.
+- **h · New Inbox items on top** → TV-U15
+  - Decision: newest first, with manual drag.
+  - Why: the newest thing is usually the one you're about to deal with, as in email.
+  - Rejected: adding at the bottom (Todoist, Things).
+- **i · A quiet hover** → TV-U10
+  - Decision: hover shows only the Focus mark, a date picker in an empty date cell and the late task's fixes.
+  - Why: icons on every hovered row are noise and invite misclicks.
+  - Rejected: a hover toolbar.
+- **j · Status names in Detailed; dates size the column** → TV-U10
+  - Decision: Detailed adds a status-name column; columns drop in a fixed order as the centre narrows; the date column sizes to its widest value.
+  - Why: icons follow the category (53a), so "In review" and "In progress" look identical; dates never truncate (41).
+  - Rejected: —
+- **k · Click the status icon to finish; ⇧S for the menu; `>` `<` nest** → TV-U10
+  - Decision: as stated; ⌘[ and ⌘] stay Back and Forward.
+  - Why: finishing is the most common action, so it gets one click; ⌘[ / ⌘] are browser keys.
+  - Rejected: a status menu on click.
+- **l · No grouping by tag or energy** → TV-U2, TV-U10
+  - Decision: Group by = Section · Status · Priority · Assignee · Team · Date · Project.
+  - Why: a task with three tags would appear three times.
+  - Rejected: —
+- **m · Manual order inside one project only** → TV-U4, TV-U10
+  - Decision: sorting shows "Sorted by due · Back to manual order"; dragging while sorted asks to switch back; cross-project views only sort.
+  - Why: one shared order can't survive two views sorted differently; competitors either block dragging while sorted or lose your order.
+  - Rejected: manual order across projects (#329's version).
+- **n · "+" in each group header, adding at the top** → TV-U10, TV-U11
+  - Decision: a "+" that stays visible and adds with the group's value filled in; same on the Board.
+  - Why: the end of a long group can be hundreds of rows away; the header is always visible.
+  - Rejected: an add row at the bottom.
+- **o · Fixed card widths, hidden empty columns, no WIP limits** → TV-U11
+  - Decision: one Card at 296 / 280 / 264 px by density; status, section and priority columns always show; assignee, team, project and waiting columns hide when empty ("3 hidden"); each column scrolls and virtualizes on its own.
+  - Why: fixed widths stop the board reflowing as you scroll; WIP limits are process tooling for large teams.
+  - Rejected: flexing columns (TV-U1's 280–400 px) and WIP limits.
+- **p · The panel shows the project when nothing is selected** → TV-U13
+  - Decision: inside a project with nothing selected, the Project view; with a task open full-page, the panel shows Project and anything clicked opens there with a back arrow.
+  - Why: the right panel is context (48b), and the project is the context.
+  - Rejected: an empty panel.
+- **q · One activity feed with "All · Comments", no threads** → TV-U13
+  - Decision: comments can be edited and deleted; Waiting on is a list, not a property row.
+  - Why: threads split a small team's conversation; the switch hides the change log when you only want the talk; Waiting on can hold several people.
+  - Rejected: threaded comments.
+- **r · Your calendar shows only your work** → spec §18 (Calendar contract)
+  - Decision: only your own due dates and sessions; unassigned team tasks stay in Upcoming; a session's planned length is never recorded as worked time.
+  - Why: the calendar is your time; a block's length is a plan, not work done.
+  - Rejected: teammates' unassigned tasks on your grid.
+- **s · Unclaimed team tasks are quiet** → TV-D13
+  - Decision: members hear once, grouped by the hour; after 3 days unclaimed, or the day before due, the creator gets one check-back; no round-robin.
+  - Why: owning work stays a human choice.
+  - Rejected: automatic assignment.
+- **t · Any member can create a team; creator, owner or admin deletes** → TV-D13
+  - Decision: as stated; Upcoming leaves out unassigned tasks routed to a team you're not in.
+  - Why: teams only route and hide nothing, so the risk is low; deleting affects others.
+  - Rejected: admin-only teams.
+- **u · References: six types in four forms; two fixes first** → RF-1, TV-D8 (registration on create)
+  - Decision: the per-type table in capture-references-teams.md §6–8 becomes the References spec; tasks register when created, not when first linked; a deleted item reads "Deleted task".
+  - Why: today search and `@` can't find a task until it's linked somewhere; a struck-through title reads as "done".
+  - Rejected: —
+
+### 2026-10-10 · Tasks v3 re-plan — platform (REPLAN §6, the agent's technical calls under /s1)
+
+- **§6.1 · Every create and every field edit is a server op** → TV-D8 (`tasks_op_create`, `tasks_op_update`), TV-D7 (raw grants revoked)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: UI, ⌘⇧K, MCP, import and templates all go through ops that register the entity, re-register on rename, assign the handle and log activity.
+  - Why: fixes search and mentions, gives agents capture, makes handles possible, one attribution path.
+  - Rejected: the module contract's "single-field raw writes for now" clause, which is exactly what left tasks unregistered.
+- **§6.2 · Status, recurrence and next occurrence are computed on the server** → TV-D8 (pg_cron roll-over), TV-D12
+  - Who: agent (technical call, /s1 §6).
+  - Decision: one SQL occurrence function; the pointer moves only in `tasks_op_set_status` and the cron; the client engine previews only.
+  - Why: the reopen bug comes from client catch-up on page load; agents and other devices never saw a roll-over.
+  - Rejected: keeping client catch-up.
+- **§6.3 · The client tolerates statuses it doesn't know; one "is open" rule** → TV-D8
+  - Who: agent (technical call, /s1 §6).
+  - Decision: unknown values render by category and never drop rows; "is open" lives in one place, shipped before any vocabulary change.
+  - Why: today such rows are silently dropped, so a new status would vanish from old builds.
+  - Rejected: changing the vocabulary first.
+- **§6.4 · `due_date` becomes a calendar date; due time is its own field** → TV-D9
+  - Who: agent (technical call, /s1 §6).
+  - Decision: `date` plus optional `due_time`; sessions are rows (`task_sessions`); all moments are `timestamptz`.
+  - Why: a timestamp gives off-by-one days across time zones.
+  - Rejected: a third "start date" on tasks (68a).
+- **§6.5 · One store for dependencies** → TV-D8 (`task_relations` canonical)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: a hub or MCP "blocks" link writes a relation; cycles refused by the existing trigger; duplicate rows cleaned at TV-D7.
+  - Why: today a "blocks" link made from the hub or MCP doesn't block anything.
+  - Rejected: two stores kept in sync.
+- **§6.6 · One shared task store per workspace** → TV-D11a (store), TV-D11b (virtualization)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: an IndexedDB (Dexie) cache per workspace, delta sync by `updated_at`, Realtime merge with echo-skip, open tasks first, server search, one-field rollback, an offline queue; every Tasks, Calendar and Home surface reads from it; TanStack Virtual for lists.
+  - Why: replaces the full reload ~10 surfaces do on mount (37 sets the bar); the first step toward offline.
+  - Rejected: a generic ORM/sync framework (one more runtime) and per-screen refetch.
+- **§6.7 · A minimum client build, checked at boot** → TV-D8 (`app_settings.min_build`), TV-D7 (raised)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: below the minimum the app shows "Update Moduo" and runs read-only.
+  - Why: the next schema reversal then costs one migration instead of three code paths.
+  - Rejected: open-ended shims for every old build.
+- **§6.8 · Manual order lives on the project and its sections** → TV-U4, TV-F6 (Board reorder in Focus disabled)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: `tasks.position` scoped to (project, section); cross-project views sort, never reorder.
+  - Why: as tasks-v2 already says, one order can't serve two views.
+  - Rejected: a per-view order table.
+- **§6.9 · One TV-D7 cleanup for every reversal** → TV-D7 (after ≥2 desktop releases and 14 days past TV-D9)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: status label and value, `due_date` type, `reschedule_count`, `task_time_blocks`, `group_label` → areas, `committed_for`, the owner shim, duplicate dependency rows, MCP aliases and raw grants all go in one migration.
+  - Why: every change before the cleanup adds a shim; expand → migrate → contract holds, nothing dropped before D7.
+  - Rejected: a cleanup per reversal.
+- **§6.10 · One time engine for the whole app** → TV-F6
+  - Who: agent (technical call, /s1 §6).
+  - Decision: Focus, Calendar block focus, the Home pomodoro and the top-bar timer share `features/focus/engine`; saves go through `tasks_op_track_time` from any page.
+  - Why: three clocks ran separately and Focus time was lost when saved from another page (P0 #6).
+  - Rejected: per-surface clocks.
+- **§6.11 · Speed at 10,000 tasks, in detail** → TV-D11a, TV-D11b (`tests/perf/tasks-10k.spec.ts`, 200 ms budget in CI)
+  - Who: agent (technical call, /s1 §6).
+  - Decision: one local copy per workspace shared by every module, delta sync on open and reconnect, lazy done/won't-do/backlog, server search, virtualised and memoised rows, per-field retry or rollback, a CI fixture against the budget.
+  - Why: 37's target has no visible feature; this is what makes it hold.
+  - Rejected: optimising screen by screen.
+- **§6.12 · Status tolerance before Backlog** → superseded
+  - Who: agent (technical call, /s1 §6).
+  - Decision: void — it applied only if 53a was declined; with per-project statuses, old builds read the category in today's status column, so Backlog doesn't wait for a desktop release.
+  - Why: 53a was accepted on 2026-10-10.
+  - Rejected: holding Backlog for a release train.
+
+### 2026-10-10 · Tasks v3 re-plan — the six paused PRs reconciled (group L, 97, 98)
+
+- **L · Verdicts for #315, #327, #330, #329, #328, #323** → blocks 1, 2, 6, 7, 13, 22–23
+  - Who: agent's choices, deferred to by Maciej, 2026-10-10 (confirmed for building; may be reconsidered).
+  - Decision: #315 (TV-D5) finish and merge first with a window-focus guard; #327 (AT-2) finish and merge; #330 (TV-U2), #329 (TV-U4) and #328 (TV-U6) re-scoped to the decided calls (83, 84, default m, 78, 30); #323 (TV-F2) closed and salvaged into TV-F6/F7, its unapplied `focus_runs` migration re-cut to Timer modes first.
+  - Why: #315's migrations are already on prod and it's the first brick of the shared store; #323's screen was built to the comp 61–66 replace, while its run record, takeover and claims carry.
+  - Rejected: merging #323 as is; applying its migration unchanged.
+- **L · Display wording: "Rows: Standard · Detailed" and "Lanes"** → TV-U2, TV-U11
+  - Who: agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: the preset is "Rows", swimlanes are "Lanes".
+  - Why: one word shouldn't mean two things.
+  - Rejected: "Density" or "Columns" for either.
+- **L · Dropping a task on the Inbox row does nothing** → TV-U4
+  - Who: agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: the Inbox sidebar row is not a drop target.
+  - Why: a shared task would quietly become private (20).
+  - Rejected: drop-to-unfile.
+- **L · DS-5's sweep of the other modules is superseded; only its lint guards stay** → DS-6
+  - Who: agent's choice, deferred to by Maciej (confirmed for building; may be reconsidered).
+  - Decision: no repo-wide primitive migration now.
+  - Why: those modules are rebuilt after Tasks and would be swept twice.
+  - Rejected: sweeping now.
+- **97 · Resume #315 and #327 now, before the spec; skip the ultra review for #315** → blocks 1 and 2
+  - Who: agent's choice, deferred to by Maciej, 2026-10-10 (he moved on to the spec without objecting; confirmed for building; may be reconsidered).
+  - Decision: each finished in its own session with the validator, `/code-review high` and the security scan; #315's Tier 2 ultra review is skipped.
+  - Why: both are independent of the re-plan, and #315 brings the repo back in line with prod; its migrations are already live, so an ultra review could only find problems after the fact.
+  - Rejected: holding both until the spec landed.
+
+### 2026-10-10 · Tasks v3 re-plan — carried from the research round (RESEARCH 1–8, 11, 12; decided 2026-10-09)
+
+- **1 · "Complete but calm" replaces "quiet and minimal"** → spec §Scope, §19 (PRODUCT_BRIEF §7 edited when the spec lands)
+  - Who: Maciej, 2026-10-09.
+  - Decision: quiet = low visual weight, no alarm colours, no debt framing; the default shows everything needed for the next decision, nothing hidden without a count, grouping does the calming.
+  - Why: relevant load helps, clutter is visual variety not item count, "too sparse" is a documented switching reason.
+  - Rejected: fewer facts as the way to calm.
+- **2 · Row presets: Standard and Detailed** → TV-U2 (Display → Rows), TV-U10
+  - Who: Maciej, 2026-10-09.
+  - Decision: one preset for which properties show on rows, separate from Density; Detailed adds handle, project › section, tag names, estimate/time, created/updated and sortable headers; user-level default, overridable per view.
+  - Why: Asana, ClickUp and Akiflow users ask for exactly this pair; user-set static presets beat adaptive ones.
+  - Rejected: a third Calm preset (only if dogfooding asks) and a fourth Table view.
+- **3 · Task handles: workspace key + permanent number** → TV-D8 (`workspaces.task_key`, `tasks.number`)
+  - Who: Maciej, 2026-10-09.
+  - Decision: `MOD-142`; key from the workspace name, editable, old key kept as an alias; no zero-padding; numbers never reused; moving never changes a handle; free on every plan; never grants access.
+  - Why: people say and search it, agents mix up fewer IDs than UUIDs, developers put it in branch names.
+  - Rejected: per-project prefixes (every capture lands in Inbox and moves at triage, leaving stale references) — the hybrid prefix is a possible later display option.
+- **4 · Handles: hidden on rows by default, everywhere else always** → TV-D8, TV-U10, RF-1 (text behaviour)
+  - Who: Maciej, 2026-10-09.
+  - Decision: off in Standard, on in Detailed; always in the detail header, ⌘K search and deep links; every MCP tool accepts the handle or the UUID; a typed handle auto-links in text.
+  - Why: rows stay calm; references need to resolve wherever they're typed.
+  - Rejected: a fourth glyph for handles in text.
+- **5 · "Waiting on…" is a field, not a status** → TV-D10 (`task_waiting`), TV-F8 (In flight)
+  - Who: Maciej, 2026-10-09 (the field route).
+  - Decision: a task waits on a person, contact, email thread, agent, link or note, with an optional check-back; visible on rows, in Filter/Group by, the contact's hub and MCP; clears itself where it can; In flight becomes the run's view of hand-offs.
+  - Why: works with any status and needs no vocabulary change; a cue-based reminder beats a timed one for ADHD; agents need it.
+  - Rejected: a fifth "waiting" status (contract change, old builds don't know the value) and a separate "In review" status.
+- **6 · Agents are delegates; a human stays accountable** → TV-D16
+  - Who: Maciej, 2026-10-09.
+  - Decision: the assignee stays human; an agent shows as waiting-on with a session state; one notification at needs you / ready / failed; attribution "Claude, via Maciej's key".
+  - Why: Linear's delegate model, GitHub co-authorship and Jira's private-until-publish all keep a human accountable with exactly one loud moment.
+  - Rejected: agents as assignees.
+- **7 · Agents write tasks: pulled ahead from MCP-1** → TV-D16
+  - Who: Maciej, 2026-10-09.
+  - Decision: a server create op, then capture/update/subtasks/dependencies/comment tools, output schemas and annotations, a read-only preset, and three prompts (Plan my day, Weekly review, Break this down).
+  - Why: every used agent workflow starts with creating tasks (syllabus → dated tasks, meeting notes → tasks).
+  - Rejected: waiting for the rest of MCP-1.
+- **8 · The client loop: project ↔ client, project overview, time by client** → TV-U16, TV-D14
+  - Who: Maciej, 2026-10-09 (carries over to "project").
+  - Decision: link a project to a contact or company in one gesture; a project overview as a right-panel view (progress, waiting, due this week, time, files, client, activity); the client's hub shows their projects, open tasks and time; time export for invoicing elsewhere.
+  - Why: client work is where the spine is structurally ahead; no task tool links task + contact + email + time.
+  - Rejected: "at risk" alarms on the overview; a finance module.
+- **11 · A client status link (no login)** → parked
+  - Who: Maciej, 2026-10-09.
+  - Decision: park until 5 and 8 have landed.
+  - Why: it needs a PERM review, a Tier 2 security review and the waiting state first, or the page has nothing honest to say.
+  - Rejected: building it in this wave.
+- **12 · Team load widget on Home** → TV-H1
+  - Who: Maciej, 2026-10-09.
+  - Decision: one row per member — queue size and lined-up time, in progress, waiting, due this week; nothing about runs or time per person.
+  - Why: show ownership, not surveillance; claims already make queues visible, so no new exposure.
+  - Rejected: per-person time or run stats.
+
+## Earlier entries (tasks-v2 and before)
+
+- **2026-10-09 · TV-U1: rows get fixed right-hand columns and quiet counts, completed tasks hide behind a "N completed · show" line, and board cards carry one meta line** (`specs/tasks-v2.md` block 9; no migration).
+  - **Row anatomy:** checkbox · title · quiet counts right after it (`# N` tags, subtasks done/total, blocked, repeats; muted, hidden at zero), then fixed columns: priority · [energy] · date · assignee · queue. Each cell has a set width (`w-icon-sm`, `w-19`, `w-icon`), so the columns line up at every density. `rowColumns` (`src/features/tasks/row-layout.ts`) decides them once per list, from the listed rows and their subtasks (expanding a parent never pops a column in): a column empty on every row collapses. Read-only, the queue column shows only when something is queued or claimed.
+  - **One date column:** the scheduled time or the due date, whichever comes first by day; on the same day the scheduled time wins. A time today shows as the time; otherwise Today / Tomorrow / Yesterday, a weekday for the coming week, else the date. A clock marks a scheduled time; a passed one is the quiet drift emphasis. The tooltip names both dates. A click opens the editor for the date shown; `s` / `d` and the menu open either one in the same cell. An empty cell holds its place but isn't clickable.
+  - **Tags are `# N`**, never chips (U1-2); their names are in the tooltip. Clicking a row's tag chip to filter is gone with the chips; the toolbar's tag filter stays until TV-U2's Filter. The bucket shows as dot + name text only where it isn't implied (Q1-3's rule), and it is still the bucket picker.
+  - **The queue toggle** shows on hover, keyboard focus or selection unless the task is queued or claimed (comp), keeping its space and fading (R6). The reveal lives in `QueueToggle` (`revealOnHover`), next to its own "claimed" rule, so TV-F2's live "is on this" claims keep the mark visible once both are in. When some row is in my queue and someone else's, the column widens so both marks fit.
+  - **Priority glyph:** three rising bars always drawn, the level read by fill, the rest as 25% ghosts. Energy is the same idea with stacked bars and is off on rows by default. The old glyph map used the key `"med"`, so medium priority and energy never rendered at all; the new map is typed by the vocabulary.
+  - **Completed (U1-3):** Display → Completed: Hidden (default) · 7 days · All, remembered per workspace and scope (`moduo:tasks:view:<ws>:<scope>`, DS-4's view prefs). Each list, group and board column ends with "N completed · show"; show is per group, until the scope or grouping changes. Group and column counts are every task in the group. **"7 days" measures from `updated_at`**, since no completion time is stored (a done task is rarely edited, and the server stamps it since TV-D5); a `completed_at` column would make it exact. A done parent with open subtasks stays listed, so they don't vanish with it. **The selected task and its parent always stay listed**, so a deep link (`?id=`), the panel or a spine "open task" never points at a row that isn't there (a done subtask nests under its done parent, which stays and expands). A deep-linked task also stays after you move on, until the scope changes (`useOpenedHere`); tasks you only browse through while completed ones are shown hide again with "hide". The page's selection backstop skips hidden tasks (`useTasksDisplay().isHidden`), so it never opens the panel on a card the Board doesn't show. Board drops are placed among every task of the column, hidden ones included (`boardDropPosition`), because `position` also orders the List. The Queue ignores Completed (TV-D4 keeps a checked-off task there until reload).
+  - **Just checked off stays (U1-3):** `useJustCompleted` records every task seen going from open to done while a scope shows, and it stays listed, struck through, until the scope changes or the page reloads. It's derived during render, so the row never disappears for a frame. A teammate's completion arriving live also stays in place rather than jumping out.
+  - **Done rows** dim as a whole except the checkbox (title cell and columns at 40%); done cards fade to 50% (comp).
+  - **Display (TV-U1 part):** Completed and "Show on rows" (Priority, Energy, Date, Assignee). `src/features/tasks/display.ts` holds the value; TV-U2 adds layout, group, order and subtasks to it and moves Group out of the toolbar.
+  - **Board (U1-4):** columns flex between 280 and 400 px (`min-w-70 max-w-100 flex-1`); a card is `rounded-lg` with one meta line (priority · date · counts · bucket where not implied · parent, then the queue mark and the assignee). Selection stays `SELECTED_OPTION`. Display applies to cards too.
+  - **Avatars on the icon rung:** `Avatar` gains `size="icon"` (`size-icon`, one initial). The task avatar's `size-4` / `size-5` classes had never applied, because Avatar's `data-[size=sm]:size-6` variant wins over a plain size class, so every row avatar was 24 px and pushed dense rows past `--row-h` (gotchas/ui.md). Rows, cards and the queue mark use the icon size; the detail panel and capture keep theirs (TV-U3 and TV-U7 own them).
+  - **Not in TV-U1:** the 📎 count (AT-3), a 💬 count (no per-task comment count is loaded yet), visual baselines (`tests/visual/tasks-list.spec.ts`, `tasks-board.spec.ts`; a human captures them).
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §6 · [src/features/tasks/row-layout.ts](../../src/features/tasks/row-layout.ts) · [src/features/tasks/completed.ts](../../src/features/tasks/completed.ts)
+
+- **2026-10-09 · TV-U3: the task detail panel follows the comp (rule C properties, the Time row, the queue toggle in the header), and comments live in it on shared spine pieces** (`specs/tasks-v2.md` block 10; no migration).
+  - **One view of the right panel, never the panel.** Tasks lists its right-panel views through `RightPanelSwitcher` (Details only today; TV-F4 adds In flight) with `hideWhenSingle`, so one view shows just its body; Contacts keeps its one-option header. Calendar, Notes and Email keep hosting the same panel as one of their views.
+  - **Header:** the bucket breadcrumb is the bucket picker (the Bucket row is gone), a subtask's breadcrumb continues to its parent, then the queue toggle ("Queue" / "In queue", pressed when queued, `Q`) with a teammate's ringed claim avatar beside it, copy link (`/tasks?id=`, `PUBLIC_WEB_ORIGIN` on desktop), and ⋯: Duplicate, Detach from parent, Archive · won't do (Reopen when archived), Delete. The full-width queue button is gone (U3-3).
+  - **Properties (rule C):** Status, Assignee, Priority, Due and Tags always; Energy, Scheduled, Time and Repeat once set, else one quiet line "+ Energy · Scheduled · Time · Repeat" where each name shows its row with the editor open (the row stays while the task is open, even if left empty). Values are `PropertyValue`s: a 14 px icon slot, no chevron, hover shows the field; view-only keeps them at full strength, inert. Skip occurrence moved into the Repeat menu; drift reads "passed" beside the Scheduled value; "Rescheduled N×" moved to the metadata line.
+  - **Time row:** estimate and tracked time are one row, "1h 20m of ~4h" with a hairline bar, editing both in one popover (a typed tracked total is TV-D3's `set_total`; a field left as it opened writes nothing, even if Focus saved meanwhile). **"you 50m" shows only when it's a real share** (0 < mine < total, in whole minutes): when all the time is yours it would repeat the total. The share comes from `tasks_time_totals`, read once per workspace and reused for 30 s unless the task's total moved; a task with no time reads nothing.
+  - **Comments & activity:** one feed, oldest first: creation, the trail, comments; older items fold behind "Show N earlier" past eight. The composer is text + @mentions: typing `@` (or the @ button) lists active members, ⌘↵ posts, and only people still named in the text are notified; `comments_op_add` adds the assignee, the creator and earlier commenters (TV-D1). Everyone who sees the panel gets the composer, as in Notes; the server's spine guard decides.
+  - **Shared spine pieces** (spec decision 12): `spine/comments.ts` (pure rules), `useCommentThread`, `useCommentPeople`, and `CommentComposer` / `CommentCard` / `CommentBody` in `spine/ui/comments-panel.tsx`. Notes' Comments panel runs on them now, so its authors show real names instead of "Teammate".
+  - **Duplicate copies the plan, not the history:** title, description, bucket, parent, assignee, priority, energy, dates, estimate, repeat rule and tags; the copy is open, unqueued, with no tracked time, subtasks, blockers, links or comments. It lands at the end of its bucket and is selected.
+  - **Title** is `DetailTitle size="lead"` (18 px semibold, wraps) in an auto-growing field; the other inspectors keep `rail` until their own redesign.
+  - **Linked +** links a note, contact, company or event (`EntityLinkPicker`, origin `manual`), with the "Already linked" guard the hub drop uses.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §9 · [src/features/tasks/ui/task-detail-panel.tsx](../../src/features/tasks/ui/task-detail-panel.tsx) · [src/features/spine/ui/comments-panel.tsx](../../src/features/spine/ui/comments-panel.tsx)
+- **2026-10-08 · TV-D5: Tasks is live over Supabase Realtime; your own edits hold teammates' changes back until they settle, and coming back to the app refetches** (`specs/tasks-v2.md` block 8, decision 10; migrations `20261008223000_tasks_realtime_publication.sql`, applied to production 2026-10-08, and `20261008224500_tasks_server_updated_at.sql`).
+  - **Published:** `tasks`, `buckets`, `task_queue`, `tags`, `tag_links`, `comments` join `supabase_realtime`. Inserts and updates reach only subscribers whose RLS lets them read the row; a delete reaches every subscriber of the table but carries only its uuid. `comments` is published for TV-U3 (no Tasks listener yet; TV-U3 landed without one, so TV-D11a owns it); `attachments` doesn't exist yet, so a data-lane block adds it (TV-D11a in the v3 build).
+  - **One channel per workspace and person** (`tasks-db:<ws>:<me>`, `src/features/tasks/realtime.ts`), shared by every surface running `useTasksModule` and filtered by `workspace_id`. Like chat and notes it sits outside the runtime seam (NO-6).
+  - **Merge rules** (`src/features/tasks/live.ts`): a change for a row we have lands only if its `updated_at` is newer (to the microsecond; Realtime and PostgREST format timestamps differently), and soft-deleted rows leave. While any of the module's own `runtime.tasks` calls is in flight, plus 1 s after (the echo usually trails the response), changes wait in a buffer and then land in order. So an echo never reverts an optimistic edit, and a row you just removed isn't put back by its insert's late echo. A stalled call can hold changes for 10 s at most. *Rejected: per-entity pending sets wired into every mutation (~20 call sites) — the runtime wrapper covers them all, including future ones.*
+  - **One clock for `updated_at`** (`20261008224500_tasks_server_updated_at.sql`): a `BEFORE INSERT OR UPDATE` trigger stamps `tasks`, `buckets` and `tags` with `clock_timestamp()`. Client-direct writes used to send the device's clock while ops used the server's, so a device running ahead made its rows look newer than later changes and open apps dropped them (validator, round 1). Old builds' stamps are quietly replaced. *Rejected: comparing by Realtime's commit timestamp — reads carry no such column to compare against.*
+  - **Refetch** on reconnect (socket rejoin, `online`), with one trailing read if inside the 5 s throttle, and on coming back to the window (focus or visibility, leading-only, so one return reads once). It's quiet: no loading flag, no error banner, and the result is discarded and retried if one of our saves started while it was out.
+  - **Where changes land:** tasks and buckets in the hook's bundle; queue rows in TV-D4's `queueRows` (claims and my line-up update live; a quiet refetch keeps the done tasks shown in place in my Queue); tags and links in TV-T1's workspace tag store (`applyLiveTags`), where a pending op stays on top and a saved one gives way to a later change on the same tag or link; the store remembers when a live change touched each tag and link, so a read that started before it (a hub's single-item read, another surface's load) can't put the older state back. A done task kept in place in my Queue leaves it if a teammate reopens it. Not caught live: a row that stops being visible to you (unshared, moved to a bucket you can't see) sends you nothing, so it stays until the next refetch.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §12, decision 10 · probe: `supabase/probes/tasks-realtime.{stub,probe}.sql`
+
+- **2026-10-08 · TV-D3: tracked time is a log of entries; a save resent after a reload counts once, and saving time never puts back anyone's edit** (`specs/tasks-v2.md` block 5; migration `20261008225500_tasks_time_entries.sql`, applied to production 2026-10-09 as version `20261008221907`, after AT-1 and TV-D5's stamp, with Maciej's OK; then a rolled-back probe there as a workspace owner passed: a focus save, its resend answered `duplicate`, an adjustment and its Undo, a typed total, an unknown task `gone`, own rows only through RLS, the totals read, an old build's write as an adjustment, nothing else on the row changed, no activity rows; round-trip `supabase/probes/tasks-time.{stub,seed,probe}.sql` on the TV-D2 stub chain plus AT-1's migration, in both orders).
+  - **`task_time_entries`**: one row per focus or waiting stretch (who, when it ended, how long), per adjustment (signed), and one `legacy` row per task holding the total it had before (no person, no date). Written only by `tasks_op_track_time` and the old-build shim; each person reads only their own rows. Time ops write no `module_activity` rows (spec decision 5).
+  - **A task's total** = every entry except waiting, never below zero. `tasks.time_spent_seconds` keeps it, so lists, the MCP task shape and old builds read the same number everywhere (D3-2). **`tasks_time_totals(workspace, since?)`** adds the caller's own share, their waiting time and their share since a time (legacy never counts there: D3-4); nobody can read anyone else's share.
+  - **Saving time changes only the time.** The op writes `time_spent_seconds` (and bumps `updated_at`, as TV-F1's save did, so TV-D5's live updates, which apply a row only when it is newer, carry the new total) and nothing else on the row; the app takes the server's total from the answer, which already counts teammates' time. Edits can't carry the time column any more (`editableTaskFields` drops it), so no edit or re-save can put back a stale total.
+  - **The duplicate guard TV-F1 asked for.** Each save from the Focus engine carries an idempotency key (`FocusCredit.flightKey`). A save that failed, came back "not now", or died with its page is kept as it was and sent again with the same seconds and key; the server records one entry per (task, key) and answers `duplicate` to a resend. Time earned meanwhile goes as its own save right after. A hand-off from a build before keys counts as unsaved again, as before (once, at the upgrade).
+  - **Corrections (D3-3).** Typing a Time value sends `set_total` (one adjustment makes the total exactly that, or none); "Took longer" and Execute's "+5m" add one adjustment, and Undo removes exactly that entry by id (only your own, only adjustments), so time tracked meanwhile stays. Taking time away stops at zero, and the hidden sum never goes below it: an Undo after someone took time away (typed 0, say) adds an evening-out entry nobody can undo, so time saved later counts in full. Calendar's block focus saves real focus stretches. One task's time writes from one Tasks view go one at a time, in order (a request that hangs fails after 30 s), so the total shown last is the latest; Calendar and Tasks each keep their own order, which only affects what's on screen until the next load.
+  - **"Gone" is the server's answer now.** A task deleted for good, not shared with you any more, or in another workspace answers `gone` (the same answer for all three, so nothing leaks) and the engine drops the seconds with a note. A task in the trash still takes its time. A module viewer, or view-only access to the task, is refused (the save stays "not saved yet", as in TV-F1).
+  - **Old builds keep working (D3-5).** Their writes of `time_spent_seconds` become the writer's adjustment, so the total lands on what they wrote (last writer wins on that column, as before). **Except a lower value from a whole-row upsert** (how builds before TV-D1 save every edit), which carries a possibly stale copy of the total: it's ignored, so renaming a task on an old build can't take away a teammate's time. The upsert is told apart by its BEFORE INSERT pass on an existing id (a transaction-local setting the UPDATE pass reads and clears). A task created with time on it gets that time as its creator's adjustment. Removed in TV-D7.
+    - **Accepted costs until those builds update.** A higher stale copy from such an upsert is still added (it can put back time someone took away), because ignoring increases would drop every bit of focus those builds track (the TV-D2 queue shim made the same call). And builds from TV-D1 to before TV-D3 save focus as a narrow write of their own copy of the total, which looks exactly like a typed value: a copy that missed a teammate's newer time lowers the total. **Rebuild the desktop app as soon as TV-D3 is on `maciej`**, so totals are exact on every device (D3-1).
+  - **Account deletion** keeps the seconds in the task's total and forgets whose they were (`user_id` SET NULL). Leaving a workspace keeps the entries.
+  - *Deviation from the spec's wording* ("opens/heartbeats/closes the caller's open entry, one open entry per user+task"): the TV-F1 engine keeps the clock on the device and saves finished stretches every minute, so the op appends closed stretches with a key. There are no open entries to heartbeat or expire; "is on this" comes from `focus_runs` (TV-F2), which also gets `run_id`'s foreign key.
+  - **Before the migration reaches the database** the runtime writes the old column only (read the total, write the new one), as builds before TV-D3 did; `listTimeTotals` is empty.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §5 · probe: `supabase/probes/tasks-time.{seed,probe}.sql` · checklist [docs/testing/t-maciej-tv-d3-time-entries.md](../testing/t-maciej-tv-d3-time-entries.md)
+
+- **2026-10-08 · TV-D4: the app reads and writes my personal queue; claims show who else has a task lined up; "My tasks" joins the rail** (`specs/tasks-v2.md` block 7; no migration).
+  - **One queue in the app: mine.** The row/card toggle, `q`, the context menus, the detail panel button, the rail's Queue row, Focus, the Home Tasks widget and Calendar's tasks panel all use `task_queue` through `useTasksModule` (`queuedTasks`, `queuedTaskIds`, `queueClaims`, `queueCount`; `toggleQueue` / `addToQueue` / `removeFromQueue` / `moveQueuedToEnd` / `reorderQueue` / `captureToQueue`). The old `committedTasks`, `toggleCommit`, `rescheduleFromToday`, `commitNewTaskToday` and `commitOrderUpdates` are gone. The pure rules live in `src/features/tasks/queue.ts`.
+  - **The new app no longer writes `committed_for` / `commit_order`.** Old desktop builds keep their own shared day list (their commits still land in the committer's queue through the TV-D2 shims), but what the new app queues doesn't show in an old build's "today". The columns go in TV-D7.
+  - **Queue ops are sent one at a time, in the order they were made** (a promise chain in the hook), and only the newest answer is applied. Each op answers with my whole queue, so a later answer always includes the earlier ops, and pending optimistic edits aren't put back by an older answer. Ops on a task that's still saving (a `tmp-` id) are refused with "Still saving that task".
+  - **Done leaves the queue at once, on screen too.** Completing, archiving or deleting a task drops every person's row locally (as the server does). A task I complete stays in the Queue view, done, in place, until the next load (tasks-v2 §6), so Focus still reads "1 / 2 done". Reopening it doesn't re-queue it (TV-D2). Done and archived tasks get no queue mark, menu item or panel button.
+  - **Claims (D4-2):** a task in someone else's queue shows their small ringed avatar in the queue column ("In Mike's queue"; with several people, "In Mike's and Ola's queues"); it stays clickable and adds the task to mine, with a quiet toast "Also in Mike's queue". When we both have it, their avatar sits beside my accent toggle. The detail panel shows the same line above its queue button. View-only members see claims without actions. "<name> is on this" (a running run's Now) is TV-F2's.
+  - **My tasks (D4-3, D4-4):** a rail row between Queue and Inbox, shown only with two or more active members (`showsMyTasks`). Scope `"mine"` = tasks assigned to me across buckets, archived left out and done kept, like All (TV-U1 hides completed tasks everywhere). It groups by bucket like All, and rows and cards there leave out the assignee avatar. The rail count is my open ones.
+  - **Focus Skip = to the end of my queue** (spec §3), not "out of today": never a reschedule; alone in the queue, the task stays Now. "Remove from queue" in Focus arrives with TV-F2's ⋯.
+  - **Home Tasks widget:** my queue's open tasks, headed "Queue"; when it's empty, the open tasks in list order, headed "Open" (decision 17). It reads a new `taskQueue` source in the dashboard data context.
+  - **Not decided here:** the stale line-up prompt's "last touched" source (TV-F2; removals delete rows, see TV-D2).
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §1, §2 · [src/features/tasks/queue.ts](../../src/features/tasks/queue.ts)
+
+- **2026-10-08 · TV-T1 landed: one workspace tag store feeds every surface, and a tag can be created by name and attached before its task exists** (`specs/tasks-v2.md` block 6; no migration).
+  - **One store per workspace** (`src/features/tags/store.ts`, a module-level `useSyncExternalStore` store like TV-Q1's hidden buckets). Tasks, Calendar, Notes and Email (each its own `useTasksModule`), the note/email/contact/company tag rows and the contacts directory filter all read it, so a tag change shows everywhere at once (T1-1). Tag code moved out of `features/contacts` into `features/tags` (`store.ts`, `selectors.ts`, `hooks/use-entity-tags.ts`, `ui/entity-tag-row.tsx`).
+  - **Reads seed it; writes are ops on top.** Each read hands in what it loaded, the part of the links it covered (all, some entity types, or one entity: a seed replaces only that part, and never a part a newer read already loaded) and when its request started. A write shows at once as an op over the loaded data; it stays on top until a read that started after it saved comes back, so a slow older read can't put back a change, and a failed write drops it with a toast on every surface. A read whose links hit the SCALE-1 row cap can't tell a removed link from one past the cap, so it doesn't count as having loaded its scope and leaves alone what full reads of single items or types loaded; it still refreshes tags, and no read brings back a link written after it started. Signing in as someone else (or out) empties the store (`attachTagUser`, from the AuthProvider).
+  - **New tags get a client-generated uuid** (the runtime's `upsertTag` already accepted one), so there are no temp tag ids to swap and the "Still saving that tag" guard is gone: an attach waits for its tag's row, and writes to the same link, or to the same tag, run one after another.
+  - **Create-or-attach by name** (`createOrAttachByName`, Tasks' `createTagForTask`) attaches the live tag with that name (any case) or creates it, in one step, and takes the item's id as a promise: `createTask` now resolves to the saved task, so capture (TV-U7) can tag a task before it is saved (T1-2). If the task is never saved, a tag made just for it is deleted again unless something else uses it by then.
+  - **Delete keeps its Undo grammar** and now commits through `undoToast`'s `onCommit` (when the toast closes), instead of a fixed timer.
+  - *Deviation from the spec's "event renamed":* the `moduo:contact-tags:changed` window event is gone rather than renamed. Its only listener was the contacts directory, which now reads the store, so every surface re-renders from the same state without an event.
+  - **`listEntityTags` fixed** (the spec's "separate chip" never landed): a stray third query filtered `tag_links.deleted_at`, a column that table doesn't have, so every hub tag row (contacts, companies, notes, email) failed its read and showed nothing until this block.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §Assumptions 11 · [src/features/tags/store.ts](../../src/features/tags/store.ts) · tests [store.test.ts](../../src/features/tags/store.test.ts)
+
+- **2026-10-08 · TV-D2: each person has their own Queue, not tied to a date; the old day columns stay for old builds, and their commits land in the committer's queue** (`specs/tasks-v2.md` block 4; migration `20261008171500_tasks_personal_queue.sql`, applied to production 2026-10-08 after a drift check and a rolled-back dry run, then probed there; round-trip `supabase/probes/tasks-queue.{stub,seed,probe}.sql`).
+  - **`task_queue`** is one row per (person, task), ordered by `position` (`COLLATE "C"`, the app's fractional keys: 10 base-36 digits, 2^20 apart, so a client can mint an optimistic key between two). The server only writes clean keys and renumbers a person's queue when two neighbours run out of room. Writes go only through `tasks_op_queue_add` (`end`, or `top` for Calendar's "Start focus"), `_remove`, `_reorder` (after a task, or the top) and `_move_to_end`, each acting for `perm_actor_id()` (an API key: its creator), serialized per person by an advisory lock, and returning that person's queue. Add and remove are in the task's trail (`tasks.queue_add` / `tasks.queue_remove`: "queued this", "removed this from the queue"); moves aren't.
+  - **Who sees what.** Anyone who can see a task can read who has it queued (claims, for TV-D4); the read policy and the ops' answers both drop a task you can no longer see. You can still remove your own row for it (quietly: its trail isn't yours to write in). `perm_enforce_write` is registered for INSERT/UPDATE only: removals follow someone else's change (a task completed, a member removed) that already passed its check, and a cascade must never fail on a person's queue.
+  - **Leaving queues:** done, archived, deleted (soft or hard), or deleted together with its bucket; a removed member's queue in that workspace goes too (so nobody sees "In <name>'s queue" for a former member), and deleting an account empties every queue through the `profiles` cascade. Reopening, restoring, catch-up and moving or reassigning never touch queues.
+  - **Carry-over (once):** open tasks committed for a date that is today somewhere on Earth when the migration runs (UTC-12 to UTC+14) go to the latest committer (an API key's: its creator) if still in the workspace, else the assignee if they are, in day then `commit_order` order. Production had none when it was applied (2026-10-08, 19:17 UTC), so nothing carried over.
+  - **Old builds keep working, with the old shared day list.** `tasks_op_commit` / `uncommit` / `skip_today` now also add to (commit: to the end; again: moves there) or take out of the caller's queue, and still write `committed_for` / `commit_order`, which builds before TV-D4 read as "today". `skip_today` no longer bumps `reschedule_count` (spec decision 4; the app's optimistic Skip matches). An old build's direct writes are mirrored into the writer's queue too: an insert or update setting a current `committed_for` (capture straight into today) adds it at the end, and a `commit_order` change re-sorts that day's rows in the writer's queue. **Removals are never mirrored:** a whole-row save from a build before TV-D1 can write a stale NULL, which must not empty a queue (the opposite stale case re-adds a task to the writer's queue, which is what their build shows them).
+  - **Deviation from the spec's wording** (decision 4: "catch-up and recurrence stop touching commit columns; `clear_commit` / `release_commit` are ignored"): `tasks_op_catch_up` and `tasks_op_skip_occurrence` are unchanged and still clear the old columns, so old builds keep today's behaviour, but the queue never follows them (the mirror ignores removals). What the spec is after, a queue that midnight and recurrence don't empty, holds.
+  - **Between TV-D2 and TV-D4** the app still shows the old day list while commits also pile up, dateless, in personal queues. TV-D4's switch shows everything still queued; the stale-line-up prompt ("Lined up 3 days ago…") is the intended answer. Removals delete rows, so "last touched" for that prompt needs its own source (`module_activity` add/remove rows, or a per-person timestamp): TV-D4/TV-F2 decide.
+  - **MCP:** `tasks_queue` (read) and `tasks_queue_add` / `_remove` / `_reorder` (`position`: top, end, or after `after_task_id`) act on the key creator's queue; every task carries `queued_by_me`. `tasks_today` / `tasks_commit` / `tasks_uncommit` / `tasks_skip_today` stay as aliases until TV-D7 (`tasks_today` returns the queue; its `date` is echoed, not a filter). `committed_for` / `commit_order` stay in the task shape until TV-D7.
+  - **App:** `runtime.tasks.listQueue` (every visible row, sorted by person then position; empty until the migration is applied) and `opQueueAdd` / `Remove` / `Reorder` / `MoveToEnd`, for TV-D4 to use. No UI change in this block.
+
+  → [specs/tasks-v2.md](../../specs/tasks-v2.md) §2, decision 4 · probe: `supabase/probes/tasks-queue.{stub,seed,probe}.sql`
+
 - **2026-10-08 · TV-D1 landed: task edits save field by field, a task has its own assignee, and owner_id is the creator again** (`specs/tasks-v2.md` block 3; migration `20261008150000_tasks_assignee_creator.sql`, applied to production 2026-10-08 after a rolled-back dry run, then probed there).
   - **Edits send only what changed.** `patchTask` → `runtime.tasks.updateTask` sends the edited columns plus `updated_at` (`src/lib/task-rows.ts`), so one person's edit can't put back a field a teammate changed. Creation stays an upsert (`upsertTask`); re-saving a task that exists writes its editable fields only, never the creator or assignee. Undo writes back only what the undone action changed (a delete's Undo: `deleted_at`, and the subtasks' `parent_id`). Same-field conflicts stay last-writer-wins.
   - **`tasks.assignee_id`** (NULL = Unassigned, FK to `profiles` ON DELETE SET NULL) is backfilled from `owner_id` (an owner whose account is gone becomes Unassigned). `owner_id` is now the creator: whoever inserts the task (an API key: its creator), never changed afterwards. **Creator recovery:** a DF-9 `tasks.assigned` row logged within a minute of the task's `created_at` is the insert's own row, so its actor is the creator (production: 5 such tasks); a task reassigned later with no such row keeps `owner_id` as it was and gets **`creator_unknown = true`**, and the app leaves "Created by" out. Server-owned: clients can't change either column. **Limit:** an old-model "Assign to → Me" pickup logged nothing, so such a task now says it was created by whoever picked it up; nothing in the data can tell (no guessing, per the spec).

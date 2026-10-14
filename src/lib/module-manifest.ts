@@ -24,6 +24,12 @@ export type ModuleOpDef = {
    * Mirrored by MCP_TOOL_NEEDS in @contracts/mcp-key-scopes.
    */
   alsoNeeds?: McpKeyModule[];
+  /**
+   * Kept for older clients and agents until a named cleanup, with what to use
+   * instead (TV-D16: the Tasks aliases stay until TV-D7). Never offered to new
+   * callers first.
+   */
+  deprecated?: { until: string; use: string };
 };
 
 /** One readable resource the module exposes (MCP resources are read-only). */

@@ -81,7 +81,7 @@ export function WidgetFrame({
       {editing ? (
         <div
           data-no-drag
-          className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-md bg-card/90 p-0.5 shadow-sm backdrop-blur-sm"
+          className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-md bg-card p-0.5 shadow-sm"
           // The cluster owns its presses so they resolve as clicks, never a drag.
           onPointerDown={(e) => e.stopPropagation()}
         >

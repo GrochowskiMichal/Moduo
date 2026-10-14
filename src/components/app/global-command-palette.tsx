@@ -8,17 +8,20 @@ import {
   House,
   Inbox,
   MessagesSquare,
+  Paperclip,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { filesLabel } from "../../features/attachments/files";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import type { EntityRecord } from "../../lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
 import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-search";
 import { formatShortcut, onShortcut, SHORTCUTS } from "../../lib/shortcuts";
+import { findWorkspaceStore } from "../../lib/sync/store";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import {
@@ -31,6 +34,7 @@ import {
   CommandShortcut,
 } from "../ui/command";
 import { Eyebrow } from "../ui/eyebrow";
+import { MetaCount } from "../ui/meta-count";
 import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events";
 
 type Action = {
@@ -137,6 +141,23 @@ export function GlobalCommandPalette() {
   }, [open, trimmed, runtime, selectedWorkspaceId]);
 
   const resultGroups = useMemo(() => groupPaletteResults(results), [results]);
+  // Archived projects stay findable, labelled (REPLAN 78, TV-U16): the
+  // workspace's Tasks copy knows which projects and tasks are archived.
+  const archivedIds = useMemo(() => {
+    if (!runtime || !selectedWorkspaceId || results.length === 0) return null;
+    const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
+    if (!bundle?.archivedBuckets?.length) return null;
+    return new Set([
+      ...bundle.archivedBuckets.map((b) => b.id),
+      ...(bundle.archivedTasks ?? []).map((t) => t.id),
+    ]);
+  }, [runtime, selectedWorkspaceId, results]);
+  // A task result's 📎 mark (AT-3), read from the same copy (files you can see).
+  const fileCounts = useMemo(() => {
+    if (!runtime || !selectedWorkspaceId || results.length === 0) return null;
+    const counts = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().attachmentCounts;
+    return counts && counts.size > 0 ? counts : null;
+  }, [runtime, selectedWorkspaceId, results]);
 
   const go = useCallback(
     (to: string) => () => {
@@ -311,9 +332,21 @@ export function GlobalCommandPalette() {
                   >
                     <Icon />
                     <span className="min-w-0 flex-1 truncate">{record.label || "Untitled"}</span>
+                    {record.type === "task" ? (
+                      <MetaCount
+                        icon={Paperclip}
+                        count={fileCounts?.get(record.id) ?? 0}
+                        label={filesLabel}
+                      />
+                    ) : null}
                     <Eyebrow className="shrink-0" tone="tag">
                       {TYPE_LABEL[record.type] ?? record.type}
                     </Eyebrow>
+                    {archivedIds?.has(record.id) ? (
+                      <Eyebrow className="shrink-0" tone="tag">
+                        Archived
+                      </Eyebrow>
+                    ) : null}
                   </CommandItem>
                 );
               })}

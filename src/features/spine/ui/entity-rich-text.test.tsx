@@ -39,4 +39,27 @@ describe("EntityRichText", () => {
     expect(screen.queryByText(/alert\(1\)/)).toBeNull();
     expect(screen.getByText("safe")).toBeTruthy();
   });
+
+  it("renders a stored date chip, reading Today while it is (RF-1, AC10.4)", () => {
+    const d = new Date();
+    const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const { container } = render(
+      <EntityRichText
+        html={`<p>Due <time data-moduo-date="${day}" datetime="${day}">Oct 11</time> ok</p>`}
+      />,
+    );
+    expect(container.querySelector("[data-slot='date-chip']")?.textContent).toBe("Today");
+  });
+
+  it("never shows a label-less reference's placeholder word as a title", () => {
+    render(
+      <EntityRichText
+        html={
+          '<p>See <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="t-1" data-ref-v="2">task</span></p>'
+        }
+      />,
+    );
+    // Outside the app shell (no store) it reads as the type's word, never a stored title.
+    expect(screen.getByRole("button", { name: "task: task" })).toBeTruthy();
+  });
 });

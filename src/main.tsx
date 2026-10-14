@@ -9,6 +9,7 @@ import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { applyAppearance, readLocalAppearance } from "./lib/appearance";
 import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
+import { useKeepInMenuBar } from "./lib/keep-in-menu-bar";
 import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
 import { router } from "./router";
 import "./global.css";
@@ -32,7 +33,7 @@ window.addEventListener("unhandledrejection", (event) => {
 // hook no-ops until signed in, and the boot landing/motion still first-paint from
 // the localStorage mirror — this keeps the mirror in sync for the next launch.
 function PreferencesSync() {
-  usePreferences();
+  usePreferences({ syncOwner: true });
   return null;
 }
 
@@ -40,6 +41,8 @@ function PreferencesSync() {
 // handlers (⌘Q menu item + window CloseRequested) can read it. No-op on web. DF-19f-quit.
 function ConfirmBeforeQuit() {
   useConfirmBeforeQuit();
+  // TV-D12: and whether closing the window keeps Moduo in the menu bar.
+  useKeepInMenuBar();
   return null;
 }
 

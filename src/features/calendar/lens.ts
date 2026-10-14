@@ -1,13 +1,16 @@
 // The calendar task lens — pure selectors that render scheduled tasks as time
-// blocks on the grid. The lens model (specs/calendar.md, decision 1): a task
-// block IS the task row (`scheduledAt` + `durationMinutes`); no separate block
-// object exists in v1, so Tasks and Calendar cannot drift apart by construction.
+// blocks on the grid. The lens model (specs/calendar.md, decision 1): a block
+// is never a stored object of the Calendar's own. Since TV-F6 (tasks-v3 AC2.3,
+// AC7.3) a block is one of my work sessions (TV-D10's `task_sessions`, several
+// per task), falling back to the task row (`scheduledAt` + `durationMinutes`)
+// for a task with no session known; due-only tasks are all-day chips.
 //
 // Everything here is real-instant math over local calendar days — never hour
 // indices — so DST days (23h/25h) resolve correctly (see grid-layout.ts).
 
+import { formatDate, formatWeekdayDate } from "../../lib/time-format";
 import { todayStr } from "../tasks/helpers";
-import type { Task } from "../tasks/model";
+import type { Task, TaskSession } from "../tasks/model";
 
 /** The two v1 grid views. Month/agenda are explicit fast-follows (§11). */
 export type CalendarView = "day" | "week";
@@ -19,10 +22,16 @@ export const DEFAULT_BLOCK_MINUTES = 30;
 export type LensTask = Pick<
   Task,
   "id" | "title" | "scheduledAt" | "durationMinutes" | "status" | "deletedAt"
->;
+> &
+  Partial<Pick<Task, "statusCategory">>;
 
 /** A task rendered as a block — a projection, never a stored object. */
 export type TaskBlock = {
+  /** The block's own id: its work session's (TV-D10), or the task's for a
+   *  schedule read from the task row (no sessions known for it). */
+  blockId: string;
+  /** The work session it shows; null when read from the task row. */
+  sessionId: string | null;
   taskId: string;
   title: string;
   /** Real instant of the block's start (ms epoch). */
@@ -111,14 +120,56 @@ export function stepAnchor(view: CalendarView, anchor: Date, dir: 1 | -1): Date 
  * render (checked/dimmed) on the day they were scheduled (AC2). One task ⇒ at
  * most one block — no double-render anywhere.
  */
-export function taskBlocks(tasks: LensTask[], range: VisibleRange): TaskBlock[] {
+/** A work session as the lens reads it (TV-D10's `task_sessions`). */
+export type LensSession = Pick<TaskSession, "id" | "taskId" | "userId" | "startsAt" | "endsAt">;
+
+/**
+ * Task blocks in the visible days (TV-F6, AC2.3/AC7.3: "sessions as blocks").
+ * With `sessions`, each of my work sessions is its own block (a task can be in
+ * my calendar several times, REPLAN 25), and a teammate's session stays in
+ * their calendar. A scheduled task the store has no session for at all (a
+ * build from before TV-D10, sessions not read yet) shows from its row, once.
+ */
+export function taskBlocks(
+  tasks: LensTask[],
+  range: VisibleRange,
+  sessions?: { list: readonly LensSession[]; me: string | null },
+): TaskBlock[] {
   const dayKeys = new Set(range.days.map(localDayKey));
   const seen = new Set<string>();
   const out: TaskBlock[] = [];
+  const withSessions = new Set<string>();
+  if (sessions) {
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    for (const s of sessions.list) {
+      withSessions.add(s.taskId);
+      if (s.userId && s.userId !== sessions.me) continue;
+      const t = byId.get(s.taskId);
+      if (!t || t.deletedAt || t.status === "archived") continue;
+      const startMs = Date.parse(s.startsAt);
+      const endMs = Date.parse(s.endsAt);
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) continue;
+      const dayKey = localDayKey(new Date(startMs));
+      if (!dayKeys.has(dayKey)) continue;
+      const durationMinutes = Math.max(1, Math.round((endMs - startMs) / 60_000));
+      out.push({
+        blockId: s.id,
+        sessionId: s.id,
+        taskId: t.id,
+        title: t.title,
+        startMs,
+        endMs: startMs + durationMinutes * 60_000,
+        durationMinutes,
+        done: t.status === "done",
+        dayKey,
+      });
+    }
+  }
   for (const t of tasks) {
     if (t.deletedAt) continue;
     if (t.status === "archived") continue;
     if (!t.scheduledAt) continue;
+    if (withSessions.has(t.id)) continue;
     if (seen.has(t.id)) continue;
     const start = new Date(t.scheduledAt);
     const startMs = start.getTime();
@@ -129,6 +180,8 @@ export function taskBlocks(tasks: LensTask[], range: VisibleRange): TaskBlock[] 
     const durationMinutes =
       t.durationMinutes && t.durationMinutes > 0 ? t.durationMinutes : DEFAULT_BLOCK_MINUTES;
     out.push({
+      blockId: t.id,
+      sessionId: null,
       taskId: t.id,
       title: t.title,
       startMs,
@@ -138,7 +191,52 @@ export function taskBlocks(tasks: LensTask[], range: VisibleRange): TaskBlock[] 
       dayKey,
     });
   }
-  return out.sort((a, b) => a.startMs - b.startMs || a.taskId.localeCompare(b.taskId));
+  return out.sort((a, b) => a.startMs - b.startMs || a.blockId.localeCompare(b.blockId));
+}
+
+/** A due-only task as an all-day chip (TV-F6, AC2.3/AC7.3). */
+export type DueChip = {
+  taskId: string;
+  title: string;
+  dayKey: string;
+  done: boolean;
+};
+
+/**
+ * Your own due-only tasks in the visible days, as all-day chips (spec §18): a
+ * task of yours with a due date and nothing in your calendar shows on its due
+ * day (REPLAN 1.3: "due-only tasks never reach the calendar grid"). A Won't do
+ * task doesn't; a done one shows done.
+ */
+export function dueChipsByDay(
+  tasks: readonly (LensTask &
+    Partial<Pick<Task, "dueOn" | "assigneeId" | "creatorId" | "creatorUnknown">>)[],
+  range: VisibleRange,
+  sessions: { list: readonly Pick<LensSession, "taskId" | "userId">[]; me: string | null },
+): Map<string, DueChip[]> {
+  const dayKeys = new Set(range.days.map(localDayKey));
+  const known = new Set(sessions.list.map((s) => s.taskId));
+  const mine = new Set(
+    sessions.list.filter((s) => !s.userId || s.userId === sessions.me).map((s) => s.taskId),
+  );
+  const out = new Map<string, DueChip[]>();
+  for (const t of tasks) {
+    if (t.deletedAt || t.status === "archived" || !t.dueOn) continue;
+    // Your own (spec §18): assigned to you, or yours as its creator while
+    // nobody is assigned. Teammates' tasks stay out.
+    const owner = t.assigneeId ?? (t.creatorUnknown ? null : (t.creatorId ?? null));
+    if (!sessions.me || owner !== sessions.me) continue;
+    // In your calendar already: a session of yours (or, with no session known
+    // for it, the row's schedule).
+    if (mine.has(t.id) || (!known.has(t.id) && t.scheduledAt)) continue;
+    const dayKey = t.dueOn.slice(0, 10);
+    if (!dayKeys.has(dayKey)) continue;
+    const chip: DueChip = { taskId: t.id, title: t.title, dayKey, done: t.status === "done" };
+    const list = out.get(dayKey);
+    if (list) list.push(chip);
+    else out.set(dayKey, [chip]);
+  }
+  return out;
 }
 
 /** Group blocks into their day columns (each block lands in exactly one). */
@@ -161,6 +259,12 @@ export function blocksByDay(blocks: TaskBlock[]): Map<string, TaskBlock[]> {
 export function rangeLabel(range: VisibleRange, locale?: string, now: Date = new Date()): string {
   const first = range.days[0];
   const last = range.days[range.days.length - 1];
+  // The app passes no locale: the label reads the one date grammar, so it
+  // follows Time & region's date order (TV-D14).
+  if (!locale) {
+    if (range.view === "day") return formatWeekdayDate(first, now);
+    return `${formatDate(first, now)} – ${formatDate(last, now)}`;
+  }
   if (range.view === "day") {
     return first.toLocaleDateString(locale, {
       weekday: "long",

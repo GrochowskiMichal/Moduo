@@ -18,7 +18,8 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
-import { useDomainSync } from "./prefs-sync";
+import { isTasksRole, type TasksRole } from "../features/tasks/onboarding";
+import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
 
@@ -38,32 +39,54 @@ export type MotionPref = "system" | "reduced" | "full";
 //     task resolves. It lives here (not a fork) so the settings UI + synced domain
 //     stay single-source (spec Assumption 7).
 
+// TV-D12 (the notification table, spec §13) adds `comments` (a comment on a
+// task you created, own or commented on, split from `mention`, which is now
+// "@you" only) and `waiting` ("something you were waiting on came in": an
+// unblocked task or a Waiting on… entry that cleared; it replaces
+// `unblocked`, whose saved value it takes). Reminders have no switch: "turned
+// off by the reminder". TV-D13 adds `teams` ("your team's mute": a task routed
+// to a team you're in, `@Team` in a comment, and the check-back on a team task
+// you created that nobody took).
 export type NotificationType =
   | "mention"
   | "assigned"
+  | "comments"
   | "completed"
   | "dueFollowUp"
-  | "unblocked"
-  | "overdueTasks";
+  | "waiting"
+  | "teams"
+  | "agents"
+  | "overdueTasks"
+  | "storage";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "mention",
   "assigned",
+  "comments",
   "completed",
   "dueFollowUp",
-  "unblocked",
+  "waiting",
+  "teams",
+  "agents",
   "overdueTasks",
+  "storage",
 ];
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   mention: true,
   assigned: true,
+  comments: true,
   completed: true,
   dueFollowUp: true,
-  unblocked: true,
+  waiting: true,
+  teams: true,
+  // TV-D16: your agent needs you, is ready for review, or failed.
+  agents: true,
   // Opt-in: overdue work otherwise lives in Tasks/Home, not the bell (AC9).
   overdueTasks: false,
+  // Only a workspace owner ever gets these (AT-1: the pool passed 80% / 95%).
+  storage: true,
 };
 
 /** module_activity `op` → the quiet-set toggle that governs it. An op absent from
@@ -73,23 +96,111 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
  *  your entity (DF-21d), both governed by `mention`; the two `email.*_due` ops
  *  share the `dueFollowUp` toggle. */
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
-  "comments.add": "mention",
+  "comments.add": "comments",
+  // TV-U13: an edit only reaches the people it newly names, so it's a mention.
+  "comments.edit": "mention",
+  "notes.mention": "mention",
+  "tasks.mentioned": "mention",
   "tasks.assigned": "assigned",
+  // Tasks handed into your Inbox (a project deleted, REPLAN 20a / U6-2).
+  "tasks.project_deleted": "assigned",
   "tasks.completed": "completed",
   "email.snooze_due": "dueFollowUp",
   "email.follow_up_due": "dueFollowUp",
-  "tasks.unblocked": "unblocked",
+  "tasks.unblocked": "waiting",
+  "tasks.waiting_resolved": "waiting",
+  // TV-D13: your teams.
+  "tasks.routed": "teams",
+  "tasks.team_check_back": "teams",
+  "comments.team_mention": "teams",
+  // TV-D16: an agent you started needs you · is ready for review · failed.
+  "tasks.agent_status": "agents",
+  // Tasks of yours that came back from someone who left (AC5.6).
+  "tasks.handed_back": "assigned",
+  "attachments.storage_80": "storage",
+  "attachments.storage_95": "storage",
 };
 
-export function notificationTypeForOp(op: string): NotificationType | null {
+/** The switch that governs a feed row. A comment that names you is a
+ *  mention; any other comment notice is "comments". */
+export function notificationTypeForOp(
+  op: string,
+  payload?: Record<string, unknown> | null,
+  userId?: string | null,
+): NotificationType | null {
+  if (op === "comments.add" && userId && payload) {
+    const named = payload.mentioned_user_ids;
+    if (Array.isArray(named) && named.includes(userId)) return "mention";
+  }
   return OP_TO_NOTIFICATION_TYPE[op] ?? null;
 }
 
 /** Whether a feed row of this `op` is visible under these prefs. Unmapped ops
- *  fail OPEN (always shown) so an unknown/legacy type is never silently hidden. */
-export function isNotificationEnabled(op: string, prefs: NotificationPrefs): boolean {
-  const type = notificationTypeForOp(op);
+ *  (a reminder, legacy types) fail OPEN (always shown) so nothing unknown is
+ *  silently hidden. */
+export function isNotificationEnabled(
+  op: string,
+  prefs: NotificationPrefs,
+  payload?: Record<string, unknown> | null,
+  userId?: string | null,
+): boolean {
+  const type = notificationTypeForOp(op, payload, userId);
   return type === null ? true : prefs[type];
+}
+
+/** The Tasks sidebar rows Customize sidebar can hide (REPLAN 29a; the Inbox
+ *  always shows). */
+export const TASKS_SIDEBAR_HIDEABLE = ["focus", "upcoming", "mine", "all"] as const;
+export type TasksSidebarHideable = (typeof TASKS_SIDEBAR_HIDEABLE)[number];
+
+/** A person's Tasks sidebar (TV-U6): the rows they hid, and what they pinned
+ *  in each workspace (project ids, in pin order; REPLAN 29b). */
+export interface TasksSidebarPrefs {
+  hidden: TasksSidebarHideable[];
+  pinned: Record<string, string[]>;
+}
+
+/**
+ * One snoozed Inbox task (TV-U15, the triage key H): hidden until `until`
+ * (a day, "2026-10-20"), or until its comments move past `stamp` (the
+ * task's comment stamp when it was snoozed).
+ */
+export interface TasksInboxSnooze {
+  until: string;
+  stamp: string | null;
+}
+
+/** A person's Inbox triage state (TV-U15): what they snoozed, per workspace and task. */
+export interface TasksInboxPrefs {
+  snoozed: Record<string, Record<string, TasksInboxSnooze>>;
+}
+
+/**
+ * Onboarding (TV-U17): the person's answer to "What will you run in Moduo?"
+ * and whether they've seen Tasks' welcome. Once per person, so it lives here
+ * and follows them to every device.
+ */
+export interface TasksOnboardingPrefs {
+  /** The role they picked; null until answered, or when they skipped it. */
+  role: TasksRole | null;
+  /** When the role question was answered or skipped (it's asked once). */
+  roleAt: string | null;
+  /** When Tasks' welcome first showed (it opens by itself only once). */
+  welcomeSeenAt: string | null;
+  /** Workspaces their teaching tasks and starter went into, with when. */
+  seeded: Record<string, string>;
+  /** Workspaces their role's saved views went into, with when (TV-U8). */
+  viewsSeeded: Record<string, string>;
+}
+
+/**
+ * What a person folded in one List or Board (TV-U8, following them to every
+ * device): each group's or column's fold choice, and when it last changed.
+ * Keyed `<workspace>:<place>:<group by>` (a Board: `<workspace>:<place>:board:<group by>`).
+ */
+export interface TasksFoldEntry {
+  at: string;
+  folds: Record<string, boolean>;
 }
 
 export interface Preferences {
@@ -108,6 +219,18 @@ export interface Preferences {
    *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
    *  command. See src/lib/confirm-before-quit.ts + src-tauri/src/lib.rs. */
   confirmBeforeQuit: boolean;
+  /** Desktop-only: closing the window keeps Moduo running in the menu bar, so
+   *  reminders still arrive (TV-D12, REPLAN 73; on by default). Mirrored into Rust
+   *  by `set_keep_in_menu_bar` (src/lib/keep-in-menu-bar.ts). */
+  keepInMenuBar: boolean;
+  /** The Tasks sidebar's Customize and Pin choices (TV-U6), following the person. */
+  tasksSidebar: TasksSidebarPrefs;
+  /** Snoozed Inbox tasks (TV-U15), following the person. */
+  tasksInbox: TasksInboxPrefs;
+  /** The role question and Tasks' welcome (TV-U17), following the person. */
+  tasksOnboarding: TasksOnboardingPrefs;
+  /** Folded groups and columns in each List and Board (TV-U8), following the person. */
+  tasksFolds: Record<string, TasksFoldEntry>;
   /** Which Notes UI this person uses while the refresh ships behind a switch
    *  (specs/notes-refresh.md NR-2). Classic until NR-12 flips the default. */
   notesExperience: NotesExperience;
@@ -122,6 +245,11 @@ export const DEFAULT_PREFERENCES: Preferences = {
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
   confirmBeforeQuit: false,
+  keepInMenuBar: true,
+  tasksSidebar: { hidden: [], pinned: {} },
+  tasksInbox: { snoozed: {} },
+  tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
+  tasksFolds: {},
   notesExperience: "classic",
 };
 
@@ -133,15 +261,144 @@ const MOTION_PREFS = ["system", "reduced", "full"] as const;
 const NOTES_EXPERIENCES = ["classic", "next"] as const;
 
 const notificationPrefsSchema = z
-  .object({
-    mention: z.boolean().catch(true),
-    assigned: z.boolean().catch(true),
-    completed: z.boolean().catch(true),
-    dueFollowUp: z.boolean().catch(true),
-    unblocked: z.boolean().catch(true),
-    overdueTasks: z.boolean().catch(false),
-  })
+  .preprocess(
+    (raw) => {
+      // `unblocked` became `waiting` (TV-D12): carry a saved choice over.
+      if (raw && typeof raw === "object" && !("waiting" in raw) && "unblocked" in raw) {
+        return {
+          ...(raw as Record<string, unknown>),
+          waiting: (raw as { unblocked: unknown }).unblocked,
+        };
+      }
+      return raw;
+    },
+    z.object({
+      mention: z.boolean().catch(true),
+      assigned: z.boolean().catch(true),
+      comments: z.boolean().catch(true),
+      completed: z.boolean().catch(true),
+      dueFollowUp: z.boolean().catch(true),
+      waiting: z.boolean().catch(true),
+      teams: z.boolean().catch(true),
+      agents: z.boolean().catch(true),
+      overdueTasks: z.boolean().catch(false),
+      storage: z.boolean().catch(true),
+    }),
+  )
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
+// A bad entry drops alone; a workspace keeps at most 50 pins.
+const tasksSidebarSchema = z
+  .object({
+    hidden: z
+      .array(z.unknown())
+      .catch([])
+      .transform((list) => [
+        ...new Set(
+          list.filter((v): v is TasksSidebarHideable =>
+            (TASKS_SIDEBAR_HIDEABLE as readonly unknown[]).includes(v),
+          ),
+        ),
+      ]),
+    pinned: z
+      .record(z.string(), z.unknown())
+      .catch({})
+      .transform((byWs) => {
+        const out: Record<string, string[]> = {};
+        for (const [ws, ids] of Object.entries(byWs)) {
+          if (!Array.isArray(ids)) continue;
+          const clean = [
+            ...new Set(ids.filter((id): id is string => typeof id === "string" && id !== "")),
+          ].slice(0, 50);
+          if (clean.length > 0) out[ws] = clean;
+        }
+        return out;
+      }),
+  })
+  .catch({ hidden: [], pinned: {} });
+// A bad entry drops alone; a workspace keeps at most 500 snoozed tasks.
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const tasksInboxSchema = z
+  .object({
+    snoozed: z
+      .record(z.string(), z.unknown())
+      .catch({})
+      .transform((byWs) => {
+        const out: Record<string, Record<string, TasksInboxSnooze>> = {};
+        for (const [ws, entries] of Object.entries(byWs)) {
+          if (!entries || typeof entries !== "object" || Array.isArray(entries)) continue;
+          const clean: Record<string, TasksInboxSnooze> = {};
+          for (const [taskId, raw] of Object.entries(entries).slice(0, 500)) {
+            const entry = raw as Partial<TasksInboxSnooze> | null;
+            if (!taskId || !entry || typeof entry.until !== "string" || !DAY_KEY.test(entry.until))
+              continue;
+            clean[taskId] = {
+              until: entry.until,
+              stamp: typeof entry.stamp === "string" ? entry.stamp : null,
+            };
+          }
+          if (Object.keys(clean).length > 0) out[ws] = clean;
+        }
+        return out;
+      }),
+  })
+  .catch({ snoozed: {} });
+// A stamp is any parseable moment; a bad one reads as "not yet".
+const stampSchema = z
+  .unknown()
+  .transform((v) => (typeof v === "string" && Number.isFinite(Date.parse(v)) ? v : null));
+const NO_ONBOARDING: TasksOnboardingPrefs = {
+  role: null,
+  roleAt: null,
+  welcomeSeenAt: null,
+  seeded: {},
+  viewsSeeded: {},
+};
+// Workspace → when; a bad entry drops alone, at most 200 workspaces.
+const workspaceStampsSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byWs) => {
+    const out: Record<string, string> = {};
+    for (const [ws, at] of Object.entries(byWs).slice(0, 200)) {
+      if (ws && typeof at === "string" && Number.isFinite(Date.parse(at))) out[ws] = at;
+    }
+    return out;
+  });
+const tasksOnboardingSchema = z
+  .object({
+    role: z.unknown().transform((v) => (isTasksRole(v) ? v : null)),
+    roleAt: stampSchema,
+    welcomeSeenAt: stampSchema,
+    seeded: workspaceStampsSchema,
+    viewsSeeded: workspaceStampsSchema,
+  })
+  .catch({ ...NO_ONBOARDING });
+/** At most this many Lists and Boards keep their folds (the newest win). */
+export const TASKS_FOLDS_KEEP = 300;
+/** And at most this many folds each. */
+const TASKS_FOLDS_PER_VIEW = 200;
+// A bad entry drops alone; the newest views are kept.
+const tasksFoldsSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byKey) => {
+    const entries: [string, TasksFoldEntry][] = [];
+    for (const [key, raw] of Object.entries(byKey)) {
+      const entry = raw as Partial<TasksFoldEntry> | null;
+      if (!key || key.length > 200 || !entry || typeof entry !== "object") continue;
+      if (typeof entry.at !== "string" || !Number.isFinite(Date.parse(entry.at))) continue;
+      const raws = entry.folds;
+      if (!raws || typeof raws !== "object" || Array.isArray(raws)) continue;
+      const folds: Record<string, boolean> = {};
+      // The newest folds are the last written: keep those.
+      for (const [id, v] of Object.entries(raws).slice(-TASKS_FOLDS_PER_VIEW)) {
+        if (id && id.length <= 200 && typeof v === "boolean") folds[id] = v;
+      }
+      entries.push([key, { at: entry.at, folds }]);
+    }
+    entries.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
+    return Object.fromEntries(entries.slice(0, TASKS_FOLDS_KEEP));
+  });
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -149,6 +406,11 @@ const preferencesSchema = z.object({
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
+  keepInMenuBar: z.boolean().catch(DEFAULT_PREFERENCES.keepInMenuBar),
+  tasksSidebar: tasksSidebarSchema,
+  tasksInbox: tasksInboxSchema,
+  tasksOnboarding: tasksOnboardingSchema,
+  tasksFolds: tasksFoldsSchema,
   notesExperience: z.enum(NOTES_EXPERIENCES).catch(DEFAULT_PREFERENCES.notesExperience),
 });
 
@@ -158,6 +420,44 @@ export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
 
 export function sanitizePreferences(raw: unknown): Preferences {
   return preferencesSchema.parse(raw && typeof raw === "object" ? raw : {});
+}
+
+/**
+ * Onboarding only moves forward (TV-U17). Preferences sync as one blob, last
+ * write wins, so another device that hadn't heard yet can push a copy where
+ * the welcome was never seen or the role never asked. Taking the cloud's
+ * value must not undo either on a device that already knows: a "seen" or an
+ * answer stays, and seeded workspaces add up. Only ever for the same person.
+ */
+export function mergeOnboardingForward(
+  local: TasksOnboardingPrefs,
+  cloud: TasksOnboardingPrefs,
+): TasksOnboardingPrefs {
+  const answered = cloud.roleAt ? cloud : local.roleAt ? local : cloud;
+  return {
+    role: answered.role,
+    roleAt: answered.roleAt,
+    welcomeSeenAt: cloud.welcomeSeenAt ?? local.welcomeSeenAt,
+    seeded: { ...local.seeded, ...cloud.seeded },
+    viewsSeeded: { ...local.viewsSeeded, ...cloud.viewsSeeded },
+  };
+}
+
+/**
+ * Folds from the cloud and this device (TV-U8): each List's or Board's
+ * newest entry wins, so a device with an older copy of the preferences
+ * never folds back what another device changed since.
+ */
+export function mergeFoldsForward(
+  local: Record<string, TasksFoldEntry>,
+  cloud: Record<string, TasksFoldEntry>,
+): Record<string, TasksFoldEntry> {
+  const out: Record<string, TasksFoldEntry> = { ...cloud };
+  for (const [key, entry] of Object.entries(local)) {
+    const other = out[key];
+    if (!other || Date.parse(entry.at) > Date.parse(other.at)) out[key] = entry;
+  }
+  return tasksFoldsSchema.parse(out);
 }
 
 /** Top-level module routes the app can land on (and remember as "last used").
@@ -313,6 +613,12 @@ export function consumeLandingRedirect(pathname: string, searchStr: string): str
 
 // ── Imperative reads for non-React consumers ──────────────────────────────────
 
+/** The shared store's value right now, for a write that patches one group
+ *  from an async callback (a render's snapshot may be stale by then). */
+export function currentPreferences(): Preferences {
+  return store;
+}
+
 /** Master sound gate, read imperatively by the Focus chime (features/focus/phase-alert). */
 export function areSoundsEnabled(): boolean {
   return store.soundEnabled;
@@ -357,29 +663,24 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-// The syncers' pushes, registered while a usePreferences() is mounted, so a
-// consumer outside Settings can change a synced field without mounting a
-// second reconcile loop (gotchas/supabase.md, "exactly ONE usePreferences()").
-// A stack, not a slot: the Settings pane mounts a second instance, and closing
-// it must leave the app-wide <PreferencesSync/>'s push registered.
-type SyncPush = (syncable: Record<string, unknown>) => void;
-const syncPushes: SyncPush[] = [];
-const currentSyncPush = (): SyncPush | undefined => syncPushes[syncPushes.length - 1];
+// A change made outside Settings (the Tasks sidebar's Customize and Pin, the
+// Notes experience switch) reaches the cloud through the one mounted sync
+// owner (<PreferencesSync/>, `usePreferences({ syncOwner: true })`), never a
+// second reconcile loop (gotchas/supabase.md, Prefs sync). Only the owner
+// registers, so the Settings pane's own instance mounting and unmounting never
+// drops it (gotchas/notes.md, the "current syncer" slot).
+const localPushers = new Set<(next: Preferences) => void>();
 
-function commit(patch: Partial<Preferences>): Preferences {
+/** Change preferences from anywhere (not only Settings): the shared store,
+ *  the local mirror and, through the sync owner, the cloud. */
+export function updatePreferences(patch: Partial<Preferences>): Preferences {
   const next = sanitizePreferences({ ...store, ...patch });
   setStore(next);
   writeLocalMirror(next);
   applyMotion(next.motion);
-  currentSyncPush()?.(next as unknown as Record<string, unknown>);
+  const [push] = localPushers;
+  push?.(next);
   return next;
-}
-
-/** Change synced preferences from anywhere (e.g. the Notes experience switch).
- *  Updates the shared store + local mirror at once and hands the value to the
- *  app-wide syncer, which pushes it to the cloud when signed in. */
-export function updatePreferences(patch: Partial<Preferences>): Preferences {
-  return commit(patch);
 }
 
 export interface UsePreferences {
@@ -397,13 +698,39 @@ export function usePreferencesValue(): Preferences {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-export function usePreferences(): UsePreferences {
+/**
+ * Whether this person's synced preferences have been read this session
+ * (TV-U17). Until then the store may hold a new device's defaults, so
+ * anything that acts once per person (Tasks' welcome) waits for it.
+ */
+export function usePreferencesReady(userId: string | null): boolean {
+  return useSyncExternalStore(
+    subscribeReconciled,
+    () => isDomainReconciled("preferences", userId),
+    () => isDomainReconciled("preferences", userId),
+  );
+}
+
+export function usePreferences(opts?: {
+  /** The one app-wide instance that also pushes `updatePreferences` changes. */
+  syncOwner?: boolean;
+}): UsePreferences {
   const preferences = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   // A value won from the cloud (another device) lands in the shared store, so every
   // mounted instance re-renders; keep the localStorage mirror + DOM warm too.
-  const applyFromCloud = useCallback((value: Record<string, unknown>) => {
-    const next = sanitizePreferences(value);
+  const applyFromCloud = useCallback((value: Record<string, unknown>, userId?: string) => {
+    const cloud = sanitizePreferences(value);
+    // The local copy is this person's (not a previous account's on a shared
+    // browser): what they've already done in onboarding stays done.
+    const mine = !!userId && getSyncMeta("preferences").userId === userId;
+    const next = mine
+      ? {
+          ...cloud,
+          tasksOnboarding: mergeOnboardingForward(store.tasksOnboarding, cloud.tasksOnboarding),
+          tasksFolds: mergeFoldsForward(store.tasksFolds, cloud.tasksFolds),
+        }
+      : cloud;
     setStore(next);
     writeLocalMirror(next);
     applyMotion(next.motion);
@@ -418,22 +745,25 @@ export function usePreferences(): UsePreferences {
     apply: applyFromCloud,
   });
 
+  const syncOwner = opts?.syncOwner ?? false;
   useEffect(() => {
-    syncPushes.push(pushLocalChange);
+    if (!syncOwner) return;
+    const push = (next: Preferences) => pushLocalChange(next as unknown as Record<string, unknown>);
+    localPushers.add(push);
     return () => {
-      const i = syncPushes.lastIndexOf(pushLocalChange);
-      if (i !== -1) syncPushes.splice(i, 1);
+      localPushers.delete(push);
     };
-  }, [pushLocalChange]);
+  }, [syncOwner, pushLocalChange]);
 
   const update = useCallback(
     (patch: Partial<Preferences>) => {
-      // `commit` pushes through the registered syncer; push here too in case
-      // this instance isn't the registered one (it is idempotent).
-      const next = commit(patch);
-      if (currentSyncPush() !== pushLocalChange) {
-        pushLocalChange(next as unknown as Record<string, unknown>);
-      }
+      // This instance pushes through its own syncer (not `updatePreferences`,
+      // which would push a second time through the owner when this is it).
+      const next = sanitizePreferences({ ...store, ...patch });
+      setStore(next);
+      writeLocalMirror(next);
+      applyMotion(next.motion);
+      pushLocalChange(next as unknown as Record<string, unknown>);
     },
     [pushLocalChange],
   );

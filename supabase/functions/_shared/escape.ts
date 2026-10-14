@@ -36,3 +36,15 @@ export function singleLine(value: string, maxLength = 80): string {
   if (chars.length <= maxLength) return flat;
   return `${chars.slice(0, Math.max(0, maxLength - 1)).join("").trimEnd()}…`;
 }
+
+const ADDRESS_LIKE = /[^\s<>"'(),;:]+@[^\s<>"'(),;:]+/g;
+
+/**
+ * An error message or log line with every email address blanked to
+ * "[address]", for text that goes to logs or ops alerts rather than to the
+ * person. Mirrors the regex email_outbox__health() uses in SQL.
+ */
+export function redactAddresses(value: string): string {
+  return value.replace(ADDRESS_LIKE, "[address]");
+}
+

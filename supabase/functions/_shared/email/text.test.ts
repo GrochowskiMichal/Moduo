@@ -3,13 +3,13 @@ import { describe, expect, it } from "@rstest/core";
 import { button, codeBox, fixed, heading, link, paragraph, sentence, signoff, strong } from "./blocks.ts";
 import { LEGAL_LINE, PRIVACY_URL, renderEmail } from "./render.ts";
 import { EMAIL_FIXTURES } from "./templates/fixtures.ts";
-import { BUILT_EMAIL_KINDS, EMAIL_TEMPLATES, renderTemplate } from "./templates/index.ts";
+import { BUILT_EMAIL_KINDS, renderTemplate, templateDoc } from "./templates/index.ts";
 import { inlineText } from "./blocks.ts";
 
 describe("plain-text twin", () => {
   for (const kind of BUILT_EMAIL_KINDS) {
     it(`${kind}: carries every sentence and full links, no markup`, () => {
-      const emailDoc = EMAIL_TEMPLATES[kind](EMAIL_FIXTURES[kind]);
+      const emailDoc = templateDoc(kind, EMAIL_FIXTURES[kind]);
       const { text } = renderTemplate(kind, EMAIL_FIXTURES[kind]);
       expect(text).not.toMatch(/<[a-z!/]/i);
       for (const block of emailDoc.blocks) {

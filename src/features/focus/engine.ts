@@ -14,6 +14,14 @@
 //    the clock from another open tab or from another workspace's session.
 //  - startFocus · toggleFocusRunning (pause/resume) · stopFocus ·
 //    toggleFocusPomodoro · previewFocusInterval.
+//  - TV-F6, the one time engine (spec §6.10, §Assumptions #11): the timer
+//    (setFocusTimer: per_task · pomodoro · off; Off records nothing),
+//    focusOnTask (⇧F, Calendar's ▶), stopFocus + undoStopFocus within
+//    STOP_UNDO_MS, and adoptFocusRun / relinquishFocus for another device's
+//    run (#323; run.ts keeps the shared record). Focus, the top-bar timer,
+//    Calendar's block focus and Home's pomodoro all drive this one clock; read
+//    it through `useFocusTimer` (timer.ts), which also shows a run another
+//    device is running.
 //  - resolveFocusAway("keep" | "discard" | "break"): answer "while you were away".
 //  - registerFocusFlushSink(workspaceId, sink) · flushFocusSession(): where
 //    tracked time is saved. TV-D3 swaps the sink for time entries
@@ -36,12 +44,14 @@
 // (a reload or crash mid-save) is sent again once it's stale. TV-D3's time
 // entries should carry an idempotency key.
 
+import type { FocusTimerMode } from "@contracts/vocabularies";
 import { useSyncExternalStore } from "react";
 
 import { type FocusPrefs, readLocalFocusPrefs } from "../../lib/focus-prefs";
 import { isTauriRuntime } from "../../lib/runtime";
 import {
   type AwayChoice,
+  adoptSession,
   bindTask,
   blankRecord,
   type FlushItem,
@@ -49,27 +59,33 @@ import {
   type FocusPhaseEnd,
   type FocusRecord,
   type FocusRhythm,
+  type FocusRunClock,
   type FocusSession,
   type FocusTaskRef,
   hasFailedSaves,
   isRunning,
   OWNER_STALE_MS,
   observe,
+  overlapAfter,
   parseRecord,
   pauseSession,
   previewInterval,
   REST_SESSION,
+  relinquishSession,
   resolveAway,
   resumeSession,
   reviveDeadFlights,
   sameSession,
   sameTaskRef,
+  setTimer,
   settleFlush,
+  skipBreak,
   snapshotOf,
   startSession,
   stopSession,
   takeFlushBatch,
   togglePomodoro,
+  undoStopSession,
 } from "./engine-core";
 import { alertPhaseEnd, type FocusPhaseNext } from "./phase-alert";
 import { forgetSavedFocusTotals } from "./saved-totals";
@@ -79,9 +95,21 @@ export type {
   FocusAwaySummary,
   FocusPhase,
   FocusPhaseEnd,
+  FocusRunClock,
   FocusSession,
   FocusTaskRef,
 } from "./engine-core";
+export type { FocusTimerMode };
+
+/** How long "Stopped · Undo" offers Undo (call 62a). */
+export const STOP_UNDO_MS = 10_000;
+
+/** Seconds this device saved on a task after another device took the run over. */
+export interface FocusGiveBack {
+  taskId: string;
+  workspaceId: string | null;
+  seconds: number;
+}
 
 /** The localStorage key family (`moduo:tasks:*` survives a cache reset). */
 export const FOCUS_STORAGE_PREFIX = "moduo:tasks:focus:";
@@ -100,6 +128,12 @@ export interface FocusSaveContext {
   /** When time was last added to this task. A complete task list loaded after
    *  it that lacks the task means the task is gone. */
   earnedAt: number;
+  /** The workspace whose time this is (the one the sink was registered for). */
+  workspaceId: string | null;
+  /** This save's idempotency key: every resend of the same seconds carries it,
+   *  so the server records them once (a save cut off by a reload, a request
+   *  whose answer was lost). */
+  key: string;
 }
 
 /**
@@ -111,13 +145,14 @@ export interface FocusSaveContext {
  *  - `"gone"`: the task can never take this time (deleted, no longer shared) —
  *    the seconds are dropped; the sink tells the person;
  *  - a promise for the write: resolving `false` or rejecting keeps the seconds,
- *    shows "not saved yet" and retries (F1-7).
+ *    shows "not saved yet" and retries (F1-7) with the same key; resolving
+ *    `"gone"` drops them, as above.
  */
 export type FocusFlushSink = (
   taskId: string,
   seconds: number,
   context: FocusSaveContext,
-) => boolean | "gone" | Promise<boolean>;
+) => boolean | "gone" | Promise<boolean | "gone">;
 
 type FocusStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -129,6 +164,8 @@ export interface FocusEngineDeps {
   /** One webview (the desktop shell): this tab always runs the clock. */
   singleWindow: () => boolean;
   tabId: string;
+  /** A fresh idempotency key for a save. */
+  newKey: () => string;
 }
 
 export interface FocusEngine {
@@ -137,10 +174,30 @@ export interface FocusEngine {
   forget(userId: string): void;
   bind(task: FocusTaskRef | null): void;
   follow(workspaceId: string, task: FocusTaskRef | null): void;
-  start(): void;
+  /** Start the bound task's session, with `timer` if given. */
+  start(timer?: FocusTimerMode): void;
+  /** "Focus on this" (⇧F, Calendar ▶): this task gets the clock now. A running
+   *  session moves to it with its rhythm; a paused one resumes; none starts. */
+  focusOn(task: FocusTaskRef, timer?: FocusTimerMode): void;
   toggleRunning(): void;
-  stop(): void;
+  /** Stop and save. True when a session was stopped (Undo is offered). */
+  stop(): boolean;
+  /** Undo the last Stop within STOP_UNDO_MS. True when the session is back. */
+  undoStop(): boolean;
+  canUndoStop(): boolean;
   togglePomodoro(): void;
+  /** Skip Pomodoro's break: a work block starts now (TV-F8). */
+  skipBreak(): void;
+  /** The timer (62a), mid-session too. */
+  setTimer(timer: FocusTimerMode): void;
+  /** Take over a run another device was running, as its record says (#323). */
+  adopt(run: FocusRunClock): void;
+  /** Another device took control at `at`: stop without crediting twice. Answers
+   *  the part of the overlap already saved (or on its way), to give back. */
+  relinquish(at: number): FocusGiveBack | null;
+  /** Whether this tab runs the clock (or may: nobody runs it). Another open
+   *  tab of the same browser that runs it is the one that speaks for it. */
+  clockIsHere(): boolean;
   preview(prefs: FocusRhythm): void;
   resolveAway(choice: AwayChoice): void;
   registerSink(workspaceId: string | null, sink: FocusFlushSink): () => void;
@@ -178,6 +235,8 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
   let flushAgain = false;
   /** A replaced engine (a page that's gone) never writes again. */
   let disposed = false;
+  /** The session as it was when Stop was pressed here, for Undo (this tab only). */
+  let lastStop: { before: FocusRecord; at: number; key: string | null } | null = null;
 
   // ── record I/O ────────────────────────────────────────────────────────────
 
@@ -346,13 +405,22 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
 
   /** Hand one item to the sink. A synchronous answer settles synchronously, so a
    *  flush with a synchronous sink (or none) finishes before it returns. */
-  function runSink(sink: FocusFlushSink, item: FlushItem): FlushOutcome | Promise<FlushOutcome> {
+  function runSink(
+    sink: FocusFlushSink,
+    item: FlushItem,
+    workspaceId: string | null,
+  ): FlushOutcome | Promise<FlushOutcome> {
     try {
-      const result = sink(item.taskId, item.seconds, { ownedSince, earnedAt: item.earnedAt });
+      const result = sink(item.taskId, item.seconds, {
+        ownedSince,
+        earnedAt: item.earnedAt,
+        workspaceId,
+        key: item.key,
+      });
       if (result === "gone") return "gone";
       if (typeof result === "boolean") return result ? "saved" : "later";
       return result.then(
-        (ok): FlushOutcome => (ok ? "saved" : "failed"),
+        (ok): FlushOutcome => (ok === "gone" ? "gone" : ok ? "saved" : "failed"),
         (): FlushOutcome => "failed",
       );
     } catch {
@@ -385,6 +453,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
           reviveDeadFlights(load(), liveFlights, now, workspaceId),
           workspaceId,
           now,
+          deps.newKey,
         );
         if (batch.items.length === 0) continue;
         save(batch.rec);
@@ -396,11 +465,13 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
             continue;
           }
           liveFlights.add(item.taskId);
-          const pending = runSink(sink, item);
+          const pending = runSink(sink, item, workspaceId);
           const outcome = typeof pending === "string" ? pending : await pending;
           liveFlights.delete(item.taskId);
           // Re-read: the clock kept ticking (and writing) while the save ran.
           saveAt(flushKey, (r) => settleFlush(r, item, outcome, deps.now()));
+          // A resent save went through: the time earned meanwhile goes next.
+          if (outcome === "saved" && item.resend) flushAgain = true;
           if (key === flushKey) publish(prefs);
         }
       }
@@ -428,6 +499,7 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     if (user) release();
     stopTimers();
     clearRetry();
+    lastStop = null;
     retryDelay = RETRY_MIN_MS;
     user = userId;
     key = userId ? `${FOCUS_STORAGE_PREFIX}${userId}` : null;
@@ -517,20 +589,101 @@ export function createFocusEngine(deps: FocusEngineDeps): FocusEngine {
     syncTimers();
   }
 
+  function stop(): boolean {
+    if (user === undefined) return false;
+    let stopped = false;
+    act(
+      (r, now, prefs) => {
+        if (!r.tracking) return r;
+        stopped = true;
+        lastStop = { before: r, at: now, key };
+        return stopSession(r, now, prefs);
+      },
+      { flush: true },
+    );
+    return stopped;
+  }
+
+  function canUndoStop(): boolean {
+    return lastStop !== null && lastStop.key === key && deps.now() - lastStop.at <= STOP_UNDO_MS;
+  }
+
+  function undoStop(): boolean {
+    if (user === undefined || !canUndoStop() || !lastStop) return false;
+    const { before, at } = lastStop;
+    lastStop = null;
+    let restored = false;
+    act((r, now) => {
+      const next = undoStopSession(r, before, at, now);
+      restored = next !== r;
+      return next;
+    });
+    return restored;
+  }
+
   return {
     attach,
     forget,
     bind,
     follow,
-    start: () => act((r, now, prefs) => startSession(r, now, prefs)),
+    start: (timer) =>
+      act((r, now, prefs) => {
+        lastStop = null;
+        return startSession(timer ? setTimer(r, timer, now, prefs) : r, now, prefs);
+      }),
+    focusOn: (task, timer) =>
+      act(
+        (r, now, prefs) => {
+          lastStop = null;
+          let next = bindTask(r, task, now, prefs);
+          if (!next.tracking) {
+            if (timer) next = setTimer(next, timer, now, prefs);
+            return startSession(next, now, prefs);
+          }
+          return isRunning(next) ? next : resumeSession(next, now);
+        },
+        // Moving the clock off another task banks that task's time.
+        { flush: true },
+      ),
     toggleRunning: () =>
       act(
         (r, now) => (isRunning(r) ? pauseSession(r, now) : resumeSession(r, now)),
         // Pausing banks the time; resuming has nothing new to save.
         { flush: isRunning(load()) },
       ),
-    stop: () => act((r, now, prefs) => stopSession(r, now, prefs), { flush: true }),
+    stop,
+    undoStop,
+    canUndoStop,
     togglePomodoro: () => act((r, now, prefs) => togglePomodoro(r, now, prefs)),
+    skipBreak: () => act((r, now, prefs) => skipBreak(r, now, prefs)),
+    setTimer: (timer) =>
+      act((r, now, prefs) => setTimer(r, timer, now, prefs), {
+        // Turning the clock off banks what it counted so far.
+        flush: timer === "off",
+      }),
+    adopt: (run) => act((r, now, prefs) => adoptSession(r, run, now, prefs), { flush: true }),
+    relinquish: (at) => {
+      if (user === undefined) return null;
+      const r = load();
+      if (!r.tracking && !r.task) return null;
+      let giveBack: FocusGiveBack | null = null;
+      act(
+        (cur, now, prefs) => {
+          const overlap = overlapAfter(cur, at);
+          if (overlap && overlap.savedMs >= 1000) {
+            giveBack = {
+              taskId: overlap.taskId,
+              workspaceId: overlap.workspaceId,
+              seconds: Math.floor(overlap.savedMs / 1000),
+            };
+          }
+          return relinquishSession(cur, at, now, prefs);
+        },
+        { flush: true },
+      );
+      return giveBack;
+    },
+    clockIsHere: () => user !== undefined && !disposed && mayRun(load(), deps.now()),
     preview,
     resolveAway: (choice) =>
       act((r, now, prefs) => resolveAway(r, choice, now, prefs), { flush: choice === "keep" }),
@@ -566,6 +719,16 @@ function newTabId(): string {
   }
 }
 
+/** A save's idempotency key: what tasks_op_track_time accepts (8–64 of
+ *  A–Z a–z 0–9 _ -). */
+function newSaveKey(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `save-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  }
+}
+
 let alertImpl: FocusEngineDeps["alert"] = alertPhaseEnd;
 
 function appDeps(): FocusEngineDeps {
@@ -582,6 +745,7 @@ function appDeps(): FocusEngineDeps {
     alert: (end, next) => alertImpl(end, next),
     singleWindow: isTauriRuntime,
     tabId: newTabId(),
+    newKey: newSaveKey,
   };
 }
 
@@ -632,9 +796,46 @@ export function followFocusTask(workspaceId: string, task: FocusTaskRef | null):
   engine.follow(workspaceId, task);
 }
 
-/** Start tracking (opt-in, never auto-called). Needs a bound task. */
-export function startFocus(): void {
-  engine.start();
+/** Start tracking (opt-in, never auto-called), with `timer` if given. Needs a
+ *  bound task. */
+export function startFocus(timer?: FocusTimerMode): void {
+  engine.start(timer);
+}
+
+/**
+ * "Focus on this" (⇧F; Calendar's ▶ on a block, call 66): `task` gets the clock
+ * now. A running session moves to it with its rhythm (the previous task's time
+ * is banked); a paused one resumes; with none, one starts with `timer`. The
+ * caller puts the task on top of Up next.
+ */
+export function focusOnTask(task: FocusTaskRef, timer?: FocusTimerMode): void {
+  engine.focusOn(task, timer);
+}
+
+/** Set the timer (62a: Per task · Pomodoro · Off), mid-session too. */
+export function setFocusTimer(timer: FocusTimerMode): void {
+  engine.setTimer(timer);
+}
+
+/** Whether this tab runs the Focus clock (or may, while nobody does). */
+export function focusClockIsHere(): boolean {
+  return engine.clockIsHere();
+}
+
+/** This device takes over a run another device was running (#323). */
+export function adoptFocusRun(run: FocusRunClock): void {
+  engine.adopt(run);
+}
+
+/**
+ * Another device took control of the run at `at` (epoch ms): this device's
+ * session stops, and what it credited after `at` is taken back (that time is
+ * counted there). Earlier unsaved time is still saved. Answers the part of the
+ * overlap that was already saved (a save that went out before this device
+ * heard): the caller gives it back with a negative adjustment.
+ */
+export function relinquishFocus(at: number): FocusGiveBack | null {
+  return engine.relinquish(at);
 }
 
 /** Pause / resume. Pausing saves the time tracked so far. */
@@ -642,14 +843,32 @@ export function toggleFocusRunning(): void {
   engine.toggleRunning();
 }
 
-/** Stop tracking and save; the task stays bound so "Track time" is offered again. */
-export function stopFocus(): void {
-  engine.stop();
+/**
+ * Stop tracking and save; the task stays bound. True when a session stopped:
+ * show "Stopped · Undo" and call undoStopFocus within STOP_UNDO_MS (62a).
+ */
+export function stopFocus(): boolean {
+  return engine.stop();
+}
+
+/** Undo the last Stop (within STOP_UNDO_MS): the clock reads as if it never stopped. */
+export function undoStopFocus(): boolean {
+  return engine.undoStop();
+}
+
+/** Whether Undo can still bring the last Stop back. */
+export function canUndoFocusStop(): boolean {
+  return engine.canUndoStop();
 }
 
 /** Switch stopwatch ↔ pomodoro (the rhythm starts over with a work block). */
 export function toggleFocusPomodoro(): void {
   engine.togglePomodoro();
+}
+
+/** Skip Pomodoro's break: a work block starts now. No-op outside a break (TV-F8). */
+export function skipFocusBreak(): void {
+  engine.skipBreak();
 }
 
 /** While paused, show an edited interval right away. No-op while running. */
@@ -689,6 +908,28 @@ export function useFocusSession(): FocusSession {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/** Follow the session outside React (the run store). Survives a test reset
+ *  of the engine: the listener moves to the new one. */
+const outsideListeners = new Set<() => void>();
+let outsideUnsub: (() => void) | null = null;
+function wireOutside(): void {
+  outsideUnsub?.();
+  outsideUnsub =
+    outsideListeners.size > 0
+      ? engine.subscribe(() => {
+          for (const listener of outsideListeners) listener();
+        })
+      : null;
+}
+export function subscribeFocusSession(listener: () => void): () => void {
+  outsideListeners.add(listener);
+  if (outsideListeners.size === 1) wireOutside();
+  return () => {
+    outsideListeners.delete(listener);
+    if (outsideListeners.size === 0) wireOutside();
+  };
+}
+
 /** Non-reactive read (tests, imperative callers). */
 export function getFocusSession(): FocusSession {
   return engine.getSnapshot();
@@ -702,4 +943,5 @@ export function __resetFocusEngineForTest(opts: { alert?: FocusEngineDeps["alert
   engine.dispose();
   alertImpl = opts.alert ?? alertPhaseEnd;
   engine = createFocusEngine(appDeps());
+  wireOutside();
 }

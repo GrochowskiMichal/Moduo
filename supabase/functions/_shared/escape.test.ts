@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { escapeHtml, singleLine } from "./escape.ts";
+import { escapeHtml, redactAddresses, singleLine } from "./escape.ts";
 
 describe("escapeHtml", () => {
   it("escapes the five HTML-significant characters", () => {
@@ -53,3 +53,13 @@ describe("singleLine", () => {
     expect(singleLine("\u0000\n ")).toBe("");
   });
 });
+
+describe("redactAddresses", () => {
+  it("blanks every address and keeps the rest of the message", () => {
+    expect(redactAddresses('Failing row contains (tom@becker.studio, bounce). To: "Anna" <anna@northwind.studio>')).toBe(
+      'Failing row contains ([address], bounce). To: "Anna" <[address]>',
+    );
+    expect(redactAddresses("resend_http_500")).toBe("resend_http_500");
+  });
+});
+

@@ -21,6 +21,10 @@ const STATE_LAYER: Record<string, string> = {
   "--state-active-hover": "color-mix(in oklab, var(--foreground) 14%, transparent)",
   "--state-selected": "color-mix(in oklab, var(--primary) 13%, transparent)",
   "--state-selected-ring": "color-mix(in oklab, var(--primary) 32%, transparent)",
+  // Hovering a selected row or card (DS-6).
+  "--state-selected-hover": "color-mix(in oklab, var(--primary) 18%, transparent)",
+  // The tertiary text level (DS-6, call 38).
+  "--subtle-foreground": "color-mix(in oklab, var(--muted-foreground) 86%, transparent)",
   // The tint-only vs tint + hairline switch (DS-2): on by default.
   "--state-selected-edge": "var(--state-selected-ring)",
   "--hairline": "color-mix(in oklab, var(--foreground) 10%, transparent)",
@@ -98,6 +102,7 @@ describe("tokens.css state layer (DS-1)", () => {
         "--color-state-active": "var(--state-active)",
         "--color-state-active-hover": "var(--state-active-hover)",
         "--color-state-selected": "var(--state-selected)",
+        "--color-state-selected-hover": "var(--state-selected-hover)",
         "--ring-color-state-selected": "var(--state-selected-ring)",
         "--ring-color-state-selected-edge": "var(--state-selected-edge)",
         "--color-hairline": "var(--hairline)",

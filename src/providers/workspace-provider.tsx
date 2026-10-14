@@ -1,6 +1,10 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type { Overrides, WorkspaceRoleDef } from "../features/workspaces/access";
+import {
+  rememberedWorkspaces,
+  rememberWorkspaces,
+} from "../features/workspaces/remembered-workspaces";
 import type {
   PermissionKey,
   WorkspaceInvite,
@@ -22,12 +26,15 @@ import {
   mapRole,
   mapWorkspace,
   storageKey,
+  withOwnName,
 } from "../features/workspaces/workspace-mappers";
 import {
   isNotificationEnabled,
   readLocalPreferences,
   usePreferencesValue,
 } from "../lib/preferences";
+import { browserOffline, isNetworkError } from "../lib/sync/network";
+import { keepWorkspaceCopies } from "../lib/sync/store";
 import { useAuth } from "./auth-provider";
 
 /** Map a legacy workspace notification into the source-agnostic feed item. */
@@ -52,7 +59,7 @@ function legacyNotificationToItem(n: WorkspaceNotification): NotificationItem {
 }
 
 export function WorkspaceProvider({ children }: PropsWithChildren) {
-  const { runtime, userId } = useAuth();
+  const { runtime, userId, userEmail } = useAuth();
   const [loading, setLoading] = useState(true);
   const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
@@ -78,7 +85,8 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       // pref-gated; the legacy feed becomes the cross-workspace Invitations area.
       const feeds = deriveNotificationFeeds(rawNotifications, {
         workspaceId: selectedWorkspaceId,
-        isEnabled: (op) => isNotificationEnabled(op, notificationPrefs),
+        isEnabled: (item) =>
+          isNotificationEnabled(item.op, notificationPrefs, item.payload, userId),
       });
       return {
         notifications: feeds.active,
@@ -86,7 +94,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
         workspaceInvitations: feeds.invitations,
         unreadCountWorkspace: feeds.unreadCount,
       };
-    }, [rawNotifications, notificationPrefs, selectedWorkspaceId]);
+    }, [rawNotifications, notificationPrefs, selectedWorkspaceId, userId]);
 
   // Mirror the selected id into a ref so `refreshWorkspaces` can read the current
   // selection without listing `selectedWorkspaceId` in its deps. Without this the
@@ -162,10 +170,35 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       return [];
     }
 
-    const rows = await runtime.workspace.list();
-    const next = rows
-      .map((row) => mapWorkspace(row, userId))
-      .filter((workspace) => !workspace.isDeleted);
+    // Offline at launch (TV-D11a): open the workspaces this person had, as this
+    // device remembers them, so the Tasks device copy can show. With no
+    // network at all, without waiting for the read's retries; it reads again
+    // when the network is back (the boot effect's `online` listener).
+    const remembered = rememberedWorkspaces(userId);
+    let next: WorkspaceSummary[];
+    if (remembered && browserOffline()) {
+      next = remembered;
+    } else {
+      try {
+        const rows = await runtime.workspace.list();
+        next = rows
+          .map((row) => mapWorkspace(row, userId))
+          .filter((workspace) => !workspace.isDeleted);
+        // An empty list proves nothing (a request that went out without the
+        // person's token reads as no workspaces): keep what the device has.
+        if (next.length > 0) {
+          rememberWorkspaces(userId, next);
+          // Tasks device copies of workspaces you left or that went away go too.
+          void keepWorkspaceCopies(
+            userId,
+            next.map((workspace) => workspace.id),
+          );
+        }
+      } catch (e) {
+        if (!remembered || !isNetworkError(e)) throw e;
+        next = remembered;
+      }
+    }
     setWorkspaces(next);
 
     const currentSelected = selectedWorkspaceIdRef.current;
@@ -213,10 +246,14 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       Promise.resolve().then(() => runtime.workspace.listRoles(selectedWorkspaceId)),
     ]);
 
-    setMembers(memberResult.status === "fulfilled" ? memberResult.value.map(mapMember) : []);
+    setMembers(
+      memberResult.status === "fulfilled"
+        ? withOwnName(memberResult.value.map(mapMember), userId, userEmail)
+        : [],
+    );
     setInvites(inviteResult.status === "fulfilled" ? inviteResult.value.map(mapInvite) : []);
     setRoles(roleResult.status === "fulfilled" ? roleResult.value.map(mapRole) : []);
-  }, [runtime, selectedWorkspaceId]);
+  }, [runtime, selectedWorkspaceId, userId, userEmail]);
 
   const refreshNotifications = useCallback(async () => {
     if (!runtime || !userId) {
@@ -286,6 +323,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     async (workspaceId: string, branding: { icon: string | null; logoUrl: string | null }) => {
       if (!runtime) return;
       await runtime.workspace.updateBranding(workspaceId, branding);
+      await refreshWorkspaces();
+    },
+    [refreshWorkspaces, runtime],
+  );
+
+  const setTaskKey = useCallback(
+    async (workspaceId: string, key: string) => {
+      if (!runtime) return;
+      await runtime.workspace.setTaskKey(workspaceId, key);
       await refreshWorkspaces();
     },
     [refreshWorkspaces, runtime],
@@ -563,8 +609,15 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
     };
 
     void run();
+    // Opened offline from the remembered list: read the real one once the
+    // network is back (TV-D11a).
+    const onOnline = () => {
+      void refreshWorkspaces().catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
     return () => {
       active = false;
+      window.removeEventListener("online", onOnline);
     };
   }, [refreshWorkspaces, runtime, userId]);
 
@@ -611,6 +664,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       createWorkspace,
       renameWorkspace,
       updateWorkspaceBranding,
+      setTaskKey,
       leaveWorkspace,
       softDeleteWorkspace,
       sendInvite,
@@ -652,6 +706,7 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
       refreshWorkspaces,
       renameWorkspace,
       updateWorkspaceBranding,
+      setTaskKey,
       revokeInvite,
       selectedWorkspace,
       selectedWorkspaceId,

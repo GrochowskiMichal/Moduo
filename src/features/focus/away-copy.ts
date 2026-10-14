@@ -2,9 +2,10 @@
 // · Count as break", plus what happened to the pomodoro meanwhile ("Your 25-min
 // focus ended at 14:25").
 
+import { formatTime } from "../../lib/time-format";
 import type { FocusAwaySummary, FocusPhaseEnd } from "./engine-core";
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+// The clock follows Settings → Time & region (TV-D14).
 
 /** "42m" · "1h 5m" (at least "1m"): away spans and dropped focus time. */
 export function formatAwaySpan(seconds: number): string {
@@ -22,7 +23,7 @@ function phaseName(end: FocusPhaseEnd): string {
 /** "Your 25-min focus ended at 2:25 PM." */
 export function describePhaseEnd(end: FocusPhaseEnd): string {
   const minutes = Math.max(1, Math.round(end.lengthMs / 60_000));
-  return `Your ${minutes}-min ${phaseName(end)} ended at ${TIME_FMT.format(end.at)}.`;
+  return `Your ${minutes}-min ${phaseName(end)} ended at ${formatTime(end.at)}.`;
 }
 
 export interface AwayPromptCopy {

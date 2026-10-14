@@ -2,6 +2,7 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { FLOATING_SURFACE } from "./surface";
 
 function TooltipProvider({
   delayDuration = 150,
@@ -37,12 +38,10 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "w-fit rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground text-balance",
-          "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2",
-          "data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
-          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-          "data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95",
-          "data-[state=instant-open]:animate-in data-[state=instant-open]:fade-in-0 data-[state=instant-open]:zoom-in-95",
+          // The one floating surface (surface.ts); `motion-pop` also covers
+          // Radix's delayed-open / instant-open states (global.css).
+          FLOATING_SURFACE,
+          "w-fit px-2 py-1 text-xs text-balance",
           className,
         )}
         style={{
@@ -53,7 +52,7 @@ function TooltipContent({
         {...props}
       >
         {children}
-        <TooltipPrimitive.Arrow className="size-2 translate-y-[-50%] rotate-45 border border-border bg-popover" />
+        <TooltipPrimitive.Arrow className="size-2 translate-y-[-50%] rotate-45 border border-hairline bg-popover" />
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );

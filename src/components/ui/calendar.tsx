@@ -2,13 +2,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import type * as React from "react";
 import { DayPicker } from "react-day-picker";
 
+import { useTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
 
 /**
  * Token-routed calendar (react-day-picker v10). Selected day = bg-primary;
  * today = a quiet ring (NOT a chromatic fill, so it doesn't compete with the
  * selection); hover = bg-state-hover; outside-month days are muted. Used inside
- * DateField's popover. No raw color — all surfaces/accents via tokens.
+ * DateField's popover. No raw color — all surfaces/accents via tokens. Weeks
+ * start where Settings → Time & region says (TV-D14) unless a caller says.
  */
 function Calendar({
   className,
@@ -16,20 +18,24 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: React.ComponentProps<typeof DayPicker>) {
+  const { weekStartsOn } = useTimeRegion();
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      weekStartsOn={weekStartsOn}
       className={cn("p-3", className)}
       classNames={{
-        months: "flex flex-col gap-4",
+        // The nav renders as a sibling of each month (react-day-picker v9+), so
+        // it overlays the caption row of this positioned box (visual audit §C).
+        months: "relative flex flex-col gap-4",
         month: "flex flex-col gap-3",
         month_caption: "relative flex h-7 items-center justify-center",
         caption_label: "font-display text-sm font-medium text-foreground",
-        nav: "flex items-center",
+        nav: "pointer-events-none absolute inset-x-0 top-0 flex h-7 items-center justify-between px-1",
         button_previous:
-          "absolute left-1 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
+          "pointer-events-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
         button_next:
-          "absolute right-1 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
+          "pointer-events-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
         month_grid: "w-full border-collapse",
         weekdays: "flex",
         weekday: "w-8 text-2xs font-normal text-muted-foreground",
@@ -40,7 +46,7 @@ function Calendar({
         selected:
           "[&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary",
         today: "[&>button]:ring-1 [&>button]:ring-ring",
-        outside: "[&>button]:text-muted-foreground/50",
+        outside: "[&>button]:text-subtle-foreground",
         disabled: "[&>button]:pointer-events-none [&>button]:opacity-40",
         hidden: "invisible",
         ...classNames,

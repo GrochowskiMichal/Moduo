@@ -10,6 +10,45 @@ function entry(op: string, payload: Record<string, unknown> = {}) {
   return { op, payload };
 }
 
+describe("team notices (TV-D13)", () => {
+  it("names the team, and how many were routed", () => {
+    expect(spineActivityLine(entry("tasks.routed", { team_name: "Design", count: 1 }))).toBe(
+      "routed this to Design",
+    );
+    expect(spineActivityLine(entry("tasks.routed", { team_name: "Design", count: 4 }))).toBe(
+      "routed 4 tasks to Design",
+    );
+    expect(
+      spineActivityLine(entry("tasks.routed", { team_name: "Design", count: 1, returned: true })),
+    ).toBe("gave this back to Design");
+  });
+
+  it("checks back on a team task nobody took", () => {
+    expect(
+      spineActivityLine(
+        entry("tasks.team_check_back", { team_name: "Design", reason: "unclaimed" }),
+      ),
+    ).toBe("checked: nobody in Design has taken this in 3 days");
+    expect(
+      spineActivityLine(entry("tasks.team_check_back", { team_name: "Design", reason: "due" })),
+    ).toBe("checked: nobody in Design has taken this, and it's due tomorrow");
+  });
+
+  it("an @Team in a comment, and tasks back from someone who left", () => {
+    expect(
+      spineActivityLine(
+        entry("comments.team_mention", { team_names: ["Design"], excerpt: "Ideas?" }),
+      ),
+    ).toBe("mentioned Design on this: “Ideas?”");
+    expect(spineActivityLine(entry("tasks.handed_back", { name: "Sam", count: 2 }))).toBe(
+      "removed Sam · 2 of your tasks are back in your Inbox",
+    );
+    expect(
+      spineActivityLine(entry("tasks.handed_back", { name: "Sam", count: 1, left: true })),
+    ).toBe("left the workspace · your task is back in your Inbox");
+  });
+});
+
 describe("spineActorName", () => {
   const base = { actorType: "user" as const, actorId: "u1", actorLabel: "Maciej" };
 
@@ -38,6 +77,15 @@ describe("spineActivityLine", () => {
   it("renders the task notifications (DF-9, TV-D1) in the card voice", () => {
     expect(spineActivityLine(entry("tasks.assigned"))).toBe("assigned this to you");
     expect(spineActivityLine(entry("tasks.completed"))).toBe("completed this");
+  });
+
+  it("renders a project delete's notice, naming the project only when it can (TV-U6)", () => {
+    expect(spineActivityLine(entry("tasks.project_deleted", { title: "Acme", count: 3 }))).toBe(
+      "deleted “Acme” · 3 of your tasks are in your Inbox",
+    );
+    expect(spineActivityLine(entry("tasks.project_deleted", { count: 1 }))).toBe(
+      "deleted a project · your task is in your Inbox",
+    );
   });
 
   it("renders link creation, by kind", () => {
@@ -74,9 +122,42 @@ describe("spineActivityLine", () => {
       "commented: “ping me when ready”",
     );
     expect(spineActivityLine(entry("comments.add"))).toBe("left a comment");
+    // TV-U13: edits, deletes and their Undo read as words, never the op name.
+    expect(spineActivityLine(entry("comments.edit", { excerpt: "now with @Mike" }))).toBe(
+      "edited a comment: “now with @Mike”",
+    );
+    expect(spineActivityLine(entry("comments.delete"))).toBe("deleted a comment");
+    expect(spineActivityLine(entry("comments.restore"))).toBe("brought back a comment");
   });
 
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(spineActivityLine(entry("links.future_op"))).toBe("links.future_op");
+  });
+});
+
+describe("storage alerts (AT-1)", () => {
+  it("says which level the uploader's file crossed, with the pool's numbers", () => {
+    expect(
+      spineActivityLine(
+        entry("attachments.storage_80", {
+          level: 80,
+          used_bytes: 1.65 * 1073741824,
+          total_bytes: 2 * 1073741824,
+        }),
+      ),
+    ).toBe("filled storage past 80% (1.7 of 2 GB)");
+    expect(
+      spineActivityLine(
+        entry("attachments.storage_95", {
+          level: 95,
+          used_bytes: 47.6 * 1073741824,
+          total_bytes: 50 * 1073741824,
+        }),
+      ),
+    ).toBe("filled storage past 95% (48 of 50 GB)");
+  });
+
+  it("still reads without the numbers", () => {
+    expect(spineActivityLine(entry("attachments.storage_95"))).toBe("filled storage past 95%");
   });
 });

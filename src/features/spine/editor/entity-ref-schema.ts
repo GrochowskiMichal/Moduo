@@ -1,60 +1,72 @@
-// Connective-tissue spine — the Lexical EntityRefNode (block CT-4), schema
-// half (NR-3): no React here, so headless editors and the sync engine can load
-// it. The chip view lives in `entity-ref-node.tsx`, installed through
-// `node-views.ts`.
+// Connective-tissue spine — the Lexical entity-ref node, schema half (NR-3):
+// no React here, so headless editors, the materializer and the sync engine's
+// markdown derivation can load it. The view (the Reference primitive, with its
+// hover card and "Show as") lives in `../references/reference-node.tsx` and is
+// installed through `node-views.ts`.
 //
-// The live-rendering ref inside a Lexical editor: an inline DecoratorNode that
-// renders the neutral `EntityRefChip` and deep-links on click. Persists the
-// entity address `{entityType, entityId}` (DESIGN_BRIEF Component Inventory),
-// plus a denormalized `label`/`icon` snapshot so it paints immediately and
-// survives offline; a live registry re-resolution is a future seam. Mirrors the
-// notes `EmbedNode` pattern, but inline. Clicking dispatches a
-// `moduo:entity:open` event so the host (any module) can route to the hub.
+// It is the Reference node (RF-1, tasks-v3 Assumptions #13): an inline
+// decorator holding `{entityType, entityId, display}`, the spine's entity-ref
+// node grown in place (type "entity-ref", JSON version 2), so Notes' documents,
+// the materializer and every HTML surface keep reading their old chips: a
+// version-1 node is a chip. What changed from version 1:
+// - `display` (link | chip | card) is stored, chip by default;
+// - the title is never trusted: the view renders what the reader may see, and
+//   surfaces that care about privacy (task descriptions) store no label at all
+//   (an older chip's label is shown only outside the app shell, where nothing
+//   can resolve it);
+// - a card stays an inline node (Lexical's inline-ness never follows display)
+//   and its DOM span is a block, so it sits alone on its line.
 
 import {
   DecoratorNode,
   type DOMConversionMap,
   type DOMConversionOutput,
   type DOMExportOutput,
+  type EditorConfig,
   type NodeKey,
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
+
+import { referenceKind, referenceNoun } from "../references/kinds";
+import { isReferenceDisplay, type ReferenceDisplay } from "../references/types";
 import { renderNodeView } from "./node-views";
 
-/** Marker attribute stamped on the exported `<span>` so `importDOM` (and any
- * HTML-round-trip surface: email compose, task/event descriptions) can recover
- * the ref. The entity address rides denormalized data-attributes; the visible
- * label is the span's text so non-Moduo readers (an email recipient) still see
- * a readable word rather than an empty chip. */
-const ENTITY_REF_ATTR = "data-lexical-entity-ref";
+/** The marker on the exported `<span>` (the HTML a task description stores). */
+export const ENTITY_REF_ATTR = "data-lexical-entity-ref";
+/** Marks a span written without a label (version 2): its text is only the type's word. */
+const NO_LABEL_ATTR = "data-ref-v";
 
-export type SerializedEntityRefNode = Spread<
+export type SerializedReferenceNode = Spread<
   {
     entityType: string;
     entityId: string;
+    /** Version 1 nodes always carry one; version 2 only where a host stores titles. */
     label: string;
     icon: string | null;
+    display?: ReferenceDisplay;
   },
   SerializedLexicalNode
 >;
 
-export class EntityRefNode extends DecoratorNode<unknown> {
+export class ReferenceNode extends DecoratorNode<unknown> {
   __entityType: string;
   __entityId: string;
   __label: string;
   __icon: string | null;
+  __display: ReferenceDisplay;
 
   static getType(): string {
     return "entity-ref";
   }
 
-  static clone(node: EntityRefNode): EntityRefNode {
-    return new EntityRefNode(
+  static clone(node: ReferenceNode): ReferenceNode {
+    return new ReferenceNode(
       node.__entityType,
       node.__entityId,
       node.__label,
       node.__icon,
+      node.__display,
       node.__key,
     );
   }
@@ -62,8 +74,9 @@ export class EntityRefNode extends DecoratorNode<unknown> {
   constructor(
     entityType: string,
     entityId: string,
-    label: string,
+    label = "",
     icon: string | null = null,
+    display: ReferenceDisplay = "chip",
     key?: NodeKey,
   ) {
     super(key);
@@ -71,48 +84,84 @@ export class EntityRefNode extends DecoratorNode<unknown> {
     this.__entityId = entityId;
     this.__label = label;
     this.__icon = icon;
+    this.__display = display;
   }
 
-  createDOM(): HTMLElement {
+  createDOM(_config: EditorConfig): HTMLElement {
     const span = document.createElement("span");
-    span.className = "lexical-entity-ref";
-    // contentEditable=false so the caret skips over the chip (mirrors EmbedNode).
+    // A card is alone on its line; a link and a chip run with the text.
+    span.className = this.__display === "card" ? "lexical-entity-ref block" : "lexical-entity-ref";
+    // What a fold counts below itself ("Show more · 2 tasks · 1 email", TV-U13).
+    span.dataset.entityType = this.__entityType;
+    // The caret skips over it (like EmbedNode).
     span.contentEditable = "false";
     return span;
   }
 
-  updateDOM(): boolean {
-    return false;
+  updateDOM(prev: ReferenceNode): boolean {
+    return prev.__display !== this.__display;
   }
 
   isInline(): boolean {
     return true;
   }
 
-  // The chip contributes its label to the editor's plain-text projection —
-  // so a derived `text` body (email alt-part, machine/MCP reads) reads the
-  // entity's name rather than a blank where the decorator sits.
+  /**
+   * The plain-text projection: an older chip's label where a host stores one
+   * (a sent email's text part reads the name); otherwise nothing, so no title
+   * reaches a text column or a search index.
+   */
   getTextContent(): string {
     return this.__label;
   }
 
-  static importJSON(serialized: SerializedEntityRefNode): EntityRefNode {
-    return $createEntityRefNode({
+  getDisplay(): ReferenceDisplay {
+    return this.getLatest().__display;
+  }
+
+  setDisplay(display: ReferenceDisplay): void {
+    const self = this.getWritable();
+    self.__display = display;
+  }
+
+  /** Forget a stored title and icon (privacy-first surfaces drop old chips' labels). */
+  dropStoredLabel(): void {
+    if (!this.__label && !this.__icon) return;
+    const self = this.getWritable();
+    self.__label = "";
+    self.__icon = null;
+  }
+
+  static importJSON(serialized: SerializedReferenceNode): ReferenceNode {
+    return $createReferenceNode({
       entityType: serialized.entityType,
       entityId: serialized.entityId,
-      label: serialized.label,
+      label: serialized.label ?? "",
       icon: serialized.icon ?? null,
+      display: isReferenceDisplay(serialized.display) ? serialized.display : "chip",
     });
   }
 
-  // HTML round-trip (DF-23): the chip persists as an inert `<span>` so it
-  // survives `$generateHtmlFromNodes` (email compose + the HTML-stored task /
-  // event descriptions) and re-hydrates via `$generateNodesFromDOM`.
+  exportJSON(): SerializedReferenceNode {
+    return {
+      type: "entity-ref",
+      version: 2,
+      entityType: this.__entityType,
+      entityId: this.__entityId,
+      label: this.__label,
+      icon: this.__icon,
+      display: this.__display,
+    };
+  }
+
+  // HTML round trip (DF-23): the reference persists as an inert `<span>` in
+  // the HTML a task or event description stores. A span written without a
+  // label holds only the type's word, so an older build still shows something.
   static importDOM(): DOMConversionMap | null {
     return {
       span: (node: HTMLElement) => {
         if (!node.hasAttribute(ENTITY_REF_ATTR)) return null;
-        return { conversion: convertEntityRefElement, priority: 2 };
+        return { conversion: convertReferenceElement, priority: 2 };
       },
     };
   }
@@ -123,53 +172,65 @@ export class EntityRefNode extends DecoratorNode<unknown> {
     span.setAttribute("data-entity-type", this.__entityType);
     span.setAttribute("data-entity-id", this.__entityId);
     if (this.__icon) span.setAttribute("data-entity-icon", this.__icon);
-    // Label as text → readable if the span is ever flattened / read by a
-    // non-Moduo client (a sent email); the chrome is re-applied on import.
-    span.textContent = this.__label;
+    if (this.__display !== "chip") span.setAttribute("data-display", this.__display);
+    if (this.__label) {
+      span.textContent = this.__label;
+    } else {
+      span.setAttribute(NO_LABEL_ATTR, "2");
+      span.textContent = referenceNoun(referenceKind(this.__entityType));
+    }
     return { element: span };
   }
 
-  exportJSON(): SerializedEntityRefNode {
-    return {
-      type: "entity-ref",
-      version: 1,
-      entityType: this.__entityType,
-      entityId: this.__entityId,
-      label: this.__label,
-      icon: this.__icon,
-    };
-  }
-
+  // The browser editor installs the view (`installReferenceView`); headless
+  // editors have none and get null, which they never render.
   decorate(): unknown {
     return renderNodeView(this);
   }
 }
 
-function convertEntityRefElement(node: HTMLElement): DOMConversionOutput {
+function convertReferenceElement(node: HTMLElement): DOMConversionOutput {
   const entityType = node.getAttribute("data-entity-type") ?? "";
   const entityId = node.getAttribute("data-entity-id") ?? "";
-  // A malformed marker (missing address) can't resolve — drop back to plain
-  // text rather than minting a dead chip.
+  // A marker without an address can't resolve: back to plain text.
   if (!entityType || !entityId) return { node: null };
+  const display = node.getAttribute("data-display");
   return {
-    node: $createEntityRefNode({
+    node: $createReferenceNode({
       entityType,
       entityId,
-      label: node.textContent ?? entityType,
+      label: node.hasAttribute(NO_LABEL_ATTR) ? "" : (node.textContent ?? ""),
       icon: node.getAttribute("data-entity-icon"),
+      display: isReferenceDisplay(display) ? display : "chip",
     }),
   };
 }
 
-export function $createEntityRefNode(input: {
+export function $createReferenceNode(input: {
   entityType: string;
   entityId: string;
-  label: string;
+  label?: string;
   icon?: string | null;
-}): EntityRefNode {
-  return new EntityRefNode(input.entityType, input.entityId, input.label, input.icon ?? null);
+  display?: ReferenceDisplay;
+}): ReferenceNode {
+  return new ReferenceNode(
+    input.entityType,
+    input.entityId,
+    input.label ?? "",
+    input.icon ?? null,
+    input.display ?? "chip",
+  );
 }
 
-export function $isEntityRefNode(node: unknown): node is EntityRefNode {
-  return node instanceof EntityRefNode;
+export function $isReferenceNode(node: unknown): node is ReferenceNode {
+  return node instanceof ReferenceNode;
 }
+
+// The spine's older names for the same node: Notes, its markdown transformer
+// and email compose register and create it by these.
+export {
+  $createReferenceNode as $createEntityRefNode,
+  $isReferenceNode as $isEntityRefNode,
+  ReferenceNode as EntityRefNode,
+  type SerializedReferenceNode as SerializedEntityRefNode,
+};

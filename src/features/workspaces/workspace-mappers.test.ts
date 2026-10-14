@@ -5,7 +5,32 @@ import {
   normalizeMemberRole,
   toMemberPerm,
   toMemberRole,
+  withOwnName,
 } from "./workspace-mappers";
+
+describe("withOwnName (TV-U13, call 43)", () => {
+  const member = (userId: string, displayName: string | null) =>
+    mapMember({
+      id: userId,
+      workspace_id: "w",
+      user_id: userId,
+      role: "member",
+      profiles: { display_name: displayName },
+    });
+
+  it("names you by your email when your profile has no name, so your avatar reads two initials", () => {
+    const out = withOwnName([member("me", ""), member("mike", null)], "me", "dev.ops@moduo.local");
+    expect(out[0]?.displayName).toBe("dev ops");
+    // Someone else without a name stays unnamed (their email isn't readable here).
+    expect(out[1]?.displayName).toBeNull();
+  });
+
+  it("leaves a name you set alone", () => {
+    expect(withOwnName([member("me", "Maciej")], "me", "dev@moduo.local")[0]?.displayName).toBe(
+      "Maciej",
+    );
+  });
+});
 
 describe("mapMember", () => {
   it("surfaces display name and avatar from the joined profile (DF-24)", () => {

@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
+import { formatWeekdayDate } from "../../../lib/time-format";
 import { RepeatPicker } from "./repeat-picker";
 import { formatTimeOfDay } from "./time-format";
 
@@ -184,12 +185,7 @@ export function EventQuickCreate({
           <div className="flex items-center gap-2">
             {allDay ? (
               <span className="flex-1 text-sm text-muted-foreground">
-                All day ·{" "}
-                {new Date(startMs).toLocaleDateString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
+                All day · {formatWeekdayDate(startMs)}
               </span>
             ) : (
               <>

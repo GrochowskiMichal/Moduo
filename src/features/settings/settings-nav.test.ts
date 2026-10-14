@@ -9,8 +9,22 @@ describe("SETTINGS_GROUPS (grouped nav — DF-19a)", () => {
 
   it("orders sections within each group per the spec", () => {
     const byLabel = Object.fromEntries(SETTINGS_GROUPS.map((g) => [g.label, g.ids]));
-    expect(byLabel.Personal).toEqual(["account", "billing", "appearance", "preferences", "focus"]);
-    expect(byLabel.Workspace).toEqual(["workspace", "access", "integrations", "apikeys"]);
+    expect(byLabel.Personal).toEqual([
+      "account",
+      "billing",
+      "appearance",
+      "preferences",
+      "timeregion",
+      "focus",
+    ]);
+    // Storage (AT-3) sits with the workspace's own settings, after access.
+    expect(byLabel.Workspace).toEqual([
+      "workspace",
+      "access",
+      "storage",
+      "integrations",
+      "apikeys",
+    ]);
     expect(byLabel.App).toEqual(["advanced", "about"]);
   });
 

@@ -24,6 +24,7 @@ import type { CompanyDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
+import { EntityTagRow } from "../../tags/ui/entity-tag-row";
 import type { ActivityEntry } from "../../tasks/model";
 import { type CompanyRollup, companyLastTouchLine } from "../company";
 import type { Company } from "../model";
@@ -31,7 +32,6 @@ import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";
 import { ContactStatusDot } from "./contact-status-badge";
 import { EntityLinkPicker } from "./entity-link-picker";
-import { EntityTagRow } from "./entity-tag-row";
 import { LinkedSections } from "./linked-sections";
 
 export type CompanyHubProps = {

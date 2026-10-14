@@ -1,5 +1,7 @@
 # Spec: Tasks v2 — the dogfood rework
 
+> **Superseded by [`specs/tasks-v3.md`](./tasks-v3.md) on 2026-10-10.** Blocks 1–10 of this spec landed and stay as built (TV-Q1, TV-F1, TV-D1–D4, TV-T1, TV-U1, TV-U3, plus DS-1–4 and AT-1; the one exception is TV-D5, block 8, still open, which finishes as tasks-v3 block 1). Blocks 11–21 are re-scoped into v3: the mapping is the "Carried from v2" paragraph under tasks-v3 §Execution blocks, and the dated note of 2026-10-10 in [`specs/BUILD_LOG.md`](./BUILD_LOG.md) closes the old lines. The decisions this spec recorded moved to [`docs/decisions/tasks.md`](../docs/decisions/tasks.md). The body below is kept as history and is not updated.
+
 > Status: **Draft — awaiting designer approval** (all open questions answered 2026-10-08) · Owner: maciej · Source of truth for every product call: [`.design/tasks-dogfood/REVIEW.md`](../.design/tasks-dogfood/REVIEW.md) (T1–T28, U1–U14, decision rounds 1–3b) + the comp [`.design/tasks-dogfood/ui-proposal.html`](../.design/tasks-dogfood/ui-proposal.html) · Companion specs: [`design-state-layer.md`](./design-state-layer.md) (DS-*), [`attachments.md`](./attachments.md) (AT-*) · Supersedes the parts of [`docs/moduo-tasks-feature-spec.md`](../docs/moduo-tasks-feature-spec.md) it changes (Plan/Execute modes, commit-for-today, capture-is-tag-free) · Contract: [`docs/moduo-module-contract.md`](../docs/moduo-module-contract.md)
 
 ## Scope
@@ -157,6 +159,8 @@ The cross-module visual foundation (state tokens, scrollbars, NavRow/MetaCount/F
   - Each list/group ends with a quiet "5 completed · show" line. Display → Completed: **Hidden · 7 days · All**.
   - A task you check off stays in place, struck through, until you change scope or reload (undo stays one click away).
   - Archived ("won't do") tasks are reachable through Filter → Status: Archived.
+
+*As built in TV-U1 (2026-10-09):* the date column shows the scheduled time or the due date, whichever comes first by day (scheduled wins a tie). "7 days" is measured from the task's last update, since no completion time is stored. A done parent with open subtasks stays listed. Display ships Completed and "Show on rows" (Priority, Energy, Date, Assignee) per scope; TV-U2 adds the rest. Details: [docs/decisions/tasks.md](../docs/decisions/tasks.md) 2026-10-09 TV-U1.
 
 ### 7. Filter, Display, search, saved views
 
@@ -585,6 +589,8 @@ Layers per AGENTS.md:
    - **Totals** come from **`tasks_time_totals(workspace_id)`** (SECURITY DEFINER), which returns per task `total_focus_seconds`, `my_seconds`, `my_waiting_seconds`. Raw entries are readable only by their author.
    - The entry table *is* the attributed log, so time ops write **no** `module_activity` rows. That's a documented exception to keep the trail quiet; recorded in `docs/decisions/tasks.md`.
    - **Legacy:** `time_spent_seconds` is backfilled as one `legacy` entry per task (excluded from date-window sums). A trigger keeps `tasks.time_spent_seconds` = total for old clients until TV-D7, and turns old-client writes of that column into adjustments.
+
+   *As built in TV-D3 (2026-10-09):* the op appends **closed** stretches (no open entries to heartbeat: the TV-F1 engine keeps the clock on the device), each Focus save under an idempotency key (`client_key`, one entry per task and key), plus `adjust`, `set_total` and `undo` (own adjustments only; a task never owes time). `tasks_time_totals(workspace_id, since)` also returns the caller's share since a time. A lower value from an old build's whole-row upsert is ignored. Details: [docs/decisions/tasks.md](../docs/decisions/tasks.md) 2026-10-08 TV-D3.
 6. **Focus engine** lives outside React (module store, AppChrome-remount-safe):
    - state is `{run, phase timestamps, open stretch startedAt, banked}`;
    - elapsed = banked + (now − startedAt) via `Date.now()` (not `performance.now()`, which freezes in sleep on WebKit);

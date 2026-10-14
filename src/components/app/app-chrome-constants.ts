@@ -1,3 +1,4 @@
+import type { ModulePermissions } from "../../features/workspaces/types";
 import type { ModuleNavItem } from "./app-chrome-types";
 
 export function safeId(): string {
@@ -23,6 +24,23 @@ export const baseModulesNavItems: ModuleNavItem[] = [
   // module, everyone else gets the locked explainer + upgrade path.
   { label: "Chat", iconName: "message-square", href: "/chat", module: "chat" },
 ];
+
+/**
+ * The top bar's module tabs this person sees, in order. PERM-1: each module tab
+ * follows its own View permission. ⌘1–7 follow this list, and so do the
+ * capture's type keys (tasks-v3 call 90b), so a number means the same module in
+ * both places.
+ */
+export function visibleModuleNavItems(perms: ModulePermissions): ModuleNavItem[] {
+  return baseModulesNavItems.filter((tab) => {
+    if (tab.module === "notes") return perms.notes !== "none";
+    if (tab.module === "tasks") return perms.tasks !== "none";
+    if (tab.module === "calendar") return perms.calendar !== "none";
+    if (tab.module === "contacts") return perms.contacts !== "none";
+    if (tab.module === "chat") return perms.chat !== "none";
+    return true;
+  });
+}
 
 // Routes that are intentionally reachable but NOT shown in the nav — kept wired
 // for later work but hidden from the alpha. The app-chrome "bounce unknown

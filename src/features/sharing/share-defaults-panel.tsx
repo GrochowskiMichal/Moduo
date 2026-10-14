@@ -34,7 +34,7 @@ const ROWS: { key: keyof Defaults; label: string; options: { id: string; label: 
   },
   {
     key: "buckets",
-    label: "New buckets",
+    label: "New projects",
     options: [
       { id: "private", label: "Private" },
       { id: "view", label: "Workspace can view" },
@@ -96,7 +96,7 @@ export function ShareDefaultsPanel({ workspaceId }: { workspaceId: string }) {
       <div>
         <h2 className="font-display text-base">Defaults for new things</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          This fills in sharing when someone creates a note, bucket, calendar, or contact. They can
+          This fills in sharing when someone creates a note, project, calendar, or contact. They can
           still change that one thing afterwards.
         </p>
       </div>

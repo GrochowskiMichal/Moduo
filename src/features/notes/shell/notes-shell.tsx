@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../../components/ui/alert-dialog";
+import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
 import { ShareMenu } from "../../sharing/share-menu";
@@ -69,6 +70,18 @@ export function NotesShell() {
   const isDraft = draft !== null && selectedId === draft.id;
   const liveNote = selectedNote && !selectedNote.deletedAt ? selectedNote : null;
   const editorNoteId = isDraft ? draft.id : (liveNote?.id ?? null);
+  // An open note rides along on a capture as "From: …" (tasks-v3 call 93); a
+  // draft isn't on the server yet, so it has nothing to link.
+  const liveNoteId = isDraft ? null : (liveNote?.id ?? null);
+  const liveNoteTitle = liveNote ? displayTitle(liveNote.title) : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      liveNoteId && liveNoteTitle !== null
+        ? { kind: "note", label: liveNoteTitle, ref: { type: "note", id: liveNoteId } }
+        : null,
+    [liveNoteId, liveNoteTitle],
+  );
+  useCaptureSource(captureSource);
 
   const tasks = useShellTasks({
     runtime,

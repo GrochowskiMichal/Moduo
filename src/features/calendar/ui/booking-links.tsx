@@ -10,7 +10,7 @@ import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
+import { busyIdsFromJson, DEFAULT_BUSY_IDS, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
 import { videoSetting } from "../booking/video";
@@ -87,7 +87,7 @@ function emptyDraft(): Draft {
     minNoticeMinutes: 240,
     hostTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     weeklyHours: normalizeWeeklyHours(DEFAULT_WEEKLY_HOURS),
-    busyCalendarIds: ["moduo"],
+    busyCalendarIds: [...DEFAULT_BUSY_IDS],
     noteEnabled: true,
     guestsEnabled: true,
     questions: [],

@@ -14,22 +14,22 @@ import type { Task } from "../model";
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The blocked task the user just tried to commit. */
+  /** The blocked task the user just tried to queue. */
   task: Task | null;
   /** Its unblocked frontier — "what's actually next" (spec §5c). */
   frontier: Task[];
   bucketNameById: (id: string) => string;
-  /** Commit a frontier task to today (it is unblocked — goes straight through). */
-  onCommitTask: (id: string) => void;
-  /** The escape hatch — commit the blocked task as asked (never a wall). */
-  onCommitAnyway: () => void;
+  /** Queue a frontier task instead (it is unblocked — goes straight through). */
+  onQueueTask: (id: string) => void;
+  /** The escape hatch — queue the blocked task as asked (never a wall). */
+  onQueueAnyway: () => void;
 };
 
 /**
- * Offered when committing a blocked task (spec §5c): list the unblocked
+ * Offered when queuing a blocked task (spec §5c): list the unblocked
  * frontier so the user can start with what actually unblocks the work — with
- * "Commit anyway" as a first-class escape hatch (mirrors, never walls;
- * principle 5). Quiet and factual; removing from Today never lands here.
+ * "Queue anyway" as a first-class escape hatch (mirrors, never walls;
+ * principle 5). Quiet and factual; removing from the queue never lands here.
  */
 export function FrontierOfferDialog({
   open,
@@ -37,8 +37,8 @@ export function FrontierOfferDialog({
   task,
   frontier,
   bucketNameById,
-  onCommitTask,
-  onCommitAnyway,
+  onQueueTask,
+  onQueueAnyway,
 }: Props) {
   if (!task) return null;
   return (
@@ -73,12 +73,12 @@ export function FrontierOfferDialog({
                 variant="secondary"
                 className="shrink-0"
                 onClick={() => {
-                  onCommitTask(t.id);
+                  onQueueTask(t.id);
                   onOpenChange(false);
                 }}
               >
                 <ListChecks aria-hidden />
-                Commit
+                Queue
               </Button>
             </div>
           ))}
@@ -92,11 +92,11 @@ export function FrontierOfferDialog({
             variant="outline"
             size="sm"
             onClick={() => {
-              onCommitAnyway();
+              onQueueAnyway();
               onOpenChange(false);
             }}
           >
-            Commit anyway
+            Queue anyway
           </Button>
         </DialogFooter>
       </DialogContent>
