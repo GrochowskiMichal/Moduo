@@ -7,12 +7,14 @@
 // scroller), a row with no date yet shows what a click would set, and a task
 // carries its dependency mark and stubs (68b).
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Paperclip } from "lucide-react";
 import { memo, type ReactNode } from "react";
 
 import { normalizeLabelColor } from "../../../components/tag-colors";
+import { MetaCount } from "../../../components/ui/meta-count";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
+import { filesLabel } from "../../attachments/files";
 import { useAssignees } from "../assignees";
 import { type SelectMods, selectModsOf } from "../selection";
 import type { Contradiction } from "../timeline-deps";
@@ -93,6 +95,8 @@ export type TimelineRowProps = {
   contradiction: Contradiction | null;
   /** The selected task's undrawn line ends. */
   stubs: RowStubs | null;
+  /** A task row's finished files (AT-3's 📎 mark beside the title; 0 hides it). */
+  files?: number;
 };
 
 /** Which kind of date a click on this row's empty track would set, or null. */
@@ -171,7 +175,7 @@ function TimelineRowView(props: TimelineRowProps) {
         />
         {sticky ? <TrackLines /> : null}
         <Track {...props} />
-        {nameHidden ? <TrackLabel row={row} /> : null}
+        {nameHidden ? <TrackLabel row={row} files={props.files} /> : null}
       </div>
     </div>
   );
@@ -209,6 +213,7 @@ function NameCell({
   actions,
   expandable,
   expanded,
+  files = 0,
 }: TimelineRowProps & { expandable: boolean; expanded: boolean }) {
   const { nameHidden } = useTimelineGeometry();
   const Chevron = expanded ? ChevronDown : ChevronRight;
@@ -252,7 +257,14 @@ function NameCell({
           <span aria-hidden className="size-icon-xs shrink-0" />
         )
       ) : null}
-      <NameContent row={row} hue={hue} editing={editing} canEdit={canEdit} handlers={handlers} />
+      <NameContent
+        row={row}
+        hue={hue}
+        editing={editing}
+        canEdit={canEdit}
+        handlers={handlers}
+        files={files}
+      />
       {row.kind === "task" && command ? (
         <TimelineTaskCommand
           task={row.task}
@@ -272,7 +284,8 @@ function NameContent({
   editing,
   canEdit,
   handlers,
-}: Pick<TimelineRowProps, "row" | "hue" | "editing" | "canEdit" | "handlers">) {
+  files = 0,
+}: Pick<TimelineRowProps, "row" | "hue" | "editing" | "canEdit" | "handlers" | "files">) {
   const { byId } = useAssignees();
   switch (row.kind) {
     case "area":
@@ -357,6 +370,8 @@ function NameContent({
           >
             {task.title || "Untitled"}
           </span>
+          {/* The 📎 mark (AT-3): the name column is the timeline's title place. */}
+          <MetaCount icon={Paperclip} count={files} label={filesLabel} className="relative" />
           {task.assigneeId ? (
             <AssigneeAvatar
               assignee={assignee}
@@ -488,12 +503,21 @@ function Track({
  * ⇧[ hid the name column (research §3): the title sits right of its mark, a
  * header's name at the left edge of the canvas.
  */
-function TrackLabel({ row }: { row: TimelineRow }) {
+function TrackLabel({ row, files = 0 }: { row: TimelineRow; files?: number }) {
   const { range, dw } = useTimelineGeometry();
   let text: ReactNode = null;
   let at: number | null = null;
   if (row.kind === "task") {
-    text = row.task.title || "Untitled";
+    // With the name column folded, the 📎 mark (AT-3) rides beside the title.
+    text =
+      files > 0 ? (
+        <span className="inline-flex items-center gap-1.5">
+          {row.task.title || "Untitled"}
+          <MetaCount icon={Paperclip} count={files} label={filesLabel} />
+        </span>
+      ) : (
+        row.task.title || "Untitled"
+      );
     at = row.point ? (row.point.day - range.start + 1) * dw + 8 : null;
   } else if (row.kind === "project") {
     text = row.project.name;
@@ -536,7 +560,8 @@ function sameRowProps(a: TimelineRowProps, b: TimelineRowProps): boolean {
     a.actions === b.actions &&
     a.editable === b.editable &&
     a.contradiction === b.contradiction &&
-    a.stubs === b.stubs
+    a.stubs === b.stubs &&
+    (a.files ?? 0) === (b.files ?? 0)
   );
 }
 

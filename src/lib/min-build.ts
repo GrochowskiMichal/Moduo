@@ -86,6 +86,8 @@ export function useMinBuild(): MinBuildState {
  * this file hasn't classified.
  */
 export const READ_RPCS: ReadonlySet<string> = new Set([
+  // AT-3: Settings → Storage's largest-files list.
+  "attachments_largest",
   "booking_google_connected",
   "calendar_busy_blocks",
   "chat_caps_get",

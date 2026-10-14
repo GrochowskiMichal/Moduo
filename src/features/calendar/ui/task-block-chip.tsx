@@ -9,11 +9,13 @@
 // longer) dims with a clock glyph, no strike, still open. CAL-5 adds the live
 // focus treatment: a leading progress edge + elapsed readout while focusing.
 
-import { Clock } from "lucide-react";
+import { Clock, Paperclip } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
+import { MetaCount } from "../../../components/ui/meta-count";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { filesLabel } from "../../attachments/files";
 import { formatTimeOfDay } from "./time-format";
 
 type Props = {
@@ -38,6 +40,8 @@ type Props = {
   focusing?: boolean;
   /** The self-ticking readout element, shown while focusing. */
   focusReadout?: ReactNode;
+  /** The task's finished files (AT-3's 📎 mark; 0 hides it). */
+  files?: number;
 };
 
 export function TaskBlockChip({
@@ -56,6 +60,7 @@ export function TaskBlockChip({
   onRemove,
   focusing = false,
   focusReadout,
+  files = 0,
 }: Props) {
   const timeLabel = `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
   // Elapsed treatment only applies while genuinely awaiting triage — a done or
@@ -85,7 +90,7 @@ export function TaskBlockChip({
     <div
       data-task-block
       data-elapsed={awaitingTriage ? "" : undefined}
-      title={`${title} · ${timeLabel}`}
+      title={`${title} · ${timeLabel}${files > 0 ? ` · ${filesLabel(files)}` : ""}`}
       className={cn(
         "relative flex h-full w-full flex-col overflow-hidden rounded-md border border-border bg-muted/60 px-1.5 py-0.5 text-left",
         "transition-colors duration-(--motion-fast) ease-(--ease-out) hover:bg-muted",
@@ -116,6 +121,7 @@ export function TaskBlockChip({
         >
           {title}
         </span>
+        <MetaCount icon={Paperclip} count={files} label={filesLabel} />
         {focusing && focusReadout ? (
           <span className="shrink-0 font-sans text-2xs tabular-nums text-primary">
             {focusReadout}

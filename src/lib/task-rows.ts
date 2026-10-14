@@ -65,7 +65,7 @@ import type {
   TimeReportRow,
   TrackTimeInput,
 } from "../features/tasks/model";
-import type { CommentMark } from "./sync/types";
+import type { AttachmentMark, CommentMark } from "./sync/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
@@ -851,6 +851,27 @@ export function commentMarkRowToModel(raw: unknown): CommentMark {
   return {
     id: r.id,
     taskId: r.entity_id,
+    updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
+    deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
+  };
+}
+
+/** An attachment row → what the shared store's 📎 counts need (AT-3). */
+export function attachmentMarkRowToModel(raw: unknown): AttachmentMark {
+  const r = raw as {
+    id?: unknown;
+    entity_id?: unknown;
+    status?: unknown;
+    updated_at?: unknown;
+    deleted_at?: unknown;
+  };
+  if (typeof r?.id !== "string" || typeof r.entity_id !== "string") {
+    throw new Error("Malformed attachment payload");
+  }
+  return {
+    id: r.id,
+    taskId: r.entity_id,
+    status: typeof r.status === "string" ? r.status : "",
     updatedAt: typeof r.updated_at === "string" ? r.updated_at : "",
     deletedAt: typeof r.deleted_at === "string" ? r.deleted_at : null,
   };

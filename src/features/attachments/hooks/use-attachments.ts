@@ -95,12 +95,20 @@ export function useEntityAttachments({
   entity,
   userId,
   canEdit,
+  refreshStamp = null,
 }: {
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
   entity: { type: "task"; id: string };
   userId: string | null;
   canEdit: boolean;
+  /**
+   * Moves whenever this entity's files change anywhere (AT-3: the shared
+   * store's `attachmentStamps`, fed by Realtime and its delta reads): an open
+   * strip reads its list again on it, so a teammate's upload or delete shows
+   * without reopening.
+   */
+  refreshStamp?: string | null;
 }): EntityAttachments {
   const queue = getUploadQueue();
   const snap = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
@@ -178,6 +186,20 @@ export function useEntityAttachments({
       reqRef.current += 1;
     };
   }, [reload]);
+
+  // The entity's files changed elsewhere (a teammate, another window, an
+  // agent): read the list again. A new entity reads already (above), so only
+  // a stamp that moves while the same entity is open counts.
+  const seenStamp = useRef<{ key: string | null; stamp: string | null }>({
+    key,
+    stamp: refreshStamp,
+  });
+  useEffect(() => {
+    const seen = seenStamp.current;
+    seenStamp.current = { key, stamp: refreshStamp };
+    if (seen.key !== key || seen.stamp === refreshStamp) return;
+    void reload();
+  }, [key, refreshStamp, reload]);
 
   // Preview links last an hour and a panel can stay open longer: sign them
   // again as they near the end, and when the window comes back (a laptop that

@@ -3806,6 +3806,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     pendingTaskIds: snap.pendingTaskIds,
     /** Per task, moves on any comment change (TV-U13): the open feed re-reads on it. */
     commentStamps: snap.commentStamps,
+    /** Finished files per task (AT-3's 📎 counts, live). */
+    attachmentCounts: snap.attachmentCounts,
+    /** Per task, moves on any file change (AT-3): an open strip re-reads on it. */
+    attachmentStamps: snap.attachmentStamps,
     /** TV-D10's structure, live from the store: areas (in sidebar order),
      *  sections, teams, members. */
     areas,

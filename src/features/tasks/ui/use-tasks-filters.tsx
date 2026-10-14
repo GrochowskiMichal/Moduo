@@ -248,44 +248,6 @@ export function taskFilterDimensions(input: {
     }));
 }
 
-/**
- * Live files per task (non-deleted, not failed), read when a "Has
- * attachments" filter is on, again each time it's turned on. AT-3's live 📎
- * counts can replace this read.
- */
-function useAttachmentCounts(
-  runtime: ModuoRuntime | null,
-  workspaceId: string,
-  enabled: boolean,
-): (taskId: string) => number {
-  const [state, setState] = useState<{ workspaceId: string; counts: Map<string, number> } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!enabled || !runtime || !workspaceId) return;
-    let cancelled = false;
-    runtime.attachments
-      .list(workspaceId)
-      .then(({ attachments }) => {
-        if (cancelled) return;
-        const counts = new Map<string, number>();
-        for (const a of attachments) {
-          if (a.entityType !== "task" || a.deletedAt || a.status === "failed") continue;
-          counts.set(a.entityId, (counts.get(a.entityId) ?? 0) + 1);
-        }
-        setState({ workspaceId, counts });
-      })
-      .catch(() => {
-        // Unknown counts read as "no files"; the filter still works for the rest.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, runtime, workspaceId]);
-  const counts = state?.workspaceId === workspaceId ? state.counts : null;
-  return useCallback((taskId: string) => counts?.get(taskId) ?? 0, [counts]);
-}
-
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el?.tagName) return false;
@@ -369,7 +331,6 @@ export function useTasksFilters({
   conditions,
   onConditionsChange,
   api,
-  runtime,
   assignees,
   enabled,
   keepTaskId = null,
@@ -410,8 +371,13 @@ export function useTasksFilters({
     [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams],
   );
 
-  const attachmentsOn = conditions.some((c) => c.dimension === "attachments");
-  const attachmentCount = useAttachmentCounts(runtime, workspaceId, attachmentsOn);
+  // "Has attachments" reads the store's live 📎 counts (AT-3): files on tasks
+  // you can see, finished and not deleted.
+  const fileCounts = api.attachmentCounts;
+  const attachmentCount = useCallback(
+    (taskId: string) => fileCounts?.get(taskId) ?? 0,
+    [fileCounts],
+  );
 
   // Each task's Waiting on… kinds (the Waiting on filter).
   const waitingKinds = useMemo(() => {

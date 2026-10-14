@@ -69,6 +69,8 @@ describe("listenTasksLive", () => {
       "tasks-db:ws-1:me",
       "tasks-db:task_completions:ws-1:me",
       "tasks-db:agent_sessions:ws-1:me",
+      // AT-3: files (the 📎 counts) on their own channel.
+      "tasks-db:attachments:ws-1:me",
       "tasks-access:ws-1:me",
     ]);
     const ch = h.channels[0]!;
@@ -93,7 +95,8 @@ describe("listenTasksLive", () => {
     expect(h.channels[1]!.tables).toEqual(["task_completions"]);
     // TV-D16: agent sessions, published by their own migration.
     expect(h.channels[2]!.tables).toEqual(["agent_sessions"]);
-    expect(h.channels[3]!.tables).toEqual(["access_changes"]);
+    expect(h.channels[3]!.tables).toEqual(["attachments"]);
+    expect(h.channels[4]!.tables).toEqual(["access_changes"]);
     expect(new Set(h.channels.flatMap((c) => c.filters))).toEqual(
       new Set(["workspace_id=eq.ws-1"]),
     );
@@ -125,7 +128,7 @@ describe("listenTasksLive", () => {
       type: "change",
       change: { table: "task_completions", kind: "upsert", row: { id: "c1", taskId: "t1" } },
     });
-    h.channels[3]!.handlers.get("access_changes")!({
+    h.channels[4]!.handlers.get("access_changes")!({
       eventType: "INSERT",
       new: {
         id: 7,
@@ -151,7 +154,7 @@ describe("listenTasksLive", () => {
     expect(h.channels.every((c) => c.removed)).toBe(true);
     // A fresh listener opens fresh channels.
     const stopC = listenTasksLive("ws-1", "me", () => {});
-    expect(h.channels).toHaveLength(8);
+    expect(h.channels).toHaveLength(10);
     stopC();
   });
 

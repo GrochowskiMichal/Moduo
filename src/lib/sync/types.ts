@@ -41,6 +41,19 @@ export type CommentMark = {
   deletedAt: string | null;
 };
 
+/**
+ * A file on a task, as far as the 📎 counts and an open strip's refresh need
+ * it (AT-3): no name, path or size ever lands on the device copy. Only
+ * finished files are read; a Realtime row still uploading is skipped.
+ */
+export type AttachmentMark = {
+  id: string;
+  taskId: string;
+  status: string;
+  updatedAt: string;
+  deletedAt: string | null;
+};
+
 /** Each synced table and the model the store holds for it. */
 export type SyncRows = {
   tasks: Task;
@@ -65,6 +78,8 @@ export type SyncRows = {
   views: TaskView;
   /** TV-D16: agent sessions the reader may see (RLS). */
   agentSessions: AgentSession;
+  /** AT-3: finished files on tasks the reader may see (RLS), for the 📎 counts. */
+  attachments: AttachmentMark;
 };
 
 export type SyncTableName = keyof SyncRows;

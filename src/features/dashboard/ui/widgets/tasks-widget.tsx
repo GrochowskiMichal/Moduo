@@ -4,9 +4,11 @@
 // disabled checkboxes); it goes through the shared store with call 87's rule,
 // so a parent's open subtasks finish too, with one Undo. Rows open the task.
 
-import { Check } from "lucide-react";
+import { Check, Paperclip } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
+import { MetaCount } from "@/components/ui/meta-count";
+import { filesLabel } from "@/features/attachments/files";
 import { useFocusTaskState } from "@/features/focus/timer";
 import { checkOffWithSubtasks, restoreFocusPlace, undoCheckOff } from "@/features/tasks/check-off";
 import { focusOrOpen } from "@/features/tasks/home";
@@ -37,12 +39,15 @@ function TaskRow({
   now,
   canWrite,
   onDone,
+  files = 0,
 }: {
   task: Task;
   /** The task a Focus session is on right now. */
   now: boolean;
   canWrite: boolean;
   onDone: (task: Task) => void;
+  /** Its finished files (AT-3's 📎 mark; 0 hides it). */
+  files?: number;
 }) {
   return (
     <li
@@ -73,6 +78,7 @@ function TaskRow({
       >
         {task.title}
       </button>
+      <MetaCount icon={Paperclip} count={files} label={filesLabel} />
       {now ? <span className="shrink-0 text-2xs text-muted-foreground">Now</span> : null}
     </li>
   );
@@ -81,7 +87,7 @@ function TaskRow({
 const subtaskWord = (n: number) => (n === 1 ? "1 subtask" : `${n} subtasks`);
 
 export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
-  const { tasks: taskSource, taskQueue, workspaceId } = useDashboardData();
+  const { tasks: taskSource, taskQueue, taskFiles, workspaceId } = useDashboardData();
   const { userId } = useAuth();
   const density = useDensity();
   const focus = useFocusTaskState();
@@ -174,6 +180,7 @@ export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
             now={heading === "Focus" && !!sessionTaskId && task.id === sessionTaskId}
             canWrite={canWrite}
             onDone={markDone}
+            files={taskFiles?.get(task.id) ?? 0}
           />
         ))}
       </ul>

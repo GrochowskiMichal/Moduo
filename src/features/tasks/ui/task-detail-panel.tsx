@@ -151,6 +151,8 @@ function DetailBody({
     entity: { type: "task", id: task.id },
     userId: api.currentUserId ?? null,
     canEdit,
+    // Live (AT-3): a teammate's upload or delete shows without reopening.
+    refreshStamp: api.attachmentStamps?.get(task.id) ?? null,
   });
   const dropScroll = cn(
     "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",

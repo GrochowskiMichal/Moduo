@@ -6,14 +6,16 @@
 // Click a card for the task's details ("← In flight"); Pick up puts it back
 // at the top of Focus and ends the wait; Later checks back tomorrow.
 
-import { Hourglass, Play } from "lucide-react";
+import { Hourglass, Paperclip, Play } from "lucide-react";
 import { useContext, useMemo } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { IconButton } from "../../../components/ui/icon-button";
+import { MetaCount } from "../../../components/ui/meta-count";
 import { formatAge, formatWhen } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
+import { filesLabel } from "../../attachments/files";
 import { agentLineText } from "../../spine/agent-session";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import type { InFlightItem } from "../focus-screen";
@@ -42,6 +44,7 @@ export function InFlightPanel({
   onOpenTask,
   onPickUp,
   onLater,
+  fileCounts,
 }: {
   items: readonly InFlightItem[];
   canEdit: boolean;
@@ -49,6 +52,8 @@ export function InFlightPanel({
   onOpenTask: (id: string) => void;
   onPickUp: (item: InFlightItem) => void;
   onLater: (item: InFlightItem) => void;
+  /** Task id → its finished files (AT-3's 📎 mark beside the project). */
+  fileCounts?: ReadonlyMap<string, number>;
 }) {
   // "since 2h", "check in 12m": the words move on by the minute.
   const tick = useMinuteTick(items.length > 0);
@@ -82,6 +87,7 @@ export function InFlightPanel({
           now={now}
           canEdit={canEdit}
           projectName={bucketNameById(item.task.bucketId)}
+          files={fileCounts?.get(item.task.id) ?? 0}
           waiting={waitingWords(item, name)}
           onOpen={() => onOpenTask(item.task.id)}
           onPickUp={() => onPickUp(item)}
@@ -97,6 +103,7 @@ function InFlightCard({
   now,
   canEdit,
   projectName,
+  files,
   waiting,
   onOpen,
   onPickUp,
@@ -106,6 +113,7 @@ function InFlightCard({
   now: Date;
   canEdit: boolean;
   projectName: string;
+  files: number;
   waiting: string | null;
   onOpen: () => void;
   onPickUp: () => void;
@@ -148,7 +156,10 @@ function InFlightCard({
           />
         ) : null}
       </div>
-      <p className="font-sans text-xs text-subtle-foreground break-words">{projectName}</p>
+      <p className="flex items-center gap-2 font-sans text-xs text-subtle-foreground break-words">
+        <span className="min-w-0">{projectName}</span>
+        <MetaCount icon={Paperclip} count={files} label={filesLabel} />
+      </p>
       {waiting ? (
         <p
           className={cn(

@@ -27,7 +27,7 @@ import {
   writePanelsMap,
 } from "../../features/layout/panel-events";
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
-import { dispatchOpenSettings } from "../../features/settings/settings-events";
+import { dispatchOpenSettings, isSettingsSectionId } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
 import { ReferencesProvider } from "../../features/spine/references/provider";
 import { requestTasksWelcome } from "../../features/tasks/welcome-request";
@@ -246,6 +246,11 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       // or without one (an id-less "open my inbox" from the widget) — let
       // entityOpenTarget decide (it returns null for id-less non-email → toast).
       if (!detail?.type) return;
+      // A settings section, by id (the storage alerts open Settings → Storage, AT-3).
+      if (detail.type === "settings") {
+        if (isSettingsSectionId(detail.id)) dispatchOpenSettings({ section: detail.id });
+        return;
+      }
       const target = entityOpenTarget(detail.type, detail.id ?? "");
       if (!target) {
         toast("Nothing to open yet", {

@@ -398,6 +398,22 @@ describe("notificationDeepLink", () => {
     expect(notificationDeepLink(g2)).toBeNull();
   });
 
+  // AT-3 (AT3-4): the 80/95% storage alerts hang on the workspace; they open
+  // Settings → Storage (its largest files), never a dead end.
+  it("opens Settings → Storage from a storage alert", () => {
+    for (const op of ["attachments.storage_80", "attachments.storage_95"]) {
+      const [g] = groupNotifications([
+        item({ id: op, createdAt: "x", op, targetType: "workspace", targetId: "w1" }),
+      ]);
+      expect(notificationDeepLink(g)).toEqual({
+        route: "/settings",
+        entityType: "settings",
+        entityId: "storage",
+      });
+    }
+    expect(notificationDeepLinkNoun("settings")).toBe("Storage settings");
+  });
+
   // DF-9: email snooze/follow-up notifications (entity_type='email_thread') must
   // deep-link the thread, not dead-end. entityType flows to the entity-open host,
   // which resolves email_thread → /email?thread=<id> (DF-2).

@@ -51,6 +51,11 @@ export function pastedFiles(dt: DataTransfer | null | undefined): File[] {
   return filesFromDataTransfer(dt);
 }
 
+/** "1 file" / "3 files": the 📎 mark's spoken label, on every surface it shows (AT-3). */
+export function filesLabel(n: number): string {
+  return n === 1 ? "1 file" : `${n} files`;
+}
+
 export function isPreviewableImage(mime: string): boolean {
   return mime.startsWith("image/");
 }

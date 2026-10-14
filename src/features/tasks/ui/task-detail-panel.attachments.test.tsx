@@ -420,4 +420,39 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
     expect(screen.getByText("rec.mov is 340 MB — your plan allows 20 MB per file")).toBeTruthy();
     expect(screen.getByText("Storage almost full — 2 of 2 GB")).toBeTruthy();
   });
+
+  it("refreshes an open strip when the task's files change elsewhere (AT-3: the store's stamp)", async () => {
+    const records = [rec("a")];
+    const { runtime, attachments } = fakeRuntime(records);
+    const t = task();
+    const panel = (stamp: string) => (
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={t}
+          buckets={[]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={{ ...api(t), attachmentStamps: new Map([["t1", stamp]]) } as TasksModuleApi}
+          runtime={runtime}
+          workspaceId="w"
+        />
+      </TooltipProvider>
+    );
+    const { rerender } = render(panel("s1"));
+    await screen.findByRole("button", { name: "Open a.png" });
+    expect(attachments.listForEntity).toHaveBeenCalledTimes(1);
+    // A teammate added a file: Realtime moved the stamp, the strip reads again.
+    records.push(rec("bb"));
+    rerender(panel("s2"));
+    await screen.findByRole("button", { name: "Open bb.png" });
+    expect(attachments.listForEntity).toHaveBeenCalledTimes(2);
+    // The same stamp again reads nothing more.
+    rerender(panel("s2"));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(attachments.listForEntity).toHaveBeenCalledTimes(2);
+  });
 });

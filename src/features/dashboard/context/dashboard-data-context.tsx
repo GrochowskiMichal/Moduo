@@ -67,6 +67,8 @@ export interface DashboardData {
   tasks: WidgetSource<TasksModuleBundle>;
   /** Queue rows I can see (TV-D2): mine, plus others' on tasks I can see. */
   taskQueue: WidgetSource<TaskQueueEntry[]>;
+  /** Task id → its finished files (AT-3's 📎 counts, from the shared store). */
+  taskFiles?: ReadonlyMap<string, number>;
   /** Waiting on… entries on tasks I can see (TV-D10), for the Team widget. */
   taskWaiting: WidgetSource<TaskWaitingEntry[]>;
   /** This week's time report rows (TV-D14): the time widget keeps your own. */
@@ -90,6 +92,7 @@ const EMPTY_TASKS: TasksModuleBundle = {
   truncated: [],
 };
 const NO_QUEUE: TaskQueueEntry[] = [];
+const NO_FILES: ReadonlyMap<string, number> = new Map<string, number>();
 const NO_WAITING: TaskWaitingEntry[] = [];
 const EMPTY_CALENDAR: CalendarModuleBundle = {
   events: [],
@@ -336,11 +339,15 @@ export function DashboardDataProvider({
   const habits = useSource<HabitRow[]>(has("habits"), workspaceId, [], (rt, ws) =>
     rt.habits.list(ws),
   );
+  // A task's finished files (AT-3's 📎 mark on the widget's rows), live.
+  const taskFiles = store ? snap.attachmentCounts : NO_FILES;
+
   const value = useMemo<DashboardData>(
     () => ({
       workspaceId,
       tasks,
       taskQueue,
+      taskFiles,
       taskWaiting,
       timeReport,
       calendar,
@@ -356,6 +363,7 @@ export function DashboardDataProvider({
       workspaceId,
       tasks,
       taskQueue,
+      taskFiles,
       taskWaiting,
       timeReport,
       calendar,

@@ -5,8 +5,11 @@
 // hold work. Each row says when ("3:00 PM · 45m", "due Thu", "Oct 8 · late").
 // Rows open the task.
 
+import { Paperclip } from "lucide-react";
 import { Fragment, useMemo } from "react";
 
+import { MetaCount } from "@/components/ui/meta-count";
+import { filesLabel } from "@/features/attachments/files";
 import { upcomingForHome } from "@/features/tasks/home";
 import type { Task } from "@/features/tasks/model";
 import { teamIdsOf } from "@/features/tasks/teams";
@@ -30,7 +33,7 @@ import {
 } from "./widget-primitives";
 
 export function UpcomingWidget({ size }: WidgetComponentProps) {
-  const { tasks } = useDashboardData();
+  const { tasks, taskFiles } = useDashboardData();
   const { userId } = useAuth();
   const density = useDensity();
   const today = useToday();
@@ -76,14 +79,28 @@ export function UpcomingWidget({ size }: WidgetComponentProps) {
           <Fragment key={g.key}>
             <WidgetGroupLabel count={g.count}>{g.label}</WidgetGroupLabel>
             <WidgetList className="pt-0">
-              {g.rows.map((task) => (
-                <WidgetRow
-                  key={task.id}
-                  title={task.title}
-                  trailing={upcomingWhen(task, now) ?? undefined}
-                  onClick={() => openEntity("task", task.id)}
-                />
-              ))}
+              {g.rows.map((task) => {
+                const when = upcomingWhen(task, now);
+                // The 📎 mark (AT-3) sits before when it's due.
+                const files = taskFiles?.get(task.id) ?? 0;
+                return (
+                  <WidgetRow
+                    key={task.id}
+                    title={task.title}
+                    trailing={
+                      files > 0 ? (
+                        <span className="inline-flex items-center gap-2">
+                          <MetaCount icon={Paperclip} count={files} label={filesLabel} />
+                          {when}
+                        </span>
+                      ) : (
+                        (when ?? undefined)
+                      )
+                    }
+                    onClick={() => openEntity("task", task.id)}
+                  />
+                );
+              })}
             </WidgetList>
           </Fragment>
         ))}

@@ -2223,6 +2223,7 @@ export function TasksPlanView({
             onOpenTask={openTaskInPanel}
             onPickUp={pickUpInFlight}
             onLater={checkBackLater}
+            fileCounts={api.attachmentCounts}
           />
         ),
         // Listed only while the Timeline shows (the registry hides a view a
