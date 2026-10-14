@@ -2,6 +2,56 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · TV-U18 Native importers — the agent's choices (deferred to by Maciej)
+
+Built in tasks-v3 block 35 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, §Assumptions #20; REPLAN 28, 35, 74; AC2.6, AC3.6, AC4.7; the engine from TV-D16) on the local stack, no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
+
+- **U18-1 · One dialog from the sidebar's ⋯, read in the app, with a preview** → `importers/ui/import-dialog.tsx`, `bucket-rail.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the hairline ⋯ → "Import tasks…" (Tasks edit) opens one dialog: drop or pick a file (the service is recognised from the file); the preview reads "7 tasks, 1 project, 2 skipped", lists each project (new, or the one an earlier run filled), the statuses with a category to confirm, two choices (include finished tasks; assign the tasks nobody is on to me, on by default for Todoist), and "On the way in" (what was skipped and why, what doesn't come across); Import shows a bar with Stop; the end says what the server made, what it refused, and offers "Undo this import". "Your imports" (your last eight runs, Undo each) sits under the drop zone. Settings → Tasks takes it when the Settings rebuild lands.
+  - Why: the spec places no importer screen; the sidebar's ⋯ already holds New project and Templates, and a hackathon organiser needs to see exactly what a prepared plan will make before it lands.
+  - Rejected: a page of its own (a new selection for one rare job); a wizard of several screens.
+- **U18-2 · The limits: 10 MB a file, 2,000 tasks an import, 20 comments a task** → `importers/plan.ts`, `read.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: a bigger file is refused with its size and the limit ("export one project or board at a time"); past 2,000 tasks the first 2,000 in the export's order come in and the rest are counted as skipped ("over the 2,000-task limit"); a task keeps its last 20 comments, the older ones are counted. Files are parsed in the browser; nothing is sent before Import.
+  - Why: one op per task (TV-D16's engine; the run's row is locked per task, so the server takes them one after another) keeps an import of a couple of thousand tasks to a few minutes with a bar and Stop; a Trello board with its history is the biggest export.
+  - Rejected: refusing a file over the task limit (an organiser would have to split by hand).
+- **U18-3 · How each service maps** → `todoist.ts`, `trello.ts`, `linear.ts`, `jira.ts`, `asana.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (within §15).
+  - Decision: **Todoist CSV**: one project named after the file, `section` rows → sections, `note` rows → comments (before any task: the project's description), INDENT → subtasks, "@label" → tags, PRIORITY 1/2/3 → high/medium/low, DATE in words through capture's own reader, DURATION → estimate, DEADLINE → the due date when there's no DATE. **Trello JSON**: the board → a project, open lists → statuses (category guessed from the name, confirmed in the preview), cards → tasks, checklist items → subtasks, labels → tags (an unnamed label by its colour), comments → comments, archived cards and lists left out. **Linear CSV**: issue ID kept as the key, its project (else its team) → the project, project milestone → section, workflow state → a status in the category its Completed/Canceled/Started columns say. **Jira CSV**: issue key kept, an epic → a section named after it (its stories are its tasks, its own text stays in Jira), sub-tasks → subtasks, the status in Jira's Status Category (a Won't-Do-like resolution → Won't do), Original Estimate → estimate. **Asana CSV**: Task ID kept, Section/Column → section, "Parent task" (a name) → subtask, Completed At → done, Assignee Email → the person.
+  - Why: §15's list (Trello lists become statuses with a confirmed category; sections stay sections; deeper subtasks flatten).
+  - Rejected: Jira epics as parent tasks (every story's sub-tasks would flatten into the epic).
+- **U18-4 · A re-run updates words and dates; where a task lives and its state stay** → `importers/run.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (refines D16-8 for the native importers).
+  - Decision: importing a file again finds your live tasks with those keys and updates them through the same op (title, description, and the due date, time, repeat, priority and estimate when the file has them; tags added); their project, section, parent, status, assignee and comments stay as they are in Moduo. Their project is reused (the one most of them are in, unless it's archived); missing tasks are made there. The preview waits until the app has read every task you can see (closed ones and archived projects' included) before deciding what's new, and reads it again at Import; if the server still finds an earlier import of a task the app took for new, the end says so ("already here from an earlier import: the file updated them, place and status included"). Undo of a run, then importing again, makes them anew. The people pickers and "nobody is on it" count new tasks only.
+  - Why: an organiser re-imports an updated plan after people started working; a re-run mustn't undo their progress or moves. Nothing is ever duplicated (the engine's key rule).
+  - Rejected: the file wins everywhere (it would reset statuses and refile tasks people moved); a stable project id per file (a re-import after Undo would hit the deleted project).
+- **U18-5 · Priorities map to Moduo's three; a level with no match keeps its word as a tag** → `plan.ts` `priorityOf`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: Urgent/Highest/Critical → High, Lowest/Trivial → Low, each also tagged with its own word ("urgent"); High/Medium/Low as they are; labels → tags by name (made when missing; a tag name is cut to 50 characters).
+  - Why: tasks have a priority field with no Urgent (§2); the tag keeps what the source said.
+  - Rejected: priorities only as tags (the field would stay empty, and grouping by priority would show nothing).
+- **U18-6 · Assignees are matched in the app and picked by hand; nothing is looked up** → `plan.ts` `suggestAssignees`, the preview's "People in the file"
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (the orchestrator's privacy call).
+  - Decision: the preview lists each person the file names ("jan@acme.com · 12 tasks", "Maya Chen · maya@example.com") with a member picker (names, as every assignee picker shows them; people who can't take tasks aren't offered). The picker starts on the person when the app already knows them: your own email or name, or a name exactly one member has; otherwise on Unassigned. Members' emails aren't readable in the app, so an email matches only your own, and the server is never asked who an email belongs to. Tasks nobody is on in the file stay unassigned, or go to you with the tick (on by default for Todoist).
+  - Why: a server lookup would let a member confirm which guessed emails belong to the workspace's members, which the app never shows them; the organiser maps a prepared plan's people once, by hand.
+  - Rejected: a server function mapping emails to members (built, then removed before landing); matching on a name two members share.
+- **U18-7 · Repeats only where Moduo's repeats can follow them** → `importers/dates.ts` `wordsDue`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14 (D12's rules).
+  - Decision: a date in words is read by capture's reader whole or not at all; a repeat with an end the rule doesn't carry ("until Dec 15", "for 3 weeks") or one it can't read ("every 3rd workday") goes into the description as "Repeats in Todoist: …" and is counted in "On the way in". Start dates are left out and counted (§15). Moments (Trello, checklists) land on the date and time they were in your Time & region zone; written dates and wall times stay as written.
+  - Why: a half-read repeat would repeat wrongly forever; the text keeps it for the person to set by hand.
+  - Rejected: dropping unreadable repeats silently.
+- **U18-8 · A comment says who wrote it and where, and still goes with Undo** → `run.ts` `commentBody`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: an imported comment is yours, opening with "Riley Ortiz · in Trello · Oct 6, 2026" (Jira's account ids are never shown); after a task's comments the run sends the task once more by its key, so the run's own comments don't count as a change made after it and Undo still removes the task (`supabase/tests/import_native.test.sql`). A teammate on a commented task is assigned only in that re-send, so the comments notify nobody and the assignment groups like any other.
+  - Why: comments are logged on the task after the run wrote it, which Undo reads as "edited since".
+  - Rejected: comments as part of the description (the spec says comments stay comments).
+- **U18-9 · "Imported from" in the panel's ⋯** → `task-detail-header.tsx`, `importedFromLine`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: an imported task's ⋯ menu reads "Imported from Linear · ENG-123" and copies the id; Todoist's CSV has no ids, so its tasks read "Imported from Todoist" alone. Search finds the id (D16-11).
+  - Why: the header is full; the id is for finding and copying, not for every glance.
+  - Rejected: a property row in the panel.
+
 ## 2026-10-14 · AT-3 Attachments everywhere + Settings → Storage — the agent's choices (deferred to by Maciej)
 
 Built in attachments block 3 ([specs/attachments.md](../../specs/attachments.md) AT3-1–AT3-4; the "From AT-2" carry-forward) on the local stack, with migration `20261013272000_attachments_everywhere`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.

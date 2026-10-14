@@ -103,6 +103,7 @@ import type { InFlightItem } from "../focus-screen";
 import { boardFoldKey, listFoldKey } from "../folds";
 import { todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { useTaskImport } from "../importers/ui/use-task-import";
 import type { ListExportContext } from "../list-export";
 import type { GroupAdd } from "../list-group-add";
 import { type Bucket, isDrifted, PRIVATE_PROJECT_LABEL, type Task } from "../model";
@@ -1205,6 +1206,19 @@ export function TasksPlanView({
     onOpenTask: (id) => onUrlTaskIdChange(id),
   });
   const offersTemplates = templateActions.supported && canEdit;
+  // "Import tasks…" (TV-U18): the hairline ⋯ opens it.
+  const taskImport = useTaskImport({
+    runtime,
+    store: templateStore,
+    workspaceId,
+    userId: currentUserId,
+    canEdit,
+    buckets,
+    sections: api.sections,
+    tasks,
+    archivedTasks: api.archivedTasks,
+    onOpenProject: pickSelection,
+  });
 
   const left = (
     <BucketRail
@@ -1264,6 +1278,7 @@ export function TasksPlanView({
           : undefined
       }
       onOpenWelcome={welcome.reopen}
+      onImport={taskImport.supported ? taskImport.open : undefined}
       navRef={railNavRef}
       dropAccepts={railAccepts}
     />
@@ -2372,6 +2387,7 @@ export function TasksPlanView({
         }
       />
       {templateActions.dialogs}
+      {taskImport.dialog}
       {savedViews.dialog}
       <FrontierOfferDialog
         open={frontierOfferTaskId !== null}
