@@ -585,7 +585,7 @@ describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
     expect(within(card).getByText("Claude · Writing tests · step 3 of 5 · just now")).toBeTruthy();
   });
 
-  it("a long agent note stays on one line, shortened, never pushing Focus sideways (MOD-119)", () => {
+  it("a long agent note shortens, never pushing Focus sideways (MOD-119)", () => {
     const now = new Date().toISOString();
     const note = `Prod desktop build published to ${"the-release-channel-".repeat(8)}latest`;
     const session: AgentSession = {
@@ -609,14 +609,15 @@ describe("Focus: along the way, Arrange, Hand off (TV-F8)", () => {
     renderView(fakeApi([task("t1"), task("t2")], { agentSessions: [session] }));
     const card = screen.getByRole("region", { name: "Now" });
     const line = card.querySelector('[data-slot="agent-session-line"]') as HTMLElement;
-    expect(line.className).toContain("flex-nowrap");
-    expect(line.className).not.toContain("flex-wrap ");
+    // It may wrap, but the note's item is never wider than the line.
+    expect(line.className).toContain("flex-wrap");
     expect(line.className).toContain("min-w-0");
     // The full text on hover; the words that can run long cut with an ellipsis.
-    expect(line.getAttribute("title")).toBe(`Claude · Needs you: ${note} · just now`);
-    const shortened = line.querySelector(".truncate");
-    expect(shortened?.textContent).toContain(note);
-    expect(shortened?.className).toContain("min-w-0");
+    const shortened = line.querySelector(".truncate") as HTMLElement;
+    expect(shortened.getAttribute("title")).toBe(`Claude · Needs you: ${note} · just now`);
+    expect(shortened.textContent).toContain(note);
+    expect(shortened.className).toContain("min-w-0");
+    expect(shortened.className).toContain("max-w-full");
     // And the screen itself never scrolls sideways.
     const scroller = document.querySelector('[data-slot="focus-view"] .pane-scroll') as HTMLElement;
     expect(scroller.className).toContain("min-w-0");

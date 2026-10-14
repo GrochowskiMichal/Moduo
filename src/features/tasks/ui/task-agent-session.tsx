@@ -155,21 +155,20 @@ function AgentSessionLine({
   };
 
   const text = agentLineText(session, now, who);
-  // Who and what (the note an agent writes can run long) shorten with an
-  // ellipsis; the step and the age, the links and the buttons stay whole.
+  // Who and what (an agent's note can run long) shorten with an ellipsis, a
+  // link's words too; the step, the age and the buttons are small and wrap.
   const head = parts.slice(0, 2);
   const tail = parts.slice(2);
   return (
     <div data-slot="agent-session" data-state={session.stoppedAt ? "stopped" : session.state}>
-      {/* One line that never wraps or widens its column (MOD-119): Focus's
+      {/* Wraps, but no item is ever wider than the line (MOD-119): Focus's
           Now card scrolled sideways on a long "needs you: …". */}
       <div
         data-slot="agent-session-line"
-        title={text}
-        className="flex min-w-0 flex-nowrap items-center gap-x-1.5 font-sans text-xs text-muted-foreground"
+        className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 font-sans text-xs text-muted-foreground"
       >
         <span className="sr-only">{text}</span>
-        <span aria-hidden className="min-w-0 truncate">
+        <span aria-hidden title={text} className="min-w-0 max-w-full truncate">
           {head.map((part, i) => (
             <span
               // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.
@@ -189,7 +188,7 @@ function AgentSessionLine({
             // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts are fixed in order.
             key={i}
             aria-hidden
-            className="shrink-0 whitespace-nowrap"
+            className="min-w-0 max-w-full truncate"
           >
             {`· ${part}`}
           </span>
@@ -200,10 +199,14 @@ function AgentSessionLine({
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            title={linkWords(link)}
+            className="inline-flex min-w-0 max-w-full items-center gap-0.5 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
-            · {linkWords(link)}
-            <ArrowUpRight className="size-icon-xs" aria-hidden />
+            <span aria-hidden className="shrink-0">
+              ·
+            </span>
+            <span className="min-w-0 max-w-40 truncate">{linkWords(link)}</span>
+            <ArrowUpRight className="size-icon-xs shrink-0" aria-hidden />
           </a>
         ))}
         {canFold ? (
@@ -212,9 +215,11 @@ function AgentSessionLine({
             size="sm"
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
-            className="h-auto shrink-0 px-1 py-0 text-xs text-muted-foreground"
+            className="h-auto min-w-0 max-w-full px-1 py-0 text-xs text-muted-foreground"
           >
-            {open ? "Fold" : hasSummary ? "Summary" : `${session.earlier.length} earlier`}
+            <span className="min-w-0 truncate">
+              {open ? "Fold" : hasSummary ? "Summary" : `${session.earlier.length} earlier`}
+            </span>
           </Button>
         ) : null}
         {own && runtime?.tasks.dismissAgentSession ? (
