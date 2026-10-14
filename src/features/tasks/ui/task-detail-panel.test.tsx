@@ -301,6 +301,41 @@ describe("the comp layout and property rule C (U3-1)", () => {
   });
 });
 
+describe("the description comes before the properties (MOD-116, the prototypes' order)", () => {
+  const follows = (a: Element, b: Element) =>
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  it("in the panel: title, description, then the properties", () => {
+    renderPanel(task(), api(task()));
+    const title = screen.getByRole("textbox", { name: "Task title" });
+    const description = screen.getByRole("textbox", { name: "Description" });
+    const status = screen.getByRole("button", { name: "Status: To do" });
+    expect(follows(title, description)).toBe(true);
+    expect(follows(description, status)).toBe(true);
+  });
+
+  it("on the full page too, in the narrow column and the wide one", () => {
+    render(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={task()}
+          buckets={[APP]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={api(task())}
+          layout="page"
+        />
+      </TooltipProvider>,
+    );
+    const description = screen.getByRole("textbox", { name: "Description" });
+    const statuses = screen.getAllByRole("button", { name: "Status: To do" });
+    expect(statuses.length).toBeGreaterThan(0);
+    for (const status of statuses) expect(follows(description, status)).toBe(true);
+  });
+});
+
 describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)", () => {
   it("has one Focus toggle, in the header beside copy link and ⋯; no full-width button", () => {
     const a = api(task());

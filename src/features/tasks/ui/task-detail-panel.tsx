@@ -1,12 +1,13 @@
 // The task's details (Tasks v3 §9, research views-board-detail §7–12): one
 // view of the right panel (hosted by Tasks, Calendar, Notes and Email), and
-// the full page in the centre (call 32). Top to bottom: the header (project
-// › section, handle, a claims slot, queue, ⤢, ⋯), the status toggle and the
-// title, the agent session line's slot, the Done / Won't do line, the
-// properties, the description (folded at ~8 lines in the panel) and its
-// attachments (AT-2: files pasted or dropped anywhere on the task attach to
-// it), the collections (Subtasks, Waiting on, Blocked by, Blocks, Linked),
-// then one feed. On the full page the properties take a column of their own on the
+// the full page in the centre (call 32). Top to bottom, as the approved
+// prototypes have it (round-2b, MOD-116): the header (project › section, the
+// handle, a claims slot, queue, ⤢, ⋯), the status toggle and the title, the
+// agent session line's slot, the description (folded at ~8 lines in the
+// panel), its attachments (AT-2: files pasted or dropped anywhere on the task
+// attach to it), the Done / Won't do line with the properties, the
+// collections (Subtasks, Waiting on, Blocked by, Blocks, Linked), then one
+// feed. On the full page the properties take a column of their own on the
 // right once there's room, and the description never folds.
 //
 // States: nothing selected (inside a project the page shows the Project
@@ -243,8 +244,10 @@ function DetailBody({
       onRevealWaiting={() => setWaitingOpen(true)}
     />
   );
+  // The text starts under the title's, past the toggle and its gap (a
+  // view-only task with no description renders nothing, so no empty gap).
   const description = (
-    <>
+    <div className="pl-6 empty:hidden">
       <TaskDescription
         task={task}
         api={api}
@@ -254,9 +257,10 @@ function DetailBody({
         foldable={layout === "panel"}
         onFiles={files.onEditorFiles}
       />
-      <AttachmentsSection state={files} className="mt-1" />
-    </>
+    </div>
   );
+  // A block of its own, 16 px under the description (the stack's gap).
+  const attachments = <AttachmentsSection state={files} />;
   const collections = (
     <div className="flex flex-col gap-3">
       {!parent ? (
@@ -346,12 +350,13 @@ function DetailBody({
                   userId={api.currentUserId}
                   runtime={runtime}
                 />
+                {description}
               </div>
+              {attachments}
               <div className="flex flex-col gap-3 @4xl:hidden">
                 {closedLine}
                 {properties}
               </div>
-              <div className="pl-6">{description}</div>
               {collections}
               <Separator className="bg-hairline" />
               {feed}
@@ -384,7 +389,8 @@ function DetailBody({
         data-drop-active={files.dropActive || undefined}
         className={cn(dropScroll, "px-1 pt-2.5 pb-4")}
       >
-        <div className="flex flex-col gap-5">
+        {/* 16 px between blocks, the title's lines 6 px apart (round-2b `.dbody`). */}
+        <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             {title}
             <AgentSessionLines
@@ -394,10 +400,13 @@ function DetailBody({
               userId={api.currentUserId}
               runtime={runtime}
             />
+            {description}
           </div>
-          {closedLine}
-          {properties}
-          <div className="pl-6">{description}</div>
+          {attachments}
+          <div className="flex flex-col gap-3">
+            {closedLine}
+            {properties}
+          </div>
           {collections}
           <Separator className="bg-hairline" />
           {feed}
