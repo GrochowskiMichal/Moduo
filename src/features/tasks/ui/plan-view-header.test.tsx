@@ -5,6 +5,8 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
+import { DisplayMenu } from "../../../components/ui/display-menu";
+import { FilterButton } from "../../../components/ui/filter-bar";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { sortedByLabel } from "../order";
 import { PlanViewHeader, SortedOrderLine } from "./plan-view-header";
@@ -75,5 +77,43 @@ describe("a project's title and ⋯ (MOD-95, round-2b)", () => {
     const heading = screen.getByRole("heading", { level: 1, name: "Website" });
     expect(within(heading).queryByRole("button")).toBeNull();
     expect(screen.queryByRole("button", { name: "Project actions" })).toBeNull();
+  });
+});
+
+describe("a narrow toolbar keeps the title (MOD-95 follow-up)", () => {
+  // jsdom runs no container queries: these pin the rules the browser applies.
+  it("gives the title group the first claim on room, and lets the controls wrap under it", () => {
+    render(
+      <TooltipProvider>
+        <PlanViewHeader
+          title="Website relaunch for the spring campaign"
+          view="list"
+          onViewChange={() => {}}
+          controls={{
+            count: 12,
+            project: { onOpenDetails: () => {} },
+            filter: <FilterButton dimensions={[]} value={[]} onValueChange={() => {}} />,
+            display: <DisplayMenu controls={[]} value={{}} onValueChange={() => {}} />,
+          }}
+          canEdit
+          onRequestCapture={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    const title = document.querySelector("[data-slot=plan-title]") as HTMLElement;
+    // About ten characters with its ⋯ and count, then all the room left.
+    expect(title.className).toContain("basis-40");
+    expect(title.className).toContain("grow");
+    expect(title.contains(screen.getByText("12"))).toBe(true);
+    const toolbar = screen.getByRole("toolbar");
+    expect(toolbar.className).toContain("flex-wrap");
+    expect(toolbar.parentElement?.className).toContain("@container");
+    const controls = document.querySelector("[data-slot=plan-controls]") as HTMLElement;
+    expect(controls.className).toContain("ml-auto");
+    // Under 36rem Filter and Display hide their words but keep their names.
+    for (const name of ["Filter", "Display"]) {
+      const button = screen.getByRole("button", { name });
+      expect(within(button).getByText(name).className).toContain("@max-xl:sr-only");
+    }
   });
 });

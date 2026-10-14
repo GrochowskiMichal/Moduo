@@ -86,9 +86,16 @@ export function PlanViewHeader({
   const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges, project } =
     controls;
   return (
-    <div className="mb-3 shrink-0 space-y-1.5">
-      <Toolbar gap="snug">
-        <div className="flex min-w-0 items-baseline gap-2">
+    // A container, so the controls read its width: under 36rem (576 px) Filter
+    // and Display drop their words for icons (the kit's `@max-xl:`).
+    <div className="@container mb-3 shrink-0 space-y-1.5">
+      <Toolbar gap="snug" className="flex-wrap gap-y-1.5">
+        {/* The title comes first (MOD-95 follow-up): it starts at 10rem with
+            its ⋯ and count (about ten characters of the name), takes all the
+            room the controls leave, and shortens with an ellipsis only below
+            that. Past that point the controls wrap under it, right-aligned,
+            instead of squeezing it away. */}
+        <div data-slot="plan-title" className="flex min-w-0 grow basis-40 items-baseline gap-2">
           {project ? (
             <h1 className="min-w-0 font-display text-lg text-foreground">
               <Tooltip>
@@ -118,28 +125,29 @@ export function PlanViewHeader({
             <span className="shrink-0 font-sans text-xs text-subtle-foreground">View only</span>
           )}
         </div>
-        <Toolbar.Spacer />
-        {viewControls ? <Toolbar.Group>{viewControls}</Toolbar.Group> : null}
-        <Toolbar.Group gap="snug">
-          {search}
-          {filter}
-          {display}
-          {more}
+        <Toolbar.Group gap="snug" data-slot="plan-controls" className="ml-auto">
+          {viewControls ? <Toolbar.Group>{viewControls}</Toolbar.Group> : null}
+          <Toolbar.Group gap="snug">
+            {search}
+            {filter}
+            {display}
+            {more}
+          </Toolbar.Group>
+          <ToolbarSeparator />
+          <ViewSwitcher view={view} onViewChange={onViewChange} />
+          {/* Read-only views have no New (research §9: no add in that project). */}
+          {canEdit ? (
+            <>
+              <ToolbarSeparator />
+              <Toolbar.Primary>
+                <Button size="sm" onClick={() => onRequestCapture()}>
+                  <Plus aria-hidden />
+                  New
+                </Button>
+              </Toolbar.Primary>
+            </>
+          ) : null}
         </Toolbar.Group>
-        <ToolbarSeparator />
-        <ViewSwitcher view={view} onViewChange={onViewChange} />
-        {/* Read-only views have no New (research §9: no add in that project). */}
-        {canEdit ? (
-          <>
-            <ToolbarSeparator />
-            <Toolbar.Primary>
-              <Button size="sm" onClick={() => onRequestCapture()}>
-                <Plus aria-hidden />
-                New
-              </Button>
-            </Toolbar.Primary>
-          </>
-        ) : null}
       </Toolbar>
       {activeFilters}
       {viewChanges}
@@ -188,7 +196,7 @@ function ProjectMenu({ project }: { project: NonNullable<PlanHeaderControls["pro
           icon={Ellipsis}
           label="Project actions"
           tooltip={null}
-          className="-ml-1 self-center text-muted-foreground"
+          className="-ml-1 shrink-0 self-center text-muted-foreground"
         />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-48">
