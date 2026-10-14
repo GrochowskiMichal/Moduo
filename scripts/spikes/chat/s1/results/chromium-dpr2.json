@@ -1,0 +1,608 @@
+{
+  "engine": "chromium-dpr2",
+  "libs": {
+    "tanstack": {
+      "at": "2026-10-14T13:24:25.984Z",
+      "fingerprint": {
+        "engine": "chromium-dpr2",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+        "platform": "MacIntel",
+        "maxTouchPoints": 0,
+        "devicePixelRatio": 2,
+        "viewport": "1280x840",
+        "overflowAnchorSupported": true,
+        "scrollendEvent": true,
+        "entryTypes": "element,event,first-input,interaction-contentful-paint,largest-contentful-paint,layout-shift,long-animation-frame,longtask,mark,measure,navigation,paint,resource,soft-navigation,visibility-state",
+        "tauri": false,
+        "brands": "Chromium 153, Not_A Brand 8",
+        "build": "development"
+      },
+      "results": [
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": false,
+          "metrics": {
+            "maxDrift": 221,
+            "maxFinalDrift": 0,
+            "perPrependMax": [221, 42, 20, 2, 59, 19, 6, 2, 24, 4],
+            "rowsAtEnd": 550,
+            "firstBad": {
+              "prepend": 0,
+              "anchor": "m09953",
+              "fonts": "loaded",
+              "frames": [-221, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            }
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": false,
+          "metrics": {
+            "maxUnexpected": 176,
+            "total": 177,
+            "jumps": [-1, 1, -1, 1, 176, 1],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "jump-5000-windowed",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "jump to row 5,000 (a window around it) lands within 1 px; back to the present at the end",
+          "pass": true,
+          "metrics": {
+            "landingError": 0,
+            "landedMs": 16.9,
+            "maxErrorAfterFirstDraw": 0,
+            "backGap": 0,
+            "backMs": 10.2
+          }
+        },
+        {
+          "scenario": "density-default",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": false,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 40,
+              "compact": 8,
+              "comfortable": 4
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 8,
+            "scrollUpJumps": [-8, -8]
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": false,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 3,
+              "compact": 6,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 5,
+            "scrollUpJumps": [-1, 1, -5, 5]
+          }
+        },
+        {
+          "scenario": "fling-up",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "2 s fling over 10,000 rows: no frame over 50 ms; rows in view don't jump",
+          "pass": true,
+          "metrics": {
+            "frames": 242,
+            "fps": 121,
+            "frameMs": {
+              "n": 241,
+              "p50": 8.3,
+              "p95": 9.3,
+              "max": 9.4
+            },
+            "framesOver50": 0,
+            "loafOver50": [],
+            "longtasks": 0,
+            "entryTypes": "long-animation-frame,longtask",
+            "maxJumpPx": 262,
+            "jumpsOver1": 23,
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "fling-down",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "2 s fling over 10,000 rows: no frame over 50 ms; rows in view don't jump",
+          "pass": true,
+          "metrics": {
+            "frames": 241,
+            "fps": 120.5,
+            "frameMs": {
+              "n": 240,
+              "p50": 8.3,
+              "p95": 9.1,
+              "max": 9.4
+            },
+            "framesOver50": 0,
+            "loafOver50": [],
+            "longtasks": 0,
+            "entryTypes": "long-animation-frame,longtask",
+            "maxJumpPx": 0,
+            "jumpsOver1": 0,
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "sticky-day-header",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "the stuck day header names the day under it, every fling frame",
+          "pass": false,
+          "metrics": {
+            "ok": 480,
+            "wrong": 1,
+            "missing": 0,
+            "n/a": 2,
+            "longestWrongRunFrames": 1
+          }
+        },
+        {
+          "scenario": "scroll-through-all",
+          "lib": "tanstack",
+          "config": "base",
+          "bar": "≤ 3,000 elements in the stream at any point",
+          "pass": null,
+          "metrics": {
+            "frames": 1571,
+            "reachedTop": true,
+            "frameMs": {
+              "n": 1570,
+              "p50": 8.3,
+              "p95": 9.2,
+              "max": 9.4
+            },
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "jump-5000-windowed",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "jump to row 5,000 (a window around it) lands within 1 px; back to the present at the end",
+          "pass": true,
+          "metrics": {
+            "landingError": 0,
+            "landedMs": 11.4,
+            "maxErrorAfterFirstDraw": 0,
+            "backGap": 0,
+            "backMs": 11.3
+          }
+        },
+        {
+          "scenario": "density-default",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": false,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 4,
+              "comfortable": 4
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 1,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "fling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "2 s fling over 10,000 rows: no frame over 50 ms; rows in view don't jump",
+          "pass": true,
+          "metrics": {
+            "frames": 241,
+            "fps": 120.5,
+            "frameMs": {
+              "n": 240,
+              "p50": 8.3,
+              "p95": 9.2,
+              "max": 9.4
+            },
+            "framesOver50": 0,
+            "loafOver50": [],
+            "longtasks": 0,
+            "entryTypes": "long-animation-frame,longtask",
+            "maxJumpPx": 0,
+            "jumpsOver1": 0,
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "fling-down",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "2 s fling over 10,000 rows: no frame over 50 ms; rows in view don't jump",
+          "pass": true,
+          "metrics": {
+            "frames": 242,
+            "fps": 121,
+            "frameMs": {
+              "n": 241,
+              "p50": 8.3,
+              "p95": 9.3,
+              "max": 9.4
+            },
+            "framesOver50": 0,
+            "loafOver50": [],
+            "longtasks": 0,
+            "entryTypes": "long-animation-frame,longtask",
+            "maxJumpPx": 0,
+            "jumpsOver1": 0,
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "sticky-day-header",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "the stuck day header names the day under it, every fling frame",
+          "pass": true,
+          "metrics": {
+            "ok": 481,
+            "wrong": 0,
+            "missing": 0,
+            "n/a": 2,
+            "longestWrongRunFrames": 0
+          }
+        },
+        {
+          "scenario": "scroll-through-all",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "≤ 3,000 elements in the stream at any point",
+          "pass": null,
+          "metrics": {
+            "frames": 1647,
+            "reachedTop": true,
+            "frameMs": {
+              "n": 1646,
+              "p50": 8.3,
+              "p95": 9.2,
+              "max": 9.4
+            },
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "max-elements",
+          "lib": "tanstack",
+          "config": "all",
+          "bar": "≤ 3,000 elements in the stream",
+          "pass": true,
+          "metrics": {
+            "maxElements": 193,
+            "where": "base/fling"
+          }
+        }
+      ]
+    },
+    "legend": {
+      "at": "2026-10-14T13:24:53.882Z",
+      "fingerprint": {
+        "engine": "chromium-dpr2",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+        "platform": "MacIntel",
+        "maxTouchPoints": 0,
+        "devicePixelRatio": 2,
+        "viewport": "1280x840",
+        "overflowAnchorSupported": true,
+        "scrollendEvent": true,
+        "entryTypes": "element,event,first-input,interaction-contentful-paint,largest-contentful-paint,layout-shift,long-animation-frame,longtask,mark,measure,navigation,paint,resource,soft-navigation,visibility-state",
+        "tauri": false,
+        "brands": "Chromium 153, Not_A Brand 8",
+        "build": "development"
+      },
+      "results": [
+        {
+          "scenario": "prepend-honest",
+          "lib": "legend",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0.63,
+            "maxFinalDrift": 0.62,
+            "perPrependMax": [0.25, 0.63, 0.13, 0, 0, 0, 0.25, 0.5, 0.38, 0.5],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "legend",
+          "config": "base",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "legend",
+          "config": "base",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0.25,
+            "total": -0.25,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "legend",
+          "config": "base",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 26707.5,
+            "gapAfter": 26877.5
+          }
+        },
+        {
+          "scenario": "jump-5000-windowed",
+          "lib": "legend",
+          "config": "base",
+          "bar": "jump to row 5,000 (a window around it) lands within 1 px; back to the present at the end",
+          "pass": true,
+          "metrics": {
+            "landingError": 0.13,
+            "landedMs": 10.2,
+            "maxErrorAfterFirstDraw": 0.13,
+            "backGap": 0,
+            "backMs": 16.3
+          }
+        },
+        {
+          "scenario": "density-default",
+          "lib": "legend",
+          "config": "base",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "fling-up",
+          "lib": "legend",
+          "config": "base",
+          "bar": "2 s fling over 10,000 rows: no frame over 50 ms; rows in view don't jump",
+          "pass": true,
+          "metrics": {
+            "frames": 242,
+            "fps": 121,
+            "frameMs": {
+              "n": 241,
+              "p50": 8.3,
+              "p95": 9.3,
+              "max": 9.4
+            },
+            "framesOver50": 0,
+            "loafOver50": [],
+            "longtasks": 0,
+            "entryTypes": "long-animation-frame,longtask",
+            "maxJumpPx": 0.13,
+            "jumpsOver1": 0,
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "fling-down",
+          "lib": "legend",
+          "config": "base",
+          "bar": "2 s fling over 10,000 rows: no frame over 50 ms; rows in view don't jump",
+          "pass": true,
+          "metrics": {
+            "frames": 242,
+            "fps": 121,
+            "frameMs": {
+              "n": 241,
+              "p50": 8.3,
+              "p95": 9.2,
+              "max": 9.4
+            },
+            "framesOver50": 0,
+            "loafOver50": [],
+            "longtasks": 0,
+            "entryTypes": "long-animation-frame,longtask",
+            "maxJumpPx": 0,
+            "jumpsOver1": 0,
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "sticky-day-header",
+          "lib": "legend",
+          "config": "base",
+          "bar": "the stuck day header names the day under it, every fling frame",
+          "pass": false,
+          "metrics": {
+            "ok": 481,
+            "wrong": 1,
+            "missing": 0,
+            "n/a": 2,
+            "longestWrongRunFrames": 1
+          }
+        },
+        {
+          "scenario": "scroll-through-all",
+          "lib": "legend",
+          "config": "base",
+          "bar": "≤ 3,000 elements in the stream at any point",
+          "pass": null,
+          "metrics": {
+            "frames": 1664,
+            "reachedTop": true,
+            "frameMs": {
+              "n": 1663,
+              "p50": 8.3,
+              "p95": 16.7,
+              "max": 33.6
+            },
+            "blankFrames": 0
+          }
+        },
+        {
+          "scenario": "max-elements",
+          "lib": "legend",
+          "config": "all",
+          "bar": "≤ 3,000 elements in the stream",
+          "pass": true,
+          "metrics": {
+            "maxElements": 1511,
+            "where": "base/fling"
+          }
+        }
+      ]
+    }
+  }
+}
