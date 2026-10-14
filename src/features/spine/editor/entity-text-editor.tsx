@@ -47,7 +47,7 @@ import { useReferenceHost } from "../references/context";
 import { DateNode } from "../references/date-node";
 import { HandleAutolinkPlugin, SEED_TAG } from "../references/handle-autolink-plugin";
 import { $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
-import { looksLikeRichHtml } from "./entity-rich-html";
+import { looksLikeRichHtml, plainListLine } from "./entity-rich-html";
 import { MentionMenuPlugin } from "./mention-menu-plugin";
 
 /** Tokens-only theme (Tailwind utilities → no bespoke CSS, no raw values). */
@@ -87,8 +87,9 @@ function $dropStoredLabels(node: LexicalNode): void {
 
 /** Seed the editor once from the stored value. Our HTML is parsed; foreign /
  * legacy plain text is inserted verbatim (line breaks preserved) so a literal
- * "<x>" is never swallowed as an element. Tagged so nothing that reacts to
- * typing (handle auto-links) treats stored text as typed. */
+ * "<x>" is never swallowed as an element, except that a Markdown bullet line
+ * ("- a") reads as "• a". Tagged so nothing that reacts to typing (handle
+ * auto-links) treats stored text as typed. */
 function SeedPlugin({ value }: { value: string }) {
   const [editor] = useLexicalComposerContext();
   const seeded = useRef(false);
@@ -125,7 +126,8 @@ function SeedPlugin({ value }: { value: string }) {
           flush();
         } else if (value) {
           const p = $createParagraphNode();
-          value.split("\n").forEach((line, i) => {
+          value.split("\n").forEach((raw, i) => {
+            const line = plainListLine(raw);
             if (i > 0) p.append($createLineBreakNode());
             if (line) p.append($createTextNode(line));
           });

@@ -242,12 +242,22 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     if (typeof window === "undefined") return;
     const onEntityOpen = (event: Event) => {
       const detail = (
-        event as CustomEvent<{ type?: string; id?: string; to?: string; workspaceId?: string }>
+        event as CustomEvent<{
+          type?: string;
+          id?: string;
+          to?: string;
+          search?: Record<string, string>;
+          workspaceId?: string;
+        }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
       // (no entity id) — navigate directly, bypassing the id-based route map.
       if (detail?.to) {
-        void navigate({ to: detail.to as any });
+        void navigate(
+          detail.search
+            ? { to: detail.to as any, search: detail.search as any }
+            : { to: detail.to as any },
+        );
         return;
       }
       // An id is required for entity selection, but email routes to /email with

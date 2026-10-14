@@ -40,6 +40,7 @@ import {
   clearPendingOpenSettings,
   isSettingsSectionId,
   pendingOpenSettings,
+  SETTINGS_CLOSE_EVENT,
   SETTINGS_GROUPS,
   SETTINGS_OPEN_EVENT,
   type SettingsOpenDetail,
@@ -100,12 +101,18 @@ export function SettingsModal() {
       applyDetail((event as CustomEvent<SettingsOpenDetail>).detail ?? {});
     };
     window.addEventListener(SETTINGS_OPEN_EVENT, handler);
+    // Something inside Settings leads elsewhere (Storage's task name).
+    const close = () => setOpen(false);
+    window.addEventListener(SETTINGS_CLOSE_EVENT, close);
     // A cold-load `/settings?section=…` dispatch fires while this modal is
     // unmounted (boot remount churn) — re-apply the sticky dispatch on every
     // mount so the deep link still opens the right section.
     const pending = pendingOpenSettings();
     if (pending) applyDetail(pending);
-    return () => window.removeEventListener(SETTINGS_OPEN_EVENT, handler);
+    return () => {
+      window.removeEventListener(SETTINGS_OPEN_EVENT, handler);
+      window.removeEventListener(SETTINGS_CLOSE_EVENT, close);
+    };
   }, []);
 
   useShortcut("settings", () =>

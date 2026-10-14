@@ -8,6 +8,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import { makeTask } from "./helpers";
 import {
+  fitUpcoming,
   focusOrOpen,
   loadLine,
   subtasksToFinish,
@@ -322,5 +323,41 @@ describe("the Upcoming widget", () => {
       ["earlier", ["late"]],
       ["tomorrow", ["thu"]],
     ]);
+  });
+});
+
+describe("filling the Upcoming widget (fitUpcoming)", () => {
+  const groups = [
+    { key: "tomorrow", label: "Tomorrow", tasks: [task("a")] },
+    { key: "thu", label: "Thu", tasks: [task("b")] },
+    { key: "later", label: "Later", tasks: [task("c"), task("d")] },
+  ];
+
+  it("shows every day when the cell holds them (no '+n more' over empty space)", () => {
+    // 3 headers + 4 tasks = 7 lines; the cell's 10 hold them all.
+    const fitted = fitUpcoming(groups, 10);
+    expect(fitted.hidden).toBe(0);
+    expect(fitted.shown.map((g) => [g.key, g.rows.map((t) => t.id)])).toEqual([
+      ["tomorrow", ["a"]],
+      ["thu", ["b"]],
+      ["later", ["c", "d"]],
+    ]);
+  });
+
+  it("cuts a day short, and starts a day only with its header and one task", () => {
+    const fitted = fitUpcoming(groups, 5);
+    // Tomorrow (2 lines) + Thu (2 lines); 1 line left can't start Later.
+    expect(fitted.shown.map((g) => g.key)).toEqual(["tomorrow", "thu"]);
+    expect(fitted.hidden).toBe(2);
+    const partly = fitUpcoming(groups, 6);
+    expect(partly.shown.at(-1)).toMatchObject({ key: "later", count: 2 });
+    expect(partly.shown.at(-1)?.rows.map((t) => t.id)).toEqual(["c"]);
+    expect(partly.hidden).toBe(1);
+  });
+
+  it("was the old three-row budget's '+2 more' (one task shown)", () => {
+    const fitted = fitUpcoming(groups, 3);
+    expect(fitted.shown.flatMap((g) => g.rows).map((t) => t.id)).toEqual(["a"]);
+    expect(fitted.hidden).toBe(3);
   });
 });

@@ -30,6 +30,30 @@ describe("EntityTextEditor commit-on-blur", () => {
   });
 });
 
+describe("EntityTextEditor plain-text lists", () => {
+  it("shows an imported Markdown list as bullet lines, and a bare visit writes nothing", () => {
+    const onCommit = rs.fn();
+    render(
+      <EntityTextEditor
+        value={"Cut list:\n- short\n- long"}
+        editable
+        runtime={null}
+        workspaceId={null}
+        source={{ type: "task", id: "t-1" }}
+        ariaLabel="Description"
+        onCommit={onCommit}
+      />,
+    );
+    const box = screen.getByLabelText("Description");
+    expect(box.textContent).toContain("• short");
+    expect(box.textContent).toContain("• long");
+    expect(box.textContent).not.toContain("- short");
+    fireEvent.focus(box);
+    fireEvent.blur(box);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+});
+
 describe("EntityTextEditor files (AT-2: attachments only, no image nodes)", () => {
   function clipboard(files: File[]) {
     return { types: ["Files"], files, items: [], getData: () => "" };

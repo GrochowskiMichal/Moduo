@@ -41,6 +41,8 @@ type WelcomeApi = Pick<
   TasksModuleApi,
   | "tasks"
   | "buckets"
+  | "archivedBuckets"
+  | "archivedTasks"
   | "inbox"
   | "canEdit"
   | "currentUserId"
@@ -91,9 +93,11 @@ export function useTasksWelcome({
   // Async steps read the module as it is by then, not as it was.
   const apiRef = useRef(api);
   const firstViewRef = useRef(onFirstView);
+  const workspaceRef = useRef(workspaceId);
   useEffect(() => {
     apiRef.current = api;
     firstViewRef.current = onFirstView;
+    workspaceRef.current = workspaceId;
   });
 
   const tasksReady = api.reachedServer && api.restLoaded;
@@ -136,8 +140,9 @@ export function useTasksWelcome({
       canEdit: api.canEdit,
       tasksReady,
       seededAlready: !!onboardingPrefs.seeded[workspaceId],
-      taskCount: api.tasks.length,
-      projectCount: api.buckets.length,
+      // An archived project (and its tasks) means the workspace isn't new.
+      taskCount: api.tasks.length + (api.archivedTasks?.length ?? 0),
+      projectCount: api.buckets.length + (api.archivedBuckets?.length ?? 0),
     });
   useEffect(() => {
     if (!seedNow || !inboxId || seedingRef.current) return;
@@ -147,8 +152,12 @@ export function useTasksWelcome({
     patchOnboarding({ seeded: { ...seeded, [workspaceId]: new Date().toISOString() } });
     const capture = SHORTCUTS.find((s) => s.id === "capture");
     const titles = teachingTaskTitles(capture ? formatShortcut(capture) : "⌘⇧K");
+    // The workspace they're for, taken once: a switch mid-way stops here
+    // rather than sending the rest to the workspace switched to.
+    const seededFor = workspaceId;
     void (async () => {
       for (const title of titles) {
+        if (workspaceRef.current !== seededFor) return;
         // One after another, each from the module as it is after the last
         // (positions follow the copy), so they land in this order.
         await apiRef.current.createTask({ bucketId: inboxId, title });

@@ -44,6 +44,6 @@
 ## Polish later
 - [ ] The dialog's × does nothing while an import runs (Stop is the way out); hide it or make it Stop.
 - [ ] A task matched by the server to an earlier import the app hadn't read gets the file's place and status (the end says so); it can only happen if a task is hidden from you but yours by key.
-- [ ] Trello members missing from the board's member list all read "A Trello member" (one picker for all of them).
+- [x] Trello members missing from the board's member list all read "A Trello member" (one picker for all of them). _Fixed in polish batch 2: "Trello member 1, 2…", one picker each._
 - [ ] The project's name can't be changed in the preview (Todoist takes the file's name).
 - [ ] Section dates (Jira epics' due dates, Linear milestones' target dates) aren't carried.

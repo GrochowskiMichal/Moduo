@@ -1112,6 +1112,15 @@ export function TaskBoardView({
                         today={today}
                         taskKey={taskKey}
                       />
+                      {/* A card of a selection carries the others (the List's "+3"). */}
+                      {multiIds.size >= 2 && multiIds.has(activeTask.id) ? (
+                        <span
+                          data-slot="drag-count"
+                          className="self-end font-sans text-xs text-muted-foreground"
+                        >
+                          +{multiIds.size - 1}
+                        </span>
+                      ) : null}
                     </DragOverlaySurface>
                   ) : null}
                 </DragOverlay>,

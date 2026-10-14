@@ -28,6 +28,7 @@ import {
   weekdayOf,
   weekStartOf,
   xOfDay,
+  zoomAnchor,
 } from "./timeline-scale";
 
 const OCT_13 = dayNumOf(2026, 9, 13); // a Tuesday
@@ -175,5 +176,44 @@ describe("Due per week (AC2.7)", () => {
     const fromSunday = weekCounts([OCT_13, OCT_13 + 1, sunday], 0);
     expect(fromSunday.get(dayNumOf(2026, 9, 11))).toBe(2);
     expect(fromSunday.get(sunday)).toBe(1);
+  });
+});
+
+describe("what a zoom holds still", () => {
+  // Quarter (10 px a day) on a 545 px track, Today a quarter across.
+  const range = { start: OCT_13 - 200, days: 600 };
+  const quarter = DAY_WIDTH.quarter;
+  const month = DAY_WIDTH.month;
+  const track = 545;
+  const scroll = scrollLeftFor(range, quarter, OCT_13, track);
+
+  it("keeps Today where it was when the control zooms in (Quarter → Month)", () => {
+    const anchor = zoomAnchor(range, quarter, scroll, track, OCT_13);
+    expect(anchor.day).toBe(OCT_13 + 0.5);
+    expect(anchor.at).toBeCloseTo(track / 4);
+    // Applied the way the view does: Today's centre lands on the same x.
+    const nextScroll = (anchor.day - range.start) * month - anchor.at;
+    const todayAt = dayCenterX(range, month, OCT_13) - nextScroll;
+    expect(todayAt).toBeCloseTo(track / 4);
+  });
+
+  it("would have pushed Today off the left edge with the old middle anchor", () => {
+    const middle = range.start + (scroll + track / 2) / quarter;
+    const nextScroll = (middle - range.start) * month - track / 2;
+    expect(dayCenterX(range, month, OCT_13) - nextScroll).toBeLessThan(0);
+  });
+
+  it("holds the middle when Today is off screen", () => {
+    const away = scroll + 100 * quarter;
+    const anchor = zoomAnchor(range, quarter, away, track, OCT_13);
+    expect(anchor.at).toBe(track / 2);
+    expect(anchor.day).toBeCloseTo(range.start + (away + track / 2) / quarter);
+  });
+
+  it("holds the day under the pointer for a ⌘-scroll, Today or not", () => {
+    const anchor = zoomAnchor(range, quarter, scroll, track, OCT_13, 400);
+    expect(anchor.at).toBe(400);
+    expect(anchor.day).toBeCloseTo(range.start + (scroll + 400) / quarter);
+    expect(zoomAnchor(range, quarter, scroll, track, OCT_13, 900).at).toBe(track);
   });
 });

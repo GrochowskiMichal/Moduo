@@ -41,7 +41,7 @@ import {
   type RangeSelection,
 } from "lexical";
 import { CalendarDays, Plus, User } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { TeamMark } from "@/components/ui/avatar";
@@ -67,7 +67,11 @@ type MentionMenuState = {
   startOffset: number;
   endOffset: number;
   top: number;
+  /** At the caret (the window keeps a minimum-width menu inside it). */
   left: number;
+  /** The menu stays between these: its host dialog's edges, else the window's. */
+  floor: number;
+  right: number;
 };
 
 export type MentionMenuPluginProps = {
@@ -139,6 +143,8 @@ export type MenuPickApi = {
 };
 
 const MENU_MIN_WIDTH = 240;
+/** How far inside a host dialog's edge the menu stays. */
+const DIALOG_INSET = 8;
 const MENU_MAX_HEIGHT = 320;
 
 function resolveMentionMenuState(
@@ -175,6 +181,12 @@ function resolveMentionMenuState(
     top = Math.min(top, Math.max(margin, window.innerHeight - margin - MENU_MAX_HEIGHT));
     const maxLeft = Math.max(margin, window.innerWidth - MENU_MIN_WIDTH - margin);
     const left = Math.max(margin, Math.min(rect.left, maxLeft));
+    // Inside a dialog (the capture), the menu keeps within the dialog's edges.
+    const host = editor.getRootElement()?.closest('[role="dialog"]')?.getBoundingClientRect();
+    const floor = host ? Math.max(margin, host.left + DIALOG_INSET) : margin;
+    const right = host
+      ? Math.min(window.innerWidth - margin, host.right - DIALOG_INSET)
+      : window.innerWidth - margin;
 
     return {
       query: found.query,
@@ -183,8 +195,18 @@ function resolveMentionMenuState(
       endOffset: anchor.offset,
       top,
       left,
+      floor,
+      right,
     };
   });
+}
+
+/**
+ * The menu's left edge: at the caret, pulled left so all of it (`width`)
+ * stays inside `right`, but never past `floor`.
+ */
+export function menuLeftWithin(caret: number, width: number, floor: number, right: number): number {
+  return Math.max(floor, Math.min(caret, right - width));
 }
 
 function removeMentionToken(menu: MentionMenuState): void {
@@ -292,6 +314,14 @@ export function MentionMenuPlugin({
   // `/date` opens a calendar where the menu was; the pick goes where the caret was.
   const [datePicker, setDatePicker] = useState<{ top: number; left: number } | null>(null);
   const pickerSelection = useRef<RangeSelection | null>(null);
+  // The drawn menu's width, so it can keep inside its dialog (it grows with
+  // its longest entry).
+  const menuBoxRef = useRef<HTMLDivElement>(null);
+  const [menuWidth, setMenuWidth] = useState(MENU_MIN_WIDTH);
+  useLayoutEffect(() => {
+    const width = menuBoxRef.current?.offsetWidth;
+    if (width && width !== menuWidth) setMenuWidth(width);
+  });
 
   const {
     setQuery,
@@ -638,7 +668,8 @@ export function MentionMenuPlugin({
       // Above a dialog (the capture), and clickable while a modal dialog has
       // turned pointer events off on <body> (TV-U14).
       className="pointer-events-auto fixed z-[var(--z-popover)] max-h-80 min-w-60 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-      style={{ top: menu.top, left: menu.left }}
+      ref={menuBoxRef}
+      style={{ top: menu.top, left: menuLeftWithin(menu.left, menuWidth, menu.floor, menu.right) }}
       role="listbox"
       aria-label={trigger === "tag" ? "Link a tag" : trigger === "ref" ? "Insert" : "Mention"}
     >

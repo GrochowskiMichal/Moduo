@@ -103,14 +103,7 @@
 ## 3. Known gaps
 
 - **Deferred on purpose:** [tasks-v3-polish-deferred.md](./tasks-v3-polish-deferred.md). Each one has a recommendation.
-- **Seen in this walkthrough, not fixed yet:**
-  - **Home's Upcoming widget** (small): shows one task and "+2 more", with most of the widget empty.
-  - **Timeline drag:** the old hover label ("Due Tue, Oct 20") stays on screen next to the new date while you drag (screenshot 11).
-  - **Timeline zoom:** going from Quarter to Month once left Today just off the left edge; Today brings it back.
-  - **Project overview:** on the Client row, the edit pencil sits on its own line under the client chip (screenshot 12).
-  - **Imported descriptions:** Markdown lists ("- short", "- long") arrive as plain lines, not a list (screenshot 3).
-  - **Capture:** the tag suggestions open past the dialog's right edge.
-  - **Console only:** a new person's first Tasks open logs three failed reads for a teaching task that isn't saved yet. Nothing shows on screen.
+- **Seen in this walkthrough, not fixed yet** (the seven Tasks items were fixed in polish batch 2, `t/maciej/tv-polish-2`: [t-maciej-tv-polish-2.md](./t-maciej-tv-polish-2.md)):
   - **Local setup only:**
     - Signing in logs a failed trial start: the local functions have no Stripe test key.
     - The local functions' `PUBLIC_APP_URL` says port 8081, so links they build (invites) point at 8081, not 8100.

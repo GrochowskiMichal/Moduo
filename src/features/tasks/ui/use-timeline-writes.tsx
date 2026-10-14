@@ -35,22 +35,39 @@ import type { CanvasCommit } from "./use-timeline-canvas";
 
 type Ask =
   /** `alsoUndo`: the move this one follows up ("Also move…"), undone with it. */
-  | { kind: "shift"; taskIds: readonly string[]; shift: number; alsoUndo?: () => void }
+  | {
+      kind: "shift";
+      taskIds: readonly string[];
+      shift: number;
+      alsoUndo?: () => void;
+      skipped?: number;
+    }
   | { kind: "day"; taskId: string; day: string };
 
 export type TimelineWrites = {
   commit: (commit: CanvasCommit) => void;
-  /** Move tasks' dates by days (⌥←/→ on one, or a selection). */
-  shiftTasks: (tasks: readonly Task[], shift: number) => void;
+  /**
+   * Move tasks' dates by days (⌥←/→ on one, or a selection). `skipped`: the
+   * selected tasks left where they are (not yours to move), named in the toast.
+   */
+  shiftTasks: (tasks: readonly Task[], shift: number, skipped?: number) => void;
   /** Move a section's or a project's dates by days (⌥←/→ on its row). */
   shiftRow: (row: TimelineRow, shift: number) => boolean;
   /** Make a task due on a day (the dependency mark's fix, a drop from No date). */
   placeTask: (taskId: string, day: number) => void;
-  /** ⇧D: clear tasks' due dates (one, or a selection). */
-  clearDue: (tasks: readonly Task[]) => void;
+  /** ⇧D: clear tasks' due dates (one, or a selection; `skipped` as above). */
+  clearDue: (tasks: readonly Task[], skipped?: number) => void;
   /** The repeat question, for the view to mount. */
   dialog: ReactNode;
 };
+
+/**
+ * A selection's toast says how many of it stayed put because they aren't
+ * yours to move ("Moved 3 tasks a day later · 2 not yours to move").
+ */
+export function withSkipped(label: string, skipped: number): string {
+  return skipped > 0 ? `${label} · ${skipped} not yours to move` : label;
+}
 
 function shiftWords(shift: number): string {
   const size = Math.abs(shift);
@@ -80,14 +97,14 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
    * Save a plan of task moves; a move later offers the ones that wait on them.
    * `alsoUndo`: the move this one follows up, put back by the same Undo.
    */
-  const run = useRef<(plan: TaskMovePlan, shift: number, alsoUndo?: () => void) => void>(
-    () => undefined,
-  );
-  run.current = (plan, shift, alsoUndo) => {
+  const run = useRef<
+    (plan: TaskMovePlan, shift: number, alsoUndo?: () => void, skipped?: number) => void
+  >(() => undefined);
+  run.current = (plan, shift, alsoUndo, skipped = 0) => {
     const a = latest.current.api;
     if (plan.writes.length === 0) return;
     void a.bulkWrite(plan.writes, {
-      label: (main) => plan.label(main),
+      label: (main) => withSkipped(plan.label(main), skipped),
       alsoUndo,
       followUp:
         shift > 0
@@ -118,8 +135,19 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
   };
 
   const runShift = useCallback(
-    (tasks: readonly Task[], shift: number, choice: RepeatChoice, alsoUndo?: () => void) => {
-      run.current(planShift(tasks, shift, choice, engineZone(), new Date()), shift, alsoUndo);
+    (
+      tasks: readonly Task[],
+      shift: number,
+      choice: RepeatChoice,
+      alsoUndo?: () => void,
+      skipped = 0,
+    ) => {
+      run.current(
+        planShift(tasks, shift, choice, engineZone(), new Date()),
+        shift,
+        alsoUndo,
+        skipped,
+      );
     },
     [],
   );
@@ -132,18 +160,23 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
     run.current(planDay(task, day, choice, engineZone(), new Date()), shift);
   }, []);
 
-  const shiftTasks = useCallback(
-    (tasks: readonly Task[], shift: number, alsoUndo?: () => void) => {
+  const shiftWith = useCallback(
+    (tasks: readonly Task[], shift: number, alsoUndo?: () => void, skipped = 0) => {
       if (shift === 0 || tasks.length === 0) return;
       if (tasks.some(asksAboutRepeat)) {
-        setAsk({ kind: "shift", taskIds: tasks.map((t) => t.id), shift, alsoUndo });
+        setAsk({ kind: "shift", taskIds: tasks.map((t) => t.id), shift, alsoUndo, skipped });
         return;
       }
-      runShift(tasks, shift, "one", alsoUndo);
+      runShift(tasks, shift, "one", alsoUndo, skipped);
     },
     [runShift],
   );
-  shiftRef.current = shiftTasks;
+  shiftRef.current = shiftWith;
+  const shiftTasks = useCallback(
+    (tasks: readonly Task[], shift: number, skipped = 0) =>
+      shiftWith(tasks, shift, undefined, skipped),
+    [shiftWith],
+  );
 
   const placeTask = useCallback(
     (taskId: string, day: number) => {
@@ -264,12 +297,18 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
     [sectionSpan, sectionEnds, projectSpan],
   );
 
-  const clearDue = useCallback((tasks: readonly Task[]) => {
+  const clearDue = useCallback((tasks: readonly Task[], skipped = 0) => {
     const dated = tasks.filter((t) => dueKeyOf(t));
     if (dated.length === 0) return;
     void latest.current.api.bulkWrite(
       dated.map((t) => ({ taskId: t.id, dueDate: null })),
-      { label: (n) => (n === 1 ? "Due date cleared" : `Cleared the due date of ${tasksWord(n)}`) },
+      {
+        label: (n) =>
+          withSkipped(
+            n === 1 ? "Due date cleared" : `Cleared the due date of ${tasksWord(n)}`,
+            skipped,
+          ),
+      },
     );
   }, []);
 
@@ -295,7 +334,7 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
         const current = ask;
         setAsk(null);
         if (current?.kind === "shift") {
-          runShift(askTasks, current.shift, choice, current.alsoUndo);
+          runShift(askTasks, current.shift, choice, current.alsoUndo, current.skipped);
         } else if (current?.kind === "day" && askTasks[0]) runDay(askTasks[0], current.day, choice);
       }}
       onClose={() => {

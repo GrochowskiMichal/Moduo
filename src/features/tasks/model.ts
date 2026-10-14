@@ -644,6 +644,14 @@ export type ProjectDeleteResult = { moved: number; deleted: number; notified: nu
 /** Days a deleted task, project or file stays restorable before the purge. */
 export const TRASH_DAYS = 30;
 
+/**
+ * A task shown before the server has it: the store gives it a `tmp-` id until
+ * the create answers. Nothing reads by that id (the server never heard of it).
+ */
+export function isUnsavedTaskId(id: string): boolean {
+  return id.startsWith("tmp-");
+}
+
 /** Coarse time-of-day slots that a bucket can be mapped to (spec §9). */
 export type TimeBlockSlot = "morning" | "afternoon" | "evening";
 
