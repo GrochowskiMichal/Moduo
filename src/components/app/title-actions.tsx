@@ -7,6 +7,11 @@
 // its own attachments strip), and they go with the body when the view or item
 // changes. With no host around them (a story, a test, a body shown on its own)
 // they render in place, so nothing drops them silently.
+//
+// Being the body's React children, their events bubble through the body's
+// handlers, not the title row's: a file dragged or pasted over the task's ⋯
+// reaches the task's drop zone, so its drop tint shows while over ⋯ and a
+// drop there attaches the file. Harmless.
 
 import { createContext, type ReactNode, useContext } from "react";
 import { createPortal } from "react-dom";
