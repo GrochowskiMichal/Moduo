@@ -37,6 +37,7 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
 
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
@@ -333,6 +334,56 @@ describe("the description comes before the properties (MOD-116, the prototypes' 
     const statuses = screen.getAllByRole("button", { name: "Status: To do" });
     expect(statuses.length).toBeGreaterThan(0);
     for (const status of statuses) expect(follows(description, status)).toBe(true);
+  });
+});
+
+describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
+  it("shortens the names with the full one on hover, and puts the handle at the end", () => {
+    const t = task({ number: 142, sectionId: "s1" });
+    const a = api(t, {
+      sections: [
+        {
+          id: "s1",
+          projectId: "b-app",
+          name: "A section name long enough to need the ellipsis",
+          position: 0,
+        },
+      ],
+    } as unknown as Partial<TasksModuleApi>);
+    render(
+      <WorkspaceContext.Provider
+        value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
+      >
+        <TooltipProvider>
+          <TaskDetailPanel
+            task={t}
+            buckets={[APP]}
+            inbox={INBOX}
+            canEdit
+            onRequestCapture={() => {}}
+            onSelectTask={() => {}}
+            api={a}
+          />
+        </TooltipProvider>
+      </WorkspaceContext.Provider>,
+    );
+    const nav = screen.getByRole("navigation", { name: "Location" });
+    expect(nav.className).toContain("flex-nowrap");
+    expect(nav.className).not.toContain("flex-wrap ");
+    const section = within(nav).getByRole("button", { name: /^Section: / });
+    expect(section.getAttribute("title")).toBe("A section name long enough to need the ellipsis");
+    expect(section.querySelector("span")?.className).toContain("truncate");
+    expect(
+      within(nav)
+        .getByRole("button", { name: /^Project: / })
+        .getAttribute("title"),
+    ).toBe("Moduo App");
+    // The handle is the task's, outside the crumbs and their chevrons, pushed right.
+    const handle = screen.getByRole("button", { name: "Copy MOD-142" });
+    expect(nav.contains(handle)).toBe(false);
+    expect(nav.parentElement?.contains(handle)).toBe(true);
+    expect(handle.className).toContain("ml-auto");
+    expect(nav.querySelectorAll(".lucide-chevron-right")).toHaveLength(1);
   });
 });
 

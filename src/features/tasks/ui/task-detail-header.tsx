@@ -1,9 +1,10 @@
 // The detail panel's header (Tasks v3 §9, research views-board-detail §7):
-// the breadcrumb "● Project › Section" (each part a picker that moves the
-// task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
-// for who "is on this" (claims, TV-F7), the Focus toggle and ▶ "Focus on
-// this" (call 31), ⤢ full page, and ⋯ (Copy branch name, Copy link, where
-// an import brought it from (TV-U18), Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
+// the breadcrumb "● Project › Section" on one line (each part a picker that
+// moves the task; a subtask goes on to "↳ parent"), the handle at the line's
+// end (click to copy), a slot for who "is on this" (claims, TV-F7), the
+// Focus toggle and ▶ "Focus on this" (call 31), ⤢ full page, and ⋯ (Copy
+// branch name, Copy link, where an import brought it from (TV-U18),
+// Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
 
 import {
   Ban,
@@ -141,8 +142,9 @@ export function TaskDetailHeader({
 
   return (
     <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
-      {/* Names wrap, never truncate (AC1.16). */}
-      <nav aria-label="Location" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+      {/* One line (MOD-118, round-2b `.dcrumb`): the project and section
+          names shorten with an ellipsis, full names on hover (AC1.16). */}
+      <nav aria-label="Location" className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5">
         <ProjectCrumb
           task={task}
           bucket={bucket}
@@ -170,32 +172,36 @@ export function TaskDetailHeader({
               type="button"
               onClick={() => onOpenTask(parent.id)}
               aria-label={`Parent task: ${parent.title || "Untitled"}`}
+              title={parent.title || "Untitled"}
               className={crumb}
             >
               <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
-              <span className="min-w-0 break-words text-left">{parent.title || "Untitled"}</span>
+              <span className="min-w-0 truncate text-left">{parent.title || "Untitled"}</span>
             </button>
           </>
         ) : null}
-        {handle ? (
-          <>
-            <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => copy(handle, `Copied ${handle}`)}
-                  aria-label={`Copy ${handle}`}
-                  className={cn(crumb, "shrink-0 whitespace-nowrap tabular-nums")}
-                >
-                  {handle}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy {handle}</TooltipContent>
-            </Tooltip>
-          </>
-        ) : null}
       </nav>
+      {/* The handle is the task's own, not a place: it sits at the line's
+          end, pushed right and quieter (round-2b `.dcrumb .hdl`), and never
+          shortens. */}
+      {handle ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => copy(handle, `Copied ${handle}`)}
+              aria-label={`Copy ${handle}`}
+              className={cn(
+                crumb,
+                "ml-auto shrink-0 whitespace-nowrap text-subtle-foreground tabular-nums",
+              )}
+            >
+              {handle}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy {handle}</TooltipContent>
+        </Tooltip>
+      ) : null}
 
       {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />}
       {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
@@ -314,6 +320,7 @@ function ProjectCrumb({
         <button
           type="button"
           aria-label={`Project: ${label}. Move to another project`}
+          title={label}
           className={cn(crumb, "-ml-1.5")}
         >
           {bucket?.isSystem ? (
@@ -323,7 +330,7 @@ function ProjectCrumb({
           ) : (
             <Lock className="size-icon-xs shrink-0" aria-hidden />
           )}
-          <span className="min-w-0 break-words text-left">{label}</span>
+          <span className="min-w-0 truncate text-left">{label}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-0">
@@ -383,9 +390,10 @@ function SectionCrumb({
         <button
           type="button"
           aria-label={`Section: ${section?.name ?? "No section"}. Move to another section`}
+          title={section?.name ?? "No section"}
           className={crumb}
         >
-          <span className="min-w-0 break-words text-left">{section?.name ?? "No section"}</span>
+          <span className="min-w-0 truncate text-left">{section?.name ?? "No section"}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-56 p-0">
