@@ -25,6 +25,7 @@ How the Chat v2 build runs, so anyone can pick it up. The spec is [specs/chat-v2
 - It runs under **OrbStack** at `127.0.0.1:54322` (Postgres) and `:54321` (API); the default Docker context on this Mac is Docker Desktop, so run Supabase CLI commands with `DOCKER_CONTEXT=orbstack` and **never `bun run local:up` or `local:reset`** (the stack is up, and a reset wipes local-only data, the research workspace included).
 - `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres"` reaches it. The local stack keeps no migration history table: apply files with `psql -v ON_ERROR_STOP=1 -f`.
 - A fresh worktree has no `.env.local`, and then `dev:web` and e2e talk to the **prod** project: run `bun run env:local` first and confirm the app's Supabase URL is `127.0.0.1`.
+- The stack is shared: while another block holds the migration turn, database-backed tests in `verify` (e.g. `chat_privacy.test.sql` via `privacy-rules.test.ts`) can fail on a branch that doesn't touch them. Say so in the hand-back; don't chase it.
 - The research workspace "Chat replan research" (`669be464-0b9a-4d84-8537-544ac04dba5f`, 3,032 messages) is the v1 fixture: read it, never write it.
 
 ## A builder's run
@@ -70,4 +71,4 @@ On a usage-limit error the orchestrator notes the reset time, sleeps in the back
 
 ## Where it stands
 
-Kept current by the orchestrator. **2026-10-14:** the build branch is cut; the kit is in (`scripts/agent/quiet.sh`, this runbook, the record template); the v1 privacy rules are merged in (217d1a62); CV-0 spike 5 (search) and the briefs CV-1…CV-23 are landed; spikes 2, 3 and 4 are building.
+Kept current by the orchestrator. **2026-10-14:** the build branch is cut; the kit is in (`scripts/agent/quiet.sh`, this runbook, the record template); the v1 privacy rules are merged in (217d1a62); CV-0 (all five spikes) and the briefs CV-1…CV-23 are landed; checkpoint 1 folded spikes 2–5 (spike 1 folds at checkpoint 2); CV-1 holds the migration turn.
