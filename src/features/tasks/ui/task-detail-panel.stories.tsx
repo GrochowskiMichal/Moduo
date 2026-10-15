@@ -410,6 +410,38 @@ export const NothingSelected: Story = {
   args: { task: null },
 };
 
+const MARKDOWN = task({
+  title: "Collect brand assets from client",
+  description: [
+    "Acme's old identity only exists as exports. We need the **source files** before Design can close.",
+    "",
+    "**What we asked for**",
+    "",
+    "- Logo source files (Illustrator or SVG)",
+    "- Pantone and CMYK values from their current cards",
+    "- Licences for the two typefaces on their site",
+    "",
+    "1. Rebuild the lockups",
+    "2. Add the type licences to the guide",
+    "",
+    "- [x] Ask Anna for the files",
+    "- [ ] Check the print specs",
+    "",
+    "> Legal signs off on anything that leaves Acme.",
+    "",
+    "Run `npm run brand` after, see [the brand guide](https://example.com) by [Oct 17](moduo://date/2026-10-17).",
+  ].join("\n"),
+});
+
+/**
+ * The description as Markdown (dogfood call #15): bullets as round-1c frame
+ * 3 draws them (`.ldesc`); numbers, checkboxes, the quote, code and the link
+ * are the agent's layout, revisitable.
+ */
+export const MarkdownDescription: Story = {
+  args: { task: MARKDOWN, api: stubApi(MARKDOWN) },
+};
+
 /**
  * Hosted as the Tasks page does, at the 280 px floor (round-2b frame 5): the
  * task's actions in the title row, "Details ▾ ……… Focus ↗ ⋯"; the breadcrumb
