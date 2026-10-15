@@ -296,3 +296,33 @@ All agent steps, each needing Maciej's OK in the session, in this order. Until s
 - **Revoking** a pending invite cancels its B3 if it hasn't gone out, and takes the address off the allow-list (TX-4's hook stops matching). It can't undo an account the address already created by asking for a code.
 - **An invite only works for its address.** Anyone else signed in sees "This invite is for t•••@becker.studio. Sign in with that address to join." with Sign out.
 - **Stop B3** without touching the rest of the queue: `alter table public.workspace_invites disable trigger workspace_invites_enqueue_email;` (and `enable` to resume). The daily cap counts queued emails, so while it's off the cap only counts invite rows.
+
+## TX-9a · Welcome and trial emails: going live
+
+All agent steps, each needing Maciej's OK in the session, in this order.
+
+1. **Worker** (agent, with OK), **from `maciej` after TX-9a has merged.** It must hold every kind the live worker sends: `waitlist_invite` (TX-4), the seven `booking_*` kinds (TX-5, TX-6), `ops_alert` (TX-3), the three `workspace_*` kinds (TX-7) and now `welcome`, `trial_ending`, `trial_ended`. The list is pinned in `templates/workspace.test.ts` › "the worker's templates". If TX-7's worker isn't live yet, this deploy carries it too, and TX-7's own steps still follow its order. Check no newer worker is live first (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`):
+   ```bash
+   supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+2. **Migration** `20261015173736_tx9a_welcome_trial.sql` (agent, with OK, per the release-train rule; independent of TX-7's). It adds `profiles.welcome_email_at`, the D1 trigger on `workspaces`, the profile trigger (D3, and keeping a waiting D1 current), the hourly D2 sweep (`email-trial-ending`, minute 41) and re-asserts the client column grants on `profiles`. Check:
+   ```sql
+   select tgname from pg_trigger where tgname in ('workspaces_enqueue_welcome', 'profiles_trial_emails');
+   select jobname, schedule from cron.job where jobname = 'email-trial-ending';
+   select has_column_privilege('authenticated', 'public.profiles', 'welcome_email_at', 'UPDATE');
+   ```
+   Expect both triggers, `email-trial-ending | 41 * * * *`, `false`. The first sweep queues D2 for every no-card trial already inside its last 72 hours (correct: their date is right).
+3. **The app** (onboarding says "14-day trial") ships with the next app promotion; nothing depends on its order.
+4. **Live check** (docs/testing/ checklist for TX-9a): a fresh invited account that makes its first workspace gets D1 about 5 minutes later, greeting by first name, with its trial's end date. Read the rows:
+   ```sql
+   select kind, status, attempts, last_error, dedupe_key, send_after from public.email_outbox
+   where kind in ('welcome', 'trial_ending', 'trial_ended') order by created_at desc limit 20;
+   ```
+
+### Day to day
+
+- **D1** goes once per person, ever (`profiles.welcome_email_at`), about 5 minutes after the first workspace they own; never for someone who owned a workspace before. If the trial reaches the profile from Stripe during those 5 minutes, the email picks up its date; without a trial (founders) it leaves that line out.
+- **D2** goes to no-card trials ending within 72 hours with no plan chosen: no card saved on the customer or the subscription, no active or past-due subscription. A trial with a card turns into a paid plan, so it gets nothing.
+- **D3** goes when the profile moves trialing → canceled on Free. Never when one of the person's subscriptions was canceled as "Moduo account deleted", and never when the subscription just disappears (`inactive`).
+- **"Trial and billing" off** (TX-8) mutes D2 and D3 when the worker claims them; until TX-8 is live they always send.
+- **Stop them** without touching the rest of the queue: `select cron.unschedule('email-trial-ending');` for D2 (re-run the migration's `cron.schedule` to resume), `alter table public.workspaces disable trigger workspaces_enqueue_welcome;` for D1, `alter table public.profiles disable trigger profiles_trial_emails;` for D3.

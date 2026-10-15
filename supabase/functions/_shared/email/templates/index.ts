@@ -23,6 +23,14 @@ import {
   bookingHostNewEmail,
 } from "./booking.ts";
 import { type OpsAlertData, opsAlertEmail } from "./ops-alert.ts";
+import {
+  type TrialEndedData,
+  type TrialEndingData,
+  trialEndedEmail,
+  trialEndingEmail,
+  type WelcomeData,
+  welcomeEmail,
+} from "./trial.ts";
 import { type WaitlistInviteData, waitlistInviteEmail } from "./waitlist-invite.ts";
 import {
   type WorkspaceInviteData,
@@ -52,6 +60,17 @@ export {
   type WorkspaceRemovedData,
 } from "./workspace.ts";
 export {
+  BILLING_SETTINGS_URL,
+  parseTrialEndedPayload,
+  parseTrialEndingPayload,
+  parseWelcomePayload,
+  TRIAL_QUEUED,
+  TRIAL_SETTINGS_URL,
+  type TrialEndedData,
+  type TrialEndingData,
+  type WelcomeData,
+} from "./trial.ts";
+export {
   type AuthConfirmCodeData,
   type AuthInviteData,
   authConfirmCodeEmail,
@@ -72,6 +91,9 @@ export interface EmailTemplateData {
   workspace_invite: WorkspaceInviteData;
   workspace_owner: WorkspaceOwnerData;
   workspace_removed: WorkspaceRemovedData;
+  welcome: WelcomeData;
+  trial_ending: TrialEndingData;
+  trial_ended: TrialEndedData;
 }
 
 export type BuiltEmailKind = keyof EmailTemplateData & EmailKind;
@@ -90,6 +112,9 @@ export const EMAIL_TEMPLATES: { [K in BuiltEmailKind]: (data: EmailTemplateData[
   workspace_invite: workspaceInviteEmail,
   workspace_owner: workspaceOwnerEmail,
   workspace_removed: workspaceRemovedEmail,
+  welcome: welcomeEmail,
+  trial_ending: trialEndingEmail,
+  trial_ended: trialEndedEmail,
 };
 
 export const BUILT_EMAIL_KINDS = Object.keys(EMAIL_TEMPLATES) as BuiltEmailKind[];

@@ -44,6 +44,7 @@ import {
 import { BOOKING_QUEUED } from "./templates/booking.ts";
 import { opsAlertEmail, parseOpsAlertPayload } from "./templates/ops-alert.ts";
 import { parseWaitlistInvitePayload, waitlistInviteEmail } from "./templates/waitlist-invite.ts";
+import { TRIAL_QUEUED } from "./templates/trial.ts";
 import { WORKSPACE_QUEUED } from "./templates/workspace.ts";
 
 export const OUTBOX_MAX_ATTEMPTS = 5;
@@ -98,6 +99,7 @@ export const OUTBOX_TEMPLATES: Partial<Record<EmailKind, QueuedTemplate>> = {
   ops_alert: (payload) => ({ doc: opsAlertEmail(parseOpsAlertPayload(payload)) }),
   ...BOOKING_QUEUED,
   ...WORKSPACE_QUEUED,
+  ...TRIAL_QUEUED,
 };
 
 /** The run lease: `email_outbox__run_start` / `email_outbox__run_stop`. */

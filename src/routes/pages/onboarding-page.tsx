@@ -6,6 +6,7 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ModuoMark } from "@/components/ui/moduo-mark";
+import { TRIAL_DAYS_NO_CARD, TRIAL_DAYS_WITH_CARD } from "@/features/billing/plans";
 import { useAuth } from "@/providers/auth-provider";
 
 /**
@@ -126,8 +127,10 @@ export function OnboardingPage() {
 
           {showTrialNote ? (
             <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
-              Your <span className="font-medium text-foreground">7-day trial</span> is active. Add a
-              card under Settings → Billing any time to extend it to 30 days.
+              Your{" "}
+              <span className="font-medium text-foreground">{TRIAL_DAYS_NO_CARD}-day trial</span> is
+              active. Add a card under Settings → Billing any time to extend it to{" "}
+              {TRIAL_DAYS_WITH_CARD} days.
             </p>
           ) : null}
         </div>
