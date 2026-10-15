@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
