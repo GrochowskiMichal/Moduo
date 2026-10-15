@@ -570,7 +570,7 @@ export function ContactDirectory({
                     <span
                       aria-hidden
                       data-label={normalizeLabelColor(t.color)}
-                      className="tag-dot size-2 shrink-0 rounded-full"
+                      className="tag-dot size-1.5 shrink-0 rounded-full"
                     />
                     <span className="truncate">{t.name}</span>
                   </DropdownMenuRadioItem>

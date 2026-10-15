@@ -29,7 +29,7 @@ type Props = {
   /** `sm` (default, 18 px, 12 px text) for rows and cards; `md` (22 px, 13 px) in panels. */
   size?: "sm" | "md";
   className?: string;
-  /** Hover text. Defaults to "Tag: <name>"; pass "" for none. */
+  /** Hover text on the dot and name. Defaults to "Tag: <name>"; pass "" for none. */
   title?: string;
 };
 
@@ -37,6 +37,10 @@ const SIZE = {
   sm: { chip: "h-4.5 pl-1.5 text-xs", end: "pr-1.75", endRemovable: "pr-0.5", gap: "gap-1.25" },
   md: { chip: "h-5.5 pl-2 text-sm", end: "pr-2.25", endRemovable: "pr-1", gap: "gap-1.5" },
 } as const;
+
+/** Name → ×: the ×'s 24 px hit area reaches 5 px past its 14 px glyph, so the
+ *  name starts clear of it (`.hit-min`, R13). */
+const REMOVE_GAP = "gap-1.25";
 
 export function TagChip({
   name,
@@ -49,6 +53,9 @@ export function TagChip({
   title,
 }: Props) {
   const s = SIZE[size];
+  // The hover text sits on the dot and name, not the whole chip, so the × shows
+  // only its own tooltip.
+  const hover = title ?? `Tag: ${name}`;
   const label = (
     <>
       <span aria-hidden className="tag-dot size-1.5 shrink-0 rounded-full" />
@@ -61,11 +68,10 @@ export function TagChip({
       data-slot="tag-chip"
       data-label={normalizeLabelColor(color)}
       data-active={active || undefined}
-      title={title ?? `Tag: ${name}`}
       className={cn(
-        "inline-flex min-w-0 max-w-full items-center gap-0.5 rounded-full bg-tag-chip-surface font-sans leading-none whitespace-nowrap",
+        "inline-flex min-w-0 max-w-full items-center rounded-full bg-tag-chip-surface font-sans leading-none whitespace-nowrap",
         s.chip,
-        onRemove ? s.endRemovable : s.end,
+        onRemove ? cn(s.endRemovable, REMOVE_GAP) : s.end,
         active ? "tag-chip-active text-foreground" : "text-foreground/90",
         className,
       )}
@@ -73,6 +79,7 @@ export function TagChip({
       {onClick ? (
         <button
           type="button"
+          title={hover}
           aria-label={`Tag: ${name}`}
           onClick={(e) => {
             e.stopPropagation();
@@ -86,20 +93,31 @@ export function TagChip({
           {label}
         </button>
       ) : (
-        <span className={cn("flex min-w-0 items-center", s.gap)}>{label}</span>
+        <span
+          data-slot="tag-chip-label"
+          title={hover}
+          className={cn("flex min-w-0 items-center", s.gap)}
+        >
+          {label}
+        </span>
       )}
       {onRemove ? (
-        <button
-          type="button"
-          aria-label={`Remove tag ${name}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="hit-min flex size-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-active hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <X aria-hidden className={size === "md" ? "size-3" : "size-2.5"} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Remove tag ${name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="hit-min flex size-3.5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-active hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X aria-hidden className={size === "md" ? "size-3" : "size-2.5"} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Remove tag</TooltipContent>
+        </Tooltip>
       ) : null}
     </span>
   );

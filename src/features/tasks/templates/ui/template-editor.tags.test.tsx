@@ -98,7 +98,9 @@ describe("template tags (MOD-97)", () => {
   it("shows each tag as a md dot chip in its hue, and × removes it from the draft", () => {
     renderEditor(true);
     expect(chips()).toEqual(["launch", "website"]);
-    const launch = screen.getByTitle("Tag: launch");
+    const launch = screen
+      .getByTitle("Tag: launch")
+      .closest('[data-slot="tag-chip"]') as HTMLElement;
     expect(launch.getAttribute("data-label")).toBe("blue");
     expect(launch.className).toContain("h-5.5");
     fireEvent.click(screen.getByRole("button", { name: "Remove tag launch" }));

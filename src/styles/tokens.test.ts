@@ -101,20 +101,21 @@ describe("tokens.css state layer (DS-1)", () => {
     const theme = (await tokenBlocks()).filter((b) => b.prelude === "@theme inline");
     expect(theme).toHaveLength(1);
     const decls = declarations(theme[0]);
-    expect(Object.fromEntries([...decls].filter(([k]) => /state|hairline|raised/.test(k)))).toEqual(
-      {
-        "--color-state-hover": "var(--state-hover)",
-        "--color-state-active": "var(--state-active)",
-        "--color-state-active-hover": "var(--state-active-hover)",
-        "--color-state-selected": "var(--state-selected)",
-        "--color-state-selected-hover": "var(--state-selected-hover)",
-        "--ring-color-state-selected": "var(--state-selected-ring)",
-        "--ring-color-state-selected-edge": "var(--state-selected-edge)",
-        "--color-hairline": "var(--hairline)",
-        "--color-control-raised": "var(--control-raised)",
-        "--shadow-control-raised": "var(--shadow-control-raised)",
-      },
-    );
+    expect(
+      Object.fromEntries([...decls].filter(([k]) => /state|hairline|raised|tag-chip/.test(k))),
+    ).toEqual({
+      "--color-tag-chip-surface": "var(--tag-chip-surface)",
+      "--color-state-hover": "var(--state-hover)",
+      "--color-state-active": "var(--state-active)",
+      "--color-state-active-hover": "var(--state-active-hover)",
+      "--color-state-selected": "var(--state-selected)",
+      "--color-state-selected-hover": "var(--state-selected-hover)",
+      "--ring-color-state-selected": "var(--state-selected-ring)",
+      "--ring-color-state-selected-edge": "var(--state-selected-edge)",
+      "--color-hairline": "var(--hairline)",
+      "--color-control-raised": "var(--control-raised)",
+      "--shadow-control-raised": "var(--shadow-control-raised)",
+    });
   });
 
   it("emits utilities that read the tokens on the element (scoped accents included)", async () => {

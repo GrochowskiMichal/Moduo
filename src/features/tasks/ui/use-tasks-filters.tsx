@@ -205,7 +205,7 @@ export function taskFilterDimensions(input: {
         <span
           aria-hidden
           data-label={normalizeLabelColor(tag.color)}
-          className="tag-dot size-2.5 shrink-0 rounded-full"
+          className="tag-dot size-1.5 shrink-0 rounded-full"
         />
       ),
     }));

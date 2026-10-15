@@ -61,10 +61,11 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
 /**
  * The counts right after a title, in their fixed order (tasks-v3 §4): tags ·
  * files (📎, AT-3) · comments · subtasks done/total · blocked · waiting ·
- * repeats · waiting to sync. Muted, each hidden at zero. Tags are a count,
- * never chips (U1-2), with their names in the tooltip; Detailed rows show up
- * to two as dot chips (`tagNames`, MOD-97). Rows and cards never show thumbnails. The facts are the
- * row's own (row-facts.ts, TV-D11b).
+ * repeats · waiting to sync. Muted, each hidden at zero. Standard rows and
+ * cards show tags as a count with their names in the tooltip (U1-2); Detailed
+ * rows show up to two dot chips in its place (`tagNames`, MOD-97). Rows and
+ * cards never show thumbnails. The facts are the row's own (row-facts.ts,
+ * TV-D11b).
  */
 type CountsFacts = Pick<TaskFacts, "tags" | "progress" | "blockedLabel"> &
   Partial<Pick<TaskFacts, "comments" | "attachments" | "waiting" | "pending">>;
@@ -105,7 +106,8 @@ export function TaskCounts({
 } & CountsOptions) {
   if (!hasTaskCounts(task, facts, opts)) return null;
   const { tags, progress, blockedLabel, comments = 0, attachments = 0, waiting, pending } = facts;
-  const tagList = tags.map((t) => `#${t.name}`).join(" ");
+  // The names as words ("ui, notes"): "#" is only how you type a tag (MOD-97).
+  const tagList = tags.map((t) => t.name).join(", ");
   return (
     <MetaCounts className={className}>
       {tags.length > 0 && opts.tagNames ? (

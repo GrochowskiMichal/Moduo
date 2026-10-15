@@ -160,7 +160,7 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     const row = rowOf("Task a");
     expect(screen.getByText("3 tags").className).toContain("sr-only");
     expect(row.textContent).not.toContain("ui");
-    expect(row.querySelector('[data-slot="tag-chip"], .tag-chip')).toBeNull();
+    expect(row.querySelector('[data-slot="tag-chip"]')).toBeNull();
     // The count sits in the title cell, right after the title.
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
     expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
@@ -182,7 +182,9 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     // The names stay at full width, so each chip is capped: the title keeps its room.
     expect(names.className).toContain("shrink-0");
     for (const chip of chips) expect(chip.className).toContain("max-w-24");
-    expect(screen.getByTitle("Tag: ui")).toBe(chips[0] as HTMLElement);
+    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+      chips[0] as HTMLElement,
+    );
     const more = names.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
     expect(more.textContent).toBe("+1");
     act(() => more.focus());
@@ -522,7 +524,9 @@ describe("Board (U1-4)", () => {
     // One line, never wrapping: long names shorten instead (full name on hover).
     expect(list.className).not.toContain("flex-wrap");
     for (const chip of chips) expect(chip.className).toContain("max-w-24");
-    expect(screen.getByTitle("Tag: ui")).toBe(chips[0] as HTMLElement);
+    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+      chips[0] as HTMLElement,
+    );
     expect(card("Task a").textContent).not.toContain("#");
   });
 

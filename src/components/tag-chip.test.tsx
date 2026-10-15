@@ -17,7 +17,9 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 
-const chipOf = (name: string) => screen.getByTitle(`Tag: ${name}`);
+/** The chip whose dot and name say "Tag: <name>" on hover. */
+const chipOf = (name: string) =>
+  screen.getByTitle(`Tag: ${name}`).closest('[data-slot="tag-chip"]') as HTMLElement;
 
 describe("TagChip", () => {
   it("is a neutral pill with the hue's dot and the bare name", () => {
@@ -38,7 +40,11 @@ describe("TagChip", () => {
   });
 
   it("never shows a #", () => {
-    render(<TagChip name="website" color="blue" onRemove={() => {}} active />);
+    render(
+      <TooltipProvider>
+        <TagChip name="website" color="blue" onRemove={() => {}} active />
+      </TooltipProvider>,
+    );
     expect(chipOf("website").textContent).not.toContain("#");
   });
 
@@ -80,7 +86,11 @@ describe("TagChip", () => {
     // The row (or card) under the chip never hears the click.
     const onRow = rs.fn();
     document.body.addEventListener("click", onRow);
-    render(<TagChip name="visual" color="violet" size="md" onRemove={onRemove} />);
+    render(
+      <TooltipProvider>
+        <TagChip name="visual" color="violet" size="md" onRemove={onRemove} />
+      </TooltipProvider>,
+    );
     const remove = screen.getByRole("button", { name: "Remove tag visual" });
     expect(remove.className).toContain("text-muted-foreground");
     expect(remove.className).toContain("hit-min");
@@ -88,6 +98,23 @@ describe("TagChip", () => {
     document.body.removeEventListener("click", onRow);
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it("the × has its own kit tooltip, and its hit area clears the name", async () => {
+    render(
+      <TooltipProvider>
+        <TagChip name="visual" color="violet" size="md" onRemove={() => {}} />
+      </TooltipProvider>,
+    );
+    const chip = chipOf("visual");
+    // The hover text is on the dot and name only, so the × never shows it too.
+    expect(chip.getAttribute("title")).toBeNull();
+    // 5 px from the name to the 14 px ×, whose 24 px target reaches 5 px out.
+    expect(chip.className).toContain("gap-1.25");
+    const remove = screen.getByRole("button", { name: "Remove tag visual" });
+    expect(remove.getAttribute("title")).toBeNull();
+    act(() => remove.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Remove tag");
   });
 
   it("a clickable chip is a button that says it's a tag", () => {
@@ -105,7 +132,9 @@ describe("TagChip", () => {
       </>,
     );
     expect(screen.getByTitle("Filter by a").textContent).toBe("a");
-    expect(screen.getByText("b").closest('[data-slot="tag-chip"]')?.getAttribute("title")).toBe("");
+    expect(
+      screen.getByText("b").closest('[data-slot="tag-chip-label"]')?.getAttribute("title"),
+    ).toBe("");
   });
 });
 

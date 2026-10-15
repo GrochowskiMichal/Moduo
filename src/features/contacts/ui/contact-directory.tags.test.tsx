@@ -59,6 +59,8 @@ describe("contacts tag filter (MOD-97)", () => {
     const dot = investor.querySelector(".tag-dot") as HTMLElement;
     expect(dot.getAttribute("data-label")).toBe("green");
     expect(dot.getAttribute("aria-hidden")).toBe("true");
+    // The chip's own 6 px dot.
+    expect(dot.className).toContain("size-1.5");
     // A tag with no stored hue falls back to gray.
     const press = within(menu).getByRole("menuitemradio", { name: "press" });
     expect(press.querySelector(".tag-dot")?.getAttribute("data-label")).toBe("gray");
@@ -74,7 +76,7 @@ describe("contacts tag filter (MOD-97)", () => {
     expect(chip.getAttribute("data-label")).toBe("green");
     expect(chip.className).toContain("tag-chip-active");
     // The trigger names it; the chip adds no hover text of its own.
-    expect(chip.getAttribute("title")).toBe("");
+    expect(chip.querySelector('[data-slot="tag-chip-label"]')?.getAttribute("title")).toBe("");
     expect(trigger.textContent).not.toContain("#");
   });
 });
