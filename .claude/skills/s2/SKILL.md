@@ -27,7 +27,7 @@ On a Max plan, `/advisor fable` adds Fable 5.1 as an advisor at decision points.
 
 ## Steps
 1. **Select.** Use the block the designer named. Otherwise (`/s2 next`, or no target) open `specs/BUILD_ORDER.md` and take the first `[ ]` block whose dependencies are all ticked **and** that no open PR already claims (`gh pr list --state open --search "<ID>"`). State which block you picked and why. If none is eligible, or the choice is ambiguous, stop and say so.
-2. **Claim.** Set the session title `[<Module> <ID>] <name>` in `.claude/SESSION_TITLE`. On your `t/<owner>/<kebab>` branch, push and open a **draft PR** into the personal branch titled `[<ID>] <name>`. The draft PR is the claim other sessions check; no ledger edit.
+2. **Claim.** Set the session title `[<Module> <ID>] <name>` in `.claude/SESSION_TITLE`. On your `t/<owner>/<kebab>` branch, push an empty claim commit (`git commit --allow-empty -m "Claim <ID>"`) and open a **draft PR** into the personal branch titled `[<ID>] <name>`. The draft PR is the claim other sessions check; no ledger edit.
 3. **Load context.** Re-read the block's spec section (behavior, acceptance criteria, tests), `docs/gotchas/<area>.md` for every area you'll touch, and the relevant `docs/decisions/<area>.md`. Keep a short task list only if the block has more than a few acceptance criteria.
 4. **Build.** Reuse the patterns `/s1` found. Write the spec's tests alongside the code: use the `tdd` skill for logic and the `diagnosing-bugs` skill when something fails in a way you don't understand.
 5. **Verify.** Run `bun run verify`; a non-zero exit means not done, so fix and re-run. If you touched `src-tauri/`, also run `cargo check`, `cargo check --features lite` and `cargo test --lib` there. If the change is observable in the app, live-verify it with the preview tools and the hosted test account (see `docs/gotchas/ui.md`); a visual-snapshot diff means stop and ask, never auto-accept.
@@ -39,6 +39,7 @@ Open with one line: **Status: Built, not landed · Blocked · Not started**, plu
 - **Changed**: what was built, tight.
 - **Test this**: 3 to 5 concrete steps (step → expected → surface). Put the same text in the PR body; there is no separate checklist file.
 - **❓ Needs you** *(only if applicable)*: numbered decisions only the designer can take, each with your recommendation.
+- **🔎 Found** *(only if applicable)*: one line each, for anything outside the block; and say here when a commit exists only locally (an unfixed security hole).
 - **⚠ Broke** *(only if applicable)*: what failed and the options.
 
 Never suppress breakage, a blocker or a needed decision for brevity. Then stop; `/s3` lands the work.

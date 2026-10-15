@@ -50,7 +50,7 @@ On Max, Fable counts against at most half the weekly limit. On Pro it bills usag
 
 Pick the tier by what the diff touches; details are in the `/s3` skill. **Re-tighten everything in the "paused" line before the first external alpha/beta.**
 
-- **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review`. CI runs once, on PRs into `develop`.
+- **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review`. The full CI suite runs once, on PRs into `develop` (and on the push after merging).
 - **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add the `validator` subagent on the diff before merging.
 - **Paused until beta:** `/code-review ultra`, the `/claude-security` diff scan, `/code-review high` on every PR, per-block manual-test checklist files, hand-written next-session prompts, and Tier 3's designer pass. The floor that stays: gitleaks (hook + CI), `guard-git.sh`, `guard-prod-db.sh`, `static-checks` required on `develop`.
 
@@ -99,7 +99,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 ## Agent tooling (Claude Code)
 
 - **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
-- **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates every block.
+- **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates Tier 2 diffs.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the three guards above.
 - **MCP:** `supabase`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
 - **Parallel work:** one block per session, each session in its own worktree; dispatch background lanes with `claude agents`. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
