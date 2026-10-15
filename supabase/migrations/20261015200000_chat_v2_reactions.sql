@@ -20,7 +20,10 @@
 --      reactions__key_ok(reaction), and the six stored words become their
 --      emoji (thumbs_up → 👍, check → ✅, eyes → 👀, pray → 🙏, heart → ❤️,
 --      smile → 😄) through comment_reactions__words_to_emoji(), which changes
---      nothing else on the row and nothing the second time.
+--      nothing else on the row and nothing the second time. Then
+--      reactions__respell_stored() stores every key already held (comments
+--      and chat messages) in the one spelling (reactions__key_canonical),
+--      merging two spellings one person holds.
 --   3. comments_op_react (from its live body) checks the shared key and holds
 --      at most 20 kinds per comment; who may react is unchanged
 --      (comments__find). chat_op_react (from its live body) checks the shared
@@ -83,25 +86,68 @@ AS $function$
 $function$;
 
 -- One spelling per emoji, as Emojibase writes it: the text selector (U+FE0E)
--- goes, and a pictograph below U+1F000 or a keycap's #, * or digit gets U+FE0F
--- unless one (or a skin tone) already follows. So ❤ and ❤️ are one key, not two
--- chips. The ops store keys in this form; canonicalReactionKey in @contracts
--- does the same for the app's own optimistic copy.
+-- goes; U+FE0F goes before a skin tone and unless it follows a text-default
+-- code point; a text-default pictograph (Unicode's Emoji_Presentation=No, read
+-- from emoji-test.txt 18.0) or a keycap's #, * or digit gets U+FE0F unless one
+-- or a skin tone already follows. So ❤ and ❤️ are one key, ✅ stays ✅ and ✅️
+-- becomes ✅. The ops store keys in this form; canonicalReactionKey in
+-- @contracts takes the same steps (the list is REACTION_KEY_SET.textDefault;
+-- the drift gate compares them).
 CREATE OR REPLACE FUNCTION public.reactions__key_canonical(p_key text)
 RETURNS text
 LANGUAGE sql
 IMMUTABLE PARALLEL SAFE
 SET search_path TO ''
 AS $function$
-  SELECT regexp_replace(
-    replace(p_key, chr(65038), ''),
-    '([#*0-9' || chr(169) || chr(174) || chr(8252) || chr(8265) || chr(8482) || chr(8505)
-      || chr(8596) || '-' || chr(8618) || chr(8986) || '-' || chr(9215) || chr(9410)
-      || chr(9642) || '-' || chr(9726) || chr(9728) || '-' || chr(10175)
-      || chr(10548) || chr(10549) || chr(11013) || '-' || chr(11093)
+  WITH c AS (
+    -- the keycap bases, then REACTION_KEY_SET.textDefault
+    SELECT '[#*0-9'
+      || chr(169) || chr(174) || chr(8252) || chr(8265) || chr(8482) || chr(8505)
+      || chr(8596) || '-' || chr(8601) || chr(8617) || '-' || chr(8618) || chr(9000)
+      || chr(9167) || chr(9197) || '-' || chr(9199) || chr(9201) || '-' || chr(9202)
+      || chr(9208) || '-' || chr(9210) || chr(9410) || chr(9642) || '-' || chr(9643)
+      || chr(9654) || chr(9664) || chr(9723) || '-' || chr(9724)
+      || chr(9728) || '-' || chr(9732) || chr(9742) || chr(9745) || chr(9752)
+      || chr(9757) || chr(9760) || chr(9762) || '-' || chr(9763) || chr(9766)
+      || chr(9770) || chr(9774) || '-' || chr(9775) || chr(9784) || '-' || chr(9786)
+      || chr(9792) || chr(9794) || chr(9823) || '-' || chr(9824) || chr(9827)
+      || chr(9829) || '-' || chr(9830) || chr(9832) || chr(9851) || chr(9854)
+      || chr(9874) || chr(9876) || '-' || chr(9879) || chr(9881)
+      || chr(9883) || '-' || chr(9884) || chr(9888) || chr(9895)
+      || chr(9904) || '-' || chr(9905) || chr(9928) || chr(9935) || chr(9937)
+      || chr(9939) || chr(9961) || chr(9968) || '-' || chr(9969) || chr(9972)
+      || chr(9975) || '-' || chr(9977) || chr(9986) || chr(9992) || '-' || chr(9993)
+      || chr(9996) || '-' || chr(9997) || chr(9999) || chr(10002) || chr(10004)
+      || chr(10006) || chr(10013) || chr(10017) || chr(10035) || '-' || chr(10036)
+      || chr(10052) || chr(10055) || chr(10083) || '-' || chr(10084) || chr(10145)
+      || chr(10548) || '-' || chr(10549) || chr(11013) || '-' || chr(11015)
       || chr(12336) || chr(12349) || chr(12951) || chr(12953)
-      || '])(?![' || chr(65039) || chr(127995) || '-' || chr(127999) || '])',
-    '\1' || chr(65039), 'g')
+      || chr(127344) || '-' || chr(127345) || chr(127358) || '-' || chr(127359)
+      || chr(127490) || chr(127543) || chr(127777) || chr(127780) || '-' || chr(127788)
+      || chr(127798) || chr(127869) || chr(127894) || '-' || chr(127895)
+      || chr(127897) || '-' || chr(127899) || chr(127902) || '-' || chr(127903)
+      || chr(127947) || '-' || chr(127950) || chr(127956) || '-' || chr(127967)
+      || chr(127987) || chr(127989) || chr(127991) || chr(128063) || chr(128065)
+      || chr(128253) || chr(128329) || '-' || chr(128330)
+      || chr(128367) || '-' || chr(128368) || chr(128371) || '-' || chr(128377)
+      || chr(128391) || chr(128394) || '-' || chr(128397) || chr(128400) || chr(128421)
+      || chr(128424) || chr(128433) || '-' || chr(128434) || chr(128444)
+      || chr(128450) || '-' || chr(128452) || chr(128465) || '-' || chr(128467)
+      || chr(128476) || '-' || chr(128478) || chr(128481) || chr(128483) || chr(128488)
+      || chr(128495) || chr(128499) || chr(128506) || chr(128715)
+      || chr(128717) || '-' || chr(128719) || chr(128736) || '-' || chr(128741)
+      || chr(128745) || chr(128752) || chr(128755)
+      || ']' AS td,
+      '[' || chr(127995) || '-' || chr(127999) || ']' AS skin
+  )
+  SELECT regexp_replace(
+           regexp_replace(
+             regexp_replace(replace(p_key, chr(65038), ''),
+                            chr(65039) || '(?=' || skin || ')', '', 'g'),
+             '(?<!' || td || ')' || chr(65039), '', 'g'),
+           '(' || td || ')(?![' || chr(65039) || chr(127995) || '-' || chr(127999) || '])',
+           '\1' || chr(65039), 'g')
+    FROM c
 $function$;
 
 REVOKE ALL ON FUNCTION public.reactions__key_canonical(text) FROM PUBLIC, anon;
@@ -144,8 +190,87 @@ COMMENT ON FUNCTION public.comment_reactions__words_to_emoji() IS
 REVOKE ALL ON FUNCTION public.comment_reactions__words_to_emoji() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.comment_reactions__words_to_emoji() TO service_role;
 
+-- Stored keys in the one spelling: a key someone stored as ✅️ or ❤ before
+-- this migration (chat v1, or a comment) becomes ✅ or ❤️, so a chip and the
+-- key it reacts with match and the person can take it off. Two spellings one
+-- person holds become one (the earliest is kept). What isn't a key is left as
+-- it is. A chat message it changes gets a new updated_at, as a reaction does.
+CREATE OR REPLACE FUNCTION public.reactions__respell_stored()
+RETURNS integer
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_n integer := 0;
+  v_m integer;
+BEGIN
+  -- Comments: drop a second spelling the same person already holds …
+  DELETE FROM public.comment_reactions r
+   WHERE public.reactions__key_ok(r.reaction)
+     AND r.reaction <> public.reactions__key_canonical(r.reaction)
+     AND EXISTS (
+       SELECT 1 FROM public.comment_reactions o
+        WHERE o.comment_id = r.comment_id AND o.user_id = r.user_id
+          AND o.reaction <> r.reaction
+          AND public.reactions__key_ok(o.reaction)
+          AND public.reactions__key_canonical(o.reaction) = public.reactions__key_canonical(r.reaction)
+          AND (o.reaction = public.reactions__key_canonical(o.reaction)
+               OR (o.created_at, o.reaction) < (r.created_at, r.reaction)));
+  GET DIAGNOSTICS v_m = ROW_COUNT;
+  v_n := v_n + v_m;
+  -- … then store the rest in the one spelling (who, when and where kept).
+  UPDATE public.comment_reactions r
+     SET reaction = public.reactions__key_canonical(r.reaction)
+   WHERE public.reactions__key_ok(r.reaction)
+     AND r.reaction <> public.reactions__key_canonical(r.reaction);
+  GET DIAGNOSTICS v_m = ROW_COUNT;
+  v_n := v_n + v_m;
+
+  -- Chat messages: merge the people under each key's one spelling.
+  UPDATE public.chat_messages m
+     SET reactions = x.reactions
+    FROM (
+      SELECT g.id, jsonb_object_agg(g.k, g.people) AS reactions
+        FROM (
+          SELECT u.id, u.k, jsonb_agg(u.person ORDER BY u.first) AS people
+            FROM (
+              SELECT e.id, e.k, e.person, min(ARRAY[e.ko, e.po]) AS first
+                FROM (
+                  SELECT m2.id,
+                         CASE WHEN public.reactions__key_ok(kv.key)
+                              THEN public.reactions__key_canonical(kv.key) ELSE kv.key END AS k,
+                         p.person, kv.ko, p.po
+                    FROM public.chat_messages m2
+                    CROSS JOIN LATERAL jsonb_each(m2.reactions) WITH ORDINALITY AS kv(key, value, ko)
+                    CROSS JOIN LATERAL jsonb_array_elements(
+                      CASE WHEN jsonb_typeof(kv.value) = 'array' THEN kv.value ELSE '[]'::jsonb END
+                    ) WITH ORDINALITY AS p(person, po)
+                   WHERE jsonb_typeof(m2.reactions) = 'object'
+                     AND EXISTS (SELECT 1 FROM jsonb_object_keys(m2.reactions) k2
+                                  WHERE public.reactions__key_ok(k2)
+                                    AND k2 <> public.reactions__key_canonical(k2))
+                ) e
+               GROUP BY e.id, e.k, e.person
+            ) u
+           GROUP BY u.id, u.k
+        ) g
+       GROUP BY g.id
+    ) x
+   WHERE m.id = x.id;
+  GET DIAGNOSTICS v_m = ROW_COUNT;
+  RETURN v_n + v_m;
+END;
+$function$;
+
+COMMENT ON FUNCTION public.reactions__respell_stored() IS
+  'CV-7c: stores every reaction key in its one spelling (comments and chat messages), merging two spellings one person holds; a no-op the second time.';
+
+REVOKE ALL ON FUNCTION public.reactions__respell_stored() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reactions__respell_stored() TO service_role;
+
 ALTER TABLE public.comment_reactions DROP CONSTRAINT IF EXISTS comment_reactions_reaction_check;
 SELECT public.comment_reactions__words_to_emoji();
+SELECT public.reactions__respell_stored();
 ALTER TABLE public.comment_reactions
   ADD CONSTRAINT comment_reactions_reaction_check CHECK (public.reactions__key_ok(reaction));
 

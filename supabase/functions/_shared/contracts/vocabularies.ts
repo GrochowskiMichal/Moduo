@@ -1190,15 +1190,14 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 // Reactions (CV-7c; round-3 §2.8, Assumptions #18, #29) — one key for chat
 // messages, task and note comments and your quick row. Mirrors
 // public.reactions__key_ok(text) in 20261015200000_chat_v2_reactions: exactly
-// one standard emoji as Emojibase writes it, 1–32 code points (≤ 128 bytes):
-// a flag (two regional indicators), a #/* keycap, or one pictograph with an
-// optional variation selector, skin tone and tag sequence, joined to more of
-// the same only by U+200D. Every code point comes from REACTION_KEY_SET (the
-// same numbers as reactions__key_pattern(); the drift gate compares them), so
-// no letters, digits, spaces, controls, invisible or direction marks, lone
-// surrogates, and never two emoji side by side. The `:name:` form of a live
-// custom emoji arrives with CV-20, which widens both halves. A reaction never
-// notifies anyone.
+// one standard emoji, 1–32 code points (≤ 128 bytes): a flag (two regional
+// indicators), a #/*/digit keycap, or one pictograph with an optional
+// variation selector, skin tone and tag sequence, joined to more of the same
+// only by U+200D. Every code point comes from REACTION_KEY_SET (the same
+// numbers as reactions__key_pattern(); the drift gate compares them), so no
+// letters, spaces, controls, invisible or direction marks, lone surrogates,
+// and never two emoji side by side. The `:name:` form of a live custom emoji
+// arrives with CV-20, which widens both halves. A reaction never notifies.
 // ---------------------------------------------------------------------------
 
 type CodeRange = number | readonly [number, number];
@@ -1217,36 +1216,86 @@ export const REACTION_KEY_SET = {
   zwj: 8205,
   keycap: 8419,
   ri: [[127462, 127487]],
+  /** #, * and 0–9: a keycap's first code point. */
+  keycapBase: [35, 42, [48, 57]],
+  /**
+   * The pictographs that show as text unless U+FE0F follows (Unicode's
+   * Emoji_Presentation=No, read from emoji-test.txt 18.0: each code point
+   * written "x FE0F" in a fully-qualified sequence), less the keycap bases.
+   * Emojibase writes these with U+FE0F and every other pictograph without.
+   */
+  textDefault: [
+    169, 174, 8252, 8265, 8482, 8505, [8596, 8601], [8617, 8618], 9000, 9167, [9197, 9199],
+    [9201, 9202], [9208, 9210], 9410, [9642, 9643], 9654, 9664, [9723, 9724], [9728, 9732],
+    9742, 9745, 9752, 9757, 9760, [9762, 9763], 9766, 9770, [9774, 9775], [9784, 9786], 9792,
+    9794, [9823, 9824], 9827, [9829, 9830], 9832, 9851, 9854, 9874, [9876, 9879], 9881,
+    [9883, 9884], 9888, 9895, [9904, 9905], 9928, 9935, 9937, 9939, 9961, [9968, 9969], 9972,
+    [9975, 9977], 9986, [9992, 9993], [9996, 9997], 9999, 10002, 10004, 10006, 10013, 10017,
+    [10035, 10036], 10052, 10055, [10083, 10084], 10145, [10548, 10549], [11013, 11015], 12336,
+    12349, 12951, 12953, [127344, 127345], [127358, 127359], 127490, 127543, 127777,
+    [127780, 127788], 127798, 127869, [127894, 127895], [127897, 127899], [127902, 127903],
+    [127947, 127950], [127956, 127967], 127987, 127989, 127991, 128063, 128065, 128253,
+    [128329, 128330], [128367, 128368], [128371, 128377], 128391, [128394, 128397], 128400,
+    128421, 128424, [128433, 128434], 128444, [128450, 128452], [128465, 128467],
+    [128476, 128478], 128481, 128483, 128488, 128495, 128499, 128506, 128715, [128717, 128719],
+    [128736, 128741], 128745, 128752, 128755,
+  ],
 } as const satisfies Record<string, CodeRange | readonly CodeRange[]>;
 
-const cp = (n: number) => String.fromCodePoint(n);
-const charClass = (ranges: readonly CodeRange[]) =>
-  `[${ranges.map((r) => (typeof r === "number" ? cp(r) : `${cp(r[0])}-${cp(r[1])}`)).join("")}]`;
-
-const REACTION_KEY_PATTERN = (() => {
-  const s = REACTION_KEY_SET;
-  const one = `(?:${charClass(s.base)}${charClass(s.vs)}?${charClass(s.skin)}?${cp(65039)}?(?:${charClass(s.tag)}+${cp(s.tagEnd)})?)`;
-  return new RegExp(
-    `^(?:${charClass(s.ri)}${charClass(s.ri)}|[#*0-9]${cp(65039)}?${cp(s.keycap)}|${one}(?:${cp(s.zwj)}${one})*)$`,
-    "u",
+const inRanges = (n: number, ranges: CodeRange | readonly CodeRange[]): boolean =>
+  (Array.isArray(ranges) ? ranges : [ranges]).some((r: CodeRange) =>
+    typeof r === "number" ? n === r : n >= r[0] && n <= r[1],
   );
-})();
-
-/** The pictographs below U+1F000 (what gets U+FE0F in the one spelling). */
-const BMP_BASE = REACTION_KEY_SET.base.filter((r) => (typeof r === "number" ? r : r[1]) < 126976);
-const NEEDS_VS16 = new RegExp(
-  `([#*0-9${charClass(BMP_BASE).slice(1, -1)}])(?![${cp(65039)}${cp(127995)}-${cp(127999)}])`,
-  "gu",
-);
 
 /**
- * One spelling per emoji, as Emojibase writes it (the same as the server's
- * reactions__key_canonical): the text selector U+FE0E goes, and a pictograph
- * below U+1F000 or a keycap's #, * or digit gets U+FE0F unless one (or a skin
- * tone) already follows. So ❤ and ❤️ are one key.
+ * Each code point as one ASCII letter, checked numerically (JavaScriptCore
+ * and V8 agree on numbers; astral character classes they don't always).
+ */
+function reactionClass(n: number): string {
+  const s = REACTION_KEY_SET;
+  if (inRanges(n, s.ri)) return "R";
+  if (inRanges(n, s.base)) return "B";
+  if (n === 65039) return "F";
+  if (n === 65038) return "V";
+  if (inRanges(n, s.skin)) return "S";
+  if (inRanges(n, s.tag)) return "T";
+  if (n === s.tagEnd) return "E";
+  if (n === s.zwj) return "Z";
+  if (n === s.keycap) return "K";
+  if (inRanges(n, s.keycapBase)) return "H";
+  return "?";
+}
+/** The grammar of reactions__key_pattern(), over reactionClass letters. */
+const ONE = "B[VF]?S?F?(?:T+E)?";
+const REACTION_KEY_GRAMMAR = new RegExp(`^(?:RR|HF?K|${ONE}(?:Z${ONE})*)$`);
+
+const needsVs16 = (n: number) =>
+  inRanges(n, REACTION_KEY_SET.textDefault) || inRanges(n, REACTION_KEY_SET.keycapBase);
+const isSkin = (n: number | undefined) => n !== undefined && inRanges(n, REACTION_KEY_SET.skin);
+
+/**
+ * One spelling per emoji, as Emojibase writes it (the same steps as the
+ * server's reactions__key_canonical): the text selector U+FE0E goes; U+FE0F
+ * goes before a skin tone and unless it follows a text-default code point; a
+ * text-default pictograph or keycap base gets U+FE0F unless one or a skin
+ * tone follows. So ❤ and ❤️ are one key, ✅ stays ✅, and ✅️ becomes ✅.
  */
 export function canonicalReactionKey(key: string): string {
-  return key.replaceAll(cp(65038), "").replace(NEEDS_VS16, `$1${cp(65039)}`);
+  const cps = [...key].map((c) => c.codePointAt(0) ?? 0).filter((n) => n !== 65038);
+  const out: number[] = [];
+  for (let i = 0; i < cps.length; i++) {
+    const n = cps[i];
+    const next = cps[i + 1];
+    if (n === 65039) {
+      const prev = i > 0 ? cps[i - 1] : undefined;
+      if (prev === undefined || !needsVs16(prev) || isSkin(next)) continue;
+      out.push(n);
+      continue;
+    }
+    out.push(n);
+    if (needsVs16(n) && next !== 65039 && !isSkin(next)) out.push(65039);
+  }
+  return String.fromCodePoint(...out);
 }
 
 /** Moduo's six quick reactions, in order (CH16a): your row when you set none. */
@@ -1264,7 +1313,9 @@ export function isReactionKey(value: unknown): value is ReactionKey {
   if (typeof value !== "string") return false;
   const length = [...value].length; // code points, as Postgres counts them
   if (length < 1 || length > REACTION_KEY_MAX) return false;
-  return REACTION_KEY_PATTERN.test(value);
+  let classes = "";
+  for (const c of value) classes += reactionClass(c.codePointAt(0) ?? 0);
+  return REACTION_KEY_GRAMMAR.test(classes);
 }
 export const REACTION_KEY = z.string().refine(isReactionKey, { message: "A reaction is an emoji." });
 export function parseReactionKey(input: unknown): SafeParseResult<ReactionKey> {

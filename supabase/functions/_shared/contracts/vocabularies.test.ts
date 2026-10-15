@@ -546,6 +546,8 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
     const v = await import("./vocabularies.ts");
     expect(v.DEFAULT_QUICK_REACTIONS.join("")).toBe("👍✅👀🙏❤️😄");
     expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.isReactionKey(k))).toBe(true);
+    // Stored as they are: a quick-row key and the key it reacts with are one chip.
+    expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.canonicalReactionKey(k) === k)).toBe(true);
     expect(v.MAX_REACTION_KINDS).toBe(20);
     expect(v.MAX_QUICK_REACTIONS).toBe(6);
   });

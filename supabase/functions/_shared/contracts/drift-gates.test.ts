@@ -326,14 +326,35 @@ describe("cross-runtime drift guards", () => {
     // the same code points as REACTION_KEY_SET, in the same order.
     expect(sql).toContain("char_length(p_key) BETWEEN 1 AND 32");
     expect(sql).toContain("AND p_key ~ public.reactions__key_pattern()");
-    const fnAt = sql.indexOf("CREATE OR REPLACE FUNCTION public.reactions__key_pattern()");
-    const body = sql.slice(fnAt, sql.indexOf("$function$;", fnAt));
-    const chrs = [...body.matchAll(/chr\((\d+)\)/g)].map((m) => Number(m[1]));
+    const fnBody = (name: string) => {
+      const at = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
+      expect(at, name).toBeGreaterThan(-1);
+      return sql.slice(at, sql.indexOf("$function$;", at)).replace(/\s+/g, " ");
+    };
+    // Each list spelled as the SQL spells it: chr(n) for one code point,
+    // chr(a) || '-' || chr(b) for a range, so the range ends are checked too.
+    type R = number | readonly [number, number];
+    const spell = (ranges: readonly R[]) =>
+      ranges
+        .map((r) => (typeof r === "number" ? `chr(${r})` : `chr(${r[0]}) || '-' || chr(${r[1]})`))
+        .join(" || ");
     const s = REACTION_KEY_SET;
-    const flat = (r: unknown): number[] =>
-      Array.isArray(r) ? r.flatMap(flat) : typeof r === "number" ? [r] : [];
-    const set = flat([s.base, s.vs, s.skin, s.tag, s.tagEnd, s.zwj, s.keycap, s.ri]);
-    expect(chrs.slice(0, set.length)).toEqual(set);
+    const pattern = fnBody("reactions__key_pattern");
+    expect(pattern).toContain(`'[' || ${spell(s.base)} || ']' AS base`);
+    expect(pattern).toContain(`'[' || ${spell(s.vs)} || ']' AS vs`);
+    expect(pattern).toContain(`'[' || ${spell(s.skin)} || ']' AS skin`);
+    expect(pattern).toContain(`'[' || ${spell(s.tag)} || ']' AS tag`);
+    expect(pattern).toContain(`chr(${s.tagEnd}) AS tag_end`);
+    expect(pattern).toContain(`chr(${s.zwj}) AS zwj`);
+    expect(pattern).toContain(`chr(${s.keycap}) AS keycap`);
+    expect(pattern).toContain(`'[' || ${spell(s.ri)} || ']' AS ri`);
+    const keycapBases = s.keycapBase
+      .map((r) => (typeof r === "number" ? String.fromCodePoint(r) : `${String.fromCodePoint(r[0])}-${String.fromCodePoint(r[1])}`))
+      .join("");
+    expect(pattern).toContain(`'|[${keycapBases}]'`);
+    // The one spelling: the keycap bases, then the text-default pictographs.
+    const canonical = fnBody("reactions__key_canonical");
+    expect(canonical).toContain(`SELECT '[${keycapBases}' || ${spell(s.textDefault)} || ']' AS td`);
     expect(sql).toContain("CHECK (public.reactions__key_ok(reaction))");
     expect(sql).toContain("IF NOT public.reactions__key_ok(p_reaction) THEN");
     expect(sql).toContain("IF NOT public.reactions__key_ok(p_key) THEN");

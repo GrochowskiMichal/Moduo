@@ -1,8 +1,14 @@
 // TV-U13 (AC11.8) and CV-7c (CH16a): any emoji, your quick row, who reacted,
 // and an edit that keeps what a comment stores.
 
-import { DEFAULT_QUICK_REACTIONS } from "@contracts/vocabularies";
+import {
+  canonicalReactionKey,
+  DEFAULT_QUICK_REACTIONS,
+  isReactionKey,
+} from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
+
+import { EMOJI_GROUPS } from "@/features/chat/emoji";
 
 import { commentBodyWithReferences, editableComment } from "./comments";
 import { toggledReactions } from "./hooks/use-comment-thread";
@@ -16,6 +22,14 @@ import {
 
 const names: Record<string, string> = { u1: "Maciej", u2: "Mike", u3: "Anna" };
 const nameOf = (id: string) => names[id] ?? null;
+
+describe("the picker's emoji (CV-7c)", () => {
+  it("are keys stored as they are, so a picked emoji and its chip are one", () => {
+    const all = EMOJI_GROUPS.flatMap((g) => g.items.map((i) => i.e));
+    expect(all.length).toBeGreaterThan(100);
+    expect(all.filter((e) => !isReactionKey(e) || canonicalReactionKey(e) !== e)).toEqual([]);
+  });
+});
 
 describe("your quick row (CH16a)", () => {
   it("is Moduo's six when you set none", () => {
