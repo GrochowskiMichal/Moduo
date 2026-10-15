@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import {
   DEV,
   devWorkspace,
+  removeRun,
   rpc,
   runTag,
   type Session,
@@ -37,6 +38,15 @@ test.beforeAll(async () => {
   tag = runTag();
 });
 
+/** The projects this run made, soft-deleted at the end (with their tasks and the
+ *  Inbox ones tagged with this run) so the shared dev workspace stays under
+ *  the app's 500-project first-load read. */
+const created: string[] = [];
+
+test.afterAll(async () => {
+  await removeRun(ws.id, tag, created);
+});
+
 const day = (back: number) => {
   const d = new Date();
   d.setDate(d.getDate() - back);
@@ -50,6 +60,7 @@ test("Add time logs an entry, and the report exports CSV and its print layout", 
     p_workspace_id: ws.id,
     p_project: { name: `Billable ${tag}` },
   });
+  created.push(project.id);
   const rows = await rpc<Array<{ id: string }> | { id: string }>(dev, "tasks_op_create", {
     p_workspace_id: ws.id,
     p_task: { title: `Homepage ${tag}`, bucket_id: project.id },
