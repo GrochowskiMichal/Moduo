@@ -1,5 +1,5 @@
 -- TX-7 · Workspace emails (specs/transactional-email.md AC34–AC39;
--- supabase/migrations/20261015090000_tx7_workspace_emails.sql).
+-- supabase/migrations/20261015153935_tx7_workspace_emails.sql).
 --
 --   bun run db:test workspace_emails
 --

@@ -44,7 +44,9 @@ async function accept() {
 
 describe("JoinPage — invite for another address (TX-7 AC35)", () => {
   it("says which address the invite is for, masked, and offers Sign out", async () => {
-    h.joinInvite.mockImplementation(() => Promise.reject(new InviteEmailMismatchError("t•••@becker.studio")));
+    h.joinInvite.mockImplementation(() =>
+      Promise.reject(new InviteEmailMismatchError("t•••@becker.studio")),
+    );
     render(<JoinPage />);
     await accept();
 
@@ -56,7 +58,9 @@ describe("JoinPage — invite for another address (TX-7 AC35)", () => {
   });
 
   it("Sign out keeps the invite for after signing in with the right address", async () => {
-    h.joinInvite.mockImplementation(() => Promise.reject(new InviteEmailMismatchError("t•••@becker.studio")));
+    h.joinInvite.mockImplementation(() =>
+      Promise.reject(new InviteEmailMismatchError("t•••@becker.studio")),
+    );
     render(<JoinPage />);
     await accept();
     await act(async () => {

@@ -83,7 +83,10 @@ import {
   type TrackTimeInput,
 } from "../features/tasks/model";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
-import { InviteEmailMismatchError, isInviteEmailMismatch } from "../features/workspaces/invite-join";
+import {
+  InviteEmailMismatchError,
+  isInviteEmailMismatch,
+} from "../features/workspaces/invite-join";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 // Any missing table (develop's deploy-gap guard); task-rows' version names the table.

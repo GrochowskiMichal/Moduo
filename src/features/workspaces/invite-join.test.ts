@@ -33,11 +33,19 @@ describe("invite for another address (AC35)", () => {
   it("says which address the invite is for, masked", () => {
     const error = new InviteEmailMismatchError("t•••@becker.studio");
     expect(error.maskedEmail).toBe("t•••@becker.studio");
-    expect(error.message).toBe("This invite is for t•••@becker.studio. Sign in with that address to join.");
+    expect(error.message).toBe(
+      "This invite is for t•••@becker.studio. Sign in with that address to join.",
+    );
   });
 
   it("never shows a hint that isn't a masked address", () => {
-    for (const hint of [undefined, "", "tom@becker.studio", "<b>x</b>•••@a", "t•••@becker studio"]) {
+    for (const hint of [
+      undefined,
+      "",
+      "tom@becker.studio",
+      "<b>x</b>•••@a",
+      "t•••@becker studio",
+    ]) {
       const error = new InviteEmailMismatchError(hint);
       expect(error.maskedEmail).toBeNull();
       expect(error.message).toBe(

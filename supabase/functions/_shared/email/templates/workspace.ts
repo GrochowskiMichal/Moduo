@@ -18,7 +18,7 @@
  * like a link or an address becomes "a workspace"; there is no message field.
  * With the 20-a-day cap (S2) that leaves nothing worth sending as spam.
  *
- * The payloads are written by SQL in snake_case (20261015090000_tx7_workspace_emails.sql)
+ * The payloads are written by SQL in snake_case (20261015153935_tx7_workspace_emails.sql)
  * and carry every date the email prints, so a retry renders the same body
  * (docs/gotchas/email.md). Dates are written in UTC: Moduo stores no zone for
  * the recipient, and these emails only name a day.

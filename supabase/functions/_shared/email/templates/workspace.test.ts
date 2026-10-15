@@ -12,7 +12,7 @@ import {
   workspaceRemovedEmail,
 } from "./workspace.ts";
 
-// The payloads 20261015090000_tx7_workspace_emails.sql writes (snake_case, from SQL).
+// The payloads 20261015153935_tx7_workspace_emails.sql writes (snake_case, from SQL).
 const INVITE = {
   invite_id: "5f1d2c3b-4a59-4e6f-8a7b-9c0d1e2f3a4b",
   email: "tom@becker.studio",
