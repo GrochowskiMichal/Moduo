@@ -122,6 +122,18 @@ describe("taskMatchesQuery", () => {
     expect(taskMatchesQuery(task, "ENG-123")).toBe(false);
   });
 
+  it("finds a task by its own handle, however it's typed (MOD-126)", () => {
+    const numbered = { ...task, number: 99 };
+    for (const query of ["mod-99", "MOD-99", "Mod-99", "mod 99", "MOD-99 capture"]) {
+      expect(taskMatchesQuery(numbered, query, "MOD")).toBe(true);
+    }
+    expect(taskMatchesQuery(numbered, "mod-98", "MOD")).toBe(false);
+    expect(taskMatchesQuery(numbered, "eng-99", "MOD")).toBe(false);
+    // No key (a workspace without one) or no number yet (unsaved): no handle.
+    expect(taskMatchesQuery(numbered, "mod-99")).toBe(false);
+    expect(taskMatchesQuery(task, "mod-99", "MOD")).toBe(false);
+  });
+
   it("an empty query matches everything", () => {
     expect(taskMatchesQuery(task, "")).toBe(true);
     expect(taskMatchesQuery(task, "   ")).toBe(true);

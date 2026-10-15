@@ -336,6 +336,7 @@ export function useTasksFilters({
   enabled,
   keepTaskId = null,
   searchExtra,
+  taskKey = null,
 }: {
   workspaceId: string;
   scope: string;
@@ -350,6 +351,8 @@ export function useTasksFilters({
   /** Tasks only a search reaches, after the scope's own (archived projects'
    *  tasks in All, TV-U6: search still finds them, labelled). */
   searchExtra?: Task[];
+  /** The workspace's task key ("MOD"): search finds a task by its handle (MOD-126). */
+  taskKey?: string | null;
 }): TasksFilterControls {
   // Search is a live narrowing, not a preference: a new scope starts empty.
   const scopeKey = `${workspaceId}:${scope}`;
@@ -465,7 +468,7 @@ export function useTasksFilters({
       ctx,
     );
     const passing = searching
-      ? filtered.filter((t) => taskMatchesQuery(t, query) || !!serverIds?.has(t.id))
+      ? filtered.filter((t) => taskMatchesQuery(t, query, taskKey) || !!serverIds?.has(t.id))
       : filtered;
     if (!keeping) return passing;
     const kept = new Set([keeping]);
@@ -474,7 +477,7 @@ export function useTasksFilters({
     if ([...kept].every((id) => passing.some((t) => t.id === id))) return passing;
     const pass = new Set(passing.map((t) => t.id));
     return scopeTasks.filter((t) => pass.has(t.id) || kept.has(t.id));
-  }, [scopeTasks, searchExtra, conditions, ctx, query, keeping, serverIds]);
+  }, [scopeTasks, searchExtra, conditions, ctx, query, keeping, serverIds, taskKey]);
 
   const tokenContext = useMemo(
     () => ({

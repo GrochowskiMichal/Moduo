@@ -869,6 +869,8 @@ export function TasksPlanView({
     // never clears saved filters (TV-U2).
     keepTaskId: linkedTaskId ?? keptArchivedId,
     searchExtra: archivedSearchTasks,
+    // "MOD-99" finds that task (MOD-126).
+    taskKey,
   });
   const scopeTasks = filtering.tasks;
   useLayoutEffect(() => {
