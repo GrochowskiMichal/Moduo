@@ -211,6 +211,33 @@ describe("tasks connector helpers", () => {
     expect("queued_by_me" in shapeTask(tasks[0]!, shapeData(tasks), now)).toBe(false);
   });
 
+  it("answers descriptions as Markdown, an older HTML one too, and cuts an excerpt before a link (call #15, MOD-120)", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const html =
+      '<p class="mb-2 last:mb-0"><span style="white-space: pre-wrap;">Currently reads as asterisks. </span><b><strong class="font-semibold" style="white-space: pre-wrap;">Example</strong></b><span style="white-space: pre-wrap;"> attached.</span></p>' +
+      `<p class="mb-2 last:mb-0"><span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${id}">Secret title</span></p>`;
+    const markdown = "**Adding an issue**\n- Put it in **Triage**.";
+    const long = `${"x".repeat(270)} [task](moduo://task/${id}) more`;
+    const tasks = [
+      task("html", { description: html }),
+      task("md", { description: markdown }),
+      task("long", { description: long }),
+    ];
+    const data = shapeData(tasks);
+    const now = new Date("2026-10-15T12:00:00Z");
+    const full = shapeTask(tasks[0]!, data, now, true);
+    expect(full.description).toBe(
+      `Currently reads as asterisks. **Example** attached.\n\n[task](moduo://task/${id})`,
+    );
+    expect(full.description).not.toContain("<");
+    expect(full.description).not.toContain("Secret");
+    // Markdown is answered as it is stored.
+    expect(shapeTask(tasks[1]!, data, now, true).description).toBe(markdown);
+    // tasks_list's excerpt (280) never ends in half a reference.
+    expect(shapeTask(tasks[2]!, data, now).description).toBe("x".repeat(270));
+    expect(shapeTask(tasks[2]!, data, now, true).description).toBe(long);
+  });
+
   it("fills Focus settings with the app's defaults", () => {
     expect(focusSettingsFrom({})).toEqual(DEFAULT_FOCUS_SETTINGS);
     expect(focusSettingsFrom(null)).toEqual(DEFAULT_FOCUS_SETTINGS);

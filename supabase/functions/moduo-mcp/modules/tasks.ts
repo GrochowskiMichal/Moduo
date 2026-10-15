@@ -88,6 +88,14 @@ import {
 
 const DEPRECATED = "Deprecated (kept until TV-D7):";
 
+/**
+ * A description is Markdown, read and written (call #15, MOD-120): what the
+ * app's editor types and saves, and what an older (HTML) description reads
+ * as. References keep no title (RF-1), only the item's kind.
+ */
+const DESCRIPTION_MARKDOWN =
+  'Markdown: **bold**, *italic*, `code`, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes. Reference an item as [task](moduo://task/<uuid>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it), a date as [Oct 17](moduo://date/2026-10-17).';
+
 /** The fields tasks_create / tasks_update take, as the ops want them. */
 function taskFieldsFromArgs(args: Row): Row {
   const fields: Row = {};
@@ -638,7 +646,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_get",
       description:
-        "One task in full: properties, tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, with Links: View its latest comments (up to 20, the newest last; earlier_comments counts the rest, which comments_list reads), and its recent attributed activity trail.",
+        "One task in full: properties (its description as Markdown, references as moduo:// links), tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, with Links: View its latest comments (up to 20, the newest last; earlier_comments counts the rest, which comments_list reads), and its recent attributed activity trail.",
       access: "view",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
@@ -997,7 +1005,7 @@ export const tasksConnectorModule: ConnectorModule = {
           bucket_id: { type: "string", description: "Older name for project_id." },
           section_id: { type: "string", description: "Section uuid in that project (see sections_list)." },
           parent_id: { type: "string", description: "Make it a subtask of this task (handle or uuid; one level only)." },
-          description: { type: "string", description: "Longer notes (plain text or Markdown)." },
+          description: { type: "string", description: `Longer notes. ${DESCRIPTION_MARKDOWN}` },
           status: { type: "string", description: "backlog · todo · in_progress · done · wont_do, or the project's status name or id. Default: to do." },
           assignee_id: { type: ["string", "null"], description: "Member uuid (see tasks_list_assignees), \"me\", or null for Unassigned." },
           team_id: { type: ["string", "null"], description: "Route it to this team (see teams_list); nobody's until someone takes it." },
@@ -1068,7 +1076,7 @@ export const tasksConnectorModule: ConnectorModule = {
           bucket_id: { type: "string", description: "Older name for project_id." },
           section_id: { type: ["string", "null"], description: "Section uuid in its project, or null." },
           parent_id: { type: ["string", "null"], description: "Parent task (handle or uuid), or null for top level." },
-          description: { type: "string", description: "New description." },
+          description: { type: "string", description: `New description (replaces it whole). ${DESCRIPTION_MARKDOWN}` },
           status: { type: "string", description: "A category word, or the project's status name or id." },
           team_id: { type: ["string", "null"], description: "Team uuid, or null." },
           due_on: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear." },

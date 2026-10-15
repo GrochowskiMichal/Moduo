@@ -142,6 +142,13 @@ through the same ops and gates as the app; the rule for all of them:
   and so does every argument that points at a task from another tool (a
   link's ends, a comment's target: `assertReach` resolves it and the op gets
   the uuid, MOD-112).
+- **Descriptions are Markdown, read and written** (dogfood call #15): the
+  app's editor stores Markdown; an older description (the editor's HTML) is
+  answered converted (`_shared/description-markdown.ts`), and `tasks_list`'s
+  280-character excerpt never ends in half a link. A reference is
+  `[task](moduo://task/<uuid>)` (the kind's word, never a title; `"card"` or
+  `"link"` as the link's title for how it shows), a date chip
+  `[Oct 17](moduo://date/2026-10-17)`.
 - **Status by category or name:** a category word (`backlog` · `todo` ·
   `in_progress` · `done` · `wont_do`; the older `archived` = won't do), the
   project's own status name, or its id (`tasks__resolve_status`).
