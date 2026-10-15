@@ -208,10 +208,11 @@ BEGIN
 END;
 $function$;
 
--- Reopen a person's closed items (never one closed because access went), and
--- undismiss their twins. A chain or an Every-message line reopens only its
--- newest item (an older one stays closed, whatever closed the newer), and only
--- while no item of it is open.
+-- Reopen a person's closed items (never one closed because access went, never
+-- one in a conversation they can't read now, never a chain's they stopped
+-- following), and undismiss their twins. A chain or an Every-message line
+-- reopens only its newest item (an older one stays closed, whatever closed the
+-- newer), and only while no item of it is open.
 CREATE OR REPLACE FUNCTION public.chat__reopen(p_user uuid, p_ids uuid[])
  RETURNS integer
  LANGUAGE plpgsql
@@ -227,6 +228,10 @@ BEGIN
       LEFT JOIN public.chat_messages m ON m.id = k.message_id
      WHERE k.user_id = p_user AND k.id = ANY (coalesce(p_ids, '{}'::uuid[]))
        AND k.done_at IS NOT NULL AND k.done_how <> 'closed'
+       AND public.chat__can_read_channel_as(k.channel_id, p_user)
+       AND NOT (k.reason = 'reply' AND EXISTS (
+             SELECT 1 FROM public.chat_chain_mutes cm
+              WHERE cm.user_id = p_user AND cm.root_id = k.chain_root_id))
   ), grouped AS (
     SELECT DISTINCT ON (c.reason, coalesce(c.chain_root_id, c.channel_id))
            c.id, c.reason, c.channel_id, c.chain_root_id, c.at, c.tie
@@ -642,15 +647,21 @@ BEGIN
   -- CV-5: only people named for the first time hear about it (CH75), and
   -- someone it no longer names at all leaves Catch up and the bell.
   PERFORM public.chat__fan_out(v_msg, v_channel, v_me, v_before);
-  PERFORM public.chat__close(k.user_id, ARRAY[k.id], 'closed')
-     FROM public.chat_catchup k
-    WHERE k.message_id = v_msg.id AND k.done_at IS NULL
-      AND k.reason IN ('mention', 'team_mention', 'everyone')
-      AND NOT (k.user_id = ANY (v_msg.mentioned_user_ids))
-      AND NOT v_msg.mentions_everyone
-      AND NOT EXISTS (SELECT 1 FROM public.team_members tm
-                       WHERE tm.team_id = ANY (v_msg.mentioned_team_ids)
-                         AND tm.user_id = k.user_id AND tm.deleted_at IS NULL);
+  -- Still named through a team means a live team of this workspace, as the
+  -- fan-out reads it. One close per person.
+  PERFORM public.chat__close(g.user_id, g.ids, 'closed')
+     FROM (SELECT k.user_id, array_agg(k.id) AS ids
+             FROM public.chat_catchup k
+            WHERE k.message_id = v_msg.id AND k.done_at IS NULL
+              AND k.reason IN ('mention', 'team_mention', 'everyone')
+              AND NOT (k.user_id = ANY (coalesce(v_msg.mentioned_user_ids, '{}'::uuid[])))
+              AND NOT coalesce(v_msg.mentions_everyone, false)
+              AND NOT EXISTS (SELECT 1 FROM public.team_members tm
+                                JOIN public.teams t ON t.id = tm.team_id
+                               WHERE tm.team_id = ANY (coalesce(v_msg.mentioned_team_ids, '{}'::uuid[]))
+                                 AND t.deleted_at IS NULL AND t.workspace_id = v_channel.workspace_id
+                                 AND tm.user_id = k.user_id AND tm.deleted_at IS NULL)
+            GROUP BY k.user_id) g;
   RETURN v_msg;
 END;
 $function$;
@@ -957,17 +968,33 @@ BEGIN
   IF NOT public.tasks_module_can_access_workspace(p_workspace_id) THEN
     RAISE EXCEPTION 'You don''t have access to this workspace.';
   END IF;
+  -- Chat (CV-5): a row with a Catch up twin comes back only with its twin
+  -- (chat__reopen undismisses what it reopens), so a chain never shows twice
+  -- and a refused item keeps its row dismissed.
+  IF EXISTS (SELECT 1 FROM public.chat_catchup k
+              WHERE k.user_id = auth.uid() AND k.activity_id = p_activity_id
+                AND k.workspace_id = p_workspace_id) THEN
+    PERFORM public.chat__reopen(auth.uid(), ARRAY(
+      SELECT k.id FROM public.chat_catchup k
+       WHERE k.user_id = auth.uid() AND k.activity_id = p_activity_id
+         AND k.workspace_id = p_workspace_id AND k.done_at IS NOT NULL));
+    RETURN;
+  END IF;
+  -- A chain's older reply row (its item moved on to a newer reply) stays
+  -- dismissed: the chain's row is the newer one.
+  IF EXISTS (SELECT 1 FROM public.module_activity a
+              WHERE a.id = p_activity_id AND a.workspace_id = p_workspace_id
+                AND a.module = 'chat' AND a.op = 'chat.reply'
+                AND EXISTS (SELECT 1 FROM public.chat_catchup k
+                             WHERE k.user_id = auth.uid() AND k.reason = 'reply'
+                               AND k.chain_root_id::text = a.payload ->> 'parent_id')) THEN
+    RETURN;
+  END IF;
   UPDATE public.notification_state
     SET dismissed_at = NULL
     WHERE user_id = auth.uid()
       AND activity_id = p_activity_id
       AND workspace_id = p_workspace_id;
-
-  -- Chat (CV-5): its Catch up twin comes back too.
-  PERFORM public.chat__reopen(auth.uid(), ARRAY(
-    SELECT k.id FROM public.chat_catchup k
-     WHERE k.user_id = auth.uid() AND k.activity_id = p_activity_id
-       AND k.workspace_id = p_workspace_id AND k.done_at IS NOT NULL));
 END;
 $function$;
 
@@ -1037,8 +1064,10 @@ AS $function$
   ), open_items AS (
     -- Catch up's share (CV-5): open items showing now (not put off with
     -- Later), never on Nothing, never a team mention while your teams'
-    -- notices are off, never a chain you stopped following, never a deleted
-    -- message's, never a quiet line.
+    -- notices are off, never a chain you stopped following, never a quiet
+    -- line, no Every-message line unless you're on Every message, and never a
+    -- deleted message's, unless it's a chain's or a line's whose newest
+    -- message was deleted while an older one of it is still unread.
     SELECT k.channel_id, count(*)::int AS n
       FROM public.chat_catchup k
       JOIN mine mi ON mi.channel_id = k.channel_id AND mi.notify_level <> 'none'
@@ -1047,7 +1076,16 @@ AS $function$
        AND (k.later_until IS NULL OR k.later_until <= now())
        AND k.reason NOT IN ('added', 'removed', 'level_reset')
        AND NOT (k.reason = 'team_mention' AND (SELECT muted FROM teams))
-       AND km.deleted_at IS NULL
+       AND NOT (k.reason = 'every_message' AND mi.notify_level <> 'all')
+       AND (km.deleted_at IS NULL
+            OR (k.reason IN ('reply', 'every_message') AND EXISTS (
+                  SELECT 1 FROM public.chat_messages x
+                   WHERE x.channel_id = k.channel_id AND x.kind = 'message' AND x.deleted_at IS NULL
+                     AND x.author_id IS DISTINCT FROM (SELECT id FROM me)
+                     AND (k.reason = 'every_message' OR x.parent_id = k.chain_root_id)
+                     AND (x.created_at, x.id) < (km.created_at, km.id)
+                     AND CASE WHEN mi.mark_id IS NULL THEN x.created_at > mi.last_read_at
+                              ELSE (x.created_at, x.id) > (mi.mark_at, mi.mark_id) END)))
        AND NOT (k.reason = 'reply' AND EXISTS (
              SELECT 1 FROM public.chat_chain_mutes cm
               WHERE cm.user_id = (SELECT id FROM me) AND cm.root_id = k.chain_root_id))

@@ -2,6 +2,7 @@
 
 > Branch `t/maciej/cv-5-catchup-server` · head: the commit carrying this line · status: built, not landed
 > Migration: `supabase/migrations/20261015170000_chat_v2_catchup.sql` · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-2-fix landed and was merged in); `bun run db:test` (all 49 files) and `bun run verify` pass after it. Before that every file ran with it inside one rolled-back transaction; it applies twice over itself cleanly. Stamp provisional: it must stay after `20261015140000_chat_v2_rules_fix.sql` (CV-2-fix), whose `chat_op_send` it redefines (cut from CV-2-fix's body: the managers-in-effect check before the rejoin, a removal kept on rejoin).
+> Review round (2026-10-15): the shared local stack had been reloaded from a prod snapshot (no chat v2 objects) when the review fixes were ready, so they were checked in a scratch database on the same server (`cv5_scratch`: the stack's schema, a stub `cron` schema, then the seven chat v2 migrations in order, this one last as changed): `db:test chat` 11 of 12 green there (`chat_catchup` 81 checks); `chat_send_limits` fails its five typing-mark checks against the snapshot's schema, which this block doesn't touch. The changed migration must be re-applied to the shared stack on its next reload; `bun run verify` passes.
 
 ## Delivered against the row
 
@@ -32,7 +33,19 @@
 - **Races:** a grouped item only ever moves forward (an older message's fan-out committing after a newer one leaves it, and its bell row is dismissed for whoever stayed on the newer one); reading closes an item only if it is still on a message up to the one read (re-checked under the row lock).
 - **The ops** need no plan (#25), log no activity (#15), refuse keys (`42501 Sign in first.` for Done/Undo; the reader check for follow), take at most 1,000 ids.
 - **Client:** `src/features/spine/activity.ts` reads the three ops by why they reached you ("mentioned you / your team / everyone in #plans", "replied in #plans", "posted in #plans"; v1's "replied in a thread" gone) and names the excerpt's references per reader (CV-1's ❓: the bell no longer prints `moduo://person/<id>`).
-- **Tests:** `supabase/tests/chat_catchup.test.sql` (new, 68 checks); `chat_counts.test.sql` (its `test.put` now fans out like a send; +5 checks for Every message). Adjusted for the new truth: `chat_ops` (N's post rings the bell; an edit naming A tells A), `chat_wrappers` (the person row of a message that also has `@channel`), `chat_foundation` (own-rows check counts the rows it wrote, not the setup sends' items), `chat_privacy` (a direct message rings no bell, so A's edit writes the row about D); `src/features/spine/activity.test.ts` (+1).
+- **Tests:** `supabase/tests/chat_catchup.test.sql` (new, 81 checks); `chat_counts.test.sql` (its `test.put` now fans out like a send; +5 checks for Every message). Adjusted for the new truth: `chat_ops` (N's post rings the bell; an edit naming A tells A), `chat_wrappers` (the person row of a message that also has `@channel`), `chat_foundation` (own-rows check counts the rows it wrote, not the setup sends' items), `chat_privacy` (a direct message rings no bell, so A's edit writes the row about D); `src/features/spine/activity.test.ts` (+1).
+
+## Reviews (Tier 2)
+
+- **`/code-review high`** on `origin/t/maciej/chat-v2-build...HEAD`: 10 findings; 7 fixed, 3 left (below). **Security scan** (`/security-review`, same diff): no findings at its threshold.
+- What the fixes make true (each has a check in `chat_catchup.test.sql` §2b or `preferences.test.ts`):
+  - Undo, the bell's undismiss and mark unread reopen an item only in a conversation you can read now, and never a chain's item while you've stopped following it.
+  - A chat bell row with a Catch up twin comes back only with its twin; a chain's older reply row (its item moved on to a newer reply) stays dismissed, so a chain shows once in the bell.
+  - Catch up's count leaves out an Every-message line unless you're on Every message.
+  - A chain's or a line's item whose newest message was deleted still counts while an older message of it is unread, and stops counting when nothing shown before it is.
+  - An edit keeps someone's mention open through a team only if the team is live and in the workspace (empty name lists read as empty); it closes the items it drops in one call per person.
+  - A `chat.mention` row that reached you through a team follows "Your teams" in the bell (`notificationTypeForOp`).
+- Left, agent's choice: closing items on leaving / removal (CV-15 below; counts already skip conversations you're not in, and reopening now needs read access); delete / restore leaving items as they are (counts skip a deleted message's items, `chat__blank_deleted` blanks the bell excerpt; closing them would need Undo-aware reopen in two more redefined ops); `chat__activity`'s copy of `module_activity_log`'s attribution (gotcha below).
 
 ## Acceptance criteria proven
 
@@ -73,7 +86,7 @@
 ## For later blocks
 
 - **CV-6a:** the fan-out (`chat__fan_out`) is where the device notice and the gate go: per reason, the recipient list is built once (`v_who`); `held_at` is the item's column; the email job reads `dm`/`mention`/`team_mention` items. Map `chat.mention` (`reason`), `chat.reply`, `chat.announcement` to notice kinds there.
-- **CV-6b:** map `chat.mention` (by `payload.reason`: person/everyone → Mentions and replies, team → also "Your teams"), `chat.reply` and `chat.announcement` in `OP_TO_NOTIFICATION_TYPE` (`src/lib/preferences.ts`). The reasons `person` / `team` / `everyone` are literals today (`activity.ts`); a shared constant belongs with that mapping.
+- **CV-6b:** `chat.mention` with `reason = team` already maps to "Your teams" (CV-5 review); map the rest of `chat.mention` (person/everyone → Mentions and replies), `chat.reply` and `chat.announcement` in `OP_TO_NOTIFICATION_TYPE` (`src/lib/preferences.ts`). The reasons `person` / `team` / `everyone` are literals today (`activity.ts`); a shared constant belongs with that mapping.
 - **CV-3 / CV-11:** `chat_unread_counts.catchup` is real items now. An item in a public conversation you're not in (you were @named there) has no counts row: count the tab from `chat_catchup` (own rows, published) if it must include those. Catch up's view should hide items the count hides (Later, Nothing, muted chains, team mentions while muted, deleted messages). A grouped item's `message_id` is its newest message; `created_at` is when the line opened. A new message bumps a snoozed line without unsnoozing it. Remind me (`reminder` items) is untouched by reading and by mark unread.
 - **CV-11:** `chat_op_catchup_done` / `_reopen` take item ids (≤ 1,000) and return how many changed; "Done all in this conversation" passes that conversation's open item ids.
 - **CV-15:** archive / delete / removal should close the affected items (`closed`); `chat__close(user, ids, 'closed')` dismisses the twins too. `chat__reopen` never reopens `closed` items.
@@ -90,7 +103,7 @@
 - [ ] Three replies in a chain B started → one bell row (the newest) and one Catch up item → bell, Chat
 - [ ] B on Every message in a channel, three plain messages → the conversation shows 3, the tab 1 → Chat
 
-- **Known, small:** undismissing an older chain bell row (one the chain's newer reply dismissed) shows it again with no Catch up twin; the bell's dismiss and undismiss sync with Catch up only through `notifications_op_dismiss` / `_undismiss` (a future bulk dismiss must call `chat__close` too, or move the sync to a trigger on `notification_state`).
+- **Known, small:** the bell's dismiss and undismiss sync with Catch up only through `notifications_op_dismiss` / `_undismiss` (a future bulk dismiss must call `chat__close` too, or move the sync to a trigger on `notification_state`).
 
 ## Verify before release
 

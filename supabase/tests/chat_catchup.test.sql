@@ -420,11 +420,15 @@ BEGIN
   -- A line whose newest message was deleted is read once what's shown is.
   v := test.send('E', 'G', 'p5', 'five', 40);
   UPDATE public.chat_messages SET deleted_at = now() WHERE id = test.mid('p5');
-  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p5', 'every_message') = 'open' AND test.counts('C', 'G') = '4/1/4/1',
-    'deleted: the line moved to p5, and with p5 deleted it leaves the count', test.counts('C', 'G'));
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p5', 'every_message') = 'open' AND test.counts('C', 'G') = '4/1/4/2',
+    'deleted: the line moved to p5; with p5 deleted it still counts while older messages of it are unread', test.counts('C', 'G'));
   v := test.as_user('C', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('G'), test.mid('p4')));
   PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p5', 'every_message') = 'done:read' AND test.item('C', 'p4', 'mention') = 'done:read+bell',
     'deleted: reading to p4, the last message shown, closes the line on deleted p5 too', v);
+  v := test.send('E', 'G', 'p6', 'six', 41);
+  UPDATE public.chat_messages SET deleted_at = now() WHERE id = test.mid('p6');
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p6', 'every_message') = 'open' AND test.counts('C', 'G') = '0/0/0/0',
+    'deleted: a line on a deleted message with nothing unread before it leaves the count', test.counts('C', 'G'));
 
   -- Joining reads to the newest message: what Catch up held there is read.
   v := test.as_user('O', format($q$SELECT public.chat_op_join(%L::uuid)$q$, test.ref('G')));
@@ -443,6 +447,76 @@ BEGIN
   PERFORM test.ok((SELECT count(*) FROM public.module_activity WHERE workspace_id = test.id('W')) = v_acts + 1
                   AND (SELECT count(*) FROM public.module_activity WHERE workspace_id = test.id('W') AND op = 'chat.join') = 1,
     'activity: Catch up''s ops, the bell''s, read marks and following log nothing (plain sends ring no bell; O''s join is its own row)');
+END;
+$$;
+
+-- ── 2b. What reopens, what counts, what an edit closes ──────────────────────
+DO $$
+DECLARE
+  v text;
+  v_old uuid;
+BEGIN
+  -- Undo and the bell's undismiss never bring back an item in a conversation
+  -- you can't read any more.
+  v := test.send('A', 'P', 'q1', 'for you ' || test.person_ref('B'), 60);
+  v := v || ' ' || test.as_user('B', format($q$SELECT public.chat_op_catchup_done(ARRAY[%L]::uuid[])$q$, test.item_id('B', 'q1', 'mention')));
+  v := v || ' ' || test.as_user('A', format($q$SELECT public.chat_op_remove_member(%L::uuid, %L::uuid)$q$, test.ref('P'), test.id('B')));
+  PERFORM test.ok(v LIKE 'ok 1 ok 1 ok%' AND test.item('B', 'q1', 'mention') = 'done:done+bell', 'access: B, Done on q1, is removed from P', v);
+  PERFORM test.ok(test.value_as('B', format($q$SELECT public.chat_op_catchup_reopen(ARRAY[%L]::uuid[])::text$q$,
+                    test.item_id('B', 'q1', 'mention'))) = '0'
+                  AND test.item('B', 'q1', 'mention') = 'done:done+bell',
+    'access: Undo reopens nothing in a conversation B can no longer read');
+  v := test.as_user('B', format($q$SELECT public.notifications_op_undismiss(%L::uuid, %L::uuid)$q$, test.id('W'), test.twin('B', 'q1', 'mention')));
+  PERFORM test.ok(v LIKE 'ok%' AND test.item('B', 'q1', 'mention') = 'done:done+bell' AND test.twin_dismissed('B', 'q1', 'mention'),
+    'access: undismissing its bell row leaves both the item and the row closed', v);
+
+  -- Stop following: Undo doesn't bring the chain's item back while it's muted.
+  v := test.send('E', 'G', 'z0', 'root', 61);
+  v := v || ' ' || test.send('B', 'G', 'z1', 'me too', 62, 'z0');
+  v := v || ' ' || test.send('E', 'G', 'z2', 'and then', 63, 'z0');
+  PERFORM test.ok(v = 'ok 1 ok 1 ok 1' AND test.item('B', 'z2', 'reply') = 'open+bell', 'mute: B, in chain z0, has its item on z2', v);
+  v := test.as_user('B', format($q$SELECT public.chat_op_follow_chain(%L::uuid, false)$q$, test.mid('z0')));
+  PERFORM test.ok(v = 'ok 1' AND test.item('B', 'z2', 'reply') = 'done:done+bell'
+                  AND test.value_as('B', format($q$SELECT public.chat_op_catchup_reopen(ARRAY[%L]::uuid[])::text$q$,
+                        test.item_id('B', 'z2', 'reply'))) = '0'
+                  AND test.item('B', 'z2', 'reply') = 'done:done+bell',
+    'mute: after Stop following, Undo leaves the chain''s item closed', v);
+  v := test.as_user('B', format($q$SELECT public.notifications_op_undismiss(%L::uuid, %L::uuid)$q$, test.id('W'), test.twin('B', 'z2', 'reply')));
+  PERFORM test.ok(v LIKE 'ok%' AND test.twin_dismissed('B', 'z2', 'reply'),
+    'mute: so does undismissing its bell row', v);
+
+  -- A chain's older bell row stays dismissed once its item moved on.
+  v := test.send('A', 'G', 'y0', 'a root of A''s', 64);
+  v := v || ' ' || test.send('E', 'G', 'y1', 'first reply', 65, 'y0');
+  SELECT a.id INTO v_old FROM public.module_activity a
+   WHERE a.op = 'chat.reply' AND a.payload ->> 'message_id' = test.mid('y1')::text;
+  v := v || ' ' || test.send('E', 'G', 'y2', 'second reply', 66, 'y0');
+  PERFORM test.ok(v = 'ok 1 ok 1 ok 1' AND v_old IS NOT NULL AND test.item('A', 'y2', 'reply') = 'open+bell'
+                  AND test.twin('A', 'y2', 'reply') <> v_old,
+    'moved twin: A''s chain item moved from y1 to y2, each with its own bell row', v);
+  v := test.as_user('A', format($q$SELECT public.notifications_op_undismiss(%L::uuid, %L::uuid)$q$, test.id('W'), v_old));
+  PERFORM test.ok(v LIKE 'ok%' AND (SELECT ns.dismissed_at IS NOT NULL FROM public.notification_state ns
+                                     WHERE ns.user_id = test.id('A') AND ns.activity_id = v_old)
+                  AND test.item('A', 'y2', 'reply') = 'open+bell' AND NOT test.twin_dismissed('A', 'y2', 'reply'),
+    'moved twin: undismissing y1''s row keeps it dismissed: the chain shows once, on y2', v);
+
+  -- An Every-message line counts only while you're on Every message.
+  UPDATE public.chat_members SET last_read_id = NULL, last_read_at = test.at(66) WHERE user_id = test.id('C') AND channel_id = test.ref('G');
+  v := test.send('E', 'G', 'x1', 'plain', 67);
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'x1', 'every_message') = 'open' AND test.counts('C', 'G') = '1/0/1/1',
+    'line: C, on Every message in G, has a line that counts', test.counts('C', 'G'));
+  PERFORM test.as_user('C', format($q$SELECT public.chat_op_set_prefs(%L, 'mentions', NULL)$q$, test.ref('G')));
+  PERFORM test.ok(test.counts('C', 'G') = '1/0/0/0',
+    'line: on Mentions, the open line no longer counts in Catch up', test.counts('C', 'G'));
+
+  -- An edit closes the item of someone it now reaches only through a deleted team.
+  v := test.send('A', 'L', 'w1', 'team moduo://team/' || test.id('T'), 70);
+  PERFORM test.ok(v = 'ok 1' AND test.item('B', 'w1', 'team_mention') = 'open+bell', 'edit: B has a team mention on w1', v);
+  UPDATE public.teams SET deleted_at = now() WHERE id = test.id('T');
+  v := test.edit('A', 'w1', 'team again moduo://team/' || test.id('T'));
+  PERFORM test.ok(v LIKE 'ok%' AND test.item('B', 'w1', 'team_mention') = 'done:closed+bell' AND test.twin_dismissed('B', 'w1', 'team_mention'),
+    'edit: naming a deleted team no longer reaches B: the item closes and its bell row goes', v);
+  UPDATE public.teams SET deleted_at = NULL WHERE id = test.id('T');
 END;
 $$;
 

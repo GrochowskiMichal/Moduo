@@ -349,6 +349,19 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("tasks.handed_back")).toBe("assigned");
   });
 
+  it("sends a chat row that reached you through a team to the teams switch (CV-5)", () => {
+    expect(notificationTypeForOp("chat.mention", { reason: "team" })).toBe("teams");
+    expect(notificationTypeForOp("chat.mention", { reason: "person" })).toBeNull();
+    expect(notificationTypeForOp("chat.mention")).toBeNull();
+    expect(
+      isNotificationEnabled(
+        "chat.mention",
+        { ...DEFAULT_PREFERENCES.notifications, teams: false },
+        { reason: "team" },
+      ),
+    ).toBe(false);
+  });
+
   it("returns null for ops outside the quiet set (legacy / future)", () => {
     expect(notificationTypeForOp("workspace.invite_accepted")).toBeNull();
     expect(notificationTypeForOp("note_shared")).toBeNull();
