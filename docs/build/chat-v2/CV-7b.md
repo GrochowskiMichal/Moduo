@@ -38,7 +38,7 @@
 
 - **`+` shows "Create, linked" now**: agent's choice · AC9.7 (`/task` `/note` `/event`) is this block's and `+` → Create is the same path · rejected: hiding it until CV-10 (brief §4's "my reading").
 - **"Linked" = the new item's chip in the message**: agent's choice · the message → item `mentions` link comes from the stored reference on send; the "From:" chip linking the item back to the message is CV-10's · rejected: a second link write from the composer.
-- **A prefilled capture starts fresh** (an earlier, abandoned task draft doesn't ride in, and is replaced once the new one is typed in): agent's choice · "T then ⏎" must not create a task with stale fields · rejected: merging the words into the kept draft.
+- **A prefilled capture starts fresh** (an earlier task draft kept with Esc doesn't ride in; it stays kept until something is changed in the new capture, and a type switch and back restores this capture as usual): agent's choice · "T then ⏎" must not create a task with stale fields · rejected: merging the words into the kept draft.
 - **T prefills only the title** (message text, whitespace collapsed, 200 chars): agent's choice · the source link is CV-10's Message type.
 - **The parity test stays in `markup-v2/`** (brief says `markup/`): CV-7a's folder choice (a `markup/` folder beside v1's `markup.ts` makes `./markup` ambiguous).
 - **The typed handle chip (`MOD-142`)** is CV-10's (brief §4); the brief's composer.test line naming it is not built here.
@@ -53,6 +53,10 @@
 ## Review (validator, round 1)
 
 No BLOCKER; 1 MAJOR fixed (a prefill merged into a stale capture draft → prefilled opens start fresh + unit test). MINORs fixed: untouched edit compared against the raw body (now the re-exported baseline), IME commit ⏎ could pick a menu item (CRITICAL guard), `@` button appended at the end (keeps the live caret), template creates didn't report `onCreated`, `@channel` note leaked across conversations, a paste with files fell through to rich HTML, plus-menu tabs/hr → `SegmentedControl`/`Separator`, note/event refs untested (tests added). NITs fixed: letters in a read-only feed, `aria-setsize` with newer pages, `isAttached` in the caret restore, emoji load retry, a failed send no longer clears the box. NITs left: `/task`'s title is read back from the menu label (works; tidy later); "create more" in the capture drops one chip per create at the same caret (intended).
+
+## Review (validator, round 2, on the delta)
+
+All round-1 fixes confirmed. One new MAJOR from the round-1 fix, fixed: a prefilled open overwrote the kept draft on open → the save now waits until something in this capture differs from the prefill (test: "closed without a change, the kept draft is still there"). New MINOR fixed: a type switch and back in a prefilled capture started fresh again → the fresh start happens once per open (`openId`). Left: a multi-line paste in the capture (`createPasted`) makes several tasks and reports none back to chat (no chip).
 
 ## Gotchas (area: ui)
 

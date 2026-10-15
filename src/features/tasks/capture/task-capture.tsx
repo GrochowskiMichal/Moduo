@@ -124,6 +124,8 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
  * then back) and come along as words.
  */
 let lastTitleWords = "";
+/** The capture open a prefill already seeded (a type switch and back restores as usual). */
+let prefilledOpenId: number | null = null;
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
 let openBody: ((draft: CaptureDraft, files: File[]) => void) | null = null;
@@ -222,14 +224,16 @@ export function TaskCaptureBody({
   const [initial] = useState(() => {
     // An opener that prefills the line (chat's T, `/task`) starts a fresh
     // task: nothing kept from an earlier capture rides into it.
-    const prefilled = context?.draft !== undefined;
+    const prefilled = context?.draft !== undefined && context.openId !== prefilledOpenId;
     if (prefilled) {
+      prefilledOpenId = context.openId;
       return {
         draft: {
           ...EMPTY_DRAFT,
           segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
         },
         restored: false,
+        prefilled: true,
         files: [] as File[],
       };
     }
@@ -273,6 +277,7 @@ export function TaskCaptureBody({
     return {
       draft: start,
       restored: Boolean(restored),
+      prefilled: false,
       // A refused capture opened again (or by its Restore) brings its files
       // back too (AT-3).
       files: refusedNow
@@ -324,8 +329,21 @@ export function TaskCaptureBody({
   const justInserted = useRef<{ key: NodeKey; baseline: string | null } | null>(null);
   const effects = useRef<Record<string, Map<string, EntryEffect>>>({});
 
-  // Keep the draft on the device as it changes.
+  // Keep the draft on the device as it changes. A prefilled open leaves the
+  // kept draft alone until something here changes (Esc right away keeps it).
+  const untouched = useRef(initial.prefilled);
   useEffect(() => {
+    if (untouched.current) {
+      const same =
+        plainText(segments) === plainText(initial.draft.segments) &&
+        keep.length === 0 &&
+        description === "" &&
+        subtasks.length === 0 &&
+        !pasted &&
+        JSON.stringify(fields) === JSON.stringify(initial.draft.fields);
+      if (same) return;
+      untouched.current = false;
+    }
     saveDraft(owner.userId, owner.workspaceId, {
       segments,
       keep,

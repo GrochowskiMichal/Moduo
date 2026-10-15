@@ -724,4 +724,22 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     expect(document.body.textContent).not.toContain("old subtask");
     expect(screen.queryByText(/Draft restored/)).toBeNull();
   });
+
+  it("closed without a change, the kept draft is still there", async () => {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Kept with Esc" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    const { unmount } = renderBody(
+      { draft: "From chat", openId: 7 },
+      referenceStore({}),
+      "From chat",
+    );
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    unmount();
+    expect(loadDraft(ME, WS)?.segments).toEqual([{ text: "Kept with Esc" }]);
+  });
 });
