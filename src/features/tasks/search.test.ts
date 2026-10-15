@@ -129,9 +129,21 @@ describe("taskMatchesQuery", () => {
     }
     expect(taskMatchesQuery(numbered, "mod-98", "MOD")).toBe(false);
     expect(taskMatchesQuery(numbered, "eng-99", "MOD")).toBe(false);
+    expect(taskMatchesQuery(numbered, "MOD-99 calendar", "MOD")).toBe(false);
     // No key (a workspace without one) or no number yet (unsaved): no handle.
     expect(taskMatchesQuery(numbered, "mod-99")).toBe(false);
     expect(taskMatchesQuery(task, "mod-99", "MOD")).toBe(false);
+  });
+
+  it("only a whole handle counts: its key or a digit alone doesn't find every task", () => {
+    const seventeen = { ...task, number: 17 };
+    expect(taskMatchesQuery(seventeen, "mod-1", "MOD")).toBe(false);
+    expect(taskMatchesQuery(seventeen, "mod-170", "MOD")).toBe(false);
+    expect(taskMatchesQuery(seventeen, "7", "MOD")).toBe(false);
+    expect(taskMatchesQuery(seventeen, "mod 1", "MOD")).toBe(false);
+    // "mod" alone is a word like any other: "Fix the Capture modal" has it.
+    expect(taskMatchesQuery(seventeen, "mod", "MOD")).toBe(true);
+    expect(taskMatchesQuery({ ...seventeen, title: "Plan Q3" }, "mod", "MOD")).toBe(false);
   });
 
   it("an empty query matches everything", () => {

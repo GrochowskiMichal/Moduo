@@ -135,22 +135,38 @@ export function descriptionWords(description: string | null | undefined): string
 
 /**
  * Whether a task matches the search box: every word of the query appears in
- * its title, the text of its description, the key it was imported under
- * ("ENG-123", TV-D16, AC3.6; the server's `tasks_search` reads these three)
- * or its own handle under the workspace's `taskKey` ("MOD-99", MOD-126; "mod
- * 99" finds it too, a word at a time), ignoring case. An empty query matches
- * everything.
+ * its title, the text of its description or the key it was imported under
+ * ("ENG-123", TV-D16, AC3.6; the server's `tasks_search` reads the same),
+ * ignoring case. Its own handle under the workspace's `taskKey` counts too
+ * (MOD-126), but only whole: "MOD-99", or "mod 99" as two words. Read as
+ * text, "mod" would find every task and "7" every number with a 7 in it.
+ * An empty query matches everything.
  */
 export function taskMatchesQuery(
   task: Pick<Task, "title" | "description" | "importedFrom" | "number">,
   query: string,
   taskKey: string | null = null,
 ): boolean {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  let words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
+  const handle = taskHandle(taskKey, task.number)?.toLowerCase() ?? null;
+  if (handle && taskKey) {
+    // The words naming this task's handle are met; the rest read as text.
+    const keyWord = taskKey.toLowerCase();
+    const numberWord = String(task.number);
+    const rest: string[] = [];
+    for (let i = 0; i < words.length; i++) {
+      if (words[i] === handle) continue;
+      if (words[i] === keyWord && words[i + 1] === numberWord) {
+        i++;
+        continue;
+      }
+      rest.push(words[i]);
+    }
+    words = rest;
+  }
   const key = task.importedFrom?.key?.toLowerCase() ?? "";
-  const handle = taskHandle(taskKey, task.number)?.toLowerCase() ?? "";
-  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}\n${key}\n${handle}`;
+  const haystack = `${task.title.toLowerCase()}\n${descriptionText(task.description)}\n${key}`;
   return words.every((word) => haystack.includes(word));
 }
 
