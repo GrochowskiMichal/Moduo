@@ -18,7 +18,8 @@ Component code uses semantic tokens, not raw values. Concretely:
 
 - **Color**: `bg-background`, `text-foreground`, `bg-primary`, `border-border`, `text-muted-foreground`. Never `bg-zinc-900`, never `bg-[#141414]`, never `text-white/60`.
 - **Spacing**: `p-4`, `gap-2`, `mx-3`. Never `p-[13px]`, never `gap-[10px]`.
-- **Radius**: `rounded-md`, `rounded-lg`, `rounded-full`. Never `rounded-[7px]`.
+- **Radius**: `rounded-md`, `rounded-lg`, `rounded-xl` (the shell's three panels, dialogs), `rounded-full`. Never `rounded-[7px]`.
+- **Panel frame**: `--panel-pad` (8, a panel's edge → a fill at it) and `--panel-inset` (16, → the text column), plus the derived `--panel-title-top` for the centre's top. Fixed across densities; a full-bleed child cancels these, never `--pad-x` or `-m-4` ([DESIGN_RULES.md](./DESIGN_RULES.md) R7, MOD-121).
 - **Font family**: `font-display`, `font-sans` (resolves to the user's body font), `font-mono`. Never `font-[Inter]`.
 - **Font size**: `text-base`, `text-lg`, `text-2xl`. Never `text-[15px]`.
 - **Motion duration**: use `--motion-fast`, `--motion-base`, `--motion-slow` via CSS or via Tailwind's arbitrary value `duration-[var(--motion-base)]`. Never `duration-200`.
@@ -180,6 +181,11 @@ inner-radius = max(outer-radius − padding, 0)
 
 Worked examples:
 
+- A nav row or the right panel's "Details ▾" chip (`rounded-md`, 8 px) inside
+  a shell panel (`rounded-xl`, 16 px) padded `--panel-pad` (8 px):
+  16 − 8 = 8, so the fill is concentric with the corner. It holds on every
+  radius setting (`round` 24 − 8 = 16, its row radius; `sharp` 0), which is
+  why the frame is a fixed 8 and never follows density (MOD-121).
 - A widget card inside a `rounded-xl` (16 px) panel with `p-5` (20 px) padding
   is `rounded-none` — the parent's curve already meets the child's corner.
 - A notification card inside a `rounded-2xl` (24 px) sheet with `p-4` (16 px)
@@ -264,6 +270,8 @@ Use Tailwind utilities that map to semantic tokens. Common lookups:
 | Destructive | `bg-destructive text-destructive-foreground` |
 | Control radius | `rounded-md` |
 | Card radius | `rounded-lg` |
+| Shell panel radius | `rounded-xl` (`FeaturePanelsShell`) |
+| Panel edge → a fill · → the text column · centre top | `--panel-pad` (8) · `--panel-inset` (16) · `--panel-title-top` (12 / 10 / 8), fixed across densities |
 | App font | `font-sans` (body) · `font-display` (structure/labels) |
 
 ## Accessibility
