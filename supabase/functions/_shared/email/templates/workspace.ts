@@ -14,7 +14,8 @@
  * The names in these emails are typed by the inviter (their display name, the
  * workspace's name) and B3 goes to any address they choose, from our domain.
  * So a person's name only appears when it is a plain name (the booking
- * emails' allow-list), else their address does; a workspace name that looks
+ * emails' allow-list) that doesn't read like us or a department ("Mоduo",
+ * "Account Security"), else their address does; a workspace name that looks
  * like a link or an address becomes "a workspace"; there is no message field.
  * With the 20-a-day cap (S2) that leaves nothing worth sending as spam.
  *
@@ -82,9 +83,23 @@ const name = (value: string) => singleLine(value, TEXT_LIMITS.name);
 /** A link, a domain or an address, in any dot (fullwidth and ideographic included). */
 const LINK_LIKE = /https?:|\/\/|www[.\uFF0E\u3002]|[\p{L}\p{N}][.\uFF0E\u3002]\p{L}{2,}|[@\uFF20]/iu;
 
-/** The person's name when it is a plain one that doesn't borrow ours, else null. */
+/** Latin look-alikes from other scripts, folded before the checks below (Cyrillic о, Greek ο, …). */
+const LOOKALIKES: Record<string, string> = {
+  "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ԁ": "d",
+  "м": "m", "υ": "u", "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p", "τ": "t",
+};
+
+/** NFKC, lower case, look-alikes folded: what a reader takes the text to say. */
+function skeleton(value: string): string {
+  return Array.from(value.normalize("NFKC").toLowerCase(), (ch) => LOOKALIKES[ch] ?? ch).join("");
+}
+
+/** Words that make a sender name read like us or like a department, not a person. */
+const OFFICIAL = /moduo|\b(?:security|support|billing|account|accounts|admin|administrator|service|help|helpdesk|team|staff|noreply|verification|compliance)\b/;
+
+/** The person's name when it is a plain one that reads like a person, else null. */
 function plainName(person: WorkspacePerson): string | null {
-  if (!isPlainName(person.name) || /moduo/i.test(person.name)) return null;
+  if (!isPlainName(person.name) || OFFICIAL.test(skeleton(person.name))) return null;
   return name(person.name).replace(/\s+/g, " ").trim();
 }
 
@@ -96,7 +111,7 @@ function who(person: WorkspacePerson): string {
 /** A typed label (workspace, role) when it is set and doesn't read like a link, else null. */
 function linkFree(value: string): string | null {
   const label = name(value);
-  return label && !LINK_LIKE.test(label) ? label : null;
+  return label && !LINK_LIKE.test(skeleton(label)) ? label : null;
 }
 
 function workspaceLabel(value: string): string {

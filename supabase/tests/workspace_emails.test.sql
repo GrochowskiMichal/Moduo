@@ -84,13 +84,13 @@ SELECT test.ok(EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'workspace_invite
 
 SELECT test.ok(test.invite('A', 'W', 'Tom@Becker.Studio ', test.id('O')) = 'ok 1',
   'an admin invites Tom');
-SELECT test.ok((SELECT created_by FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')) = test.id('A'),
+SELECT test.ok((SELECT created_by FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')) = test.id('A'),
   'created_by is pinned to the signed-in inviter, whatever the client sent');
-SELECT test.ok((test.outbox('B3:' || test.invite_id('Tom@Becker.Studio '))).id IS NOT NULL,
+SELECT test.ok((test.outbox('B3:' || test.invite_id('tom@becker.studio'))).id IS NOT NULL,
   'B3 is queued under B3:<invite id>');
-SELECT test.ok((test.outbox('B3:' || test.invite_id('Tom@Becker.Studio '))).kind = 'workspace_invite'
-           AND (test.outbox('B3:' || test.invite_id('Tom@Becker.Studio '))).to_email = 'tom@becker.studio'
-           AND (test.outbox('B3:' || test.invite_id('Tom@Becker.Studio '))).status = 'queued',
+SELECT test.ok((test.outbox('B3:' || test.invite_id('tom@becker.studio'))).kind = 'workspace_invite'
+           AND (test.outbox('B3:' || test.invite_id('tom@becker.studio'))).to_email = 'tom@becker.studio'
+           AND (test.outbox('B3:' || test.invite_id('tom@becker.studio'))).status = 'queued',
   'B3 goes to the invited address, lower-cased, queued');
 SELECT test.ok(
   (SELECT o.payload ->> 'inviter_email' = 'db-test-a@example.com'
@@ -102,11 +102,19 @@ SELECT test.ok(
       AND o.payload ->> 'token' = i.token
       AND o.payload ->> 'expires_at' = to_char(i.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
      FROM public.email_outbox o JOIN public.workspace_invites i ON o.dedupe_key = 'B3:' || i.id
-    WHERE i.id = test.invite_id('Tom@Becker.Studio ')),
+    WHERE i.id = test.invite_id('tom@becker.studio')),
   'B3 carries the inviter (the caller, not created_by), workspace, role, expiry and token',
-  (SELECT payload::text FROM public.email_outbox WHERE dedupe_key = 'B3:' || test.invite_id('Tom@Becker.Studio ')));
-SELECT test.ok((SELECT created_at FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')) = now(),
-  'the invite is stamped with the server time');
+  (SELECT payload::text FROM public.email_outbox WHERE dedupe_key = 'B3:' || test.invite_id('tom@becker.studio')));
+SELECT test.ok((SELECT created_at = now() AND expires_at = now() + interval '7 days'
+                   FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')),
+  'the invite is stamped with the server time and the 7-day expiry');
+SELECT test.ok(test.as_user('A', format(
+    $q$INSERT INTO public.workspace_invites (workspace_id, email, role, expires_at, token)
+       VALUES (%L, 'forever@becker.studio', 'member', 'infinity', 'chosen-token')$q$, test.id('W'))) = 'ok 1',
+  'an invite sent with its own expiry and token');
+SELECT test.ok((SELECT expires_at = now() + interval '7 days' AND token <> 'chosen-token'
+                  FROM public.workspace_invites WHERE email = 'forever@becker.studio'),
+  'a client can''t choose the expiry or the token');
 
 SELECT test.ok(test.invite('M', 'W', 'nope@becker.studio') LIKE '42501 %', 'a member cannot invite');
 SELECT test.ok(test.invite('V', 'W', 'nope@becker.studio') LIKE '42501 %', 'a viewer cannot invite');
@@ -126,7 +134,7 @@ SELECT test.ok(test.as_user('A', format($q$DELETE FROM public.workspace_invites 
 SELECT test.ok((SELECT status FROM public.email_outbox WHERE kind = 'workspace_invite' AND to_email = 'deleted@becker.studio') = 'cancelled',
   'deleting cancels the queued B3');
 SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET email = 'other@becker.studio' WHERE id = %L$q$,
-  test.invite_id('Tom@Becker.Studio '))) = '42501 An invite''s address can''t be changed. Revoke it and invite the new address.',
+  test.invite_id('tom@becker.studio'))) = '42501 An invite''s address can''t be changed. Revoke it and invite the new address.',
   'an invite''s address cannot be changed');
 SELECT test.ok(test.invite('A', 'W', 'not an address') = '22023 Enter an email address like name@company.com.',
   'an invite to something that is not an address is refused in words');
@@ -134,37 +142,37 @@ SELECT test.ok(test.invite('A', 'W', 'not an address') = '22023 Enter an email a
 -- ── AC35: only the invited address can accept ───────────────────────────────
 
 SELECT test.ok(
-  test.accept('X', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')))
+  test.accept('X', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')))
     = 'invite_email_mismatch | t•••@becker.studio',
   'someone else signed in gets invite_email_mismatch with the masked address',
-  test.accept('X', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio '))));
+  test.accept('X', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio'))));
 SELECT test.ok(test.member_id('W', 'X') IS NULL, 'and does not join');
-SELECT test.ok((SELECT status FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')) = 'pending',
+SELECT test.ok((SELECT status FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')) = 'pending',
   'and the invite stays pending');
-SELECT test.ok(test.accept('A', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')))
+SELECT test.ok(test.accept('A', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')))
   LIKE 'invite_email_mismatch |%', 'a member of the workspace with another address gets the mismatch too');
 
-UPDATE public.workspace_invites SET expires_at = now() - interval '1 minute' WHERE id = test.invite_id('Tom@Becker.Studio ');
+UPDATE public.workspace_invites SET expires_at = now() - interval '1 minute' WHERE id = test.invite_id('tom@becker.studio');
 SELECT test.ok(
-  test.accept('X', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')))
+  test.accept('X', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')))
     = 'Invalid or expired invite | ',
   'an expired invite says so without revealing its address');
-UPDATE public.workspace_invites SET expires_at = now() + interval '7 days' WHERE id = test.invite_id('Tom@Becker.Studio ');
+UPDATE public.workspace_invites SET expires_at = now() + interval '7 days' WHERE id = test.invite_id('tom@becker.studio');
 
 SELECT test.ok(
-  test.accept('T', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio '))) = 'ok',
+  test.accept('T', (SELECT token FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio'))) = 'ok',
   'the invited address joins (case and spaces ignored)');
 SELECT test.ok(test.member_id('W', 'T') IS NOT NULL, 'Tom is a member now');
-SELECT test.ok((SELECT status FROM public.workspace_invites WHERE id = test.invite_id('Tom@Becker.Studio ')) = 'accepted',
+SELECT test.ok((SELECT status FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')) = 'accepted',
   'the invite is accepted');
 
 -- ── AC37: 20 invites per workspace per 24 hours ─────────────────────────────
 
 SELECT test.ok((SELECT count(*) FROM public.email_outbox WHERE kind = 'workspace_invite'
-                  AND payload ->> 'workspace_id' = test.id('W')::text) = 3,
-  'three invites emailed so far today (accepted, revoked and deleted ones count)');
+                  AND payload ->> 'workspace_id' = test.id('W')::text) = 4,
+  'four invites emailed so far today (accepted, revoked and deleted ones count)');
 SELECT test.ok(bool_and(test.invite('A', 'W', 'cap' || g || '@becker.studio') = 'ok 1'),
-  'invites 4 to 20 go through') FROM generate_series(4, 20) g;
+  'invites 5 to 20 go through') FROM generate_series(5, 20) g;
 SELECT test.ok(test.invite('A', 'W', 'cap21@becker.studio')
     = 'P0001 You''ve sent 20 invites today. You can send more tomorrow.',
   'the 21st is refused with the daily-limit copy', test.invite('A', 'W', 'cap21@becker.studio'));

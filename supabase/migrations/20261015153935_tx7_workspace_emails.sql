@@ -75,7 +75,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.workspace__email_time(p_at timestamptz)
 RETURNS text
 LANGUAGE sql
-IMMUTABLE
+STABLE
 SET search_path = ''
 AS $$
   SELECT to_char(p_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
@@ -111,9 +111,14 @@ BEGIN
     IF coalesce(btrim(NEW.email), '') !~ '^[^[:space:]@]+@[^[:space:]@]+$' THEN
       RAISE EXCEPTION 'Enter an email address like name@company.com.' USING ERRCODE = '22023';
     END IF;
-    -- The inviter is whoever is signed in; the row's timestamps are the server's.
+    -- The inviter is whoever is signed in; the row's address, token and times
+    -- are the server's (a client-chosen expiry would make a permanent sign-up
+    -- allow-list entry and an unrenderable B3).
     IF v_actor IS NOT NULL THEN NEW.created_by := v_actor; END IF;
+    NEW.email := lower(btrim(NEW.email));
+    NEW.token := encode(extensions.gen_random_bytes(24), 'base64');
     NEW.created_at := now();
+    NEW.expires_at := now() + interval '7 days';
     -- S2: at most 20 invites per workspace in 24 hours. The lock makes two
     -- invites sent at once count each other.
     PERFORM pg_advisory_xact_lock(hashtextextended('workspace_invites:' || NEW.workspace_id::text, 0));

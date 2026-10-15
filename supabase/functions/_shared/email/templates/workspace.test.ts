@@ -116,7 +116,10 @@ describe("workspace invite (B3)", () => {
     expect(text).not.toContain("evil");
     expect(text).not.toContain("Moduo Security");
     expect(text).toContain("anna@northwind.studio invited you to their workspace in Moduo.");
-    for (const workspaceName of ["acme.studio", "https://x", "a@b", "ｅｖｉｌ．ｃｏｍ", "go。example"]) {
+    for (const inviterName of ["Mоduo Team", "Account Security", "Billing Department", "MODUO"]) {
+      expect(OUTBOX_TEMPLATES.workspace_invite?.({ ...INVITE, inviter_name: inviterName }).fromName).toBe("Moduo");
+    }
+    for (const workspaceName of ["acme.studio", "https://x", "a@b", "ｅｖｉｌ．ｃｏｍ", "go。example", "evil\u2024com"]) {
       const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
       expect(subject).toBe("Anna Carter invited you to a workspace");
     }
