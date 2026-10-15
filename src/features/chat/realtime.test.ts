@@ -165,6 +165,25 @@ describe("postgresChangesSource", () => {
     expect(events).toEqual([{ type: "member-left", channelId: "general" }]);
   });
 
+  it("your Catch up rows recount only their own workspace (CV-6b review)", () => {
+    const { socket, channels, fire } = fakeSocket();
+    const events: ChatLiveEvent[] = [];
+    postgresChangesSource(socket)({ workspaceId: WS, userId: ME }, (e) => events.push(e));
+    const catchup = channels[3]!;
+    fire(catchup, "postgres_changes", {
+      eventType: "INSERT",
+      new: { id: "k1", user_id: ME, workspace_id: "ws-2" },
+    });
+    expect(events).toEqual([]);
+    fire(catchup, "postgres_changes", {
+      eventType: "UPDATE",
+      new: { id: "k2", user_id: ME, workspace_id: WS },
+    });
+    // A delete's old record is the key alone: it recounts.
+    fire(catchup, "postgres_changes", { eventType: "DELETE", new: {}, old: { id: "k3" } });
+    expect(events).toEqual([{ type: "catchup" }, { type: "catchup" }]);
+  });
+
   it("a restart joins new channels, never the ones still leaving", () => {
     const { socket, channels } = fakeSocket();
     const source = postgresChangesSource(socket);

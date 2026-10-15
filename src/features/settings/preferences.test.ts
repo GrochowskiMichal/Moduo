@@ -28,6 +28,7 @@ describe("DEFAULT_PREFERENCES", () => {
       landingView: "home",
       reopenLastWorkspace: true,
       soundEnabled: true,
+      chatSound: false,
       motion: "system",
       notifications: {
         mention: true,
@@ -41,6 +42,10 @@ describe("DEFAULT_PREFERENCES", () => {
         overdueTasks: false,
         storage: true,
         bookings: true,
+        chatDirect: true,
+        chatMentions: true,
+        chatAnnouncements: true,
+        chatEvery: true,
       },
       confirmBeforeQuit: false,
       keepInMenuBar: true,
@@ -80,6 +85,7 @@ describe("sanitizePreferences", () => {
       landingView: "calendar",
       reopenLastWorkspace: false,
       soundEnabled: false,
+      chatSound: false,
       motion: "reduced",
       // overdueTasks absent from input → coerced to its opt-in default (off);
       // completed (added in TV-D1), storage (AT-1) and comments (TV-D12) absent →
@@ -96,6 +102,10 @@ describe("sanitizePreferences", () => {
         overdueTasks: false,
         storage: true,
         bookings: true,
+        chatDirect: true,
+        chatMentions: true,
+        chatAnnouncements: true,
+        chatEvery: true,
       },
       confirmBeforeQuit: true,
       keepInMenuBar: true,
@@ -148,6 +158,10 @@ describe("sanitizePreferences", () => {
       overdueTasks: false,
       storage: true,
       bookings: true,
+      chatDirect: true,
+      chatMentions: true,
+      chatAnnouncements: true,
+      chatEvery: true,
     });
     expect(
       sanitizePreferences({ notifications: { unblocked: false, waiting: true } }).notifications
@@ -351,8 +365,9 @@ describe("notificationTypeForOp", () => {
 
   it("sends a chat row that reached you through a team to the teams switch (CV-5)", () => {
     expect(notificationTypeForOp("chat.mention", { reason: "team" })).toBe("teams");
-    expect(notificationTypeForOp("chat.mention", { reason: "person" })).toBeNull();
-    expect(notificationTypeForOp("chat.mention")).toBeNull();
+    // CV-6b: everything else of chat.mention follows "Mentions and replies".
+    expect(notificationTypeForOp("chat.mention", { reason: "person" })).toBe("chatMentions");
+    expect(notificationTypeForOp("chat.mention")).toBe("chatMentions");
     expect(
       isNotificationEnabled(
         "chat.mention",
@@ -383,6 +398,10 @@ describe("isNotificationEnabled", () => {
       overdueTasks: false,
       storage: false,
       bookings: false,
+      chatDirect: false,
+      chatMentions: false,
+      chatAnnouncements: false,
+      chatEvery: false,
     };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("attachments.storage_95", prefs)).toBe(false);
@@ -407,6 +426,17 @@ describe("isNotificationEnabled", () => {
     expect(isNotificationEnabled("comments.add", quiet, participant, "me")).toBe(true);
   });
 
+  // CV-6b: chat's bell rows follow the Chat switches; @Team follows "Your teams".
+  it("maps chat's bell rows to the Chat switches", () => {
+    const off = { ...DEFAULT_NOTIFICATION_PREFS, chatMentions: false, chatAnnouncements: false };
+    expect(isNotificationEnabled("chat.mention", off, { reason: "person" })).toBe(false);
+    expect(isNotificationEnabled("chat.mention", off, { reason: "everyone" })).toBe(false);
+    expect(isNotificationEnabled("chat.reply", off)).toBe(false);
+    expect(isNotificationEnabled("chat.announcement", off)).toBe(false);
+    expect(isNotificationEnabled("chat.mention", off, { reason: "team" })).toBe(true);
+    expect(isNotificationEnabled("chat.mention", DEFAULT_NOTIFICATION_PREFS)).toBe(true);
+  });
+
   it("fails open for an unmapped op regardless of prefs", () => {
     const allOff = {
       mention: false,
@@ -420,6 +450,10 @@ describe("isNotificationEnabled", () => {
       overdueTasks: false,
       storage: false,
       bookings: false,
+      chatDirect: false,
+      chatMentions: false,
+      chatAnnouncements: false,
+      chatEvery: false,
     };
     expect(isNotificationEnabled("tasks.reminder", allOff)).toBe(true);
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);

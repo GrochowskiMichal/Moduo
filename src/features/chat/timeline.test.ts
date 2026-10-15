@@ -1,7 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 import type { ChatChannel, ChatMessage } from "./model";
 import {
-  badgeCount,
   buildSidebar,
   buildStream,
   buildTimeline,
@@ -221,8 +220,6 @@ describe("channels", () => {
     expect(s.starred.map((x) => x.channel.id)).toEqual(["star"]);
     expect(s.channels.map((x) => x.channel.id)).toEqual(["alpha", "muted", "zeta"]);
     expect(s.dms.map((x) => x.channel.id)).toEqual(["dm2", "dm1"]);
-    // alpha: 1 mention (default level), zeta: 0 mentions, dm1: 3 unread, muted: 0.
-    expect(badgeCount(entries, () => "mentions")).toBe(4);
   });
 });
 

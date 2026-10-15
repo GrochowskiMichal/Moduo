@@ -353,20 +353,3 @@ export function buildSidebar(
     dms: live.filter((e) => !e.starred && e.channel.kind === "dm").sort(byRecent),
   };
 }
-
-/**
- * The nav badge: DMs count every unread, channels only count mentions unless
- * the user set them to "all" (quiet bar). Muted channels never count.
- */
-export function badgeCount(
-  entries: SidebarEntry[],
-  levelOf: (channelId: string) => string,
-): number {
-  let n = 0;
-  for (const e of entries) {
-    if (e.muted || e.channel.archivedAt) continue;
-    if (e.channel.kind === "dm" || levelOf(e.channel.id) === "all") n += e.unread;
-    else n += e.mentions;
-  }
-  return n;
-}

@@ -600,7 +600,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               }
             />
             <NotificationCenter />
-            <NoticeDeliveries />
+            <NoticeDeliveries chat={chatBadge} />
             {/* Asks once when this device is in another time zone (TV-D14). */}
             <TimeRegionPrompt />
             <UserMenu

@@ -2,6 +2,7 @@ import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { WorkspaceMark } from "../features/workspaces/ui/workspace-mark";
 import { useEntitlement } from "../hooks/use-entitlement";
+import { useChatCounts } from "../lib/notices/chat-counts";
 import { formatShortcut, SHORTCUTS, useShortcut } from "../lib/shortcuts";
 import { useWorkspace } from "../providers/workspace-provider";
 import { Button } from "./ui/button";
@@ -35,6 +36,8 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     joinWorkspace,
   } = useWorkspace();
   const { allowed: canAddWorkspace } = useEntitlement("unlimited_workspaces");
+  // Each workspace's open Catch up items (CV-6b, spec §11 "Count").
+  const { byWorkspace: chatCounts } = useChatCounts();
   const [open, setOpen] = useState(false);
   // The shortcut hook must mount before the early return so React's hook
   // order rule is respected. It becomes a no-op when the trigger is hidden
@@ -334,6 +337,15 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                     >
                       {nameLabel}
                     </span>
+                    {(chatCounts[workspace.id] ?? 0) > 0 ? (
+                      <span
+                        className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                        title="Waiting in Catch up"
+                      >
+                        {chatCounts[workspace.id]}
+                        <span className="sr-only"> waiting in Catch up</span>
+                      </span>
+                    ) : null}
                     <span className="flex shrink-0 items-center gap-1">
                       <span
                         role="button"

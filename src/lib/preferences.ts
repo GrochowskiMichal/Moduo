@@ -58,7 +58,11 @@ export type NotificationType =
   | "agents"
   | "overdueTasks"
   | "storage"
-  | "bookings";
+  | "bookings"
+  | "chatDirect"
+  | "chatMentions"
+  | "chatAnnouncements"
+  | "chatEvery";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
@@ -73,6 +77,10 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "overdueTasks",
   "storage",
   "bookings",
+  "chatDirect",
+  "chatMentions",
+  "chatAnnouncements",
+  "chatEvery",
 ];
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -91,6 +99,15 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   storage: true,
   // Someone booked or canceled on one of your booking links (TX-5).
   bookings: true,
+  // Chat (CV-6b, spec §11 "The switches"): direct messages · mentions and
+  // replies · announcements · Every message. Each one turns off the bell row
+  // and the device notice for its rows; Catch up's item is always written.
+  // The server reads them at `user_preferences.preferences.notifications.<key>`
+  // to hold the push and the email (CV-18's gate).
+  chatDirect: true,
+  chatMentions: true,
+  chatAnnouncements: true,
+  chatEvery: true,
 };
 
 /** module_activity `op` → the quiet-set toggle that governs it. An op absent from
@@ -125,6 +142,11 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "attachments.storage_95": "storage",
   "calendar.booking_create": "bookings",
   "calendar.booking_cancel": "bookings",
+  // Chat (CV-6b): @you and @channel, a reply in your chain, an announcement.
+  // A direct message rings no bell (CV-5); `@Team` follows "Your teams" below.
+  "chat.mention": "chatMentions",
+  "chat.reply": "chatMentions",
+  "chat.announcement": "chatAnnouncements",
 };
 
 /** The switch that governs a feed row. A comment that names you is a
@@ -218,6 +240,8 @@ export interface Preferences {
   reopenLastWorkspace: boolean;
   /** Master switch for app sound effects (today: the Focus interval chime). */
   soundEnabled: boolean;
+  /** Chat's one soft sound for direct messages and `@you` (CV-6b, CH34): off by default. */
+  chatSound: boolean;
   /** Reduce-motion override, layered on the OS setting. */
   motion: MotionPref;
   /** Per-type notification mutes (read-side filter over the bell feed). */
@@ -250,6 +274,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   landingView: "home",
   reopenLastWorkspace: true,
   soundEnabled: true,
+  chatSound: false,
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
   confirmBeforeQuit: false,
@@ -292,6 +317,10 @@ const notificationPrefsSchema = z
       overdueTasks: z.boolean().catch(false),
       storage: z.boolean().catch(true),
       bookings: z.boolean().catch(true),
+      chatDirect: z.boolean().catch(true),
+      chatMentions: z.boolean().catch(true),
+      chatAnnouncements: z.boolean().catch(true),
+      chatEvery: z.boolean().catch(true),
     }),
   )
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
@@ -412,6 +441,7 @@ const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
   soundEnabled: z.boolean().catch(DEFAULT_PREFERENCES.soundEnabled),
+  chatSound: z.boolean().catch(DEFAULT_PREFERENCES.chatSound),
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
