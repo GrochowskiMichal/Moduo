@@ -865,8 +865,9 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     keptIsThere();
   });
 
-  it("T, ⏎ refused, then Restore: it opens in its own draft and the kept one stays", async () => {
+  it("T, ⏎ refused, then Restore: it opens in its own draft (files too), the kept one stays", async () => {
     keepDraft();
+    registerCaptureAttachments(() => {});
     fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
       throw new Error("You can't add tasks here.");
     });
@@ -875,6 +876,19 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     window.addEventListener(CAPTURE_OPEN_EVENT, onOpen);
     render(<Toaster />);
     const first = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    const shot = new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
+      target: { value: "the refused one's words" },
+    });
+    fireEvent.paste(screen.getByRole("textbox", { name: "Description" }), {
+      clipboardData: {
+        types: ["Files"],
+        files: [shot],
+        items: [{ kind: "file", getAsFile: () => shot }],
+        getData: () => "",
+      },
+    });
+    await screen.findByRole("button", { name: "Remove shot.png" });
     await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
     fireEvent.click(createButton(/^Create⏎?$/));
     first.unmount();
@@ -883,17 +897,34 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0] as HTMLElement);
     window.removeEventListener(CAPTURE_OPEN_EVENT, onOpen);
     keptIsThere();
+    // Kept until it's made: an open that doesn't happen loses nothing.
+    expect(loadDraft(ME, WS, "refused")?.description).toBe("the refused one's words");
     const request = opened.at(-1);
-    expect(request?.draft).toBe("From chat");
-    // The shell opens it as a prefilled open holding the refused draft.
-    renderBody(
-      { ...request, openId: 3, held: { current: request?.heldDraft ?? null } },
+    expect(request).toMatchObject({ type: "task", draft: "From chat", fromRefused: true });
+    // The shell opens it as a prefilled open (its own `held`).
+    const second = renderBody(
+      { ...request, openId: 3, held: { current: null } },
       referenceStore({}),
       request?.draft ?? "",
     );
     await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    expect(
+      (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
+    ).toBe("the refused one's words");
+    expect(screen.getByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("Kept with Esc");
+    // Esc: both stay kept.
+    second.unmount();
     keptIsThere();
+    expect(loadDraft(ME, WS, "refused")).not.toBeNull();
+    // Opened again and made: only the refused one goes.
+    renderBody({ ...request, openId: 4, held: { current: null } }, referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).toBeNull());
+    cleanup();
+    keptIsThere();
+    registerCaptureAttachments(null);
   });
 
   it("a normal open keeps today's draft: what's typed is kept on the device", async () => {

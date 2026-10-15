@@ -134,7 +134,7 @@ describe("a prefilled open (chat's T, CV-7b)", () => {
       },
     };
   }
-  const openWith = async (request?: { draft?: string }) => {
+  const openWith = async (request?: { draft?: string; fromRefused?: boolean }) => {
     await act(async () => {
       dispatchOpenCapture(request);
       await new Promise((r) => setTimeout(r, 0));
@@ -168,10 +168,14 @@ describe("a prefilled open (chat's T, CV-7b)", () => {
     await close();
     await openWith({ draft: "Another message" });
     expect(seen.at(-1)?.held).not.toBe(held);
+    await close();
+    await openWith({ draft: "Refused one", fromRefused: true });
+    expect(seen.at(-1)?.fromRefused).toBe(true);
+    expect(seen.at(-1)?.held).toEqual({ current: null });
     unlisten();
   });
 
-  it("closed, it gives back the line kept before it", async () => {
+  it("the next open gives back the line kept before it (after one or several prefilled opens)", async () => {
     const { unlisten } = renderShell([TASK, NOTE]);
     await openWith();
     fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
@@ -183,6 +187,9 @@ describe("a prefilled open (chat's T, CV-7b)", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
       target: { value: "From chat, edited" },
     });
+    await close();
+    await openWith({ draft: "A second message" });
+    expect(line()).toBe("A second message");
     await close();
     await openWith();
     expect(line()).toBe("Kept with Esc");

@@ -68,10 +68,11 @@ export type CaptureRequest = {
    */
   onCreated?: (ref: EntityRef, title: string) => void;
   /**
-   * With `draft`: the body's whole draft to start from (a refused capture's
-   * Restore while the person keeps another draft). Only its body reads it.
+   * With `draft`: start from this person's refused capture (its toast's
+   * Restore while they keep another draft). The refused one stays kept on
+   * the device until it's made. Only the Task body reads it.
    */
-  heldDraft?: unknown;
+  fromRefused?: boolean;
 };
 
 /** A request as the body gets it: plus what was open when it was opened (93). */

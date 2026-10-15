@@ -223,8 +223,11 @@ export function TaskCaptureBody({
   const held = context?.held;
   /** Forget the draft this capture writes to (a prefilled open's own, or the kept one). */
   const forgetDraft = () => {
-    if (held) held.current = null;
-    else {
+    if (held) {
+      held.current = null;
+      // A restored refused capture is made: it's no longer kept.
+      if (context?.fromRefused) clearDraft(owner.userId, owner.workspaceId, "refused");
+    } else {
       clearDraft(owner.userId, owner.workspaceId);
       lastTitleWords = "";
     }
@@ -235,16 +238,22 @@ export function TaskCaptureBody({
     // draft is never read, written or cleared by it.
     if (held) {
       const mine = held.current as CaptureDraft | null;
-      let start: CaptureDraft = mine ?? {
-        ...EMPTY_DRAFT,
-        segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
-      };
+      // A refused capture's Restore (`fromRefused`): it starts from the
+      // refused one, read (not taken) from its slot, files and all.
+      const refusedHere =
+        !mine && context?.fromRefused
+          ? loadDraft(owner.userId, owner.workspaceId, "refused")
+          : null;
+      let start: CaptureDraft = mine ??
+        refusedHere ?? {
+          ...EMPTY_DRAFT,
+          segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
+        };
       // Typed under another type (⌘2, then back): those words come along.
       if (mine && shellDraft.trim() && shellDraft !== plainText(mine.segments)) {
         start = { ...start, segments: [{ text: shellDraft }] };
       }
-      // A refused capture opened by its Restore brings its files back too.
-      const files = mine ? takeRefusedFiles(owner.userId, owner.workspaceId, true) : [];
+      const files = refusedHere ? takeRefusedFiles(owner.userId, owner.workspaceId) : [];
       return { draft: start, restored: false, files };
     }
     const stored = loadDraft(owner.userId, owner.workspaceId);
@@ -946,18 +955,21 @@ export function TaskCaptureBody({
         onClick: () => {
           const waiting = loadDraft(who, where, "refused");
           if (!waiting) return;
-          clearDraft(who, where, "refused");
-          if (openBody) openBody(waiting, takeRefusedFiles(who, where));
-          else if (draftHasContent(loadDraft(who, where) ?? EMPTY_DRAFT)) {
+          if (!openBody && draftHasContent(loadDraft(who, where) ?? EMPTY_DRAFT)) {
             // The person keeps another draft: it stays where it is, and the
-            // refused capture opens in its own (files and all).
-            if (refusedFiles) refusedFiles.restoring = true;
+            // refused capture opens in its own; it stays kept in its slot
+            // until it's made (Esc, or an open that doesn't happen, loses
+            // nothing).
             dispatchOpenCapture({
               type: "task",
               draft: plainText(waiting.segments),
-              heldDraft: waiting,
+              fromRefused: true,
             });
-          } else {
+            return;
+          }
+          clearDraft(who, where, "refused");
+          if (openBody) openBody(waiting, takeRefusedFiles(who, where));
+          else {
             // The capture that opens takes the files with the draft.
             if (refusedFiles) refusedFiles.restoring = true;
             saveDraft(who, where, waiting);
