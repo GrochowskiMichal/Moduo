@@ -395,7 +395,7 @@ BEGIN
                   AND test.send('C', 'OLD', 'old2', 'me too') LIKE 'ok %', 'setup: B and C write in OLD');
 
   -- Removed by a manager: no posting back in; leaving on your own and posting rejoins.
-  UPDATE public.chat_members SET left_at = now(), removed_by = test.id('A')
+  UPDATE public.chat_members SET left_at = now(), removed_at = now(), removed_by = test.id('A')
    WHERE channel_id = test.ref('OLD') AND user_id = test.id('C');
   v := test.send('C', 'OLD', 'old3', 'let me back in');
   PERFORM test.ok(v = '42501 You were removed from this conversation.' AND test.msg('old3') IS NULL
@@ -414,13 +414,13 @@ BEGIN
     'left: B, who left OLD, posts and is back in', v);
 
   -- Removed from a private conversation: nothing there any more, own messages included.
-  UPDATE public.chat_members SET left_at = now(), removed_by = test.id('A')
+  UPDATE public.chat_members SET left_at = now(), removed_at = now(), removed_by = test.id('A')
    WHERE channel_id = test.ref('P') AND user_id = test.id('B');
   PERFORM test.ok(test.send('B', 'P', 'p2', 'still here?') = '42501 You''re not a member of this conversation.'
                   AND test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('p1')))
                         = '42501 You''re not a member of this conversation.',
     'removed: B, removed from the private P, can''t post or react there');
-  UPDATE public.chat_members SET left_at = NULL, removed_by = NULL
+  UPDATE public.chat_members SET left_at = NULL, removed_at = NULL, removed_by = NULL
    WHERE channel_id = test.ref('P') AND user_id = test.id('B');
 
   -- Archived: read-only (a message can still be deleted).
@@ -1093,12 +1093,13 @@ BEGIN
   v_stamp := (test.member(test.ref('L'), 'C')).updated_at;
   v := test.conv_op('A', 'chat_op_remove_member', test.ref('L'), format(', %L::uuid', test.id('C')));
   PERFORM test.ok(v = 'ok 1' AND (test.member(test.ref('L'), 'C')).left_at IS NOT NULL
+                  AND (test.member(test.ref('L'), 'C')).removed_at IS NOT NULL
                   AND (test.member(test.ref('L'), 'C')).removed_by = test.id('A')
                   AND (test.member(test.ref('L'), 'C')).updated_at > v_stamp
                   AND test.cacts(test.ref('L'), 'chat.member_remove', 'A') = 1
                   AND (SELECT payload FROM public.module_activity WHERE entity_id = test.ref('L') AND op = 'chat.member_remove')
                         = jsonb_build_object('user_id', test.id('C')),
-    'remove: its manager removes C: the row stays, stamped left_at + removed_by and updated; one attributed row', v);
+    'remove: its manager removes C: the row stays, stamped left_at + removed_at (+ who: removed_by) and updated; one attributed row', v);
   PERFORM test.ok(test.conv_op('C', 'chat_op_join', test.ref('L')) = '42501 You were removed from this channel. A manager can add you back.'
                   AND test.send('C', 'L', 'l-c1', 'let me in') = '42501 You were removed from this conversation.',
     'remove: C can''t join or post their way back in');
@@ -1107,6 +1108,7 @@ BEGIN
     'remove: a member can''t add back someone a manager removed', v);
   v := test.value_as('A', format($q$SELECT public.chat_op_add_members(%L, ARRAY[%L]::uuid[])::text$q$, test.ref('L'), test.id('C')));
   PERFORM test.ok(v = '1' AND (test.member(test.ref('L'), 'C')).removed_by IS NULL
+                  AND (test.member(test.ref('L'), 'C')).removed_at IS NULL
                   AND test.send('C', 'L', 'l-c2', 'thanks') = 'ok 1',
     'remove: the manager adds C back, and C posts again', v);
   v := test.conv_op('A', 'chat_op_remove_member', test.ref('L'), format(', %L::uuid', test.id('B')));
@@ -1120,6 +1122,7 @@ BEGIN
   v := test.conv_op('E', 'chat_op_remove_member', test.ref('L'), format(', %L::uuid', test.id('E')));
   PERFORM test.ok(v = 'ok 1' AND (test.member(test.ref('L'), 'E')).left_at IS NOT NULL
                   AND (test.member(test.ref('L'), 'E')).removed_by IS NULL
+                  AND (test.member(test.ref('L'), 'E')).removed_at IS NULL
                   AND test.conv_op('E', 'chat_op_join', test.ref('L')) = 'ok 1',
     'remove: removing yourself is leaving (you may join again)', v);
   PERFORM test.ok(test.conv_op('X', 'chat_op_remove_member', test.ref('L'), format(', %L::uuid', test.id('E')))
@@ -1470,7 +1473,7 @@ BEGIN
           OR has_function_privilege('anon', p.oid, 'EXECUTE'));
   PERFORM test.ok(v_bad IS NULL, 'CV-2b definers: search_path pinned, no PUBLIC or anon EXECUTE', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad
-    FROM unnest(ARRAY['chat__channel_name(text)', 'chat__channel_topic(text)', 'chat__name_taken(uuid, text, uuid)',
+    FROM unnest(ARRAY['chat__channel_name(text)', 'chat__channel_topic(text)', 'chat__name_taken(uuid, text, uuid, uuid)',
                       'chat__is_manager(public.chat_channels, uuid)',
                       'chat__can_manage(public.chat_channels, uuid)', 'chat__can_post(public.chat_channels, uuid)',
                       'chat__enter(uuid, uuid, uuid, text)', 'chat__hand_over(uuid, uuid)',
