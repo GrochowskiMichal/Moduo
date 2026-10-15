@@ -973,12 +973,23 @@ export function TaskCaptureBody({
   }, []);
   const putBack = (kept: CaptureDraft, message: string, keptFiles: File[] = []) => {
     const empty = segmentsRef.current.every((x) => "text" in x && !x.text.trim());
+    const { userId: who, workspaceId: where } = owner;
     if (mounted.current && empty && !pastedRef.current) {
       fill(kept, keptFiles);
+      if (held) {
+        // A prefilled open's draft isn't on the device: the refused one is
+        // kept in its slot too (Esc loses nothing), and making it ends that.
+        saveDraft(who, where, kept, "refused");
+        refusedFiles =
+          keptFiles.length > 0 ? { key: `${who ?? ""}:${where ?? ""}`, files: keptFiles } : null;
+        const now = loadDraft(who, where, "refused");
+        held.from = now
+          ? { json: JSON.stringify(now), files: refusedFiles?.files ?? [] }
+          : undefined;
+      }
       toast.error(message, { description: "Your capture is back: change it and try again." });
       return;
     }
-    const { userId: who, workspaceId: where } = owner;
     saveDraft(who, where, kept, "refused");
     // Its files can't go in the device slot: they wait in memory for Restore.
     refusedFiles =
@@ -1277,11 +1288,12 @@ export function TaskCaptureBody({
     void applying.then((created) => {
       // The opener asked to hear about it (chat's `/task`).
       if (created) context?.onCreated?.({ type: "task", id: created }, madeTitle);
+      // Made: a restored refused capture is no longer kept (even if closed meanwhile).
+      if (created) consumeRefused();
       if (!mounted.current) return;
       setApplyingTemplate(false);
       // Refused or offline (the provider said why): the capture stays as it was.
       if (!created) return;
-      consumeRefused();
       if (more) {
         setTemplate(null);
         resetForMore();

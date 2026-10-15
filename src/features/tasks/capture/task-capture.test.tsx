@@ -970,6 +970,32 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     registerCaptureAttachments(null);
   });
 
+  it("a restored capture refused again on Create more stays kept through Esc", async () => {
+    keepDraft();
+    registerCaptureAttachments(() => {});
+    const request = await refuseThenRestore();
+    // Lexical measures the caret when the capture is filled back.
+    Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+    Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
+    // Refused once the emptied capture has drawn: it comes back into it.
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      throw new Error("Still not here.");
+    });
+    const second = renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create more/));
+    await waitFor(() =>
+      expect(
+        (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
+      ).toBe("the refused one's words"),
+    );
+    second.unmount();
+    expect(loadDraft(ME, WS, "refused")?.description).toBe("the refused one's words");
+    keptIsThere();
+    registerCaptureAttachments(null);
+  });
+
   it("a Restore that finds no refused capture here (another workspace) starts empty", async () => {
     keepDraft();
     renderBody(
