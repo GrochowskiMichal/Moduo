@@ -497,18 +497,23 @@ function ProjectOverview({
                     type="button"
                     onClick={() => onOpenTask?.(f.entityId)}
                     disabled={!onOpenTask}
-                    className={ROW_BUTTON}
+                    className={cn(ROW_BUTTON, "py-0.5")}
                   >
                     <Paperclip
                       className="size-icon-sm shrink-0 text-muted-foreground"
                       aria-hidden
                     />
-                    <span className="min-w-0 flex-1 break-words">{f.fileName}</span>
-                    {task ? (
-                      <span className="min-w-0 shrink truncate text-xs text-muted-foreground">
-                        {task.title}
-                      </span>
-                    ) : null}
+                    {/* The name on one line and its task under it, both cut
+                        short: beside each other, a long name got a column
+                        one letter wide (MOD-127). */}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate">{f.fileName}</span>
+                      {task ? (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {task.title || "Untitled"}
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               );
