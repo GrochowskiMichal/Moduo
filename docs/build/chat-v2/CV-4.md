@@ -32,7 +32,7 @@
 - **`search_path` stays `public`** (the live body's), with every call schema-qualified.
 - **Spec at API level** (the brief's reading): the paused line and "Not sent · Retry" are CV-8a's; this spec asserts `chat_workspace_enabled`, reads, search (v2 `search_tsv` and v1's `ilike`) and a refused `chat_op_send` (by HTTP status, not wording: CV-2a may reword the refusal) with no row written.
 - **The spec's grant stub** is created with `psql` (PostgREST can't run DDL) using the stack's `DB_URL` from `supabase status` (`MODUO_DB_URL` overrides), carries the comment `chat-plan.spec stub`, and is replaced or dropped only on a positive match of that comment (validator: a real function with no comment must never count as the stub); it is dropped in `beforeAll` too, so a crashed run leaves no grant behind. When a real `plan_grant_effective_tier` exists (TX-9b landed) the grant test skips with a reason; the lapsed-plan test still runs (a new workspace has no grant).
-- **`chat_workspace_enabled` still answers any signed-in caller for any workspace id** (v1's behaviour, kept) · agent · it is the same single bit v1 gave (chat on or off), and every write caller checks membership first · rejected: a membership check in this block (changes the RPC's contract for the connector; not this block's scope).
+- **`chat_workspace_enabled` keeps v1's signature and contract** (one bit: chat on or off for a workspace) · agent · callers and the connector depend on it, and every write path checks membership first · rejected: changing the RPC's contract in this block (CV-23 reviews the v1 surface).
 
 ## Gotchas (area: supabase)
 
