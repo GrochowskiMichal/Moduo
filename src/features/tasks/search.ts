@@ -176,8 +176,12 @@ export function descriptionWords(description: string | null | undefined): string
 /**
  * Whether a task matches the search box: every word of the query appears in
  * its title, the text of its description or the key it was imported under
- * ("ENG-123", TV-D16, AC3.6; the server's `tasks_search` reads the same),
- * ignoring case. Its own handle under the workspace's `taskKey` counts too
+ * ("ENG-123", TV-D16, AC3.6), ignoring case. The server's `tasks_search`
+ * reads the same fields but not quite the same text: it strips the old HTML
+ * and reads Markdown as stored, so a word the editor escapes (`a\*b`) or a
+ * reference's `moduo://` address can match differently there (call #15; the
+ * editor escapes only what Markdown would read, so `file_name` is stored
+ * as written). Its own handle under the workspace's `taskKey` counts too
  * (MOD-126), but only whole: "MOD-99", or "mod 99" as two words. Read as
  * text, "mod" would find every task and "7" every number with a 7 in it.
  * An empty query matches everything.

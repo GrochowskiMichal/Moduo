@@ -107,3 +107,26 @@
 .desc-checklist > .desc-li-checked:focus-visible::before {
   box-shadow: 0 0 0 2px var(--ring);
 }
+
+/* A fenced code block (call #15's review): a plain monospace block, its
+   content kept as written (no highlighting). Agent's layout, revisitable:
+   mirrors Notes' code block. */
+.desc-code-block {
+  display: block;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.desc-code-block:last-child {
+  margin-bottom: 0;
+}

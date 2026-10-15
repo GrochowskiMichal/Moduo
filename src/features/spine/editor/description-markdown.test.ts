@@ -24,7 +24,12 @@ import {
 import { referenceWord } from "../../../../supabase/functions/_shared/description-markdown";
 import { $createDateNode, $isDateNode, DateNode } from "../references/date-node";
 import { referenceKind, referenceNoun } from "../references/kinds";
-import { $exportDescription, $importDescription } from "./description-markdown";
+import {
+  $exportDescription,
+  $importDescription,
+  $isRawTextNode,
+  DESCRIPTION_MARKDOWN_NODES,
+} from "./description-markdown";
 import { $createReferenceNode, $isReferenceNode, ReferenceNode } from "./entity-ref-schema";
 
 const TASK = "11111111-1111-4111-8111-111111111111";
@@ -33,7 +38,7 @@ const NOTE = "22222222-2222-4222-8222-222222222222";
 /** The description editor's nodes (format "markdown"). */
 function markdownEditor() {
   return createHeadlessEditor({
-    nodes: [ReferenceNode, DateNode, ListNode, ListItemNode, QuoteNode, LinkNode],
+    nodes: DESCRIPTION_MARKDOWN_NODES,
     onError: (error) => {
       throw error;
     },
@@ -258,6 +263,152 @@ describe("an old HTML description reads into the editor as Markdown", () => {
         .map((n) => n.getTextContent()),
     );
     expect(bold).toEqual(["bold", "both"]);
+  });
+});
+
+/** Load, change one word elsewhere (a real edit), save. */
+function editAndSave(markdown: string): string {
+  const editor = load(markdown);
+  editor.update(
+    () => {
+      $getRoot().append($createParagraphNode().append($createTextNode("Edited.")));
+    },
+    { discrete: true },
+  );
+  return save(editor);
+}
+
+describe("code keeps its content as written (call #15's review)", () => {
+  const PYTHON_CODE = [
+    "def f(*args, **kwargs):",
+    '    """__name__ and *stars*"""',
+    "",
+    "    return __name__ + `x` + a_b * 2",
+  ].join("\n");
+  const SQL_CODE = [
+    "SELECT user_id, file_name FROM t WHERE a ~~ '%_x%' AND b = '\\';",
+    "-- * not a list",
+  ].join("\n");
+
+  for (const [name, lang, code] of [
+    ["Python", "python", PYTHON_CODE],
+    ["SQL", "sql", SQL_CODE],
+  ] as const) {
+    it(`a ${name} fence round-trips verbatim, also after an edit elsewhere`, () => {
+      const md = `Before:\n\n\`\`\`${lang}\n${code}\n\`\`\`\n\nAfter.`;
+      expect(save(load(md))).toBe(md);
+      expect(editAndSave(md)).toBe(`${md}\n\nEdited.`);
+      const editor = load(md);
+      const inside = editor.getEditorState().read(() =>
+        $getRoot()
+          .getChildren()
+          .find((b) => b.getType() === "code")
+          ?.getTextContent(),
+      );
+      expect(inside).toBe(code);
+    });
+  }
+
+  it("inline code keeps its content raw", () => {
+    const md = "Use `__name__` and `a\\*b` and `` `tick` ``.";
+    const editor = load(md);
+    expect(save(editor)).toBe(md);
+    const codes = editor.getEditorState().read(() =>
+      $getRoot()
+        .getAllTextNodes()
+        .filter((n) => n.hasFormat("code"))
+        .map((n) => n.getTextContent()),
+    );
+    expect(codes).toEqual(["__name__", "a\\*b", "`tick`"]);
+  });
+});
+
+describe("words are escaped only where Markdown would read them (call #15's review)", () => {
+  it("stores identifiers, lone stars and paths as written, and reads them back the same", () => {
+    const words = "file_name and user_id, 5 * 3, a ~ b, C:\\Users\\me, one ` tick";
+    const editor = markdownEditor();
+    editor.update(
+      () => {
+        $getRoot().clear();
+        $getRoot().append($createParagraphNode().append($createTextNode(words)));
+      },
+      { discrete: true },
+    );
+    const saved = save(editor);
+    expect(saved).toBe(words);
+    expect(
+      load(saved)
+        .getEditorState()
+        .read(() => $getRoot().getTextContent()),
+    ).toBe(words);
+  });
+
+  it("still escapes what would become formatting", () => {
+    const words = "a*b* _x_ ~~gone~~ `code` two ``ticks`` \\* end_";
+    const editor = markdownEditor();
+    editor.update(
+      () => {
+        $getRoot().clear();
+        $getRoot().append($createParagraphNode().append($createTextNode(words)));
+      },
+      { discrete: true },
+    );
+    const saved = save(editor);
+    const reread = load(saved);
+    expect(reread.getEditorState().read(() => $getRoot().getTextContent())).toBe(words);
+    expect(
+      all(reread)
+        .filter($isTextNode)
+        .every((n) => reread.getEditorState().read(() => n.getFormat() === 0)),
+    ).toBe(true);
+    expect(save(reread)).toBe(saved);
+  });
+});
+
+describe("text read raw saves back exactly (call #15's review)", () => {
+  it("a costly line saves the same twice, escapes and all", () => {
+    const line = `${"user_id a*b \\_ \\\\ `tick` [x] ".repeat(200)}end`;
+    expect(line.length).toBeGreaterThan(5_000);
+    const md = `**Bold** before.\n\n${line}\n\nAfter *it*.`;
+    const once = save(load(md));
+    expect(once).toBe(md);
+    expect(save(load(once))).toBe(once);
+    const raw = all(load(md)).filter($isRawTextNode);
+    expect(raw).toHaveLength(1);
+  });
+
+  it("everything past the total saves the same twice", () => {
+    const md = Array.from({ length: 6_000 }, (_, i) => `line_${i} a\\*b \\_x\\_`).join("\n\n");
+    const once = save(load(md));
+    expect(once).toBe(md);
+    expect(save(load(once))).toBe(once);
+  });
+});
+
+describe("a long description is cut only between blocks (call #15's review)", () => {
+  it("a paragraph or quote of more than 100 lines comes back whole, with no blank line inside", () => {
+    const paragraph = Array.from({ length: 150 }, (_, i) => `Line ${i} of the paragraph.`).join(
+      "\n",
+    );
+    const quote = Array.from({ length: 120 }, (_, i) => `> Quoted ${i}.`).join("\n");
+    const md = `${paragraph}\n\n${quote}\n\nThe end.`;
+    const once = save(load(md));
+    expect(once).toBe(md);
+    expect(save(load(once))).toBe(once);
+  });
+
+  it("a big list and a fence with blank lines inside stay Markdown", () => {
+    const list = Array.from({ length: 300 }, (_, i) => `- item ${i}`).join("\n");
+    const fence = `\`\`\`\n${Array.from({ length: 120 }, (_, i) => (i % 10 === 0 ? "" : `code ${i}`)).join("\n")}\n\`\`\``;
+    const md = `${list}\n\n${fence}\n\nDone.`;
+    const editor = load(md);
+    const types = editor.getEditorState().read(() =>
+      $getRoot()
+        .getChildren()
+        .map((b) => b.getType()),
+    );
+    expect(types).toEqual(["list", "code", "paragraph"]);
+    expect(save(editor)).toBe(md);
   });
 });
 

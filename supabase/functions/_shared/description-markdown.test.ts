@@ -8,6 +8,8 @@ import { describe, expect, it } from "@rstest/core";
 import {
   CONVERT_LIMIT,
   dateMarkdown,
+  escapeBlockStarts,
+  escapeMarkdownText,
   descriptionPlainText,
   descriptionReferences,
   descriptionToMarkdown,
@@ -54,9 +56,9 @@ describe("htmlToMarkdown: the shapes the editor stored", () => {
     expect(htmlToMarkdown(html)).toBe("One\ntwo\n\nThree");
   });
 
-  it("decodes entities, and escapes what Markdown would read as formatting", () => {
+  it("decodes entities, and escapes only what Markdown would read as formatting", () => {
     const html = `${P}${span("Q&amp;A &lt;draft&gt; &quot;v2&quot; &#39;ok&#39;&nbsp;&#8212; a*b snake_case")}</p>`;
-    expect(htmlToMarkdown(html)).toBe(`Q&A <draft> "v2" 'ok' — a\\*b snake\\_case`);
+    expect(htmlToMarkdown(html)).toBe(`Q&A <draft> "v2" 'ok' — a\\*b snake_case`);
   });
 
   it("keeps bold, italic, both, strikethrough and code; underline has no Markdown", () => {
@@ -122,6 +124,32 @@ describe("htmlToMarkdown: the shapes the editor stored", () => {
     expect(htmlToMarkdown(`${P}${span("&lt;span&gt; wraps wrong")}</p>`)).toBe("\\<span> wraps wrong");
     expect(guardMarkdownStart("<b> is bold")).toBe("\\<b> is bold");
     expect(guardMarkdownStart("fine <b>")).toBe("fine <b>");
+  });
+});
+
+describe("escapeMarkdownText: only what Markdown would read (call #15's review)", () => {
+  it("leaves identifiers, lone stars and tildes, and paths as written", () => {
+    expect(escapeMarkdownText("file_name user_id __init__x")).toBe("file_name user_id \\_\\_init\\_\\_x");
+    expect(escapeMarkdownText("5 * 3 and a ~ b")).toBe("5 * 3 and a ~ b");
+    expect(escapeMarkdownText("C:\\Users\\me")).toBe("C:\\Users\\me");
+    expect(escapeMarkdownText("one ` tick", { lonelyBacktick: true })).toBe("one ` tick");
+  });
+
+  it("escapes what would start emphasis, strike or code, and the text's own edges", () => {
+    expect(escapeMarkdownText("a*b* _x_ ~~y~~ `c`")).toBe("a\\*b\\* \\_x\\_ \\~\\~y\\~\\~ \\`c\\`");
+    expect(escapeMarkdownText("_lead and end_")).toBe("\\_lead and end\\_");
+    expect(escapeMarkdownText("\\*")).toBe("\\\\\\*");
+    expect(escapeMarkdownText("trailing\\")).toBe("trailing\\\\");
+  });
+
+  it("block starts in an old HTML paragraph stay words, a list item's too", () => {
+    const html =
+      `${P}${span("2026. Q4 plan")}</p>${P}${span("- not a list")}<br>${span("&gt; not a quote")}</p>` +
+      "<ul><li>- dash inside</li></ul>";
+    expect(htmlToMarkdown(html)).toBe(
+      "2026\\. Q4 plan\n\n\\- not a list\n\\> not a quote\n\n- \\- dash inside",
+    );
+    expect(escapeBlockStarts("[ ] box\n1. one\n+ plus")).toBe("\\[ ] box\n1\\. one\n\\+ plus");
   });
 });
 
@@ -236,6 +264,8 @@ describe("a crafted description can't stall a reader (the connector runs this)",
     expect(md).not.toContain("**Tail**");
     expect(md).not.toContain("Northwind");
     expect(md).not.toContain("<");
+    // Its reference past the cut is kept, as an address only.
+    expect(md).toContain(`[task](moduo://task/${TASK})`);
   });
 });
 

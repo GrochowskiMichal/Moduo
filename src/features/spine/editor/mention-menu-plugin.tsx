@@ -608,7 +608,17 @@ export function MentionMenuPlugin({
       if (candidate) commitRef.current(candidate);
       return true;
     };
-    const offEnter = editor.registerCommand(KEY_ENTER_COMMAND, pick, COMMAND_PRIORITY_HIGH);
+    // ⏎ never goes past a menu that shows: with nothing to pick yet
+    // ("Searching…", "No matches") it closes the menu and does nothing else,
+    // so a host's ⏎ (capture's create, call #14) can't fire under it.
+    const enter = (event: KeyboardEvent | null) => {
+      if (pick(event)) return true;
+      if (!menuRef.current || hiddenRef.current) return false;
+      event?.preventDefault();
+      setMenu(null);
+      return true;
+    };
+    const offEnter = editor.registerCommand(KEY_ENTER_COMMAND, enter, COMMAND_PRIORITY_HIGH);
     const offTab = editor.registerCommand(KEY_TAB_COMMAND, pick, COMMAND_PRIORITY_HIGH);
     return () => {
       offEnter();

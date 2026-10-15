@@ -30,8 +30,7 @@
 // description's lists in styles/description-prose.css).
 
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
-import { $isLinkNode, LinkNode } from "@lexical/link";
-import { ListItemNode, ListNode } from "@lexical/list";
+import { $isLinkNode } from "@lexical/link";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
@@ -42,7 +41,7 @@ import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
-import { DRAG_DROP_PASTE, QuoteNode } from "@lexical/rich-text";
+import { DRAG_DROP_PASTE } from "@lexical/rich-text";
 import { $findMatchingParent } from "@lexical/utils";
 import {
   $createLineBreakNode,
@@ -83,6 +82,7 @@ import { HandleAutolinkPlugin, SEED_TAG } from "../references/handle-autolink-pl
 import {
   $exportDescription,
   $importDescription,
+  DESCRIPTION_MARKDOWN_NODES,
   DESCRIPTION_TRANSFORMERS,
 } from "./description-markdown";
 import { $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
@@ -113,6 +113,8 @@ const MARKDOWN_THEME = {
   ...THEME,
   quote: "mb-2 border-s-2 border-border ps-3 text-muted-foreground last:mb-0",
   link: "text-primary underline underline-offset-2",
+  // A fenced code block (call #15's review): a plain monospace block.
+  code: "desc-code-block",
   list: {
     ul: "desc-ul",
     ol: "desc-ol",
@@ -552,9 +554,7 @@ export function EntityTextEditor({
       onError: (error: Error) => {
         console.error("EntityTextEditor error:", error);
       },
-      nodes: markdown
-        ? [EntityRefNode, DateNode, ListNode, ListItemNode, QuoteNode, LinkNode]
-        : [EntityRefNode, DateNode],
+      nodes: markdown ? DESCRIPTION_MARKDOWN_NODES : [EntityRefNode, DateNode],
       theme: markdown ? MARKDOWN_THEME : THEME,
     }),
     [editable, markdown],

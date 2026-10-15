@@ -110,6 +110,71 @@ export function guardMarkdownStart(markdown: string): string {
   return isHtmlDescription(markdown) ? markdown.replace(/^(\s*)</, "$1\\<") : markdown;
 }
 
+// ── Escaping words as Markdown ────────────────────────────────────────────
+
+const ASCII_PUNCTUATION = /[!-/:-@[-`{-~]/;
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+const BLANK = /\s/;
+
+/**
+ * Words as Markdown text, escaped only where Markdown would read them as
+ * something else (call #15), so stored text stays searchable as written:
+ * - `_` inside a word (`file_name`) can't start emphasis and stays bare;
+ * - `*` with a space on both sides (`5 * 3`) can't either;
+ * - a single `~` can't strike through (it takes two);
+ * - a backtick stays bare when it's the only one in its block (`lonelyBacktick`);
+ * - `\` is escaped only before punctuation, where it would escape it.
+ * The text's own edges count as "could be anything", so a character there is
+ * escaped: the words around it may sit in another run.
+ */
+export function escapeMarkdownText(text: string, opts: { lonelyBacktick?: boolean } = {}): string {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i] as string;
+    const prev = text[i - 1];
+    const next = text[i + 1];
+    switch (ch) {
+      case "\\":
+        out += next === undefined || ASCII_PUNCTUATION.test(next) ? "\\\\" : "\\";
+        break;
+      case "_":
+        out += prev !== undefined && next !== undefined && WORD_CHAR.test(prev) && WORD_CHAR.test(next) ? "_" : "\\_";
+        break;
+      case "*":
+        out += prev !== undefined && next !== undefined && BLANK.test(prev) && BLANK.test(next) ? "*" : "\\*";
+        break;
+      case "~":
+        out += prev === undefined || next === undefined || prev === "~" || next === "~" ? "\\~" : "~";
+        break;
+      case "`":
+        out += opts.lonelyBacktick ? "`" : "\\`";
+        break;
+      default:
+        out += ch;
+    }
+  }
+  return out;
+}
+
+/**
+ * A paragraph's line whose words start like a block (`- `, `+ `, `1. `, `> `,
+ * `[ ] `) keeps that start escaped, as `*` is, so the next read gives the
+ * paragraph back, not a list, a quote or a checkbox ("2026. Q4 plan" stays
+ * words). Each line counts: a line break inside the paragraph starts a line.
+ */
+export function escapeBlockStarts(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^([ \t]*)([-+])(?=[ \t])/, "$1\\$2")
+        .replace(/^([ \t]*)(\d{1,9})\.(?=[ \t])/, "$1$2\\.")
+        .replace(/^([ \t]*)>/, "$1\\>")
+        .replace(/^([ \t]*)\[([ xX]?)\](?=[ \t])/, "$1\\[$2]"),
+    )
+    .join("\n");
+}
+
 /** Any stored description as Markdown: the old HTML converted, Markdown as it is. */
 export function descriptionToMarkdown(value: string | null | undefined): string {
   if (!value) return "";
@@ -273,35 +338,49 @@ function parseHtml(html: string): El {
 }
 
 /**
- * The words of HTML past CONVERT_LIMIT, in one pass: tags dropped, a
- * reference's stored text dropped with it (it may be a title, RF-1), entities
- * decoded, escaped as Markdown text.
+ * The words of HTML past CONVERT_LIMIT, in one pass: tags dropped, entities
+ * decoded, escaped as Markdown text, one line per block; a reference as its
+ * Markdown link (its stored text, which may be a title, dropped, RF-1).
  */
 function htmlWords(html: string): string {
   let out = "";
+  let words = "";
+  const flushWords = () => {
+    out += escapeText(decodeEntities(words));
+    words = "";
+  };
   let i = 0;
   const n = html.length;
   while (i < n) {
     const lt = html.indexOf("<", i);
     if (lt < 0) {
-      out += html.slice(i);
+      words += html.slice(i);
       break;
     }
-    out += html.slice(i, lt);
+    words += html.slice(i, lt);
     const gt = html.indexOf(">", lt + 1);
     if (gt < 0) break;
     const tag = html.slice(lt, gt + 1);
     i = gt + 1;
     if (tag.includes(ENTITY_REF)) {
+      const name = /^<([a-zA-Z][a-zA-Z0-9-]{0,30})/.exec(tag);
+      const attrs = parseAttrs(tag.slice(1 + (name?.[1].length ?? 0), -1));
+      const type = attrs["data-entity-type"] ?? "";
+      const id = attrs["data-entity-id"] ?? "";
+      flushWords();
+      if (/^[a-z][a-z_-]{0,40}$/.test(type) && /^[A-Za-z0-9-]{1,64}$/.test(id)) {
+        out += referenceMarkdown(type, id, attrs["data-display"]);
+      }
       const close = html.indexOf("</span", i);
       i = close < 0 ? n : close;
     } else if (/^<\/?(?:p|div|li|br|blockquote|ul|ol|h[1-6])\b/i.test(tag)) {
-      out += "\n";
+      words += "\n";
     }
   }
-  return escapeText(decodeEntities(out))
+  flushWords();
+  return out
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => escapeBlockStarts(line.trim()))
     .filter(Boolean)
     .join("\n");
 }
@@ -338,9 +417,9 @@ function formatOf(el: El, base: Format): Format {
 /** A run of words with its formats, or Markdown that goes out as it is. */
 type Run = { text: string; format: Format } | { raw: string };
 
-/** Escape what Markdown would read as formatting (the editor's exporter escapes the same). */
+/** Escape what Markdown would read as formatting (the editor's text export uses the same rules). */
 function escapeText(text: string): string {
-  return text.replace(/[*_`~\\]/g, "\\$&");
+  return escapeMarkdownText(text);
 }
 
 function codeSpan(text: string): string {
@@ -489,7 +568,8 @@ function listMarkdown(list: El, indent: string): string[] {
     const inline = item.children
       .filter((c) => !isList(c))
       .flatMap((c) => (typeof c !== "string" && isBlock(c) ? [...c.children, BR] : [c]));
-    const text = inlineMarkdown(inline);
+    // An item's words that start like a block stay words, not a nested list.
+    const text = escapeBlockStarts(inlineMarkdown(inline));
     const marker = ordered ? `${n}. ` : "- ";
     const checked = item.attrs["aria-checked"];
     const box = item.attrs.role === "checkbox" || checked !== undefined ? (checked === "true" ? "[x] " : "[ ] ") : "";
@@ -508,9 +588,13 @@ function listMarkdown(list: El, indent: string): string[] {
 function blocksMarkdown(nodes: Node[]): string[] {
   const blocks: string[] = [];
   let inline: Node[] = [];
+  // A paragraph whose words start like a block ("2026. Q4 plan", "- not a
+  // list") stays a paragraph: the old editor had no lists, so it never was one.
+  const paragraph = (text: string) => {
+    if (text) blocks.push(escapeBlockStarts(text));
+  };
   const flushInline = () => {
-    const text = inlineMarkdown(inline);
-    if (text) blocks.push(text);
+    paragraph(inlineMarkdown(inline));
     inline = [];
   };
   for (const node of nodes) {
@@ -527,15 +611,12 @@ function blocksMarkdown(nodes: Node[]): string[] {
       const inner = blocksMarkdown(node.children).join("\n\n");
       if (inner) blocks.push(inner.split("\n").map((line) => (line ? `> ${line}` : ">")).join("\n"));
     } else if (node.tag === "li") {
-      const text = inlineMarkdown(node.children);
+      const text = escapeBlockStarts(inlineMarkdown(node.children));
       if (text) blocks.push(`- ${text}`);
     } else {
       // p, div, h1–h6, pre: a paragraph (a div holding blocks is read through).
       if (node.children.some(isBlock)) blocks.push(...blocksMarkdown(node.children));
-      else {
-        const text = inlineMarkdown(node.children);
-        if (text) blocks.push(text);
-      }
+      else paragraph(inlineMarkdown(node.children));
     }
   }
   flushInline();

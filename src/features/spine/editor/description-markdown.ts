@@ -2,13 +2,22 @@
 // MOD-120): the transformer set the description editor types, imports and
 // saves with. One dialect, written down once in `_shared/description-markdown`
 // (the connector reads it too): bold, italic, strikethrough, inline code,
-// links, bulleted, numbered and checkbox lists, quotes, and references and
-// date chips as `moduo://` links. No headings (`#` is the tag menu) and no
-// code blocks: the call didn't ask for them.
+// fenced code blocks, links, bulleted, numbered and checkbox lists, quotes,
+// and references and date chips as `moduo://` links. No headings (`#` is the
+// tag menu).
+//
+// Words are escaped only where Markdown would read them as something else
+// (`escapeMarkdownText`), so `file_name` is stored as written; a paragraph
+// that starts like a list stays a paragraph (`escapeBlockStarts`); code keeps
+// its content raw; and text too costly to read as Markdown comes in as raw
+// text that saves back exactly as it was (`RawTextNode`).
 //
 // Schema imports only, no React (headless tests load it). Value imports stay
 // relative.
 
+import { CodeHighlightNode, CodeNode } from "@lexical/code";
+import { $isLinkNode, LinkNode } from "@lexical/link";
+import { ListItemNode, ListNode } from "@lexical/list";
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
@@ -18,6 +27,7 @@ import {
   BOLD_STAR,
   BOLD_UNDERSCORE,
   CHECK_LIST,
+  CODE,
   type ElementTransformer,
   INLINE_CODE,
   ITALIC_STAR,
@@ -30,18 +40,27 @@ import {
   type Transformer,
   UNORDERED_LIST,
 } from "@lexical/markdown";
+import { QuoteNode } from "@lexical/rich-text";
 import {
+  $applyNodeReplacement,
   $createParagraphNode,
-  $createTextNode,
   $getRoot,
+  $isElementNode,
+  $isLineBreakNode,
   $isParagraphNode,
+  $isTextNode,
+  type LexicalNode,
   ParagraphNode,
+  type SerializedTextNode,
+  TextNode,
 } from "lexical";
 
 import {
   DESCRIPTION_LINK,
   dateMarkdown,
   descriptionToMarkdown,
+  escapeBlockStarts,
+  escapeMarkdownText,
   guardMarkdownStart,
   referenceMarkdown,
 } from "../../../../supabase/functions/_shared/description-markdown";
@@ -50,6 +69,52 @@ import { isReferenceDisplay } from "../references/types";
 import { $createReferenceNode, $isReferenceNode, ReferenceNode } from "./entity-ref-schema";
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A pattern that never matches: export-only transformers. */
+const NEVER = /(?!)/;
+
+/**
+ * Text read as it is stored, too costly or too large to read as Markdown (see
+ * CHUNK_LIMIT). It saves back exactly as it came in, never escaped again, so
+ * a save can't grow `user_id` into `user\\\_id`.
+ */
+export class RawTextNode extends TextNode {
+  static getType(): string {
+    return "description-raw";
+  }
+
+  static clone(node: RawTextNode): RawTextNode {
+    return new RawTextNode(node.__text, node.__key);
+  }
+
+  static importJSON(serialized: SerializedTextNode): RawTextNode {
+    return $createRawTextNode(serialized.text).updateFromJSON(serialized);
+  }
+
+  exportJSON(): SerializedTextNode {
+    return { ...super.exportJSON(), type: "description-raw" };
+  }
+}
+
+export function $createRawTextNode(text: string): RawTextNode {
+  return $applyNodeReplacement(new RawTextNode(text));
+}
+
+export function $isRawTextNode(node: unknown): node is RawTextNode {
+  return node instanceof RawTextNode;
+}
+
+/** Every node the description editor's Markdown needs. */
+export const DESCRIPTION_MARKDOWN_NODES = [
+  ReferenceNode,
+  DateNode,
+  ListNode,
+  ListItemNode,
+  QuoteNode,
+  LinkNode,
+  CodeNode,
+  CodeHighlightNode,
+  RawTextNode,
+];
 
 /**
  * `[task](moduo://task/<id>)` ⇄ a reference (no title kept, RF-1), with its
@@ -87,42 +152,77 @@ export const DESCRIPTION_REFERENCE: TextMatchTransformer = {
   type: "text-match",
 };
 
+/** Whether `node` holds its block's only backtick (no inline code there either). */
+function $onlyBacktickInBlock(node: TextNode): boolean {
+  const block = node.getTopLevelElement();
+  if (!block || !$isElementNode(block)) return false;
+  let count = 0;
+  for (const text of block.getAllTextNodes()) {
+    if (text.hasFormat("code")) return false;
+    for (const ch of text.getTextContent()) if (ch === "`" && ++count > 1) return false;
+  }
+  return count === 1;
+}
+
 /**
- * A paragraph's line whose words start like a block (`- `, `+ `, `1. `, `> `,
- * `[ ] `) keeps that start escaped, as the exporter already escapes `*`, so
- * the next read gives the paragraph back, not a list, a quote or a checkbox.
- * Each line counts: a line break inside the paragraph starts a line too.
+ * Plain words escaped only where Markdown would read them (call #15): Lexical
+ * escapes every `*`, `_`, `~`, backtick and backslash, which stored
+ * `file_name` as `file\_name` where the server's search can't find it. Raw
+ * text goes out exactly as it is. Formatted words, words inside a link and
+ * words right after one keep Lexical's own export (it closes the formats
+ * there).
  */
-export function escapeBlockStarts(markdown: string): string {
-  return markdown
-    .split("\n")
-    .map((line) =>
-      line
-        .replace(/^([ \t]*)([-+])(?=[ \t])/, "$1\\$2")
-        .replace(/^([ \t]*)(\d{1,9})\.(?=[ \t])/, "$1$2\\.")
-        .replace(/^([ \t]*)>/, "$1\\>")
-        .replace(/^([ \t]*)\[([ xX]?)\](?=[ \t])/, "$1\\[$2]"),
-    )
-    .join("\n");
+export const DESCRIPTION_TEXT: TextMatchTransformer = {
+  dependencies: [RawTextNode],
+  export: (node) => {
+    if ($isRawTextNode(node)) return node.getTextContent();
+    if (!$isTextNode(node) || node.getType() !== "text" || node.getFormat() !== 0) return null;
+    const previous = node.getPreviousSibling();
+    if (previous && $isElementNode(previous)) return null;
+    if ($isLinkNode(node.getParent())) return null;
+    return escapeMarkdownText(node.getTextContent(), {
+      lonelyBacktick: $onlyBacktickInBlock(node),
+    });
+  },
+  importRegExp: NEVER,
+  regExp: NEVER,
+  replace: () => {},
+  type: "text-match",
+};
+
+/** A paragraph of raw text (and line breaks) only: nothing to escape. */
+function $isRawParagraph(node: LexicalNode): boolean {
+  if (!$isParagraphNode(node)) return false;
+  const children = node.getChildren();
+  return (
+    children.length > 0 &&
+    children.every((child) => $isRawTextNode(child) || $isLineBreakNode(child)) &&
+    children.some($isRawTextNode)
+  );
 }
 
 /**
  * A paragraph exports with its block-like line starts escaped
- * (`escapeBlockStarts`). Export only: its pattern matches nothing, so import
- * and typing never use it.
+ * (`escapeBlockStarts`); a raw one exactly as it is. Export only: its pattern
+ * matches nothing, so import and typing never use it.
  */
 export const DESCRIPTION_PARAGRAPH: ElementTransformer = {
   dependencies: [ParagraphNode],
-  export: (node, traverseChildren) =>
-    $isParagraphNode(node) ? escapeBlockStarts(traverseChildren(node)) : null,
-  regExp: /^(?!)/,
+  export: (node, traverseChildren) => {
+    if (!$isParagraphNode(node)) return null;
+    const text = traverseChildren(node);
+    return $isRawParagraph(node) ? text : escapeBlockStarts(text);
+  },
+  regExp: NEVER,
   replace: () => false,
   type: "element",
 };
 
-/** The description's Markdown, in import order: checkboxes before bullets
- *  (CHECK_LIST isn't in ELEMENT_TRANSFORMERS), references before links. */
+/** The description's Markdown, in import order: code fences first, checkboxes
+ *  before bullets (CHECK_LIST isn't in ELEMENT_TRANSFORMERS), references
+ *  before links. */
 export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
+  CODE,
   DESCRIPTION_PARAGRAPH,
   CHECK_LIST,
   UNORDERED_LIST,
@@ -137,6 +237,7 @@ export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
   ITALIC_UNDERSCORE,
   STRIKETHROUGH,
   DESCRIPTION_REFERENCE,
+  DESCRIPTION_TEXT,
   LINK,
 ];
 
@@ -145,12 +246,14 @@ export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
  * long block: a long line of crafted delimiters (`[`, `` ` ``, `[x](`: seconds
  * at 50 KB) or thousands of lines in one paragraph (4 s at 100 KB), which
  * would freeze the panel for everyone who opens the task. So a description
- * past CHUNK_LIMIT is read a chunk at a time, cut at a blank line where it
- * can; a line longer than LINE_LIMIT or dense with the costly delimiters
- * (more than DELIMITER_LIMIT `[` and backticks: a real paragraph with dozens of
- * links and code spans has under 200) comes in as plain text, and so does
- * everything past TOTAL_LIMIT characters or TOTAL_LINES lines, as one paragraph. Plain text saves back
- * escaped, which only text like that ever meets.
+ * past CHUNK_LIMIT characters or CHUNK_LINES lines is read in chunks cut only
+ * between blocks (at blank lines outside code fences), never inside one. A
+ * block too costly to read (a paragraph or quote past either limit, a line
+ * longer than LINE_LIMIT or with more than DELIMITER_LIMIT `[` and backticks:
+ * a real paragraph with dozens of links and code spans has under 200), and
+ * everything past TOTAL_LIMIT characters or TOTAL_LINES lines, comes in as raw
+ * text and saves back unchanged. Lists and code blocks read in linear time and
+ * stay Markdown whatever their size.
  */
 const CHUNK_LIMIT = 5_000;
 const CHUNK_LINES = 100;
@@ -166,46 +269,109 @@ function costlyDelimiters(line: string): number {
   return n;
 }
 
-/** Import a long description a chunk at a time (see CHUNK_LIMIT). */
+type Block = {
+  lines: string[];
+  /** Every line a list item (or its indented continuation): reads in linear time. */
+  list: boolean;
+  /** A line outside a code fence too costly to read as Markdown. */
+  costlyLine: boolean;
+};
+
+const FENCE_OPEN = /^[ \t]*(`{3,})(.*)$/;
+const LIST_LINE = /^[ \t]*(?:[-*+]|\d{1,9}\.)[ \t]/;
+
+/** The description's blocks: runs of lines between blank lines, a code fence kept whole. */
+function markdownBlocks(markdown: string): Block[] {
+  const blocks: Block[] = [];
+  let current: Block = { lines: [], list: true, costlyLine: false };
+  let fence: string | null = null;
+  const end = () => {
+    if (current.lines.length > 0) blocks.push(current);
+    current = { lines: [], list: true, costlyLine: false };
+  };
+  for (const line of markdown.split("\n")) {
+    if (fence !== null) {
+      current.lines.push(line);
+      if (new RegExp(`^[ \\t]*\`{${fence.length},}[ \\t]*$`).test(line)) fence = null;
+      continue;
+    }
+    if (line.trim() === "") {
+      end();
+      continue;
+    }
+    const open = FENCE_OPEN.exec(line);
+    if (open && !/`{3,}[ \t]*$/.test(open[2] ?? "")) fence = open[1] ?? "```";
+    current.lines.push(line);
+    if (
+      !LIST_LINE.test(line) &&
+      !(current.list && current.lines.length > 1 && /^[ \t]{2,}\S/.test(line))
+    ) {
+      current.list = false;
+    }
+    if (!open && (line.length > LINE_LIMIT || costlyDelimiters(line) > DELIMITER_LIMIT)) {
+      current.costlyLine = true;
+    }
+  }
+  end();
+  return blocks;
+}
+
+/** A paragraph of raw text: read as it is stored, saved back as it was. */
+function $rawParagraph(text: string): ParagraphNode {
+  return $createParagraphNode().append($createRawTextNode(text));
+}
+
+/** Import a long description in chunks of whole blocks (see CHUNK_LIMIT). */
 function $importInChunks(markdown: string): void {
   const root = $getRoot();
+  const blocks = markdownBlocks(markdown);
   let chunk: string[] = [];
-  let chunkSize = 0;
-  let used = 0;
+  let chunkChars = 0;
+  let chunkLines = 0;
+  let usedChars = 0;
+  let usedLines = 0;
   const flush = () => {
     if (chunk.length > 0) {
       root.append(...$generateNodesFromMarkdownString(chunk.join("\n"), DESCRIPTION_TRANSFORMERS));
     }
     chunk = [];
-    chunkSize = 0;
+    chunkChars = 0;
+    chunkLines = 0;
   };
-  const lines = markdown.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    used += line.length + 1;
-    if (used > TOTAL_LIMIT || i >= TOTAL_LINES) {
-      // Everything from here is one paragraph of plain text, however many lines.
+  for (let b = 0; b < blocks.length; b++) {
+    const block = blocks[b] as Block;
+    const text = block.lines.join("\n");
+    usedChars += text.length + 2;
+    usedLines += block.lines.length + 1;
+    if (usedChars > TOTAL_LIMIT || usedLines > TOTAL_LINES) {
+      // Everything from here is one paragraph of raw text, however long.
       flush();
-      root.append($createParagraphNode().append($createTextNode(lines.slice(i).join("\n"))));
+      root.append(
+        $rawParagraph(
+          blocks
+            .slice(b)
+            .map((x) => x.lines.join("\n"))
+            .join("\n\n"),
+        ),
+      );
       return;
     }
-    if (line.length > LINE_LIMIT || costlyDelimiters(line) > DELIMITER_LIMIT) {
+    const tooLong = text.length > CHUNK_LIMIT || block.lines.length > CHUNK_LINES;
+    if (block.costlyLine || (tooLong && !block.list && !FENCE_OPEN.test(block.lines[0] ?? ""))) {
       flush();
-      if (line) root.append($createParagraphNode().append($createTextNode(line)));
+      root.append($rawParagraph(text));
       continue;
     }
-    // A blank line past half the chunk is a clean place to cut; past the
-    // whole chunk (or CHUNK_LINES lines: one paragraph's cost grows with its
-    // lines too), cut anyway (a paragraph that long becomes two).
     if (
-      (line === "" && (chunkSize > CHUNK_LIMIT / 2 || chunk.length > CHUNK_LINES / 2)) ||
-      chunkSize + line.length > CHUNK_LIMIT ||
-      chunk.length >= CHUNK_LINES
+      chunk.length > 0 &&
+      (chunkChars + text.length > CHUNK_LIMIT || chunkLines + block.lines.length > CHUNK_LINES)
     ) {
       flush();
     }
-    chunk.push(line);
-    chunkSize += line.length + 1;
+    if (chunk.length > 0) chunk.push("");
+    chunk.push(...block.lines);
+    chunkChars += text.length + 1;
+    chunkLines += block.lines.length + 1;
   }
   flush();
 }
