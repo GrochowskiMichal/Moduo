@@ -208,3 +208,26 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 - **On the local stack the research workspace's owner is on Free, so `chat_can_read_channel` returns false for everyone there** until CV-1 drops the plan from reads. A test of the real read rule needs a paid plan on the owner, or CV-1's body.
 - **Never call `chat_can_read_channel` per message in a loop: it costs about 83 µs a call.** Per conversation is fine for tens, not for thousands (170 ms at 2,025 conversations). Work out the set of readable conversations once (`chat__readable_channel_ids`) and filter by it. → [record](../build/chat-v2/CV-0-S5.md)
 - **PostgreSQL regex alternation is leftmost-longest, and a non-greedy quantifier follows the greediness of the whole expression.** `+?` doesn't behave as it does in Perl or JavaScript. Write patterns whose pieces exclude their own delimiters, such as `(?:[^*\n]|\*(?!\*))+`. → [chat_v1_to_v2.sql](../build/chat-v2/drafts/chat_v1_to_v2.sql)
+
+## Chat foundation and conversion (CV-1)
+
+- **A nested `SECURITY DEFINER` call with `SET search_path` inside a function that a read policy calls per row costs about 100 µs a row.** Reading 3,032 messages went from 406 ms to 26 ms once the rule was written out in both functions. Keep per-row read rules free of definer hops, and guard the written-out copy with a parity test (`chat_foundation.test.sql` compares it with `perm_user_has`). → [record](../build/chat-v2/CV-1.md) (2026-10-14)
+- **A plpgsql character loop is about 100 times slower than the same loop in JavaScript.** A scan the client can afford per character (`](` looking for its `)`) took 4.4 s on an 8,000-character body. Bound every look-ahead in a parser that runs from a trigger.
+- **A regex bound past 255 (`` `{300,} ``) is an error ("invalid repetition count"), not a no-match.** Compare run lengths instead of building `{N,}` from data.
+- **`text[] || 'literal'` resolves the literal as an array and fails ("malformed array literal").** Cast it: `o || '['::text`.
+- **`perm_members_resolve` recomputes `workspace_members.perms` on every update.** A test that removes a permission by hand has to bypass the trigger (`SET LOCAL session_replication_role = replica`).
+- **The shared local stack owns its functions as `supabase_admin` (applied by `scripts/local/stack.sh`); prod's migration role is `postgres`.** Redefine and apply as `supabase_admin` locally (`spine__visible_to` is one), and expect `postgres` as the owner on prod.
+- **A whole-database "zero rows changed" check in READ COMMITTED sees other sessions' commits.** Run it REPEATABLE READ, and compare `ctid`s, not `xmin` (one transaction keeps one `xmin`).
+- **`share_chat_message_guard` is a BEFORE INSERT trigger and fires before the CHECK constraints.** A probe without an author gets `42501`, not the CHECK's `23514`.
+
+## Chat message ops (CV-2a)
+
+- **A function with a defaulted trailing argument shadows a shorter signature of the same name.** `f(uuid, text)` beside `f(uuid, text, uuid[] DEFAULT …)` is "not unique" in SQL and ambiguous in PostgREST. Drop the default (DROP, CREATE, restate the grants), as the v1 `chat_op_edit` wrapper had to. → [record](../build/chat-v2/CV-2a.md) (2026-10-14)
+- **`perm_enforce_write` fires before `share_chat_message_guard` (triggers run in name order).** A viewer's insert reads "Your role can't add messages" unless the op checks "post" first.
+- **`chat__is_iso_day(NULL)` is false, not NULL.**
+
+## Chat plan source (CV-4)
+
+- **A `LANGUAGE sql` function body is parsed and its functions resolved at `CREATE` time.** A function that may not exist yet can only be reached from plpgsql: guard it with `to_regprocedure` and call it plainly (plpgsql prepares the call on its first run, so it is never resolved while the function is absent). → [record](../build/chat-v2/CV-4.md) (2026-10-14)
+- **A `DO $$ … $$` block whose body contains `$$` anywhere ends early with a confusing syntax error.** Name the outer quote: `DO $do$ … $do$`.
+- **`coalesce(obj_description(…), 'mark') = 'mark'` counts an uncommented object as marked.** Match a marker positively: `obj_description(…) IS NOT DISTINCT FROM 'mark'`, and check the object exists.
