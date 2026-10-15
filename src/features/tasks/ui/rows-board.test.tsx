@@ -150,7 +150,7 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     ]);
   });
 
-  it("tags show as a quiet `# N` count after the title, never as chips", () => {
+  it("tags show as a quiet tag icon + count after the title, never as chips or a #", async () => {
     const tags = [
       { id: "t1", name: "ui" },
       { id: "t2", name: "notes" },
@@ -158,12 +158,49 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     ];
     renderList([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
     const row = rowOf("Task a");
-    expect(screen.getByText("3 tags").className).toContain("sr-only");
-    expect(row.textContent).not.toContain("ui");
-    expect(row.querySelector('[data-slot="tag-chip"], .tag-chip')).toBeNull();
+    const spoken = screen.getByText("3 tags: ui, notes, bug");
+    expect(spoken.className).toContain("sr-only");
+    // The same icon size and colour as files, comments and subtasks (MetaCount).
+    // (Its tooltip trigger takes over the span's data-slot.)
+    const count = spoken.parentElement as HTMLElement;
+    expect(count.querySelector("svg")?.getAttribute("class")).toContain("lucide-tag");
+    expect(count.querySelector("svg")?.getAttribute("class")).toContain("size-icon-xs");
+    expect(count.className).toContain("text-muted-foreground");
+    expect(count.textContent).toBe("33 tags: ui, notes, bug");
+    expect(row.querySelector('[data-slot="tag-chip"]')).toBeNull();
+    expect(row.textContent).not.toContain("#");
+    // Hovering names them as words, in the kit tooltip.
+    fireEvent.pointerMove(count, { pointerType: "mouse" });
+    expect((await screen.findByRole("tooltip")).textContent).toBe("ui, notes, bug");
     // The count sits in the title cell, right after the title.
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
     expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
+  });
+
+  it("Detailed rows show two tags as dot chips, then +n, never a # (MOD-97)", async () => {
+    const tags = [
+      { id: "t1", name: "ui", color: "blue" },
+      { id: "t2", name: "notes", color: "green" },
+      { id: "t3", name: "bug", color: "red" },
+    ];
+    renderList([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    const title = rowOf("Task a").querySelector('[data-slot="row-title"]') as HTMLElement;
+    const names = title.querySelector('[data-slot="row-tag-names"]') as HTMLElement;
+    const chips = [...names.querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
+    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes"]);
+    expect(chips.map((c) => c.dataset.label)).toEqual(["blue", "green"]);
+    expect(chips[0]?.className).toContain("h-4.5");
+    // The names stay at full width, so each chip is capped: the title keeps its room.
+    expect(names.className).toContain("shrink-0");
+    for (const chip of chips) expect(chip.className).toContain("max-w-24");
+    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+      chips[0] as HTMLElement,
+    );
+    const more = names.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.textContent).toBe("+1");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("bug");
+    expect(names.textContent).not.toContain("#");
   });
 
   it("counts subtasks as done/total and marks blocked and repeating tasks", () => {
@@ -422,8 +459,12 @@ describe("useJustCompleted", () => {
 });
 
 describe("Board (U1-4)", () => {
-  function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
-    const api = viewApi(tasks);
+  function renderBoard(
+    tasks: Task[],
+    extra: Record<string, unknown> = {},
+    apiExtra: Record<string, unknown> = {},
+  ) {
+    const api = viewApi(tasks, apiExtra);
     render(
       <TooltipProvider>
         <TaskBoardView
@@ -471,6 +512,47 @@ describe("Board (U1-4)", () => {
     expect(meta).not.toBeNull();
     expect(meta.contains(screen.getByLabelText("High priority"))).toBe(true);
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);
+  });
+
+  it("Standard cards count tags with the tag icon, as rows do (MOD-97)", () => {
+    const tags = [
+      { id: "t1", name: "ui", color: "blue" },
+      { id: "t2", name: "notes", color: "green" },
+    ];
+    renderBoard([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
+    const spoken = within(card("Task a")).getByText("2 tags: ui, notes");
+    expect(spoken.parentElement?.querySelector("svg")?.getAttribute("class")).toContain(
+      "lucide-tag",
+    );
+    expect(card("Task a").querySelector('[data-slot="tag-chip"]')).toBeNull();
+    expect(card("Task a").textContent).not.toContain("#");
+  });
+
+  it("Detailed cards show three tags as dot chips on the second line, layout-neutral (MOD-97)", async () => {
+    const tags = ["ui", "notes", "bug", "copy"].map((name, i) => ({
+      id: `t${i}`,
+      name,
+      color: "violet",
+    }));
+    renderBoard([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    const chips = [...card("Task a").querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
+    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes", "bug"]);
+    const more = card("Task a").querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.textContent).toBe("+1");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("copy");
+    // 18 px chips in a 16 px text line: the list takes -1 px top and bottom,
+    // so the card keeps its height.
+    const list = chips[0]?.closest('[data-slot="tag-chip-list"]') as HTMLElement;
+    expect(list.className).toContain("-my-px");
+    expect(list.closest('[data-slot="item-card-meta"]')).not.toBeNull();
+    // One line, never wrapping: long names shorten instead (full name on hover).
+    expect(list.className).not.toContain("flex-wrap");
+    for (const chip of chips) expect(chip.className).toContain("max-w-24");
+    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+      chips[0] as HTMLElement,
+    );
+    expect(card("Task a").textContent).not.toContain("#");
   });
 
   it("done cards fade, and completed cards hide behind each column's line", () => {

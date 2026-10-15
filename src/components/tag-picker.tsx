@@ -131,10 +131,9 @@ export function TagPicker({
                             : "pointer-events-none",
                         )}
                       />
-                      <span className="min-w-0 flex-1 truncate">
-                        <span className="text-muted-foreground/70">#</span>
-                        {tag.name}
-                      </span>
+                      {/* Dot + name, as on the dot chip (MOD-97); "#" stays
+                          only on "Create #name", the typing grammar. */}
+                      <span className="min-w-0 flex-1 truncate">{tag.name}</span>
                       {isSelected ? <Check className="size-4 text-foreground" aria-hidden /> : null}
                       {canEdit && onDelete ? (
                         <button

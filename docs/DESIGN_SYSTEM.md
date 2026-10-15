@@ -259,6 +259,7 @@ Use Tailwind utilities that map to semantic tokens. Common lookups:
 | Current page / pressed toggle | `bg-state-active` |
 | Selected item | `bg-state-selected` (+ `ring-1 ring-inset ring-state-selected`) |
 | Current segment of a segmented control | `bg-control-raised shadow-control-raised` |
+| A tag | `<TagChip>` (neutral `bg-tag-chip-surface` pill; the hue only on its dot, via `data-label`) |
 | Hide a scrollbar · reserve a pane's gutter | `no-scrollbar` · `pane-scroll` (thin scrollbars are global) |
 | Destructive | `bg-destructive text-destructive-foreground` |
 | Control radius | `rounded-md` |
@@ -312,8 +313,15 @@ Established during the Tasks rebuild; **reusable across modules** (Notes adopts 
 - **New primitives in `src/components/ui/`:** `SegmentedControl` (the one toggle —
   no bespoke segmented controls), `IconButton` (required tooltip+label),
   `Toolbar`, `Calendar` + `DateField` (no native `<input type=date>`),
-  `CompleteToggle`, `EmptyState`. `TagChip` v2 = colored `#` + neutral name (no
-  dot/pill); active filter chip = full-hue.
+  `CompleteToggle`, `EmptyState`. `TagChip` is the **dot chip** (MOD-97,
+  2026-10-15): a neutral `rounded-full` pill (`bg-tag-chip-surface`), a 6 px
+  dot in the tag's hue, the name in `text-foreground/90`, no `#`. `sm` 18 px /
+  12 px text (Detailed rows, Board cards), `md` 22 px / 13 px (panels;
+  removable with a muted ×). Active filter chip = a 1 px inset ring in the hue
+  (`.tag-chip-active`) and full-foreground name. `TagChipList` caps a row at
+  `max` chips (each at most `max-w-24`) + "+n". Standard rows and cards count
+  tags instead: a muted tag icon (lucide `Tag`) + the number, a `MetaCount`
+  like files and comments; never "#", which is only the typing grammar.
 
 ### Motion (Session 11; foundations re-set by SH-1, 2026-10-10)
 Quiet and quick, **no blur** (tasks-v3 call 81). Tokens are load-bearing — no raw
@@ -368,7 +376,7 @@ of them was retired (guards only).
 
 ## Open questions / future work
 
-- Label colors for tags / event categories — a curated palette distinct from accent + status. Add when the tagging UX surfaces.
+- Label colors for event categories: tags have their eight hues (tokens.css §13b, shown only as the dot chip's dot); calendar categories may reuse them.
 - Light mode is structurally supported in tokens but visually un-tuned. Real light mode is its own design pass.
 - Per-page chrome variants (e.g., the Notes page's right-rail vs. Settings' no right-rail). Currently per-page; may consolidate into shell props.
 - Cmd-K command palette item catalogue.

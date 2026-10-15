@@ -16,6 +16,8 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { TagChip } from "@/components/tag-chip";
+import { normalizeLabelColor } from "@/components/tag-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -543,9 +545,15 @@ export function ContactDirectory({
             <Button
               variant="ghost"
               size="sm"
+              aria-label={activeTag ? `Tag filter: ${activeTag.name}` : undefined}
               className={cn("gap-1.5", tagFilter ? "text-foreground" : "text-muted-foreground")}
             >
-              {activeTag ? `#${activeTag.name}` : "Tag"}
+              {activeTag ? (
+                // The active filter is the tag's dot chip with its hue ring (MOD-97).
+                <TagChip name={activeTag.name} color={activeTag.color} active title="" />
+              ) : (
+                "Tag"
+              )}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -559,7 +567,12 @@ export function ContactDirectory({
                 <DropdownMenuRadioItem value={ALL}>All tags</DropdownMenuRadioItem>
                 {workspaceTags.map((t) => (
                   <DropdownMenuRadioItem key={t.id} value={t.id}>
-                    #{t.name}
+                    <span
+                      aria-hidden
+                      data-label={normalizeLabelColor(t.color)}
+                      className="tag-dot size-1.5 shrink-0 rounded-full"
+                    />
+                    <span className="truncate">{t.name}</span>
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>

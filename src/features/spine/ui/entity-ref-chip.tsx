@@ -1,8 +1,9 @@
 // Connective-tissue spine — the neutral EntityRefChip (block CT-4).
 //
-// Mirrors TagChip's borderless inline *layout*, but is MONOCHROME by design: a
-// type glyph + label, no `data-label`, no hue (DESIGN_BRIEF Component Inventory;
-// DESIGN_RULES R5 — color stays reserved for tags + status). The type icon, not
+// Borderless inline text, MONOCHROME by design: a type glyph + label, no pill,
+// no `data-label`, no hue (tags have their own pill-and-dot TagChip, MOD-97;
+// DESIGN_BRIEF Component Inventory; DESIGN_RULES R5 — color stays reserved
+// for tags + status). The type icon, not
 // color, distinguishes a task from a contact. Rendered in prose by the Lexical
 // `EntityRefNode`, in `@mention` / `/ref` picker results, and in property
 // values. Tombstoned targets read "Deleted task", with no title (RF-1).

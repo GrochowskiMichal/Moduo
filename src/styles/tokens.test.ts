@@ -28,6 +28,8 @@ const STATE_LAYER: Record<string, string> = {
   // The tint-only vs tint + hairline switch (DS-2): on by default.
   "--state-selected-edge": "var(--state-selected-ring)",
   "--hairline": "color-mix(in oklab, var(--foreground) 10%, transparent)",
+  // A tag's dot chip (MOD-97): a rest surface, 7% on dark (6% on light below).
+  "--tag-chip-surface": "color-mix(in oklab, var(--foreground) 7%, transparent)",
   "--control-raised": "color-mix(in oklab, var(--foreground) 14%, var(--muted))",
   "--scroll-thumb": "color-mix(in oklab, var(--foreground) 16%, transparent)",
   "--scroll-thumb-hover": "color-mix(in oklab, var(--foreground) 32%, transparent)",
@@ -81,10 +83,13 @@ describe("tokens.css state layer (DS-1)", () => {
     expect(strays).toEqual([]);
   });
 
-  it("lifts the raised plate on light: the white card plus a shadow", async () => {
+  it("lifts the raised plate on light (the white card plus a shadow) and steps the tag chip down", async () => {
     const blocks = await tokenBlocks();
     const light = declarations(onlyBlock(blocks, LIGHT_SCOPES));
-    expect([...light]).toEqual([["--control-raised", "var(--card)"]]);
+    expect([...light]).toEqual([
+      ["--control-raised", "var(--card)"],
+      ["--tag-chip-surface", "color-mix(in oklab, var(--foreground) 6%, transparent)"],
+    ]);
 
     const darkShadows = onlyShadowBlock(blocks, ":root");
     expect(darkShadows.get("--shadow-control-raised")).toBe("0 0 0 0 transparent");
@@ -96,20 +101,21 @@ describe("tokens.css state layer (DS-1)", () => {
     const theme = (await tokenBlocks()).filter((b) => b.prelude === "@theme inline");
     expect(theme).toHaveLength(1);
     const decls = declarations(theme[0]);
-    expect(Object.fromEntries([...decls].filter(([k]) => /state|hairline|raised/.test(k)))).toEqual(
-      {
-        "--color-state-hover": "var(--state-hover)",
-        "--color-state-active": "var(--state-active)",
-        "--color-state-active-hover": "var(--state-active-hover)",
-        "--color-state-selected": "var(--state-selected)",
-        "--color-state-selected-hover": "var(--state-selected-hover)",
-        "--ring-color-state-selected": "var(--state-selected-ring)",
-        "--ring-color-state-selected-edge": "var(--state-selected-edge)",
-        "--color-hairline": "var(--hairline)",
-        "--color-control-raised": "var(--control-raised)",
-        "--shadow-control-raised": "var(--shadow-control-raised)",
-      },
-    );
+    expect(
+      Object.fromEntries([...decls].filter(([k]) => /state|hairline|raised|tag-chip/.test(k))),
+    ).toEqual({
+      "--color-tag-chip-surface": "var(--tag-chip-surface)",
+      "--color-state-hover": "var(--state-hover)",
+      "--color-state-active": "var(--state-active)",
+      "--color-state-active-hover": "var(--state-active-hover)",
+      "--color-state-selected": "var(--state-selected)",
+      "--color-state-selected-hover": "var(--state-selected-hover)",
+      "--ring-color-state-selected": "var(--state-selected-ring)",
+      "--ring-color-state-selected-edge": "var(--state-selected-edge)",
+      "--color-hairline": "var(--hairline)",
+      "--color-control-raised": "var(--control-raised)",
+      "--shadow-control-raised": "var(--shadow-control-raised)",
+    });
   });
 
   it("emits utilities that read the tokens on the element (scoped accents included)", async () => {
@@ -125,6 +131,7 @@ describe("tokens.css state layer (DS-1)", () => {
       "border-hairline",
       "bg-control-raised",
       "shadow-control-raised",
+      "bg-tag-chip-surface",
     ]);
     const utility = (name: string) => {
       const block = cssBlocks(css).find((b) => b.prelude === `.${name}`);
@@ -146,6 +153,7 @@ describe("tokens.css state layer (DS-1)", () => {
     );
     expect(utility("border-hairline").get("border-color")).toBe("var(--hairline)");
     expect(utility("bg-control-raised").get("background-color")).toBe("var(--control-raised)");
+    expect(utility("bg-tag-chip-surface").get("background-color")).toBe("var(--tag-chip-surface)");
     expect(utility("shadow-control-raised").get("--tw-shadow")).toBe(
       "var(--shadow-control-raised)",
     );

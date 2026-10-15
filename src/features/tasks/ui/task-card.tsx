@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CornerDownRight } from "lucide-react";
 import { memo, useCallback } from "react";
+import { TagChipList } from "../../../components/tag-chip";
 import { TeamMark } from "../../../components/ui/avatar";
 import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { ItemCard, ItemCardMeta, ItemCardTitle } from "../../../components/ui/item-card";
@@ -446,12 +447,9 @@ export function CardBody({
       {second ? (
         <ItemCardMeta>
           {tagNames ? (
-            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
-              {facts.tags.slice(0, 3).map((t) => (
-                <span key={t.id}>#{t.name}</span>
-              ))}
-              {facts.tags.length > 3 ? <span>+{facts.tags.length - 3}</span> : null}
-            </span>
+            // Dot chips (MOD-97). The 18 px chips sit in a 16 px text line, so
+            // -my-px keeps the line, and the card, at its height.
+            <TagChipList tags={facts.tags} max={3} className="-my-px" />
           ) : null}
           {time ? <span className="shrink-0 whitespace-nowrap">{time}</span> : null}
           {facts.waiting ? (

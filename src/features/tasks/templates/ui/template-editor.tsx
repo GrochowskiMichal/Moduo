@@ -8,6 +8,7 @@
 import { ArrowLeft, Plus, X } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 
+import { TagChip } from "../../../../components/tag-chip";
 import { Badge } from "../../../../components/ui/badge";
 import { Button } from "../../../../components/ui/button";
 import { CollectionHeader } from "../../../../components/ui/collection-header";
@@ -301,23 +302,19 @@ function TaskTemplateFields({
         </PropertyRow>
         {root.tags.length > 0 ? (
           <PropertyRow label="Tags" align="start">
-            <span className="flex flex-wrap gap-1">
+            <span className="flex flex-wrap gap-1.5">
               {root.tags.map((tag) => (
-                <Badge key={tag.name} variant="outline" className="gap-1">
-                  {tag.name}
-                  {!disabled ? (
-                    <button
-                      type="button"
-                      aria-label={`Remove ${tag.name}`}
-                      className="rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-                      onClick={() =>
-                        patchRoot({ tags: root.tags.filter((t) => t.name !== tag.name) })
-                      }
-                    >
-                      <X className="size-icon-xs" aria-hidden />
-                    </button>
-                  ) : null}
-                </Badge>
+                <TagChip
+                  key={tag.name}
+                  name={tag.name}
+                  color={tag.color}
+                  size="md"
+                  onRemove={
+                    disabled
+                      ? undefined
+                      : () => patchRoot({ tags: root.tags.filter((t) => t.name !== tag.name) })
+                  }
+                />
               ))}
             </span>
           </PropertyRow>

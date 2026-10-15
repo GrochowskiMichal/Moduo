@@ -21,7 +21,7 @@ const SEED: PickableTag[] = [
   { id: "4", name: "quick-win", color: "green" },
 ];
 
-/** Every label hue, as the quiet inline chip used on rows/cards/detail. */
+/** Every label hue, as the dot chip used on rows, cards and panels (MOD-97). */
 export const Chips: Story = {
   render: () => (
     <div className="flex max-w-sm flex-wrap gap-1.5">
@@ -36,7 +36,7 @@ export const Chips: Story = {
 export const ChipStates: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-2">
-      <TagChip name="deep-work" color="blue" onRemove={() => {}} />
+      <TagChip name="deep-work" color="blue" size="md" onRemove={() => {}} />
       <TagChip name="errand" color="amber" active onRemove={() => {}} />
       <TagChip name="waiting-on" color="violet" onClick={() => {}} />
     </div>
