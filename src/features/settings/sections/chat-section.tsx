@@ -1,4 +1,4 @@
-import { isReactionKey } from "@contracts/vocabularies";
+import { canonicalReactionKey, isReactionKey } from "@contracts/vocabularies";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -34,7 +34,8 @@ export function ChatSection() {
   };
 
   /** Put `key` in slot `at`; if it's already in another slot, the two swap. */
-  const place = (at: number, key: string) => {
+  const place = (at: number, picked: string) => {
+    const key = canonicalReactionKey(picked);
     const next = [...row];
     const from = next.indexOf(key);
     if (from === at) return;

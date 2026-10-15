@@ -568,6 +568,25 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
     }
   });
 
+  it("have one spelling, the same as the server's (the canonical corpus)", async () => {
+    const v = await import("./vocabularies.ts");
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      "utf8",
+    );
+    const block = sql.slice(sql.indexOf("-- canonical:begin"), sql.indexOf("-- canonical:end"));
+    const rows = [...block.matchAll(/\('([0-9A-F ]+)', '([0-9A-F ]+)'\)/g)];
+    expect(rows.length).toBeGreaterThan(5);
+    const fromHex = (hex: string) =>
+      String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16)));
+    for (const [, hex, want] of rows) {
+      expect(v.canonicalReactionKey(fromHex(hex)), `[${hex}]`).toBe(fromHex(want));
+      expect(v.isReactionKey(fromHex(want)), `[${want}]`).toBe(true);
+    }
+  });
+
   it("refuse what the database can't even hold, and anything not a string", async () => {
     const v = await import("./vocabularies.ts");
     const lone = String.fromCharCode(0xd83d);

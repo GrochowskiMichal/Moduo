@@ -29,6 +29,8 @@
 ## Agent's choices (deferred to by Maciej: confirmed for building, may be reconsidered)
 
 - **A key is a closed set of emoji code points** · agent · "no letters, digits, spaces or control characters" alone let through invisible and direction marks and two emoji side by side; the set spells "exactly one emoji" in both languages with the same numbers · rejected: a deny-list of character classes (Postgres and JS classify differently).
+- **One spelling per emoji** · agent · ❤ and ❤️ (and keycaps with or without U+FE0F) were two chips; the ops store the Emojibase form (`reactions__key_canonical`, mirrored by `canonicalReactionKey`; shared canonical corpus). Astral pictographs keep whatever selector was sent (🕵 vs 🕵️ stay two; rare) · rejected: storing what was sent.
+- **Keycaps 0️⃣–9️⃣, #️⃣, *️⃣ are keys** · agent · standard emoji people vote with · rejected: refusing every key with a digit.
 - **ℹ️ and other letter-like emoji are allowed** · agent · they are emoji as Emojibase writes them · rejected: the literal "no letters" rule.
 - **Old words still work on comments** · agent · desktop bundles its UI, so old apps keep sending `thumbs_up` after the migration; they land as 👍 · rejected: refusing them (reactions break for everyone not yet updated).
 - **The rewrite lives in a kept server-only function** · agent · the test calls it twice to prove lossless and idempotent · rejected: inline UPDATE (untestable after the fact).
@@ -49,6 +51,7 @@
 - **CV-6b:** `runtime.chat.myPrefs()` / `setMyPrefs({ noticeShowText, emailWhenAway, … })` already exist; `user_chat_prefs` is already in `READ_RPCS`; add your switches to `settings/sections/chat-section.tsx` or Notifications.
 - **CV-20:** widen `reactions__key_pattern()` and `REACTION_KEY_SET`/`isReactionKey` together (the drift gate and the shared corpus hold them equal). `reactions__key_ok` is IMMUTABLE and backs a CHECK: "live in this workspace" must be checked in the ops, not the CHECK. `resolveQuickRow(saved, usable)` takes the workspace check; Settings saves the resolved row, so stop dropping a custom key missing in this workspace when you add them.
 - **CV-15:** viewer permission rows beyond `chat_op_react`.
+- **Later polish (code review, not needed for this block):** the chat hover/menu quick buttons are still drawn in `message-actions.tsx` (labelled "React 👍", no pressed state) rather than through `QuickReactionRow`; the app doesn't stop a 21st kind before the server does (toast); the quick row is fetched once per session (a change on another device shows after a reload); `chat/timeline.ts` has its own "only emoji" rule for jumbo messages that differs from the reaction key at the edges.
 - **Stamp re-cut:** the migration name is pinned in `drift-gates.test.ts` and in a comment in `vocabularies.ts`; update both when the stamp is re-cut.
 
 ## Manual checklist (step → expect → surface)
@@ -64,7 +67,8 @@
 
 ## Verify before release
 
-- **Release order:** the migration can go before the app (old apps' comment words map to emoji), but an old app **hides** emoji reactions on comments (its reader only knew the words) until it updates: ship the app (web promote + the desktop release) in the same train.
+- **Release order:** the migration can go before the app (old apps' comment words map to emoji), but an old app **hides** emoji reactions on comments (its reader only knew the words) until it updates: ship the app (web promote + the desktop release) in the same train, and raise the minimum build (`src/lib/min-build.ts`) so old desktop builds update.
+- Chat v1 messages may hold keys that aren't keys now: they are not drawn, still count toward the 20 kinds, and can't be taken off. Count them on prod before release; if any, clear them in a data step.
 - Re-run `tests/reactions.spec.ts`: on 2026-10-15 the shared stack's dev person had no workspace (another session's data), so `devWorkspace()` failed before the spec began; `tests/chat-stream.spec.ts` passed.
 - Run the visual kit spec (`bunx playwright test --project=visual tests/visual/kit.spec.ts`) for the Reactions story.
 - Prod chat messages from v1 with non-emoji keys are left out when drawn (the reader shows only keys); count them on prod before release if v1 allowed text keys.

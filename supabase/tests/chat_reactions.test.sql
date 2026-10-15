@@ -124,7 +124,8 @@ INSERT INTO test.key_corpus (hex, ok) VALUES
   ('3A 70 61 72 74 79 3A', false),
   ('61', false),
   ('31', false),
-  ('31 FE0F 20E3', false),
+  ('31 FE0F 20E3', true),
+  ('30 20E3', true),
   ('23', false),
   ('21 21', false),
   ('20', false),
@@ -153,17 +154,43 @@ INSERT INTO test.key_corpus (hex, ok) VALUES
 -- corpus:end
 ;
 
+-- One spelling per emoji (shared with vocabularies.test.ts too): what is
+-- sent, then what is stored.
+CREATE TABLE test.canonical_corpus (hex text NOT NULL, want text NOT NULL);
+INSERT INTO test.canonical_corpus (hex, want) VALUES
+-- canonical:begin
+  ('2764', '2764 FE0F'),
+  ('2764 FE0F', '2764 FE0F'),
+  ('2764 FE0E', '2764 FE0F'),
+  ('23 20E3', '23 FE0F 20E3'),
+  ('31 FE0F 20E3', '31 FE0F 20E3'),
+  ('261D 1F3FD', '261D 1F3FD'),
+  ('2764 200D 1F525', '2764 FE0F 200D 1F525'),
+  ('1F44D', '1F44D'),
+  ('1F3C3 1F3FD 200D 2642', '1F3C3 1F3FD 200D 2642 FE0F')
+-- canonical:end
+;
+
+CREATE FUNCTION test.from_hex(p_hex text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN p_hex = '' THEN '' ELSE (
+    SELECT string_agg(chr(('x' || lpad(x, 8, '0'))::bit(32)::int), '' ORDER BY o)
+      FROM unnest(string_to_array(p_hex, ' ')) WITH ORDINALITY AS t(x, o)) END
+$$;
+
 DO $$
 DECLARE
   r record;
   k text;
 BEGIN
   FOR r IN SELECT hex, ok FROM test.key_corpus LOOP
-    k := CASE WHEN r.hex = '' THEN '' ELSE (
-      SELECT string_agg(chr(('x' || lpad(x, 8, '0'))::bit(32)::int), '' ORDER BY o)
-        FROM unnest(string_to_array(r.hex, ' ')) WITH ORDINALITY AS t(x, o)) END;
+    k := test.from_hex(r.hex);
     PERFORM test.ok(public.reactions__key_ok(k) = r.ok,
       format('key: [%s] %s', r.hex, CASE WHEN r.ok THEN 'is a reaction' ELSE 'is refused' END));
+  END LOOP;
+  FOR r IN SELECT hex, want FROM test.canonical_corpus LOOP
+    PERFORM test.ok(public.reactions__key_canonical(test.from_hex(r.hex)) = test.from_hex(r.want)
+                AND public.reactions__key_ok(test.from_hex(r.want)),
+      format('key: [%s] is stored as [%s]', r.hex, r.want));
   END LOOP;
   PERFORM test.ok(NOT coalesce(public.reactions__key_ok(NULL), true), 'key: nothing is refused');
   PERFORM test.ok(NOT public.reactions__key_ok(repeat('👍', 400)), 'key: a long string is refused');
@@ -191,6 +218,13 @@ BEGIN
     'chat: a viewer reacts with any emoji (AC10.9)', v);
   v := test.react('B', 'q1', '👨‍👩‍👧');
   PERFORM test.ok(v = 'ok 1', 'chat: a joined emoji is one key', v);
+  PERFORM test.react('B', 'q1', chr(10084));
+  PERFORM test.react('V', 'q1', chr(10084) || chr(65039));
+  PERFORM test.ok(jsonb_array_length((test.msg('q1')).reactions -> (chr(10084) || chr(65039))) = 2
+              AND NOT ((test.msg('q1')).reactions ? chr(10084)),
+    'chat: ❤ and ❤️ are one key (one spelling is stored)');
+  PERFORM test.react('B', 'q1', chr(10084), false);
+  PERFORM test.react('V', 'q1', chr(10084), false);
   v := test.react('B', 'q1', 'party');
   PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'chat: a word is refused', v);
   v := test.react('B', 'q1', ':party:');

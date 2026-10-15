@@ -14,6 +14,7 @@
 // without taking focus; ↑↓ step through messages and the message keys act on
 // the selected one.
 
+import { canonicalReactionKey } from "@contracts/vocabularies";
 import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import {
@@ -499,7 +500,8 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     const verbsFor = (m: ChatMessage): MessageVerbs => {
       const p = live.current;
       return {
-        onReact: (key) => {
+        onReact: (picked) => {
+          const key = canonicalReactionKey(picked);
           const mine = !!selfId && (m.reactions[key] ?? []).includes(selfId);
           p.onReact(m, key, !mine);
         },

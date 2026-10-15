@@ -1227,10 +1227,27 @@ const REACTION_KEY_PATTERN = (() => {
   const s = REACTION_KEY_SET;
   const one = `(?:${charClass(s.base)}${charClass(s.vs)}?${charClass(s.skin)}?${cp(65039)}?(?:${charClass(s.tag)}+${cp(s.tagEnd)})?)`;
   return new RegExp(
-    `^(?:${charClass(s.ri)}${charClass(s.ri)}|[#*]${cp(65039)}?${cp(s.keycap)}|${one}(?:${cp(s.zwj)}${one})*)$`,
+    `^(?:${charClass(s.ri)}${charClass(s.ri)}|[#*0-9]${cp(65039)}?${cp(s.keycap)}|${one}(?:${cp(s.zwj)}${one})*)$`,
     "u",
   );
 })();
+
+/** The pictographs below U+1F000 (what gets U+FE0F in the one spelling). */
+const BMP_BASE = REACTION_KEY_SET.base.filter((r) => (typeof r === "number" ? r : r[1]) < 126976);
+const NEEDS_VS16 = new RegExp(
+  `([#*0-9${charClass(BMP_BASE).slice(1, -1)}])(?![${cp(65039)}${cp(127995)}-${cp(127999)}])`,
+  "gu",
+);
+
+/**
+ * One spelling per emoji, as Emojibase writes it (the same as the server's
+ * reactions__key_canonical): the text selector U+FE0E goes, and a pictograph
+ * below U+1F000 or a keycap's #, * or digit gets U+FE0F unless one (or a skin
+ * tone) already follows. So ❤ and ❤️ are one key.
+ */
+export function canonicalReactionKey(key: string): string {
+  return key.replaceAll(cp(65038), "").replace(NEEDS_VS16, `$1${cp(65039)}`);
+}
 
 /** Moduo's six quick reactions, in order (CH16a): your row when you set none. */
 export const DEFAULT_QUICK_REACTIONS = ["👍", "✅", "👀", "🙏", "❤️", "😄"] as const;

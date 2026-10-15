@@ -3,6 +3,7 @@
 // never a notification. Gives the two pieces a comment card places: the ☺
 // button (its actions) and the chips (its footer).
 
+import { canonicalReactionKey } from "@contracts/vocabularies";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -35,7 +36,8 @@ export function useCommentReactions({
   const groups = groupReactions(comment.reactions, currentUserId, nameOf);
   const mine = new Set(groups.filter((g) => g.mine).map((g) => g.key));
 
-  const react = (key: string, on: boolean) => {
+  const react = (picked: string, on: boolean) => {
+    const key = canonicalReactionKey(picked);
     void thread.react(comment.id, key, on).catch((e: unknown) => {
       toast.error(e instanceof Error ? e.message : "Couldn’t save the reaction.");
     });

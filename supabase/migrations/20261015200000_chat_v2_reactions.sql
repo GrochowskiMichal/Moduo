@@ -65,7 +65,7 @@ AS $function$
       FROM c
   )
   SELECT '^(?:' || ri || ri
-      || '|[#*]' || chr(65039) || '?' || keycap
+      || '|[#*0-9]' || chr(65039) || '?' || keycap
       || '|' || one || '(?:' || zwj || one || ')*'
       || ')$'
     FROM e
@@ -81,6 +81,31 @@ AS $function$
      AND char_length(p_key) BETWEEN 1 AND 32
      AND p_key ~ public.reactions__key_pattern()
 $function$;
+
+-- One spelling per emoji, as Emojibase writes it: the text selector (U+FE0E)
+-- goes, and a pictograph below U+1F000 or a keycap's #, * or digit gets U+FE0F
+-- unless one (or a skin tone) already follows. So ❤ and ❤️ are one key, not two
+-- chips. The ops store keys in this form; canonicalReactionKey in @contracts
+-- does the same for the app's own optimistic copy.
+CREATE OR REPLACE FUNCTION public.reactions__key_canonical(p_key text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE PARALLEL SAFE
+SET search_path TO ''
+AS $function$
+  SELECT regexp_replace(
+    replace(p_key, chr(65038), ''),
+    '([#*0-9' || chr(169) || chr(174) || chr(8252) || chr(8265) || chr(8482) || chr(8505)
+      || chr(8596) || '-' || chr(8618) || chr(8986) || '-' || chr(9215) || chr(9410)
+      || chr(9642) || '-' || chr(9726) || chr(9728) || '-' || chr(10175)
+      || chr(10548) || chr(10549) || chr(11013) || '-' || chr(11093)
+      || chr(12336) || chr(12349) || chr(12951) || chr(12953)
+      || '])(?![' || chr(65039) || chr(127995) || '-' || chr(127999) || '])',
+    '\1' || chr(65039), 'g')
+$function$;
+
+REVOKE ALL ON FUNCTION public.reactions__key_canonical(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reactions__key_canonical(text) TO authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.reactions__key_pattern() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.reactions__key_pattern() TO authenticated, service_role;
@@ -140,6 +165,7 @@ BEGIN
     WHEN 'thumbs_up' THEN '👍' WHEN 'check' THEN '✅' WHEN 'eyes' THEN '👀'
     WHEN 'pray' THEN '🙏' WHEN 'heart' THEN '❤️' WHEN 'smile' THEN '😄'
     ELSE p_reaction END;
+  p_reaction := public.reactions__key_canonical(p_reaction);
   IF NOT public.reactions__key_ok(p_reaction) THEN
     RAISE EXCEPTION 'That reaction isn''t supported.' USING ERRCODE = '22023';
   END IF;
@@ -188,6 +214,7 @@ DECLARE
   v_me text := auth.uid()::text;
   v_list jsonb;
 BEGIN
+  p_key := public.reactions__key_canonical(p_key);
   IF NOT public.reactions__key_ok(p_key) THEN
     RAISE EXCEPTION 'That reaction isn''t supported.' USING ERRCODE = '22023';
   END IF;
@@ -273,7 +300,7 @@ BEGIN
       IF jsonb_typeof(v_item::jsonb) <> 'string' THEN
         RAISE EXCEPTION 'A reaction is an emoji.' USING ERRCODE = '22023';
       END IF;
-      v_item := v_item::jsonb #>> '{}';
+      v_item := public.reactions__key_canonical(v_item::jsonb #>> '{}');
       IF NOT public.reactions__key_ok(v_item) THEN
         RAISE EXCEPTION 'A reaction is an emoji.' USING ERRCODE = '22023';
       END IF;
