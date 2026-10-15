@@ -197,11 +197,7 @@ function BlurPlugin({ onBlur }: { onBlur: () => void }) {
  * focus back to the box a moment later, and the browser would put the caret at
  * its start, so the next words would land before the chip.
  */
-function CaretAfterChipPlugin({
-  pending,
-}: {
-  pending: React.MutableRefObject<RangeSelection | null>;
-}) {
+function CaretAfterChipPlugin({ pending }: { pending: React.RefObject<RangeSelection | null> }) {
   const [editor] = useLexicalComposerContext();
   useEffect(
     () =>
@@ -209,6 +205,7 @@ function CaretAfterChipPlugin({
         FOCUS_COMMAND,
         () => {
           const caret = pending.current;
+          pending.current = null;
           if (caret) queueMicrotask(() => editor.update(() => $restoreOrEnd(caret)));
           return false;
         },

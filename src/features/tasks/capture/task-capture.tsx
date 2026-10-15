@@ -127,7 +127,9 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
 let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
-let openBody: ((draft: CaptureDraft, files: File[]) => void) | null = null;
+let openBody:
+  | ((draft: CaptureDraft, files: File[], slot: { json: string } | null) => boolean)
+  | null = null;
 
 /**
  * A refused capture's files (AT-3): the draft slot on the device keeps words
@@ -963,8 +965,18 @@ export function TaskCaptureBody({
   useEffect(() => {
     fillRef.current = fill;
   });
+  // This open's own draft cell (the shell keeps it for the open: stable).
+  const heldRef = useRef(held);
   useEffect(() => {
-    const restore = (kept: CaptureDraft, keptFiles: File[]) => fillRef.current(kept, keptFiles);
+    // Answers whether the refused slot stays kept: a prefilled open's draft
+    // isn't on the device, so it keeps the refused one there until it's made.
+    const restore = (kept: CaptureDraft, keptFiles: File[], slot: { json: string } | null) => {
+      fillRef.current(kept, keptFiles);
+      const mine = heldRef.current;
+      if (!mine || !slot) return false;
+      mine.from = { json: slot.json, files: keptFiles };
+      return true;
+    };
     openBody = restore;
     return () => {
       mounted.current = false;
@@ -1013,9 +1025,16 @@ export function TaskCaptureBody({
             });
             return;
           }
-          clearDraft(who, where, "refused");
-          if (openBody) openBody(waiting, takeRefusedFiles(who, where));
-          else {
+          if (openBody) {
+            const keeps = openBody(waiting, peekRefusedFiles(who, where), {
+              json: JSON.stringify(waiting),
+            });
+            if (!keeps) {
+              clearDraft(who, where, "refused");
+              takeRefusedFiles(who, where);
+            }
+          } else {
+            clearDraft(who, where, "refused");
             // The capture that opens takes the files with the draft.
             if (refusedFiles) refusedFiles.restoring = true;
             saveDraft(who, where, waiting);

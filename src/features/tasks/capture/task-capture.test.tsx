@@ -996,6 +996,40 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     registerCaptureAttachments(null);
   });
 
+  it("Restore into an open prefilled capture, then Esc: the refused one stays kept", async () => {
+    render(<Toaster />);
+    saveDraft(ME, WS, {
+      segments: [{ text: "Refused while closed" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      throw new Error("You can't add tasks here.");
+    });
+    const first = renderBody({ openId: 1 }, referenceStore({}), "");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    first.unmount();
+    await waitFor(() =>
+      expect(loadDraft(ME, WS, "refused")?.segments).toEqual([{ text: "Refused while closed" }]),
+    );
+    // Chat's T opens the capture; the toast's Restore fills it.
+    const open = prefilledOpen("From chat", 2);
+    const second = renderBody(open, referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0] as HTMLElement);
+    await waitFor(() => expect(document.body.textContent).toContain("Refused while closed"));
+    second.unmount();
+    expect(loadDraft(ME, WS, "refused")?.segments).toEqual([{ text: "Refused while closed" }]);
+    // Made in that open (back from a type switch): no longer kept.
+    renderBody(open, referenceStore({}), "Refused while closed");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).toBeNull());
+  });
+
   it("a Restore that finds no refused capture here (another workspace) starts empty", async () => {
     keepDraft();
     renderBody(
