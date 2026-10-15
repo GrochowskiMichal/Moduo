@@ -2,6 +2,16 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · People show their profile photo, initials as the fallback (dogfood MOD-96)
+
+Screen-only, no migration: photos already live on `profiles.avatar_url` (a public URL in the public `avatars` bucket, set in Settings → Account) and reach Tasks through the member list (`listMembers` → `mapMember` → `toAssignees`). The kit's `PersonAvatar` draws them; this change gives the surfaces that dropped them (the capture's pills, its title tokens, the `@` menus) the photo, and re-reads the members when a profile changes.
+
+- **MOD-96 · A person's avatar is their photo when they have one** → `components/ui/avatar.tsx` `PersonAvatar`, `capture-pills.tsx`, `token-node.tsx` `TokenPhotoContext`, `capture-menus.ts`, `spine/editor/mention-menu-plugin.tsx` `CandidateIcon`, `spine/hooks/use-mention-search.ts`, `providers/workspace-provider.tsx`; §19 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-14 (dogfood MOD-96: "show profile photos").
+  - Decision: every place Tasks shows a person draws their profile photo, round, when they have one; the two initials on their stable colour stay as the fallback when there is none, while it loads and when it fails to load. The colour stays keyed on the id.
+  - Why: people recognise a face faster than two letters, and the photos people set in Settings showed nowhere in Tasks' capture or menus.
+  - Rejected: call 43's initials only, for everyone, everywhere.
+
 ## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
 
 The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([round-2b](../../.design/tasks-v3/prototypes/round-2b.html), the detail frames). Screen-only, no migration.
