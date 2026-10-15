@@ -229,6 +229,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-16 · The app calls the reader "you", app-wide (Maciej, dogfood call #27, MOD-137): a value reads "You", a people list "Maciej Grzywacz (you)", a sentence "you"; "my" labels say "your" and "Remind me" loses the pronoun; "My tasks" and typed `@me` stay; capture's "Remind me…" waits for its lane; rejected: "Me" everywhere → decisions/tasks.md call #27
 - 2026-10-15 · A + on the Views header opens a new blank view over All, "Untitled view" until it's named on Save; while your view has unsaved changes the toolbar shows a clear Save (▾: Save as new view…, Revert changes) instead of the 12px line (Maciej, dogfood call #19, MOD-142; agent's layout, revisitable) → decisions/tasks.md
 - 2026-10-15 · Filter gets Project wherever more than one project shows (All, My tasks, Upcoming, Won't do, views over them), never inside one; "Inbox" is each reader's own; views save it (server keeps only projects the saver sees; migration 20261015215031, live on prod 2026-10-15) (Maciej, dogfood call #20, MOD-141) → decisions/tasks.md
 - 2026-10-15 · Each person keeps their own order of projects in the sidebar, synced in their preferences; a drag never moves anyone else's, a drop into another area still files it for everyone (edit only); sections and areas keep one shared order (Maciej, dogfood call #21, MOD-38) → decisions/tasks.md
