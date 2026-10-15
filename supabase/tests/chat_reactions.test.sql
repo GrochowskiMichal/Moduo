@@ -92,20 +92,82 @@ BEGIN
 END;
 $$;
 
--- ── One key: any emoji, nothing else ────────────────────────────────────────
+-- ── One key: exactly one emoji, nothing else ────────────────────────────────
+-- The corpus below is shared: vocabularies.test.ts reads these lines and holds
+-- isReactionKey to the same answers, so the app and the server accept exactly
+-- the same keys. Code points in hex, then whether it is a key.
+CREATE TABLE test.key_corpus (hex text NOT NULL, ok boolean NOT NULL);
+INSERT INTO test.key_corpus (hex, ok) VALUES
+-- corpus:begin
+  ('1F44D', true),
+  ('2705', true),
+  ('1F440', true),
+  ('1F64F', true),
+  ('2764 FE0F', true),
+  ('1F604', true),
+  ('1F389', true),
+  ('1F44D 1F3FD', true),
+  ('1F468 200D 1F469 200D 1F467', true),
+  ('1F1F5 1F1F1', true),
+  ('23 FE0F 20E3', true),
+  ('2A 20E3', true),
+  ('2139 FE0F', true),
+  ('A9 FE0F', true),
+  ('1F3C3 1F3FD 200D 2642 FE0F', true),
+  ('2764 FE0F 200D 1F525', true),
+  ('1F3F4 E0067 E0062 E0065 E006E E0067 E007F', true),
+  ('1F9D1 1F3FD 200D 1F91D 200D 1F9D1 1F3FB', true),
+  ('1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D', true),
+  ('1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D', false),
+  ('', false),
+  ('74 68 75 6D 62 73 5F 75 70', false),
+  ('3A 70 61 72 74 79 3A', false),
+  ('61', false),
+  ('31', false),
+  ('31 FE0F 20E3', false),
+  ('23', false),
+  ('21 21', false),
+  ('20', false),
+  ('3000', false),
+  ('A', false),
+  ('1F44D 1F44D', false),
+  ('1F44D 20', false),
+  ('1F44D A', false),
+  ('1F44D 61', false),
+  ('FE0F', false),
+  ('200D', false),
+  ('200D 1F44D', false),
+  ('1F44D 200D', false),
+  ('1F1F5', false),
+  ('1F1F5 1F1F1 1F1F5', false),
+  ('1F3FD', false),
+  ('E0067', false),
+  ('1F44D E007F', false),
+  ('1F44D 202E', false),
+  ('202E 1F44D', false),
+  ('200B 1F44D', false),
+  ('2066 1F44D 2069', false),
+  ('1F44D FEFF', false),
+  ('1F44D 0301', false),
+  ('E000', false)
+-- corpus:end
+;
+
 DO $$
 DECLARE
+  r record;
   k text;
 BEGIN
-  FOREACH k IN ARRAY ARRAY['👍', '✅', '👀', '🙏', '❤️', '😄', '🎉', '👍🏽', '👨‍👩‍👧', '🇵🇱', '#️⃣'] LOOP
-    PERFORM test.ok(public.reactions__key_ok(k), format('key: %s is a reaction', k));
-  END LOOP;
-  FOREACH k IN ARRAY ARRAY['thumbs_up', 'party', ':party:', 'a', '1', '!!', ' ', '👍 👍', E'👍\n', repeat('👍', 33),
-                           U&'\FE0F', U&'\200D', ''] LOOP
-    PERFORM test.ok(NOT public.reactions__key_ok(k), format('key: %L is refused', k));
+  FOR r IN SELECT hex, ok FROM test.key_corpus LOOP
+    k := CASE WHEN r.hex = '' THEN '' ELSE (
+      SELECT string_agg(chr(('x' || lpad(x, 8, '0'))::bit(32)::int), '' ORDER BY o)
+        FROM unnest(string_to_array(r.hex, ' ')) WITH ORDINALITY AS t(x, o)) END;
+    PERFORM test.ok(public.reactions__key_ok(k) = r.ok,
+      format('key: [%s] %s', r.hex, CASE WHEN r.ok THEN 'is a reaction' ELSE 'is refused' END));
   END LOOP;
   PERFORM test.ok(NOT coalesce(public.reactions__key_ok(NULL), true), 'key: nothing is refused');
-  PERFORM test.ok(public.reactions__key_ok(repeat('👍', 32)), 'key: up to 32 characters');
+  PERFORM test.ok(NOT public.reactions__key_ok(repeat('👍', 400)), 'key: a long string is refused');
+  PERFORM test.ok(NOT public.reactions__key_ok(E'👍\n'), 'key: a line break is refused');
   -- Custom emoji (`:name:`) arrive with CV-20, which widens this one check.
   PERFORM test.ok(
     pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'comment_reactions_reaction_check'))
@@ -166,8 +228,15 @@ DECLARE
 BEGIN
   v := test.creact('A', 'C', '🎉');
   PERFORM test.ok(v = 'ok 1', 'comment: a member reacts with any emoji', v);
+  -- An app from before CV-7c sends the old words: they land as their emoji.
   v := test.creact('A', 'C', 'thumbs_up');
-  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'comment: the old words are refused', v);
+  PERFORM test.ok(v = 'ok 2' AND EXISTS (SELECT 1 FROM public.comment_reactions
+                                           WHERE comment_id = test.id('C') AND reaction = '👍'),
+    'comment: an old app''s word lands as its emoji', v);
+  v := test.creact('A', 'C', 'thumbs_up', false);
+  PERFORM test.ok(v = 'ok 1', 'comment: and takes it back the same way', v);
+  v := test.creact('A', 'C', 'party');
+  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'comment: any other word is refused', v);
   v := test.creact('N', 'CV', '👀');
   PERFORM test.ok(v = 'ok 1', 'comment: a view-only share reacts to what it can comment on', v);
   v := test.creact('V', 'C', '👀');

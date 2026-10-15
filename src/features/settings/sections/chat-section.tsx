@@ -72,7 +72,12 @@ export function ChatSection() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" disabled={saved === null} onClick={() => save(null)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!saved || saved.length === 0}
+              onClick={() => save(null)}
+            >
               Use Moduo’s six
             </Button>
           </div>

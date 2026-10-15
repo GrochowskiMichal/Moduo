@@ -21,6 +21,8 @@ type State = {
 
 let state: State = { userId: null, saved: null, loaded: false };
 let loading: Promise<void> | null = null;
+/** Bumped by every save: an answer that started before the latest save is stale. */
+let version = 0;
 const listeners = new Set<() => void>();
 
 function set(next: State) {
@@ -37,10 +39,13 @@ function load(userId: string) {
   if (state.userId !== userId) set({ userId, saved: null, loaded: false });
   const chat = chatRuntime();
   if (!chat) return;
+  const started = version;
   const run = chat
     .myPrefs()
     .then((p) => {
-      if (state.userId === userId) set({ userId, saved: p.reactionRow, loaded: true });
+      if (state.userId === userId && version === started) {
+        set({ userId, saved: p.reactionRow, loaded: true });
+      }
     })
     // Unreachable prefs leave Moduo's six; the next mount tries again.
     .catch(() => {})
@@ -56,12 +61,16 @@ export async function saveQuickRow(row: string[] | null): Promise<void> {
   const chat = chatRuntime();
   if (!chat) throw new Error("Sign in to change your reactions.");
   const before = state;
+  const mine = ++version;
   set({ ...state, saved: row, loaded: true });
   try {
     const p = await chat.setMyPrefs({ reactionRow: row });
-    if (state.userId === before.userId) set({ ...state, saved: p.reactionRow, loaded: true });
+    if (state.userId === before.userId && version === mine) {
+      set({ ...state, saved: p.reactionRow, loaded: true });
+    }
   } catch (e) {
-    if (state.userId === before.userId) set(before);
+    // Only the latest save puts its old row back (a later one already moved on).
+    if (state.userId === before.userId && version === mine) set(before);
     throw e;
   }
 }
@@ -94,4 +103,5 @@ export function useQuickReactions(userId: string | null): {
 export function resetQuickReactionsForTest() {
   state = { userId: null, saved: null, loaded: false };
   loading = null;
+  version = 0;
 }

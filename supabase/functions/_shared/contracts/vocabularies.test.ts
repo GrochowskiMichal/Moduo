@@ -550,39 +550,39 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
     expect(v.MAX_QUICK_REACTIONS).toBe(6);
   });
 
-  it("are any emoji and nothing else (the server's rule)", async () => {
+  it("accept exactly what the server accepts (the corpus in chat_reactions.test.sql)", async () => {
     const v = await import("./vocabularies.ts");
-    for (const k of ["🎉", "👍🏽", "👨‍👩‍👧", "🇵🇱", "#️⃣", "👍".repeat(32)]) {
-      expect(v.isReactionKey(k), k).toBe(true);
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      "utf8",
+    );
+    const block = sql.slice(sql.indexOf("-- corpus:begin"), sql.indexOf("-- corpus:end"));
+    const rows = [...block.matchAll(/\('([0-9A-F ]*)', (true|false)\)/g)];
+    expect(rows.length).toBeGreaterThan(40);
+    for (const [, hex, ok] of rows) {
+      const key = hex ? String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16))) : "";
+      expect(v.isReactionKey(key), `[${hex}]`).toBe(ok === "true");
+      expect(v.parseReactionKey(key).success, `[${hex}]`).toBe(ok === "true");
     }
-    for (const k of [
-      "thumbs_up",
-      ":party:",
-      "a",
-      "1",
-      "!!",
-      " ",
-      "👍 👍",
-      "👍\n",
-      "👍".repeat(33),
-      "\uFE0F",
-      "\u200D",
-      "",
-      null,
-      42,
-    ]) {
-      expect(v.isReactionKey(k), String(k)).toBe(false);
-    }
-    expect(v.parseReactionKey("🎉").success).toBe(true);
-    expect(v.parseReactionKey("party").success).toBe(false);
   });
 
-  it("read laxly: whatever the server stored shows", async () => {
+  it("refuse what the database can't even hold, and anything not a string", async () => {
     const v = await import("./vocabularies.ts");
-    expect(v.normalizeReactionKey("²")).toBe("²");
+    const lone = String.fromCharCode(0xd83d);
+    for (const k of [lone, `👍${String.fromCharCode(0xdc00)}`, "👍".repeat(400), "x".repeat(1024), null, 42, {}]) {
+      expect(v.isReactionKey(k), String(k).slice(0, 8)).toBe(false);
+    }
+  });
+
+  it("read: only a key shows; anything else stored is left out", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeReactionKey("🎉")).toBe("🎉");
+    expect(v.normalizeReactionKey(`👍${String.fromCodePoint(0x202e)}`)).toBeNull();
+    expect(v.normalizeReactionKey("thumbs_up")).toBeNull();
     expect(v.normalizeReactionKey("")).toBeNull();
     expect(v.normalizeReactionKey(7)).toBeNull();
-    expect(v.normalizeReactionKey("x".repeat(33))).toBeNull();
   });
 });
 

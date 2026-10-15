@@ -6,6 +6,7 @@ import {
   DEFAULT_QUICK_REACTIONS,
   isReactionKey,
   MAX_QUICK_REACTIONS,
+  normalizeReactionKey,
   type ReactionKey,
 } from "@contracts/vocabularies";
 
@@ -71,14 +72,15 @@ export function groupReactions(
   return [...byKey].map(([key, ids]) => groupOf(key, ids, currentUserId, nameOf));
 }
 
-/** A message's reactions (`{key: [user ids]}`), in the order the server keeps them. */
+/** A message's reactions (`{key: [user ids]}`), in the order the server keeps
+ *  them; anything stored there that isn't a key is left out, never drawn. */
 export function groupMessageReactions(
   reactions: Readonly<Record<string, readonly string[]>>,
   currentUserId: string | null,
   nameOf: (userId: string) => string | null,
 ): ReactionGroup[] {
   return Object.entries(reactions)
-    .filter(([, ids]) => ids.length > 0)
+    .filter(([key, ids]) => ids.length > 0 && normalizeReactionKey(key) !== null)
     .map(([key, ids]) => groupOf(key, ids, currentUserId, nameOf));
 }
 

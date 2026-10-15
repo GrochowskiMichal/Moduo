@@ -27,6 +27,7 @@ import {
   CHAT_PLAN_TIERS,
   CONTENT_AUTHOR_KINDS,
   DEFAULT_QUICK_REACTIONS,
+  REACTION_KEY_SET,
   DATE_ORDERS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
@@ -321,12 +322,18 @@ describe("cross-runtime drift guards", () => {
 
   it("one reaction key: CV-7c's check, used by comments, chat and the quick row", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261015200000_chat_v2_reactions.sql"), "utf8");
-    // The same rule as isReactionKey: length, the refused classes, one non-ASCII
-    // character, not only joiners or variation selectors.
+    // The same rule as isReactionKey: the length, and the pattern spelled with
+    // the same code points as REACTION_KEY_SET, in the same order.
     expect(sql).toContain("char_length(p_key) BETWEEN 1 AND 32");
-    expect(sql).toContain("p_key !~ '[[:alnum:][:space:][:cntrl:]]'");
-    expect(sql).toContain("p_key ~ '[^\\x01-\\x7f]'");
-    expect(sql).toContain("chr(65038) || chr(65039) || chr(8205) || chr(8419)");
+    expect(sql).toContain("AND p_key ~ public.reactions__key_pattern()");
+    const fnAt = sql.indexOf("CREATE OR REPLACE FUNCTION public.reactions__key_pattern()");
+    const body = sql.slice(fnAt, sql.indexOf("$function$;", fnAt));
+    const chrs = [...body.matchAll(/chr\((\d+)\)/g)].map((m) => Number(m[1]));
+    const s = REACTION_KEY_SET;
+    const flat = (r: unknown): number[] =>
+      Array.isArray(r) ? r.flatMap(flat) : typeof r === "number" ? [r] : [];
+    const set = flat([s.base, s.vs, s.skin, s.tag, s.tagEnd, s.zwj, s.keycap, s.ri]);
+    expect(chrs.slice(0, set.length)).toEqual(set);
     expect(sql).toContain("CHECK (public.reactions__key_ok(reaction))");
     expect(sql).toContain("IF NOT public.reactions__key_ok(p_reaction) THEN");
     expect(sql).toContain("IF NOT public.reactions__key_ok(p_key) THEN");

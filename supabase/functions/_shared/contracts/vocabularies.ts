@@ -1189,13 +1189,48 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 // ---------------------------------------------------------------------------
 // Reactions (CV-7c; round-3 §2.8, Assumptions #18, #29) — one key for chat
 // messages, task and note comments and your quick row. Mirrors
-// public.reactions__key_ok(text) in 20261015200000_chat_v2_reactions: a
-// standard emoji as Emojibase writes it, 1–32 characters, no letters, digits,
-// spaces or control characters, at least one character outside ASCII, and not
-// only joiners or variation selectors. The `:name:` form of a live custom
-// emoji arrives with CV-20, which widens both halves. A reaction never
+// public.reactions__key_ok(text) in 20261015200000_chat_v2_reactions: exactly
+// one standard emoji as Emojibase writes it, 1–32 code points (≤ 128 bytes):
+// a flag (two regional indicators), a #/* keycap, or one pictograph with an
+// optional variation selector, skin tone and tag sequence, joined to more of
+// the same only by U+200D. Every code point comes from REACTION_KEY_SET (the
+// same numbers as reactions__key_pattern(); the drift gate compares them), so
+// no letters, digits, spaces, controls, invisible or direction marks, lone
+// surrogates, and never two emoji side by side. The `:name:` form of a live
+// custom emoji arrives with CV-20, which widens both halves. A reaction never
 // notifies anyone.
 // ---------------------------------------------------------------------------
+
+type CodeRange = number | readonly [number, number];
+
+/** The code points a key is built from, in decimal (as the SQL's chr()). */
+export const REACTION_KEY_SET = {
+  base: [
+    169, 174, 8252, 8265, 8482, 8505, [8596, 8618], [8986, 9215], 9410, [9642, 9726],
+    [9728, 10175], 10548, 10549, [11013, 11093], 12336, 12349, 12951, 12953,
+    [126976, 127461], [127488, 127994], [128000, 129791],
+  ],
+  vs: [65038, 65039],
+  skin: [[127995, 127999]],
+  tag: [[917536, 917630]],
+  tagEnd: 917631,
+  zwj: 8205,
+  keycap: 8419,
+  ri: [[127462, 127487]],
+} as const satisfies Record<string, CodeRange | readonly CodeRange[]>;
+
+const cp = (n: number) => String.fromCodePoint(n);
+const charClass = (ranges: readonly CodeRange[]) =>
+  `[${ranges.map((r) => (typeof r === "number" ? cp(r) : `${cp(r[0])}-${cp(r[1])}`)).join("")}]`;
+
+const REACTION_KEY_PATTERN = (() => {
+  const s = REACTION_KEY_SET;
+  const one = `(?:${charClass(s.base)}${charClass(s.vs)}?${charClass(s.skin)}?${cp(65039)}?(?:${charClass(s.tag)}+${cp(s.tagEnd)})?)`;
+  return new RegExp(
+    `^(?:${charClass(s.ri)}${charClass(s.ri)}|[#*]${cp(65039)}?${cp(s.keycap)}|${one}(?:${cp(s.zwj)}${one})*)$`,
+    "u",
+  );
+})();
 
 /** Moduo's six quick reactions, in order (CH16a): your row when you set none. */
 export const DEFAULT_QUICK_REACTIONS = ["👍", "✅", "👀", "🙏", "❤️", "😄"] as const;
@@ -1212,20 +1247,17 @@ export function isReactionKey(value: unknown): value is ReactionKey {
   if (typeof value !== "string") return false;
   const length = [...value].length; // code points, as Postgres counts them
   if (length < 1 || length > REACTION_KEY_MAX) return false;
-  if (/[\p{L}\p{N}\p{White_Space}\p{Cc}]/u.test(value)) return false;
-  if (!/[^\u0001-\u007f]/.test(value)) return false;
-  return !/^[\uFE0E\uFE0F\u200D\u20E3]+$/.test(value);
+  return REACTION_KEY_PATTERN.test(value);
 }
 export const REACTION_KEY = z.string().refine(isReactionKey, { message: "A reaction is an emoji." });
 export function parseReactionKey(input: unknown): SafeParseResult<ReactionKey> {
   return parseOrError(REACTION_KEY, input);
 }
-/** Lax read: any short key the server stored is shown (null otherwise). The
- *  server is the authority, so a key it accepted is never hidden here. */
+/** Read: a stored key shows only when it is a key (null otherwise), so nothing
+ *  else stored there is ever drawn as a reaction. The two checks accept the
+ *  same set, so a key the server took is never hidden. */
 export function normalizeReactionKey(input: unknown): ReactionKey | null {
-  return typeof input === "string" && input.length > 0 && [...input].length <= REACTION_KEY_MAX
-    ? input
-    : null;
+  return isReactionKey(input) ? input : null;
 }
 
 // ---------------------------------------------------------------------------

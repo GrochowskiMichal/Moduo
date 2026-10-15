@@ -6,11 +6,16 @@
 --
 -- What it does:
 --   1. One reaction key for chat and comments: reactions__key_ok(text), the
---      server's half of REACTION_KEY in @contracts. A key is a standard emoji
---      as Emojibase writes it: 1–32 characters, no letters, digits, spaces or
---      control characters, at least one character outside ASCII, and not only
---      joiners or variation selectors. (The `:name:` form of a live custom
---      emoji arrives with CV-20, whose migration widens this function.)
+--      server's half of REACTION_KEY in @contracts. A key is exactly one
+--      standard emoji as Emojibase writes it, 1–32 code points (so at most
+--      128 bytes): a pair of regional indicators (a flag), a #/* keycap, or
+--      one pictograph from the emoji blocks with an optional variation
+--      selector, skin tone and tag sequence, joined to more of the same only
+--      by U+200D. Every code point comes from that closed set: no letters,
+--      digits, spaces, controls, invisible or direction marks, and never two
+--      emoji side by side. reactions__key_pattern() spells the set as code
+--      point numbers, the same numbers @contracts uses. (The `:name:` form of
+--      a live custom emoji arrives with CV-20, whose migration widens this.)
 --   2. Comments take any key. comment_reactions' CHECK (the six words) becomes
 --      reactions__key_ok(reaction), and the six stored words become their
 --      emoji (thumbs_up → 👍, check → ✅, eyes → 👀, pray → 🙏, heart → ❤️,
@@ -27,6 +32,45 @@
 SET LOCAL lock_timeout = '5s';
 
 -- ── 1. The shared key ───────────────────────────────────────────────────────
+-- Code points in decimal (chr), the same numbers as REACTION_KEY_SET in
+-- @contracts; the drift gate compares the two lists.
+CREATE OR REPLACE FUNCTION public.reactions__key_pattern()
+RETURNS text
+LANGUAGE sql
+IMMUTABLE PARALLEL SAFE
+SET search_path TO ''
+AS $function$
+  WITH c AS (
+    SELECT
+      -- one pictograph: ©, ®, ‼, ⁉, ™, ℹ, arrows, ⌚…⏿, Ⓜ, ▪…◾, ☀…➿, ⤴⤵,
+      -- ⬅…⭕, 〰, 〽, ㊗, ㊙, and U+1F000–1FAFF less the flags' letters and
+      -- the skin tones
+      '[' || chr(169) || chr(174) || chr(8252) || chr(8265) || chr(8482) || chr(8505)
+          || chr(8596) || '-' || chr(8618) || chr(8986) || '-' || chr(9215) || chr(9410)
+          || chr(9642) || '-' || chr(9726) || chr(9728) || '-' || chr(10175)
+          || chr(10548) || chr(10549) || chr(11013) || '-' || chr(11093)
+          || chr(12336) || chr(12349) || chr(12951) || chr(12953)
+          || chr(126976) || '-' || chr(127461) || chr(127488) || '-' || chr(127994)
+          || chr(128000) || '-' || chr(129791) || ']' AS base,
+      '[' || chr(65038) || chr(65039) || ']' AS vs,                  -- U+FE0E, U+FE0F
+      '[' || chr(127995) || '-' || chr(127999) || ']' AS skin,       -- U+1F3FB–1F3FF
+      '[' || chr(917536) || '-' || chr(917630) || ']' AS tag,        -- U+E0020–E007E
+      chr(917631) AS tag_end,                                        -- U+E007F
+      chr(8205) AS zwj,                                              -- U+200D
+      chr(8419) AS keycap,                                           -- U+20E3
+      '[' || chr(127462) || '-' || chr(127487) || ']' AS ri          -- U+1F1E6–1F1FF
+  ), e AS (
+    SELECT c.*, '(?:' || base || vs || '?' || skin || '?' || chr(65039) || '?(?:'
+                || tag || '+' || tag_end || ')?)' AS one
+      FROM c
+  )
+  SELECT '^(?:' || ri || ri
+      || '|[#*]' || chr(65039) || '?' || keycap
+      || '|' || one || '(?:' || zwj || one || ')*'
+      || ')$'
+    FROM e
+$function$;
+
 CREATE OR REPLACE FUNCTION public.reactions__key_ok(p_key text)
 RETURNS boolean
 LANGUAGE sql
@@ -35,11 +79,11 @@ SET search_path TO ''
 AS $function$
   SELECT p_key IS NOT NULL
      AND char_length(p_key) BETWEEN 1 AND 32
-     AND p_key !~ '[[:alnum:][:space:][:cntrl:]]'
-     AND p_key ~ '[^\x01-\x7f]'
-     -- not only variation selectors (U+FE0E, U+FE0F), joiners (U+200D) or keycaps (U+20E3)
-     AND p_key !~ ('^[' || chr(65038) || chr(65039) || chr(8205) || chr(8419) || ']+$')
+     AND p_key ~ public.reactions__key_pattern()
 $function$;
+
+REVOKE ALL ON FUNCTION public.reactions__key_pattern() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reactions__key_pattern() TO authenticated, service_role;
 
 COMMENT ON FUNCTION public.reactions__key_ok(text) IS
   'CV-7c: a reaction key (chat messages, comments, the quick row) is a standard emoji. Mirrors REACTION_KEY in @contracts.';
@@ -90,6 +134,12 @@ AS $function$
 DECLARE
   v public.comments;
 BEGIN
+  -- An app from before CV-7c still sends the six TV-U13 words: they mean their
+  -- emoji, so this can ship before every app (desktop bundles its UI) updates.
+  p_reaction := CASE p_reaction
+    WHEN 'thumbs_up' THEN '👍' WHEN 'check' THEN '✅' WHEN 'eyes' THEN '👀'
+    WHEN 'pray' THEN '🙏' WHEN 'heart' THEN '❤️' WHEN 'smile' THEN '😄'
+    ELSE p_reaction END;
   IF NOT public.reactions__key_ok(p_reaction) THEN
     RAISE EXCEPTION 'That reaction isn''t supported.' USING ERRCODE = '22023';
   END IF;

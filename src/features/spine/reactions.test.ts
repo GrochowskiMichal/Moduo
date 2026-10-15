@@ -65,7 +65,11 @@ describe("who reacted", () => {
 
   it("groups a message's reactions the same way, skipping empty ones", () => {
     expect(
-      groupMessageReactions({ "👍": ["u2", "u1"], "👀": [], "🎉": ["x"] }, "u1", nameOf),
+      groupMessageReactions(
+        { "👍": ["u2", "u1"], "👀": [], "🎉": ["x"], party: ["u2"] },
+        "u1",
+        nameOf,
+      ),
     ).toEqual([
       { key: "👍", count: 2, mine: true, people: ["You", "Mike"] },
       { key: "🎉", count: 1, mine: false, people: ["Former member"] },
