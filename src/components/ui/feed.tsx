@@ -125,25 +125,38 @@ function FeedCard({
 }
 
 /**
+ * The filled composer's surface (chat, round 5 frame 5): a quiet fill with a
+ * hairline inside it. Exported for hosts that lay out their own editor in it
+ * (the chat composer's Lexical box).
+ */
+const FEED_COMPOSER_FILLED = "rounded-lg bg-state-hover ring-1 ring-hairline ring-inset";
+
+/**
  * The composer's surface. Put a growing textarea (`FeedComposerInput`) in
  * `children` and the IconButtons in `actions`; `leading` sits above the text
- * inside the box (a quote being replied to).
+ * inside the box (a quote being replied to). `filled` is chat's box.
  */
 const FeedComposer = React.forwardRef<
   HTMLDivElement,
   Omit<React.ComponentProps<"div">, "children"> & {
     leading?: React.ReactNode;
     actions?: React.ReactNode;
+    variant?: "outline" | "filled";
     children: React.ReactNode;
   }
->(function FeedComposer({ leading, actions, className, children, ...props }, ref) {
+>(function FeedComposer(
+  { leading, actions, variant = "outline", className, children, ...props },
+  ref,
+) {
   return (
     <div
       ref={ref}
       data-slot="feed-composer"
+      data-variant={variant}
       className={cn(
-        "rounded-lg border border-hairline bg-transparent transition-[border-color] duration-(--motion-fade) ease-(--ease-out)",
-        "focus-within:border-border",
+        variant === "filled"
+          ? FEED_COMPOSER_FILLED
+          : "rounded-lg border border-hairline bg-transparent transition-[border-color] duration-(--motion-fade) ease-(--ease-out) focus-within:border-border",
         className,
       )}
       {...props}
@@ -157,23 +170,26 @@ const FeedComposer = React.forwardRef<
   );
 });
 
-/** The composer's text field: body text, grows with its content up to a cap. */
-const FeedComposerInput = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"textarea">>(
-  function FeedComposerInput({ className, rows = 1, ...props }, ref) {
-    return (
-      <textarea
-        ref={ref}
-        rows={rows}
-        data-slot="feed-composer-input"
-        className={cn(
-          "max-h-60 min-h-6 flex-1 resize-none self-center bg-transparent py-0.5 font-sans text-sm leading-relaxed text-foreground outline-none",
-          "placeholder:text-muted-foreground disabled:cursor-not-allowed",
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
-);
+/** The composer's text field: body text, grows with its content up to a cap.
+ * `md` is chat's 15 px message text (the same size at every density). */
+const FeedComposerInput = React.forwardRef<
+  HTMLTextAreaElement,
+  React.ComponentProps<"textarea"> & { size?: "sm" | "md" }
+>(function FeedComposerInput({ className, rows = 1, size = "sm", ...props }, ref) {
+  return (
+    <textarea
+      ref={ref}
+      rows={rows}
+      data-slot="feed-composer-input"
+      className={cn(
+        "max-h-60 min-h-6 flex-1 resize-none self-center bg-transparent py-0.5 font-sans text-foreground outline-none",
+        size === "md" ? "text-md leading-normal" : "text-sm leading-relaxed",
+        "placeholder:text-muted-foreground disabled:cursor-not-allowed",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 
-export { FeedCard, FeedComposer, FeedComposerInput, FeedItem };
+export { FEED_COMPOSER_FILLED, FeedCard, FeedComposer, FeedComposerInput, FeedItem };

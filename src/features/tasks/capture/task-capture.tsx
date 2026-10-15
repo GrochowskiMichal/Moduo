@@ -118,7 +118,8 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
 };
 
 /**
- * The title's words as the Task body last told the shell. When the shell's
+ * The title's words as the Task body last told the shell (a prefilled open's
+ * words never land here: they're its own, in `held`). When the shell's
  * draft still matches, the stored draft (with its tokens) is the one to
  * restore; when it doesn't, the words were changed under another type (⌘2,
  * then back) and come along as words.
@@ -126,7 +127,9 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
 let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
-let openBody: ((draft: CaptureDraft, files: File[]) => void) | null = null;
+let openBody:
+  | ((draft: CaptureDraft, files: File[], slot: { json: string } | null) => boolean)
+  | null = null;
 
 /**
  * A refused capture's files (AT-3): the draft slot on the device keeps words
@@ -146,6 +149,15 @@ function takeRefusedFiles(
   const { files } = refusedFiles;
   refusedFiles = null;
   return files;
+}
+
+/** What a refused capture's Restore started from: its slot (as read) and files. */
+type RefusedOrigin = { json: string; files: File[] };
+
+/** A refused capture's files, left waiting (a Restore that may be closed unmade). */
+function peekRefusedFiles(userId: string | null, workspaceId: string | null): File[] {
+  const key = `${userId ?? ""}:${workspaceId ?? ""}`;
+  return refusedFiles?.key === key ? refusedFiles.files : [];
 }
 
 /**
@@ -219,7 +231,68 @@ export function TaskCaptureBody({
   const [owner] = useState(() => ({ userId, workspaceId }));
 
   // ── the draft (restored on open, research §1.8) ──────────────────────────
+  const held = context?.held;
+  /** Forget the draft this capture writes to (a prefilled open's own, or the kept one). */
+  const forgetDraft = () => {
+    if (held) held.current = null;
+    else {
+      clearDraft(owner.userId, owner.workspaceId);
+      lastTitleWords = "";
+    }
+  };
+  /**
+   * A restored refused capture was handed off (made, or waiting to sync): it's
+   * no longer kept. Only if its slot and files are still the ones it started
+   * from (another capture refused meanwhile keeps its own).
+   */
+  const consumeRefused = () => {
+    const from = held?.from as RefusedOrigin | undefined;
+    if (!held || !from) return;
+    held.from = undefined;
+    const now = loadDraft(owner.userId, owner.workspaceId, "refused");
+    if (now && JSON.stringify(now) === from.json) {
+      clearDraft(owner.userId, owner.workspaceId, "refused");
+    }
+    if (peekRefusedFiles(owner.userId, owner.workspaceId) === from.files) {
+      takeRefusedFiles(owner.userId, owner.workspaceId);
+    }
+  };
   const [initial] = useState(() => {
+    // An opener that prefills the line (chat's T, `/task`) starts a fresh
+    // task in its own draft (`held`, this open's only): the person's kept
+    // draft is never read, written or cleared by it.
+    if (held) {
+      const mine = held.current as CaptureDraft | null;
+      // A refused capture's Restore (`fromRefused`): it starts from this
+      // owner's refused one, read (not taken) from its slot, files and all;
+      // both stay kept until it's made (`consumeRefused`). None here (a
+      // switch of workspace since): it starts empty, not with another's words.
+      if (!mine && context?.fromRefused) {
+        const refusedHere = loadDraft(owner.userId, owner.workspaceId, "refused");
+        held.from = refusedHere
+          ? {
+              json: JSON.stringify(refusedHere),
+              files: peekRefusedFiles(owner.userId, owner.workspaceId),
+            }
+          : undefined;
+      }
+      const from = held.from as RefusedOrigin | undefined;
+      let start: CaptureDraft =
+        mine ??
+        (from
+          ? (JSON.parse(from.json) as CaptureDraft)
+          : context?.fromRefused
+            ? EMPTY_DRAFT
+            : { ...EMPTY_DRAFT, segments: shellDraft ? [{ text: shellDraft }] : [] });
+      // Typed under another type (⌘2, then back): those words come along.
+      if (mine && shellDraft.trim() && shellDraft !== plainText(mine.segments)) {
+        start = { ...start, segments: [{ text: shellDraft }] };
+      }
+      // Its files, while they still wait (a type switch and back too).
+      const waiting = from ? peekRefusedFiles(owner.userId, owner.workspaceId) : [];
+      const files = from && waiting === from.files ? waiting : [];
+      return { draft: start, restored: false, files };
+    }
     const stored = loadDraft(owner.userId, owner.workspaceId);
     // A capture the server refused comes back when nothing else is waiting.
     const refused = loadDraft(owner.userId, owner.workspaceId, "refused");
@@ -311,17 +384,12 @@ export function TaskCaptureBody({
   const justInserted = useRef<{ key: NodeKey; baseline: string | null } | null>(null);
   const effects = useRef<Record<string, Map<string, EntryEffect>>>({});
 
-  // Keep the draft on the device as it changes.
+  // Keep the draft on the device as it changes (a prefilled open: in its own).
   useEffect(() => {
-    saveDraft(owner.userId, owner.workspaceId, {
-      segments,
-      keep,
-      description,
-      subtasks,
-      fields,
-      pasted,
-    });
-  }, [owner, segments, keep, description, subtasks, fields, pasted]);
+    const now = { segments, keep, description, subtasks, fields, pasted };
+    if (held) held.current = now;
+    else saveDraft(owner.userId, owner.workspaceId, now);
+  }, [owner, held, segments, keep, description, subtasks, fields, pasted]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -647,8 +715,10 @@ export function TaskCaptureBody({
   const onTitleChange = (next: TitleSegment[], keys: Array<NodeKey | null>) => {
     setSegments(next);
     setSegmentKeys(keys);
-    lastTitleWords = plainText(next);
-    onDraftChange(lastTitleWords);
+    const words = plainText(next);
+    // The kept draft's words (a prefilled open's are its own, in `held`).
+    if (!held) lastTitleWords = words;
+    onDraftChange(words);
     const just = justInserted.current;
     if (just) {
       const now = JSON.stringify(next);
@@ -895,8 +965,18 @@ export function TaskCaptureBody({
   useEffect(() => {
     fillRef.current = fill;
   });
+  // This open's own draft cell (the shell keeps it for the open: stable).
+  const heldRef = useRef(held);
   useEffect(() => {
-    const restore = (kept: CaptureDraft, keptFiles: File[]) => fillRef.current(kept, keptFiles);
+    // Answers whether the refused slot stays kept: a prefilled open's draft
+    // isn't on the device, so it keeps the refused one there until it's made.
+    const restore = (kept: CaptureDraft, keptFiles: File[], slot: { json: string } | null) => {
+      fillRef.current(kept, keptFiles);
+      const mine = heldRef.current;
+      if (!mine || !slot) return false;
+      mine.from = { json: slot.json, files: keptFiles };
+      return true;
+    };
     openBody = restore;
     return () => {
       mounted.current = false;
@@ -905,12 +985,23 @@ export function TaskCaptureBody({
   }, []);
   const putBack = (kept: CaptureDraft, message: string, keptFiles: File[] = []) => {
     const empty = segmentsRef.current.every((x) => "text" in x && !x.text.trim());
+    const { userId: who, workspaceId: where } = owner;
     if (mounted.current && empty && !pastedRef.current) {
       fill(kept, keptFiles);
+      if (held) {
+        // A prefilled open's draft isn't on the device: the refused one is
+        // kept in its slot too (Esc loses nothing), and making it ends that.
+        saveDraft(who, where, kept, "refused");
+        refusedFiles =
+          keptFiles.length > 0 ? { key: `${who ?? ""}:${where ?? ""}`, files: keptFiles } : null;
+        const now = loadDraft(who, where, "refused");
+        held.from = now
+          ? { json: JSON.stringify(now), files: refusedFiles?.files ?? [] }
+          : undefined;
+      }
       toast.error(message, { description: "Your capture is back: change it and try again." });
       return;
     }
-    const { userId: who, workspaceId: where } = owner;
     saveDraft(who, where, kept, "refused");
     // Its files can't go in the device slot: they wait in memory for Restore.
     refusedFiles =
@@ -922,9 +1013,28 @@ export function TaskCaptureBody({
         onClick: () => {
           const waiting = loadDraft(who, where, "refused");
           if (!waiting) return;
-          clearDraft(who, where, "refused");
-          if (openBody) openBody(waiting, takeRefusedFiles(who, where));
-          else {
+          if (!openBody && draftHasContent(loadDraft(who, where) ?? EMPTY_DRAFT)) {
+            // The person keeps another draft: it stays where it is, and the
+            // refused capture opens in its own; it stays kept in its slot
+            // until it's made (Esc, or an open that doesn't happen, loses
+            // nothing).
+            dispatchOpenCapture({
+              type: "task",
+              draft: plainText(waiting.segments),
+              fromRefused: true,
+            });
+            return;
+          }
+          if (openBody) {
+            const keeps = openBody(waiting, peekRefusedFiles(who, where), {
+              json: JSON.stringify(waiting),
+            });
+            if (!keeps) {
+              clearDraft(who, where, "refused");
+              takeRefusedFiles(who, where);
+            }
+          } else {
+            clearDraft(who, where, "refused");
             // The capture that opens takes the files with the draft.
             if (refusedFiles) refusedFiles.restoring = true;
             saveDraft(who, where, waiting);
@@ -1107,11 +1217,11 @@ export function TaskCaptureBody({
     const kept = currentDraft();
     const handler = files.length > 0 ? captureAttachments() : null;
     const filesNow = files;
+    consumeRefused();
     // The capture closes (or clears) at once; the task saves behind it.
     if (more) resetForMore();
     else {
-      clearDraft(owner.userId, owner.workspaceId);
-      lastTitleWords = "";
+      forgetDraft();
       onDraftChange("");
       onDone();
     }
@@ -1120,6 +1230,13 @@ export function TaskCaptureBody({
     // it was made offline (the AT-3 seam): the task is always created first.
     if (handler && userId) {
       handler({ workspaceId, userId, task: taskForFiles(sending, main.id), files: filesNow });
+    }
+    // The opener asked to hear about it (chat's `/task` puts a chip there).
+    const onCreated = context?.onCreated;
+    if (onCreated) {
+      void taskForFiles(sending, main.id).then((made) => {
+        if (made) onCreated({ type: "task", id: main.id }, main.title);
+      });
     }
   };
 
@@ -1188,6 +1305,10 @@ export function TaskCaptureBody({
       });
     }
     void applying.then((created) => {
+      // The opener asked to hear about it (chat's `/task`).
+      if (created) context?.onCreated?.({ type: "task", id: created }, madeTitle);
+      // Made: a restored refused capture is no longer kept (even if closed meanwhile).
+      if (created) consumeRefused();
       if (!mounted.current) return;
       setApplyingTemplate(false);
       // Refused or offline (the provider said why): the capture stays as it was.
@@ -1196,8 +1317,7 @@ export function TaskCaptureBody({
         setTemplate(null);
         resetForMore();
       } else {
-        clearDraft(owner.userId, owner.workspaceId);
-        lastTitleWords = "";
+        forgetDraft();
         onDraftChange("");
         onDone();
       }
@@ -1240,6 +1360,7 @@ export function TaskCaptureBody({
     const kept: CaptureDraft = { ...EMPTY_DRAFT, fields, pasted };
     const handler = files.length > 0 ? captureAttachments() : null;
     const filesNow = files;
+    consumeRefused();
     setPasted(null);
     if (more) setFiles([]);
     else onDone();
@@ -1322,7 +1443,7 @@ export function TaskCaptureBody({
   }, [pasted]);
 
   const discardDraft = () => {
-    clearDraft(owner.userId, owner.workspaceId);
+    forgetDraft();
     titleApi.current?.setSegments([]);
     setKeep([]);
     setDescription("");

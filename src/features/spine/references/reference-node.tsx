@@ -17,6 +17,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "../../../components/ui/p
 import { $isReferenceNode, ReferenceNode } from "../editor/entity-ref-schema";
 import { registerNodeView } from "../editor/node-views";
 import { referenceKind } from "./kinds";
+import { useReferenceViewOverride } from "./mention-view";
 import type { ReferenceDisplay } from "./types";
 import { Reference, ShowAs } from "./ui/reference";
 
@@ -122,6 +123,10 @@ function ReferenceDecorator({
       { tag: REFERENCE_DISPLAY_TAG },
     );
   };
+
+  // A host that draws this kind itself (chat's `@person`) wins; else the primitive.
+  const own = useReferenceViewOverride()?.(type, id) ?? null;
+  if (own) return own;
 
   const reference = (
     <Reference

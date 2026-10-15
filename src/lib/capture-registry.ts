@@ -19,6 +19,7 @@ import { taskCaptureType } from "../features/tasks/capture-type";
 import type { ModulePermissions } from "../features/workspaces/types";
 
 import type { CaptureSource } from "./capture-source";
+import type { EntityRef } from "./entity-links";
 
 /** A top-bar module, by the key its tab carries (app-chrome-constants.ts). */
 export type CaptureModule = "notes" | "tasks" | "calendar" | "email" | "contacts" | "chat";
@@ -50,6 +51,28 @@ export type CaptureRequest = {
     statusId?: string | null;
     statusName?: string | null;
   };
+  /**
+   * Open as this registered type ("task", "note", "event") instead of the
+   * first, when this person may create it (chat's `/note`, `/event`).
+   */
+  type?: string;
+  /**
+   * The title line, prefilled (a chat message's "Make a task", the words after
+   * `/task`). It takes the place of the words the capture kept, as a type
+   * switch's words do.
+   */
+  draft?: string;
+  /**
+   * Told when the item is made (or waits on this device to sync), so the
+   * opener can put a chip where it asked (chat's `/task`).
+   */
+  onCreated?: (ref: EntityRef, title: string) => void;
+  /**
+   * With `draft`: start from this person's refused capture (its toast's
+   * Restore while they keep another draft). The refused one stays kept on
+   * the device until it's made. Only the Task body reads it.
+   */
+  fromRefused?: boolean;
 };
 
 /** A request as the body gets it: plus what was open when it was opened (93). */
@@ -58,6 +81,17 @@ export type CaptureContext = CaptureRequest & {
   source: CaptureSource | null;
   /** Bumped on every open, so a body can tell a fresh open from a re-render. */
   openId: number;
+  /**
+   * A prefilled open's own draft (set only when the opener passed `draft`):
+   * it lives for this open, type switches included, and is never stored, so
+   * the person's kept draft is never read, written or cleared by it. Only the
+   * Task body writes it (its `CaptureDraft`).
+   */
+  held?: {
+    current: unknown;
+    /** What the body started from (the Task body's refused capture), its own. */
+    from?: unknown;
+  };
 };
 
 /** What the capture hands the type's body. */

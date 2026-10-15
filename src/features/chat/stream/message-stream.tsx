@@ -40,7 +40,6 @@ import { useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import type { ChatMessage, ChatPerson } from "../model";
 import type { ChatWindow } from "../store/store";
 import { buildStream, countNewSince, lastSeenMessage, type StreamItem } from "../timeline";
-import { EditBox } from "./edit-box";
 import { HoverToolbar, type MessageVerbs } from "./message-actions";
 import type { BodyContext } from "./message-body";
 import { authorName, DaySeparator, DeletedRow, EventLine, MessageRow, NewPill } from "./rows";
@@ -126,8 +125,8 @@ export type MessageStreamProps = {
   /** The last message that was on screen (the read mark; forward only in the store). */
   onSeen: (messageId: string) => void;
   onStartEdit: (m: ChatMessage) => void;
-  onCancelEdit: () => void;
-  onSaveEdit: (m: ChatMessage, body: string) => void;
+  /** The composer that edits `m` in place (CV-7b: the chat composer in edit mode). */
+  renderEditor: (m: ChatMessage) => ReactNode;
   onDelete: (m: ChatMessage) => void;
   onReact: (m: ChatMessage, key: string, on: boolean) => void;
   onPin: (m: ChatMessage) => void;
@@ -138,8 +137,12 @@ export type MessageStreamProps = {
   onRetry: (m: ChatMessage) => void;
   onDiscard: (m: ChatMessage) => void;
   onPersonClick?: (userId: string) => void;
-  /** ⏎ on a message without replies, Esc, ↓ past the newest: back to typing. */
-  onReturnToComposer: () => void;
+  /**
+   * ⏎ on a message without replies, Esc, ↓ past the newest: back to typing.
+   * A letter that isn't a message key comes along (`typed`): it goes into the
+   * composer, so typing anywhere types there (§16).
+   */
+  onReturnToComposer: (typed?: string) => void;
 };
 
 export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(
@@ -455,6 +458,12 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
 
     const messageKeys = (): string[] =>
       rowsRef.current.flatMap((r) => (r.type === "message" ? [r.key] : []));
+    // The feed pattern's positions: each message's place among the drawn ones.
+    const positions = useMemo(() => {
+      const out = new Map<string, number>();
+      for (const r of rows) if (r.type === "message") out.set(r.key, out.size + 1);
+      return out;
+    }, [rows]);
 
     const select = (key: string | null) => {
       setSelected(key);
@@ -541,7 +550,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         }
         return;
       }
-      if (!m || m.sendState) return;
+      if (!m || m.sendState) {
+        if (canWrite) typeIntoComposer(e);
+        return;
+      }
       const verbs = verbsFor(m);
       const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "Backspace") {
@@ -591,8 +603,17 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           verbs.onTask();
           return;
         default:
+          if (canWrite) typeIntoComposer(e);
           return;
       }
+    };
+
+    /** A printable key the stream doesn't use: back to the composer, with the key. */
+    const typeIntoComposer = (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.key.length !== 1 || e.key === " ") return;
+      e.preventDefault();
+      select(null);
+      live.current.onReturnToComposer(e.key);
     };
 
     // ── drawing ─────────────────────────────────────────────────────────────
@@ -638,6 +659,9 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               ctx={ctx}
               selected={selected === row.key}
               target={lit === row.key}
+              domId={`chat-msg-${row.key}`}
+              position={positions.get(row.key)}
+              setSize={win.hasOlder || win.hasNewer ? -1 : positions.size}
               handlers={handlers}
               onPointerEnter={() => setHovered(row.key)}
               onContextMenu={(e) => {
@@ -659,15 +683,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
                   />
                 ) : undefined
               }
-              editor={
-                editing ? (
-                  <EditBox
-                    initial={m.body}
-                    onCancel={() => live.current.onCancelEdit()}
-                    onSave={(body) => live.current.onSaveEdit(m, body)}
-                  />
-                ) : undefined
-              }
+              editor={editing ? live.current.renderEditor(m) : undefined}
             />
           );
         }
@@ -698,6 +714,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
             role="feed"
             aria-busy={win.loading}
             aria-label="Messages"
+            aria-activedescendant={selected ? `chat-msg-${selected}` : undefined}
             // biome-ignore lint/a11y/noNoninteractiveTabindex: the feed takes focus to step through messages
             tabIndex={0}
             onScroll={onScroll}

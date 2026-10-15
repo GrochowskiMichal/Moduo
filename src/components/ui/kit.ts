@@ -28,6 +28,7 @@ const KIT: readonly KitEntry[] = [
   { name: "Picker pill", file: "chip", story: "PickerPillDensities" },
   { name: "EmptyState", file: "empty-state", story: "Densities" },
   { name: "Feed", file: "feed", story: "Densities" },
+  { name: "Filled composer", file: "feed", story: "FilledComposerDensities" },
   { name: "DateField", file: "date-field", story: "Densities" },
   { name: "Progress", file: "progress", story: "Densities" },
   { name: "Avatar", file: "avatar", story: "Densities" },

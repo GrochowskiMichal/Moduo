@@ -54,7 +54,15 @@ function lines(inlines: readonly Inline[]): Inline[][] {
   return out;
 }
 
-function Mention({ label, me, onClick }: { label: string; me?: boolean; onClick?: () => void }) {
+export function Mention({
+  label,
+  me,
+  onClick,
+}: {
+  label: string;
+  me?: boolean;
+  onClick?: () => void;
+}) {
   const cls = cn(
     "rounded-sm px-0.5 font-medium",
     me ? "bg-primary text-primary-foreground" : "bg-state-active text-foreground",

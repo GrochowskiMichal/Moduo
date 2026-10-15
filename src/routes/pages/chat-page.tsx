@@ -15,10 +15,12 @@ import { toast } from "sonner";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { Button } from "../../components/ui/button";
 import { EmptyState } from "../../components/ui/empty-state";
+import { ChatComposer, type ChatComposerHandle } from "../../features/chat/composer/chat-composer";
+import { CHANNEL_REFUSED_COPY } from "../../features/chat/composer/grammar";
 import { useChatOnline, useChatTyping } from "../../features/chat/hooks/use-chat-live";
 import { useChatModule } from "../../features/chat/hooks/use-chat-module";
 import { decodeForComposer, toPlainText } from "../../features/chat/markup";
-import { messageTree, toBodyText } from "../../features/chat/markup-v2";
+import { mentionsOf, messageTree, parseStored, toBodyText } from "../../features/chat/markup-v2";
 import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../../features/chat/model";
 import type { ChatSearch } from "../../features/chat/search";
 import type { ChatWindow } from "../../features/chat/store/store";
@@ -45,6 +47,7 @@ import { PersonAvatar } from "../../features/chat/ui/person-avatar";
 import { DetailsPanel, SearchPanel, ThreadPanel } from "../../features/chat/ui/side-panels";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../features/layout/panel-events";
 import { createCapturedEntity } from "../../features/spine/capture-command";
+import { dispatchOpenCapture } from "../../lib/capture-open";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
@@ -394,9 +397,25 @@ export function ChatPage() {
     [selfId],
   );
 
-  const returnToComposer = useCallback(() => {
-    document.querySelector<HTMLElement>("[data-chat-composer] textarea")?.focus();
+  const composerRef = useRef<ChatComposerHandle | null>(null);
+  const returnToComposer = useCallback((typed?: string) => {
+    if (typed) composerRef.current?.insertText(typed);
+    else composerRef.current?.focus();
   }, []);
+
+  // `@channel` from a role that may not mention everyone is sent as text; the
+  // server decides (CV-2a) and the composer says so once the message is back.
+  const [channelNote, setChannelNote] = useState<{ id: string; note: string | null } | null>(null);
+  // The note belongs to the conversation it was sent in.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  useEffect(() => setChannelNote(null), [activeChannelId]);
+  useEffect(() => {
+    if (!channelNote || channelNote.note) return;
+    const row = store?.rowById(channelNote.id);
+    if (row && !row.mentionsEveryone)
+      setChannelNote({ ...channelNote, note: CHANNEL_REFUSED_COPY });
+    else if (row) setChannelNote(null);
+  });
 
   // Delete hides the message at once with "Deleted · Undo" for 8 s, no
   // confirm (§6 #10); the server deletes it when the toast's time is up.
@@ -462,28 +481,16 @@ export function ChatPage() {
     [store, unhide],
   );
 
-  const makeTaskFrom = useCallback(
-    (m: ChatMessage) => {
-      if (!runtime || !selectedWorkspaceId) return;
-      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body)).slice(0, 200);
-      void createCapturedEntity({
-        runtime,
-        workspaceId: selectedWorkspaceId,
-        target: "task",
-        body: text,
-      })
-        .then((created) =>
-          toast(`Task created: ${created.title}`, {
-            description: created.description,
-            action: { label: "Open", onClick: () => void navigate({ to: "/tasks" }) },
-          }),
-        )
-        .catch((err: unknown) =>
-          toast(err instanceof Error ? err.message : "Couldn't create the task."),
-        );
-    },
-    [runtime, selectedWorkspaceId, navigate],
-  );
+  // T / "Make a task": the app's capture opens as Task with the message's
+  // words on the title line (AC2.7). The "From:" chip linking it back to the
+  // message is CV-10's.
+  const makeTaskFrom = useCallback((m: ChatMessage) => {
+    const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 200);
+    dispatchOpenCapture({ type: "task", draft: text });
+  }, []);
 
   // ── render: states ────────────────────────────────────────────────────────
   if (!selectedWorkspaceId || state.status === "loading") {
@@ -635,17 +642,30 @@ export function ChatPage() {
         onJumpToLatest={() => void actions.jumpToLatest(channel.id)}
         onSeen={(id) => markSeen(channel.id, id)}
         onStartEdit={(m) => setEditingId(m.id)}
-        onCancelEdit={() => {
-          setEditingId(null);
-          returnToComposer();
-        }}
-        onSaveEdit={(m, body) => {
-          setEditingId(null);
-          returnToComposer();
-          void store?.edit(m.id, body, "v2").then((res) => {
-            if (!res.ok) toast(res.offline ? "Offline" : res.message);
-          });
-        }}
+        renderEditor={(m) => (
+          <ChatComposer
+            mode="edit"
+            className="mt-0.5"
+            runtime={runtime}
+            workspaceId={selectedWorkspaceId}
+            selfId={selfId}
+            people={people}
+            placeholder="Edit message"
+            initial={m.body}
+            autoFocus
+            onCancel={() => {
+              setEditingId(null);
+              returnToComposer();
+            }}
+            onSend={(body) => {
+              setEditingId(null);
+              returnToComposer();
+              void store?.edit(m.id, body, "v2").then((res) => {
+                if (!res.ok) toast(res.offline ? "Offline" : res.message);
+              });
+            }}
+          />
+        )}
         onDelete={deleteWithUndo}
         onReact={(m, key) => void actions.react(m, key)}
         onPin={(m) => messageActions.onPin?.(m, !m.pinnedAt)}
@@ -675,26 +695,45 @@ export function ChatPage() {
             ) : null}
           </div>
         ) : (
-          <Composer
-            {...composerBase}
-            placeholder={placeholder}
-            draftKey={channel.id}
-            autoFocus
-            onSubmit={(text, picks) => {
-              actions.send({ channelId: channel.id, text, picks });
-              streamRef.current?.showLatest();
-            }}
-            onEditLast={() =>
-              editLast(
-                // The row past the window's edge isn't drawn; ids inside their Undo are gone.
-                (streamWin?.hasOlder ? streamWin.rows.slice(1) : streamWin?.rows) ?? [],
-                true,
-                hidden,
-              )
-            }
-            onTyping={() => link?.sendTyping(channel.id, null)}
-            typingLine={typingLine(typingNames(channel.id, null))}
-          />
+          <>
+            <p
+              className="h-5 truncate px-3 pt-0.5 text-xs text-muted-foreground"
+              aria-live="polite"
+            >
+              {typingLine(typingNames(channel.id, null))}
+            </p>
+            <ChatComposer
+              key={channel.id}
+              ref={composerRef}
+              runtime={runtime}
+              workspaceId={selectedWorkspaceId}
+              selfId={selfId}
+              people={people}
+              placeholder={placeholder}
+              initial={store?.draft(channel.id) ?? ""}
+              autoFocus
+              note={channelNote?.note ?? null}
+              onSend={(body) => {
+                const id = actions.sendStored({ channelId: channel.id, body });
+                setChannelNote(
+                  id && mentionsOf(parseStored(body)).channel ? { id, note: null } : null,
+                );
+                streamRef.current?.showLatest();
+                return id !== null;
+              }}
+              onDraftChange={(stored) => store?.setDraft(channel.id, null, stored)}
+              onTyping={(active) => link?.sendTyping(channel.id, null, !active)}
+              onEditLast={() =>
+                editLast(
+                  // The row past the window's edge isn't drawn; ids inside their Undo are gone.
+                  (streamWin?.hasOlder ? streamWin.rows.slice(1) : streamWin?.rows) ?? [],
+                  true,
+                  hidden,
+                )
+              }
+              onEscapeEmpty={() => streamRef.current?.focusLast()}
+            />
+          </>
         )}
       </div>
     </div>

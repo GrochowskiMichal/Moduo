@@ -148,8 +148,7 @@ function StreamDemo() {
         onJumpToLatest={noop}
         onSeen={noop}
         onStartEdit={noop}
-        onCancelEdit={noop}
-        onSaveEdit={noop}
+        renderEditor={() => null}
         onDelete={noop}
         onReact={noop}
         onPin={noop}

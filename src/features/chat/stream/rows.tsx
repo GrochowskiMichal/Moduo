@@ -221,6 +221,9 @@ export function MessageRow({
   ctx,
   selected,
   target,
+  domId,
+  position,
+  setSize,
   handlers,
   toolbar,
   editor,
@@ -235,6 +238,11 @@ export function MessageRow({
   ctx: BodyContext;
   selected?: boolean;
   target?: boolean;
+  /** The row's id (the feed's `aria-activedescendant` names the selected one). */
+  domId?: string;
+  /** Its place among the drawn messages, and how many there are (-1: more above). */
+  position?: number;
+  setSize?: number;
   handlers: RowHandlers;
   /** The hover toolbar, drawn only for the row under the pointer or selected. */
   toolbar?: ReactNode;
@@ -250,6 +258,9 @@ export function MessageRow({
       {/* biome-ignore lint/a11y/useSemanticElements: the feed pattern's rows are articles */}
       <div
         role="article"
+        id={domId}
+        aria-posinset={position}
+        aria-setsize={setSize}
         aria-label={`${name}, ${formatTime(message.createdAt)}`}
         data-message-id={message.id}
         data-selected={selected ? "" : undefined}
