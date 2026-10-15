@@ -1201,11 +1201,13 @@ export function normalizeTaskViewScope(input: unknown): TaskViewScope | null {
 /**
  * The Filter dimensions a saved view may keep (mirrors
  * task_views__check_filters). An id dimension holds "none" or the id of a
- * person, team or tag of the same workspace; a word dimension holds short
- * words. The app's Filter offers exactly these (TASK_FILTER_DIMENSIONS in
- * features/tasks/filters.ts, held to them by a test).
+ * person, team or tag of the same workspace, or of a project the saver can
+ * see (Project also takes "inbox", each reader's own; MOD-141); a word
+ * dimension holds short words. The app's Filter offers exactly these
+ * (TASK_FILTER_DIMENSIONS in features/tasks/filters.ts, held to them by a
+ * test).
  */
-export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag"] as const;
+export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag", "project"] as const;
 export const TASK_VIEW_WORD_DIMENSIONS = [
   "status",
   "completed",

@@ -1,7 +1,8 @@
 // Saved views on the Tasks page (TV-U8): what the sidebar's Views group and
-// a view's ⋯ do, "Save as view…" in the toolbar's ⋯, the "Unsaved changes ·
-// Save · Revert" line, a `?view=` link opening its view, and onboarding's
-// seeded views (once per person and workspace).
+// a view's ⋯ do, "Save as view…" in the toolbar's ⋯, the toolbar's Save while
+// a view has unsaved changes, a new blank view from the Views header's +
+// (MOD-142), a `?view=` link opening its view, and onboarding's seeded views
+// (once per person and workspace).
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -23,7 +24,7 @@ import {
   viewSelection,
 } from "../views";
 import type { ViewActions } from "./bucket-rail";
-import { SaveViewDialog, ViewChangesLine } from "./saved-view-parts";
+import { SaveViewDialog, type ViewSaveAction, ViewSaveControl } from "./saved-view-parts";
 
 /** A view's link: `/tasks?view=<id>`. */
 export function viewLink(viewId: string): string {
@@ -41,6 +42,8 @@ export function useSavedViews({
   userId,
   place,
   openView,
+  drafting = false,
+  onNewView,
   prefs,
   dirty,
   revert,
@@ -58,6 +61,10 @@ export function useSavedViews({
   /** The place the centre shows ("all", "mine", "upcoming", a project id, …). */
   place: string;
   openView: TaskView | null;
+  /** The centre shows a new, not yet saved view (MOD-142): named on Save. */
+  drafting?: boolean;
+  /** Opens a new blank view (the Views header's +). */
+  onNewView?: () => void;
   /** The Filter and Display as they are now. */
   prefs: TasksViewPrefs;
   dirty: boolean;
@@ -76,8 +83,9 @@ export function useSavedViews({
   viewActions: ViewActions;
   /** The toolbar ⋯'s first item, where a view can be saved. */
   saveAsMenu?: { label: string; onSelect: () => void };
-  /** Under the toolbar while an open view has unsaved changes. */
-  viewChanges?: ReactNode;
+  /** The toolbar's Save while an open view has unsaved changes, or a new
+   *  view waits for its name (MOD-142). */
+  viewSave?: ReactNode;
   dialog: ReactNode;
 } {
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -88,9 +96,14 @@ export function useSavedViews({
   const target = viewScopeOf(place, projectIds);
 
   const openSave = useCallback(() => {
+    // A new view is named now: the field starts empty.
+    if (drafting) {
+      setDialog({ kind: "new", initialName: "" });
+      return;
+    }
     const base = openView ? `${openView.name} copy` : placeTitle;
     setDialog({ kind: "new", initialName: freeViewName(base, views) });
-  }, [openView, placeTitle, views]);
+  }, [drafting, openView, placeTitle, views]);
 
   const save = useCallback(
     async (name: string): Promise<boolean> => {
@@ -102,13 +115,13 @@ export function useSavedViews({
         prefs,
       });
       if (!view) return false;
-      // The place keeps its own Filter and Display; an open view's unsaved
-      // changes went into the new one.
-      if (openView) revert();
+      // The place keeps its own Filter and Display; an open view's (or a new
+      // view's) unsaved choices went into the new one.
+      if (openView || drafting) revert();
       onOpen(viewSelection(view.id));
       return true;
     },
-    [api, target, prefs, openView, revert, onOpen],
+    [api, target, prefs, openView, drafting, revert, onOpen],
   );
 
   const saveChanges = useCallback(() => {
@@ -148,6 +161,8 @@ export function useSavedViews({
       onDelete: deleteView,
       onMove: api.moveView,
       onCopyLink: copyLink,
+      // A build without saved views makes none (MOD-142).
+      onNew: supported ? onNewView : undefined,
       canShare,
       canModerate,
     }),
@@ -158,6 +173,8 @@ export function useSavedViews({
       deleteView,
       api.moveView,
       copyLink,
+      supported,
+      onNewView,
       canShare,
       canModerate,
     ],
@@ -215,25 +232,42 @@ export function useSavedViews({
 
   // Your view; a shared one only with Tasks edit (it changes what others see).
   const canSaveInto = !!openView && openView.ownerId === userId && (canShare || !openView.shared);
+  const revertAction: ViewSaveAction = { label: "Revert changes", onSelect: revert };
+  const saveAsNew: ViewSaveAction | null = target
+    ? { label: "Save as new view…", onSelect: openSave }
+    : null;
+  // The toolbar's Save (MOD-142): a new view's first save; your view's Save
+  // with the other two in its ▾; someone else's view saves only as a new one.
+  let viewSave: ReactNode;
+  if (supported && drafting && target) {
+    viewSave = (
+      <ViewSaveControl
+        primary={{ label: "Save view…", onSelect: openSave }}
+        more={dirty ? [revertAction] : []}
+      />
+    );
+  } else if (openView && dirty) {
+    viewSave = canSaveInto ? (
+      <ViewSaveControl
+        primary={{ label: "Save", onSelect: saveChanges }}
+        more={saveAsNew ? [saveAsNew, revertAction] : [revertAction]}
+      />
+    ) : (
+      <ViewSaveControl primary={saveAsNew ?? revertAction} more={saveAsNew ? [revertAction] : []} />
+    );
+  }
   return {
     viewActions,
+    // A new view saves from its own button.
     saveAsMenu:
-      supported && target
+      supported && target && !drafting
         ? { label: openView ? "Save as new view…" : "Save as view…", onSelect: openSave }
         : undefined,
-    viewChanges:
-      openView && dirty ? (
-        <ViewChangesLine
-          canSave={canSaveInto}
-          onSave={saveChanges}
-          onSaveAsNew={target ? openSave : undefined}
-          onRevert={revert}
-        />
-      ) : undefined,
+    viewSave,
     dialog: (
       <SaveViewDialog
         open={dialog !== null}
-        title={openView ? "Save as a new view" : "Save as view"}
+        title={openView ? "Save as a new view" : drafting ? "Name this view" : "Save as view"}
         description={
           target?.scope === "mine"
             ? "Keeps this Filter and Display over My tasks. Everyone sees their own tasks through it."

@@ -10,7 +10,10 @@ import {
   addFilterValue,
   captureSeed,
   filterTasks,
+  INBOX_VALUE,
+  offersProjectFilter,
   sanitizeTaskFilters,
+  seededProject,
   showsArchived,
   showsDone,
   statusesLetThrough,
@@ -83,8 +86,37 @@ describe("Filter dimensions", () => {
     expect(taskFilterValues(task("x", { dueDate: day(3) }), "due", ctx)).toEqual([]);
   });
 
+  it("Project (MOD-141): the task's project, the reader's own Inbox as 'inbox'", () => {
+    const inInbox = task("x", { bucketId: "inbox-1" });
+    const inProject = task("y", { bucketId: "p1" });
+    const withInbox = { ...ctx, inboxId: "inbox-1" };
+    expect(taskFilterValues(inProject, "project", withInbox)).toEqual(["p1"]);
+    expect(taskFilterValues(inInbox, "project", withInbox)).toEqual([INBOX_VALUE]);
+    // Someone else's Inbox (a task handed on) is just its id.
+    expect(taskFilterValues(inInbox, "project", ctx)).toEqual(["inbox-1"]);
+    const only = (values: string[], operator: FilterCondition["operator"] = "any_of") =>
+      filterTasks(
+        [inInbox, inProject],
+        [{ dimension: "project", operator, values }],
+        withInbox,
+      ).map((t) => t.id);
+    expect(only(["p1"], "is")).toEqual(["y"]);
+    expect(only([INBOX_VALUE, "p1"])).toEqual(["x", "y"]);
+    expect(only([INBOX_VALUE], "is_not")).toEqual(["y"]);
+  });
+
+  it("offers Project only where more than one project shows (MOD-141)", () => {
+    for (const place of ["all", "mine", "upcoming", "wontdo"]) {
+      expect(offersProjectFilter(place)).toBe(true);
+    }
+    for (const place of ["inbox", "today", "p1", "archived", "trash", "templates"]) {
+      expect(offersProjectFilter(place)).toBe(false);
+    }
+  });
+
   it("offers every §7 dimension; yes/no ones take one value under 'is'", () => {
     expect(TASK_FILTER_DIMENSIONS).toEqual([
+      "project",
       "assignee",
       "team",
       "creator",
@@ -271,6 +303,12 @@ describe("Stored filters", () => {
     ]);
   });
 
+  it("keep a Project condition, so a view saves it like the others (MOD-141)", () => {
+    expect(
+      sanitizeTaskFilters([{ dimension: "project", operator: "any_of", values: ["inbox", "p1"] }]),
+    ).toEqual([{ dimension: "project", operator: "any_of", values: ["inbox", "p1"] }]);
+  });
+
   it("drop junk, unknown dimensions and operators a dimension doesn't offer", () => {
     expect(sanitizeTaskFilters("junk")).toEqual([]);
     expect(
@@ -327,5 +365,19 @@ describe("captureSeed (U2-5)", () => {
 
   it("other dimensions don't seed", () => {
     expect(captureSeed([is("status", "todo"), is("due", "today")])).toEqual({ tagIds: [] });
+  });
+
+  it("a Project filter names where New files the task (MOD-141)", () => {
+    expect(captureSeed([is("project", "p2", "p1")])).toEqual({ tagIds: [], projectId: "p2" });
+    // Inbox: the reader's own; "is not" says nothing.
+    expect(captureSeed([is("project", INBOX_VALUE)])).toEqual({ tagIds: [], projectId: null });
+    expect(captureSeed([isNot("project", "p1")])).toEqual({ tagIds: [] });
+    // Only a project the reader holds; the Inbox and a gone one are the
+    // capture's own default (the Inbox).
+    const live = ["p1", "p2"];
+    expect(seededProject(captureSeed([is("project", "p2")]), live)).toBe("p2");
+    expect(seededProject(captureSeed([is("project", INBOX_VALUE)]), live)).toBeNull();
+    expect(seededProject(captureSeed([is("project", "gone")]), live)).toBeNull();
+    expect(seededProject(captureSeed([is("tag", "t1")]), live)).toBeNull();
   });
 });
