@@ -30,6 +30,7 @@ const listStatusSchema = z.union([z.literal("open"), taskStatusSchema]);
 const listCategorySchema = z.union([z.literal("open"), z.literal("closed"), taskStatusCategorySchema]);
 const minutes = z.coerce.number().int().min(0).max(100000);
 const tagName = z.string().trim().min(1).max(50);
+const projectDescription = z.string().max(20000);
 /** A repeat: an RRULE string, or {rrule, mode}. */
 const repeatSchema = z.union([
   z.string().trim().min(1).max(500),
@@ -192,6 +193,8 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     target_on: ymd.optional(),
     color: nonempty.optional(),
     lead_id: nonempty.optional(),
+    // TV-U16's description, plain text ('' for none); the ops cap it at 20,000.
+    description: projectDescription.optional(),
     import_id: nonempty.optional(),
   }),
   projects_update: z.object({
@@ -203,6 +206,7 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     target_on: z.union([ymd, z.null()]).optional(),
     color: z.union([nonempty, z.null()]).optional(),
     lead_id: z.union([nonempty, z.null()]).optional(),
+    description: z.union([projectDescription, z.null()]).optional(),
     archived: z.boolean().optional(),
   }),
   projects_duplicate: z.object({
