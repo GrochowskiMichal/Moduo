@@ -48,11 +48,9 @@ export function useChatRights(
     setRows(null);
     if (!workspaceId) return;
     let live = true;
-    void supabaseClient
-      .rpc("chat_caps_get", { p_workspace_id: workspaceId })
-      .then(({ data }) => {
-        if (live && Array.isArray(data)) setRows(data as CapsRow[]);
-      });
+    void supabaseClient.rpc("chat_caps_get", { p_workspace_id: workspaceId }).then(({ data }) => {
+      if (live && Array.isArray(data)) setRows(data as CapsRow[]);
+    });
     return () => {
       live = false;
     };

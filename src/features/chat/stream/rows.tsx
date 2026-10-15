@@ -303,6 +303,12 @@ export function MessageRow({
               {message.authorKind === "api_key" ? (
                 <span className="text-xs text-muted-foreground">app</span>
               ) : null}
+              {/* Someone who left keeps their name, with a quiet label (AC6.5). */}
+              {message.authorKind !== "api_key" && person?.former ? (
+                <span data-slot="former-member" className="text-xs text-muted-foreground">
+                  former member
+                </span>
+              ) : null}
               <time
                 dateTime={message.createdAt}
                 title={formatStamp(message.createdAt)}

@@ -726,9 +726,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               }
             }}
             data-testid="message-stream"
-            className="chat-stream min-h-0 flex-1 px-2 outline-none"
+            className="chat-stream flex min-h-0 flex-1 flex-col px-2 outline-none"
           >
-            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+            {/* A short conversation sits at the bottom, by the composer (frame 7). */}
+            <div
+              className="relative mt-auto w-full shrink-0"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
               {virtualItems.map((v) => {
                 const row = rows[v.index];
                 if (!row) return null;

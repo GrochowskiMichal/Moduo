@@ -50,7 +50,7 @@ export function ConversationStart({
     line = channel.topic || null;
   }
   return (
-    <div data-slot="conversation-start" className="flex flex-col gap-2.5 px-1 pt-5 pb-1">
+    <div data-slot="conversation-start" className="flex flex-col gap-2.5 px-1 pt-5 pb-5">
       {channel.kind === "dm" ? (
         <div className="flex -space-x-2">
           {people.slice(0, 4).map((id) => (
@@ -126,7 +126,9 @@ export function ComposerLineView({
       text = (
         <>
           {COMPOSER_LINE_COPY.paused}
-          {!line.owner && line.ownerName ? ` ${COMPOSER_LINE_COPY.pausedBackOn(line.ownerName)}` : ""}
+          {!line.owner && line.ownerName
+            ? ` ${COMPOSER_LINE_COPY.pausedBackOn(line.ownerName)}`
+            : ""}
         </>
       );
       if (line.owner && onChoosePlan) {

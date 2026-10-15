@@ -11,14 +11,13 @@ import type { WorkspaceRole } from "@contracts/vocabularies";
 import { Loader2, MessagesSquare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
-import { dispatchOpenPalette } from "@/components/app/global-command-palette";
 import { FeaturePanelsShell } from "@/components/app/feature-panels-shell";
+import { dispatchOpenPalette } from "@/components/app/global-command-palette";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
@@ -168,11 +167,11 @@ export function ChatScreen({
     if (first) onOpen(first.id, { replace: true });
   }, [ready, conversationId, snap.channels, ordered, onOpen]);
 
+  // Open once per conversation (re-opening would drop a window around a linked message).
+  const known = !!conversationId && !!snap.channels[conversationId];
   useEffect(() => {
-    if (store && ready && conversationId && snap.channels[conversationId]) {
-      void store.open(conversationId);
-    }
-  }, [store, ready, conversationId, snap.channels]);
+    if (store && ready && conversationId && known) void store.open(conversationId);
+  }, [store, ready, conversationId, known]);
 
   // A message named by the link that isn't in the window: load the window around it.
   const landed = useRef<string | null>(null);
@@ -454,11 +453,7 @@ export function ChatScreen({
       .filter((t) => t.channelId === channel.id && t.parentId === null && t.userId !== selfId)
       .map((t) => personOf(t.userId)?.name ?? "Someone");
     const peopleCount =
-      channel.kind === "dm"
-        ? others.length + 1
-        : channel.isDefault
-          ? members.length || null
-          : null;
+      channel.kind === "dm" ? others.length + 1 : channel.isDefault ? members.length || null : null;
     center = (
       <div className="flex h-full min-h-0 flex-col" data-conversation={channel.id}>
         <ConversationToolbar
@@ -471,7 +466,10 @@ export function ChatScreen({
           paused={snap.paused}
           onSearch={() => dispatchOpenPalette()}
           onPin={(starred) =>
-            guarded(() => store?.setPrefs(channel.id, { starred }) ?? Promise.resolve(), "Couldn't pin it.")
+            guarded(
+              () => store?.setPrefs(channel.id, { starred }) ?? Promise.resolve(),
+              "Couldn't pin it.",
+            )
           }
           onNotify={(notifyLevel: ChatNotifyLevel) =>
             guarded(
@@ -481,13 +479,10 @@ export function ChatScreen({
           }
           onMarkRead={markRead}
           onLeave={() =>
-            guarded(
-              async () => {
-                await store?.leave(channel.id);
-                onOpen(null, { replace: true });
-              },
-              "Couldn't leave the channel.",
-            )
+            guarded(async () => {
+              await store?.leave(channel.id);
+              onOpen(null, { replace: true });
+            }, "Couldn't leave the channel.")
           }
           onArchive={(archived) =>
             guarded(
@@ -548,7 +543,9 @@ export function ChatScreen({
           onDelete={deleteWithUndo}
           onReact={(m, key, on) => {
             if (!store || m.sendState) return;
-            void store.react(m.id, key, on).then((res) => failed(res, "Couldn't add the reaction."));
+            void store
+              .react(m.id, key, on)
+              .then((res) => failed(res, "Couldn't add the reaction."));
           }}
           onPin={(m) => {
             if (!store) return;
@@ -591,7 +588,10 @@ export function ChatScreen({
                 managers.some((id) => id !== selfId) ? () => openDmWith(managers) : undefined
               }
               onJoin={() =>
-                guarded(() => store?.join(channel.id) ?? Promise.resolve(), "Couldn't join the channel.")
+                guarded(
+                  () => store?.join(channel.id) ?? Promise.resolve(),
+                  "Couldn't join the channel.",
+                )
               }
             />
           ) : (

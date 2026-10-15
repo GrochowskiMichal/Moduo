@@ -93,7 +93,8 @@ export function buildChatSidebar(input: {
     else dms.push(row);
   }
   archived.sort(
-    (a, b) => (b.channel.archivedAt ?? "").localeCompare(a.channel.archivedAt ?? "") || byTitle(a, b),
+    (a, b) =>
+      (b.channel.archivedAt ?? "").localeCompare(a.channel.archivedAt ?? "") || byTitle(a, b),
   );
   return {
     catchup: catchupCount({ mine, unread }),
