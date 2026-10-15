@@ -4,7 +4,7 @@
 > every session — human or agent — picks up where the last left off. Pairs with
 > [moduo-tasks-feature-spec.md](./moduo-tasks-feature-spec.md),
 > [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md), and
-> [build-log.md](./build-log.md).
+> [build-log-tasks.md](./archive/build-log-tasks.md).
 
 ## Session protocol
 

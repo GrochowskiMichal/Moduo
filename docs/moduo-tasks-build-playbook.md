@@ -16,7 +16,7 @@ How to build the Tasks module with Claude Code, start to finish. Pairs with `mod
 3. **Scope.** Paste that session's prompt (below). One session = one coherent, shippable chunk. Resist letting it run ahead into later sessions.
 4. **Build.** Let it implement. Keep it inside the scope.
 5. **Verify.** Run it. Dogfood the slice. Note what's wrong or friction-y.
-6. **Checkpoint.** `git commit` the working state. Have Claude Code append a 3–5 line entry to `docs/build-log.md`: what it built, key decisions, anything deferred or broken. This is the breadcrumb the next session reads.
+6. **Checkpoint.** `git commit` the working state. Have Claude Code append a 3–5 line entry to `docs/archive/build-log-tasks.md` (archived 2026-10-10; new work is logged by its PR): what it built, key decisions, anything deferred or broken. This is the breadcrumb the next session reads.
 7. **Feed back.** If dogfooding changed a decision, update the spec *first*, then carry on. The spec is the single source of truth; code follows it, not the reverse.
 
 **Rules of thumb:**
@@ -40,7 +40,7 @@ How to build the Tasks module with Claude Code, start to finish. Pairs with `mod
 
 ## Session 2 — Plan Mode: Buckets + List + Capture
 
-> Read `docs/moduo-tasks-feature-spec.md`, `docs/architecture-vocabulary.md`, and `docs/build-log.md` first. Then the existing shell/layout code so you build inside it.
+> Read `docs/moduo-tasks-feature-spec.md`, `docs/architecture-vocabulary.md`, and `docs/archive/build-log-tasks.md` (archived 2026-10-10; new work is logged by its PR) first. Then the existing shell/layout code so you build inside it.
 >
 > Scope: **Plan mode, visible and usable.**
 > - Left panel: mode toggle (Plan/Execute — Execute can be a stub this session), bucket list (one open by default, all expandable), instant add-bucket (no cooldown), the "All" and "Inbox" selections. Per-bucket drift indicator can be a placeholder for now.

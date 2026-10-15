@@ -40,6 +40,9 @@
 
 <!--
   The AGENT authors these from the acceptance criteria — the user does not write tests.
+  This table is the block's ORACLE: one automated test per AC wherever a layer can prove it,
+  written by /s2 before or alongside the code; the block is done when they pass. A criterion
+  no layer can automate gets a recorded live check instead, and says so here.
   For each test: the test name/file + a one-line PLAIN-ENGLISH note of what it checks,
   so the user can sanity-check coverage without reading test code. Map each back to an AC.
   Pick the cheapest layer that proves the AC (see docs on the test layers):
@@ -53,7 +56,10 @@
 
 ## Assumptions & technical decisions
 
-<!-- What the agent decided ON THE USER'S BEHALF and why: data model (Supabase-first), library choices, intent-op shapes, permission mapping, migration approach. Each = decision + one-clause rationale + the alternative rejected. Anything durable also gets a line in docs/decisions.md. -->
+<!-- What the agent decided ON THE USER'S BEHALF and why: data model (Supabase-first), library choices, intent-op shapes, permission mapping, migration approach. Each = decision + one-clause rationale + the alternative rejected, marked **confident** or **low-confidence**. A low-confidence one names its verification step: a test here, a live check, or the question /s2 raises under ❓ Needs you once the code exists. Anything durable also becomes a full entry in docs/decisions/<area>.md (the index is generated). -->
+
+- **confident** · …
+- **low-confidence** · … → verify by: …
 
 ## Execution blocks
 
@@ -79,21 +85,21 @@
 
 ## Definition-of-Ready gate
 
-> **/s2 must not start a block until this is all true.** This replaces the user's mental "is the spec complete?" checklist. If any item fails, go back to grilling/research — do not start building.
+> **Walk this for the first two blocks before /s1 ends; every later block gets its own pass when /s2 picks it.** This replaces the user's mental "is the spec complete?" checklist. If an item fails for the block at hand, go back to interview/research for that block — the rest of the spec can stay in motion.
 
 - [ ] **Scope, Product behavior, Edge cases, Acceptance criteria** are all filled and unambiguous.
 - [ ] **Every acceptance criterion has at least one test** in *Tests that prove them*, with its plain-English note.
-- [ ] **Open questions is empty** — every product question is answered, every technical unknown is researched and recorded under *Assumptions & technical decisions* (no "we'll figure it out during build").
+- [ ] **No open question blocks this block** — every product question for it is answered, and every technical unknown is either researched and recorded as **confident**, or recorded as **low-confidence with a verification step** under *Assumptions & technical decisions*. "We'll see during build" is fine only when written down as an assumption with its test.
 - [ ] **Data model is named and Supabase-first** (or a deliberate exception is recorded). New tables/columns/migrations are identified.
 - [ ] For a **module feature**: spine wiring is enumerated (links / attach / drag / @mention / notifications / activity / tags), MCP tools are listed, and the dashboard widget is defined — per `docs/moduo-module-contract.md`.
 - [ ] **Execution blocks** are decomposed, sequenced, and each is context-sized and self-contained.
 - [ ] **Design constraints acknowledged**: tokens-only (no hardcoded visual values), shadcn-wrapped primitives, and the relevant `docs/DESIGN_RULES.md` rules for any UI.
-- [ ] **Manual-test surfaces identified** for the session wrap-up checklist (`docs/testing/<branch>.md`).
+- [ ] **Sitting-checklist questions identified** for any user-visible change (`docs/testing/<ISO-week>/<ID>.md`: "what happens when … ?" with the expected observation).
 
-When all boxes are checked, state: **"Ready to execute."**
+When all boxes are checked for the first two blocks, state: **"Ready to execute: <ID>, <ID>."**
 
 ## Open questions
 
-<!-- MUST be empty before execution. Anything here is a blocker. Product questions → ask the user. Technical questions → research and move to Assumptions; never leave them here. -->
+<!-- Only questions that block the NEXT block to build belong here, and the first two blocks start with none. Product questions → ask the user. Technical questions → research and move to Assumptions (confident or low-confidence + verification step); never leave them here. -->
 
 - [ ] (none)
