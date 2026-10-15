@@ -17,6 +17,7 @@ import { useState } from "react";
 
 import { TooltipProvider } from "../ui/tooltip";
 import { type PanelItem, RightPanel, usePanelStack } from "./right-panel";
+import { TitleActions } from "./title-actions";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -298,5 +299,67 @@ describe("switching views over a deep stack", () => {
     altDigit(1);
     expect(onBack).toHaveBeenCalledTimes(3);
     expect(onChange).toHaveBeenCalledWith("detail");
+  });
+});
+
+describe("the title row's actions slot (MOD-118 follow-up)", () => {
+  const withActions = (body: string) => () => (
+    <>
+      <p>{body}</p>
+      <TitleActions>
+        <button type="button">Pin</button>
+      </TitleActions>
+    </>
+  );
+
+  it("a view's actions show at the row's right end, not in its body, and leave with it", () => {
+    const views = { ...CALENDAR_VIEWS, tasks: withActions("Tasks body") };
+    const { rerender } = renderPanel({ views });
+    const row = screen.getByRole("button", { name: "Panel view: Tasks" })
+      .parentElement as HTMLElement;
+    const slot = row.querySelector("[data-slot=panel-title-actions]") as HTMLElement;
+    expect(row.lastElementChild).toBe(slot);
+    expect(within(slot).getByRole("button", { name: "Pin" })).toBeTruthy();
+    expect(screen.getByText("Tasks body").parentElement?.contains(slot)).toBe(false);
+    rerender(
+      <TooltipProvider>
+        <RightPanel module="calendar" views={views} activeId="notes" onChange={() => {}} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Pin" })).toBeNull();
+    expect(slot.childElementCount).toBe(0);
+  });
+
+  it("an item's actions sit after its name, before its Open in …", () => {
+    renderPanel({
+      items: [
+        {
+          key: "task:1",
+          title: "Collect assets",
+          render: withActions("Task body"),
+          open: { label: "Open in Tasks", onOpen: () => {} },
+        },
+      ],
+      onBack: () => {},
+    });
+    const row = screen.getByRole("heading", { name: "Collect assets" })
+      .parentElement as HTMLElement;
+    expect(
+      within(row)
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label") ?? b.textContent),
+    ).toEqual(["Back to Tasks", "Pin", "Open in Tasks"]);
+  });
+
+  it("with no host around them, they render in place", () => {
+    render(
+      <section aria-label="Alone">
+        <TitleActions>
+          <button type="button">Pin</button>
+        </TitleActions>
+      </section>,
+    );
+    const alone = screen.getByRole("region", { name: "Alone" });
+    expect(within(alone).getByRole("button", { name: "Pin" })).toBeTruthy();
   });
 });

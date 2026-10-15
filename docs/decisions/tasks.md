@@ -12,6 +12,21 @@ Screen-only, no migration: photos already live on `profiles.avatar_url` (a publi
   - Why: people recognise a face faster than two letters, and the photos people set in Settings showed nowhere in Tasks' capture or menus.
   - Rejected: call 43's initials only, for everyone, everywhere.
 
+## 2026-10-14 · The task's actions move to the panel's title row (dogfood MOD-118 follow-up)
+
+Screen-only, no migration. The prototype is [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) frame 5 (`?frame=5`): the panel's `.rphead` reads "Details ▾ ……… ↗ ⋯", the full page's `.fphead` "← List · 3 of 7 ↑ ↓ | ⤡ ⋯", and `.dcrumb` holds only the crumbs and the handle.
+
+- **The task's actions sit in the host's title row, on the right; the breadcrumb line holds only the crumbs and the handle** → `src/components/app/title-actions.tsx`, `right-panel.tsx`, `task-full-page.tsx`, `task-detail-header.tsx`; spec §9
+  - Who: Maciej, 2026-10-14 (dogfood MOD-118 follow-up, "yes, definitely").
+  - Decision: who's on it, the Focus toggle, ⤢ and ⋯ sit right of "Details ▾" (or of an item's "← name", before its "Open in …"); on the full page, after ↑ ↓ and a hairline. A view's body puts its own actions in `TitleActions` and they show in the host's slot, so any module's view can use it; Project, a multi-selection and "Shown in the centre" put none there. With no host (a story) the actions stay on the breadcrumb line.
+  - Why: four icons on the breadcrumb line cut the project's name to "Resear…" in a 280 px panel; the prototype gives the crumbs the whole line.
+  - Rejected: an `actions` field on each view's registration or on `PanelItem` (the task's ⋯ needs its attachments' file picker, which lives in the body, and four hosts would each wire it).
+- **▶ Focus on this moves into ⋯; the Focus toggle stays an icon** → `task-detail-header.tsx` `FocusOnThisItem`, `QueueButton`
+  - Who: agent's choice, flagged for Maciej, 2026-10-14.
+  - Decision: ⋯ opens with "Focus on this ⇧F" (open tasks, people who can edit; hidden while my session is on it), as in the row's menu; the Focus toggle keeps its icon, its "In Focus" state and others' avatars, on the same small rung as ↗ and ⋯ (`IconButton`, `--ctrl-h-sm`). There a viewer's "In Focus" is an icon too (the words in its tooltip and name), and "is on this" shows one avatar and "+n" (`TaskClaimMark max={1}`), everyone in its tooltip.
+  - Why: frame 5 shows ↗ and ⋯ at 280 px and frames 2–3 the Focus toggle, while no frame has ▶. Inside a 280 px panel the row has ~254 px. "Details ▾" (~76) and four 26 px icons with their gaps take ~196, which leaves no room for who's on the task; three take ~166. At the fullest (a viewer, in their Focus, three people on it, one lined up) the row is ~246: the mark ~52, the lined-up avatar ~20. The old 78 px "In Focus" label or three avatars would push ⋯ past the panel's edge.
+  - Rejected: all four as icons (overflows once people are on the task, and squeezes an item's name), and the Focus toggle in ⋯ too (its state would hide in a menu).
+
 ## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
 
 The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([round-2b](../../.design/tasks-v3/prototypes/round-2b.html), the detail frames). Screen-only, no migration.
