@@ -151,6 +151,13 @@ BEGIN
   v := test.send('A', 'D', 'dm2', 'see ' || test.person_ref('B'), 2);
   PERFORM test.ok(v = 'ok 1' AND test.reasons('B', 'dm2') = 'dm' AND test.bells('dm2') = 0,
     'direct message: naming B there is still one direct-message item, no bell row', v);
+  PERFORM test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L, 'none', NULL)$q$, test.ref('D')));
+  v := test.send('A', 'D', 'dm3', 'still there?', 22);
+  v := v || ' ' || test.send('A', 'D', 'dm4', 'hello ' || test.person_ref('B'), 23);
+  PERFORM test.ok(v = 'ok 1 ok 1' AND test.reasons('B', 'dm3') = '' AND test.item('B', 'dm4', 'mention') = 'open'
+                  AND test.bells('dm4') = 0,
+    'direct message on Nothing: nothing, unless it names B (then a silent mention item)', v);
+  PERFORM test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L, 'mentions', NULL)$q$, test.ref('D')));
 
   -- @you in a channel: item and bell; a reader who isn't a member hears it too.
   v := test.send('A', 'L', 'm1', 'look ' || test.person_ref('B') || ' and ' || test.person_ref('O'), 3);
@@ -185,8 +192,8 @@ BEGIN
   PERFORM test.ok(v = 'ok 1' AND test.reasons('B', 'm5') = '' AND test.item('C', 'm5', 'team_mention') = 'open'
                   AND test.bells('m5') = 0,
     '@Team: with "Your teams" off, B hears nothing; C still gets the silent item', v);
-  PERFORM test.ok(test.counts('B', 'L') = '5/4/2/2',
-    'team mute: while it''s on, team mentions are neither in the conversation''s number nor the tab''s (m1 and m4 are)',
+  PERFORM test.ok(test.counts('B', 'L') = '5/2/2/2',
+    'team mute: while it''s on, team mentions count nowhere: mentions, the number, the tab (m1 and m4 do)',
     test.counts('B', 'L'));
   UPDATE public.user_preferences SET preferences = '{}' WHERE user_id = test.id('B');
   PERFORM test.ok(test.counts('B', 'L') = '5/4/4/3',
@@ -231,8 +238,15 @@ BEGIN
   v := test.send('E', 'G', 'r5', 'really final', 14, 'r0');
   PERFORM test.ok(v = 'ok 1' AND test.item('B', 'r5', 'reply') = 'open+bell',
     'follow again: the next reply reaches B with a new item', v);
+  -- On Nothing, a chain's replies reach nobody.
+  PERFORM test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L, 'none', NULL)$q$, test.ref('G')));
+  v := test.send('A', 'G', 'r6', 'one more', 24, 'r0');
+  PERFORM test.ok(v = 'ok 1' AND test.reasons('B', 'r6') = '' AND test.item('B', 'r5', 'reply') = 'open+bell'
+                  AND test.told('r6', 'chat.reply') = 'E,O',
+    'chain on Nothing: B hears nothing and B''s chain item stays where it was', v);
+  PERFORM test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L, 'mentions', NULL)$q$, test.ref('G')));
   v := test.as_user('X', format($q$SELECT public.chat_op_follow_chain(%L::uuid, false)$q$, test.mid('r0')));
-  PERFORM test.ok(v = '42501 You don''t have access to this workspace.', 'stop following: an outsider is refused', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'stop following: an outsider is told the message isn''t there', v);
 
   -- An announcement: every member, once; Nothing turns it off.
   PERFORM test.as_user('C', format($q$SELECT public.chat_op_set_prefs(%L, 'none', NULL)$q$, test.ref('N')));
@@ -243,11 +257,11 @@ BEGIN
 
   -- Every message: one line per conversation, no bell (AC7.3).
   PERFORM test.as_user('C', format($q$SELECT public.chat_op_set_prefs(%L, 'all', NULL)$q$, test.ref('G')));
-  UPDATE public.chat_members SET last_read_id = NULL, last_read_at = test.at(15)
+  UPDATE public.chat_members SET last_read_id = NULL, last_read_at = test.at(24)
    WHERE channel_id = test.ref('G') AND user_id = test.id('C');
-  PERFORM test.send('E', 'G', 'p1', 'one', 16);
-  PERFORM test.send('E', 'G', 'p2', 'two', 17);
-  PERFORM test.send('E', 'G', 'p3', 'three', 18);
+  PERFORM test.send('E', 'G', 'p1', 'one', 25);
+  PERFORM test.send('E', 'G', 'p2', 'two', 26);
+  PERFORM test.send('E', 'G', 'p3', 'three', 27);
   PERFORM test.ok((SELECT count(*) FROM public.chat_catchup
                     WHERE user_id = test.id('C') AND channel_id = test.ref('G') AND reason = 'every_message') = 1
                   AND test.item('C', 'p3', 'every_message') = 'open'
@@ -255,10 +269,18 @@ BEGIN
                   AND test.counts('C', 'G') = '3/0/3/1',
     'Every message: three messages are one line (at the newest) and no bell row; the conversation counts 3, the tab 1 (AC7.3)',
     test.counts('C', 'G'));
-  v := test.send('E', 'G', 'p4', 'and ' || test.person_ref('C'), 19);
+  v := test.send('E', 'G', 'p4', 'and ' || test.person_ref('C'), 28);
   PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p4', 'mention') = 'open+bell' AND test.item('C', 'p3', 'every_message') = 'open'
                   AND test.counts('C', 'G') = '4/1/4/2',
     'Every message: a mention there is its own item; the line stays', test.counts('C', 'G'));
+  -- A send that commits after a newer one never moves the line back.
+  PERFORM public.chat__fan_out(m, c, m.author_id)
+     FROM public.chat_messages m JOIN public.chat_channels c ON c.id = m.channel_id
+    WHERE m.id = test.mid('p1');
+  PERFORM test.ok(test.item('C', 'p3', 'every_message') = 'open'
+                  AND (SELECT count(*) FROM public.chat_catchup
+                        WHERE user_id = test.id('C') AND channel_id = test.ref('G') AND reason = 'every_message') = 1,
+    'Every message: an older message arriving late leaves the line on the newest');
 
   -- An edit tells only people named for the first time (AC7.10).
   v := test.send('A', 'L', 'e1', 'hi ' || test.person_ref('B'), 20);
@@ -376,6 +398,20 @@ BEGIN
     test.item_id('B', 'r3', 'reply'), test.item_id('B', 'r5', 'reply')));
   PERFORM test.ok(v = 'ok 1' AND test.item('B', 'r5', 'reply') = 'open+bell' AND test.item('B', 'r3', 'reply') = 'done:done+bell',
     'chain: Undo of two of its items reopens the newest only', v);
+  PERFORM test.ok(test.value_as('B', format($q$SELECT public.chat_op_catchup_reopen(ARRAY[%L]::uuid[])::text$q$,
+                    test.item_id('B', 'r3', 'reply'))) = '0'
+                  AND test.item('B', 'r3', 'reply') = 'done:done+bell',
+    'chain: Undo of an older item while the chain has an open one reopens nothing');
+
+  -- Marking unread brings back a grouped line too.
+  v := test.as_user('C', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('G'), test.mid('p4')));
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p3', 'every_message') = 'done:read' AND test.item('C', 'p4', 'mention') = 'done:read+bell'
+                  AND test.counts('C', 'G') = '0/0/0/0',
+    'read: reading G to the newest closes C''s line and mention', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::uuid)$q$, test.ref('G'), test.mid('p1')));
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p3', 'every_message') = 'open' AND test.item('C', 'p4', 'mention') = 'open+bell'
+                  AND test.counts('C', 'G') = '4/1/4/2',
+    'mark unread: the Every-message line and the mention come back', v);
 
   -- These ops need no plan and log no activity.
   UPDATE public.profiles SET plan_tier = 'free' WHERE id = test.id('O');
@@ -401,7 +437,7 @@ BEGIN
   v := test.as_user('B', format($q$UPDATE public.chat_catchup SET done_at = NULL, done_how = NULL WHERE user_id = %L$q$, test.id('B')));
   PERFORM test.ok(v LIKE '42501 %', 'tables: nor reopen them by hand', v);
   PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.chat__fan_out(public.chat_messages, public.chat_channels, uuid, public.chat_messages)', 'EXECUTE')
-                  AND NOT has_function_privilege('authenticated', 'public.chat__close(uuid, uuid[], text)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.chat__close(uuid, uuid[], text, public.chat_messages)', 'EXECUTE')
                   AND NOT has_function_privilege('authenticated', 'public.chat__reopen(uuid, uuid[])', 'EXECUTE')
                   AND NOT has_function_privilege('anon', 'public.chat_op_catchup_done(uuid[])', 'EXECUTE')
                   AND has_function_privilege('authenticated', 'public.chat_op_catchup_done(uuid[])', 'EXECUTE')

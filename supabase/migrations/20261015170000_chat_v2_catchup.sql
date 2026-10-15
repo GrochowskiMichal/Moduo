@@ -1,15 +1,16 @@
 -- Chat v2 · CV-5 Addressed to you: Catch up rows and the bell (specs/chat-v2.md
 -- §9, §11; §Assumptions #7, #8, #15, #25; .design/chat-v2/research/round-3-
 -- database.md §2.14 a–c, §2.15, §2.18). The stamp is provisional: re-cut on the
--- day it applies, after …_chat_v2_conversation_ops (CV-2b) and the chat
--- migrations landed before it. It runs again cleanly over itself.
+-- day it applies; it must stay after …_chat_v2_rules_fix (CV-2-fix), whose
+-- chat_op_send it redefines. It runs again cleanly over itself.
 --
 -- What it does:
 --   1. The fan-out. chat_op_send, chat_op_edit (only people named for the first
 --      time, CH75) and chat_op_agent_post work out, in the same transaction,
 --      who a message is addressed to, among people who can read the
---      conversation, never its sender, one reason per person (the first that
---      applies):
+--      conversation, never its sender. A send gives each person one reason
+--      (the first that applies); an edit adds a mention item for the newly
+--      named only:
 --        a direct message ............ dm (no bell row: the bell is for work)
 --        named in person ............. mention        bell chat.mention (person)
 --        a team of theirs named ...... team_mention   bell chat.mention (team),
@@ -45,8 +46,8 @@
 --   4. Counts: chat_unread_counts' catchup is now the conversation's open,
 --      showing Catch up items (none on Nothing, none from a chain you stopped
 --      following, none for a deleted message, quiet lines never, team
---      mentions not while your teams' notices are off); `addressed` leaves out
---      team mentions while they're off too.
+--      mentions not while your teams' notices are off); `mentions` and
+--      `addressed` leave out team mentions while they're off too.
 --   5. The bell's recipient guard (module_activity_gate_recipients) covers the
 --      three chat ops.
 --
@@ -153,8 +154,11 @@ BEGIN
 END;
 $function$;
 
--- Close a person's open items, and dismiss their twins in the bell.
-CREATE OR REPLACE FUNCTION public.chat__close(p_user uuid, p_ids uuid[], p_how text)
+-- Close a person's open items, and dismiss their twins in the bell. With
+-- p_upto (reading), only items still on a message up to it: a send that moved
+-- one to a newer message meanwhile keeps it open.
+CREATE OR REPLACE FUNCTION public.chat__close(p_user uuid, p_ids uuid[], p_how text,
+                                              p_upto public.chat_messages DEFAULT NULL)
  RETURNS integer
  LANGUAGE plpgsql
  SET search_path TO ''
@@ -166,6 +170,10 @@ BEGIN
     UPDATE public.chat_catchup k
        SET done_at = now(), done_how = p_how
      WHERE k.user_id = p_user AND k.id = ANY (coalesce(p_ids, '{}'::uuid[])) AND k.done_at IS NULL
+       AND (p_upto.id IS NULL
+            OR EXISTS (SELECT 1 FROM public.chat_messages m
+                        WHERE m.id = k.message_id
+                          AND (m.created_at, m.id) <= (p_upto.created_at, p_upto.id)))
     RETURNING k.workspace_id, k.activity_id
   ), dismissed AS (
     INSERT INTO public.notification_state (workspace_id, user_id, activity_id, dismissed_at)
@@ -244,7 +252,7 @@ AS $function$
       JOIN public.chat_messages m ON m.id = k.message_id
      WHERE k.user_id = p_user AND k.channel_id = p_channel_id AND k.done_at IS NULL
        AND k.reason IN ('dm', 'mention', 'team_mention', 'everyone', 'reply', 'announcement', 'every_message')
-       AND (m.created_at, m.id) <= (p_upto.created_at, p_upto.id)), 'read')
+       AND (m.created_at, m.id) <= (p_upto.created_at, p_upto.id)), 'read', p_upto)
 $function$;
 
 -- The fan-out: who a message is addressed to, and why (see the header). On an
@@ -382,15 +390,18 @@ BEGIN
 
     IF v_reason = 'reply' THEN
       -- One item per chain: it moves to the newest reply, and the bell keeps
-      -- one row per chain (the twin it had is dismissed).
+      -- one row per chain (the twin it had is dismissed). An item already on
+      -- a newer reply (a send that committed first) stays where it is.
       INSERT INTO public.notification_state (workspace_id, user_id, activity_id, dismissed_at)
       SELECT DISTINCT k.workspace_id, k.user_id, k.activity_id, now()
         FROM public.chat_catchup k
+        JOIN public.chat_messages cur ON cur.id = k.message_id
        WHERE k.user_id = ANY (v_users) AND k.reason = 'reply' AND k.chain_root_id = p_msg.parent_id
          AND k.done_at IS NULL AND k.activity_id IS NOT NULL
+         AND (cur.created_at, cur.id) < (p_msg.created_at, p_msg.id)
       ON CONFLICT (user_id, activity_id) DO UPDATE
         SET dismissed_at = coalesce(public.notification_state.dismissed_at, EXCLUDED.dismissed_at);
-      INSERT INTO public.chat_catchup
+      INSERT INTO public.chat_catchup AS k
         (workspace_id, user_id, channel_id, message_id, chain_root_id, reason, actor_id, activity_id)
       SELECT p_channel.workspace_id, u, p_channel.id, p_msg.id, p_msg.parent_id, 'reply', p_actor,
              CASE WHEN u = ANY (v_bell) THEN v_activity END
@@ -398,16 +409,31 @@ BEGIN
       ON CONFLICT (user_id, chain_root_id) WHERE reason = 'reply' AND done_at IS NULL
       DO UPDATE SET message_id = EXCLUDED.message_id,
                     actor_id = EXCLUDED.actor_id,
-                    activity_id = EXCLUDED.activity_id;
+                    activity_id = EXCLUDED.activity_id
+       WHERE NOT EXISTS (SELECT 1 FROM public.chat_messages cur
+                          WHERE cur.id = k.message_id
+                            AND (cur.created_at, cur.id) > (p_msg.created_at, p_msg.id));
+      -- Whoever's item stayed on a newer reply doesn't see this one's row either.
+      IF v_activity IS NOT NULL THEN
+        INSERT INTO public.notification_state (workspace_id, user_id, activity_id, dismissed_at)
+        SELECT p_channel.workspace_id, u, v_activity, now()
+          FROM unnest(v_bell) u
+         WHERE NOT EXISTS (SELECT 1 FROM public.chat_catchup x
+                            WHERE x.user_id = u AND x.activity_id = v_activity)
+        ON CONFLICT (user_id, activity_id) DO NOTHING;
+      END IF;
     ELSIF v_reason = 'every_message' THEN
       -- One line per conversation (CH73), pointing at its newest message.
-      INSERT INTO public.chat_catchup
+      INSERT INTO public.chat_catchup AS k
         (workspace_id, user_id, channel_id, message_id, reason, actor_id)
       SELECT p_channel.workspace_id, u, p_channel.id, p_msg.id, 'every_message', p_actor
         FROM unnest(v_users) u
       ON CONFLICT (user_id, channel_id) WHERE reason = 'every_message' AND done_at IS NULL
       DO UPDATE SET message_id = EXCLUDED.message_id,
-                    actor_id = EXCLUDED.actor_id;
+                    actor_id = EXCLUDED.actor_id
+       WHERE NOT EXISTS (SELECT 1 FROM public.chat_messages cur
+                          WHERE cur.id = k.message_id
+                            AND (cur.created_at, cur.id) > (p_msg.created_at, p_msg.id));
     ELSE
       INSERT INTO public.chat_catchup
         (workspace_id, user_id, channel_id, message_id, chain_root_id, reason, actor_id, activity_id)
@@ -464,6 +490,10 @@ BEGIN
   IF public.chat__was_removed(p_channel_id, v_me) THEN
     RAISE EXCEPTION 'You were removed from this conversation.' USING ERRCODE = '42501';
   END IF;
+  -- Managers in effect only: in the channel, in a role that posts.
+  IF v_channel.managers_only AND NOT public.chat__is_manager(v_channel, v_me) THEN
+    RAISE EXCEPTION 'Only managers can post in this channel.' USING ERRCODE = '42501';
+  END IF;
   PERFORM public.chat__check_body(v_body);
 
   -- A reply posts in the conversation and joins the chain of what it answers.
@@ -487,7 +517,7 @@ BEGIN
   INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
   VALUES (p_channel_id, v_me, v_channel.workspace_id)
   ON CONFLICT (channel_id, user_id) DO UPDATE SET left_at = NULL
-   WHERE public.chat_members.left_at IS NOT NULL;
+   WHERE public.chat_members.left_at IS NOT NULL AND public.chat_members.removed_at IS NULL;
 
   -- client_id = id while the v1 wrappers live: v1 screens and old builds match
   -- their optimistic row by it (CV-23 stops writing it).
@@ -796,7 +826,8 @@ DECLARE
   v_root uuid;
 BEGIN
   SELECT * INTO v_msg FROM public.chat_messages WHERE id = p_message_id;
-  IF v_msg.id IS NULL OR v_msg.kind <> 'message' THEN
+  -- A message you can't read reads as one that isn't there.
+  IF v_msg.id IS NULL OR v_msg.kind <> 'message' OR NOT public.chat_can_read_channel(v_msg.channel_id) THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   PERFORM public.chat_op__reader(v_msg.channel_id);
@@ -902,12 +933,9 @@ AS $function$
      WHERE tm.user_id = (SELECT id FROM me) AND tm.workspace_id = p_workspace_id AND tm.deleted_at IS NULL
   ), fresh AS (
     SELECT mi.channel_id, mi.notify_level, mi.kind, m.id, m.parent_id,
+           -- A team mention counts only while your teams' notices are on (CV-5).
            ((SELECT id FROM me) = ANY (m.mentioned_user_ids) OR m.mentions_everyone
-            OR m.mentioned_team_ids && (SELECT ids FROM teams)) AS mentioned,
-           -- What counts as addressed leaves out a team mention when your
-           -- teams' notices are off (CV-5).
-           ((SELECT id FROM me) = ANY (m.mentioned_user_ids) OR m.mentions_everyone
-            OR (m.mentioned_team_ids && (SELECT ids FROM teams) AND NOT (SELECT muted FROM teams))) AS named,
+            OR (m.mentioned_team_ids && (SELECT ids FROM teams) AND NOT (SELECT muted FROM teams))) AS mentioned,
            (mi.managers_only AND m.parent_id IS NULL) AS announced,
            (m.parent_id IS NOT NULL
             AND NOT EXISTS (SELECT 1 FROM public.chat_chain_mutes cm
@@ -937,7 +965,7 @@ AS $function$
   ), items AS (
     SELECT f.channel_id, f.mentioned,
            CASE WHEN f.notify_level = 'none' THEN NULL
-                WHEN f.kind = 'dm' OR f.named OR f.announced THEN 'm:' || f.id::text
+                WHEN f.kind = 'dm' OR f.mentioned OR f.announced THEN 'm:' || f.id::text
                 WHEN f.in_chain THEN 'c:' || f.parent_id::text
                 WHEN f.notify_level = 'all' THEN 'all'
            END AS item
@@ -1007,7 +1035,7 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'chat__team_muted(uuid)',
     'chat__activity(public.chat_channels, public.chat_messages, uuid, text, text, uuid[], uuid[])',
-    'chat__close(uuid, uuid[], text)',
+    'chat__close(uuid, uuid[], text, public.chat_messages)',
     'chat__reopen(uuid, uuid[])',
     'chat__close_read(uuid, uuid, public.chat_messages)',
     'chat__fan_out(public.chat_messages, public.chat_channels, uuid, public.chat_messages)'
