@@ -116,6 +116,8 @@ const NAMED_WRITE_RPCS = new Set([
   "contact_group_add",
   "contact_group_create",
   "contact_merge",
+  "email_build_updates_set",
+  "email_prefs_set",
   "share_defaults_set",
   "workspace_api_keys_create",
   "workspace_api_keys_revoke",

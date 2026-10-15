@@ -27,7 +27,7 @@ import {
   type NotificationType,
   usePreferences,
 } from "../../../lib/preferences";
-import { isTauriRuntime } from "../../../lib/runtime";
+import { type EmailPrefs, isTauriRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 
 import { SettingsSectionShell } from "./section-shell";
@@ -156,6 +156,8 @@ export function PreferencesSection() {
         </PrefRow>
       </PrefGroup>
 
+      <EmailGroup />
+
       <RemindersGroup />
 
       <AgentWorkGroup />
@@ -243,6 +245,99 @@ export function PreferencesSection() {
 
       <AnalyticsConsentGroup />
     </SettingsSectionShell>
+  );
+}
+
+type EmailSwitch = keyof EmailPrefs;
+
+const EMAIL_ROWS: ReadonlyArray<{ key: EmailSwitch; title: string; description: string }> = [
+  {
+    key: "bookings",
+    title: "Bookings",
+    description: "When someone books or cancels on your links.",
+  },
+  {
+    key: "trialBilling",
+    title: "Trial and billing reminders",
+    description: "Before your trial or free access ends, and when it has.",
+  },
+  { key: "buildUpdates", title: "Build updates", description: "About once a month." },
+];
+
+const EMAIL_DEFAULTS: EmailPrefs = { bookings: true, trialBilling: true, buildUpdates: false };
+
+/**
+ * Settings → Preferences → Email (TX-8, spec §9). The switches live on the
+ * server (`email_prefs`), not in the synced preferences blob, so another device
+ * or an older build never turns one back on. Build updates subscribes the
+ * account's address at once; off unsubscribes. Hidden until the server has
+ * them (before TX-8's migration).
+ */
+export function EmailGroup() {
+  const { runtime } = useAuth();
+  const [prefs, setPrefs] = useState<EmailPrefs | null>(null);
+  const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  const [busy, setBusy] = useState<EmailSwitch | null>(null);
+  const read = runtime?.preferences.getEmailPrefs;
+
+  useEffect(() => {
+    if (!read) return;
+    let cancelled = false;
+    read()
+      .then((value) => {
+        if (cancelled) return;
+        setPrefs(value);
+        setState(value ? "ready" : "missing");
+      })
+      .catch(() => {
+        if (!cancelled) setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [read]);
+
+  if (!runtime || state === "missing") return null;
+  const shown = prefs ?? EMAIL_DEFAULTS;
+
+  const toggle = async (key: EmailSwitch, value: boolean) => {
+    if (!prefs) return;
+    const before = prefs;
+    setBusy(key);
+    setPrefs({ ...prefs, [key]: value });
+    try {
+      if (key === "buildUpdates") {
+        const on = await runtime.preferences.setBuildUpdates(value);
+        setPrefs((current) => (current ? { ...current, buildUpdates: on } : current));
+      } else {
+        const saved = await runtime.preferences.setEmailPrefs({ [key]: value });
+        if (!saved) throw new Error("unavailable");
+        setPrefs((current) => (current ? { ...current, ...saved } : current));
+      }
+    } catch {
+      setPrefs(before);
+      toast("Couldn't change your email settings — try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <PrefGroup
+      label="Email"
+      description="Sign-in codes and other emails about your account always arrive."
+    >
+      {EMAIL_ROWS.map((row) => (
+        <PrefRow key={row.key} title={row.title} description={row.description}>
+          <Switch
+            checked={shown[row.key]}
+            disabled={state !== "ready" || busy !== null}
+            onCheckedChange={(v) => void toggle(row.key, v)}
+            aria-label={`${row.title} emails`}
+          />
+        </PrefRow>
+      ))}
+    </PrefGroup>
   );
 }
 

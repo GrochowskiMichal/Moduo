@@ -11,6 +11,8 @@ export type {
   AuthChangeEvent,
   AuthListener,
   AuthMnemonic,
+  EmailPrefs,
+  EmailPrefsPatch,
   IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,

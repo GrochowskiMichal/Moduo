@@ -70,6 +70,7 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
 export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   auth_code: "A1 · Sign-in code",
+  account_deleted: "A2 · Account deleted",
   waitlist_invite: "B1 · Waitlist invite",
   ops_alert: "Ops alert (internal)",
   booking_guest_confirmed: "C1 · Booking confirmed (guest)",
