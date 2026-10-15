@@ -39,6 +39,7 @@ import {
   noticeDeliveryFromRow,
 } from "../../lib/notices/deliveries";
 import {
+  BURST_WINDOW_MS,
   burstCopy,
   chatNoticeSwitch,
   chatNoticeTarget,
@@ -153,6 +154,12 @@ export function NoticeDeliveries({
     const { selectedWorkspaceId: open, selectWorkspace: select, navigate: go } = live.current;
     if (workspaceId && workspaceId !== open) select(workspaceId);
     void go({ to: "/chat", search: target });
+    // You read it there: its burst starts over.
+    for (const tag of rungByTag.current.keys()) {
+      if (tag === `chat:${target.c}` || tag.startsWith(`chat:${target.c}:`)) {
+        rungByTag.current.delete(tag);
+      }
+    }
   }, []);
 
   // ── Heartbeat: this client is open (and has your attention) ─────────────
@@ -267,6 +274,9 @@ export function NoticeDeliveries({
         tagRing.quiet += 1;
       } else if (action === "ring") {
         const copy = burstCopy(noticeCopy(delivery), tagRing, now);
+        for (const [old, r] of rungByTag.current) {
+          if (now - r.at >= BURST_WINDOW_MS) rungByTag.current.delete(old);
+        }
         rungByTag.current.set(tag, { at: now, quiet: 0 });
         // Moduo coming to the front soon after is the click on it, but only
         // when it rang while Moduo was in the background: switching apps with

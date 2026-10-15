@@ -119,9 +119,10 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
 
 /** Chat's switches (CV-6b, spec §11 "The switches", §15). Each hides its bell
  *  rows and keeps an open Moduo from ringing for its messages; the server's
- *  push and email follow them with CV-18. Catch up keeps every item. Prototype frame 9 (Settings · Notifications · Chat) draws one
- *  switch for all of them; the spec's table names four (a key's own switch
- *  arrives with CV-21). */
+ *  push and email follow them with CV-18. Catch up keeps every item.
+ *  Prototype frame 9 (Settings · Notifications · Chat) draws one switch for
+ *  all of them; the spec's table names four (a key's own switch arrives with
+ *  CV-21). */
 const CHAT_NOTIFICATION_ROWS: ReadonlyArray<{
   type: NotificationType;
   title: string;

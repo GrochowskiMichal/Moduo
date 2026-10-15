@@ -67,6 +67,19 @@ describe("one device rings (CV-6b, AC7.6)", () => {
       title: "Sofia Ortiz · Acme",
       body: "3 messages",
     });
+    // The server already counted rows left on the tag: one prefix, both counts.
+    expect(
+      burstCopy({ ...copy, body: "2 messages: five" }, { at: now - 61_000, quiet: 2 }, now),
+    ).toEqual({
+      title: "Sofia Ortiz · Acme",
+      body: "4 messages: five",
+    });
+    expect(burstCopy({ ...copy, body: "2 messages" }, { at: now - 61_000, quiet: 1 }, now)).toEqual(
+      {
+        title: "Sofia Ortiz · Acme",
+        body: "3 messages",
+      },
+    );
     // A burst long gone no longer counts (the server's own window).
     expect(burstCopy(copy, { at: now - BURST_WINDOW_MS, quiet: 2 }, now)).toEqual(copy);
   });

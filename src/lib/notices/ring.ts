@@ -95,8 +95,11 @@ export function burstCopy(
 ): { title: string; body: string } {
   const quiet = tagRing && now - tagRing.at < BURST_WINDOW_MS ? tagRing.quiet : 0;
   if (quiet <= 0) return copy;
-  const n = `${quiet + 1} messages`;
-  const text = copy.body.trim();
+  // The server's body may already count rows left unacknowledged on the tag.
+  const server = /^(\d+) messages(?::\s*([\s\S]*))?$/.exec(copy.body.trim());
+  const counted = server ? Number(server[1]) : 1;
+  const text = (server ? (server[2] ?? "") : copy.body).trim();
+  const n = `${quiet + counted} messages`;
   return { title: copy.title, body: text ? `${n}: ${text}` : n };
 }
 
