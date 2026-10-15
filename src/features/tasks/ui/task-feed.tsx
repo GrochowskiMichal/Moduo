@@ -1,11 +1,16 @@
 // The one feed at the bottom of the detail panel (Tasks v3 §9, default q;
 // research views-board-detail §9): comments and the quiet activity trail in
-// one list, oldest first, then the composer, then the metadata line.
+// one list, oldest first like a thread, then the composer. In the panel the
+// composer is pinned under the scrolling body (the host's `composerSlot`), so
+// it's always in reach; on the full page it ends the feed (MOD-129). No
+// "Created by · Updated" line under it: the trail's first and last lines say
+// both (MOD-129).
 //
 // - "All · Comments" in the header, remembered per person on this device.
 // - One person's changes within 10 minutes merge ("changed due, priority and
 //   2 more", click to see each); runs of changes between comments fold into
-//   "Show 12 earlier changes".
+//   "Show 12 earlier changes", and after the last comment the latest five
+//   show (`TAIL_VISIBLE`).
 // - Comments: edit your own ("edited"), delete with an 8 s Undo and no
 //   tombstone (yours, or anyone's with Full access to the project), six fixed
 //   reactions that never notify (hover says who). No threads.
@@ -17,6 +22,7 @@ import type { CommentReaction } from "@contracts/vocabularies";
 import { COMMENT_REACTIONS } from "@contracts/vocabularies";
 import { Ellipsis, Pencil, SmilePlus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,8 +53,6 @@ import {
   PersonAvatar,
 } from "../../spine/ui/comments-panel";
 import { activityActorName, activityLine } from "../activity";
-import { createdByLabel } from "../assignee-options";
-import { useAssignees } from "../assignees";
 import {
   buildTaskFeed,
   type FeedFilter,
@@ -72,6 +76,12 @@ type Props = {
   workspaceId: string | null;
   /** Full access to the task's project: delete anyone's comment (the server decides). */
   canRemoveAny?: boolean;
+  /**
+   * Where the composer shows (MOD-129): the panel's spot pinned under its
+   * scrolling body; `null` while that spot isn't mounted yet. Absent (the
+   * full page): at the end of the feed.
+   */
+  composerSlot?: HTMLElement | null;
 };
 
 // ── the remembered filter ─────────────────────────────────────────────────────
@@ -95,7 +105,14 @@ function writeFilter(userId: string | null, filter: FeedFilter) {
   }
 }
 
-export function TaskFeed({ task, api, runtime, workspaceId, canRemoveAny = false }: Props) {
+export function TaskFeed({
+  task,
+  api,
+  runtime,
+  workspaceId,
+  canRemoveAny = false,
+  composerSlot,
+}: Props) {
   const { loadActivity, activityStamp, currentUserId } = api;
   const [activity, setActivity] = useState<ActivityEntry[]>(NO_ACTIVITY);
   const [filter, setFilterState] = useState<FeedFilter>(() => readFilter(currentUserId));
@@ -224,6 +241,19 @@ export function TaskFeed({ task, api, runtime, workspaceId, canRemoveAny = false
     }
   };
 
+  const composer = canComment ? (
+    <CommentComposer
+      people={people.mentionable}
+      aria-label="Comment on this task"
+      placeholder="Leave a comment…  @ to mention · / for dates"
+      references={referenceSearch}
+      teams={teams}
+      onSubmit={(body, mentionedUserIds, mentionedTeamIds) =>
+        thread.post({ body, mentionedUserIds, mentionedTeamIds })
+      }
+    />
+  ) : null;
+
   return (
     <section aria-label="Comments and activity" className="flex flex-col gap-2.5">
       <div className="flex min-h-(--ctrl-h-sm) items-center justify-between gap-2">
@@ -256,19 +286,9 @@ export function TaskFeed({ task, api, runtime, workspaceId, canRemoveAny = false
           </Button>
         </p>
       ) : null}
-      {canComment ? (
-        <CommentComposer
-          people={people.mentionable}
-          aria-label="Comment on this task"
-          placeholder="Leave a comment…  @ to mention · / for dates"
-          references={referenceSearch}
-          teams={teams}
-          onSubmit={(body, mentionedUserIds, mentionedTeamIds) =>
-            thread.post({ body, mentionedUserIds, mentionedTeamIds })
-          }
-        />
-      ) : null}
-      <MetaLine task={task} />
+      {composerSlot === undefined ? composer : null}
+      {/* Pinned in the panel: still this feed's, so it keeps the thread. */}
+      {composerSlot && composer ? createPortal(composer, composerSlot) : null}
     </section>
   );
 }
@@ -581,21 +601,5 @@ function ReactionPicker({
         ))}
       </PopoverContent>
     </Popover>
-  );
-}
-
-/** "Created by Maciej · Oct 6, 12:07 PM · Updated 7:20 PM". No "Rescheduled N×":
- *  the counter stopped counting at TV-D2 (TV-P0, AC1.11). */
-function MetaLine({ task }: { task: Task }) {
-  const { byId } = useAssignees();
-  const by = createdByLabel(task, byId);
-  const parts = [
-    by
-      ? `Created by ${by} · ${formatTimestamp(task.createdAt)}`
-      : `Created ${formatTimestamp(task.createdAt)}`,
-    `Updated ${feedTime(task.updatedAt)}`,
-  ];
-  return (
-    <p className="font-sans text-2xs text-muted-foreground tabular-nums">{parts.join(" · ")}</p>
   );
 }

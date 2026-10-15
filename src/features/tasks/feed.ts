@@ -84,7 +84,8 @@ export type FeedFilter = "all" | "comments";
 export const MERGE_WINDOW_MS = 10 * 60 * 1000;
 /** A run of change lines between comments folds once it is longer than this. */
 export const RUN_FOLD_AT = 2;
-/** The run after the last comment shows this many of its latest lines. */
+/** The run after the last comment shows this many of its latest lines, the
+ *  older ones behind "Show n earlier changes" (MOD-129 keeps five). */
 export const TAIL_VISIBLE = 5;
 
 /** What the feed draws, in order. */
