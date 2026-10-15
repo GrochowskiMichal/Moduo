@@ -379,3 +379,46 @@ describe("the title row's actions slot (MOD-118 follow-up)", () => {
     expect(within(alone).getByRole("button", { name: "Pin" })).toBeTruthy();
   });
 });
+
+// MOD-121 (dogfood call #28): one panel frame. jsdom has no layout, so these pin
+// the classes that place the row; the measured insets (fill 9 / 9 from the outer
+// edge, text at 17, first lines on one centre) are in the live check.
+describe("the title row's frame (MOD-121)", () => {
+  const pulled = /(^|\s)-m[lxtrb]?-/;
+
+  it("is a row tall, and the ▾ chip is a row tall with no pull into the padding", () => {
+    renderPanel();
+    const trigger = screen.getByRole("button", { name: "Panel view: Tasks" });
+    expect(trigger.style.height).toBe("var(--row-h)");
+    expect(trigger.className).toMatch(/(^|\s)px-2(\s|$)/);
+    expect(trigger.className).not.toMatch(pulled);
+    const row = trigger.closest("div");
+    expect(row?.className).toMatch(/(^|\s)min-h-\(--row-h\)(\s|$)/);
+  });
+
+  it("a plain title's text sits 8 in, where the chip's text does", () => {
+    render(
+      <RightPanel
+        module="tasks"
+        views={{ details: () => <p>Task details</p> }}
+        activeId="details"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Details" }).className).toMatch(/(^|\s)px-2(\s|$)/);
+  });
+
+  it("the back arrow sits at the panel's padding, not pulled into it", () => {
+    renderPanel({
+      items: [{ key: "task:1", title: "Collect assets", render: () => <p>Task body</p> }],
+      onBack: () => {},
+    });
+    expect(screen.getByRole("button", { name: "Back to Tasks" }).className).not.toMatch(pulled);
+  });
+
+  it("the body steps in 4, so a view's text lines up with the title's", () => {
+    renderPanel();
+    const body = screen.getByText("Tasks body").parentElement;
+    expect(body?.className).toMatch(/(^|\s)px-1(\s|$)/);
+  });
+});

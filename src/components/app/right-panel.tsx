@@ -217,7 +217,11 @@ export function RightPanel({
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
-      <div ref={titleRowRef} className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
+      {/* One row tall, like the left panel's first row, so the first lines
+          share a centre (MOD-121). The chip's fill sits at the panel's edge
+          padding and its text 8 in; the body's 4 plus a view's own 4 put the
+          body's text on that same 16 px column. */}
+      <div ref={titleRowRef} className="flex min-h-(--row-h) shrink-0 items-center gap-1">
         {item ? (
           <ItemTitle
             item={item}
@@ -235,7 +239,7 @@ export function RightPanel({
         ) : (
           <h2
             tabIndex={-1}
-            className="min-w-0 flex-1 font-display text-base font-medium text-foreground outline-none"
+            className="min-w-0 flex-1 px-2 font-display text-base font-medium text-foreground outline-none"
           >
             {title ?? active.label}
           </h2>
@@ -255,7 +259,7 @@ export function RightPanel({
           />
         ) : null}
       </div>
-      <div key={bodyKey} className={cn("min-h-0 flex-1", crossfade && "motion-view")}>
+      <div key={bodyKey} className={cn("min-h-0 flex-1 px-1", crossfade && "motion-view")}>
         <TitleActionsScope slot={actionsSlot}>{body}</TitleActionsScope>
       </div>
     </div>
@@ -288,7 +292,8 @@ function ViewMenu({
               ? `Panel view: ${active.label}`
               : `Panel view: ${active.label}, ${title}`
           }
-          className="-ml-2.5 gap-1 font-medium"
+          className="gap-1 px-2 font-medium"
+          style={{ height: "var(--row-h)" }}
         >
           {title}
           <ChevronDown className="text-muted-foreground" aria-hidden />
@@ -331,7 +336,7 @@ function ItemTitle({
         label={`Back to ${backTo}`}
         onClick={onBack}
         disabled={!onBack}
-        className="-ml-1.5 shrink-0"
+        className="shrink-0"
       />
       <h2
         className={cn(

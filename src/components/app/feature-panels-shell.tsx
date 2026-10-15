@@ -108,10 +108,14 @@ const CENTER_WRAPPER =
 const CENTER_WRAPPER_FLUSH =
   "min-h-0 min-w-0 h-full w-full rounded-xl border border-border bg-card overflow-hidden relative flex flex-col";
 
-// Density-driven, uniform padding (responds to Appearance → density). Uniform so
-// content sits equidistant from every panel edge. Rails run tighter than center.
-const RAIL_PAD = { padding: "var(--pad-x-sm)" } as const;
-const CENTER_PAD = { padding: "var(--pad-x)" } as const;
+// One inset system for the three panels (MOD-121, tokens.css §10), fixed across
+// densities. Side panels hold their fills --panel-pad from the edge (concentric
+// with rounded-xl); the centre's text column sits --panel-inset from the edge,
+// and its title line centres on the side panels' first row (--panel-title-top).
+const RAIL_PAD = { padding: "var(--panel-pad)" } as const;
+const CENTER_PAD = {
+  padding: "var(--panel-title-top) var(--panel-inset) var(--panel-inset)",
+} as const;
 
 export function FeaturePanelsShell({
   feature,
