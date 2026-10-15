@@ -72,7 +72,7 @@ On a usage-limit error the orchestrator notes the reset time, sleeps in the back
 
 ## Handing over (2026-10-15, to the Moduo Team account)
 
-Whoever picks this up becomes the orchestrator: read this whole runbook, then this section, then `docs/local/chat-v2-handover-private.md` if it exists on this Mac (git-ignored; it holds what must never be committed). Calls B1–B6 still apply.
+Whoever picks this up becomes the orchestrator: read this whole runbook, then this section, then `docs/local/chat-v2-handover-private.md` in the **main checkout** (git-ignored, so a new worktree's own `docs/local/` is empty: read it from the main checkout's folder; it holds what must never be committed, and the v1 research dump sits next to it in `chat-v1-fixture/`). Calls B1–B6 still apply.
 
 **Landed on `t/maciej/chat-v2-build`** (head `199d249a` at hand-over): the kit; CV-0 (five spikes); the briefs CV-1…CV-23; the e2e isolation and clean-up fixes; CV-1 (+ its conversion); CV-4; CV-2a; CV-2b; CV-2-fix; checkpoints 1 and 2 folded. Live on prod from this build: the v1 privacy rules and the v1 sending/typing limits (both merged into `maciej`).
 
