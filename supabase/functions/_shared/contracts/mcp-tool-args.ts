@@ -74,6 +74,7 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   tasks_search: z.object({ q: nonempty, limit }),
   tasks_get: z.object({ task_id: nonempty }),
   tasks_history: z.object({ task_id: nonempty }),
+  tasks_comments_list: z.object({ task_id: nonempty, limit }),
   tasks_time_report: z.object({
     from: ymd,
     to: ymd,

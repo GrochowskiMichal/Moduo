@@ -339,6 +339,10 @@ export const tasksModuleManifest: ModuleManifest = {
     { name: "tags", summary: "Workspace-level tags and their task links." },
     { name: "relations", summary: "Blocker → blocked dependency edges (DAG)." },
     { name: "activity", summary: "The attributed intent-op trail for a task." },
+    {
+      name: "comments",
+      summary: "A task's comments, the newest last, by who wrote them (MCP tasks_comments_list).",
+    },
     { name: "attachments", summary: "A task's files, with short-lived download links (AT-1)." },
   ],
 };

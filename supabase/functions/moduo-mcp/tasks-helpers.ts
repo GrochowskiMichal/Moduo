@@ -12,6 +12,7 @@
 
 import { isClosedTask, isOpenTask, pickTagColor } from "../_shared/contracts/vocabularies.ts";
 import {
+  commentsInOrder,
   queueTaskIds,
   readAllPages,
   rowTaskState,
@@ -245,6 +246,22 @@ export async function shapeOne(ctx: ToolContext, row: Row): Promise<Row> {
     };
   }
   return shapeTask(row, ws, new Date(), true);
+}
+
+/**
+ * MOD-94: a task's live comments, oldest first (the newest last). The caller
+ * has passed the task's own gate (fetchTask), which is the app's rule for
+ * them: a comment on a task shows to whoever can see the task
+ * (comments__item_seen). `*` because the app reads them so too: older
+ * databases lack some columns.
+ */
+export async function taskComments(ctx: ToolContext, taskId: string): Promise<Row[]> {
+  const found = await rows(
+    ctx.db.from("comments").select("*")
+      .eq("workspace_id", ctx.key.workspaceId).eq("entity_type", "task").eq("entity_id", taskId)
+      .is("deleted_at", null).order("created_at", { ascending: true }),
+  );
+  return commentsInOrder(found);
 }
 
 /**

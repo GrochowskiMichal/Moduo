@@ -5,7 +5,7 @@
  */
 
 import { isOpenTask, normalizeTaskStatusCategory } from "./contracts/vocabularies.ts";
-import { assigneeIdOf, taskPeople } from "./task-people.ts";
+import { assigneeIdOf, FORMER_MEMBER, taskPeople } from "./task-people.ts";
 
 type Row = Record<string, any>;
 
@@ -256,4 +256,30 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
     out.updated_at = t.updated_at;
   }
   return out;
+}
+
+/** How many comments tasks_get carries (the latest; tasks_comments_list reads more). */
+export const TASK_GET_COMMENTS = 20;
+
+/**
+ * A task's comment as agents read it (MOD-94): who wrote it as the app shows
+ * them (a person by name; an app as "<key name> (app)", spine/comments.ts),
+ * when, whether it was edited, and the body. Reactions stay out.
+ */
+export function shapeComment(c: Row, names: ReadonlyMap<string, string>): Row {
+  const person = typeof c.created_by === "string" ? names.get(c.created_by) : undefined;
+  return {
+    id: c.id,
+    author: c.author_kind === "api_key" ? `${c.author_label || "App"} (app)` : (person ?? FORMER_MEMBER),
+    at: c.created_at,
+    ...(c.edited_at ? { edited: true } : {}),
+    body: typeof c.body === "string" ? c.body : "",
+  };
+}
+
+/** Comments oldest first, so the newest is last (ties by id, so it's stable). */
+export function commentsInOrder<T extends Row>(comments: T[]): T[] {
+  return [...comments].sort(
+    (a, b) => compareText(a.created_at, b.created_at) || compareText(a.id, b.id),
+  );
 }

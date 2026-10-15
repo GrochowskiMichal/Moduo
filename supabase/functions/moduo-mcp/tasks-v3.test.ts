@@ -241,6 +241,82 @@ describe("handles: every task argument takes MOD-142 or a uuid", () => {
   });
 });
 
+describe("comments: agents read what people answered (MOD-94)", () => {
+  const comment = (id: string, at: string, extra: Row = {}): Row => ({
+    id,
+    workspace_id: WS,
+    entity_type: "task",
+    entity_id: "t-open",
+    body: `body ${id}`,
+    created_by: BEA,
+    author_kind: "user",
+    author_label: null,
+    created_at: at,
+    edited_at: null,
+    deleted_at: null,
+    ...extra,
+  });
+
+  function withComments() {
+    const s = setup();
+    s.tables.comments = [
+      comment("c-2", "2030-01-02T10:00:00Z", { edited_at: "2030-01-02T11:00:00Z" }),
+      comment("c-1", "2030-01-01T10:00:00Z", { created_by: ME, author_kind: "api_key", author_label: "Claude Code" }),
+      comment("c-3", "2030-01-03T10:00:00Z", { created_by: "gone-user" }),
+      comment("c-deleted", "2030-01-04T10:00:00Z", { deleted_at: "2030-01-05T00:00:00Z" }),
+      comment("c-other", "2030-01-04T10:00:00Z", { entity_id: "t-done" }),
+      comment("c-note", "2030-01-04T10:00:00Z", { entity_type: "note" }),
+    ];
+    return s;
+  }
+
+  it("tasks_get carries the task's live comments, the newest last, with who wrote each", async () => {
+    const { ctx } = withComments();
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.comments).toEqual([
+      { id: "c-1", author: "Claude Code (app)", at: "2030-01-01T10:00:00Z", body: "body c-1" },
+      { id: "c-2", author: "Bea", at: "2030-01-02T10:00:00Z", edited: true, body: "body c-2" },
+      { id: "c-3", author: "Former member", at: "2030-01-03T10:00:00Z", body: "body c-3" },
+    ]);
+    expect(got).not.toHaveProperty("earlier_comments");
+  });
+
+  it("tasks_get keeps the latest 20 and counts the earlier ones", async () => {
+    const { ctx, tables } = setup();
+    tables.comments = Array.from({ length: 23 }, (_, i) =>
+      comment(`c-${String(i).padStart(2, "0")}`, `2030-01-01T10:${String(i).padStart(2, "0")}:00Z`),
+    );
+    const got = await call("tasks_get", { task_id: "t-open" }, ctx);
+    expect(got.comments).toHaveLength(20);
+    expect(got.comments[0].id).toBe("c-03");
+    expect(got.comments.at(-1).id).toBe("c-22");
+    expect(got.earlier_comments).toBe(3);
+  });
+
+  it("tasks_comments_list reads the latest N, the newest last, with the total", async () => {
+    const { ctx } = withComments();
+    const all = await call("tasks_comments_list", { task_id: "MOD-1" }, ctx);
+    expect(all).toMatchObject({ task_id: "t-open", total: 3 });
+    expect(all.comments.map((c: Row) => c.id)).toEqual(["c-1", "c-2", "c-3"]);
+    const last = await call("tasks_comments_list", { task_id: "MOD-1", limit: 1 }, ctx);
+    expect(last.comments.map((c: Row) => c.id)).toEqual(["c-3"]);
+  });
+
+  it("a task the key's person can't see has no comments to read: it reads as missing", async () => {
+    const { ctx, tables } = withComments();
+    tables.comments!.push(comment("c-secret", "2030-01-01T00:00:00Z", { entity_id: "t-secret" }));
+    await expect(call("tasks_comments_list", { task_id: "MOD-9" }, ctx)).rejects.toThrow(
+      "Task not found in this workspace.",
+    );
+    await expect(call("tasks_get", { task_id: "t-secret" }, ctx)).rejects.toThrow("Task not found in this workspace.");
+  });
+
+  it("reads at View", () => {
+    const listComments = tasksConnectorModule.tools.find((t) => t.name === "tasks_comments_list")!;
+    expect(listComments.access).toBe("view");
+  });
+});
+
 describe("tasks_set_status: by category or name; finishing cascades (call 87)", () => {
   function statusOps() {
     const statusCalls: Row[] = [];

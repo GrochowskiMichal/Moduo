@@ -46,7 +46,9 @@ import {
   pageOf,
   parseAssignee,
   rowTaskState,
+  shapeComment,
   shapeTask,
+  TASK_GET_COMMENTS,
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
@@ -75,6 +77,7 @@ import {
   shapeOne,
   shapedQueue,
   str,
+  taskComments,
   unwrap,
   workspaceMembers,
   type Row,
@@ -596,14 +599,14 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_get",
       description:
-        "One task in full: properties, tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, and its recent attributed activity trail.",
+        "One task in full: properties, tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, its latest comments (up to 20, the newest last; earlier_comments counts the rest, which tasks_comments_list reads) and its recent attributed activity trail.",
       access: "view",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         const taskId = task.id as string;
         const ws = ctx.key.workspaceId;
-        const [data, activity, sessions, reminders, waiting, agents] = await Promise.all([
+        const [data, activity, sessions, reminders, waiting, agents, comments] = await Promise.all([
           loadWorkspace(ctx),
           rows(
             ctx.db.from("module_activity")
@@ -620,8 +623,10 @@ export const tasksConnectorModule: ConnectorModule = {
           rows(ctx.db.from("task_waiting").select("id, kind, ref, label, since")
             .eq("workspace_id", ws).eq("task_id", taskId).is("deleted_at", null)),
           unwrap<Row[] | null>(ctx.db.rpc("tasks_agent_sessions", { p_workspace_id: ws, p_task_id: taskId })),
+          taskComments(ctx, taskId),
         ]);
         const now = new Date();
+        const latest = comments.slice(-TASK_GET_COMMENTS);
         const titled = (id: string) => {
           const t = data.byId.get(id);
           return t ? { id, title: t.title, status: t.status } : null;
@@ -648,6 +653,9 @@ export const tasksConnectorModule: ConnectorModule = {
             since: w.since,
           })),
           agent_sessions: agents ?? [],
+          // MOD-94: what people answered here (the trail has no comments).
+          comments: latest.map((c) => shapeComment(c, data.names)),
+          ...(comments.length > latest.length ? { earlier_comments: comments.length - latest.length } : {}),
           activity,
         };
       },
@@ -660,6 +668,31 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         return unwrap(ctx.db.rpc("tasks_op_history", { p_workspace_id: ctx.key.workspaceId, p_task_id: task.id }));
+      },
+    },
+    {
+      name: "tasks_comments_list",
+      description:
+        "A task's comments, the newest last: who wrote each (a person by name, an app as \"<key name> (app)\"), when, whether it was edited, and the text. Read the answers people left you here; tasks_comment writes one. Comments on a task show to whoever can see the task.",
+      access: "view",
+      inputSchema: {
+        type: "object",
+        properties: {
+          task_id: TASK_ID,
+          limit: { type: "number", description: "The latest N comments (default 50, max 200)." },
+        },
+        required: ["task_id"],
+      },
+      handler: async (args, ctx) => {
+        const task = await fetchTask(ctx, str(args, "task_id"));
+        const [comments, members] = await Promise.all([taskComments(ctx, task.id), workspaceMembers(ctx)]);
+        const names = new Map(members.map((m) => [m.user_id, m.name]));
+        const shown = comments.slice(-clampLimit(args, 50, 200));
+        return {
+          task_id: task.id,
+          total: comments.length,
+          comments: shown.map((c) => shapeComment(c, names)),
+        };
       },
     },
     {
@@ -757,7 +790,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_activity",
       description:
-        "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity.",
+        "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity. Comments aren't in it: read them with tasks_comments_list (or tasks_get).",
       access: "view",
       inputSchema: {
         type: "object",
