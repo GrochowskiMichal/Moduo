@@ -118,7 +118,13 @@ import {
 } from "../my-tasks";
 import { defaultRowsFor, firstViewFor, timelineRoleFor } from "../onboarding";
 import { showsSortedNote, sortedByLabel } from "../order";
-import { IN_FLIGHT_PANEL_VIEW, NO_DATE_PANEL_VIEW } from "../panel-views";
+import {
+  activePanelView,
+  askedProjectFor,
+  IN_FLIGHT_PANEL_VIEW,
+  NO_DATE_PANEL_VIEW,
+  type ProjectAsk,
+} from "../panel-views";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
@@ -170,7 +176,7 @@ import {
   useProjectEditable,
 } from "./use-project-overview-data";
 import { useSavedViews } from "./use-saved-views";
-import { useTaskSelection } from "./use-task-selection";
+import { type MultiSelect, useTaskSelection } from "./use-task-selection";
 import { useTasksDisplay } from "./use-tasks-display";
 import { useTasksFilters } from "./use-tasks-filters";
 import { useTasksWelcome } from "./use-tasks-welcome";
@@ -269,7 +275,8 @@ export function TasksPlanView({
     // The Timeline's zoom is per scope in Display since TV-TL1.
     removeLS(workspaceId, "timelineZoom");
   }, [workspaceId]);
-  // Which right-panel view is showing (views: features/tasks/panel-views.ts).
+  // The right-panel view last picked, which the panel remembers; what shows
+  // is `panelActive` below (views and the rule: features/tasks/panel-views.ts).
   const [panelView, setPanelView] = useState("details");
   // The task that fills the centre (call 32), or null for the view.
   const [fullPageId, setFullPageId] = useState<string | null>(null);
@@ -1556,24 +1563,40 @@ export function TasksPlanView({
     : null;
   // What the title asked for: that project's overview, over an item stacked
   // in the panel and over a multi-selection's bulk panel, until the cursor or
-  // the place moves (then the panel follows the selection again).
-  const [projectAsk, setProjectAsk] = useState<{
-    projectId: string;
-    taskId: string | null;
-    place: string;
-  } | null>(null);
-  const askedProjectId =
-    projectAsk && projectAsk.taskId === selectedTaskId && projectAsk.place === place
-      ? projectAsk.projectId
-      : null;
+  // the place moves, a task is clicked or a view is picked (then the panel
+  // follows the selection again, on the view it remembers).
+  const [projectAsk, setProjectAsk] = useState<ProjectAsk | null>(null);
+  const askedProjectId = askedProjectFor(projectAsk, selectedTaskId, place);
+  // The ask is only a look, never the panel's pick (MOD-131): setting the
+  // panel's view here left it on Project for every task clicked after.
   const openProjectDetails = useCallback(() => {
     if (!titleProjectId) return;
     clearPanel();
     setProjectAsk({ projectId: titleProjectId, taskId: selectedTaskId, place });
-    setPanelView("project");
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
   }, [titleProjectId, selectedTaskId, place, clearPanel]);
+  // A view picked (the panel's menu, ⌥1–4, No date · n, In flight, a task
+  // opened from a panel) ends the ask, then is the one the panel remembers.
+  const pickPanelView = useCallback((id: string) => {
+    setProjectAsk(null);
+    setPanelView(id);
+  }, []);
+  // A click on a task in the centre ends the ask too, on the selected task as
+  // well, which moves no cursor (MOD-131). Only a gesture comes through the
+  // views' `select`; the cursor's own fallbacks don't.
+  const selectInView = multiSelect.select;
+  const selectEndingAsk = useCallback<MultiSelect["select"]>(
+    (id, mods, order) => {
+      setProjectAsk(null);
+      selectInView(id, mods, order);
+    },
+    [selectInView],
+  );
+  const viewMultiSelect = useMemo(
+    () => ({ ...multiSelect, select: selectEndingAsk }),
+    [multiSelect, selectEndingAsk],
+  );
   const header: PlanHeaderControls = {
     // Won't do counts what it lists (none of it is open); a saved view, the
     // tasks it shows ("Done last week" counts its done ones).
@@ -1618,7 +1641,7 @@ export function TasksPlanView({
 
   const sharedViewProps = {
     tasks: scopeTasks,
-    multiSelect,
+    multiSelect: viewMultiSelect,
     orderRef: viewOrderRef,
     scopeTitle,
     // The views read the place: a saved view of a project is that project.
@@ -1788,22 +1811,25 @@ export function TasksPlanView({
   // "No date · n" opens the panel on that view (the panel too, if it's closed).
   const openNoDate = useCallback(() => {
     clearPanel();
-    setPanelView(NO_DATE_PANEL_VIEW);
+    pickPanelView(NO_DATE_PANEL_VIEW);
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
-  }, [clearPanel]);
+  }, [clearPanel, pickPanelView]);
   // Focus's "2 in flight" opens In flight the same way (TV-F8).
   const openInFlight = useCallback(() => {
     clearPanel();
-    setPanelView(IN_FLIGHT_PANEL_VIEW);
+    pickPanelView(IN_FLIGHT_PANEL_VIEW);
     const state = readFeaturePanelState("tasks");
     if (!state.right) dispatchLayoutPanelsSet({ feature: "tasks", left: state.left, right: true });
-  }, [clearPanel]);
+  }, [clearPanel, pickPanelView]);
   // The offer's Shrink shows the task's Details (TV-F8).
-  const showDetails = useCallback((id: string) => {
-    setPanelView("details");
-    setSelectedTaskId(id);
-  }, []);
+  const showDetails = useCallback(
+    (id: string) => {
+      pickPanelView("details");
+      setSelectedTaskId(id);
+    },
+    [pickPanelView],
+  );
   // In flight (TV-F8): what I'm waiting on, and my agents' work.
   const inFlight = useInFlight(api);
   // Pick up: the wait is over, the task goes back to the top of Focus.
@@ -2305,24 +2331,26 @@ export function TasksPlanView({
       onSetState={requestProjectState}
       onEdit={(id, patch) => void api.updateProjectFields(id, patch)}
       onOpenTask={(id) => {
-        setPanelView("details");
+        pickPanelView("details");
         onUrlTaskIdChange(id);
       }}
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
     />
   ) : null;
-  // Nothing selected inside a project, or a task in the centre: the panel
-  // shows Project (the one exception to "the panel remembers its view").
-  // The Timeline's No date stays open while you work the canvas (TV-TL2).
-  const panelActive =
-    multiSelect.multi && !(askedProject && panelView === "project")
-      ? "details"
-      : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
-        ? NO_DATE_PANEL_VIEW
-        : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
-          ? "project"
-          : panelView;
+  // The panel remembers its view; the title's ask shows Project only while
+  // it stands (MOD-131). Nothing selected inside a project, or a task in the
+  // centre, shows Project too; the Timeline's No date stays open while you
+  // work the canvas (TV-TL2). The rule: `activePanelView`.
+  const panelActive = activePanelView({
+    asked: askedProject !== null,
+    multi: multiSelect.multi,
+    remembered: panelView,
+    noDateShown: timelineShown && !fullPageTask,
+    projectInstead: Boolean(
+      projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject)),
+    ),
+  });
 
   // The right panel's title row names and switches its views (SH-1): Details
   // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
@@ -2367,7 +2395,7 @@ export function TasksPlanView({
                 canMove={timelineCanDragTask}
                 selectedTaskId={selectedTaskId}
                 onOpen={(id) => {
-                  setPanelView("details");
+                  pickPanelView("details");
                   setSelectedTaskId(id);
                 }}
               />
@@ -2375,7 +2403,7 @@ export function TasksPlanView({
           : undefined,
       }}
       activeId={panelActive}
-      onChange={setPanelView}
+      onChange={pickPanelView}
       items={panelItems}
       onBack={panelStack.back}
       onClearItems={panelStack.clear}
