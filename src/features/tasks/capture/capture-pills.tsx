@@ -37,7 +37,17 @@ import { RECURRENCE_PRESETS, recurrenceFromPreset, recurrenceLabel } from "../pa
 import { CATEGORY_LABELS } from "../statuses";
 import { estimateLabel } from "./capture-menus";
 
-export type PillPerson = { userId: string; name: string; isMe: boolean; canTakeTasks: boolean };
+export type PillPerson = {
+  userId: string;
+  name: string;
+  /** Their own name, for the avatar's initials; empty when unset ("?", never
+   *  the "ME" of a "Member" placeholder, call 43). */
+  fullName: string;
+  /** Their profile photo; the avatar shows initials without it (MOD-96). */
+  avatarUrl: string | null;
+  isMe: boolean;
+  canTakeTasks: boolean;
+};
 
 /** What the pills show (tokens and hand picks merged by the body). */
 export type PillValues = {
@@ -105,9 +115,17 @@ const ESTIMATES = [15, 30, 60, 120, 240];
 
 const dayDate = (day: string) => new Date(`${day}T00:00:00`);
 
-function nameOf(people: readonly PillPerson[], id: string | null | undefined): string {
-  return people.find((p) => p.userId === id)?.name ?? "Someone";
+function personOf(people: readonly PillPerson[], id: string | null | undefined) {
+  const p = people.find((x) => x.userId === id);
+  return {
+    name: p?.name ?? "Someone",
+    avatar: p ? avatarName(p) : "?",
+    avatarUrl: p?.avatarUrl ?? null,
+  };
 }
+
+/** The name an avatar's initials come from (call 43). */
+const avatarName = (p: PillPerson) => p.fullName || "?";
 
 export function CapturePills({
   values,
@@ -125,6 +143,7 @@ export function CapturePills({
   const team = teams.find((t) => t.id === values.teamId) ?? null;
   const assigneeId = values.assigneeId === undefined ? me : values.assigneeId;
   const someoneElse = assigneeId && assigneeId !== me ? assigneeId : null;
+  const other = personOf(people, someoneElse);
   const toggle = (pill: Exclude<OpenPill, null>) => (next: boolean) =>
     onOpenChange(next ? pill : null);
 
@@ -132,15 +151,17 @@ export function CapturePills({
   const assignValue =
     someoneElse || team ? (
       <span className="flex min-w-0 items-center gap-1.5">
-        {someoneElse ? <PersonAvatar name={nameOf(people, someoneElse)} id={someoneElse} /> : null}
+        {someoneElse ? (
+          <PersonAvatar name={other.avatar} id={someoneElse} src={other.avatarUrl} />
+        ) : null}
         {team ? (
           <TeamMark name={team.name} id={team.id} letters={team.mark || null} color={team.color} />
         ) : null}
         <span className="truncate">
           {someoneElse
             ? team
-              ? `${nameOf(people, someoneElse)} · ${team.name}`
-              : nameOf(people, someoneElse)
+              ? `${other.name} · ${team.name}`
+              : other.name
             : `${team?.name} · unclaimed`}
         </span>
       </span>
@@ -177,7 +198,7 @@ export function CapturePills({
                   onChange({ field: "assignee", value: p.isMe ? undefined : p.userId })
                 }
               >
-                <PersonAvatar name={p.name} id={p.userId} />
+                <PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />
                 <span className="truncate">{p.isMe ? `${p.name} (you)` : p.name}</span>
                 {assigneeId === p.userId ? <Check className="ms-auto" aria-hidden /> : null}
               </DropdownMenuItem>
@@ -375,7 +396,7 @@ function MoreChips({
     chips.push({
       key: `waiting:${id}`,
       icon: Hourglass,
-      label: `Waiting on ${nameOf(people, id)}`,
+      label: `Waiting on ${personOf(people, id).name}`,
       clear: () => onChange({ field: "waiting", userId: id, on: false }),
     });
   return (
@@ -493,7 +514,7 @@ function MorePill({
                     key={p.userId}
                     size="xs"
                     active={on}
-                    icon={<PersonAvatar name={p.name} id={p.userId} />}
+                    icon={<PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />}
                     onClick={() => onChange({ field: "waiting", userId: p.userId, on: !on })}
                   >
                     {p.name}

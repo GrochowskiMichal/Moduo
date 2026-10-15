@@ -6,7 +6,9 @@
 //   lights up, and hand `onEditorFiles` to the description editor (Lexical
 //   routes its own paste and drop, so the zone skips those);
 // - `<AttachmentsSection>` draws the strip and the viewer, right under the
-//   description (specs/attachments.md "Where they show").
+//   description (specs/attachments.md "Where they show"), and the file
+//   picker, so `openPicker` works from a menu ("Attach files…") even while
+//   the strip is hidden (no files yet, MOD-115).
 
 import type React from "react";
 import { useRef, useState } from "react";
@@ -34,6 +36,10 @@ export type AttachmentsSectionState = {
   dropZone: AttachmentsDropZone;
   /** For the description editor's `onFiles`; undefined when files can't be added. */
   onEditorFiles: ((files: File[]) => void) | undefined;
+  /** Opens the file picker (the "+" tile, ⋯ → Attach files…); undefined when files can't be added. */
+  openPicker: (() => void) | undefined;
+  /** The picker's input, which `<AttachmentsSection>` renders. */
+  pickerRef: React.RefObject<HTMLInputElement | null>;
   viewerIndex: number | null;
   setViewerIndex: (index: number | null) => void;
 };
@@ -68,6 +74,7 @@ export function useAttachmentsSection({
     refreshStamp,
   });
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const pickerRef = useRef<HTMLInputElement>(null);
   const [dropActive, setDropActive] = useState(false);
   const dragDepth = useRef(0);
   const available = !!runtime && !!workspaceId;
@@ -121,6 +128,8 @@ export function useAttachmentsSection({
     dropActive,
     dropZone,
     onEditorFiles: acceptsFiles ? attachments.addFiles : undefined,
+    openPicker: acceptsFiles ? () => pickerRef.current?.click() : undefined,
+    pickerRef,
     viewerIndex,
     setViewerIndex,
   };
@@ -129,9 +138,12 @@ export function useAttachmentsSection({
 /** The strip (thumbnails, file tiles, "+", upload captions) and its viewer. */
 export function AttachmentsSection({
   state,
+  addTile,
   className,
 }: {
   state: AttachmentsSectionState;
+  /** When the "+" tile shows (the strip's `addTile`); a drag over the zone always shows it. */
+  addTile?: "always" | "with-files";
   className?: string;
 }) {
   const { attachments: a, acceptsFiles, available, viewerIndex, setViewerIndex } = state;
@@ -140,6 +152,9 @@ export function AttachmentsSection({
     <>
       <AttachmentStrip
         className={className}
+        addTile={addTile}
+        dropping={state.dropActive}
+        onPickFiles={state.openPicker}
         records={a.records}
         previews={a.previews}
         uploads={a.uploads}
@@ -155,6 +170,22 @@ export function AttachmentsSection({
         // The largest-files list (AT-3): delete what's no longer needed.
         onFreeUpSpace={() => dispatchOpenSettings({ section: "storage" })}
       />
+      {acceptsFiles ? (
+        <input
+          ref={state.pickerRef}
+          type="file"
+          multiple
+          hidden
+          tabIndex={-1}
+          aria-hidden
+          data-slot="attachment-picker"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length > 0) a.addFiles(files);
+          }}
+        />
+      ) : null}
       <AttachmentViewer
         runtime={state.runtime}
         records={a.records}

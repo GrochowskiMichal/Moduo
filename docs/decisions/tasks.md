@@ -2,6 +2,61 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-14 · People show their profile photo, initials as the fallback (dogfood MOD-96)
+
+Screen-only, no migration: photos already live on `profiles.avatar_url` (a public URL in the public `avatars` bucket, set in Settings → Account) and reach Tasks through the member list (`listMembers` → `mapMember` → `toAssignees`). The kit's `PersonAvatar` draws them; this change gives the surfaces that dropped them (the capture's pills, its title tokens, the `@` menus, Settings → Teams' people) the photo, fills a non-square photo into the circle (`object-cover`), and re-reads the members when your own profile changes, so your new photo shows at once; a teammate's shows on the next members read (switching workspace or reopening the app).
+
+- **MOD-96 · A person's avatar is their photo when they have one** → `components/ui/avatar.tsx` `PersonAvatar`, `capture-pills.tsx`, `token-node.tsx` `TokenPersonContext`, `capture-menus.ts`, `spine/editor/mention-menu-plugin.tsx` `CandidateIcon`, `spine/hooks/use-mention-search.ts`, `settings/access/teams-panel.tsx`, `providers/workspace-provider.tsx`; §19 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-14 (dogfood MOD-96: "show profile photos").
+  - Decision: every place Tasks shows a person draws their profile photo, round, when they have one; the two initials on their stable colour stay as the fallback when there is none, while it loads and when it fails to load. The colour stays keyed on the id, and the initials still come from the person's own name ("?" when they haven't set one).
+  - Why: people recognise a face faster than two letters, and the photos people set in Settings showed nowhere in Tasks' capture or menus.
+  - Rejected: call 43's initials only, for everyone, everywhere.
+
+## 2026-10-14 · The task's actions move to the panel's title row (dogfood MOD-118 follow-up)
+
+Screen-only, no migration. The prototype is [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) frame 5 (`?frame=5`): the panel's `.rphead` reads "Details ▾ ……… ↗ ⋯", the full page's `.fphead` "← List · 3 of 7 ↑ ↓ | ⤡ ⋯", and `.dcrumb` holds only the crumbs and the handle.
+
+- **The task's actions sit in the host's title row, on the right; the breadcrumb line holds only the crumbs and the handle** → `src/components/app/title-actions.tsx`, `right-panel.tsx`, `task-full-page.tsx`, `task-detail-header.tsx`; spec §9
+  - Who: Maciej, 2026-10-14 (dogfood MOD-118 follow-up, "yes, definitely").
+  - Decision: who's on it, the Focus toggle, ⤢ and ⋯ sit right of "Details ▾" (or of an item's "← name", before its "Open in …"); on the full page, after ↑ ↓ and a hairline. A view's body puts its own actions in `TitleActions` and they show in the host's slot, so any module's view can use it; Project, a multi-selection and "Shown in the centre" put none there. With no host (a story) the actions stay on the breadcrumb line.
+  - Why: four icons on the breadcrumb line cut the project's name to "Resear…" in a 280 px panel; the prototype gives the crumbs the whole line.
+  - Rejected: an `actions` field on each view's registration or on `PanelItem` (the task's ⋯ needs its attachments' file picker, which lives in the body, and four hosts would each wire it).
+- **▶ Focus on this moves into ⋯; the Focus toggle stays an icon** → `task-detail-header.tsx` `FocusOnThisItem`, `QueueButton`
+  - Who: agent's choice, flagged for Maciej, 2026-10-14.
+  - Decision: ⋯ opens with "Focus on this ⇧F" (open tasks, people who can edit; hidden while my session is on it), as in the row's menu; the Focus toggle keeps its icon, its "In Focus" state and others' avatars, on the same small rung as ↗ and ⋯ (`IconButton`, `--ctrl-h-sm`). There a viewer's "In Focus" is an icon too (the words in its tooltip and name), and "is on this" shows one avatar and "+n" (`TaskClaimMark max={1}`), everyone in its tooltip.
+  - Why: frame 5 shows ↗ and ⋯ at 280 px and frames 2–3 the Focus toggle, while no frame has ▶. Inside a 280 px panel the row has ~254 px. "Details ▾" (~76) and four 26 px icons with their gaps take ~196, which leaves no room for who's on the task; three take ~166. At the fullest (a viewer, in their Focus, three people on it, one lined up) the row is ~246: the mark ~52, the lined-up avatar ~20. The old 78 px "In Focus" label or three avatars would push ⋯ past the panel's edge.
+  - Rejected: all four as icons (overflows once people are on the task, and squeezes an item's name), and the Focus toggle in ⋯ too (its state would hide in a menu).
+
+## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
+
+The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([round-2b](../../.design/tasks-v3/prototypes/round-2b.html), the detail frames). Screen-only, no migration.
+
+- **MOD-116 · The description and its files sit above the properties** → `task-detail-panel.tsx` (panel and full page); supersedes U13-5's order
+  - Who: Maciej, 2026-10-14 (dogfood MOD-116, and his yes to this batch).
+  - Decision: breadcrumb · status toggle + title (the agent line under it) · description · files · the Done / Won't do line with the properties · Subtasks, Waiting on, Blocked by, Blocks, Linked · the feed; on the wide full page the properties keep their own column. The breadcrumb and the "+" line stay on one line and shorten (see MOD-114/118); every other value in the panel still wraps (AC1.16 amended).
+  - Why: every approved prototype frame has it this way; the order had been changed while writing the spec, without his call.
+  - Rejected: U13-5's properties-first order.
+- **MOD-114 / MOD-118 · The "+" line and the breadcrumb stay on one line** → `task-detail-properties.tsx` `AddPropertyLine`, `task-detail-header.tsx`; AC1.16 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-14 (dogfood MOD-114 and MOD-118, his yes to this batch).
+  - Decision: "+ Energy · Scheduled · … +n" names whole properties then "+n" (call 42) and opens one menu of every hidden property; the project and section names cut with an ellipsis (full name on hover) and the handle sits at the line's end, outside the crumbs.
+  - Why: prototype round-2b (`.addprop`, `.dcrumb .hdl`); a wrapped breadcrumb or "+" line pushed the title and the properties down in a 280 px panel.
+  - Rejected: AC1.16's "nothing truncates in the panel" for these two lines (values still wrap).
+- **MOD-115 · With no files the strip is hidden; Attach files… in ⋯** → `attachment-strip.tsx` `addTile`, `attachments-section.tsx` `openPicker`, `task-detail-header.tsx`; [specs/attachments.md](../../specs/attachments.md)
+  - Who: agent's choice, flagged for Maciej, 2026-10-14 (dogfood MOD-115 asked for the tile on hover too).
+  - Decision: with no files the strip is hidden, as prototyped; Attach files… in the panel's ⋯ opens the picker, and dragging or pasting adds files anywhere on the task. The "+" tile shows once there are files, or while files are dragged over. The description reads as plain text; editing is a soft fill with the padding inside, no ring.
+  - Why: the prototypes have no empty tile; showing it on hover either reflows the properties under the pointer (R6) or holds an empty 60 px row.
+  - Rejected: the tile on hover (reflow), a reserved row for it (an empty band), and no picker at all for a task without files.
+- **MOD-119 · The agent's status line never widens its column; Focus never scrolls sideways** → `task-agent-session.tsx`, `focus-view.tsx`, `focus-now-card.tsx`, `entity-rich-text.tsx`
+  - Who: Maciej asked for the fix (dogfood MOD-119, high priority); the shape is the agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: drawn as round-1c's rows: a chip ("Claude · needs you", a dot, or a check or an x once ready or failed) with Fold and × at its row's end, then one sentence cut with an ellipsis (full line on hover); one link rides at its end, several make a wrapping row of small chips. No item is wider than the line. It stays under the title (call 52). Focus's scroller clips sideways, and descriptions break long words.
+  - Why: an agent's "needs you: …" note and its links ran wider than the Now card, so all of Focus scrolled sideways.
+  - Rejected: one line that never wraps (five long links still overflow it), a wrapping line of bare parts (it stacked into five rows of "·" fragments at 235 px), and letting the note wrap in full (a 280-character note pushes the task down).
+- **MOD-95 · A project's title opens its overview; a ⋯ sits beside it; a narrow toolbar keeps the title** → `plan-view-header.tsx`, `tasks-plan-view.tsx` `openProjectDetails`, the kit's `FilterButton` and `DisplayMenu`
+  - Who: Maciej (dogfood MOD-95, and his yes to this batch); the narrow toolbar and what the ⋯ holds are the agent's choice, deferred to by Maciej, 2026-10-14.
+  - Decision: the title opens Project in the right panel (over an item stacked there, and during a multi-selection, until the cursor or the place moves); the ⋯ holds Project details and Statuses… (round-2b names nothing else). The title group starts at 10rem with its ⋯ and count; under 36rem Filter and Display are icons; narrower still, the controls wrap under the title.
+  - Why: the project's details had no way in from the centre; at a 1024 px window with both side panels open the title collapsed to nothing.
+  - Rejected: a new route or a separate "About" button, and squeezing the title before the controls give way.
+
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 
 Screen-only, no migration: the seven Tasks gaps the local walkthrough found (`docs/testing/tasks-v3-local.md` §3) and the quick no-migration lines of [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md) whose recommendation held. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
@@ -1459,7 +1514,7 @@ Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC
   - Decision: one person's changes within 10 minutes of the first merge ("changed due, priority and 2 more", click to see each); a run of more than two change lines between comments folds into "Show n earlier changes", and the run after the last comment shows its latest five. The All · Comments switch is remembered per person in local storage.
   - Why: research §9; the switch is a reading habit, not a setting worth syncing yet.
   - Rejected: tabs (Jira's All · Comments · History · Work log) and a synced preference.
-- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
+- **U13-5 · The panel's anatomy follows the spec's order; the agent line sits under the title** (the order is superseded by MOD-116, 2026-10-14: description first) → TV-U13, TV-D16 (fills `AgentSessionSlot`), TV-F7 (fills `claimSlot`)
   - Who: agent's choice, deferred to by Maciej, 2026-10-13.
   - Decision: header (project › section pickers, handle, the claims slot, queue, ⤢, ⋯) · status toggle + title · the agent session line's slot (52's placement, not the spec list's) · Done/Won't do line · properties (Status, Assignee + Team, Priority, Due + time, Tags; "+ Energy · Scheduled · Reminder · Estimate · Repeat · Waiting on") · description · Subtasks · Waiting on · Blocked by · Blocks · Linked (reference cards, five then "Show n more") · the feed. Copy link moved into ⋯ beside Copy branch name; ⋯ shows for viewers too (copying only).
   - Why: the spec's order with REPLAN 52's decided spot for the agent line.

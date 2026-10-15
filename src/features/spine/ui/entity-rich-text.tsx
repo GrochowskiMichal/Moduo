@@ -137,7 +137,7 @@ export type EntityRichTextProps = {
 export function EntityRichText({ html, className }: EntityRichTextProps) {
   const rich = useMemo(() => (looksLikeRichHtml(html) ? renderRichHtml(html) : null), [html]);
   if (rich === null) {
-    return <div className={cn("whitespace-pre-wrap", className)}>{html}</div>;
+    return <div className={cn("whitespace-pre-wrap break-words", className)}>{html}</div>;
   }
-  return <div className={cn("space-y-2", className)}>{rich}</div>;
+  return <div className={cn("space-y-2 break-words", className)}>{rich}</div>;
 }

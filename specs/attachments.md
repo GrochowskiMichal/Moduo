@@ -24,9 +24,9 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
   - the detail panel, including its description editor;
   - the capture modal;
   - a list row or board card (incl. files dragged from macOS Finder);
-  - the panel's "+" tile / file picker.
+  - the file picker: the panel's "+" tile, which shows once the task has files (or while files are dragged over it), and the panel's ⋯ → Attach files…, always there for an editor (MOD-115).
 - **Where they show.**
-  - **Detail panel:** a thumbnail strip right under the description. Images get thumbnails; other files get a type-icon tile with name + size.
+  - **Detail panel:** a thumbnail strip right under the description, hidden while the task has no files (as prototyped, MOD-115). Images get thumbnails; other files get a type-icon tile with name + size.
   - **Viewer:** click a thumbnail for full size, ←/→ between attachments, Download, Copy (images), Delete.
 - **The mark.** Every task surface shows a quiet **📎 N** (12 px paperclip + count, muted, hidden at 0, same slot in the quiet-counts group):
   - list row

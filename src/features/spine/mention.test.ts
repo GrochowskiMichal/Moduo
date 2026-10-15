@@ -199,3 +199,40 @@ describe("buildMentionCandidates", () => {
     ).toBe(false);
   });
 });
+
+describe("buildMentionCandidates: people's avatars (MOD-96)", () => {
+  it("passes each person's own name and photo through to the @ menu", () => {
+    const photo =
+      "https://example.supabase.co/storage/v1/object/public/avatars/profiles/u-mike/a.png";
+    const candidates = buildMentionCandidates({
+      trigger: "mention",
+      query: "",
+      entities: [],
+      people: [
+        { memberId: "u-mike", label: "Mike Grochowski", name: "Mike Grochowski", avatarUrl: photo },
+        { memberId: "u-new", label: "Member", name: "?", avatarUrl: null },
+        // A source that knows neither: the menu falls back to the label's initials.
+        { memberId: "u-old", label: "Ola" },
+      ],
+    });
+    expect(candidates.filter((c) => c.kind === "person")).toEqual([
+      {
+        kind: "person",
+        memberId: "u-mike",
+        label: "Mike Grochowski",
+        icon: null,
+        name: "Mike Grochowski",
+        avatarUrl: photo,
+      },
+      {
+        kind: "person",
+        memberId: "u-new",
+        label: "Member",
+        icon: null,
+        name: "?",
+        avatarUrl: null,
+      },
+      { kind: "person", memberId: "u-old", label: "Ola", icon: null },
+    ]);
+  });
+});
