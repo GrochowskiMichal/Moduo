@@ -12,7 +12,7 @@
 - **`chat_op_update_channel(channel, name, topic)`**: rename is the managers' and admins'; the topic is any role that posts and wasn't removed (in an announcement channel only its managers), or a manager/admin; the registry label follows the name. Archived channels refuse both.
 - **`chat_op_archive_channel(channel, archived)`**: managers and admins; General can't be archived; a repeat changes and logs nothing.
 - **`chat_op_join`**: public, open channels; viewers too; someone a manager removed is refused (`42501 You were removed from this channel. A manager can add you back.`).
-- **`chat_op_leave`**: stamps `left_at` (never deletes); works while chat is paused; leaving twice is fine; leaving General sticks; a last manager who leaves hands the channel on (`chat__hand_over`: the workspace owner if they can read it, else its earliest remaining member whose role posts; nobody if none, admins still manage it). Leave and remove lock the channel row, so two managers leaving at once can't both skip the hand-over.
+- **`chat_op_leave`**: stamps `left_at` on an active row only (never deletes; a removal that lands meanwhile stays a removal); works while chat is paused; leaving twice is fine; leaving General sticks; a last manager who leaves hands the channel on (`chat__hand_over`: the workspace owner if they can read it, else its earliest remaining member whose role posts; nobody if none, admins still manage it). Leave and remove lock the channel row, so two managers leaving at once can't both skip the hand-over.
 - **`chat_op_add_members`**: public: any role that posts (and wasn't removed); private: managers and admins. Someone a manager removed comes back only through a manager or admin. Returns how many joined.
 - **`chat_op_remove_member`**: managers and admins; stamps `left_at` + `removed_by` on the person's own row (its `updated_at` moves, so it reaches them live); a removed last manager hands the channel on; removing yourself is leaving. This is what CV-2a's send rule ("You were removed from this conversation.") waited for.
 - **`chat_op_set_prefs(channel, notify_level, starred)`**: same signature (`starred` is "Pin to sidebar"); members who haven't left; no plan needed.
@@ -92,7 +92,7 @@ With the migration applied: `bun run db:test chat` → 10 files pass, and all 47
 - **CV-13:** add the link arguments to `chat_op_create_channel` (DROP the 6-argument one, re-grant).
 - **CV-14:** `chat_sync_ids` reads a `moved_out` line's `event.ids`.
 - **CV-23:** drop `chat_op_mark_read(uuid, timestamptz)`, `chat_op_mark_unread(uuid, timestamptz)` and `chat_normalize_channel_name`.
-- **Orchestrator:** when the stamp is re-cut, update `MIGRATION` in `src/features/chat/privacy-rules.test.ts`. `tests/chat-plan.spec.ts` now finds General by `is_default`.
+- **Orchestrator:** when the stamp is re-cut, update `MIGRATION` in `src/features/chat/privacy-rules.test.ts`. `tests/chat-plan.spec.ts` now finds General by `is_default` (intended: names are as typed, so a new workspace's General is "General"; `is_default` is what marks it). A build head with this migration but without this branch's spec change fails the spec's bootstrap path.
 
 ## Manual checklist (step → expect → surface)
 
