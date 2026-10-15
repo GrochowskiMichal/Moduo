@@ -10,7 +10,7 @@
  * see reads exactly like something that isn't there.
  */
 
-import { isClosedTask, isOpenTask } from "../_shared/contracts/vocabularies.ts";
+import { isClosedTask, isOpenTask, pickTagColor } from "../_shared/contracts/vocabularies.ts";
 import {
   queueTaskIds,
   readAllPages,
@@ -273,6 +273,42 @@ export async function shapeOne(ctx: ToolContext, row: Row): Promise<Row> {
     };
   }
   return shapeTask(row, ws, new Date(), true);
+}
+
+/**
+ * MOD-93: give every live tag without a colour the hue the app would have
+ * given it. The ops make a tag from a name alone (tasks_op_tag, a template's
+ * tags), while the app picks a colour when it makes one (pickTagColor), so a
+ * tag an agent made used to stay colourless. Tags are coloured oldest first,
+ * each counting the ones before it, so the hues spread as in the app; that
+ * also colours the ones made before this fix. Nobody ever chooses "no colour"
+ * (a recolour always names a hue), so a null is only ever a missing pick.
+ * Best effort: the call that made the tag has already succeeded, and an
+ * uncoloured tag still shows in the default hue.
+ */
+export async function colourBareTags(ctx: ToolContext): Promise<void> {
+  const ws = ctx.key.workspaceId;
+  try {
+    const tags = await rows(
+      ctx.db.from("tags").select("id, color, created_at").eq("workspace_id", ws).is("deleted_at", null),
+    );
+    const bare = tags
+      .filter((t) => !t.color)
+      .sort((a, b) =>
+        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || String(a.id).localeCompare(String(b.id)));
+    if (!bare.length) return;
+    const coloured: { color: string | null }[] = tags.filter((t) => t.color).map((t) => ({ color: t.color }));
+    for (const tag of bare) {
+      const color = pickTagColor(coloured);
+      // Only while it's still bare: a person may have just picked one.
+      const { error } = await ctx.db.from("tags").update({ color })
+        .eq("workspace_id", ws).eq("id", tag.id).is("color", null);
+      if (error) return;
+      coloured.push({ color });
+    }
+  } catch {
+    // Reading the tags failed: they keep the default hue until the next call.
+  }
 }
 
 /** Open, not closed: the one rule (TV-D9). */

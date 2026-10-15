@@ -567,3 +567,40 @@ describe("onboarding roles (TV-U17, MOD-111: kept in preferences JSON, no CHECK)
     expect(v.isTasksRole(3)).toBe(false);
   });
 });
+
+describe("label hues and a new tag's colour (MOD-93: one rule for the app and the connector)", () => {
+  it("are the eight token names, gray last", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.LABEL_COLORS).toEqual(["blue", "green", "amber", "red", "violet", "teal", "pink", "gray"]);
+    expect(v.DEFAULT_LABEL_COLOR).toBe("gray");
+  });
+
+  it("the app's palette is this one", async () => {
+    const v = await import("./vocabularies.ts");
+    const app = await import("@/components/tag-colors");
+    expect(app.LABEL_COLORS).toBe(v.LABEL_COLORS);
+    expect(app.pickTagColor).toBe(v.pickTagColor);
+  });
+
+  it("normalize known hues through, anything else to the default; parse strictly", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeLabelColor("blue")).toBe("blue");
+    expect(v.normalizeLabelColor("pink")).toBe("pink");
+    expect(v.normalizeLabelColor(null)).toBe(v.DEFAULT_LABEL_COLOR);
+    expect(v.normalizeLabelColor(undefined)).toBe(v.DEFAULT_LABEL_COLOR);
+    expect(v.normalizeLabelColor("#ff0000")).toBe(v.DEFAULT_LABEL_COLOR);
+    expect(v.parseLabelColor("teal").success).toBe(true);
+    expect(v.parseLabelColor("#ff0000").success).toBe(false);
+  });
+
+  it("pickTagColor: the least-used hue, palette order breaking ties, gray only when every hue is used", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.pickTagColor([])).toBe(v.LABEL_COLORS[0]);
+    expect(v.pickTagColor([{ color: "blue" }])).toBe(v.LABEL_COLORS[1]);
+    const mixed = [{ color: "blue" }, { color: "green" }, { color: "blue" }];
+    expect(v.pickTagColor(mixed)).toBe(v.pickTagColor(mixed));
+    expect(v.pickTagColor([{ color: "blue" }, { color: "green" }])).not.toBe("gray");
+    const colored = v.LABEL_COLORS.filter((c) => c !== "gray");
+    expect(v.pickTagColor(colored.map((color) => ({ color })))).toBe("gray");
+  });
+});

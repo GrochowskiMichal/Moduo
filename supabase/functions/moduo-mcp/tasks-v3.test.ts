@@ -33,12 +33,18 @@ type Filter = { op: "eq" | "neq"; column: string; value: unknown };
 
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown>) {
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  const updates: Array<{ table: string; values: Row; ids: unknown[] }> = [];
   function from(table: string) {
     const filters: Filter[] = [];
     let window: [number, number] | null = null;
     let cap: number | null = null;
+    let patch: Row | null = null;
     const query = {
       select: () => query,
+      update: (values: Row) => {
+        patch = values;
+        return query;
+      },
       eq: (column: string, value: unknown) => {
         filters.push({ op: "eq", column, value });
         return query;
@@ -74,6 +80,10 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         );
         if (window) all = all.slice(window[0], window[1] + 1);
         if (cap !== null) all = all.slice(0, cap);
+        if (patch) {
+          for (const row of all) Object.assign(row, patch);
+          updates.push({ table, values: patch, ids: all.map((r) => r.id) });
+        }
         return Promise.resolve({ data: all, error: null }).then(resolve);
       },
     };
@@ -89,7 +99,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       return { data: null, error: { message: (e as Error).message } };
     }
   }
-  return { db: { from, rpc }, rpcCalls };
+  return { db: { from, rpc }, rpcCalls, updates };
 }
 
 const task = (id: string, n: number, extra: Row = {}): Row => ({
@@ -454,6 +464,58 @@ describe("writes go through the ops, checked before anything is written", () => 
       p_patch: { recurrence: null },
       p_with: { tags_add: ["x"], tags_remove: ["y"] },
     });
+  });
+
+  it("a tag the op makes gets the colour the app would pick, oldest bare tag first (MOD-93)", async () => {
+    const tagRow = (id: string, name: string, color: string | null, at: string): Row => ({
+      id, workspace_id: WS, name, color, created_at: at, deleted_at: null,
+    });
+    const { ctx, tables, updates } = setup({
+      rpcs: {
+        // As tasks_op_tag: a new name becomes a tag with no colour.
+        tasks_op_create_with: (a) => {
+          for (const name of (a.p_with as Row).tags as string[]) {
+            if (!tables.tags!.some((t) => t.name === name)) {
+              tables.tags!.push(tagRow(`tag-${name}`, name, null, "2030-02-01T00:00:00Z"));
+            }
+          }
+          return { action: "created", task: task("t-new", 20, a.p_task as Row) };
+        },
+        tasks_op_update_with: (a) => {
+          for (const name of ((a.p_with as Row).tags_add as string[] | undefined) ?? []) {
+            tables.tags!.push(tagRow(`tag-${name}`, name, null, "2030-03-01T00:00:00Z"));
+          }
+          return [task(a.p_task_id as string, 1)];
+        },
+      },
+    });
+    tables.tags = [
+      tagRow("tag-1", "board", null, "2030-01-01T00:00:00Z"),
+      tagRow("tag-blue", "work", "blue", "2029-01-01T00:00:00Z"),
+      tagRow("tag-gone", "old", null, "2029-01-01T00:00:00Z"),
+    ];
+    tables.tags[2]!.deleted_at = "2029-06-01T00:00:00Z";
+    const colour = (id: string) => tables.tags!.find((t) => t.id === id)?.color;
+
+    await call("tasks_create", { title: "x", tags: ["board", "mcp"] }, ctx);
+    // blue is taken, so the bare tags get green, then amber, in the order they were made.
+    expect(colour("tag-1")).toBe("green");
+    expect(colour("tag-mcp")).toBe("amber");
+    expect(colour("tag-blue")).toBe("blue");
+    expect(colour("tag-gone")).toBeNull();
+
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["idea"] }, ctx);
+    expect(colour("tag-idea")).toBe("red");
+    // Only bare tags are written, one at a time, and never a coloured one.
+    expect(updates.map((u) => [u.ids, u.values])).toEqual([
+      [["tag-1"], { color: "green" }],
+      [["tag-mcp"], { color: "amber" }],
+      [["tag-idea"], { color: "red" }],
+    ]);
+
+    // A call that adds no tags colours nothing.
+    await call("tasks_update", { task_id: "MOD-1", title: "y" }, ctx);
+    expect(updates).toHaveLength(3);
   });
 
   it("tasks_session_status sends only the fields given", async () => {

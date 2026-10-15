@@ -62,6 +62,7 @@ import {
   archivedBucketIds,
   callOp,
   clampLimit,
+  colourBareTags,
   dayOrThrow,
   fetchProject,
   fetchTask,
@@ -930,7 +931,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_create",
       description:
-        "Create a task in one go: filed into a project and section (default: the key creator's Inbox), with a status (a category word, the project's status name or id), assignee (a member, \"me\", or null; default the key's creator), team, due date and time, estimate, priority, tags (by name; new ones are made), a repeat (RRULE), reminders, work sessions and a parent (one level). With imported_from {source, key} it remembers where it came from; sending a key you already used on a live task of yours updates that task instead (a re-run). Inside an import run (import_id), it is recorded for imports_undo. Nothing is written if any part is refused. It gets its handle (e.g. MOD-142), shows in search at once, and the trail reads \"<person> · via <key name>\".",
+        "Create a task in one go: filed into a project and section (default: the key creator's Inbox), with a status (a category word, the project's status name or id), assignee (a member, \"me\", or null; default the key's creator), team, due date and time, estimate, priority, tags (by name; new ones are made and coloured as the app colours them), a repeat (RRULE), reminders, work sessions and a parent (one level). With imported_from {source, key} it remembers where it came from; sending a key you already used on a live task of yours updates that task instead (a re-run). Inside an import run (import_id), it is recorded for imports_undo. Nothing is written if any part is refused. It gets its handle (e.g. MOD-142), shows in search at once, and the trail reads \"<person> · via <key name>\".",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -987,6 +988,8 @@ export const tasksConnectorModule: ConnectorModule = {
           p_task: task,
           p_with: extras,
         }));
+        // A tag name new to the workspace became a tag with no colour (MOD-93).
+        if (Array.isArray(extras.tags) && extras.tags.length) await colourBareTags(ctx);
         return {
           action: out.action,
           ...(await shapeOne(ctx, out.task as Row)),
@@ -1045,6 +1048,7 @@ export const tasksConnectorModule: ConnectorModule = {
           p_patch: patch,
           p_with: extras,
         }));
+        if (extras.tags_add) await colourBareTags(ctx); // MOD-93, as in tasks_create
         const row = Array.isArray(answered) ? answered[0] : answered;
         if (!row) throw new Error("The operation returned nothing.");
         // Finishing through an edit finishes its open subtasks too (call 87).
@@ -1688,6 +1692,7 @@ export const tasksConnectorModule: ConnectorModule = {
             p_template_id: str(args, "template_id"),
             p_fields: fields,
           }));
+          await colourBareTags(ctx); // a template's tags come by name (MOD-93)
           const tasks = (made?.tasks as Row[] | undefined) ?? [];
           const top = tasks.find((t) => !t.parent_id) ?? tasks[0];
           return { task: top ? await shapeOne(ctx, top) : null, tasks: tasks.length };
@@ -1699,6 +1704,7 @@ export const tasksConnectorModule: ConnectorModule = {
           p_template_id: str(args, "template_id"),
           p_fields: fields,
         }));
+        await colourBareTags(ctx);
         const project = (made?.buckets as Row[] | undefined)?.[0];
         return {
           project: project ? { id: project.id, name: project.name } : null,
