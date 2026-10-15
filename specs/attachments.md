@@ -187,7 +187,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 7. **Client pipeline** (`src/lib/uploads/`, shared):
    - **Decode:** `createImageBitmap`, or `<img>` for HEIC on WebKit.
    - **Scale:** to 4096 px for originals; 1280 px for previews.
-   - **No preview for a small image** (MOD-132): a final original (after the rules below) that is a JPEG, PNG or WebP, at most 1280 px on its long edge and at most 100 KB gets none (`originalIsItsOwnPreview`, `SELF_PREVIEW_MAX_BYTES`). Readers use `thumbnailPath` (`features/attachments/files.ts`): the preview, else that small original, signed for the preview's hour; any other image without a preview (HEIC kept as HEIC, a preview that never uploaded) stays a file tile. A GIF keeps its frame-1 preview.
+   - **No preview for a small image** (MOD-132): a final original (after the rules below) that is a JPEG, PNG or WebP, at most 1280 px on its long edge and at most 100 KB gets none (`originalIsItsOwnPreview`, `SELF_PREVIEW_MAX_BYTES`). Readers use `thumbnailPath` (`features/attachments/files.ts`): the preview, else that small original, signed for the preview's hour; any other image without a preview (HEIC kept as HEIC, a preview that never uploaded) stays a file tile. A GIF, an animated PNG (`acTL`) and an animated WebP (`ANIM`) keep their still preview (`isAnimatedImage`), so tiles never play.
    - **Encode:**
      - previews → WebP only where `toBlob('image/webp')` really returns WebP (Chromium; Safari/WKWebView silently return PNG);
      - otherwise PNG when the image has alpha, else JPEG q0.8.
