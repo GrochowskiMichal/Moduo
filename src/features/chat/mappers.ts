@@ -46,6 +46,9 @@ export function mapMember(raw: unknown): ChatMember | null {
   const channelId = str(r?.channel_id);
   const userId = str(r?.user_id);
   if (!r || !channelId || !userId) return null;
+  // Leaving or a removal stamps the row (CV-2b) instead of deleting it: to v1's
+  // screens a stamped row is no membership.
+  if (str(r.left_at)) return null;
   return {
     channelId,
     userId,

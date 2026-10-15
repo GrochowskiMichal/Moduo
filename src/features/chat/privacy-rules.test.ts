@@ -11,21 +11,16 @@ import { describe, expect, it } from "@rstest/core";
 const DB_URL =
   process.env.MODUO_DB_URL ?? "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
 // The newest migration whose behaviour chat_privacy.test.sql expects (typing for
-// members only, the ops' error codes: CV-2a), found by a function it adds.
-const MIGRATION = "20261014150000_chat_v2_core_ops.sql";
+// members only, the ops' error codes: CV-2a; conversations registered when made,
+// leaving logged, General as is_default: CV-2b), found by a function it adds.
+const MIGRATION = "20261014160000_chat_v2_conversation_ops.sql";
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const TESTS = `${ROOT}supabase/tests/`;
 
 function stackState(): "ready" | string {
   const probe = spawnSync(
     "psql",
-    [
-      DB_URL,
-      "-X",
-      "-At",
-      "-c",
-      "select to_regprocedure('public.chat_op_restore(uuid)') is not null",
-    ],
+    [DB_URL, "-X", "-At", "-c", "select to_regprocedure('public.chat_people(uuid)') is not null"],
     { encoding: "utf8", timeout: 10_000 },
   );
   if (probe.error) return `psql is not installed (${probe.error.message})`;

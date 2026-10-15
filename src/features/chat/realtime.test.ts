@@ -172,4 +172,35 @@ describe("chat live link", () => {
       rs.useRealTimers();
     }
   });
+
+  it("reads a membership row stamped left_at as leaving, and an active one as joining", () => {
+    const { link, release } = acquireChatLink("ws-4", "me");
+    const events: unknown[] = [];
+    const stop = link.subscribe((e) => events.push(e));
+    // The members subscription is the last postgres_changes handler on the db topic.
+    const onMember = byTopic("chat-db:ws-4:me")?.handlers.get("postgres_changes:*");
+    const row = {
+      channel_id: "c-9",
+      user_id: "me",
+      workspace_id: "ws-4",
+      notify_level: "mentions",
+    };
+
+    onMember?.({ eventType: "UPDATE", new: { ...row, left_at: null }, old: {} } as never);
+    onMember?.({
+      eventType: "UPDATE",
+      new: { ...row, left_at: "2026-10-15T09:00:00Z" },
+      old: {},
+    } as never);
+    onMember?.({ eventType: "DELETE", new: {}, old: { channel_id: "c-8" } } as never);
+
+    expect(events.map((e) => (e as { type: string }).type)).toEqual([
+      "membership",
+      "membership-removed",
+      "membership-removed",
+    ]);
+    expect((events[1] as { channelId: string }).channelId).toBe("c-9");
+    stop();
+    release();
+  });
 });

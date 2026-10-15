@@ -171,34 +171,11 @@ export function useChatModule({
           setState({ ...EMPTY_STATE, status: "locked" });
           return;
         }
+        // The server puts everyone in General (bootstrap and a trigger, CV-2b);
+        // someone who left it stays out, so nothing joins it from here.
         await chat.bootstrap(workspaceId);
-        let loaded = await loadAll();
+        const loaded = await loadAll();
         if (cancelled || !loaded) return;
-
-        // First visit to chat in this workspace: join #general (Slack's default).
-        const flag = `moduo:chat:autojoined:${workspaceId}:${userId}`;
-        let seen = false;
-        try {
-          seen = window.localStorage.getItem(flag) === "1";
-        } catch {
-          seen = false;
-        }
-        if (!seen) {
-          const general = loaded.channels.find((c) => c.kind === "channel" && c.name === "general");
-          if (general && !loaded.mine.some((m) => m.channelId === general.id)) {
-            try {
-              await chat.join(general.id);
-              loaded = (await loadAll()) ?? loaded;
-            } catch {
-              /* non-fatal — the channel stays one click away in Browse */
-            }
-          }
-          try {
-            window.localStorage.setItem(flag, "1");
-          } catch {
-            /* storage disabled */
-          }
-        }
         if (cancelled) return;
         applyLoaded(loaded);
         const held = acquireChatLink(workspaceId, userId);
