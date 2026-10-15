@@ -1149,6 +1149,35 @@ export function normalizeStarterTemplate(input: unknown): StarterTemplate | null
 }
 
 // ---------------------------------------------------------------------------
+// Onboarding roles (TV-U17, REPLAN §3) — the answers to "What will you run in
+// Moduo?". Kept only in the synced preferences JSON
+// (user_preferences.tasks_onboarding.role), never in a column, so there is no
+// Postgres CHECK to mirror. A role sets defaults only (src/features/tasks/
+// onboarding.ts ROLE_DEFAULTS); an unknown one reads as no answer.
+// ---------------------------------------------------------------------------
+
+export const TASKS_ROLES = [
+  "student",
+  "developer",
+  "pm",
+  "founder",
+  "client_work",
+  "creator",
+] as const;
+export type TasksRole = (typeof TASKS_ROLES)[number];
+export const tasksRoleSchema = z.enum(TASKS_ROLES);
+export function isTasksRole(value: unknown): value is TasksRole {
+  return typeof value === "string" && (TASKS_ROLES as readonly string[]).includes(value);
+}
+export function parseTasksRole(input: unknown): SafeParseResult<TasksRole> {
+  return parseOrError(tasksRoleSchema, input);
+}
+/** Lax read: a role this build doesn't know reads as no answer (null). */
+export function normalizeTasksRole(input: unknown): TasksRole | null {
+  return isTasksRole(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
 // Saved views (TV-U8, REPLAN 29d) — mirrors the CHECK on task_views.scope and
 // task_views_op_create's guard in <stamp>_task_views. A view keeps one base
 // scope: All, My tasks, Upcoming (each reader's own) or one project. Focus

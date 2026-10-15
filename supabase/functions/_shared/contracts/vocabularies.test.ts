@@ -549,3 +549,21 @@ describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
     expect(v.taskCategoryOf({ status: "todo", statusCategory: null })).toBe("todo");
   });
 });
+
+describe("onboarding roles (TV-U17, MOD-111: kept in preferences JSON, no CHECK)", () => {
+  it("are the role question's six answers, in its order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.TASKS_ROLES).toEqual(["student", "developer", "pm", "founder", "client_work", "creator"]);
+  });
+
+  it("parse strictly, normalize unknown to no answer, and guard", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.parseTasksRole("pm").success).toBe(true);
+    expect(v.parseTasksRole("designer").success).toBe(false);
+    expect(v.normalizeTasksRole("founder")).toBe("founder");
+    expect(v.normalizeTasksRole("designer")).toBeNull();
+    expect(v.normalizeTasksRole(undefined)).toBeNull();
+    expect(v.isTasksRole("creator")).toBe(true);
+    expect(v.isTasksRole(3)).toBe(false);
+  });
+});
