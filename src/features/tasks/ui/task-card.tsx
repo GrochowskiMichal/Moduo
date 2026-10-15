@@ -172,8 +172,11 @@ function TaskCardView({
         if (canEdit) onStartEdit(task.id);
       }}
       className={cn(
-        // `group` too: the Focus mark reveals on the card's hover (R6).
-        "group w-(--board-card-w) select-none",
+        // `group` too: the Focus mark reveals on the card's hover (R6). It
+        // fills its column, whose width is the fixed one: a card of the
+        // column's width overflowed it by the scrollbar's once the column
+        // scrolled, and the column scrolled sideways (MOD-143).
+        "group w-full select-none",
         canEdit && !editing && "cursor-grab active:cursor-grabbing",
         dropTarget && DROP_TARGET,
       )}
@@ -327,7 +330,13 @@ export function CardBody({
             onCancel={onEndEdit}
           />
         ) : (
-          <span className={cn("font-sans", closed && "line-through decoration-subtle-foreground")}>
+          // A long title wraps to three lines at most (MOD-143).
+          <span
+            className={cn(
+              "line-clamp-3 font-sans",
+              closed && "line-through decoration-subtle-foreground",
+            )}
+          >
             {task.title || "Untitled"}
           </span>
         )}

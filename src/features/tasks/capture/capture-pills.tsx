@@ -11,7 +11,6 @@ import {
   CalendarDays,
   Check,
   CircleDot,
-  Flag,
   Hash,
   Hourglass,
   MoreHorizontal,
@@ -35,6 +34,7 @@ import { isoDay } from "../../spine/grammar";
 import type { PriorityLevel, RecurrenceRule, Tag, Team } from "../model";
 import { RECURRENCE_PRESETS, recurrenceFromPreset, recurrenceLabel } from "../parse/recurrence";
 import { CATEGORY_LABELS } from "../statuses";
+import { PriorityIcon } from "../ui/level-icons";
 import { estimateLabel } from "./capture-menus";
 
 export type PillPerson = {
@@ -144,24 +144,32 @@ export function CapturePills({
   const assigneeId = values.assigneeId === undefined ? me : values.assigneeId;
   const someoneElse = assigneeId && assigneeId !== me ? assigneeId : null;
   const other = personOf(people, someoneElse);
+  // You: picked or named, or by default unless a team takes it (a team task
+  // with nobody picked is the team's to claim, 54). Said like anyone else,
+  // with your photo, as "You" (MOD-135).
+  const mine =
+    me !== null && (values.assigneeId === me || (values.assigneeId === undefined && !team));
+  const shown = someoneElse
+    ? { id: someoneElse, ...other }
+    : mine && me
+      ? { id: me, ...personOf(people, me), name: "You" }
+      : null;
   const toggle = (pill: Exclude<OpenPill, null>) => (next: boolean) =>
     onOpenChange(next ? pill : null);
 
   // Assign: a person (round), a team (square), or both.
   const assignValue =
-    someoneElse || team ? (
+    shown || team ? (
       <span className="flex min-w-0 items-center gap-1.5">
-        {someoneElse ? (
-          <PersonAvatar name={other.avatar} id={someoneElse} src={other.avatarUrl} />
-        ) : null}
+        {shown ? <PersonAvatar name={shown.avatar} id={shown.id} src={shown.avatarUrl} /> : null}
         {team ? (
           <TeamMark name={team.name} id={team.id} letters={team.mark || null} color={team.color} />
         ) : null}
         <span className="truncate">
-          {someoneElse
+          {shown
             ? team
-              ? `${other.name} · ${team.name}`
-              : other.name
+              ? `${shown.name} · ${team.name}`
+              : shown.name
             : `${team?.name} · unclaimed`}
         </span>
       </span>
@@ -183,7 +191,7 @@ export function CapturePills({
     <div className="flex flex-wrap items-center gap-1.5">
       <PickerPill
         label="Assign"
-        icon={someoneElse || team ? undefined : User}
+        icon={shown || team ? undefined : User}
         value={assignValue}
         open={open === "assign"}
         onOpenChange={toggle("assign")}
@@ -304,7 +312,9 @@ export function CapturePills({
           />
           <PickerPill
             label="Priority"
-            icon={Flag}
+            // The app's three bars, as rows and the details show priority:
+            // the level's bars once set, all faint while unset (MOD-134).
+            icon={<PriorityIcon level={values.priority} />}
             value={
               values.priority ? PRIORITIES.find((p) => p.level === values.priority)?.label : null
             }
@@ -317,13 +327,18 @@ export function CapturePills({
                     key={p.level}
                     onSelect={() => onChange({ field: "priority", value: p.level })}
                   >
-                    <Flag className="text-muted-foreground" aria-hidden />
+                    <span className="flex size-icon-sm items-center text-muted-foreground">
+                      <PriorityIcon level={p.level} />
+                    </span>
                     {p.label}
                     {values.priority === p.level ? <Check className="ms-auto" aria-hidden /> : null}
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => onChange({ field: "priority", value: null })}>
+                  <span className="flex size-icon-sm items-center text-muted-foreground">
+                    <PriorityIcon level={null} />
+                  </span>
                   No priority
                 </DropdownMenuItem>
               </>
