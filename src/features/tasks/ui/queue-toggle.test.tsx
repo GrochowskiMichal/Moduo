@@ -6,7 +6,14 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const PEOPLE = {
-  u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  u1: {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   u2: { userId: "u2", name: "Mike", avatarUrl: null, isMe: false, canTakeTasks: true },
   u3: { userId: "u3", name: "Ola", avatarUrl: null, isMe: false, canTakeTasks: true },
 } as const;
@@ -209,12 +216,12 @@ describe("TaskRow in My tasks (D4-4)", () => {
 
   it("shows the assignee avatar elsewhere in a team workspace", () => {
     renderRow(true);
-    expect(screen.getByLabelText("Assignee: Me")).toBeTruthy();
+    expect(screen.getByLabelText("Assignee: You")).toBeTruthy();
   });
 
   it("leaves it out in My tasks", () => {
     renderRow(false);
-    expect(screen.queryByLabelText("Assignee: Me")).toBeNull();
+    expect(screen.queryByLabelText("Assignee: You")).toBeNull();
   });
 });
 

@@ -748,7 +748,7 @@ function RowAgentMark({ mark }: { mark: string }) {
   );
 }
 
-/** Detailed's assignee cell: the first name ("Mike" of "Mike Grochowski"; "Me" stays). */
+/** Detailed's assignee cell: the first name ("Mike" of "Mike Grochowski"; "You" stays, MOD-137). */
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] ?? name;
 }

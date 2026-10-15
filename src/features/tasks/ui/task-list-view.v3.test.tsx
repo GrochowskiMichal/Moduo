@@ -11,7 +11,14 @@ import { useState } from "react";
 rs.mock("../assignees", () => ({
   useAssignees: () => ({
     assignees: [
-      { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+      {
+        userId: "u1",
+        name: "You",
+        fullName: "Alex Rivera",
+        avatarUrl: null,
+        isMe: true,
+        canTakeTasks: true,
+      },
       { userId: "u2", name: "Mike", avatarUrl: null, isMe: false, canTakeTasks: true },
     ],
     currentUserId: "u1",

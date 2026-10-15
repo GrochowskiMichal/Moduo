@@ -35,7 +35,8 @@ const ASSIGNEE: FilterDimension = {
   id: "assignee",
   label: "Assignee",
   options: [
-    { value: "me", label: "Me" },
+    // The picker names you "Alex Rivera (you)", the chip "You" (MOD-137).
+    { value: "me", label: "Alex Rivera (you)", chipLabel: "You", keywords: ["me"] },
     { value: "ola", label: "Ola", keywords: ["ola@example.com"] },
     { value: "none", label: "Unassigned" },
   ],
@@ -205,10 +206,10 @@ describe("FilterBar", () => {
         ]}
       />,
     );
-    const assignee = screen.getByRole("group", { name: "Assignee is Me" });
+    const assignee = screen.getByRole("group", { name: "Assignee is You" });
     expect(within(assignee).getByText("Assignee")).toBeTruthy();
     expect(within(assignee).getByText("is")).toBeTruthy();
-    expect(within(assignee).getByText("Me")).toBeTruthy();
+    expect(within(assignee).getByText("You")).toBeTruthy();
     expect(screen.getByRole("group", { name: "Tag is any of UI, fix" })).toBeTruthy();
     expect(screen.getByText("23 of 76")).toBeTruthy();
 
@@ -232,7 +233,7 @@ describe("FilterBar", () => {
         ]}
       />,
     );
-    const remove = screen.getByRole("button", { name: "Remove filter: Assignee is Me" });
+    const remove = screen.getByRole("button", { name: "Remove filter: Assignee is You" });
     remove.focus();
     fireEvent.click(remove);
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add filter" }));
@@ -247,7 +248,7 @@ describe("FilterBar", () => {
         ]}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Remove filter: Assignee is Me" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter: Assignee is You" }));
     expect(state()).toEqual([{ dimension: "tag", operator: "is", values: ["ui"] }]);
   });
 
@@ -281,12 +282,12 @@ describe("FilterMenu", () => {
     fireEvent.change(search, { target: { value: "up" } });
     expect(screen.queryAllByRole("option")).toEqual([]);
     expect(screen.getByText("No matches.")).toBeTruthy();
-    // "me" finds Assignee › Me, not the Tag dimension (its id is "dimension:tag").
+    // "me" finds you by your keyword, not the Tag dimension (its id is "dimension:tag").
     fireEvent.change(search, { target: { value: "me" } });
     const names = screen
       .getAllByRole("option")
       .map((o) => o.getAttribute("aria-label") ?? o.textContent);
-    expect(names).toContain("Assignee › Me");
+    expect(names).toContain("Assignee › Alex Rivera (you)");
     expect(names).not.toContain("Tag");
   });
 
@@ -324,7 +325,7 @@ describe("FilterMenu", () => {
     fireEvent.click(screen.getByRole("option", { name: "Ola" }));
     expect(state()).toEqual([{ dimension: "assignee", operator: "is", values: ["ola"] }]);
     // A multi-value dimension keeps the menu open for a second pick.
-    fireEvent.click(screen.getByRole("option", { name: "Me" }));
+    fireEvent.click(screen.getByRole("option", { name: "Alex Rivera (you)" }));
     expect(state()).toEqual([{ dimension: "assignee", operator: "any_of", values: ["ola", "me"] }]);
     expect(screen.getByRole("button", { name: "Filter, 1 active" })).toBeTruthy();
   });

@@ -1,5 +1,5 @@
 // Tasks' welcome (TV-U17, tasks-v3 §16, REPLAN 34): the role question once per
-// person, then the basics with "Learn more" / "Explore on my own", then up to
+// person, then the basics with "Learn more" / "Explore on your own" (MOD-137), then up to
 // three steps, each a short clip recorded from the real app with one or two
 // sentences: (1) above the line is yours, below it is shared; (2) line things
 // up in Focus; (3) `@` `#` `/`. Back / Next, progress dots, a Close that's
@@ -184,7 +184,7 @@ function BasicsStep({
       ) : null}
       <DialogFooter>
         <Button variant="ghost" onClick={onExplore}>
-          Explore on my own
+          Explore on your own
         </Button>
         <Button onClick={onLearnMore}>Learn more</Button>
       </DialogFooter>

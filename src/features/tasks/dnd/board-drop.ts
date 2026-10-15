@@ -51,7 +51,25 @@ export type BoardDropContext = {
   statusesFor: (bucketId: string) => readonly ProjectStatus[];
   /** The task's parent, when it has one (a project move may detach it). */
   parent: Pick<Task, "bucketId"> | null;
+  /** The reader, so a toast says "Assigned to you" (MOD-137). */
+  selfId?: string | null;
 };
+
+/**
+ * A target's name inside a sentence: "you" when it names the reader (whose
+ * column reads "You", MOD-137), otherwise the column's label.
+ */
+export function targetName(
+  target: BoardTarget | null,
+  label: string,
+  selfId: string | null | undefined,
+): string {
+  if (!selfId || !target) return label;
+  const self =
+    (target.field === "assignee" && target.value === selfId) ||
+    (target.field === "waiting" && target.kind === "person" && target.ref === selfId);
+  return self ? "you" : label;
+}
 
 /** Whether a target takes this task: never the Inbox for a project's task. */
 export function targetAccepts(
@@ -152,7 +170,10 @@ export function planBoardDrop(input: {
     return {
       kind: "waiting",
       entry: { kind, ref, label: words },
-      label: targetLabel(dest.column.target, dest.column.label),
+      label: targetLabel(
+        dest.column.target,
+        targetName(dest.column.target, dest.column.label, ctx.selfId),
+      ),
     };
   }
   if (columnMoved) {
@@ -160,14 +181,14 @@ export function planBoardDrop(input: {
     const fields = target ? targetWrite(target, task, ctx) : null;
     if (!target || !fields) return { kind: "none" };
     write = { ...write, ...fields };
-    label = targetLabel(target, dest.column.label);
+    label = targetLabel(target, targetName(target, dest.column.label, ctx.selfId));
   }
   if (laneMoved) {
     const target = dest.lane?.target ?? null;
     const fields = target ? targetWrite(target, task, ctx) : null;
     if (!target || !fields || !dest.lane) return { kind: "none" };
     write = { ...write, ...fields };
-    if (!columnMoved) label = targetLabel(target, dest.lane.label);
+    if (!columnMoved) label = targetLabel(target, targetName(target, dest.lane.label, ctx.selfId));
   }
   if (position !== null) write.position = position;
   return { kind: "write", write, label };

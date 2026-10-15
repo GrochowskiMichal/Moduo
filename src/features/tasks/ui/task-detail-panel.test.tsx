@@ -6,7 +6,14 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 const PEOPLE = {
-  u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  u1: {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   u2: { userId: "u2", name: "Mike", avatarUrl: null, isMe: false, canTakeTasks: true },
 } as const;
 
@@ -777,6 +784,27 @@ describe("an unset priority draws the bars, as capture does (MOD-134)", () => {
     renderPanel(task({ priority: "high" }), api(task({ priority: "high" })));
     const value = screen.getByRole("button", { name: "Priority: High" });
     expect(value.querySelector('svg[data-level="3"]')).toBeTruthy();
+  });
+});
+
+describe("one way to name you (MOD-137)", () => {
+  it("your task's assignee reads You; the picker lists you as your name plus (you)", async () => {
+    renderPanel(task(), api(task()));
+    const value = screen.getByRole("button", { name: "Assignee: You" });
+    expect(value.textContent).toContain("You");
+    fireEvent.click(value);
+    expect(await screen.findByRole("option", { name: /Alex Rivera \(you\)$/ })).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /\bMe$/ })).toBeNull();
+  });
+
+  it("an empty Reminder reads Add reminder, never Remind me", async () => {
+    renderPanel(task(), api(task()));
+    const menu = await openAddMenu();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Reminder" }));
+    await waitFor(() => expect(shownRows()).toContain("Reminder"));
+    const value = screen.getByRole("button", { name: "Reminder: add one", hidden: true });
+    expect(value.textContent).toContain("Add reminder");
+    expect(document.body.textContent).not.toContain("Remind me");
   });
 });
 

@@ -21,7 +21,11 @@ const DEFAULT_OPERATORS: readonly FilterOperator[] = ["is", "is_not", "any_of"];
 
 export type FilterOption = {
   value: string;
+  /** How the value reads in pickers. */
   label: string;
+  /** How it reads once picked (the chip and its accessible name) when that
+   *  differs from the picker's: "You" for the list's "Alex Rivera (you)". */
+  chipLabel?: string;
   /** A leading glyph in pickers. */
   icon?: FilterIcon;
   /** A leading node in pickers when an icon won't do: a tag's colour dot, an
@@ -196,20 +200,22 @@ export function matchesFilters<T>(
   });
 }
 
-/** The chip's value text: up to two labels, then "+N". An option the module
- *  no longer lists shows its raw value. */
+/** A picked value's words: its chip label, else its picker label, else the
+ *  raw value (an option the module no longer lists). */
+function pickedLabel(dimension: FilterDimension, value: string): string {
+  const option = dimension.options.find((o) => o.value === value);
+  return option?.chipLabel ?? option?.label ?? value;
+}
+
+/** The chip's value text: up to two labels, then "+N". */
 export function conditionValueText(condition: FilterCondition, dimension: FilterDimension): string {
-  const labels = condition.values.map(
-    (v) => dimension.options.find((o) => o.value === v)?.label ?? v,
-  );
+  const labels = condition.values.map((v) => pickedLabel(dimension, v));
   if (labels.length <= 2) return labels.join(", ");
   return `${labels.slice(0, 2).join(", ")} +${labels.length - 2}`;
 }
 
 /** The whole condition as one sentence, for accessible names. */
 export function describeCondition(condition: FilterCondition, dimension: FilterDimension): string {
-  const labels = condition.values.map(
-    (v) => dimension.options.find((o) => o.value === v)?.label ?? v,
-  );
+  const labels = condition.values.map((v) => pickedLabel(dimension, v));
   return `${dimension.label} ${FILTER_OPERATOR_LABEL[condition.operator]} ${labels.join(", ")}`;
 }

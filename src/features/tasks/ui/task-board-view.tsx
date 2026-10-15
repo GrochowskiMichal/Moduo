@@ -43,7 +43,7 @@ import {
   type SubtaskMode,
   type TaskOrder,
 } from "../display";
-import { type BoardCellRef, planBoardDrop, targetAccepts } from "../dnd/board-drop";
+import { type BoardCellRef, planBoardDrop, targetAccepts, targetName } from "../dnd/board-drop";
 import { positionNextTo } from "../dnd/drop-mode";
 import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
@@ -633,6 +633,7 @@ export function TaskBoardView({
     inboxId,
     statusesFor,
     parent: task.parentId ? (taskById.get(task.parentId) ?? null) : null,
+    selfId: api.currentUserId,
   });
 
   // Screen readers hear titles and column names, never ids (standalone
@@ -689,7 +690,12 @@ export function TaskBoardView({
         multi && multi.ids.size >= 2 && multi.ids.has(task.id)
           ? inViewOrder(multi.ids, selectionRef.current.order)
           : [task.id];
-      void api.bulkWaiting(ids, decision.entry, dest.column.label, api.waiting);
+      void api.bulkWaiting(
+        ids,
+        decision.entry,
+        targetName(dest.column.target, dest.column.label, api.currentUserId),
+        api.waiting,
+      );
     } else if (decision.kind === "write") {
       // A card of a selection carries the selection (TV-U12): one write, one Undo.
       const multi = selectionRef.current.multiSelect;
@@ -759,7 +765,12 @@ export function TaskBoardView({
       });
       if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
       if (decision.kind === "waiting") {
-        void api.bulkWaiting([task.id], decision.entry, column.label, api.waiting);
+        void api.bulkWaiting(
+          [task.id],
+          decision.entry,
+          targetName(column.target, column.label, api.currentUserId),
+          api.waiting,
+        );
       }
       return;
     }

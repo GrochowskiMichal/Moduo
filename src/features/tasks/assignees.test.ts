@@ -7,9 +7,12 @@ import { describe, expect, it } from "@rstest/core";
 import type { WorkspaceMember } from "../workspaces/types";
 import { mapMember, withOwnName } from "../workspaces/workspace-mappers";
 import {
+  assigneeInSentence,
   assigneeLabel,
+  assigneeListName,
   assigneeOptions,
   fromAssigneeValue,
+  SELF_KEYWORDS,
   toAssignees,
   toAssigneeValue,
   UNASSIGNED,
@@ -50,13 +53,21 @@ const assignees = toAssignees(MEMBERS, "me");
 const byId = (id: string | null | undefined) => assignees.find((a) => a.userId === id) ?? null;
 
 describe("Unassigned option + former member", () => {
-  it("lists Unassigned first, then active members (me first); viewers can't be picked", () => {
+  it("lists Unassigned first, then active members (you first); viewers can't be picked", () => {
     const options = assigneeOptions(assignees);
     expect(options.map((o) => [o.value, o.label, o.disabled])).toEqual([
       [UNASSIGNED, "Unassigned", false],
-      ["me", "Me", false],
+      ["me", "Maciej (you)", false],
       ["mike", "Mike", false],
       ["vera", "Vera (view only)", true],
+    ]);
+  });
+
+  it("marks you in a picker even when you can only view", () => {
+    const viewer = toAssignees([member("me", "Maciej", ["tasks.view"])], "me");
+    expect(assigneeOptions(viewer).map((o) => o.label)).toEqual([
+      "Unassigned",
+      "Maciej (you) (view only)",
     ]);
   });
 
@@ -66,10 +77,38 @@ describe("Unassigned option + former member", () => {
     expect(fromAssigneeValue(toAssigneeValue("mike"))).toBe("mike");
   });
 
-  it("reads Unassigned, a member's name, or Former member for someone who left", () => {
+  it("reads Unassigned, You, a member's name, or Former member for someone who left", () => {
     expect(assigneeLabel(null, byId)).toBe("Unassigned");
+    expect(assigneeLabel("me", byId)).toBe("You");
     expect(assigneeLabel("mike", byId)).toBe("Mike");
     expect(assigneeLabel("gone", byId)).toBe("Former member");
+  });
+});
+
+describe("one way to name you (MOD-137)", () => {
+  const you = byId("me");
+  const mike = byId("mike");
+
+  it("never names you Me: You as a value, your name plus (you) in a list, you in a sentence", () => {
+    if (!you || !mike) throw new Error("fixture");
+    expect(you.name).toBe("You");
+    expect(you.fullName).toBe("Maciej");
+    expect(assigneeListName(you)).toBe("Maciej (you)");
+    expect(assigneeInSentence(you)).toBe("you");
+    expect(mike.name).toBe("Mike");
+    expect(assigneeListName(mike)).toBe("Mike");
+    expect(assigneeInSentence(mike)).toBe("Mike");
+  });
+
+  it("lists you as You while you have no name yet, never 'You (you)'", () => {
+    const [nameless] = toAssignees([member("me", "", ["tasks.view", "tasks.edit"])], "me");
+    if (!nameless) throw new Error("fixture");
+    expect(nameless.name).toBe("You");
+    expect(assigneeListName(nameless)).toBe("You");
+  });
+
+  it("finds you by me, mine or you in a picker's search", () => {
+    expect(SELF_KEYWORDS).toEqual(["me", "mine", "you"]);
   });
 });
 

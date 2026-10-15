@@ -1,5 +1,5 @@
 // TV-U17 · Tasks' welcome: the role question once, the basics with "Learn
-// more" / "Explore on my own", three steps with Back / Next and dots, Esc and
+// more" / "Explore on your own", three steps with Back / Next and dots, Esc and
 // Close always there; and when it opens by itself (once per person, never for
 // someone who already made tasks here), what it seeds, and what a role answer
 // does.
@@ -64,7 +64,7 @@ describe("the dialog", () => {
     expect(welcome.close).toHaveBeenCalled();
   });
 
-  it("the basics: three lines, Learn more or Explore on my own, and where a starter went", () => {
+  it("the basics: three lines, Learn more or Explore on your own, and where a starter went", () => {
     const welcome = fakeWelcome("basics", { starterName: "Project kickoff" });
     render(<TasksWelcomeDialog welcome={welcome} />);
     expect(screen.getByRole("heading", { name: "Welcome to Tasks" })).toBeTruthy();
@@ -72,7 +72,7 @@ describe("the dialog", () => {
     expect(screen.getByText(/Project kickoff is in your templates/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Learn more" }));
     expect(welcome.setStep).toHaveBeenCalledWith(1);
-    fireEvent.click(screen.getByRole("button", { name: "Explore on my own" }));
+    fireEvent.click(screen.getByRole("button", { name: "Explore on your own" }));
     expect(welcome.close).toHaveBeenCalled();
   });
 
