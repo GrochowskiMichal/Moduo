@@ -115,10 +115,13 @@ function who(person: WorkspacePerson): string {
   return plainName(person) ?? singleLine(person.email, 254);
 }
 
-/** A typed label (workspace, role) when it is set and doesn't read like a link, else null. */
+/** A typed label (workspace, role) when it is set and doesn't read like a link, like us or like a spoof, else null. */
 function linkFree(value: string): string | null {
   const label = name(value);
-  return label && !LINK_LIKE.test(skeleton(label)) ? label : null;
+  if (!label) return null;
+  const read = skeleton(label);
+  if (LINK_LIKE.test(read) || /moduo/.test(read) || MIXED_SCRIPT.test(label.normalize("NFKC"))) return null;
+  return label;
 }
 
 function workspaceLabel(value: string): string {

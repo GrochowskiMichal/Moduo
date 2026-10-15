@@ -21,7 +21,7 @@ function storage(): Storage | null {
 }
 
 /** A pending join older than this is someone's abandoned sign-in, not this one's. */
-export const PENDING_JOIN_TTL_MS = 60 * 60 * 1000;
+export const PENDING_JOIN_TTL_MS = 24 * 60 * 60 * 1000;
 
 export function setPendingJoin(token: string, now: number = Date.now()): void {
   storage()?.setItem(PENDING_JOIN_KEY, JSON.stringify({ token, at: now }));
@@ -29,7 +29,8 @@ export function setPendingJoin(token: string, now: number = Date.now()): void {
 
 /**
  * The pending invite token, removed as it is read; null when there is none or
- * it is older than an hour. A bare token (written by builds before TX-7)
+ * it is older than a day (agent's choice: a sign-in finished the next day
+ * still lands in the workspace; an abandoned one stops steering sign-ins). A bare token (written by builds before TX-7)
  * counts as fresh.
  */
 export function takePendingJoin(now: number = Date.now()): string | null {

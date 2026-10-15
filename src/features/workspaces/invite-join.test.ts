@@ -20,7 +20,7 @@ describe("pending join", () => {
     expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBeNull();
   });
 
-  it("is dropped after an hour, so an abandoned invite doesn't hijack a later sign-in", () => {
+  it("is dropped after a day, so an abandoned invite doesn't hijack a later sign-in", () => {
     setPendingJoin("ab+cd/ef==", 0);
     expect(takePendingJoin(PENDING_JOIN_TTL_MS + 1)).toBeNull();
     expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBeNull();

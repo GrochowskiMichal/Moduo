@@ -143,6 +143,9 @@ SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites
 SELECT test.ok((SELECT expires_at = now() + interval '7 days' AND token <> 'chosen-token' AND created_at = now()
                   FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')),
   'none of them change');
+SELECT test.ok(test.as_user('O', format($q$UPDATE public.workspace_invites SET workspace_id = %L WHERE id = %L$q$,
+  test.id('W2'), test.invite_id('tom@becker.studio'))) = '42501 An invite can''t move to another workspace. Send a new one.',
+  'an invite cannot move to another workspace (its daily cap never saw it)');
 SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET status = 'pending' WHERE id = %L$q$,
   test.invite_id('gone@becker.studio'))) = '42501 This invite can''t be changed back. Send a new one.',
   'a revoked invite cannot be brought back');

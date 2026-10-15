@@ -283,7 +283,7 @@ All agent steps, each needing Maciej's OK in the session, in this order. Until s
    bun run functions:reconcile
    ```
    Expect `404` (the gateway's `NOT_FOUND`) and a clean reconcile. Its secret `WORKSPACE_INVITE_WEBHOOK_SECRET` was never set, so there is nothing to remove.
-4. **The app** (join page mismatch state, the pending-join fix, the "Invite sent" toast) ships through develop → `staging-app` → "Promote to production" → `app`. Until then an invitee on the old build who signs in with a code lands in onboarding and has to open the invite link again, and a mismatched address sees the raw `invite_email_mismatch`.
+4. **The app** (join page mismatch state, the pending-join fix, the "Invite sent" toast) ships through develop → `staging-app` → "Promote to production" → `app`, **in the same train as step 2 or after it**: before the migration, the toast says "Invite sent" while the old trigger still sends nothing. Until then an invitee on the old build who signs in with a code lands in onboarding and has to open the invite link again, and a mismatched address sees the raw `invite_email_mismatch`.
 5. **Live check** (docs/testing/ checklist for TX-7): invite a throwaway address you can read from Settings → Members and access → B3 "<you> invited you to <workspace>" from "<you> via Moduo", reply-to you → "Accept invite" opens `app.moduo.app/join?invite=…` → sign in with a code → you land in the workspace, not onboarding. Read the rows:
    ```sql
    select kind, status, attempts, last_error, dedupe_key from public.email_outbox

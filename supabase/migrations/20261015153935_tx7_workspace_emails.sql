@@ -114,6 +114,9 @@ BEGIN
     -- revoke, or accept through the op) can't extend an invite, swap its token,
     -- or bring a used or revoked one back (each would be an invite the daily
     -- cap and B3 never saw). Server SQL (no signed-in person) still can.
+    IF NEW.workspace_id IS DISTINCT FROM OLD.workspace_id THEN
+      RAISE EXCEPTION 'An invite can''t move to another workspace. Send a new one.' USING ERRCODE = '42501';
+    END IF;
     NEW.token := OLD.token;
     NEW.created_by := OLD.created_by;
     NEW.created_at := OLD.created_at;
