@@ -11,6 +11,7 @@
 import type { EmailKind } from "../../contracts/vocabularies.ts";
 import type { EmailDoc } from "../blocks.ts";
 import { type RenderedEmail, type RenderOptions, renderEmail } from "../render.ts";
+import { type AccountDeletedData, accountDeletedEmail } from "./account-deleted.ts";
 import { type AuthCodeData, authCodeEmail } from "./auth-code.ts";
 import {
   type BookingEmailData,
@@ -23,6 +24,7 @@ import {
 import { type OpsAlertData, opsAlertEmail } from "./ops-alert.ts";
 import { type WaitlistInviteData, waitlistInviteEmail } from "./waitlist-invite.ts";
 
+export { type AccountDeletedData, accountDeletedEmail } from "./account-deleted.ts";
 export { AUTH_CODE_VALID_MINUTES } from "./auth-code.ts";
 export { EMAIL_RUNBOOK_URL, OPS_ALERT_RECIPIENT, type OpsAlertData, parseOpsAlertPayload } from "./ops-alert.ts";
 export { BOOKING_QUEUED, BOOKING_SETTINGS_URL, type BookingEmailData, parseBookingPayload } from "./booking.ts";
@@ -40,6 +42,7 @@ export {
 
 export interface EmailTemplateData {
   auth_code: AuthCodeData;
+  account_deleted: AccountDeletedData;
   waitlist_invite: WaitlistInviteData;
   ops_alert: OpsAlertData;
   booking_guest_confirmed: BookingEmailData;
@@ -53,6 +56,7 @@ export type BuiltEmailKind = keyof EmailTemplateData & EmailKind;
 
 export const EMAIL_TEMPLATES: { [K in BuiltEmailKind]: (data: EmailTemplateData[K]) => EmailDoc } = {
   auth_code: authCodeEmail,
+  account_deleted: accountDeletedEmail,
   waitlist_invite: waitlistInviteEmail,
   ops_alert: opsAlertEmail,
   booking_guest_confirmed: bookingGuestConfirmedEmail,

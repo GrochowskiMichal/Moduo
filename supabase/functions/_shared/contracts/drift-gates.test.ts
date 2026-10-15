@@ -22,6 +22,7 @@ import {
   CONTENT_AUTHOR_KINDS,
   DATE_ORDERS,
   EMAIL_KINDS,
+  EMAIL_KINDS_BY_SWITCH,
   EMAIL_OUTBOX_STATUSES,
   EMAIL_STREAMS,
   EMAIL_SUBSCRIPTION_SOURCES,
@@ -115,6 +116,14 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`kind IN (${inList(EMAIL_KINDS)})`);
     expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
+  });
+
+  it("the worker's preference filter lists the canonical kinds per switch (TX-8)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261015153000_tx8_email_preferences.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`NOT p.bookings AND o.kind IN (${inList(EMAIL_KINDS_BY_SWITCH.bookings)})`);
+    expect(sql).toContain(`NOT p.trial_billing AND o.kind IN (${inList(EMAIL_KINDS_BY_SWITCH.trial_billing)})`);
+    expect(Object.keys(EMAIL_KINDS_BY_SWITCH).sort()).toEqual(["bookings", "trial_billing"]);
   });
 
   it("email_suppressions CHECK lists the canonical suppression reasons", () => {

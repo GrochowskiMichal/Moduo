@@ -7,9 +7,11 @@ import {
   type ErasureDb,
   type ErasureDeps,
   ErasureError,
+  type ErasureFarewell,
   type ErasureStep,
   type ErasureStripe,
   erasureErrorMessage,
+  type FarewellEmail,
   type StorageBucket,
   type StorageEntry,
 } from "./account-erasure.ts";
@@ -328,6 +330,20 @@ function stripeError(message: string, statusCode: number, code?: string) {
   return Object.assign(new Error(message), { statusCode, code });
 }
 
+/** Records A2 sends; `failWith` makes the next send throw. */
+class FakeFarewell implements ErasureFarewell {
+  sent: FarewellEmail[] = [];
+  failWith: Error | null = null;
+  /** Set by a test to see the world at the moment of the send. */
+  onSend: (() => void) | null = null;
+
+  async send(email: FarewellEmail): Promise<void> {
+    this.onSend?.();
+    if (this.failWith) throw this.failWith;
+    this.sent.push(email);
+  }
+}
+
 // ── A workspace world: the user deleting their account, and people who stay ───
 
 const ME = "11111111-1111-4111-8111-111111111111";
@@ -394,6 +410,24 @@ function world() {
       { id: "found-1", email: MY_EMAIL },
       { id: "found-2", email: "other@example.com" },
     ],
+    user_preferences: [
+      { user_id: ME, time_zone: "Asia/Tokyo" },
+      { user_id: OTHER, time_zone: "Europe/Warsaw" },
+    ],
+    email_outbox: [
+      // A booking email to me as a host, and my waitlist invite (TX-4 logs it with no account id).
+      { id: "out-1", kind: "booking_host_new", to_email: MY_EMAIL, to_user_id: ME },
+      { id: "out-2", kind: "waitlist_invite", to_email: MY_EMAIL, to_user_id: null },
+      // Logged under my account id after an address change.
+      { id: "out-3", kind: "auth_code", to_email: "old-me@example.com", to_user_id: ME },
+      { id: "out-4", kind: "booking_host_new", to_email: "other@example.com", to_user_id: OTHER },
+      { id: "out-5", kind: "booking_guest_confirmed", to_email: "guest1@example.com", to_user_id: null },
+    ],
+    email_suppressions: [{ email: "other@example.com", reason: "bounce" }],
+    email_subscriptions: [
+      { email: MY_EMAIL, status: "subscribed", user_id: ME },
+      { email: "other@example.com", status: "subscribed", user_id: OTHER },
+    ],
   });
   db.users.add(ME);
   db.users.add(OTHER);
@@ -428,8 +462,9 @@ function world() {
   stripe.addCustomer("cus_other", OTHER, [["sub_other", "active"]]);
 
   const posthog = new FakePostHog();
-  const deps: ErasureDeps = { db, stripe, posthog };
-  return { db, stripe, posthog, deps };
+  const farewell = new FakeFarewell();
+  const deps: ErasureDeps = { db, stripe, posthog, farewell };
+  return { db, stripe, posthog, farewell, deps };
 }
 
 const me = { id: ME, email: MY_EMAIL };
@@ -721,7 +756,7 @@ describe("deleteAccount — Stripe records", () => {
     const withCustomer = world();
     expect(
       await failedStep(
-        deleteAccount({ db: withCustomer.db, stripe: null, posthog: withCustomer.posthog }, me),
+        deleteAccount({ ...withCustomer.deps, stripe: null }, me),
       ),
     ).toBe("stripe");
     expect(withCustomer.db.log).toEqual([]);
@@ -730,7 +765,7 @@ describe("deleteAccount — Stripe records", () => {
     const withoutCustomer = world();
     withoutCustomer.db.tables.profiles[0].stripe_customer_id = null;
     const result = await deleteAccount(
-      { db: withoutCustomer.db, stripe: null, posthog: withoutCustomer.posthog },
+      { ...withoutCustomer.deps, stripe: null },
       me,
     );
     expect(result).toEqual({ status: "deleted", warnings: ["stripe_not_configured"] });
@@ -1031,6 +1066,114 @@ describe("deleteAccount — failures leave a retryable account", () => {
   });
 });
 
+describe("deleteAccount — email records and the A2 email (TX-8)", () => {
+  it("erases the address's outbox rows, subscription and do-not-email entry, and nobody else's", async () => {
+    const { db, deps } = world();
+    db.tables.email_suppressions.push({ email: "someone@example.com", reason: "complaint" });
+
+    await deleteAccount(deps, me);
+
+    expect(ids(db.rows("email_outbox"))).toEqual(["out-4", "out-5"]);
+    expect(db.rows("email_subscriptions").map((r) => r.email)).toEqual(["other@example.com"]);
+    expect(db.rows("email_suppressions").map((r) => r.email)).toEqual([
+      "other@example.com",
+      "someone@example.com",
+    ]);
+  });
+
+  it("sends A2 once, after the auth user is gone and the email rows are erased", async () => {
+    const { db, farewell, deps } = world();
+    let seenAtSend: { userGone: boolean; outbox: unknown[] } | null = null;
+    farewell.onSend = () => {
+      seenAtSend = { userGone: !db.users.has(ME), outbox: ids(db.rows("email_outbox")) };
+    };
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: [] });
+    expect(farewell.sent).toHaveLength(1);
+    expect(farewell.sent[0]).toMatchObject({
+      userId: ME,
+      email: MY_EMAIL,
+      zone: "Asia/Tokyo",
+      hadBilling: true,
+    });
+    expect(Number.isNaN(Date.parse(farewell.sent[0].deletedAt))).toBe(false);
+    expect(seenAtSend).toEqual({ userGone: true, outbox: ["out-4", "out-5"] });
+  });
+
+  it("sends nothing when the deletion is blocked or a step fails", async () => {
+    const blocked = world();
+    blocked.db.tables.workspace_members.push({ workspace_id: "ws-solo", user_id: OTHER });
+    expect((await deleteAccount(blocked.deps, me)).status).toBe("blocked");
+    expect(blocked.farewell.sent).toEqual([]);
+
+    const failing = world();
+    failing.db.fail = { table: "email_subscriptions", op: "delete" };
+    expect(await failedStep(deleteAccount(failing.deps, me))).toBe("email");
+    expect(failing.db.users.has(ME)).toBe(true);
+    expect(failing.farewell.sent).toEqual([]);
+
+    // The retry finishes, and only then is A2 sent.
+    failing.db.fail = null;
+    expect((await deleteAccount(failing.deps, me)).status).toBe("deleted");
+    expect(failing.farewell.sent).toHaveLength(1);
+  });
+
+  it("still finishes the deletion when the send fails, with a warning", async () => {
+    const { db, farewell, deps } = world();
+    farewell.failWith = new Error("resend_http_500");
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["farewell_failed: resend_http_500"] });
+    expect(db.users.has(ME)).toBe(false);
+    expect(ids(db.rows("email_outbox"))).toEqual(["out-4", "out-5"]);
+  });
+
+  it("sends no A2 to an address on the do-not-email list, but still erases the entry", async () => {
+    const { db, farewell, deps } = world();
+    db.tables.email_suppressions.push({ email: MY_EMAIL, reason: "complaint" });
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["farewell_skipped_suppressed"] });
+    expect(farewell.sent).toEqual([]);
+    expect(db.rows("email_suppressions").map((r) => r.email)).toEqual(["other@example.com"]);
+  });
+
+  it("without a confirmed address: no A2, and only the rows tied to the account id go", async () => {
+    const { db, farewell, deps } = world();
+
+    await deleteAccount(deps, { id: ME, email: null });
+
+    expect(farewell.sent).toEqual([]);
+    // out-2 (the waitlist invite to the address) can't be told apart from someone else's.
+    expect(ids(db.rows("email_outbox"))).toEqual(["out-2", "out-4", "out-5"]);
+    expect(db.rows("email_subscriptions").map((r) => r.email)).toEqual(["other@example.com"]);
+  });
+
+  it("leaves the plan line out when there was no Stripe customer, and dates in UTC without a zone", async () => {
+    const { db, stripe, farewell, deps } = world();
+    db.tables.profiles = db.rows("profiles").map((p) => (p.id === ME ? { ...p, stripe_customer_id: null } : p));
+    stripe.customersById.delete("cus_me");
+    db.tables.user_preferences = [];
+
+    await deleteAccount(deps, me);
+
+    expect(farewell.sent[0]).toMatchObject({ hadBilling: false, zone: null });
+  });
+
+  it("warns, and still deletes, when Resend isn't configured", async () => {
+    const { db, deps } = world();
+
+    const result = await deleteAccount({ ...deps, farewell: null }, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["farewell_not_configured"] });
+    expect(db.users.has(ME)).toBe(false);
+  });
+});
+
 describe("erasureErrorMessage", () => {
   it("says the account wasn't deleted only for the steps before any Moduo data goes", () => {
     for (const step of ["check", "posthog", "stripe"] as const) {
@@ -1044,6 +1187,7 @@ describe("erasureErrorMessage", () => {
       "contact_notes",
       "workspace_data",
       "waitlist",
+      "email",
       "auth",
     ] as const) {
       expect(erasureErrorMessage(step)).toBe(

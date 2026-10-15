@@ -889,6 +889,19 @@ export const EMAIL_SUBSCRIPTION_SOURCES = ["waitlist", "settings"] as const;
 export type EmailSubscriptionSource = (typeof EMAIL_SUBSCRIPTION_SOURCES)[number];
 export const emailSubscriptionSourceSchema = z.enum(EMAIL_SUBSCRIPTION_SOURCES);
 
+/**
+ * Settings → Preferences → Email (TX-8, T18): the kinds each switch stops, as
+ * the columns of public.email_preferences. Every other kind always sends. The
+ * worker's claim turns a due row of a switched-off kind into `skipped_pref`
+ * (20261015153000_tx8_email_preferences.sql; drift-gates.test.ts checks its
+ * IN-lists against this).
+ */
+export const EMAIL_KINDS_BY_SWITCH = {
+  bookings: ["booking_host_new", "booking_host_guest_cancelled"],
+  trial_billing: ["trial_ending", "trial_ended", "founder_access_ending"],
+} as const satisfies Record<string, readonly EmailKind[]>;
+export type EmailSwitch = keyof typeof EMAIL_KINDS_BY_SWITCH;
+
 // ---------------------------------------------------------------------------
 // Email accounts — provider/status vocabularies.
 //

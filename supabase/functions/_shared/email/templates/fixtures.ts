@@ -42,6 +42,12 @@ export const BOOKING_ZOOM_FIXTURE: BookingEmailData = {
 
 export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
   auth_code: { code: "482913", email: "tom@becker.studio" },
+  account_deleted: {
+    email: "tom@becker.studio",
+    deletedAt: "2026-10-08T10:30:00Z",
+    zone: "Europe/Warsaw",
+    hadBilling: true,
+  },
   waitlist_invite: { email: "tom@becker.studio", joinedAt: "2026-10-02T09:14:00Z" },
   ops_alert: {
     reason: "failures",
