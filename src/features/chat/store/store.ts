@@ -1441,7 +1441,9 @@ export class ChatStore {
         void this.checkAccess();
         return;
       case "catchup":
-        // Catch up's items are CV-11's; the counts follow with the next gap fill.
+        // Catch up's items are CV-11's. Your rows moved (a message wrote one,
+        // Done closed one): the counts are re-read once a burst settles (CV-6b).
+        this.countsSoon();
         return;
       case "joined":
         if (this.joinTimer) clearTimeout(this.joinTimer);
