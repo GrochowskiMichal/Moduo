@@ -87,22 +87,29 @@ export async function assertReach(ctx: ToolContext, type: string, ref: string): 
 }
 
 /**
- * MOD-94: an item's live comments, oldest first (the newest last). Call it
- * only for an item the key reaches (assertReach, or fetchTask for a task):
- * that is the app's rule for them (comments__item_seen: a comment shows to
- * whoever can see its item). `*` as the app reads them: older databases lack
- * some columns.
+ * MOD-94: an item's latest `limit` live comments, oldest first (the newest
+ * last), and how many it has in all. One request: the newest page plus an
+ * exact count, never the whole thread. Call it only for an item the key
+ * reaches (assertReach, or fetchTask for a task): that is the app's rule for
+ * them (comments__item_seen: a comment shows to whoever can see its item).
+ * `deleted_at` came with the table (20260626130000); `*` because author_kind /
+ * author_label (20261008123000) and edited_at (20261013100000) came later,
+ * and naming them would fail the read on a database without them.
  */
 export async function entityComments(
   ctx: ToolContext,
   type: string,
   id: string,
-): Promise<Record<string, unknown>[]> {
-  const { data, error } = await ctx.db.from("comments").select("*")
+  limit: number,
+): Promise<{ comments: Record<string, unknown>[]; total: number }> {
+  const { data, error, count } = await ctx.db.from("comments").select("*", { count: "exact" })
     .eq("workspace_id", ctx.key.workspaceId).eq("entity_type", type).eq("entity_id", id)
-    .is("deleted_at", null).order("created_at", { ascending: true });
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false }).order("id", { ascending: false })
+    .limit(limit);
   if (error) throw new Error(error.message);
-  return commentsInOrder((data ?? []) as Record<string, unknown>[]);
+  const page = commentsInOrder((data ?? []) as Record<string, unknown>[]);
+  return { comments: page, total: typeof count === "number" ? count : page.length };
 }
 
 /** Throws unless the key can see both endpoints' modules (a link's two ends). */

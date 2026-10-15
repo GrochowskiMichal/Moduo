@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "@rstest/core";
 
 import {
@@ -311,6 +315,43 @@ describe("tasks_list's summary row (MOD-113)", () => {
     const summary = rows.map((t) => shapeTaskSummary(t, data, now, names2));
     const full = rows.map((t) => shapeTask(t, data, now));
     expect(size(summary) * 2).toBeLessThan(size(full));
+  });
+});
+
+describe("a due day from a due instant: the server's tasks__due_on_of rule", () => {
+  it("keeps a local midnight on its own date across a UTC midnight, and noon UTC on its date", async () => {
+    const { dueDayOfInstant, dueDayOfRow } = await import("./tasks-connector.ts");
+    // Jan 15's local midnight in UTC+1 is still Jan 14 in UTC.
+    expect(dueDayOfInstant("2030-01-14T23:00:00Z")).toBe("2030-01-15");
+    // Noon UTC, due_on's mirror, is its own date.
+    expect(dueDayOfInstant("2030-01-15T12:00:00Z")).toBe("2030-01-15");
+    // Jan 15's local midnight in UTC-5.
+    expect(dueDayOfInstant("2030-01-15T05:00:00Z")).toBe("2030-01-15");
+    expect(dueDayOfInstant("2030-01-15T00:00:00Z")).toBe("2030-01-15");
+    expect(dueDayOfInstant("not a date")).toBeNull();
+    expect(dueDayOfInstant(null)).toBeNull();
+    // due_on leads when it's there.
+    expect(dueDayOfRow({ due_on: "2030-01-20", due_date: "2030-01-14T23:00:00Z" })).toBe("2030-01-20");
+  });
+
+  it("a timed task with only a due_date shows its day across a UTC midnight", async () => {
+    const { shapeTaskSummary } = await import("./tasks-connector.ts");
+    const row = task("t", { number: 9, title: "x", status: "todo", due_date: "2030-01-14T23:00:00Z", due_time: "18:00:00" });
+    const data = { ...shapeData([row]), taskKey: "MOD" };
+    const out = shapeTaskSummary(row, data, new Date("2030-01-01T00:00:00Z"), {
+      sections: new Map(),
+      statuses: new Map(),
+    });
+    expect(out.due).toBe("2030-01-15 18:00");
+  });
+
+  it("is the rule the migration states", () => {
+    const sql = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations/20261010171000_tasks_completion_due_on.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("WHEN (p_at AT TIME ZONE 'UTC')::time = time '12:00' THEN (p_at AT TIME ZONE 'UTC')::date");
+    expect(sql).toContain("ELSE ((p_at + interval '12 hours') AT TIME ZONE 'UTC')::date");
   });
 });
 

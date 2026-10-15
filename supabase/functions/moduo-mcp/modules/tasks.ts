@@ -662,11 +662,13 @@ export const tasksConnectorModule: ConnectorModule = {
           rows(ctx.db.from("task_waiting").select("id, kind, ref, label, since")
             .eq("workspace_id", ws).eq("task_id", taskId).is("deleted_at", null)),
           unwrap<Row[] | null>(ctx.db.rpc("tasks_agent_sessions", { p_workspace_id: ws, p_task_id: taskId })),
-          // Comments are the Links module's (the key card says so): none without it.
-          keyScopeAllows(ctx.key.scopes, "links", "view") ? entityComments(ctx, "task", taskId) : null,
+          // Comments are the Links module's (the key card says so): none without
+          // it. A failed comment read leaves them out instead of failing the task.
+          keyScopeAllows(ctx.key.scopes, "links", "view")
+            ? entityComments(ctx, "task", taskId, TASK_GET_COMMENTS).catch(() => null)
+            : null,
         ]);
         const now = new Date();
-        const latest = comments?.slice(-TASK_GET_COMMENTS) ?? [];
         const titled = (id: string) => {
           const t = data.byId.get(id);
           return t ? { id, title: t.title, status: t.status } : null;
@@ -696,8 +698,10 @@ export const tasksConnectorModule: ConnectorModule = {
           // MOD-94: what people answered here (the trail has no comments).
           ...(comments
             ? {
-                comments: latest.map((c) => shapeComment(c, data.names)),
-                ...(comments.length > latest.length ? { earlier_comments: comments.length - latest.length } : {}),
+                comments: comments.comments.map((c) => shapeComment(c, data.names)),
+                ...(comments.total > comments.comments.length
+                  ? { earlier_comments: comments.total - comments.comments.length }
+                  : {}),
               }
             : {}),
           activity,

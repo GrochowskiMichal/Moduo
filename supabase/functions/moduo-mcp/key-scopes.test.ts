@@ -61,7 +61,8 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
   };
   function from(table: string) {
     const filters: Filter[] = [];
-    let orderBy: string | null = null;
+    const orders: Array<{ column: string; ascending: boolean }> = [];
+    let counted = false;
     let max = Number.POSITIVE_INFINITY;
     let skip = 0;
     const add = (op: Filter["op"]) => (column: string, value: unknown) => {
@@ -69,7 +70,10 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       return query;
     };
     const query = {
-      select: () => query,
+      select: (_cols?: string, opts?: { count?: string }) => {
+        if (opts?.count) counted = true;
+        return query;
+      },
       eq: add("eq"),
       is: add("is"),
       in: add("in"),
@@ -80,8 +84,8 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         ors.push(expr);
         return query;
       },
-      order: (column: string) => {
-        orderBy = column;
+      order: (column: string, opts?: { ascending?: boolean }) => {
+        orders.push({ column, ascending: opts?.ascending !== false });
         return query;
       },
       limit: (n: number) => {
@@ -95,12 +99,21 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       },
       maybeSingle: () =>
         query.then((r: { data: Row[]; error: null }) => ({ data: r.data[0] ?? null, error: r.error })),
-      then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
+      then<T>(resolve: (result: { data: Row[]; error: null; count?: number }) => T) {
         queries.push({ table, filters });
         let data = (tables[table] ?? []).filter((row) => filters.every((f) => matches(row, f)));
-        const by = orderBy;
-        if (by) data = [...data].sort((a, b) => String(a[by]).localeCompare(String(b[by])));
-        return Promise.resolve({ data: data.slice(skip, skip + max), error: null }).then(resolve);
+        const total = data.length;
+        if (orders.length) {
+          data = [...data].sort((a, b) => {
+            for (const o of orders) {
+              const c = String(a[o.column]).localeCompare(String(b[o.column]));
+              if (c) return o.ascending ? c : -c;
+            }
+            return 0;
+          });
+        }
+        const page = data.slice(skip, skip + max);
+        return Promise.resolve({ data: page, error: null, ...(counted ? { count: total } : {}) }).then(resolve);
       },
     };
     return query;

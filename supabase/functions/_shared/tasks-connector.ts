@@ -271,6 +271,29 @@ export type SummaryNames = {
   projects?: ReadonlyMap<string, string>;
 };
 
+/**
+ * The due day a due instant stands for when no zone is known: the server's
+ * own rule, `tasks__due_on_of(at, NULL)` (20261010171000), which sets every
+ * row's due_on from its due_date. Noon UTC (due_on's mirror) is its UTC date;
+ * anything else is the nearest UTC day, so a local midnight anywhere from
+ * UTC-11 to UTC+12 keeps its own date. A plain UTC slice would put a midnight
+ * east of UTC on the day before.
+ */
+export function dueDayOfInstant(iso: unknown): string | null {
+  if (typeof iso !== "string" || !iso) return null;
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return null;
+  const d = new Date(at);
+  const noon = d.getUTCHours() === 12 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
+    && d.getUTCMilliseconds() === 0;
+  return new Date(noon ? at : at + 12 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** A task's due day: its due_on, else the day its due_date stands for. */
+export function dueDayOfRow(t: Row): string | null {
+  return typeof t.due_on === "string" && t.due_on ? t.due_on.slice(0, 10) : dueDayOfInstant(t.due_date);
+}
+
 /** "In progress", "To do", "Won't do" are just their category, written out. */
 function sameWords(a: string, b: string): boolean {
   const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
@@ -291,7 +314,7 @@ export function shapeTaskSummary(t: Row, data: ShapeData, now: Date, names: Summ
   const category = normalizeTaskStatusCategory(t.status_category ?? t.status);
   const statusName = typeof t.status_id === "string" ? names.statuses.get(t.status_id) : undefined;
   const assigneeId = assigneeIdOf(t);
-  const dueDay = t.due_on ?? (typeof t.due_date === "string" ? t.due_date.slice(0, 10) : null);
+  const dueDay = dueDayOfRow(t);
   const out: Row = {
     ...(handleOf(t) ? { handle: handleOf(t) } : {}),
     id: t.id,

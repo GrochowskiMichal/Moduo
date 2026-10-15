@@ -247,13 +247,16 @@ export const linksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const type = str(args, "entity_type");
         const id = await assertReach(ctx, type, str(args, "entity_id"));
-        const [comments, members] = await Promise.all([entityComments(ctx, type, id), workspaceMembers(ctx)]);
+        const [read, members] = await Promise.all([
+          entityComments(ctx, type, id, clampLimit(args, 50, 200)),
+          workspaceMembers(ctx),
+        ]);
         const names = new Map(members.map((m) => [m.user_id, m.name]));
         return {
           entity_type: type,
           entity_id: id,
-          total: comments.length,
-          comments: comments.slice(-clampLimit(args, 50, 200)).map((c) => shapeComment(c, names)),
+          total: read.total,
+          comments: read.comments.map((c) => shapeComment(c, names)),
         };
       },
     },

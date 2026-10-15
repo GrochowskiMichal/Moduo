@@ -270,16 +270,18 @@ export async function colourBareTags(ctx: ToolContext): Promise<void> {
   try {
     const may = await ctx.db.rpc("perm_can_tag", { p_workspace_id: ws });
     if (may.error || may.data !== true) return;
-    const tags = await rows(
-      ctx.db.from("tags").select("id, color, created_at").eq("workspace_id", ws).is("deleted_at", null),
+    // The work list: the oldest colourless tags, at most a call's worth.
+    const bare = await rows(
+      ctx.db.from("tags").select("id").eq("workspace_id", ws).is("deleted_at", null).is("color", null)
+        .order("created_at", { ascending: true }).order("id", { ascending: true })
+        .limit(COLOUR_TAGS_PER_CALL),
     );
-    const bare = tags
-      .filter((t) => !t.color)
-      .sort((a, b) =>
-        String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || String(a.id).localeCompare(String(b.id)));
     if (!bare.length) return;
-    const coloured: { color: string | null }[] = tags.filter((t) => t.color).map((t) => ({ color: t.color }));
-    for (const tag of bare.slice(0, COLOUR_TAGS_PER_CALL)) {
+    // Only then the hues in use, which pickTagColor counts.
+    const coloured: { color: string | null }[] = (await rows(
+      ctx.db.from("tags").select("color").eq("workspace_id", ws).is("deleted_at", null).not("color", "is", null),
+    )).map((t) => ({ color: t.color }));
+    for (const tag of bare) {
       const color = pickTagColor(coloured);
       // Only while it's still bare: a person may have just picked one.
       const { data, error } = await ctx.db.from("tags").update({ color })

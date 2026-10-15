@@ -29,7 +29,7 @@ const A_BEAS = "88888888-8888-4888-8888-888888888888";
 const A_SHARED = "99999999-9999-4999-8999-999999999999";
 const TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-type Filter = { op: "eq" | "neq" | "in"; column: string; value: unknown };
+type Filter = { op: "eq" | "neq" | "in" | "notnull"; column: string; value: unknown };
 
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown>) {
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
@@ -39,8 +39,18 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
     let window: [number, number] | null = null;
     let cap: number | null = null;
     let patch: Row | null = null;
+    let counted = false;
+    const orders: Array<{ column: string; ascending: boolean }> = [];
     const query = {
-      select: () => query,
+      select: (_cols?: string, opts?: { count?: string }) => {
+        if (opts?.count) counted = true;
+        return query;
+      },
+      not: (column: string, op: string, value: unknown) => {
+        if (op !== "is" || value !== null) throw new Error(`fake: not(${column}, ${op})`);
+        filters.push({ op: "notnull", column, value });
+        return query;
+      },
       update: (values: Row) => {
         patch = values;
         return query;
@@ -62,7 +72,10 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         return query;
       },
       or: () => query,
-      order: () => query,
+      order: (column: string, opts?: { ascending?: boolean }) => {
+        orders.push({ column, ascending: opts?.ascending !== false });
+        return query;
+      },
       limit: (n: number) => {
         cap = n;
         return query;
@@ -73,7 +86,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       },
       maybeSingle: () =>
         query.then((r: { data: Row[] }) => ({ data: r.data[0] ?? null, error: null })),
-      then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
+      then<T>(resolve: (result: { data: Row[]; error: null; count?: number }) => T) {
         const value = (row: Row, column: string): unknown => {
           const json = column.match(/^(\w+)->>(\w+)$/);
           if (json) return ((row[json[1]!] as Row | null) ?? {})[json[2]!] ?? null;
@@ -84,15 +97,28 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
             ? value(row, f.column) === f.value
             : f.op === "in"
               ? (f.value as unknown[]).includes(value(row, f.column))
-              : value(row, f.column) !== f.value;
+              : f.op === "notnull"
+                ? value(row, f.column) !== null
+                : value(row, f.column) !== f.value;
         let all = (tables[table] ?? []).filter((row) => filters.every((f) => holds(row, f)));
+        const total = all.length;
+        if (orders.length) {
+          all = [...all].sort((a, b) => {
+            for (const o of orders) {
+              const x = String(value(a, o.column) ?? "");
+              const y = String(value(b, o.column) ?? "");
+              if (x !== y) return (x < y ? -1 : 1) * (o.ascending ? 1 : -1);
+            }
+            return 0;
+          });
+        }
         if (window) all = all.slice(window[0], window[1] + 1);
         if (cap !== null) all = all.slice(0, cap);
         if (patch) {
           for (const row of all) Object.assign(row, patch);
           updates.push({ table, values: patch, ids: all.map((r) => r.id) });
         }
-        return Promise.resolve({ data: all, error: null }).then(resolve);
+        return Promise.resolve({ data: all, error: null, ...(counted ? { count: total } : {}) }).then(resolve);
       },
     };
     return query;
@@ -309,6 +335,24 @@ describe("comments in tasks_get (MOD-94): Links: View reads them", () => {
     expect(got).not.toHaveProperty("comments");
     expect(got).not.toHaveProperty("earlier_comments");
     expect(JSON.stringify(got)).not.toContain("body c-");
+  });
+
+  it("a comment read that fails leaves the comments out, never the task", async () => {
+    const { ctx } = withComments();
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      if (t !== "comments") return from(t);
+      const failing: Row = {};
+      for (const m of ["select", "eq", "is", "order", "limit"]) failing[m] = () => failing;
+      failing.then = (resolve: (r: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { message: "column comments.x does not exist" } }).then(resolve);
+      return failing;
+    };
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.handle).toBe("MOD-1");
+    expect(got).not.toHaveProperty("comments");
+    expect(got).not.toHaveProperty("earlier_comments");
   });
 
   it("a task the key's person can't see reads as missing, comments and all", async () => {
@@ -683,6 +727,31 @@ describe("writes go through the ops, checked before anything is written", () => 
     tables.tags!.push(bare("tag-c", "2030-01-03T00:00:00Z"));
     await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
     expect(tables.tags!.find((x) => x.id === "tag-c")?.color).toBeNull();
+  });
+
+  it("with no colourless tag, reads just the (empty) work list, never every tag's hue (MOD-93)", async () => {
+    const { ctx, tables } = setup({
+      rpcs: {
+        perm_can_tag: () => true,
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+      },
+    });
+    tables.tags = [{ id: "tag-1", workspace_id: WS, name: "board", color: "blue", created_at: "2030", deleted_at: null }];
+    let tagReads = 0;
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      if (t === "tags") tagReads += 1;
+      return from(t);
+    };
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["board"] }, ctx);
+    // loadWorkspace's own read (shaping the answer) plus the work list: no second hue read.
+    const shaped = tagReads;
+    tables.tags.push({ id: "tag-2", workspace_id: WS, name: "new", color: null, created_at: "2031", deleted_at: null });
+    tagReads = 0;
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["new"] }, ctx);
+    expect(tagReads).toBe(shaped + 2); // + the hues in use, + the guarded update
+    expect(tables.tags.find((x) => x.id === "tag-2")?.color).toBe("green");
   });
 
   it("tasks_session_status sends only the fields given", async () => {
