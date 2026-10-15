@@ -18,6 +18,7 @@ import {
   BOLD_STAR,
   BOLD_UNDERSCORE,
   CHECK_LIST,
+  type ElementTransformer,
   INLINE_CODE,
   ITALIC_STAR,
   ITALIC_UNDERSCORE,
@@ -29,7 +30,13 @@ import {
   type Transformer,
   UNORDERED_LIST,
 } from "@lexical/markdown";
-import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
+import {
+  $createParagraphNode,
+  $createTextNode,
+  $getRoot,
+  $isParagraphNode,
+  ParagraphNode,
+} from "lexical";
 
 import {
   DESCRIPTION_LINK,
@@ -80,9 +87,43 @@ export const DESCRIPTION_REFERENCE: TextMatchTransformer = {
   type: "text-match",
 };
 
+/**
+ * A paragraph's line whose words start like a block (`- `, `+ `, `1. `, `> `,
+ * `[ ] `) keeps that start escaped, as the exporter already escapes `*`, so
+ * the next read gives the paragraph back, not a list, a quote or a checkbox.
+ * Each line counts: a line break inside the paragraph starts a line too.
+ */
+export function escapeBlockStarts(markdown: string): string {
+  return markdown
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^([ \t]*)([-+])(?=[ \t])/, "$1\\$2")
+        .replace(/^([ \t]*)(\d{1,9})\.(?=[ \t])/, "$1$2\\.")
+        .replace(/^([ \t]*)>/, "$1\\>")
+        .replace(/^([ \t]*)\[([ xX]?)\](?=[ \t])/, "$1\\[$2]"),
+    )
+    .join("\n");
+}
+
+/**
+ * A paragraph exports with its block-like line starts escaped
+ * (`escapeBlockStarts`). Export only: its pattern matches nothing, so import
+ * and typing never use it.
+ */
+export const DESCRIPTION_PARAGRAPH: ElementTransformer = {
+  dependencies: [ParagraphNode],
+  export: (node, traverseChildren) =>
+    $isParagraphNode(node) ? escapeBlockStarts(traverseChildren(node)) : null,
+  regExp: /^(?!)/,
+  replace: () => false,
+  type: "element",
+};
+
 /** The description's Markdown, in import order: checkboxes before bullets
  *  (CHECK_LIST isn't in ELEMENT_TRANSFORMERS), references before links. */
 export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
+  DESCRIPTION_PARAGRAPH,
   CHECK_LIST,
   UNORDERED_LIST,
   ORDERED_LIST,

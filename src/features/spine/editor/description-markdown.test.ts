@@ -140,6 +140,49 @@ describe("a description's Markdown round-trips through the editor", () => {
     expect(save(editor)).toBe("one\ntwo\n\nthree");
   });
 
+  it("a paragraph whose words start like a list, quote or checkbox stays a paragraph", () => {
+    const starts = [
+      "- first item",
+      "+ plus",
+      "* star",
+      "1. numbered",
+      "> said",
+      "[ ] box",
+      "[x] done",
+    ];
+    for (const words of starts) {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          $getRoot().clear();
+          // Two lines in one paragraph: the second starts like a block too.
+          $getRoot().append(
+            $createParagraphNode().append(
+              $createTextNode(words),
+              $createLineBreakNode(),
+              $createTextNode(words),
+            ),
+          );
+        },
+        { discrete: true },
+      );
+      const saved = save(editor);
+      expect(saved).toContain("\\");
+      const reloaded = load(saved);
+      const shape = reloaded.getEditorState().read(() =>
+        $getRoot()
+          .getChildren()
+          .map((b) => [b.getType(), b.getTextContent()]),
+      );
+      expect(shape).toEqual([["paragraph", `${words}\n${words}`]]);
+      expect(save(reloaded)).toBe(saved);
+    }
+    // Real lists and quotes still save as themselves.
+    expect(save(load("- one\n- two\n\n1. first\n\n> said"))).toBe(
+      "- one\n- two\n\n1. first\n\n> said",
+    );
+  });
+
   it("an empty editor saves nothing, and words that read as HTML keep their < escaped", () => {
     expect(save(load(""))).toBe("");
     const editor = markdownEditor();
