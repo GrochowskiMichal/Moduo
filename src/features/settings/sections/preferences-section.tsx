@@ -117,9 +117,9 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
   },
 ];
 
-/** Chat's switches (CV-6b, spec §11 "The switches", §15). Each turns off the
- *  bell row and the device notice and email for its messages; Catch up keeps
- *  every item. Prototype frame 9 (Settings · Notifications · Chat) draws one
+/** Chat's switches (CV-6b, spec §11 "The switches", §15). Each hides its bell
+ *  rows and keeps an open Moduo from ringing for its messages; the server's
+ *  push and email follow them with CV-18. Catch up keeps every item. Prototype frame 9 (Settings · Notifications · Chat) draws one
  *  switch for all of them; the spec's table names four (a key's own switch
  *  arrives with CV-21). */
 const CHAT_NOTIFICATION_ROWS: ReadonlyArray<{
@@ -357,7 +357,7 @@ function ChatNotificationsGroup() {
   return (
     <PrefGroup
       label="Chat"
-      description="Each switch turns off the notification and the email for its messages. Catch up keeps every one."
+      description="Each switch silences notifications for its messages while Moduo is open on one of your devices. Catch up keeps every one."
     >
       {CHAT_NOTIFICATION_ROWS.map((row) => (
         <PrefRow key={row.type} title={row.title} description={row.description}>

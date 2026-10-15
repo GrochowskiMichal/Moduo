@@ -7,10 +7,14 @@ import { noticesOffInBrowser, shouldAskChat } from "./chat-ask";
 import { getChatCounts, refreshChatCounts, resetChatCounts, setLiveChatCount } from "./chat-counts";
 import { chatServerPrefsFromRow } from "./chat-prefs";
 import {
+  BURST_WINDOW_MS,
+  burstCopy,
+  CLIENT_IDLE_MS,
   chatNoticeSwitch,
   chatNoticeTarget,
   decideChatNotice,
   isChatInFront,
+  PUSH_WAIT_MS,
   TAG_THROTTLE_MS,
 } from "./ring";
 import { soundsForNotice } from "./sound";
@@ -22,6 +26,7 @@ const base = {
   surface: "desktop" as const,
   switchedOff: false,
   lastRungAt: null as number | null,
+  createdAt: 999_500,
   now: 1_000_000,
 };
 
@@ -44,8 +49,31 @@ describe("one device rings (CV-6b, AC7.6)", () => {
   });
 
   it("a burst rings once a minute per conversation, the rest acknowledged quietly", () => {
-    expect(decideChatNotice({ ...base, lastRungAt: base.now - 5_000 })).toBe("quiet-ack");
+    expect(decideChatNotice({ ...base, lastRungAt: base.now - 5_000 })).toBe("throttled");
     expect(decideChatNotice({ ...base, lastRungAt: base.now - TAG_THROTTLE_MS })).toBe("ring");
+  });
+
+  it("the next ring after a burst says how many: 'Sender · N messages' (CV-6b review)", () => {
+    const copy = { title: "Sofia Ortiz · Acme", body: "lunch?" };
+    const now = base.now;
+    expect(burstCopy(copy, null, now)).toEqual(copy);
+    expect(burstCopy(copy, { at: now - 61_000, quiet: 0 }, now)).toEqual(copy);
+    expect(burstCopy(copy, { at: now - 61_000, quiet: 2 }, now)).toEqual({
+      title: "Sofia Ortiz · Acme",
+      body: "3 messages: lunch?",
+    });
+    // "Show message text" off: the server sends no text, so only the number.
+    expect(burstCopy({ ...copy, body: "" }, { at: now - 61_000, quiet: 2 }, now)).toEqual({
+      title: "Sofia Ortiz · Acme",
+      body: "3 messages",
+    });
+    // A burst long gone no longer counts (the server's own window).
+    expect(burstCopy(copy, { at: now - BURST_WINDOW_MS, quiet: 2 }, now)).toEqual(copy);
+  });
+
+  it("an answer that comes after the push was due never rings (CV-6b review)", () => {
+    expect(decideChatNotice({ ...base, createdAt: base.now - PUSH_WAIT_MS })).toBe("ring");
+    expect(decideChatNotice({ ...base, createdAt: base.now - PUSH_WAIT_MS - 1 })).toBe("quiet-ack");
   });
 
   it("a switched-off kind is acknowledged quietly by the latest client, web included", () => {
@@ -66,9 +94,15 @@ describe("in front", () => {
     pathname: "/chat",
     selectedWorkspaceId: "w1",
     workspaceId: "w1",
+    lastInputAt: 1_000_000,
+    now: 1_000_000,
   };
   it("is Chat of the notice's workspace with your attention", () => {
     expect(isChatInFront(front)).toBe(true);
+    expect(isChatInFront({ ...front, now: front.lastInputAt + CLIENT_IDLE_MS - 1 })).toBe(true);
+  });
+  it("focused but idle is not in front: the notice rings (CV-6b review)", () => {
+    expect(isChatInFront({ ...front, now: front.lastInputAt + CLIENT_IDLE_MS })).toBe(false);
   });
   it("another app, another module or another workspace is not in front", () => {
     expect(isChatInFront({ ...front, focused: false })).toBe(false);
@@ -81,27 +115,24 @@ describe("in front", () => {
 });
 
 describe("switches, sound and the landing", () => {
-  const dm = { kind: "chat_message", title: "Sofia Ortiz · Acme" };
-  const channel = { kind: "chat_message", title: "Sofia Ortiz · #plans · Acme" };
-  it("tells a direct message from an Every-message conversation", () => {
-    expect(chatNoticeSwitch(dm, null)).toBe("chatDirect");
-    expect(chatNoticeSwitch(channel, null)).toBe("chatEvery");
-    expect(chatNoticeSwitch(channel, "dm")).toBe("chatDirect");
-    expect(chatNoticeSwitch(dm, "channel")).toBe("chatEvery");
-    expect(chatNoticeSwitch({ kind: "chat_reply", title: "" }, null)).toBe("chatMentions");
-    expect(chatNoticeSwitch({ kind: "chat_mention", title: "" }, null)).toBe("chatMentions");
-    expect(chatNoticeSwitch({ kind: "chat_announcement", title: "" }, null)).toBe(
-      "chatAnnouncements",
-    );
-    expect(chatNoticeSwitch({ kind: "reminder", title: "" }, null)).toBeNull();
+  const message = { kind: "chat_message" as const };
+  it("tells a direct message from an Every-message conversation by its kind, never its title", () => {
+    expect(chatNoticeSwitch(message, "dm")).toBe("chatDirect");
+    expect(chatNoticeSwitch(message, "channel")).toBe("chatEvery");
+    // Unknown (the read failed): no switch is guessed.
+    expect(chatNoticeSwitch(message, null)).toBeNull();
+    expect(chatNoticeSwitch({ kind: "chat_reply" }, null)).toBe("chatMentions");
+    expect(chatNoticeSwitch({ kind: "chat_mention" }, null)).toBe("chatMentions");
+    expect(chatNoticeSwitch({ kind: "chat_announcement" }, null)).toBe("chatAnnouncements");
+    expect(chatNoticeSwitch({ kind: "reminder" }, null)).toBeNull();
   });
 
   it("sounds only for a direct message or @you (CH34)", () => {
-    expect(soundsForNotice({ kind: "chat_message", title: dm.title }, "dm")).toBe(true);
-    expect(soundsForNotice({ kind: "chat_mention", title: channel.title }, null)).toBe(true);
-    expect(soundsForNotice({ kind: "chat_message", title: channel.title }, "channel")).toBe(false);
-    expect(soundsForNotice({ kind: "chat_reply", title: channel.title }, null)).toBe(false);
-    expect(soundsForNotice({ kind: "chat_announcement", title: channel.title }, null)).toBe(false);
+    expect(soundsForNotice(message, "dm")).toBe(true);
+    expect(soundsForNotice({ kind: "chat_mention" }, null)).toBe(true);
+    expect(soundsForNotice(message, "channel")).toBe(false);
+    expect(soundsForNotice({ kind: "chat_reply" }, null)).toBe(false);
+    expect(soundsForNotice({ kind: "chat_announcement" }, null)).toBe(false);
   });
 
   it("lands on the conversation and message of the notice's link", () => {
@@ -134,15 +165,46 @@ describe("counts outside Chat (§11 Count)", () => {
 
   it("the switcher counts each workspace and the badge sums them, the open one live", async () => {
     resetChatCounts();
-    await refreshChatCounts(["w1", "w2", "w3"], "w1", async (ws) => (ws === "w2" ? 4 : 1));
+    await refreshChatCounts("u1", ["w1", "w2", "w3"], "w1", async (ws) => (ws === "w2" ? 4 : 1));
     setLiveChatCount("w1", 2);
     expect(getChatCounts().byWorkspace).toEqual({ w1: 2, w2: 4, w3: 1 });
     expect(getChatCounts().total).toBe(7);
     // A failed read keeps the last number.
-    await refreshChatCounts(["w1", "w2", "w3"], "w1", async (ws) => (ws === "w2" ? null : 0));
+    await refreshChatCounts("u1", ["w1", "w2", "w3"], "w1", async (ws) => (ws === "w2" ? null : 0));
     expect(getChatCounts().byWorkspace).toEqual({ w1: 2, w2: 4, w3: 0 });
     resetChatCounts();
     expect(getChatCounts().total).toBe(0);
+  });
+
+  it("an older read landing late never overwrites a newer one (CV-6b review)", async () => {
+    resetChatCounts();
+    let release: (n: number) => void = () => {};
+    const slow = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const older = refreshChatCounts("u1", ["w2"], null, () => slow);
+    await refreshChatCounts("u1", ["w2"], null, async () => 5);
+    release(9);
+    await older;
+    expect(getChatCounts().byWorkspace).toEqual({ w2: 5 });
+    resetChatCounts();
+  });
+
+  it("another person's refresh starts from none and drops the last one's reads", async () => {
+    resetChatCounts();
+    await refreshChatCounts("u1", ["w2"], null, async () => 4);
+    let release: (n: number) => void = () => {};
+    const slow = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const stale = refreshChatCounts("u1", ["w2"], null, () => slow);
+    // Signed in as someone else: their read fails, and nothing of u1's shows.
+    await refreshChatCounts("u2", ["w2"], null, async () => null);
+    expect(getChatCounts().byWorkspace).toEqual({});
+    release(7);
+    await stale;
+    expect(getChatCounts().byWorkspace).toEqual({});
+    resetChatCounts();
   });
 
   it("the tab title carries the sum", () => {

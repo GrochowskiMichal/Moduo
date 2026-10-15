@@ -32,7 +32,7 @@ import {
  * CV-6a's chat_notices.test.sql proves the claim itself.
  */
 
-test.describe.configure({ mode: "serial", timeout: 150_000 });
+test.describe.configure({ mode: "serial", timeout: 240_000 });
 
 type Person = { email: string; password: string; name: string };
 const SENDER: Person = {
@@ -200,7 +200,9 @@ async function client(
 }
 
 const rung = (page: Page) =>
-  page.evaluate(() => (window as unknown as { __rung: Array<{ title: string }> }).__rung);
+  page.evaluate(
+    () => (window as unknown as { __rung: Array<{ title: string; body?: string }> }).__rung,
+  );
 const sounds = (page: Page) =>
   page.evaluate(() => (window as unknown as { __sounds: number }).__sounds);
 const setFocus = (page: Page, on: boolean) =>
@@ -262,6 +264,7 @@ test("one device rings", async ({ browser }) => {
   const inFront = await say(roomA, `in front ${tag}`);
   await ackedSoon(inFront);
   expect(await rung(desktop)).toHaveLength(0);
+  expect(await rung(web)).toHaveLength(0);
 
   // 2 · The desktop app on another module, a tab in the background: exactly
   // one notice, from the desktop, naming the sender and the workspace.
@@ -276,12 +279,29 @@ test("one device rings", async ({ browser }) => {
   expect(first.title).toContain(SENDER.name);
   expect(first.title).toContain(roomA.name);
   expect(await rung(web)).toHaveLength(0);
+  const firstRingAt = Date.now();
+  // It rang while Moduo was in front (on Tasks): switching away and back is
+  // not a click on it, so nothing jumps to the message.
+  await setFocus(desktop, false);
+  await setFocus(desktop, true);
+  await desktop.waitForTimeout(500);
+  expect(new URL(desktop.url()).pathname).toBe("/tasks");
 
   // 3 · A burst in that conversation: no second notice for a minute; every
-  // row is acknowledged, so no browser rings for them either.
+  // row is acknowledged, so no browser rings for them either. The next
+  // message after the minute rings once with the burst's count.
   const burst = [await say(roomA, `burst one ${tag}`), await say(roomA, `burst two ${tag}`)];
   for (const id of burst) await ackedSoon(id);
   expect(await rung(desktop)).toHaveLength(1);
+  await desktop.waitForTimeout(Math.max(0, firstRingAt + 61_000 - Date.now()));
+  await setFocus(desktop, true);
+  const after = await say(roomA, `burst three ${tag}`);
+  await ackedSoon(after);
+  await expect.poll(async () => (await rung(desktop)).length).toBe(2);
+  const summary = (await rung(desktop))[1];
+  expect(summary.title).toContain(SENDER.name);
+  expect(summary.body).toMatch(/^3 messages: burst three/);
+  expect(await rung(web)).toHaveLength(0);
 
   // 4 · A notice from the other workspace says its name; the click (Moduo
   // coming to the front right after) switches workspace and lands on it.
@@ -290,8 +310,8 @@ test("one device rings", async ({ browser }) => {
   const other = await say(roomB, `other workspace ${tag}`);
   // Unfocused and not idle long: the desktop is still the latest active client.
   await ackedSoon(other);
-  await expect.poll(async () => (await rung(desktop)).length).toBe(2);
-  expect((await rung(desktop))[1].title).toContain(roomB.name);
+  await expect.poll(async () => (await rung(desktop)).length).toBe(3);
+  expect((await rung(desktop))[2].title).toContain(roomB.name);
   await setFocus(desktop, true);
   await expect(desktop).toHaveURL(new RegExp(`/chat\\?.*c=${roomB.dm}`));
   expect(new URL(desktop.url()).searchParams.get("m")).toBe(other);
@@ -303,7 +323,42 @@ test("one device rings", async ({ browser }) => {
   ).toBe(roomB.ws);
   expect(await rung(web)).toHaveLength(0);
 
-  // 5 · Both closed: nobody acknowledges, so the row is the browser's to push
+  // 5 · You moved to the browser tab (it has your attention now), the desktop
+  // in the background: the tab is the latest client, so the desktop doesn't
+  // ring, and the tab leaves it to its push (unacknowledged once due).
+  await setFocus(desktop, false);
+  await setFocus(web, true);
+  type Seen = { surface: string; last_active_at: string | null };
+  await expect
+    .poll(
+      async () => {
+        const rows = await rest<Seen[]>(
+          "service",
+          `user_clients?user_id=eq.${receiver.user.id}&select=surface,last_active_at`,
+        );
+        const at = (surface: string) =>
+          Math.max(
+            0,
+            ...rows
+              .filter((r) => r.surface === surface && r.last_active_at)
+              .map((r) => Date.parse(r.last_active_at ?? "")),
+          );
+        return at("web") > at("desktop");
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  const rungBefore = (await rung(desktop)).length;
+  const contested = await say(roomA, `the tab is latest ${tag}`);
+  await new Promise((resolve) => setTimeout(resolve, 9_500));
+  const left = await noticeOf(contested);
+  expect(left).not.toBeNull();
+  expect(left?.acked_at).toBeNull();
+  expect(Date.parse(left?.push_after ?? "")).toBeLessThanOrEqual(Date.now());
+  expect(await rung(desktop)).toHaveLength(rungBefore);
+  expect(await rung(web)).toHaveLength(0);
+
+  // 6 · Both closed: nobody acknowledges, so the row is the browser's to push
   // once it is due (8 s after the message).
   await desktopCtx.close();
   await webCtx.close();

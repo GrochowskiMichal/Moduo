@@ -160,7 +160,12 @@ export function postgresChangesSource(socket: ChatSocket): ChatLiveSource {
         name: "catchup",
         table: "chat_catchup",
         filter: `user_id=eq.${me}`,
-        on: () => sink({ type: "catchup" }),
+        on: (p) => {
+          // Only this workspace's rows recount it. A delete carries only the
+          // key (no workspace): an extra recount is harmless, so it passes.
+          if (p.eventType !== "DELETE" && field(p.new, "workspace_id") !== ws) return;
+          sink({ type: "catchup" });
+        },
       },
     ];
 

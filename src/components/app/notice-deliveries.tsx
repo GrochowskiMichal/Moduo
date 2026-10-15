@@ -10,8 +10,9 @@
 // that workspace in front of you shows it in place and acknowledges it; else
 // your most recently active client (asked of the server as the notice
 // arrives) rings an OS notification on the desktop and acknowledges it, once
-// per conversation a minute; a browser tab never rings itself, its push does
-// after 8 s when nobody acknowledged. This component also keeps the client's
+// per conversation a minute (the rows in between are acknowledged quietly and
+// counted: the next ring says "N messages"); a browser tab never rings itself,
+// its push does after 8 s when nobody acknowledged. This component also keeps the client's
 // heartbeat, the counts outside Chat (switcher, dock, tab title) and the web
 // app's one-time ask.
 
@@ -38,6 +39,7 @@ import {
   noticeDeliveryFromRow,
 } from "../../lib/notices/deliveries";
 import {
+  burstCopy,
   chatNoticeSwitch,
   chatNoticeTarget,
   decideChatNotice,
@@ -74,6 +76,23 @@ function openTask(delivery: NoticeDelivery): void {
 }
 
 type Rung = { workspaceId: string | null; target: { c: string; m?: string }; at: number };
+/** A tag's last ring, and the rows acknowledged quietly on it since (a burst). */
+type TagRing = { at: number; quiet: number };
+
+/** A conversation's kind ("dm", "channel", …), one read per conversation (RLS). */
+async function readConversationKind(channelId: string): Promise<string | null> {
+  try {
+    const { data } = await supabaseClient
+      .from("chat_channels")
+      .select("kind")
+      .eq("id", channelId)
+      .maybeSingle();
+    const kind = (data as { kind?: unknown } | null)?.kind;
+    return typeof kind === "string" ? kind : null;
+  } catch {
+    return null;
+  }
+}
 
 export function NoticeDeliveries({
   chat,
@@ -100,7 +119,8 @@ export function NoticeDeliveries({
     refresh.current = refreshNotifications;
   }, [refreshNotifications]);
   const shown = useRef(new Set<string>());
-  const rungByTag = useRef(new Map<string, number>());
+  const rungByTag = useRef(new Map<string, TagRing>());
+  const kinds = useRef(new Map<string, string>());
   const lastRing = useRef<Rung | null>(null);
   const lastInput = useRef(Date.now());
 
@@ -146,6 +166,7 @@ export function NoticeDeliveries({
       stamp();
       // The desktop's OS notification has no click of its own: Moduo coming
       // to the front right after it rang is that click.
+      // Armed only by a ring while Moduo was in the background (see below).
       const rung = lastRing.current;
       lastRing.current = null;
       if (rung && Date.now() - rung.at < RING_CLICK_MS) land(rung.workspaceId, rung.target);
@@ -204,33 +225,56 @@ export function NoticeDeliveries({
         pathname: path,
         selectedWorkspaceId: open,
         workspaceId: delivery.workspaceId,
+        lastInputAt: lastInput.current,
+        now: Date.now(),
       });
-      const kind =
-        delivery.channelId && delivery.workspaceId === open
-          ? (here?.conversationKind(delivery.channelId) ?? null)
-          : null;
+      const channelId = delivery.channelId;
+      const knownKind =
+        (channelId && delivery.workspaceId === open ? here?.conversationKind(channelId) : null) ??
+        (channelId ? (kinds.current.get(channelId) ?? null) : null);
+      // A direct message and an Every-message conversation share a kind: the
+      // conversation tells them apart (read once when the store doesn't hold it).
+      const needsKind = !knownKind && !!channelId && delivery.kind === "chat_message";
+      // Ask the server now, not at the last heartbeat: whoever you touched last rings.
+      const [kind, latest] = await Promise.all([
+        needsKind && channelId ? readConversationKind(channelId) : Promise.resolve(knownKind),
+        inFront || delivery.heldForFocus
+          ? Promise.resolve(null)
+          : stampClient(surface, hasAttention()),
+      ]);
+      if (kind && channelId) kinds.current.set(channelId, kind);
       const switchKey = chatNoticeSwitch(delivery, kind);
       const switchedOff = switchKey ? !currentPreferences().notifications[switchKey] : false;
-      // Ask the server now, not at the last heartbeat: whoever you touched last rings.
-      const latest =
-        inFront || delivery.heldForFocus ? null : await stampClient(surface, hasAttention());
       const now = Date.now();
       const tag = delivery.tag ?? delivery.id;
+      const tagRing = rungByTag.current.get(tag) ?? null;
+      const createdAt = Date.parse(delivery.createdAt);
       const action = decideChatNotice({
         held: delivery.heldForFocus,
         inFront,
         latest,
         surface,
         switchedOff,
-        lastRungAt: rungByTag.current.get(tag) ?? null,
+        lastRungAt: tagRing?.at ?? null,
+        createdAt: Number.isFinite(createdAt) ? createdAt : now,
         now,
       });
       if (action === "leave") return;
-      if (action === "ring") {
-        rungByTag.current.set(tag, now);
+      if (action === "show-in-place") {
+        // Seen in place: a burst's earlier rows are read too.
+        rungByTag.current.delete(tag);
+      } else if (action === "throttled" && tagRing) {
+        tagRing.quiet += 1;
+      } else if (action === "ring") {
+        const copy = burstCopy(noticeCopy(delivery), tagRing, now);
+        rungByTag.current.set(tag, { at: now, quiet: 0 });
+        // Moduo coming to the front soon after is the click on it, but only
+        // when it rang while Moduo was in the background: switching apps with
+        // Moduo already in front never jumps you to a message.
+        const background = !document.hasFocus() || document.visibilityState !== "visible";
         const target = chatNoticeTarget(delivery.url);
-        lastRing.current = target ? { workspaceId: delivery.workspaceId, target, at: now } : null;
-        const copy = noticeCopy(delivery);
+        lastRing.current =
+          background && target ? { workspaceId: delivery.workspaceId, target, at: now } : null;
         void notifyDesktop(copy.title, copy.body);
       }
       if ((action === "ring" || action === "show-in-place") && !switchedOff) {
@@ -277,7 +321,7 @@ export function NoticeDeliveries({
     }
     const ids = workspaceIds ? workspaceIds.split(",") : [];
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const reread = () => void refreshChatCounts(ids, selectedWorkspaceId);
+    const reread = () => void refreshChatCounts(userId, ids, selectedWorkspaceId);
     reread();
     const channel = supabaseClient
       .channel(`chat-counts:${userId}:${Math.random().toString(36).slice(2)}`)

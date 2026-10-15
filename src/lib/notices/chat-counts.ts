@@ -20,6 +20,8 @@ const EMPTY: ChatCounts = { byWorkspace: {}, total: 0 };
 export const COUNTS_MAX_WORKSPACES = 25;
 
 let fetched: Record<string, number> = {};
+/** Whose numbers `fetched` holds: another person's refresh starts from none. */
+let owner: string | null = null;
 /** Each refresh's turn: an older read that lands late is dropped. */
 let generation = 0;
 let live: { workspaceId: string; count: number } | null = null;
@@ -67,16 +69,22 @@ export async function readWorkspaceChatCount(workspaceId: string): Promise<numbe
 
 /** Re-read the other workspaces' counts (the open one is live). */
 export async function refreshChatCounts(
+  userId: string,
   workspaceIds: readonly string[],
   openWorkspaceId: string | null,
   read: (workspaceId: string) => Promise<number | null> = readWorkspaceChatCount,
 ): Promise<void> {
+  if (owner !== userId) {
+    owner = userId;
+    fetched = {};
+    rebuild();
+  }
   const turn = ++generation;
   const others = workspaceIds
     .filter((ws) => ws !== openWorkspaceId)
     .slice(0, COUNTS_MAX_WORKSPACES);
   const results = await Promise.all(others.map(async (ws) => [ws, await read(ws)] as const));
-  if (turn !== generation) return;
+  if (turn !== generation || owner !== userId) return;
   const next: Record<string, number> = {};
   for (const [ws, n] of results) {
     // A failed read keeps the last number rather than dropping to zero.
@@ -90,6 +98,7 @@ export async function refreshChatCounts(
 /** Signed out: nothing counts. */
 export function resetChatCounts(): void {
   generation += 1;
+  owner = null;
   fetched = {};
   live = null;
   rebuild();

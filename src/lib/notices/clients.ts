@@ -10,14 +10,14 @@
 
 import type { ClientSurface } from "@contracts/vocabularies";
 import { supabaseClient } from "../runtime.web";
+import { CLIENT_IDLE_MS } from "./ring";
 
 export type { ClientSurface };
+export { CLIENT_IDLE_MS };
 
 const CLIENT_KEY = "moduo:client-id";
 /** The heartbeat (the server counts a client open for three minutes after it). */
 export const CLIENT_SEEN_MS = 60_000;
-/** Idle after this long without a key or a pointer: no longer "active". */
-export const CLIENT_IDLE_MS = 5 * 60_000;
 
 let memoryId: string | null = null;
 

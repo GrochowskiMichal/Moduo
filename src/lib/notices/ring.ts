@@ -6,17 +6,28 @@
 //   not your most recently active client   → leave it (another one rings)
 //   its switch is off (Settings)              → acknowledge quietly (no push either)
 //   a browser tab             → leave it (its push rings after 8 s if nobody acknowledged)
-//   rung on this tag a moment ago → acknowledge quietly (one notice per burst)
+//   the answer came after the push was due → acknowledge quietly (the push rang)
+//   rung on this tag a moment ago → acknowledge quietly, counted (one notice per burst)
 //   otherwise                 → ring (an OS notification), acknowledge
 
 import type { ClientSurface } from "@contracts/vocabularies";
 
 /** One notice per conversation (its tag) for about a minute. */
 export const TAG_THROTTLE_MS = 60_000;
-/** A focus this soon after a ring is the click on it: land on the message. */
+/** A focus this soon after a ring from the background is the click on it: land on the message. */
 export const RING_CLICK_MS = 10_000;
+/** Idle after this long without a key or a pointer: no longer "active" (nor in front). */
+export const CLIENT_IDLE_MS = 5 * 60_000;
+/** A chat notice's push is due this long after the row (`push_after`, CV-6a). */
+export const PUSH_WAIT_MS = 8_000;
+/** A burst's quiet rows count into the next ring only this long (the server's window). */
+export const BURST_WINDOW_MS = 10 * 60_000;
 
-export type ChatNoticeAction = "show-in-place" | "ring" | "quiet-ack" | "leave";
+/**
+ * `throttled`: acknowledged quietly as part of a burst (counted into the next
+ * ring's "N messages"); `quiet-ack`: acknowledged quietly for any other reason.
+ */
+export type ChatNoticeAction = "show-in-place" | "ring" | "throttled" | "quiet-ack" | "leave";
 
 /**
  * Moduo is "in front" of you for a chat notice only while its window has your
@@ -29,10 +40,14 @@ export function isChatInFront(input: {
   pathname: string;
   selectedWorkspaceId: string | null;
   workspaceId: string | null;
+  /** Your last key or pointer on this window (ms), and the time now. */
+  lastInputAt: number;
+  now: number;
 }): boolean {
   return (
     input.focused &&
     input.visible &&
+    input.now - input.lastInputAt < CLIENT_IDLE_MS &&
     (input.pathname === "/chat" || input.pathname.startsWith("/chat/")) &&
     input.workspaceId !== null &&
     input.workspaceId === input.selectedWorkspaceId
@@ -49,6 +64,8 @@ export function decideChatNotice(input: {
   switchedOff: boolean;
   /** When this client last rang this notice's tag (ms), if it did. */
   lastRungAt: number | null;
+  /** The row's `created_at` (ms, the server's clock). */
+  createdAt: number;
   now: number;
 }): ChatNoticeAction {
   if (input.held) return "leave";
@@ -56,20 +73,40 @@ export function decideChatNotice(input: {
   if (input.latest !== true) return "leave";
   if (input.switchedOff) return "quiet-ack";
   if (input.surface === "web") return "leave";
+  // The server answered after the push was due: a browser may have rung already.
+  if (input.now - input.createdAt > PUSH_WAIT_MS) return "quiet-ack";
   if (input.lastRungAt !== null && input.now - input.lastRungAt < TAG_THROTTLE_MS) {
-    return "quiet-ack";
+    return "throttled";
   }
   return "ring";
 }
 
 /**
+ * What a ring says after a burst was acknowledged quietly (`tagRing`: the
+ * tag's last ring and the rows acknowledged quietly since): the server's title
+ * (sender, conversation, workspace) and "N messages", with the newest text
+ * when "Show message text" is on (the server then sends a body), as the
+ * server's own burst copy does ("Sofia · 3 messages").
+ */
+export function burstCopy(
+  copy: { title: string; body: string },
+  tagRing: { at: number; quiet: number } | null,
+  now: number,
+): { title: string; body: string } {
+  const quiet = tagRing && now - tagRing.at < BURST_WINDOW_MS ? tagRing.quiet : 0;
+  if (quiet <= 0) return copy;
+  const n = `${quiet + 1} messages`;
+  const text = copy.body.trim();
+  return { title: copy.title, body: text ? `${n}: ${text}` : n };
+}
+
+/**
  * The Chat switch a notice answers to. `chat_message` is a direct message or a
- * conversation on Every message: the conversation's kind tells them apart when
- * this app holds it, else the server's title does (a direct message's title
- * names no "#channel").
+ * conversation on Every message: the conversation's kind (the store's, or one
+ * read of `chat_channels.kind`) tells them apart; unknown answers to no switch.
  */
 export function chatNoticeSwitch(
-  delivery: { kind: string; title: string },
+  delivery: { kind: string },
   conversationKind: string | null,
 ): "chatDirect" | "chatMentions" | "chatAnnouncements" | "chatEvery" | null {
   switch (delivery.kind) {
@@ -78,12 +115,9 @@ export function chatNoticeSwitch(
       return "chatMentions";
     case "chat_announcement":
       return "chatAnnouncements";
-    case "chat_message": {
-      const direct = conversationKind
-        ? conversationKind === "dm"
-        : !delivery.title.includes(" · #");
-      return direct ? "chatDirect" : "chatEvery";
-    }
+    case "chat_message":
+      if (!conversationKind) return null;
+      return conversationKind === "dm" ? "chatDirect" : "chatEvery";
     default:
       return null;
   }

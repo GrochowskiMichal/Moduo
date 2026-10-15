@@ -8,7 +8,7 @@ import { chatNoticeSwitch } from "./ring";
 
 /** Whether this notice gets the sound: a direct message or one that names you. */
 export function soundsForNotice(
-  delivery: Pick<NoticeDelivery, "kind" | "title">,
+  delivery: Pick<NoticeDelivery, "kind">,
   conversationKind: string | null,
 ): boolean {
   if (delivery.kind === "chat_mention") return true;
