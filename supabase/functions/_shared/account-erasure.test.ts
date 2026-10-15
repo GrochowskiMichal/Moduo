@@ -626,7 +626,7 @@ describe("deleteAccount — erasing what the FK cascade can't reach", () => {
     expect(ids(noEmail.db.rows("founders_interest"))).toEqual(["found-1", "found-2"]);
   });
 
-  it("deletes the auth user last, after every other step", async () => {
+  it("deletes the auth user after every other step but the do-not-email entry (TX-8)", async () => {
     const { db, deps } = world();
 
     const result = await deleteAccount(deps, me);
@@ -634,7 +634,7 @@ describe("deleteAccount — erasing what the FK cascade can't reach", () => {
     expect(result).toEqual({ status: "deleted", warnings: [] });
     expect(db.users.has(ME)).toBe(false);
     expect(db.users.has(OTHER)).toBe(true);
-    expect(db.log.at(-1)).toBe("auth delete");
+    expect(db.log.slice(-2)).toEqual(["auth delete", "delete email_suppressions"]);
     expect(db.log.filter((entry) => entry === "auth delete")).toHaveLength(1);
   });
 
@@ -859,7 +859,7 @@ describe("deleteAccount — the SQL side (PRIV-2b)", () => {
     expect(at("rpc account_scrub_stripe_mirror")).toBeLessThan(at("storage remove"));
     expect(at("rpc account_erase_workspace_data")).toBeGreaterThan(at("delete contact_private_notes"));
     expect(at("rpc account_erase_workspace_data")).toBeLessThan(at("delete waitlist"));
-    expect(db.log.at(-1)).toBe("auth delete");
+    expect(db.log.at(-2)).toBe("auth delete");
   });
 
   it("stops at the Stripe copy with the account still there, says it's partly deleted, and a retry finishes", async () => {
@@ -1120,16 +1120,38 @@ describe("deleteAccount — email records and the A2 email (TX-8)", () => {
     expect(failing.farewell.sent).toHaveLength(1);
   });
 
-  it("a retry after a failed email step still sees the do-not-email entry and sends no A2", async () => {
+  it("a retry after a failed email or auth step still sees the do-not-email entry and sends no A2", async () => {
     const { db, farewell, deps } = world();
     db.tables.email_suppressions.push({ email: MY_EMAIL, reason: "complaint" });
     db.fail = { table: "email_subscriptions", op: "delete" };
     expect(await failedStep(deleteAccount(deps, me))).toBe("email");
-
     db.fail = null;
+    const deleteUser = db.auth.admin.deleteUser;
+    db.auth.admin.deleteUser = async () => ({ error: { message: "auth unavailable", status: 503 } });
+    expect(await failedStep(deleteAccount(deps, me))).toBe("auth");
+    expect(db.rows("email_suppressions").map((r) => r.email)).toContain(MY_EMAIL);
+
+    db.auth.admin.deleteUser = deleteUser;
     const result = await deleteAccount(deps, me);
 
     expect(result).toEqual({ status: "deleted", warnings: ["farewell_skipped_suppressed"] });
+    expect(farewell.sent).toEqual([]);
+    expect(db.rows("email_suppressions").map((r) => r.email)).toEqual(["other@example.com"]);
+  });
+
+  it("erases the do-not-email entry after the auth user, and only warns when that fails", async () => {
+    const { db, farewell, deps } = world();
+    db.tables.email_suppressions.push({ email: MY_EMAIL, reason: "manual" });
+    // On the list, so no A2; erasing the entry afterwards fails.
+    db.fail = { table: "email_suppressions", op: "delete" };
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({
+      status: "deleted",
+      warnings: ["farewell_skipped_suppressed", "suppression_not_erased: email_suppressions: delete email_suppressions failed"],
+    });
+    expect(db.users.has(ME)).toBe(false);
     expect(farewell.sent).toEqual([]);
   });
 

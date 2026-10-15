@@ -28,18 +28,20 @@
  *                     trace, shared ones get a new owner, their tasks are unassigned.
  *   8. waitlist       public.waitlist + founders_interest rows for the account email.
  *   9. email          the address's email records (TX-8, T25): email_outbox rows sent
- *                     to it or to the account, its do-not-email entry and its
- *                     build-updates subscription. email_preferences goes with the auth
- *                     user (FK cascade).
+ *                     to it or to the account, and its build-updates subscription.
+ *                     email_preferences goes with the auth user (FK cascade). Its
+ *                     do-not-email entry goes after the auth delete (below).
  *
  * Every step is idempotent and the auth delete runs last, so a failure leaves the
  * account in place and a retry finishes the job. PostHog and Stripe run first: when
  * they fail, nothing in Moduo has been deleted yet.
  *
  * After the auth delete, and only then, the "account deleted" email (A2) goes to the
- * address, sent directly, never queued, so it leaves no record to erase. Nothing
- * after the auth delete can fail the deletion: a failed send is a warning. An
- * address on the do-not-email list (a hard bounce or a spam complaint) gets no A2.
+ * address, sent directly, never queued, so it leaves no record to erase. Then the
+ * address's do-not-email entry goes; it stays until here so that a retry after any
+ * earlier failure still sees it, and an address on the list (a hard bounce or a spam
+ * complaint) never gets A2. Nothing after the auth delete can fail the deletion: a
+ * failed send or erase is a warning.
  *
  * Plain TypeScript with injected clients (no Deno globals, no URL imports) so the
  * unit tests can run it: see account-erasure.test.ts. The real supabase-js and
@@ -272,6 +274,7 @@ export async function deleteAccount(
   // owned workspaces with everything in them, and the user's memberships elsewhere.
   await step("auth", () => deleteAuthUser(deps.db, user.id));
   await sendFarewell(deps, farewell, warnings);
+  await forgetSuppression(deps.db, user.email, warnings);
   return { status: "deleted", warnings };
 }
 
@@ -665,10 +668,10 @@ async function farewellFacts(
   };
 }
 
-/** Every email record of the account and its address. Outbox rows to the account's id
- *  would go in the daily purge an hour later; rows to the address with no account id
- *  (a waitlist invite) would stay 30 days, so both go now. The do-not-email entry goes
- *  last: if anything before it fails, a retry still sees it and still sends no A2. */
+/** Every email record of the account and its address but the do-not-email entry.
+ *  Outbox rows to the account's id would go in the daily purge an hour later; rows to
+ *  the address with no account id (a waitlist invite) would stay 30 days, so both go
+ *  now. */
 async function deleteEmailRecords(db: ErasureDb, user: AccountUser): Promise<void> {
   const email = user.email;
   await deleteRows(db, "email_outbox", (q) => q.eq("to_user_id", user.id));
@@ -676,7 +679,17 @@ async function deleteEmailRecords(db: ErasureDb, user: AccountUser): Promise<voi
   if (!email) return;
   await deleteRows(db, "email_outbox", (q) => q.eq("to_email", email));
   await deleteRows(db, "email_subscriptions", (q) => q.eq("email", email));
-  await deleteRows(db, "email_suppressions", (q) => q.eq("email", email));
+}
+
+/** After the auth delete and A2: the address's do-not-email entry. Never throws. A
+ *  bounce or complaint on A2 itself doesn't bring it back (resend-webhook.ts). */
+async function forgetSuppression(db: ErasureDb, email: string | null, warnings: string[]): Promise<void> {
+  if (!email) return;
+  try {
+    await deleteRows(db, "email_suppressions", (q) => q.eq("email", email));
+  } catch (err) {
+    warnings.push(`suppression_not_erased: ${errorMessage(err)}`);
+  }
 }
 
 /** After the auth delete: never throws, the account is already gone. */

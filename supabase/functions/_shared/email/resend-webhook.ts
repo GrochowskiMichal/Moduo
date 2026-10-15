@@ -10,6 +10,10 @@
  * - `email.suppressed` (Resend refused to send because the address is on its own
  *   suppression list, built from earlier bounces and complaints) suppresses it
  *   here too, so our record matches what can actually be delivered.
+ * - A bounce, complaint or refusal of the "account deleted" email (A2, tag
+ *   `kind=account_deleted`) suppresses nothing: the account is gone and its
+ *   address was just erased from our records, including this list (TX-8), so
+ *   putting it back would keep it here for good.
  * - `email.delivered` stamps `delivered_at` on the outbox row with that Resend id.
  * - Every other event is acknowledged and ignored.
  *
@@ -61,10 +65,26 @@ function addresses(value: unknown): string[] {
   return [...out];
 }
 
+/** The `kind` tag we send every email with, as Resend echoes it back: an object
+ *  (`{ kind: "…" }`) or a list of `{ name, value }`. */
+function sentKind(tags: unknown): string | null {
+  if (Array.isArray(tags)) {
+    const tag = tags.find((item) => isRecord(item) && item.name === "kind");
+    return isRecord(tag) && typeof tag.value === "string" ? tag.value : null;
+  }
+  return isRecord(tags) && typeof tags.kind === "string" ? tags.kind : null;
+}
+
+const SUPPRESSING_EVENTS = new Set(["email.bounced", "email.complained", "email.suppressed"]);
+
 /** What one parsed event asks of us. Pure; unknown shapes are ignored rather than trusted. */
 export function classifyResendEvent(event: unknown): ResendWebhookAction {
   if (!isRecord(event) || typeof event.type !== "string") return { type: "ignore", why: "no_type" };
   const data = isRecord(event.data) ? event.data : {};
+
+  if (SUPPRESSING_EVENTS.has(event.type) && sentKind(data.tags) === "account_deleted") {
+    return { type: "ignore", why: "account_deleted" };
+  }
 
   if (event.type === "email.bounced") {
     const bounce = isRecord(data.bounce) ? data.bounce : {};

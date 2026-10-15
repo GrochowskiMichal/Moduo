@@ -111,6 +111,28 @@ describe("EmailGroup", () => {
     expect(isOn("Build updates")).toBe(false);
   });
 
+  it("stays hidden when the switches can't be read, rather than showing wrong ones", async () => {
+    mocks.preferences.getEmailPrefs.mockRejectedValue(new Error("offline"));
+    const { container } = render(<EmailGroup />);
+    await waitFor(() => expect(container.textContent).toBe(""));
+  });
+
+  it("says why Build updates can't be turned on for an unconfirmed address", async () => {
+    const user = userEvent.setup();
+    mocks.preferences.getEmailPrefs.mockResolvedValue(DEFAULTS);
+    mocks.preferences.setBuildUpdates.mockRejectedValue(
+      new Error("Confirm your email address before turning on build updates."),
+    );
+    render(<EmailGroup />);
+    await waitFor(() => expect(switchFor("Build updates").hasAttribute("disabled")).toBe(false));
+    await user.click(switchFor("Build updates"));
+    await waitFor(() =>
+      expect(mocks.toast).toHaveBeenCalledWith(
+        "Confirm your email address before turning on build updates.",
+      ),
+    );
+  });
+
   it("stays hidden before the server has the switches", async () => {
     mocks.preferences.getEmailPrefs.mockResolvedValue(null);
     const { container } = render(<EmailGroup />);

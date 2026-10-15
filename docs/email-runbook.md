@@ -252,6 +252,10 @@ All agent steps, each needing Maciej's OK in the session, on a release train (AG
    ```
    Expect `true, false, true, false, true`. Until it's applied, the Settings group stays hidden and every booking/trial email sends.
 2. **`email-worker`: no deploy.** The filter lives in the claim (SQL); `OUTBOX_TEMPLATES` is unchanged (`waitlist_invite`, `ops_alert`, TX-5's booking kinds).
+   **`resend-webhook`: deploy** (agent, with OK, from `maciej`), before or with step 3: it now ignores a bounce, complaint or Resend refusal of A2 (tag `kind=account_deleted`), so a deleted address doesn't land back on the do-not-email list. Harmless until Maciej connects the Resend webhook.
+   ```bash
+   supabase functions deploy resend-webhook --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
 3. **`delete-account`** (agent, with OK), **from `maciej` after TX-8 has merged**. It uses `RESEND_API_KEY` (already set); without it the deletion still finishes and logs `farewell_not_configured`.
    ```bash
    supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api

@@ -271,12 +271,12 @@ const EMAIL_DEFAULTS: EmailPrefs = { bookings: true, trialBilling: true, buildUp
  * server (`email_prefs`), not in the synced preferences blob, so another device
  * or an older build never turns one back on. Build updates subscribes the
  * account's address at once; off unsubscribes. Hidden until the server has
- * them (before TX-8's migration).
+ * them (before TX-8's migration) and when they can't be read.
  */
 export function EmailGroup() {
   const { runtime } = useAuth();
   const [prefs, setPrefs] = useState<EmailPrefs | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
   const [busy, setBusy] = useState<EmailSwitch | null>(null);
   const read = runtime?.preferences.getEmailPrefs;
 
@@ -290,7 +290,8 @@ export function EmailGroup() {
         setState(value ? "ready" : "missing");
       })
       .catch(() => {
-        if (!cancelled) setState("error");
+        // Showing the defaults would misstate a switch someone turned off.
+        if (!cancelled) setState("missing");
       });
     return () => {
       cancelled = true;
@@ -314,9 +315,15 @@ export function EmailGroup() {
         if (!saved) throw new Error("unavailable");
         setPrefs((current) => (current ? { ...current, ...saved } : current));
       }
-    } catch {
+    } catch (err) {
       setPrefs(before);
-      toast("Couldn't change your email settings — try again.");
+      // The server's own words when the address isn't confirmed yet.
+      const message = err instanceof Error ? err.message : "";
+      toast(
+        /confirm your email/i.test(message)
+          ? message
+          : "Couldn't change your email settings — try again.",
+      );
     } finally {
       setBusy(null);
     }

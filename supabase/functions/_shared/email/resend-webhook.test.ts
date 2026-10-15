@@ -137,6 +137,22 @@ describe("svix signature + suppression", () => {
     expect((await handleResendWebhook({ ...(await signed("{}")), method: "GET" }, db.deps)).status).toBe(405);
   });
 
+  it("never suppresses on the account-deleted email: that address was just erased (TX-8)", () => {
+    for (const tags of [{ kind: "account_deleted" }, [{ name: "kind", value: "account_deleted" }]]) {
+      for (const event of [
+        { type: "email.bounced", data: { to: ["gone@example.com"], bounce: { type: "Permanent" }, tags } },
+        { type: "email.complained", data: { to: ["gone@example.com"], tags } },
+        { type: "email.suppressed", data: { to: ["gone@example.com"], tags } },
+      ]) {
+        expect(classifyResendEvent(event)).toEqual({ type: "ignore", why: "account_deleted" });
+      }
+    }
+    // Any other kind still suppresses.
+    expect(
+      classifyResendEvent({ type: "email.complained", data: { to: ["x@example.com"], tags: { kind: "waitlist_invite" } } }),
+    ).toEqual({ type: "suppress", emails: ["x@example.com"], reason: "complaint" });
+  });
+
   it("ignores events without a usable recipient", () => {
     expect(classifyResendEvent({ type: "email.complained", data: { to: ["not an address"] } })).toEqual({
       type: "ignore",
