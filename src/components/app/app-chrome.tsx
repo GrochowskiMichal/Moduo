@@ -248,6 +248,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           to?: string;
           search?: Record<string, string>;
           workspaceId?: string;
+          /** A chat notice's message and chain (CV-3). */
+          messageId?: string;
+          chainId?: string;
         }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
@@ -281,7 +284,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         dispatchOpenSettings({ section: detail.id });
         return;
       }
-      const target = entityOpenTarget(detail.type, detail.id ?? "");
+      const target = entityOpenTarget(detail.type, detail.id ?? "", {
+        messageId: detail.messageId,
+        chainId: detail.chainId,
+      });
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,

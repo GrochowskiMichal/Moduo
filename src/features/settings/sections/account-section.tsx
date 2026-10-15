@@ -13,6 +13,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
 import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-image";
+import { wipeChatCopies } from "../../chat/store/store";
 import { forgetFocusUser } from "../../focus/engine";
 import { forgetRunUser } from "../../focus/run";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
@@ -113,6 +114,7 @@ export function AccountSection() {
           forgetCaptureDrafts(userId);
           // The Tasks device copy (TV-D11a): the account is gone, so is its copy.
           void wipeSyncCopies();
+          void wipeChatCopies();
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

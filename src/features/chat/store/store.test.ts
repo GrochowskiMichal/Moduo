@@ -1,0 +1,351 @@
+// The chat store (CV-3; AC12.2, AC1.1, AC1.4): it opens from the device copy,
+// fills gaps by `updated_at` deltas (after 1,000 missed changes the copy equals
+// a full read), applies live rows with zero requests, skips its own echo,
+// rolls back one write on a refusal and drains an outbox in order under the
+// same client-minted ids. The device copy here is the memory copy with the
+// IndexedDB copy's contract (`device-copy.ts`); IndexedDB itself was measured
+// in Chromium by CV-0 spike 2.
+
+import { afterEach, describe, expect, it } from "@rstest/core";
+
+import type { ChatMessage } from "../model";
+import { emptyMeta, memoryChatCopy, ownerKey } from "./device-copy";
+import { compareKeys, keyOf } from "./keys";
+import { ChatStore, type ChatStoreOptions, PAGE } from "./store";
+import { FakeChatServer, fakeLive, ME, member, settle, stampOf, uuid, WS, YOU } from "./testing";
+
+const C = uuid(9001);
+const D = uuid(9002);
+const P = uuid(9003);
+const OWNER = ownerKey(ME, WS);
+
+const stores: ChatStore[] = [];
+
+function setup(opts: Partial<ChatStoreOptions> = {}) {
+  const server = new FakeChatServer();
+  const copy = memoryChatCopy();
+  const live = fakeLive();
+  const store = new ChatStore(server.transport(), ME, WS, {
+    copy,
+    live,
+    ...opts,
+    timing: {
+      persistMs: 0,
+      markReadMs: 0,
+      joinDebounceMs: 0,
+      focusThrottleMs: 0,
+      retryMs: 3_600_000,
+      gapFillMs: 3_600_000,
+      accessCheckMs: 3_600_000,
+      ...opts.timing,
+    },
+  });
+  stores.push(store);
+  return { server, copy, live, store };
+}
+
+afterEach(() => {
+  for (const s of stores.splice(0)) s.dispose({ persist: false });
+});
+
+const ids = (rows: readonly ChatMessage[]) => rows.map((r) => r.id);
+const serverRows = (rows: readonly ChatMessage[]) => rows.filter((r) => !r.sendState);
+
+describe("device copy, delta, echo, outbox", () => {
+  it("opens from the device copy, then the server's newest page lands", async () => {
+    const { server, copy, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    for (let i = 0; i < 80; i += 1) server.post(uuid(1000 + i), C);
+    const all = server.fullRead([C]);
+    // The device holds the newest 60 and the sidebar from a past session.
+    await copy.updateMeta(OWNER, () => ({
+      ...emptyMeta(),
+      conversations: { [C]: { openedAt: 1 } },
+      channels: [server.channels.get(C)!],
+      mine: [member(C)],
+      cursor: stampOf(server.clock),
+    }));
+    await copy.put(OWNER, all.slice(20), 500);
+
+    const enabled = server.holdNext("isEnabled");
+    store.acquire();
+    await settle();
+    // Before the server answers anything: the sidebar from the device.
+    expect(store.getSnapshot().status).toBe("ready");
+    expect(store.getSnapshot().fromDevice).toBe(true);
+    expect(Object.keys(store.getSnapshot().channels)).toEqual([C]);
+
+    const page = server.holdNext("page");
+    void store.open(C);
+    await settle();
+    // The conversation paints the device's newest 51 before its page arrives.
+    let win = store.getSnapshot().windows[C]!;
+    expect(ids(win.rows)).toEqual(ids(all.slice(-PAGE)));
+    expect(win.loaded).toBe(false);
+
+    enabled();
+    page();
+    await settle();
+    win = store.getSnapshot().windows[C]!;
+    expect(store.getSnapshot().fromDevice).toBe(false);
+    expect(win.loaded).toBe(true);
+    expect(ids(win.rows)).toEqual(ids(all.slice(-PAGE)));
+    expect(win.hasOlder).toBe(true);
+  });
+
+  it("after 1,000 missed changes a delta read equals a full read (a late commit included)", async () => {
+    const { server, store, live } = setup({ deltaLimit: 100 });
+    server.addChannel(C, { isDefault: true });
+    server.addChannel(D);
+    // A private conversation the reader can't see: its changes never arrive.
+    server.addChannel(P, { readable: false, member: false });
+    let n = 0;
+    for (let i = 0; i < 30; i += 1) {
+      server.post(uuid(++n), C);
+      server.post(uuid(++n), D);
+    }
+    store.acquire();
+    await store.ready();
+    await store.open(D);
+    await store.open(C);
+    expect(serverRows(store.getSnapshot().windows[C]!.rows)).toHaveLength(30);
+
+    // Ten minutes later (older than the lookback), offline from the live feed:
+    server.clock += 10 * 60 * 1_000_000;
+    const held = () => [...server.rows.values()].filter((r) => r.channelId !== P);
+    const pick = (i: number) => {
+      const rows = held();
+      return rows[(i * 7919) % rows.length]!;
+    };
+    for (let i = 0; i < 1000; i += 1) {
+      const kind = i % 10;
+      if (kind <= 2) server.post(uuid(++n), [C, D, P][i % 3]!);
+      else if (kind === 3 || kind === 4)
+        server.change(pick(i).id, { body: `edit ${i}`, editedAt: server.now() });
+      else if (kind === 5 || kind === 6) {
+        server.change(pick(i).id, { reactions: { "👍": [YOU] } });
+      } else if (kind === 7) server.change(pick(i).id, { deletedAt: server.now(), body: "" });
+      else if (kind === 8) server.change(pick(i).id, { pinnedAt: server.now(), pinnedBy: YOU });
+      else {
+        // A move between the two conversations you read.
+        const row = pick(i);
+        server.change(row.id, { channelId: row.channelId === C ? D : C });
+      }
+    }
+    // A transaction that wrote before the cursor and committed late.
+    const late = server.post(uuid(++n), C, { createdAt: stampOf(server.clock - 60 * 1_000_000) });
+
+    const before = server.calls.length;
+    live.emit({ type: "joined", source: "messages" });
+    await settle(80);
+    // The delta paged under (updated_at, id), 100 rows a page.
+    expect(server.calls.slice(before).filter((c) => c === "delta").length).toBeGreaterThan(1);
+
+    for (const id of [C, D]) {
+      const expected = server.fullRead([id]);
+      const got = serverRows(store.getSnapshot().windows[id]!.rows);
+      expect(ids(got)).toEqual(ids(expected));
+      expect(got.map((r) => r.updatedAt)).toEqual(expected.map((r) => r.updatedAt));
+    }
+    expect(store.rowById(late.id)?.updatedAt).toBe(late.updatedAt);
+    // Nothing from the conversation you can't read.
+    for (const row of server.rows.values()) {
+      if (row.channelId === P) expect(store.rowById(row.id)).toBeUndefined();
+    }
+  });
+
+  it("no message is lost at a page boundary: 200 share one timestamp", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    let n = 0;
+    for (let i = 0; i < 100; i += 1) server.post(uuid(++n), C);
+    const tie = server.now();
+    for (let i = 0; i < 200; i += 1) server.post(uuid(5000 - i), C, { createdAt: tie });
+    for (let i = 0; i < 100; i += 1) server.post(uuid(++n + 10_000), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    while (store.getSnapshot().windows[C]!.hasOlder) await store.loadOlder(C);
+    const got = ids(store.getSnapshot().windows[C]!.rows);
+    expect(got).toEqual(ids(server.fullRead([C])));
+    expect(new Set(got).size).toBe(400);
+  });
+
+  it("a reconnect fills the gap before the window shows: nothing missing for good", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    for (let i = 0; i < 20; i += 1) server.post(uuid(i + 1), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    // A 60 s outage: more than 50 messages arrive with no event.
+    for (let i = 0; i < 60; i += 1) server.post(uuid(i + 100), C);
+    live.emit({ type: "lost", source: "messages" });
+    live.emit({ type: "joined", source: "messages" });
+    await settle(40);
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toEqual(ids(server.fullRead([C])));
+  });
+
+  it("applies a live row with zero requests and skips its own echo", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    server.post(uuid(1), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await settle();
+
+    // Someone else's message: from the event, no request.
+    const calls = server.calls.length;
+    const theirs = server.post(uuid(2), C);
+    live.emit({ type: "message", row: theirs, insert: true });
+    expect(server.calls.length).toBe(calls);
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(theirs.id);
+    expect(store.getSnapshot().unread[C]?.unread).toBe(1);
+
+    // Mine: visible at once, under the id the server keeps.
+    const id = store.send({ channelId: C, body: "hi" });
+    const shown = store.getSnapshot().windows[C]!.rows.at(-1)!;
+    expect(shown.id).toBe(id);
+    expect(shown.sendState).toBe("sending");
+    await settle();
+    expect(store.getSnapshot().windows[C]!.rows.at(-1)).toMatchObject({ id, body: "hi" });
+    expect(store.getSnapshot().windows[C]!.rows.at(-1)!.sendState).toBeUndefined();
+
+    // Its echo (the same server stamp) changes nothing.
+    const before = store.getSnapshot();
+    live.emit({ type: "message", row: server.rows.get(id)!, insert: true });
+    expect(store.getSnapshot()).toBe(before);
+
+    // A write in flight isn't flicked back by an event about its row.
+    const answer = server.holdNext("react");
+    const reacting = store.react(theirs.id, "👍", true);
+    live.emit({
+      type: "message",
+      row: server.change(theirs.id, { body: "edited by them" }),
+      insert: false,
+    });
+    let row = store.getSnapshot().windows[C]!.rows.find((r) => r.id === theirs.id)!;
+    expect(row.body).toBe("edited by them");
+    expect(row.reactions["👍"]).toEqual([ME]);
+    answer();
+    expect(await reacting).toEqual({ ok: true });
+    row = store.getSnapshot().windows[C]!.rows.find((r) => r.id === theirs.id)!;
+    expect(row.reactions["👍"]).toEqual([ME]);
+    expect(row.body).toBe("edited by them");
+  });
+
+  it("a refusal rolls back one write: the others on the same row stay", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const row = server.post(uuid(1), C, { authorId: ME, body: "original" });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    server.refuse.set("edit", { code: "42501", message: "You can't edit this message." });
+    const [pinned, edited] = await Promise.all([
+      store.pin(row.id, true),
+      store.edit(row.id, "changed"),
+    ]);
+    expect(pinned).toEqual({ ok: true });
+    expect(edited).toEqual({ ok: false, offline: false, message: "You can't edit this message." });
+    const shown = store.getSnapshot().windows[C]!.rows.find((r) => r.id === row.id)!;
+    expect(shown.body).toBe("original");
+    expect(shown.pinnedAt).not.toBeNull();
+    // No reload: the refusal cost no read.
+    expect(server.calls.filter((c) => c === "page")).toHaveLength(1);
+  });
+
+  it("offline sends wait, then go in order under the same ids; a refusal says Not sent", async () => {
+    const { server, copy, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+
+    server.offline = true;
+    const sent = ["one", "two", "three"].map((body) => store.send({ channelId: C, body }));
+    await settle();
+    let rows = store.getSnapshot().windows[C]!.rows;
+    expect(ids(rows)).toEqual(sent);
+    expect(rows.map((r) => r.sendState)).toEqual(["waiting", "waiting", "waiting"]);
+    expect(store.getSnapshot().offline).toBe(true);
+    // Kept with the copy: a reload still has them.
+    expect(copy.metas.get(OWNER)?.outbox.map((e) => e.id)).toEqual(sent);
+    // Other writes say "Offline".
+    expect(await store.react(sent[0]!, "👍", true)).toMatchObject({ ok: false, offline: true });
+
+    // Back online; the first answer is lost after the server stored it.
+    server.offline = false;
+    server.loseAnswer.add("send");
+    window.dispatchEvent(new Event("online"));
+    await settle(40);
+    window.dispatchEvent(new Event("online"));
+    await settle(40);
+    const mine = [...server.rows.values()].filter((r) => r.authorId === ME);
+    // Each once, in order, under the ids minted on the device.
+    expect(ids(mine.sort((a, b) => compareKeys(keyOf(a), keyOf(b))))).toEqual(sent);
+    rows = store.getSnapshot().windows[C]!.rows;
+    expect(ids(rows)).toEqual(sent);
+    expect(rows.every((r) => !r.sendState)).toBe(true);
+    expect(copy.metas.get(OWNER)?.outbox).toEqual([]);
+
+    // The server says no: "Not sent · Retry", never a vanished message.
+    server.refuse.set("send", { code: "42501", message: "This channel is archived." });
+    const refused = store.send({ channelId: C, body: "four" });
+    await settle();
+    const failed = store.getSnapshot().windows[C]!.rows.at(-1)!;
+    expect(failed).toMatchObject({
+      id: refused,
+      sendState: "failed",
+      sendError: "This channel is archived.",
+    });
+    expect(copy.metas.get(OWNER)?.outbox.map((e) => e.id)).toEqual([refused]);
+    server.refuse.delete("send");
+    store.retry(refused);
+    await settle();
+    expect(server.rows.get(refused)?.body).toBe("four");
+    expect(store.getSnapshot().windows[C]!.rows.at(-1)!.sendState).toBeUndefined();
+  });
+
+  it("the read mark is the last message on screen and moves forward only", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const rows = Array.from({ length: 5 }, (_, i) => server.post(uuid(i + 1), C));
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    store.markSeen(C, rows[3]!.id);
+    store.markSeen(C, rows[1]!.id);
+    await settle();
+    expect(store.getSnapshot().mine[C]?.lastReadId).toBe(rows[3]!.id);
+    expect(server.marks).toEqual([{ channelId: C, messageId: rows[3]!.id }]);
+  });
+
+  it("lands on a message from last month: a window around it, its chain named", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    for (let i = 0; i < 400; i += 1) server.post(uuid(i + 1), C);
+    const root = server.rows.get(uuid(150))!;
+    const reply = server.post(uuid(9999), C, {
+      createdAt: stampOf(server.clock - 1),
+      parentId: root.id,
+      replyToId: root.id,
+    });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    const target = server.rows.get(uuid(100))!;
+    expect(await store.openAt(C, target.id)).toEqual({ channelId: C, chainId: null });
+    const win = store.getSnapshot().windows[C]!;
+    expect(win.target).toBe(target.id);
+    expect(win.hasNewer).toBe(true);
+    expect(win.hasOlder).toBe(false);
+    expect(win.rows.map((r) => r.id)).toContain(target.id);
+    expect(win.rows).toHaveLength(99 + 1 + 100);
+    expect(await store.openAt(C, reply.id)).toEqual({ channelId: C, chainId: root.id });
+    // Back to the newest: the jump window goes.
+    await store.jumpToLatest(C);
+    expect(store.getSnapshot().windows[C]!.hasNewer).toBe(false);
+  });
+});

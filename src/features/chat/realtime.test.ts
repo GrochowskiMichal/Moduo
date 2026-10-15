@@ -1,206 +1,236 @@
-import { describe, expect, it, rs } from "@rstest/core";
+import { describe, expect, it } from "@rstest/core";
 
-// Chat's live link: presence on the workspace's private topic, typing on one
-// private topic per conversation that only the open conversation joins, and
-// "I'm typing" told to the server (chat_op_typing) rather than broadcast from
-// here, so the sender on a typing line is always the session's.
+// Chat's live layer (CV-3): the Postgres Changes adapter the store's merge
+// takes its input from (the message binding narrowed with `select`, a join
+// counted only once Realtime says "Subscribed to PostgreSQL"), and the typing
+// and presence stores: typing on one private topic per open conversation, told
+// to the server rather than broadcast, and a refused join is an error state,
+// never an empty "everyone away" (AC1.9).
 
-type Handler = (msg: { payload: unknown }) => void;
-type Channel = {
+import { CHAT_MESSAGE_COLUMN_LIST } from "./columns";
+import { type ChatLiveEvent, type ChatSocket, postgresChangesSource } from "./realtime";
+import { ChatPresenceStore } from "./store/presence";
+import { ChatTypingStore, TYPING_THROTTLE_MS, TYPING_TTL_MS } from "./store/typing";
+
+type Handler = (payload: unknown) => void;
+type FakeChannel = {
   topic: string;
   opts: unknown;
-  handlers: Map<string, Handler>;
-  joined: boolean;
+  bindings: { kind: string; filter: Record<string, unknown>; fn: Handler }[];
+  status: ((s: string) => void) | null;
   removed: boolean;
-  sent: unknown[];
+  tracked: unknown[];
+  presence: Record<string, unknown>;
 };
-const h = rs.hoisted(() => ({
-  channels: [] as Channel[],
-  rpcs: [] as { name: string; args: unknown }[],
-}));
 
-rs.mock("@/lib/runtime.web", () => ({
-  supabaseClient: {
+function fakeSocket() {
+  const channels: FakeChannel[] = [];
+  const socket = {
     channel: (topic: string, opts?: unknown) => {
-      const ch: Channel = {
+      const ch: FakeChannel = {
         topic,
         opts,
-        handlers: new Map(),
-        joined: false,
+        bindings: [],
+        status: null,
         removed: false,
-        sent: [],
+        tracked: [],
+        presence: {},
       };
-      h.channels.push(ch);
+      channels.push(ch);
       const api = {
-        on: (kind: string, filter: { event?: string; table?: string }, fn: Handler) => {
-          ch.handlers.set(`${kind}:${filter.event ?? filter.table ?? ""}`, fn);
+        on: (kind: string, filter: Record<string, unknown>, fn: Handler) => {
+          ch.bindings.push({ kind, filter, fn });
           return api;
         },
         subscribe: (cb?: (s: string) => void) => {
-          ch.joined = true;
-          cb?.("SUBSCRIBED");
+          ch.status = cb ?? null;
           return api;
         },
-        send: (msg: unknown) => {
-          ch.sent.push(msg);
+        track: (state: unknown) => {
+          ch.tracked.push(state);
           return Promise.resolve("ok");
         },
-        track: () => Promise.resolve("ok"),
-        presenceState: () => ({}),
+        presenceState: () => ch.presence,
         __ch: ch,
       };
       return api;
     },
-    removeChannel: (api: { __ch: Channel }) => {
+    removeChannel: (api: { __ch: FakeChannel }) => {
       api.__ch.removed = true;
       return Promise.resolve("ok");
     },
-    rpc: (name: string, args: unknown) => {
-      h.rpcs.push({ name, args });
-      return Promise.resolve({ data: null, error: null });
-    },
-  },
-}));
-
-const { acquireChatLink } = await import("./realtime");
-
-/** The newest channel on a topic (an earlier test may have left a removed one). */
-const byTopic = (topic: string) => [...h.channels].reverse().find((c) => c.topic === topic);
-const typingOn = (topic: string, payload: unknown) =>
-  byTopic(topic)?.handlers.get("broadcast:typing")?.({ payload });
-
-describe("chat live link", () => {
-  it("keeps presence on the workspace topic and follows typing one conversation at a time", () => {
-    const { link, release } = acquireChatLink("ws-1", "me");
-    expect(h.channels.map((c) => c.topic)).toEqual(["chat-db:ws-1:me", "chat:ws-1"]);
-    const presence = byTopic("chat:ws-1")!;
-    expect(presence.opts).toEqual({ config: { private: true, presence: { key: "me" } } });
-    expect([...presence.handlers.keys()]).toEqual(["presence:sync"]);
-
-    const stopA = link.watchTyping("c-1");
-    const stopB = link.watchTyping("c-1");
-    const typing = byTopic("chat:typing:c-1")!;
-    expect(h.channels.filter((c) => c.topic === "chat:typing:c-1")).toHaveLength(1);
-    expect(typing.opts).toEqual({ config: { private: true } });
-    expect([...typing.handlers.keys()]).toEqual(["broadcast:typing"]);
-    expect(typing.joined).toBe(true);
-
-    stopA();
-    expect(typing.removed).toBe(false);
-    stopB();
-    stopB();
-    expect(typing.removed).toBe(true);
-
-    link.watchTyping("c-2");
-    expect(byTopic("chat:typing:c-2")?.joined).toBe(true);
-    release();
-    expect(byTopic("chat:typing:c-2")?.removed).toBe(true);
-    expect(presence.removed).toBe(true);
-  });
-
-  it("shows the sender the server named, drops my own echo, and forgets a conversation it leaves", () => {
-    const { link, release } = acquireChatLink("ws-2", "me");
-    const stop = link.watchTyping("c-1");
-    let notified = 0;
-    link.subscribeTyping(() => {
-      notified += 1;
-    });
-
-    typingOn("chat:typing:c-1", { userId: "u2", channelId: "c-1", parentId: null, stop: false });
-    expect(link.getTyping().map((t) => [t.userId, t.channelId, t.parentId])).toEqual([
-      ["u2", "c-1", null],
-    ]);
-    expect(notified).toBe(1);
-
-    typingOn("chat:typing:c-1", { userId: "me", channelId: "c-1", parentId: null, stop: false });
-    expect(link.getTyping()).toHaveLength(1);
-
-    typingOn("chat:typing:c-1", { userId: "u3", channelId: "c-1", parentId: "m-1", stop: false });
-    expect(link.getTyping().map((t) => t.userId)).toEqual(["u2", "u3"]);
-
-    typingOn("chat:typing:c-1", { userId: "u2", channelId: "c-1", parentId: null, stop: true });
-    expect(link.getTyping().map((t) => t.userId)).toEqual(["u3"]);
-
-    typingOn("chat:typing:c-1", { channelId: "c-1" });
-    expect(link.getTyping()).toHaveLength(1);
-
-    stop();
-    expect(link.getTyping()).toEqual([]);
-    release();
-  });
-
-  it("asks the server to show me as typing, throttled, and never broadcasts from the client", () => {
-    rs.useFakeTimers();
-    const t0 = new Date("2026-10-14T10:00:00Z").getTime();
-    rs.setSystemTime(t0);
-    try {
-      const { link, release } = acquireChatLink("ws-3", "me");
-      const sentBefore = h.channels.reduce((n, c) => n + c.sent.length, 0);
-      h.rpcs.length = 0;
-
-      link.sendTyping("c-1", null);
-      link.sendTyping("c-1", null);
-      expect(h.rpcs).toEqual([
-        {
-          name: "chat_op_typing",
-          args: { p_channel_id: "c-1", p_parent_id: null, p_stop: false },
-        },
-      ]);
-
-      rs.setSystemTime(t0 + 2_999);
-      link.sendTyping("c-1", null);
-      expect(h.rpcs).toHaveLength(1);
-      rs.setSystemTime(t0 + 3_000);
-      link.sendTyping("c-1", null);
-      expect(h.rpcs).toHaveLength(2);
-
-      link.sendTyping("c-1", "m-1");
-      expect(h.rpcs.at(-1)?.args).toEqual({
-        p_channel_id: "c-1",
-        p_parent_id: "m-1",
-        p_stop: false,
-      });
-
-      link.sendTyping("c-1", null, true);
-      expect(h.rpcs.at(-1)?.args).toEqual({ p_channel_id: "c-1", p_parent_id: null, p_stop: true });
-      link.sendTyping("c-1", null, true);
-      expect(h.rpcs).toHaveLength(4);
-
-      expect(h.channels.reduce((n, c) => n + c.sent.length, 0)).toBe(sentBefore);
-      release();
-    } finally {
-      rs.useRealTimers();
+  };
+  const fire = (ch: FakeChannel, kind: string, payload: unknown, event?: string) => {
+    for (const b of ch.bindings) {
+      if (b.kind === kind && (!event || b.filter.event === event)) b.fn(payload);
     }
+  };
+  return { socket: socket as unknown as ChatSocket, channels, fire };
+}
+
+const WS = "ws-1";
+const ME = "me";
+
+describe("postgresChangesSource", () => {
+  it("binds the message table with `select`, each source its own channel", () => {
+    const { socket, channels } = fakeSocket();
+    const stop = postgresChangesSource(socket)({ workspaceId: WS, userId: ME }, () => {});
+    expect(channels.map((c) => c.topic)).toEqual([
+      `chat-messages:${WS}:${ME}`,
+      `chat-channels:${WS}:${ME}`,
+      `chat-members:${WS}:${ME}`,
+      `chat-catchup:${WS}:${ME}`,
+    ]);
+    const messages = channels[0]!.bindings.find((b) => b.kind === "postgres_changes")!;
+    expect(messages.filter).toMatchObject({
+      table: "chat_messages",
+      filter: `workspace_id=eq.${WS}`,
+      select: [...CHAT_MESSAGE_COLUMN_LIST],
+    });
+    expect(messages.filter.select).not.toContain("search_tsv");
+    expect(messages.filter.select).not.toContain("body_text");
+    expect(channels[2]!.bindings[0]!.filter).toMatchObject({ filter: `user_id=eq.${ME}` });
+    stop();
+    expect(channels.every((c) => c.removed)).toBe(true);
   });
 
-  it("reads a membership row stamped left_at as leaving, and an active one as joining", () => {
-    const { link, release } = acquireChatLink("ws-4", "me");
-    const events: unknown[] = [];
-    const stop = link.subscribe((e) => events.push(e));
-    // The members subscription is the last postgres_changes handler on the db topic.
-    const onMember = byTopic("chat-db:ws-4:me")?.handlers.get("postgres_changes:*");
+  it("says joined only once Realtime is subscribed to Postgres, and maps rows", () => {
+    const { socket, channels, fire } = fakeSocket();
+    const events: ChatLiveEvent[] = [];
+    postgresChangesSource(socket)({ workspaceId: WS, userId: ME }, (e) => events.push(e));
+    const [messages, , members] = channels;
+    messages!.status?.("SUBSCRIBED");
+    expect(events).toEqual([]);
+    fire(messages!, "system", { extension: "postgres_changes", status: "ok" });
+    expect(events).toEqual([{ type: "joined", source: "messages" }]);
+
     const row = {
-      channel_id: "c-9",
-      user_id: "me",
-      workspace_id: "ws-4",
-      notify_level: "mentions",
+      id: "m1",
+      channel_id: "c1",
+      workspace_id: WS,
+      created_at: "2026-10-14T11:25:24.355604+00:00",
+      updated_at: "2026-10-14T11:25:24.355604+00:00",
+      kind: "message",
+      format_version: 2,
     };
-
-    onMember?.({ eventType: "UPDATE", new: { ...row, left_at: null }, old: {} } as never);
-    onMember?.({
+    fire(messages!, "postgres_changes", { eventType: "INSERT", new: row, old: {} });
+    fire(messages!, "postgres_changes", {
       eventType: "UPDATE",
-      new: { ...row, left_at: "2026-10-15T09:00:00Z" },
+      new: { ...row, body: "x" },
       old: {},
-    } as never);
-    onMember?.({ eventType: "DELETE", new: {}, old: { channel_id: "c-8" } } as never);
-
-    expect(events.map((e) => (e as { type: string }).type)).toEqual([
-      "membership",
-      "membership-removed",
-      "membership-removed",
+    });
+    fire(messages!, "postgres_changes", { eventType: "DELETE", new: {}, old: { id: "m1" } });
+    expect(events.slice(1).map((e) => [e.type, "insert" in e ? e.insert : null])).toEqual([
+      ["message", true],
+      ["message", false],
+      ["message-gone", null],
     ]);
-    expect((events[1] as { channelId: string }).channelId).toBe("c-9");
-    stop();
+    expect(events[1]).toMatchObject({ row: { id: "m1", updatedAt: row.updated_at } });
+
+    // Leaving or a removal stamps the row: no longer a membership.
+    fire(members!, "postgres_changes", {
+      eventType: "UPDATE",
+      new: { channel_id: "c1", user_id: ME, workspace_id: WS, left_at: "2026-10-14T12:00:00Z" },
+    });
+    expect(events.at(-1)).toEqual({ type: "member-left", channelId: "c1" });
+    messages!.status?.("CHANNEL_ERROR");
+    expect(events.at(-1)).toEqual({ type: "lost", source: "messages" });
+  });
+});
+
+describe("ChatTypingStore", () => {
+  it("joins only the open conversation's private topic and leaves it on release", () => {
+    const { socket, channels } = fakeSocket();
+    const typing = new ChatTypingStore(socket, { typing: async () => {} }, ME);
+    const leaveA = typing.watch("a");
+    const leaveA2 = typing.watch("a");
+    expect(channels.map((c) => [c.topic, c.opts])).toEqual([
+      ["chat:typing:a", { config: { private: true } }],
+    ]);
+    leaveA();
+    expect(channels[0]!.removed).toBe(false);
+    leaveA2();
+    expect(channels[0]!.removed).toBe(true);
+    typing.watch("b");
+    expect(channels.at(-1)!.topic).toBe("chat:typing:b");
+  });
+
+  it("tells the server at most once every 3 s, stops at once, and never shows yourself", () => {
+    let now = 1_000_000;
+    const sent: unknown[] = [];
+    const { socket, channels, fire } = fakeSocket();
+    const typing = new ChatTypingStore(
+      socket,
+      {
+        typing: async (args) => {
+          sent.push(args);
+        },
+      },
+      ME,
+      () => now,
+    );
+    typing.send("a", null);
+    typing.send("a", null);
+    now += TYPING_THROTTLE_MS;
+    typing.send("a", null);
+    typing.send("a", null, true);
+    expect(sent).toEqual([
+      { channelId: "a", parentId: null, stop: false },
+      { channelId: "a", parentId: null, stop: false },
+      { channelId: "a", parentId: null, stop: true },
+    ]);
+
+    typing.watch("a");
+    fire(channels[0]!, "broadcast", { payload: { userId: ME, channelId: "a" } });
+    expect(typing.getSnapshot().entries).toEqual([]);
+    fire(channels[0]!, "broadcast", { payload: { userId: "ana", channelId: "a", parentId: null } });
+    expect(typing.getSnapshot().entries).toEqual([
+      { userId: "ana", channelId: "a", parentId: null, until: now + TYPING_TTL_MS },
+    ]);
+    fire(channels[0]!, "broadcast", { payload: { userId: "ana", channelId: "a", stop: true } });
+    expect(typing.getSnapshot().entries).toEqual([]);
+    typing.dispose();
+  });
+
+  it("a refused join is an error state, not an empty line (AC1.9)", () => {
+    const { socket, channels } = fakeSocket();
+    const typing = new ChatTypingStore(socket, { typing: async () => {} }, ME);
+    typing.watch("a");
+    channels[0]!.status?.("CHANNEL_ERROR");
+    expect(typing.getSnapshot().error).toBe("Typing isn't available");
+    channels[0]!.status?.("SUBSCRIBED");
+    expect(typing.getSnapshot().error).toBeNull();
+  });
+});
+
+describe("ChatPresenceStore", () => {
+  it("tracks you once joined and shows who's online", () => {
+    const { socket, channels, fire } = fakeSocket();
+    const presence = new ChatPresenceStore(socket, WS, ME);
+    const release = presence.acquire();
+    const ch = channels[0]!;
+    expect([ch.topic, ch.opts]).toEqual([
+      `chat:${WS}`,
+      { config: { private: true, presence: { key: ME } } },
+    ]);
+    ch.status?.("SUBSCRIBED");
+    expect(ch.tracked).toHaveLength(1);
+    ch.presence = { [ME]: [{}], ana: [{}] };
+    fire(ch, "presence", {}, "sync");
+    expect(presence.getSnapshot()).toMatchObject({ status: "online", error: null });
+    expect([...presence.getSnapshot().online].sort()).toEqual(["ana", ME]);
     release();
+    expect(ch.removed).toBe(true);
+  });
+
+  it("a refused join shows as an error, never as everyone away (AC1.9)", () => {
+    const { socket, channels } = fakeSocket();
+    const presence = new ChatPresenceStore(socket, WS, ME);
+    presence.acquire();
+    channels[0]!.status?.("CHANNEL_ERROR");
+    expect(presence.getSnapshot()).toMatchObject({
+      status: "error",
+      error: "Presence isn't available",
+    });
   });
 });

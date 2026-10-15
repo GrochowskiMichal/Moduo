@@ -25,6 +25,7 @@ const m = (channelId: string, notifyLevel: ChatMember["notifyLevel"] = "mentions
   notifyLevel,
   starred: false,
   lastReadAt: "2026-01-01T00:00:00Z",
+  lastReadId: null,
   joinedAt: "2026-01-01T00:00:00Z",
 });
 
@@ -46,9 +47,9 @@ describe("shapeChatWidget", () => {
       ],
       mine: [m("quiet"), m("busy"), m("dm"), m("muted", "none"), m("old")],
       unread: [
-        { channelId: "busy", unread: 5, mentions: 0 },
-        { channelId: "dm", unread: 2, mentions: 0 },
-        { channelId: "muted", unread: 9, mentions: 9 },
+        { channelId: "busy", unread: 5, mentions: 0, addressed: 0, catchup: 0 },
+        { channelId: "dm", unread: 2, mentions: 0, addressed: 2, catchup: 2 },
+        { channelId: "muted", unread: 9, mentions: 9, addressed: 0, catchup: 0 },
       ],
       people: { ana: { userId: "ana", name: "Ana", avatarUrl: null, role: null } },
       selfId: ME,

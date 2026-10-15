@@ -78,11 +78,17 @@ function msg(
     workspaceId: "w",
     channelId: "launch-plan",
     parentId: null,
+    replyToId: null,
+    kind: "message",
+    event: null,
+    formatVersion: 2,
     authorId: author,
     authorKind: "user",
     authorLabel: null,
     body,
     mentionedUserIds: [],
+    mentionedTeamIds: [],
+    mentionsEveryone: false,
     reactions: {},
     replyCount: 0,
     lastReplyAt: null,
@@ -93,6 +99,7 @@ function msg(
     deletedAt: null,
     clientId: null,
     createdAt: at(minAgo),
+    updatedAt: at(minAgo),
     ...extra,
   };
 }
@@ -155,6 +162,7 @@ const members: ChatMember[] = [ME, ANA, BEN].map((userId) => ({
   notifyLevel: "mentions",
   starred: false,
   lastReadAt: at(9),
+  lastReadId: null,
   joinedAt: at(1000),
 }));
 

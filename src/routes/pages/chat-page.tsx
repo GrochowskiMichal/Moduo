@@ -83,6 +83,7 @@ export function ChatPage() {
     userId,
     activeChannelId,
     activeThreadId,
+    focusMessageId: search.m ?? null,
   });
   const online = useChatOnline(link);
   const typing = useChatTyping(link);
@@ -514,9 +515,7 @@ export function ChatPage() {
         onTopic={(topic) => actions.updateChannel(channel.id, { topic })}
         onStar={(starred) => void actions.setPrefs(channel.id, { starred })}
         onNotify={(notifyLevel) => void actions.setPrefs(channel.id, { notifyLevel })}
-        onMarkRead={() => {
-          void runtime?.chat.markRead({ channelId: channel.id }).then(() => actions.reload());
-        }}
+        onMarkRead={() => actions.markRead(channel.id)}
         onLeave={() => {
           void actions.leave(channel.id).then(() => go({}, true));
         }}

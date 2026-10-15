@@ -46,7 +46,19 @@ export function takeEntityOpenIntent(id: string): boolean {
   return hit;
 }
 
-export function entityOpenTarget(type: string, id: string): EntityOpenTarget | null {
+/** Where in an entity to land, when the link names it (a chat notice names its message). */
+export type EntityOpenAt = {
+  /** A message in a conversation: the stream loads a window around it. */
+  messageId?: string | null;
+  /** The chain that message belongs to: it opens beside the stream. */
+  chainId?: string | null;
+};
+
+export function entityOpenTarget(
+  type: string,
+  id: string,
+  at: EntityOpenAt = {},
+): EntityOpenTarget | null {
   // Email: an id-less "open my inbox" (the widget's per-account unread rows) is
   // valid and lands on the plain inbox; an id (a thread's `email_thread` entity
   // id) deep-links to that thread (DF-2). Handled before the id guard so the
@@ -68,9 +80,15 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
       return { to: "/notes", search: { id }, intentId: id };
     case "event":
       return { to: "/calendar", search: { event: id }, intentId: id };
-    // Chat notifications target the conversation (chat.mention / chat.reply).
-    case "chat_channel":
-      return { to: "/chat", search: { c: id }, intentId: id };
+    // Chat notifications target the conversation (chat.mention / chat.reply) and
+    // land on the message and its chain when the notice names them (AC1.6):
+    // `c` the conversation, `m` the message, `t` the chain beside it.
+    case "chat_channel": {
+      const search: Record<string, string> = { c: id };
+      if (at.messageId) search.m = at.messageId;
+      if (at.messageId && at.chainId) search.t = at.chainId;
+      return { to: "/chat", search, intentId: id };
+    }
     default:
       return null;
   }
