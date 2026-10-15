@@ -165,7 +165,24 @@ test("a handle deep link (?id=MOD-142) opens its task", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(t.title, {
     timeout: 20_000,
   });
-  await expect(page).toHaveURL(new RegExp(`id=${t.id}`));
+  // The address bar keeps the handle (MOD-28).
+  await expect(page).toHaveURL(new RegExp(`id=${taskKey}-${t.number}$`));
+});
+
+test("an old link by id still opens its task, and the address bar then shows the handle (MOD-28)", async ({
+  page,
+}) => {
+  const t = await createTask(dev, { title: `Uuid target ${tag}`, bucketId: ws.inboxId });
+  await openTask(page, dev, t.id);
+  await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(t.title, {
+    timeout: 20_000,
+  });
+  await expect(page).toHaveURL(new RegExp(`id=${taskKey}-${t.number}$`));
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Task title" })).toHaveValue(t.title, {
+    timeout: 20_000,
+  });
+  await expect(page).toHaveURL(new RegExp(`id=${taskKey}-${t.number}$`));
 });
 
 test("`/task` + a four-word title offers New task; Enter creates it and inserts it", async ({

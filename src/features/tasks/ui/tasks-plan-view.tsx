@@ -53,6 +53,7 @@ import {
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
+import { taskLinkId } from "../../../lib/task-handle";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
@@ -128,7 +129,7 @@ import {
   panelTitleOf,
 } from "../panel-views";
 import { handleLabel } from "../row-layout";
-import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
+import { handleLinkStep, lookupHandleLink, resolveTasksDeepLink, type TasksPlace } from "../search";
 import { backstopPick, inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
@@ -204,6 +205,8 @@ type Props = {
 
 // The selection→URL mirror writes only at rest (see the mirror effect).
 const URL_MIRROR_DEBOUNCE_MS = 250;
+// A handle link whose lookup failed is asked again this often (MOD-28).
+const HANDLE_RETRY_MS = 30_000;
 
 const EMPTY_IDS: readonly string[] = [];
 const NO_OP = () => {};
@@ -374,6 +377,22 @@ export function TasksPlanView({
   // A handle deep link (`?id=MOD-142`, RF-1) being looked up, and the URL's
   // latest id (the lookup is dropped if the URL moved on meanwhile).
   const handlePendingRef = useRef<string | null>(null);
+  // A handle whose lookup failed (offline, a server error, MOD-28): it stays
+  // in the URL, unprocessed, and is asked again when the connection comes
+  // back or every half minute; its "take me there" mark is kept meanwhile.
+  const [handleFailed, setHandleFailed] = useState<string | null>(null);
+  const [handleRetry, setHandleRetry] = useState(0);
+  const handleRetryIntentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!handleFailed) return;
+    const again = () => setHandleRetry((n) => n + 1);
+    const id = window.setTimeout(again, HANDLE_RETRY_MS);
+    window.addEventListener("online", again);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("online", again);
+    };
+  }, [handleFailed]);
   const latestUrlIdRef = useRef(urlTaskId);
   useLayoutEffect(() => {
     latestUrlIdRef.current = urlTaskId;
@@ -1421,6 +1440,7 @@ export function TasksPlanView({
     }),
     [tasks, buckets, inboxId, api.archivedTasks, api.archivedBuckets],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `handleRetry` asks a failed handle lookup again
   useEffect(() => {
     if (api.loading || api.error) return;
     if (!urlTaskId) {
@@ -1434,19 +1454,28 @@ export function TasksPlanView({
     }
     // Done, Won't do and Backlog tasks arrive after the open ones (the shared
     // store, TV-D11a): a link to one waits for them before it reads as gone.
+    // A handle too (MOD-28: refresh, back and forward arrive as one now).
+    const handleStep = looksLikeHandle(urlTaskId)
+      ? handleLinkStep(urlTaskId, { tasks: linkable.tasks, taskKey, restLoaded: api.restLoaded })
+      : null;
     if (
-      !api.restLoaded &&
-      !looksLikeHandle(urlTaskId) &&
-      resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
+      handleStep
+        ? handleStep.kind === "wait"
+        : !api.restLoaded && resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
     ) {
       return;
     }
     processedUrlIdRef.current = urlTaskId;
-    const external = takeEntityOpenIntent(urlTaskId);
-    // A handle (`?id=MOD-142`, RF-1): find its task (here, else on the server,
-    // which knows the old keys too), then follow the task's own id, keeping a
-    // "take me there" mark. A handle you can't open is a "Private item".
-    if (looksLikeHandle(urlTaskId)) {
+    // A link whose lookup failed keeps its "take me there" mark for the retry.
+    const external = takeEntityOpenIntent(urlTaskId) || handleRetryIntentRef.current === urlTaskId;
+    handleRetryIntentRef.current = null;
+    setHandleFailed(null);
+    // A handle (`?id=MOD-142`, RF-1): find its task (here, archived projects'
+    // too, else on the server, which knows the old keys), then follow the
+    // task's own id, keeping a "take me there" mark. A handle the server says
+    // you can't open is a "Private item"; one it couldn't look up (offline)
+    // stays in the URL and is asked again, never dropped (MOD-28).
+    if (handleStep) {
       const handle = urlTaskId;
       handlePendingRef.current = handle;
       const follow = (id: string | null) => {
@@ -1461,10 +1490,21 @@ export function TasksPlanView({
         if (external) markEntityOpenIntent(id);
         onUrlTaskIdChange(id);
       };
-      const local = taskIdForHandle(handle, tasks, taskKey);
-      if (local) follow(local);
-      else if (referenceStore) void referenceStore.resolveHandle(handle).then(follow);
-      else follow(null);
+      if (handleStep.kind === "task") follow(handleStep.taskId);
+      // Outside the app shell there's no lookup: what's loaded is all there is.
+      else if (!referenceStore) follow(null);
+      else
+        void lookupHandleLink(handle, (h) => referenceStore.lookupHandle(h)).then((answer) => {
+          if (answer.kind !== "failed") {
+            follow(answer.kind === "task" ? answer.taskId : null);
+            return;
+          }
+          if (handlePendingRef.current !== handle) return;
+          handlePendingRef.current = null;
+          if (processedUrlIdRef.current === handle) processedUrlIdRef.current = null;
+          if (external) handleRetryIntentRef.current = handle;
+          setHandleFailed(handle);
+        });
       return;
     }
     // Won't do tasks open too: the selected one stays in scope with Reopen
@@ -1497,30 +1537,50 @@ export function TasksPlanView({
     api.error,
     api.restLoaded,
     urlTaskId,
-    tasks,
     linkable,
     scopeTasksAll,
     onUrlTaskIdChange,
     taskKey,
     referenceStore,
+    handleRetry,
   ]);
+  // Picking a task while a failed handle link waits lets the link go: you
+  // moved on, and a later answer mustn't pull the selection back (MOD-28).
+  const selectionAtFailRef = useRef(selectedTaskId);
+  useEffect(() => {
+    if (!handleFailed) {
+      selectionAtFailRef.current = selectedTaskId;
+      return;
+    }
+    if (selectedTaskId === selectionAtFailRef.current) return;
+    processedUrlIdRef.current = handleFailed;
+    handleRetryIntentRef.current = null;
+    setHandleFailed(null);
+  }, [handleFailed, selectedTaskId]);
 
   // Mirror selection → URL (replace) so refresh keeps it. Trailing-debounced:
   // the URL only needs to be right at rest, and WebKit throttles
   // history.replaceState (~100 calls/30s) — an undebounced j/k key-repeat
   // cursor would trip a SecurityError in the desktop webview. Suspended while
   // an inbound id awaits apply — never overwrite a target before honoring it
-  // (a handle being looked up included).
+  // (a handle being looked up included). The URL names the task by its
+  // handle when it has one (`?id=MOD-142`, MOD-28), else by its id; a link
+  // that arrived by id (an old link, a notification, a chip) is rewritten to
+  // the handle once it's selected, and the apply above reads the handle back
+  // as the mirror's own write (`selfWroteUrlIdRef`), never as a new link.
+  const selectedLinkId = selectedTaskId
+    ? taskLinkId(taskKey, { id: selectedTaskId, number: selectedTask?.number })
+    : null;
   useEffect(() => {
     if (api.loading || inboundPending || handlePendingRef.current) return;
-    if ((selectedTaskId ?? null) === (urlTaskId ?? null)) return;
+    if (selectedLinkId === (urlTaskId ?? null)) return;
     const handle = window.setTimeout(() => {
       if (handlePendingRef.current) return;
-      selfWroteUrlIdRef.current = selectedTaskId;
-      onUrlTaskIdChange(selectedTaskId);
+      selfWroteUrlIdRef.current = selectedLinkId;
+      onUrlTaskIdChange(selectedLinkId);
     }, URL_MIRROR_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [api.loading, inboundPending, selectedTaskId, urlTaskId, onUrlTaskIdChange]);
+  }, [api.loading, inboundPending, selectedLinkId, urlTaskId, onUrlTaskIdChange]);
 
   // Reveal the deep-linked row/card/bar once it exists in the DOM — the scope
   // snap, a collapsed group's reveal, and a nested subtask's parent

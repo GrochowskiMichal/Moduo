@@ -20,6 +20,8 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "../../../components/ui/context-menu";
+import { taskLinkId } from "../../../lib/task-handle";
+import { taskUrl } from "../../../lib/web-origin";
 import { LEVEL_OPTIONS } from "../helpers";
 import type { EnergyLevel, PriorityLevel, Task } from "../model";
 import { handleLabel } from "../row-layout";
@@ -79,8 +81,8 @@ export function TaskContextMenu({
   const closed = isClosedTask(task);
 
   const copyLink = () => {
-    const target = handle ?? task.id;
-    const url = `${window.location.origin}/tasks?id=${encodeURIComponent(target)}`;
+    // The handle when it has one (MOD-28), on the web's origin even on desktop.
+    const url = taskUrl(taskLinkId(taskKey, task));
     void navigator.clipboard?.writeText(url).then(
       () => toast("Link copied"),
       () => toast.error("Couldn’t copy."),
