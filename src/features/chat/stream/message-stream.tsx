@@ -24,9 +24,11 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
@@ -154,8 +156,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const [density] = useState(currentDensity);
-    const cacheKey = `${conversationId}|${density}`;
-    const sizes = useRef<Map<string, number>>(sizeCache.get(cacheKey) ?? new Map());
+
+    const sizes = useRef<Map<string, number>>(
+      sizeCache.get(`${conversationId}|${density}`) ?? new Map(),
+    );
 
     // One rows array per change of the window: the virtualizer's measurement
     // memo is keyed on `estimateSize` / `getItemKey`, which are keyed on it.
@@ -220,22 +224,91 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, v) =>
       item.start + item.size <= (v.scrollOffset ?? 0) + v.scrollAdjustments;
 
-    // Remember what was measured, for switching back (the measurement cache).
-    useEffect(() => {
-      const cache = sizes.current;
-      return () => {
-        for (const [key, size] of virtualizer.itemSizeCache) {
-          if (typeof key === "string") cache.set(key, size);
-        }
-        rememberSizes(cacheKey, cache);
-      };
-    }, [virtualizer, cacheKey]);
-
     const indexOfKey = useCallback((key: string) => {
       const list = rowsRef.current;
       for (let i = list.length - 1; i >= 0; i--) if (list[i]?.key === key) return i;
       return -1;
     }, []);
+
+    // Remember what was measured, for switching back (the measurement cache).
+    const densityRef = useRef(density);
+    const saveSizes = useCallback(() => {
+      const cache = sizes.current;
+      for (const [key, size] of virtualizer.itemSizeCache) {
+        if (typeof key === "string") cache.set(key, size);
+      }
+      rememberSizes(`${conversationId}|${densityRef.current}`, cache);
+    }, [virtualizer, conversationId]);
+    useEffect(() => saveSizes, [saveSizes]);
+
+    // A density switch (CH27) re-anchors in the same task, before the frame
+    // paints (spike 1's helper): the reader's row stays where it was while
+    // every row takes its new height.
+    const [, rerender] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => {
+      const root = document.documentElement;
+      const observer = new MutationObserver(() => {
+        const next = root.dataset.density ?? "comfortable";
+        if (next === densityRef.current) return;
+        const el = scrollRef.current;
+        const prev = densityRef.current;
+        saveSizes();
+        densityRef.current = next;
+        sizes.current = sizeCache.get(`${conversationId}|${next}`) ?? new Map();
+        if (!el) return;
+        // 1. The anchor: the first message wholly in view, by its text's top.
+        //    The new density's styles already apply, but rows still sit at
+        //    their old offsets; a row that starts a person had the old
+        //    density's gap above its text, read from a probe.
+        const probe = document.createElement("div");
+        probe.dataset.density = prev;
+        el.appendChild(probe);
+        const gapRaw = getComputedStyle(probe).getPropertyValue("--feed-person-gap").trim();
+        probe.remove();
+        const rem = Number.parseFloat(getComputedStyle(root).fontSize) || 16;
+        const oldGap = (Number.parseFloat(gapRaw) || 0) * (gapRaw.endsWith("rem") ? rem : 1);
+        const top = el.getBoundingClientRect().top;
+        let anchorKey: string | null = null;
+        let anchorTop = 0;
+        let anchorInner = 0;
+        for (const node of el.querySelectorAll<HTMLElement>("[data-key]")) {
+          if (node.dataset.sticky !== undefined) continue;
+          const article = node.querySelector<HTMLElement>("[data-message-id]");
+          if (!article) continue;
+          const r = node.getBoundingClientRect();
+          const inner = article.getBoundingClientRect().top - r.top;
+          const t = r.top - top + (inner > 0.5 ? oldGap : 0);
+          if (
+            t >= 0 &&
+            r.bottom - top <= el.clientHeight &&
+            (anchorKey === null || t < anchorTop)
+          ) {
+            anchorKey = node.dataset.key ?? null;
+            anchorTop = t;
+            anchorInner = inner;
+          }
+        }
+        // 2. Forget every size, re-measure what is drawn.
+        virtualizer.measure();
+        for (const node of el.querySelectorAll<HTMLDivElement>("[data-index]")) {
+          virtualizer.measureElement(node);
+        }
+        virtualizer.getTotalSize();
+        // 3. Put the anchor back where it was.
+        if (anchorKey !== null) {
+          const item = virtualizer.measurementsCache[indexOfKey(anchorKey)];
+          if (item) {
+            const target = Math.max(0, item.start + anchorInner - anchorTop);
+            el.scrollTop = target;
+            virtualizer.scrollOffset = target;
+            virtualizer.scrollAdjustments = 0;
+          }
+        }
+        flushSync(rerender);
+      });
+      observer.observe(root, { attributes: true, attributeFilter: ["data-density"] });
+      return () => observer.disconnect();
+    }, [virtualizer, conversationId, saveSizes, indexOfKey]);
 
     // ── opening, jumps, back to the present ─────────────────────────────────
     const [lit, setLit] = useState<string | null>(null);
