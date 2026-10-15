@@ -181,7 +181,8 @@ export type SizedColumn = (typeof SIZED_COLUMNS)[number];
 export type RowTexts = Partial<Record<SizedColumn, string | null>>;
 
 /** Detailed's header labels (also the narrowest each column gets). */
-export const COLUMN_LABELS: Record<Exclude<SizedColumn, "handle" | "date">, string> = {
+export const COLUMN_LABELS: Record<Exclude<SizedColumn, "date">, string> = {
+  handle: "ID",
   project: "Project",
   status: "Status",
   due: "Due",

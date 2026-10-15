@@ -315,6 +315,19 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(handle.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("Detailed's ID header sorts by the number and says which way (MOD-144)", () => {
+    const onSort = rs.fn();
+    const numbered = [task("a", { number: 10 }), task("b", { number: 2 })];
+    renderList(numbered, { rows: "detailed", taskKey: "MOD", onSort, order: "id" });
+    const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
+    const id = within(header).getByRole("button", { name: "ID, sorted ascending" });
+    fireEvent.click(id);
+    expect(onSort).toHaveBeenCalledWith("id");
+    // In number order: MOD-2 before MOD-10.
+    const titles = screen.getAllByRole("row").map((r) => r.getAttribute("data-task-id"));
+    expect(titles.filter(Boolean)).toEqual(["b", "a"]);
+  });
+
   it("Detailed has sortable column headers on the rows' widths", () => {
     const onSort = rs.fn();
     renderList(rows, { rows: "detailed", onSort });

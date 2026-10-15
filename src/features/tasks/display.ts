@@ -57,7 +57,9 @@ export type TaskOrder =
   | "created"
   | "updated"
   | "title"
-  | "status";
+  | "status"
+  /** The task's ID (MOD-144): in number order, MOD-2 before MOD-10. */
+  | "id";
 /** Which way a sort runs (a Detailed header clicked twice, TV-U10). */
 export type OrderDirection = "asc" | "desc";
 export type SubtaskMode = "nested" | "flat";
@@ -341,6 +343,7 @@ const ORDER_CONTROL: DisplayControl<TasksDisplay> = {
     { value: "updated", label: "Updated" },
     { value: "title", label: "Title" },
     { value: "status", label: "Status" },
+    { value: "id", label: "ID" },
   ],
 };
 
@@ -609,6 +612,9 @@ const SORT_KEYS: Record<Exclude<TaskOrder, "manual" | "title">, (t: Task) => num
     return x === null ? null : -x;
   },
   status: (t) => STATUS_RANK[statusKeyOf(t)] ?? null,
+  // The number, not the handle's text (MOD-144): MOD-2 before MOD-10. A task
+  // not saved yet has none.
+  id: (t) => (typeof t.number === "number" ? t.number : null),
 };
 
 function compareBy(order: Exclude<TaskOrder, "manual">, dir: OrderDirection) {
@@ -635,7 +641,8 @@ function compareBy(order: Exclude<TaskOrder, "manual">, dir: OrderDirection) {
  * Orders tasks for Display → Order by. Manual keeps the incoming (position)
  * order; every other order is stable, so ties keep the manual order. Dates
  * run earliest first, priority high to none, Created / Updated newest first,
- * titles A to Z, statuses in the List's order (In progress first); `desc`
+ * titles A to Z, statuses in the List's order (In progress first), IDs in
+ * number order (MOD-2 before MOD-10, MOD-144); `desc`
  * turns each around, and a task without the value sorts last either way.
  */
 export function orderTasks<T extends Task>(

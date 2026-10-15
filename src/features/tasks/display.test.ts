@@ -380,6 +380,25 @@ describe("Order by", () => {
     expect(ids(orderTasks(list, "due", "desc"))).toEqual(["a", "c", "b"]);
     expect(ids(orderTasks(list, "priority", "desc"))).toEqual(["a", "b", "c"]);
   });
+
+  it("IDs run in number order, MOD-2 before MOD-10, both ways; unsaved ones last (MOD-144)", () => {
+    const m10 = task("m10", { number: 10 });
+    const m2 = task("m2", { number: 2 });
+    const m999 = task("m999", { number: 999 });
+    const unsaved = task("unsaved", { number: null });
+    const mixed = [m10, unsaved, m999, m2];
+    expect(ids(orderTasks(mixed, "id"))).toEqual(["m2", "m10", "m999", "unsaved"]);
+    expect(ids(orderTasks(mixed, "id", "desc"))).toEqual(["m999", "m10", "m2", "unsaved"]);
+  });
+
+  it("Order by offers ID last, on the List and the Board (MOD-144)", () => {
+    for (const layout of ["list", "board"] as const) {
+      const order = tasksDisplayControls("all", layout).find((c) => c.id === "order");
+      expect(order?.options.at(-1)).toMatchObject({ value: "id", label: "ID" });
+    }
+    // A stored ID order is kept.
+    expect(sanitizeTasksView({ order: "id" }, tasksViewDefaults("b1"), "b1").order).toBe("id");
+  });
 });
 
 describe("Detailed headers (TV-U10)", () => {
