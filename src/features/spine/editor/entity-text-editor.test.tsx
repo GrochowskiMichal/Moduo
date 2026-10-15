@@ -30,6 +30,37 @@ describe("EntityTextEditor commit-on-blur", () => {
   });
 });
 
+describe("EntityTextEditor surfaces (MOD-115)", () => {
+  const editor = (surface?: "ring" | "soft") =>
+    render(
+      <EntityTextEditor
+        value="Some notes"
+        editable
+        runtime={null}
+        workspaceId={null}
+        source={{ type: "event", id: "e-1" }}
+        ariaLabel="Notes"
+        placeholder="Notes…"
+        surface={surface}
+      />,
+    );
+
+  it("keeps the ring by default (Calendar's notes look as before)", () => {
+    editor();
+    const box = screen.getByLabelText("Notes");
+    expect(box.className).toContain("focus-visible:ring-2");
+    expect(box.className).not.toContain("focus:bg-state-hover");
+  });
+
+  it("soft: plain text at rest, a quiet fill with its padding inside while editing", () => {
+    editor("soft");
+    const box = screen.getByLabelText("Notes");
+    expect(box.className).toContain("focus:bg-state-hover");
+    expect(box.className).toContain("px-2");
+    expect(box.className).not.toContain("ring");
+  });
+});
+
 describe("EntityTextEditor plain-text lists", () => {
   it("shows an imported Markdown list as bullet lines, and a bare visit writes nothing", () => {
     const onCommit = rs.fn();

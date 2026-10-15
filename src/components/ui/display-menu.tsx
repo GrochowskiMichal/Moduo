@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { SegmentedControl, type SegmentedItem } from "./segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
 import { Separator } from "./separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 /*
  * DisplayMenu (DS-4) — one popover for "how this view looks", generic over a
@@ -132,16 +133,23 @@ function DisplayMenu<V extends DisplayValues>({
   const set = (id: string, next: string | readonly string[]) =>
     onValueChange({ ...value, [id]: next });
 
-  return (
+  // The default trigger: in a narrow toolbar (an `@container` under 36rem) it
+  // drops its word and stays an icon, named and with its tooltip.
+  const trigger = children ?? (
+    <TooltipTrigger asChild>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="px-2 data-[state=open]:bg-state-active @max-xl:min-w-(--ctrl-h-sm) @max-xl:justify-center @max-xl:px-1.5"
+      >
+        <SlidersHorizontal aria-hidden />
+        <span className="@max-xl:sr-only">Display</span>
+      </Button>
+    </TooltipTrigger>
+  );
+  const popover = (
     <Popover open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        {children ?? (
-          <Button variant="ghost" size="sm" className="px-2 data-[state=open]:bg-state-active">
-            <SlidersHorizontal aria-hidden />
-            Display
-          </Button>
-        )}
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align={align}
         container={portalContainer}
@@ -257,6 +265,15 @@ function DisplayMenu<V extends DisplayValues>({
         ) : null}
       </PopoverContent>
     </Popover>
+  );
+  // A caller's own trigger brings its own tooltip, if any.
+  return children ? (
+    popover
+  ) : (
+    <Tooltip>
+      {popover}
+      <TooltipContent>Display</TooltipContent>
+    </Tooltip>
   );
 }
 

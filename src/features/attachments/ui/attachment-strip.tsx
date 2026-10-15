@@ -1,7 +1,8 @@
 // The attachment strip (specs/attachments.md "Where they show", comp §5
 // `.attstrip`): thumbnails right under a task's description. Images are 64×44
 // thumbnails; other files are a type-icon tile with name + size; the "+" tile
-// opens the file picker. Uploads show in place with their progress, and a file
+// opens the file picker (in the task panel only once there are files, or
+// while files are dragged over, MOD-115). Uploads show in place with their progress, and a file
 // that couldn't attach gets one quiet caption line under the strip with its
 // one way forward (AT2-4): facts with numbers, never red, never a dialog.
 // Presentational: the data and actions come from `useEntityAttachments`.
@@ -39,6 +40,19 @@ export type AttachmentStripProps = {
   onUpgrade?: () => void;
   /** Settings → Storage's largest files (AT-3); hidden until it exists. */
   onFreeUpSpace?: () => void;
+  /**
+   * When the "+" tile shows: `always` (default), or `with-files`, once the
+   * strip holds a file or an upload, or while `dropping` (the task panel,
+   * MOD-115). With nothing in it then, the strip takes no room at all.
+   */
+  addTile?: "always" | "with-files";
+  /** A file drag is over the drop zone: the "+" shows where files land. */
+  dropping?: boolean;
+  /**
+   * The "+" opens the caller's picker instead of its own (AttachmentsSection
+   * keeps one that ⋯ → Attach files… opens too, strip or no strip).
+   */
+  onPickFiles?: () => void;
   className?: string;
 };
 
@@ -59,13 +73,18 @@ export function AttachmentStrip({
   onDismissAlmostFull,
   onUpgrade,
   onFreeUpSpace,
+  addTile = "always",
+  dropping = false,
+  onPickFiles,
   className,
 }: AttachmentStripProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const inFlight = uploads.filter((u) => u.state !== "rejected");
   const notices = useMemo(() => problemNotices(uploads, isOwner), [uploads, isOwner]);
+  const hasFiles = records.length > 0 || inFlight.length > 0;
+  const showAdd = canEdit && (addTile === "always" || hasFiles || dropping);
 
-  if (records.length === 0 && inFlight.length === 0 && notices.length === 0 && !canEdit) {
+  if (!hasFiles && notices.length === 0 && !showAdd && !(canEdit && almostFull)) {
     return null;
   }
 
@@ -80,55 +99,61 @@ export function AttachmentStrip({
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)} data-slot="attachment-strip">
-      <ul className="flex flex-wrap gap-1.5" aria-label="Attachments">
-        {records.map((rec, index) => (
-          <li key={rec.id}>
-            <ReadyTile
-              rec={rec}
-              previewUrl={rec.previewPath ? (previews.get(rec.previewPath) ?? null) : null}
-              onOpen={() => onOpen(index)}
-            />
-          </li>
-        ))}
-        {inFlight.map((u) => (
-          <li key={u.id}>
-            <UploadTile upload={u} />
-          </li>
-        ))}
-        {canEdit ? (
-          <li>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Add files"
-                  onClick={() => inputRef.current?.click()}
-                  className={cn(
-                    TILE,
-                    "flex size-11 items-center justify-center text-muted-foreground hover:bg-state-hover hover:text-foreground",
-                  )}
-                >
-                  <Plus className="size-icon-sm" aria-hidden />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Add files, or paste or drop them anywhere on the task</TooltipContent>
-            </Tooltip>
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              hidden
-              tabIndex={-1}
-              aria-hidden
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                e.target.value = "";
-                if (files.length > 0) onAddFiles(files);
-              }}
-            />
-          </li>
-        ) : null}
-      </ul>
+      {hasFiles || showAdd ? (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Attachments">
+          {records.map((rec, index) => (
+            <li key={rec.id}>
+              <ReadyTile
+                rec={rec}
+                previewUrl={rec.previewPath ? (previews.get(rec.previewPath) ?? null) : null}
+                onOpen={() => onOpen(index)}
+              />
+            </li>
+          ))}
+          {inFlight.map((u) => (
+            <li key={u.id}>
+              <UploadTile upload={u} />
+            </li>
+          ))}
+          {showAdd ? (
+            <li>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Add files"
+                    onClick={() => (onPickFiles ? onPickFiles() : inputRef.current?.click())}
+                    className={cn(
+                      TILE,
+                      "flex size-11 items-center justify-center text-muted-foreground hover:bg-state-hover hover:text-foreground",
+                    )}
+                  >
+                    <Plus className="size-icon-sm" aria-hidden />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Add files, or paste or drop them anywhere on the task
+                </TooltipContent>
+              </Tooltip>
+              {onPickFiles ? null : (
+                <input
+                  ref={inputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  tabIndex={-1}
+                  aria-hidden
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (files.length > 0) onAddFiles(files);
+                  }}
+                />
+              )}
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
 
       {notices.map((n) => (
         <Caption

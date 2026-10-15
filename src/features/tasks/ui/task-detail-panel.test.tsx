@@ -35,13 +35,19 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
   }),
 }));
 
+import type { ReactNode } from "react";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+import { RightPanel } from "../../../components/app/right-panel";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { setRunClaims } from "../../focus/claims";
+import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
+import { BulkPanel } from "./bulk-panel";
 import { TaskDetailPanel } from "./task-detail-panel";
+import { TaskFullPage } from "./task-full-page";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -55,6 +61,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   clearTaskTimeShares();
+  setRunClaims(null, new Map());
 });
 
 const INBOX: Bucket = {
@@ -227,17 +234,35 @@ const ROW_LABELS = [
   "Tags",
 ];
 
+/** The labels of the property rows on screen (the "+" line names more, as text). */
 function shownRows(): string[] {
-  return ROW_LABELS.filter((l) => screen.queryByText(l, { selector: "span" }) !== null);
+  const labels = [...document.querySelectorAll("[data-slot=property-row]")].map(
+    (row) => row.firstElementChild?.textContent ?? "",
+  );
+  return ROW_LABELS.filter((l) => labels.includes(l));
+}
+
+const OPTIONAL_NAMES = ["Energy", "Scheduled", "Reminder", "Estimate", "Repeat", "Waiting on"];
+
+/** The quiet "+" line: one control naming what isn't shown yet (MOD-114). */
+function addLine(): HTMLElement {
+  return screen.getByRole("button", { name: /^Add a property/ });
+}
+
+async function openAddMenu(): Promise<HTMLElement> {
+  fireEvent.pointerDown(addLine(), { button: 0, pointerType: "mouse" });
+  return screen.findByRole("menu");
 }
 
 describe("the comp layout and property rule C (U3-1)", () => {
   it("shows the core properties always and names the rest in one quiet line", () => {
     renderPanel(task(), api(task()));
     expect(shownRows()).toEqual(["Status", "Assignee", "Priority", "Due", "Tags"]);
-    for (const name of ["energy", "scheduled", "reminder", "estimate", "repeat", "waiting on"]) {
-      expect(screen.getByRole("button", { name: `Add ${name}` })).toBeTruthy();
-    }
+    for (const name of OPTIONAL_NAMES) expect(addLine().textContent).toContain(name);
+    // Its name holds the words it shows (label in name).
+    expect(addLine().getAttribute("aria-label")).toBe(
+      `Add a property: ${OPTIONAL_NAMES.join(", ")}`,
+    );
     // Checkbox beside a wrapping title, no chevrons on the values.
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Task title" }).tagName).toBe("TEXTAREA");
@@ -261,15 +286,22 @@ describe("the comp layout and property rule C (U3-1)", () => {
       "Scheduled",
       "Tags",
     ]);
-    expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Add estimate" })).toBeTruthy();
+    expect(addLine().textContent).not.toContain("Energy");
+    expect(addLine().textContent).toContain("Estimate");
   });
 
-  it("picking a name in the quiet line shows that row, empty", () => {
+  it("picking a name in the quiet line's menu shows that row, empty", async () => {
     renderPanel(task(), api(task()));
-    fireEvent.click(screen.getByRole("button", { name: "Add repeat" }));
-    expect(shownRows()).toContain("Repeat");
-    expect(screen.queryByRole("button", { name: "Add repeat" })).toBeNull();
+    const menu = await openAddMenu();
+    // The menu lists every property the line names, in panel order.
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(OPTIONAL_NAMES);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Repeat" }));
+    await waitFor(() => expect(shownRows()).toContain("Repeat"));
+    expect(addLine().textContent).not.toContain("Repeat");
   });
 
   it('reads the Estimate row as "1h 20m of ~4h" with my share, the bar on its own line', async () => {
@@ -288,7 +320,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
 
   it("view-only members see the values but no quiet line, and ⋯ only copies", async () => {
     renderPanel(task(), api(task()), null, false);
-    expect(screen.queryByRole("button", { name: "Add energy" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add a property/ })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
     ).toBe(true);
@@ -301,8 +333,318 @@ describe("the comp layout and property rule C (U3-1)", () => {
   });
 });
 
-describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)", () => {
-  it("has one Focus toggle, in the header beside copy link and ⋯; no full-width button", () => {
+describe("the description comes before the properties (MOD-116, the prototypes' order)", () => {
+  const follows = (a: Element, b: Element) =>
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  it("in the panel: title, description, then the properties", () => {
+    renderPanel(task(), api(task()));
+    const title = screen.getByRole("textbox", { name: "Task title" });
+    const description = screen.getByRole("textbox", { name: "Description" });
+    const status = screen.getByRole("button", { name: "Status: To do" });
+    expect(follows(title, description)).toBe(true);
+    expect(follows(description, status)).toBe(true);
+  });
+
+  it("on the full page too, in the narrow column and the wide one", () => {
+    render(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={task()}
+          buckets={[APP]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={api(task())}
+          layout="page"
+        />
+      </TooltipProvider>,
+    );
+    const description = screen.getByRole("textbox", { name: "Description" });
+    const statuses = screen.getAllByRole("button", { name: "Status: To do" });
+    expect(statuses.length).toBeGreaterThan(0);
+    for (const status of statuses) expect(follows(description, status)).toBe(true);
+  });
+});
+
+describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () => {
+  it("never wraps: the names sit on one clipped line", () => {
+    renderPanel(task(), api(task()));
+    const names = addLine().querySelector("[data-slot=add-property-names]") as HTMLElement;
+    expect(names.className).toContain("whitespace-nowrap");
+    expect(names.className).toContain("overflow-hidden");
+    expect(names.className).not.toContain("flex-wrap");
+    // One control, not a button per name.
+    expect(within(addLine()).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("opens from the keyboard, and a pick adds that property's row with its editor open", async () => {
+    renderPanel(task(), api(task()));
+    addLine().focus();
+    fireEvent.keyDown(addLine(), { key: "Enter" });
+    const menu = await screen.findByRole("menu", { name: /^Add a property/ });
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Energy" }));
+    await waitFor(() => expect(shownRows()).toContain("Energy"));
+    // The new row's picker is open (a modal menu, so the rest reads as hidden).
+    expect(await screen.findByRole("menu", { name: "Energy: none" })).toBeTruthy();
+    const line = screen.getByRole("button", { name: /^Add a property/, hidden: true });
+    expect(line.textContent).not.toContain("Energy");
+  });
+});
+
+describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
+  it("shortens the names with the full one on hover, and puts the handle at the end", async () => {
+    const t = task({ number: 142, sectionId: "s1" });
+    const a = api(t, {
+      sections: [
+        {
+          id: "s1",
+          projectId: "b-app",
+          name: "A section name long enough to need the ellipsis",
+          position: 0,
+        },
+      ],
+    } as unknown as Partial<TasksModuleApi>);
+    render(
+      <WorkspaceContext.Provider
+        value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
+      >
+        <TooltipProvider>
+          <TaskDetailPanel
+            task={t}
+            buckets={[APP]}
+            inbox={INBOX}
+            canEdit
+            onRequestCapture={() => {}}
+            onSelectTask={() => {}}
+            api={a}
+          />
+        </TooltipProvider>
+      </WorkspaceContext.Provider>,
+    );
+    const nav = screen.getByRole("navigation", { name: "Location" });
+    expect(nav.className).toContain("flex-nowrap");
+    expect(nav.className).not.toContain("flex-wrap ");
+    const section = within(nav).getByRole("button", { name: /^Section: / });
+    expect(section.querySelector("span")?.className).toContain("truncate");
+    // The full name in the kit tooltip (as the handle's), not a native title.
+    expect(section.getAttribute("title")).toBeNull();
+    act(() => section.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "A section name long enough to need the ellipsis",
+    );
+    // The handle is the task's, outside the crumbs and their chevrons: the
+    // next thing on the line after the nav, which grows to push it right.
+    const handle = screen.getByRole("button", { name: "Copy MOD-142" });
+    expect(nav.contains(handle)).toBe(false);
+    expect(nav.nextElementSibling).toBe(handle);
+    expect(nav.className).toContain("flex-1");
+    expect(nav.querySelectorAll(".lucide-chevron-right")).toHaveLength(1);
+  });
+});
+
+/** The panel the Tasks page hosts it in: "Details ▾" over the task, Project beside it. */
+function renderInRightPanel(
+  t: Task,
+  a: TasksModuleApi,
+  opts: { onOpenFullPage?: () => void; canEdit?: boolean } = {},
+) {
+  const taskDetails = () => (
+    <TaskDetailPanel
+      task={t}
+      buckets={[APP]}
+      inbox={INBOX}
+      canEdit={opts.canEdit ?? true}
+      onRequestCapture={() => {}}
+      onSelectTask={() => {}}
+      onOpenFullPage={opts.onOpenFullPage}
+      api={a}
+    />
+  );
+  const ui = (activeId: string, details: () => ReactNode) => (
+    <WorkspaceContext.Provider
+      value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
+    >
+      <TooltipProvider>
+        <RightPanel
+          module="tasks"
+          views={{ details, project: () => <p>Project body</p> }}
+          activeId={activeId}
+          onChange={() => {}}
+        />
+      </TooltipProvider>
+    </WorkspaceContext.Provider>
+  );
+  const utils = render(ui("details", taskDetails));
+  return {
+    ...utils,
+    show: (activeId: string, details: () => ReactNode = taskDetails) =>
+      utils.rerender(ui(activeId, details)),
+  };
+}
+
+/** The panel's title row: the one that holds "Details ▾". */
+function titleRow(): HTMLElement {
+  return screen.getByRole("button", { name: /^Panel view: / }).parentElement as HTMLElement;
+}
+
+/** Its right end, where a view's own actions show. */
+function titleActions(): HTMLElement {
+  return titleRow().querySelector("[data-slot=panel-title-actions]") as HTMLElement;
+}
+
+const labels = (scope: HTMLElement) =>
+  within(scope)
+    .getAllByRole("button")
+    .map((b) => b.getAttribute("aria-label"));
+
+async function openMore(scope: HTMLElement = document.body): Promise<HTMLElement> {
+  const more = within(scope).getByRole("button", { name: "More actions" });
+  fireEvent.pointerDown(more, { button: 0, pointerType: "mouse" });
+  return screen.findByRole("menu");
+}
+
+describe("the task's actions sit in the panel's title row (MOD-118 follow-up, round-2b frame 5)", () => {
+  it('reads "Details ▾ … Focus ↗ ⋯"; the breadcrumb row holds only the crumbs and the handle', () => {
+    const t = task({ number: 142 });
+    renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
+    expect(labels(titleActions())).toEqual(["Add to Focus", "Open full page", "More actions"]);
+    // All three on one rung, the small control size (the toggle was 32 px).
+    const heights = within(titleActions())
+      .getAllByRole("button")
+      .map((b) => [b.style.height, b.style.width]);
+    expect(heights).toEqual(Array(3).fill(["var(--ctrl-h-sm)", "var(--ctrl-h-sm)"]));
+    // ▶ "Focus on this" went into ⋯: no icon of its own.
+    expect(screen.queryByRole("button", { name: "Focus on this" })).toBeNull();
+
+    const nav = screen.getByRole("navigation", { name: "Location" });
+    const crumbRow = nav.parentElement as HTMLElement;
+    expect(titleRow().contains(nav)).toBe(false);
+    expect([...crumbRow.children]).toEqual([
+      nav,
+      screen.getByRole("button", { name: "Copy MOD-142" }),
+    ]);
+  });
+
+  it("they still work from there: full page, the Focus toggle, ⋯", async () => {
+    const t = task();
+    const onOpenFullPage = rs.fn();
+    const a = api(t, { focusOnTask: rs.fn(() => true) });
+    renderInRightPanel(t, a, { onOpenFullPage });
+    fireEvent.click(within(titleActions()).getByRole("button", { name: "Open full page" }));
+    expect(onOpenFullPage).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(titleActions()).getByRole("button", { name: "Add to Focus" }));
+    expect(a.toggleQueue).toHaveBeenCalledWith("t1");
+
+    const focusOn = within(await openMore(titleActions())).getByRole("menuitem", {
+      name: /Focus on this/,
+    });
+    expect(focusOn.textContent).toContain("⇧F");
+    fireEvent.click(focusOn);
+    expect(a.focusOnTask).toHaveBeenCalledWith("t1");
+
+    const menu = await openMore(titleActions());
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Delete/ }));
+    expect(a.deleteTask).toHaveBeenCalledWith("t1");
+  });
+
+  it("stays short at its fullest: a viewer, in their Focus, three people on it, one lined up", () => {
+    act(() => setRunClaims("w", new Map([["t1", ["u3", "u4", "u5"]]])));
+    const t = task();
+    const a = api(t, {
+      canEdit: false,
+      queuedTaskIds: new Set(["t1"]),
+      queueClaims: new Map([["t1", ["u2"]]]),
+    });
+    renderInRightPanel(t, a, { onOpenFullPage: () => {}, canEdit: false });
+    const slot = titleActions();
+    // One avatar and "+2" for the three on it; the mark's name says who.
+    const onIt = within(slot).getByRole("img", { name: /are on this$/ });
+    expect(onIt.querySelectorAll("[data-slot=avatar]")).toHaveLength(1);
+    expect(onIt.textContent).toContain("+2");
+    // Mike, who has it lined up, then the viewer's own "In Focus" as an icon:
+    // its words are in its name and tooltip, never on the row.
+    expect(within(slot).getByRole("img", { name: "Also in Mike’s Focus" })).toBeTruthy();
+    const inFocus = within(slot).getByRole("img", { name: "In Focus" });
+    expect(inFocus.textContent).toBe("");
+    expect(slot.textContent).not.toContain("In Focus");
+    expect(labels(slot)).toEqual(["Open full page", "More actions"]);
+  });
+
+  it("the Project view and a multi-selection show none of the task's actions", () => {
+    const t = task();
+    const { show } = renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
+    expect(titleActions().childElementCount).toBeGreaterThan(0);
+
+    show("project");
+    expect(screen.getByText("Project body")).toBeTruthy();
+    expect(titleActions().childElementCount).toBe(0);
+
+    // A multi-selection swaps Details' body for the shared values (the page's rule).
+    show("details", () => (
+      <BulkPanel
+        tasks={[t, task({ id: "t2", title: "Second" })]}
+        statusById={new Map()}
+        bucketNameById={() => "Moduo App"}
+        sections={[]}
+        teams={[]}
+        tagsByTask={new Map()}
+        canEdit
+        onPick={() => {}}
+      />
+    ));
+    expect(titleActions().childElementCount).toBe(0);
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /to Focus|in Focus/i })).toBeNull();
+  });
+
+  it("on the full page they sit in its header after ↑ ↓ (the prototype's `.fphead`)", () => {
+    const t = task({ number: 142 });
+    render(
+      <WorkspaceContext.Provider
+        value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
+      >
+        <TooltipProvider>
+          <TaskFullPage
+            backLabel="List · Moduo App"
+            position={{ index: 0, total: 3 }}
+            onPrev={null}
+            onNext={() => {}}
+            onClose={() => {}}
+          >
+            <TaskDetailPanel
+              task={t}
+              buckets={[APP]}
+              inbox={INBOX}
+              canEdit
+              onRequestCapture={() => {}}
+              onSelectTask={() => {}}
+              onCloseFullPage={() => {}}
+              layout="page"
+              api={api(t)}
+            />
+          </TaskFullPage>
+        </TooltipProvider>
+      </WorkspaceContext.Provider>,
+    );
+    const header = screen.getByRole("button", { name: "Next task" }).parentElement as HTMLElement;
+    const slot = header.querySelector("[data-slot=full-page-actions]") as HTMLElement;
+    expect(labels(slot)).toEqual(["Add to Focus", "Back to the panel", "More actions"]);
+    // The hairline before them is 16 px tall, not the primitive's h-full (0 px in a row).
+    const hairline = header.querySelector("[data-slot=separator]") as HTMLElement;
+    expect(hairline.className).toContain("data-[orientation=vertical]:h-4");
+    expect(hairline.className).not.toContain("h-full");
+    const nav = screen.getByRole("navigation", { name: "Location" });
+    expect([...(nav.parentElement as HTMLElement).children]).toEqual([
+      nav,
+      screen.getByRole("button", { name: "Copy MOD-142" }),
+    ]);
+  });
+});
+
+describe("the Focus toggle (U3-3; call 61 renamed the Queue)", () => {
+  it("is one icon, never the old full-width button", () => {
     const a = api(task());
     renderPanel(task(), a);
     const queue = screen.getAllByRole("button", { name: /to Focus|in Focus/i });
@@ -311,16 +653,11 @@ describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)
     expect(queue[0].getAttribute("aria-pressed")).toBe("false");
     expect(screen.queryByText("Commit to Queue")).toBeNull();
     expect(screen.queryByRole("button", { name: /queue/i })).toBeNull();
-    const header = queue[0].parentElement as HTMLElement;
-    expect(within(header).getByRole("button", { name: "More actions" })).toBeTruthy();
-    expect(within(header).getByRole("navigation", { name: "Location" }).textContent).toContain(
-      "Moduo App",
-    );
     fireEvent.click(queue[0]);
     expect(a.toggleQueue).toHaveBeenCalledWith("t1");
   });
 
-  it("reads 'In Focus' once queued, and offers nothing for a done task", () => {
+  it("reads 'In Focus' once queued, and offers nothing for a done task", async () => {
     renderPanel(task(), api(task(), { queuedTaskIds: new Set(["t1"]) }));
     const toggle = screen.getByRole("button", { name: "In Focus" });
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
@@ -328,13 +665,17 @@ describe("the Focus toggle lives in the header (U3-3; call 61 renamed the Queue)
     const done = task({ status: "done" });
     renderPanel(done, api(done));
     expect(screen.queryByRole("button", { name: /Focus/ })).toBeNull();
+    expect(within(await openMore()).queryByRole("menuitem", { name: /Focus/ })).toBeNull();
   });
 
-  it("▶ is Focus on this (call 31): on top of Up next, with the clock", () => {
+  it("⋯ → Focus on this (call 31): on top of Up next, with the clock; not for a viewer", async () => {
     const a = api(task(), { focusOnTask: rs.fn(() => true) });
     renderPanel(task(), a);
-    fireEvent.click(screen.getByRole("button", { name: "Focus on this" }));
+    fireEvent.click(within(await openMore()).getByRole("menuitem", { name: /Focus on this/ }));
     expect(a.focusOnTask).toHaveBeenCalledWith("t1");
+    cleanup();
+    renderPanel(task(), api(task()), null, false);
+    expect(within(await openMore()).queryByRole("menuitem", { name: /Focus on this/ })).toBeNull();
   });
 });
 

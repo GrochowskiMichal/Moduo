@@ -8,6 +8,7 @@ import type { SpineComment } from "@/lib/runtime.types";
 import {
   branchName,
   isPropertySet,
+  namesThatFit,
   quietLineProperties,
   shownOptionalProperties,
 } from "./detail-properties";
@@ -67,6 +68,26 @@ describe("v3 properties: core always, the rest once set (TV-U13)", () => {
   it("shows a row picked from the quiet line even while it's empty", () => {
     expect([...shownOptionalProperties(task(), new Set(["repeat"]))]).toEqual(["repeat"]);
     expect(quietLineProperties(task(), new Set(["repeat"]))).not.toContain("repeat");
+  });
+});
+
+describe("the quiet line's one line (MOD-114)", () => {
+  // Energy · Scheduled · Reminder · Estimate · Repeat · Waiting on
+  const widths = [44, 70, 66, 62, 52, 78];
+  it("spells every name out when they all fit", () => {
+    expect(namesThatFit(400, widths, 20)).toBe(6);
+  });
+
+  it("keeps whole names and leaves room for +n", () => {
+    // 44 + 70 + 66 = 180, + 20 for "+3" = 200
+    expect(namesThatFit(200, widths, 20)).toBe(3);
+    expect(namesThatFit(199, widths, 20)).toBe(2);
+  });
+
+  it("always shows one name, and every name when nothing was measured", () => {
+    expect(namesThatFit(30, widths, 20)).toBe(1);
+    expect(namesThatFit(0, widths, 20)).toBe(6);
+    expect(namesThatFit(0, [0, 0, 0], 0)).toBe(3);
   });
 });
 
