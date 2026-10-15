@@ -1,11 +1,20 @@
 // MOD-97 · the dot chip (option C): a neutral pill, a 6 px dot in the tag's
 // hue, the name, no "#". Colour only through data-label and the tokens.
 
-import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TagChip, TagChipList } from "./tag-chip";
+import { TooltipProvider } from "./ui/tooltip";
 
+beforeAll(() => {
+  // The kit Tooltip measures its trigger.
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as never;
+});
 afterEach(cleanup);
 
 const chipOf = (name: string) => screen.getByTitle(`Tag: ${name}`);
@@ -108,12 +117,20 @@ describe("TagChipList", () => {
     { id: "4", name: "someday", color: null },
   ];
 
-  it("shows the first `max` as chips, then +n naming the rest", () => {
-    render(<TagChipList tags={tags} max={2} />);
+  it("shows the first `max` as chips, then a focusable +n whose kit tooltip names the rest", async () => {
+    render(
+      <TooltipProvider>
+        <TagChipList tags={tags} max={2} />
+      </TooltipProvider>,
+    );
     expect(document.querySelectorAll('[data-slot="tag-chip"]')).toHaveLength(2);
-    const more = screen.getByText("+2");
-    expect(more.getAttribute("title")).toBe("errand, someday");
+    const more = document.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.tagName).toBe("BUTTON");
+    expect(more.textContent).toBe("+2");
+    expect(more.getAttribute("title")).toBeNull();
     expect(more.className).toContain("text-subtle-foreground");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("errand, someday");
   });
 
   it("renders nothing without tags", () => {

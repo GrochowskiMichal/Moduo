@@ -166,7 +166,7 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
   });
 
-  it("Detailed rows show two tags as dot chips, then +n, never a # (MOD-97)", () => {
+  it("Detailed rows show two tags as dot chips, then +n, never a # (MOD-97)", async () => {
     const tags = [
       { id: "t1", name: "ui", color: "blue" },
       { id: "t2", name: "notes", color: "green" },
@@ -180,7 +180,10 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(chips.map((c) => c.dataset.label)).toEqual(["blue", "green"]);
     expect(chips[0]?.className).toContain("h-4.5");
     expect(screen.getByTitle("Tag: ui")).toBe(chips[0] as HTMLElement);
-    expect(screen.getByText("+1").getAttribute("title")).toBe("bug");
+    const more = names.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.textContent).toBe("+1");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("bug");
     expect(names.textContent).not.toContain("#");
   });
 
@@ -495,7 +498,7 @@ describe("Board (U1-4)", () => {
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);
   });
 
-  it("Detailed cards show three tags as dot chips on the second line, layout-neutral (MOD-97)", () => {
+  it("Detailed cards show three tags as dot chips on the second line, layout-neutral (MOD-97)", async () => {
     const tags = ["ui", "notes", "bug", "copy"].map((name, i) => ({
       id: `t${i}`,
       name,
@@ -504,7 +507,10 @@ describe("Board (U1-4)", () => {
     renderBoard([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
     const chips = [...card("Task a").querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
     expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes", "bug"]);
-    expect(screen.getByText("+1").getAttribute("title")).toBe("copy");
+    const more = card("Task a").querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.textContent).toBe("+1");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("copy");
     // 18 px chips in a 16 px text line: the list takes -1 px top and bottom,
     // so the card keeps its height.
     const list = chips[0]?.closest('[data-slot="tag-chip-list"]') as HTMLElement;

@@ -15,6 +15,7 @@
 import { X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { normalizeLabelColor } from "./tag-colors";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type Props = {
   name: string;
@@ -106,7 +107,7 @@ export function TagChip({
 
 /**
  * A capped row of chips for dense surfaces (Detailed rows, Board cards): the
- * first `max`, then a quiet "+n" whose hover text names the rest. Chips shrink
+ * first `max`, then a quiet "+n" whose tooltip names the rest. Chips shrink
  * and truncate before the row grows.
  */
 export function TagChipList({
@@ -134,12 +135,18 @@ export function TagChipList({
         />
       ))}
       {rest.length > 0 ? (
-        <span
-          title={rest.map((t) => t.name).join(", ")}
-          className="shrink-0 font-sans text-xs tabular-nums text-subtle-foreground"
-        >
-          +{rest.length}
-        </span>
+        <Tooltip>
+          {/* A button, so keyboard focus opens the names too (the kit Tooltip,
+              as the row's other counts use). */}
+          <TooltipTrigger
+            type="button"
+            data-slot="tag-chip-more"
+            className="shrink-0 rounded-sm font-sans text-xs tabular-nums text-subtle-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
+            +{rest.length}
+          </TooltipTrigger>
+          <TooltipContent>{rest.map((t) => t.name).join(", ")}</TooltipContent>
+        </Tooltip>
       ) : null}
     </span>
   );
