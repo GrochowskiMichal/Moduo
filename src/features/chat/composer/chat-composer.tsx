@@ -30,6 +30,7 @@ import {
   $setSelection,
   BLUR_COMMAND,
   COMMAND_PRIORITY_LOW,
+  FOCUS_COMMAND,
   type LexicalEditor,
   type RangeSelection,
 } from "lexical";
@@ -191,6 +192,33 @@ function BlurPlugin({ onBlur }: { onBlur: () => void }) {
   return null;
 }
 
+/**
+ * The caret a just-made item's chip left (after it): the capture closing hands
+ * focus back to the box a moment later, and the browser would put the caret at
+ * its start, so the next words would land before the chip.
+ */
+function CaretAfterChipPlugin({
+  pending,
+}: {
+  pending: React.MutableRefObject<RangeSelection | null>;
+}) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerCommand(
+        FOCUS_COMMAND,
+        () => {
+          const caret = pending.current;
+          if (caret) queueMicrotask(() => editor.update(() => $restoreOrEnd(caret)));
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+    [editor, pending],
+  );
+  return null;
+}
+
 const ToolButton = forwardRef<
   HTMLButtonElement,
   {
@@ -266,6 +294,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     [],
   );
   const savedSelection = useRef<RangeSelection | null>(null);
+  const caretAfterChip = useRef<RangeSelection | null>(null);
 
   // Who may create what (their module's Edit), as the capture decides.
   const modulePermissions = useContext(WorkspaceContext)?.modulePermissions;
@@ -394,9 +423,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   /** Open the app's capture as `command`, and put the new item's chip where the caret was. */
   const openCreate = useCallback(
     (command: CreateCommand, title: string, saved: RangeSelection | null) => {
-      openCreateCapture(command, title, (made) =>
-        insertAt(saved, () => $insertRef(made.type, made.id)),
-      );
+      openCreateCapture(command, title, (made) => {
+        insertAt(saved, () => {
+          $insertRef(made.type, made.id);
+          const after = $getSelection();
+          caretAfterChip.current = $isRangeSelection(after) ? after.clone() : null;
+        });
+        // Only for the focus the closing capture hands back.
+        window.setTimeout(() => {
+          caretAfterChip.current = null;
+        }, 1_000);
+      });
     },
     [insertAt],
   );
@@ -692,6 +729,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         <CleanPastePlugin origins={origins} />
         <ComposerStatePlugin onChange={onState} />
         <SelectionFormatPlugin />
+        <CaretAfterChipPlugin pending={caretAfterChip} />
         <BlurPlugin
           onBlur={() => {
             flushDraft();
