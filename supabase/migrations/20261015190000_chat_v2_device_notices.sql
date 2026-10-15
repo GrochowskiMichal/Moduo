@@ -593,8 +593,10 @@ BEGIN
        SET body = left(CASE WHEN x.burst IS NOT NULL THEN x.burst || coalesce(': ' || x.words, '')
                             ELSE x.words END, 500)
       FROM (SELECT d2.id, substring(d2.body FROM '^([0-9]+ messages)(: |$)') AS burst,
-                   public.chat__notice_text(NEW.body, NEW.workspace_id, d2.user_id) AS words
+                   CASE WHEN coalesce(up.notice_show_text, true)
+                        THEN public.chat__notice_text(NEW.body, NEW.workspace_id, d2.user_id) END AS words
               FROM public.notice_deliveries d2
+              LEFT JOIN public.user_preferences up ON up.user_id = d2.user_id
              WHERE d2.message_id = NEW.id AND d2.body IS NOT NULL) x
      WHERE d.id = x.id;
     UPDATE public.email_outbox o
@@ -602,6 +604,7 @@ BEGIN
              public.chat__notice_text(NEW.body, NEW.workspace_id, o.to_user_id))
      WHERE o.kind = 'chat_waiting' AND o.status = 'queued' AND o.created_at > now() - interval '8 days'
        AND o.payload ->> 'text' IS NOT NULL
+       AND public.chat__can_read_channel_as(NEW.channel_id, o.to_user_id)
        AND o.payload ->> 'path' LIKE '%&m=' || NEW.id::text;
   END IF;
   RETURN NULL;
