@@ -422,6 +422,47 @@ describe("a team task (54, 94)", () => {
     expect(mock.bucketId).toBe("p-requests");
     // ...unless a line names its own person.
     expect(review.assigneeId).toBe(SAM);
+    // Nobody picked: the pill says the team's, never "You" (MOD-135).
+    expect(screen.getByRole("button", { name: /^Assign:\s*Design · unclaimed$/ })).toBeTruthy();
+  });
+});
+
+// The pill's name joins its hidden "Assign: " and the value without the space.
+const pillName = (label: string, value: string) => new RegExp(`^${label}:\\s*${value}$`);
+
+describe("the pills say what the task will get (MOD-134, MOD-135)", () => {
+  const draftWith = (fields: Record<string, unknown>) =>
+    saveDraft(ME, WS, {
+      segments: [{ text: "Draw the poster" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: { ...EMPTY_FIELDS, ...fields },
+    });
+
+  it("Assign shows you, with your avatar, while the task will be yours", async () => {
+    renderBody();
+    const pill = await screen.findByRole("button", { name: pillName("Assign", "You") });
+    expect(pill.querySelector('[data-slot="avatar"]')).toBeTruthy();
+  });
+
+  it("Assign says Unassigned once that's picked", async () => {
+    draftWith({ assigneeId: null });
+    renderBody();
+    expect(
+      await screen.findByRole("button", { name: pillName("Assign", "Unassigned") }),
+    ).toBeTruthy();
+  });
+
+  it("Priority shows the app's three bars: all faint unset, the level's once set", async () => {
+    renderBody();
+    const unset = await screen.findByRole("button", { name: "Priority" });
+    expect(unset.querySelector('svg[data-level="0"]')).toBeTruthy();
+    cleanup();
+    draftWith({ priority: "high" });
+    renderBody();
+    const set = await screen.findByRole("button", { name: pillName("Priority", "High") });
+    expect(set.querySelector('svg[data-level="3"]')).toBeTruthy();
   });
 });
 
@@ -434,6 +475,22 @@ describe("a group's + (TV-U10)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
     await waitFor(() => expect(fake.saved.length).toBe(1));
     expect(fake.saved[0]?.statusCategory).toBe("in_progress");
+  });
+});
+
+describe("a date cleared by hand (MOD-133)", () => {
+  it("its × keeps the date words as words: the chip stays gone, the title keeps them", async () => {
+    renderBody({}, referenceStore({}), "Ring the framer tomorrow 3pm");
+    const clear = await screen.findByRole("button", { name: /^Clear Tomorrow/ });
+    fireEvent.click(clear);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /^Clear Tomorrow/ })).toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    const [task] = fake.saved;
+    expect(task.title).toBe("Ring the framer tomorrow 3pm");
+    expect(task.scheduledAt ?? null).toBeNull();
   });
 });
 

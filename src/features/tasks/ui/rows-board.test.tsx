@@ -489,12 +489,23 @@ describe("Board (U1-4)", () => {
   }
   const card = (title: string) => screen.getByText(title).closest("[data-task-id]") as HTMLElement;
 
-  it("cards keep one fixed width per density, and so do their columns (default o, TV-U11)", () => {
+  it("columns keep one fixed width per density, and their cards fill them (default o, TV-U11)", () => {
     renderBoard([task("a")]);
     const column = card("Task a").closest("section") as HTMLElement;
     expect(column.className).toContain("w-(--board-col-w)");
     expect(column.className).toContain("shrink-0");
-    expect(card("Task a").className).toContain("w-(--board-card-w)");
+    // A card as wide as the column overflowed it by the scrollbar's width
+    // once the column scrolled, so the column scrolled sideways (MOD-143).
+    expect(card("Task a").className).toContain("w-full");
+    expect(card("Task a").className).not.toContain("w-(--board-card-w)");
+    const scroller = column.children[1] as HTMLElement;
+    expect(scroller.className).toContain("overflow-x-hidden");
+    expect(scroller.className).toContain("overflow-y-auto");
+  });
+
+  it("a long title wraps to three lines at most (MOD-143)", () => {
+    renderBoard([task("a")]);
+    expect(screen.getByText("Task a").className).toContain("line-clamp-3");
   });
 
   it("a card has one quiet meta line, and selection is the tint", () => {
