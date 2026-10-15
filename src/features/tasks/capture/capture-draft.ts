@@ -50,6 +50,11 @@ export type CaptureDraft = {
   fields: DraftFields;
   /** A pasted list waiting for "Create n tasks?" (the person's own lines). */
   pasted?: string | null;
+  /**
+   * The people `@`-mentioned in the description, by id only (call #15): told
+   * once the task exists, also after the draft comes back.
+   */
+  mentions?: string[];
 };
 
 export const EMPTY_FIELDS: DraftFields = { tags: [], waitingOn: [] };
@@ -122,6 +127,7 @@ export function storableDraft(draft: CaptureDraft): CaptureDraft {
       statusName: null,
     },
     ...(draft.pasted ? { pasted: draft.pasted } : {}),
+    ...(draft.mentions?.length ? { mentions: [...new Set(draft.mentions)] } : {}),
   };
 }
 
@@ -156,6 +162,9 @@ export function loadDraft(
         waitingOn: Array.isArray(parsed.fields?.waitingOn) ? parsed.fields.waitingOn : [],
       },
       pasted: typeof parsed.pasted === "string" ? parsed.pasted : null,
+      mentions: Array.isArray(parsed.mentions)
+        ? parsed.mentions.filter((id): id is string => typeof id === "string")
+        : [],
     });
   } catch {
     return null;

@@ -19,7 +19,6 @@ import { CodeHighlightNode, CodeNode } from "@lexical/code";
 import { $isLinkNode, LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
 import {
-  $convertFromMarkdownString,
   $convertToMarkdownString,
   $generateNodesFromMarkdownString,
   BOLD_ITALIC_STAR,
@@ -242,57 +241,90 @@ export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
 ];
 
 /**
- * How Markdown is read in pieces. Lexical's importer slows down sharply on one
- * long block: a long line of crafted delimiters (`[`, `` ` ``, `[x](`: seconds
- * at 50 KB) or thousands of lines in one paragraph (4 s at 100 KB), which
- * would freeze the panel for everyone who opens the task. So a description
- * past CHUNK_LIMIT characters or CHUNK_LINES lines is read in chunks cut only
- * between blocks (at blank lines outside code fences), never inside one. A
- * block too costly to read (a paragraph or quote past either limit, a line
- * longer than LINE_LIMIT or with more than DELIMITER_LIMIT `[` and backticks:
- * a real paragraph with dozens of links and code spans has under 200), and
- * everything past TOTAL_LIMIT characters or TOTAL_LINES lines, comes in as raw
- * text and saves back unchanged. Lists and code blocks read in linear time and
- * stay Markdown whatever their size.
+ * How Markdown is read in pieces, every route capped. Lexical's importer
+ * slows down sharply on one long block: a long line of crafted delimiters
+ * (`[`, `` ` ``, `[x](`: seconds at 50 KB) or thousands of lines in one
+ * paragraph or list item (4 s at 100 KB), which would freeze the panel for
+ * everyone who opens the task; dense emphasis (`*a*a*a…`) is worse still to
+ * save. So every description, however short, goes through one reader:
+ * - it is read in chunks of whole blocks (cut at blank lines outside code
+ *   fences), each chunk within CHUNK_LIMIT characters and CHUNK_LINES lines
+ *   (a short description is one chunk);
+ * - a block too costly to read comes in as raw text that saves back unchanged:
+ *   a paragraph, quote or anything not a plain list past CHUNK_LIMIT or
+ *   CHUNK_LINES, a line longer than LINE_LIMIT or with more than
+ *   DELIMITER_LIMIT delimiters (`costlyDelimiters`: a real paragraph with
+ *   dozens of links, code spans and bold words has under 200), and any block
+ *   once the whole description has spent DELIMITER_BUDGET of them;
+ * - everything past TOTAL_LIMIT characters or TOTAL_LINES lines is one raw
+ *   paragraph.
+ * A list whose every line is an item reads in linear time, and a fence's
+ * content isn't parsed at all, so those stay Markdown up to the totals.
  */
 const CHUNK_LIMIT = 5_000;
 const CHUNK_LINES = 100;
 const TOTAL_LINES = 5_000;
 const LINE_LIMIT = 5_000;
 const DELIMITER_LIMIT = 300;
+const DELIMITER_BUDGET = 2_000;
 const TOTAL_LIMIT = 100_000;
 
-/** How many of the delimiters that make Lexical's importer slow a line holds. */
+const WORD = /[\p{L}\p{N}]/u;
+
+/**
+ * How many delimiters that make Lexical's import and export slow a line
+ * holds: `[`, backticks, `*`, `~`, and `_` unless inside a word (`file_name`
+ * can't start emphasis, so identifiers cost nothing). A line of `*a*a*a…`
+ * becomes thousands of formatted runs: seconds to read, minutes to save.
+ */
 function costlyDelimiters(line: string): number {
   let n = 0;
-  for (const ch of line) if (ch === "[" || ch === "`") n++;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "[" || ch === "`" || ch === "*" || ch === "~") n++;
+    else if (ch === "_" && !(WORD.test(line[i - 1] ?? "") && WORD.test(line[i + 1] ?? ""))) n++;
+  }
   return n;
 }
 
 type Block = {
   lines: string[];
-  /** Every line a list item (or its indented continuation): reads in linear time. */
+  /** A code fence, start to end: its content isn't parsed. */
+  fence: boolean;
+  /** Every line a list item: reads in linear time. */
   list: boolean;
-  /** A line outside a code fence too costly to read as Markdown. */
+  /** A line too costly to read as Markdown. */
   costlyLine: boolean;
+  /** Its `[` and backticks, outside a fence. */
+  delimiters: number;
 };
 
 const FENCE_OPEN = /^[ \t]*(`{3,})(.*)$/;
 const LIST_LINE = /^[ \t]*(?:[-*+]|\d{1,9}\.)[ \t]/;
 
-/** The description's blocks: runs of lines between blank lines, a code fence kept whole. */
+/** The description's blocks: runs of lines between blank lines; a code fence is a block of its own. */
 function markdownBlocks(markdown: string): Block[] {
   const blocks: Block[] = [];
-  let current: Block = { lines: [], list: true, costlyLine: false };
-  let fence: string | null = null;
+  const empty = (): Block => ({
+    lines: [],
+    fence: false,
+    list: true,
+    costlyLine: false,
+    delimiters: 0,
+  });
+  let current = empty();
+  let fenceClose: RegExp | null = null;
   const end = () => {
     if (current.lines.length > 0) blocks.push(current);
-    current = { lines: [], list: true, costlyLine: false };
+    current = empty();
   };
   for (const line of markdown.split("\n")) {
-    if (fence !== null) {
+    if (fenceClose) {
       current.lines.push(line);
-      if (new RegExp(`^[ \\t]*\`{${fence.length},}[ \\t]*$`).test(line)) fence = null;
+      if (fenceClose.test(line)) {
+        fenceClose = null;
+        end();
+      }
       continue;
     }
     if (line.trim() === "") {
@@ -300,17 +332,19 @@ function markdownBlocks(markdown: string): Block[] {
       continue;
     }
     const open = FENCE_OPEN.exec(line);
-    if (open && !/`{3,}[ \t]*$/.test(open[2] ?? "")) fence = open[1] ?? "```";
-    current.lines.push(line);
-    if (
-      !LIST_LINE.test(line) &&
-      !(current.list && current.lines.length > 1 && /^[ \t]{2,}\S/.test(line))
-    ) {
+    if (open && !/`{3,}[ \t]*$/.test(open[2] ?? "")) {
+      end();
+      current.fence = true;
       current.list = false;
+      current.lines.push(line);
+      fenceClose = new RegExp(`^[ \\t]*\`{${(open[1] ?? "```").length},}[ \\t]*$`);
+      continue;
     }
-    if (!open && (line.length > LINE_LIMIT || costlyDelimiters(line) > DELIMITER_LIMIT)) {
-      current.costlyLine = true;
-    }
+    current.lines.push(line);
+    if (!LIST_LINE.test(line)) current.list = false;
+    const delimiters = costlyDelimiters(line);
+    current.delimiters += delimiters;
+    if (line.length > LINE_LIMIT || delimiters > DELIMITER_LIMIT) current.costlyLine = true;
   }
   end();
   return blocks;
@@ -330,6 +364,7 @@ function $importInChunks(markdown: string): void {
   let chunkLines = 0;
   let usedChars = 0;
   let usedLines = 0;
+  let budget = DELIMITER_BUDGET;
   const flush = () => {
     if (chunk.length > 0) {
       root.append(...$generateNodesFromMarkdownString(chunk.join("\n"), DESCRIPTION_TRANSFORMERS));
@@ -357,11 +392,14 @@ function $importInChunks(markdown: string): void {
       return;
     }
     const tooLong = text.length > CHUNK_LIMIT || block.lines.length > CHUNK_LINES;
-    if (block.costlyLine || (tooLong && !block.list && !FENCE_OPEN.test(block.lines[0] ?? ""))) {
+    const costly =
+      !block.fence && (block.costlyLine || (tooLong && !block.list) || block.delimiters > budget);
+    if (costly) {
       flush();
       root.append($rawParagraph(text));
       continue;
     }
+    budget -= block.delimiters;
     if (
       chunk.length > 0 &&
       (chunkChars + text.length > CHUNK_LIMIT || chunkLines + block.lines.length > CHUNK_LINES)
@@ -382,12 +420,9 @@ export function $importDescription(value: string): void {
   root.clear();
   const markdown = descriptionToMarkdown(value);
   if (markdown.trim()) {
-    const lines = markdown.split("\n", CHUNK_LINES + 1).length;
-    if (markdown.length <= CHUNK_LIMIT && lines <= CHUNK_LINES) {
-      $convertFromMarkdownString(markdown, DESCRIPTION_TRANSFORMERS);
-    } else {
-      $importInChunks(markdown);
-    }
+    // Every description goes through the capped reader, however short: a
+    // short one is a single chunk, and its costly blocks still read raw.
+    $importInChunks(markdown);
   }
   if (root.getChildrenSize() === 0) root.append($createParagraphNode());
 }

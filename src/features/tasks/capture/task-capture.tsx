@@ -286,8 +286,14 @@ export function TaskCaptureBody({
   const [description, setTypedDescription] = useState(initial.draft.description);
   const descriptionNow = useRef(description);
   const descriptionApi = useRef<EntityTextEditorApi | null>(null);
-  /** People `@`-mentioned in the description: told once the task exists. */
-  const [mentioned, setMentioned] = useState<Array<{ id: string; label: string }>>([]);
+  /**
+   * People `@`-mentioned in the description: told once the task exists. The
+   * draft keeps their ids only (no names on the device), so a restored one
+   * has no label until it's read off the member list at create.
+   */
+  const [mentioned, setMentioned] = useState<Array<{ id: string; label: string | null }>>(() =>
+    (initial.draft.mentions ?? []).map((id) => ({ id, label: null })),
+  );
   const onDescriptionTyped = (value: string) => {
     descriptionNow.current = value;
     setTypedDescription(value);
@@ -344,8 +350,9 @@ export function TaskCaptureBody({
       subtasks,
       fields,
       pasted,
+      mentions: mentioned.map((p) => p.id),
     });
-  }, [owner, segments, keep, description, subtasks, fields, pasted]);
+  }, [owner, segments, keep, description, subtasks, fields, pasted, mentioned]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -916,7 +923,14 @@ export function TaskCaptureBody({
     return { title: read.title || line, facts };
   };
 
-  const currentDraft = (): CaptureDraft => ({ segments, keep, description, subtasks, fields });
+  const currentDraft = (): CaptureDraft => ({
+    segments,
+    keep,
+    description,
+    subtasks,
+    fields,
+    mentions: mentioned.map((p) => p.id),
+  });
 
   // A capture the server refused comes back: straight into this capture when
   // it's open and empty; otherwise it's kept in its own slot on the device
@@ -931,7 +945,7 @@ export function TaskCaptureBody({
     titleApi.current?.setSegments(kept.segments);
     setKeep(kept.keep);
     setDescription(kept.description);
-    setMentioned([]);
+    setMentioned((kept.mentions ?? []).map((id) => ({ id, label: null })));
     setSubtasks(kept.subtasks);
     setFields(kept.fields);
     setPasted(kept.pasted ?? null);
@@ -1136,7 +1150,14 @@ export function TaskCaptureBody({
         ...describedThings.map((ref) => ({ ref, label: "" })),
       ],
       // A person whose "@Name" was taken out again isn't told.
-      mentions: mentionsStillIn(mentioned, descriptionPlainText(describedAs)),
+      mentions: mentionsStillIn(
+        mentioned.flatMap((p) => {
+          // A restored draft's person: their name as the members list has it.
+          const label = p.label ?? assignees.find((a) => a.userId === p.id)?.fullName ?? null;
+          return label ? [{ id: p.id, label }] : [];
+        }),
+        descriptionPlainText(describedAs),
+      ),
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,

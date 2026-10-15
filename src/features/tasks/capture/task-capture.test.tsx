@@ -138,6 +138,7 @@ function fakeRuntime() {
       addWaiting: rs.fn(async () => []),
       opQueueAdd: rs.fn(async () => []),
       attachTag: rs.fn(async () => ({})),
+      mentionInTask: rs.fn(async () => {}),
     },
     spine: {
       createLink: rs.fn(async (input: unknown) => {
@@ -804,13 +805,14 @@ describe("The description: one editor, Markdown, ⏎ creates (call #15, MOD-117)
   });
   rangeProto.getClientRects ??= () => [];
 
-  async function openWith(description: string) {
+  async function openWith(description: string, mentions: string[] = []) {
     saveDraft(ME, WS, {
       segments: [{ text: "Fix the login screen" }],
       keep: [],
       description,
       subtasks: [],
       fields: EMPTY_FIELDS,
+      mentions,
     });
     renderBody();
     await screen.findByText(/Draft restored/);
@@ -851,6 +853,33 @@ describe("The description: one editor, Markdown, ⏎ creates (call #15, MOD-117)
           relationKind: "mentions",
         }),
       ),
+    );
+  });
+
+  it("a draft with a crafted description comes back quickly, and creates with it (security review)", async () => {
+    const crafted = [
+      "*a".repeat(2_500),
+      Array.from({ length: 20 }, () => `- ${"*a".repeat(2_400)}`).join("\n"),
+      "[x](".repeat(15_000),
+    ].join("\n\n");
+    const start = performance.now();
+    const box = await openWith(crafted);
+    expect(performance.now() - start).toBeLessThan(4000);
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.description).toBe(crafted);
+  });
+
+  it("a restored draft still tells the people its description @-mentions", async () => {
+    const box = await openWith("Ask @Sam Ortiz about it", [SAM]);
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    await waitFor(() =>
+      expect(fake.runtime.tasks.mentionInTask).toHaveBeenCalledWith({
+        workspaceId: WS,
+        taskId: fake.saved[0]?.id,
+        userIds: [SAM],
+      }),
     );
   });
 

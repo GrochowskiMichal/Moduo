@@ -300,6 +300,83 @@ describe("EntityTextEditor markdown (call #15)", () => {
     open.mockRestore();
   });
 
+  describe("a crafted description stays quick through every way in (security review)", () => {
+    const ADVERSARIAL = [
+      "*a".repeat(2_500),
+      Array.from({ length: 20 }, () => `- ${"*a".repeat(2_400)}`).join("\n"),
+      "[x](".repeat(15_000),
+      `- a\n${"  more [x](\n".repeat(2_000)}`,
+      "a\n".repeat(200_000),
+    ].join("\n\n");
+    const timed = async (fn: () => unknown) => {
+      const start = performance.now();
+      await act(async () => {
+        fn();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+      return performance.now() - start;
+    };
+
+    it("load: the stored value, seeded and saved", async () => {
+      const onCommit = rs.fn();
+      const start = performance.now();
+      const box = await markdownEditor({ value: ADVERSARIAL, onCommit });
+      expect(performance.now() - start).toBeLessThan(3000);
+      act(() => {
+        lexicalOf(box).update(
+          () => {
+            const p = $getRoot().getFirstChild();
+            if ($isElementNode(p)) p.append($createTextNode("x"));
+          },
+          { discrete: true },
+        );
+      });
+      expect(await timed(() => fireEvent.blur(box))).toBeLessThan(3000);
+      expect(onCommit).toHaveBeenCalledTimes(1);
+    });
+
+    it("draft restore: the host's setValue, reported live", async () => {
+      const onChange = rs.fn();
+      const apiRef: { current: EntityTextEditorApi | null } = { current: null };
+      await markdownEditor({ value: "", onChange, apiRef });
+      expect(await timed(() => apiRef.current?.setValue(ADVERSARIAL))).toBeLessThan(3000);
+      // Typing after it still reports, quickly, with the whole text.
+      expect(
+        await timed(() =>
+          lexicalOf(screen.getByLabelText("Description")).update(
+            () => {
+              const p = $getRoot().getLastChild();
+              if ($isElementNode(p)) p.append($createTextNode("!"));
+            },
+            { discrete: true },
+          ),
+        ),
+      ).toBeLessThan(3000);
+      expect(String(onChange.mock.lastCall?.[0] ?? "").length).toBeGreaterThan(400_000);
+    });
+
+    it("paste: pasted text is words, never parsed, and saves quickly", async () => {
+      const onChange = rs.fn();
+      const box = await markdownEditor({ value: "", onChange });
+      caretAtEnd(box);
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.assign(paste, {
+        clipboardData: {
+          types: ["text/plain"],
+          files: [],
+          items: [],
+          getData: (type: string) => (type === "text/plain" ? "*a".repeat(50_000) : ""),
+        },
+      });
+      const g = globalThis as Record<string, unknown>;
+      g.ClipboardEvent ??= class ClipboardEvent extends Event {};
+      Object.setPrototypeOf(paste, (g.ClipboardEvent as typeof Event).prototype);
+      expect(await timed(() => box.dispatchEvent(paste))).toBeLessThan(3000);
+      // It landed as words, escaped where Markdown would read them.
+      expect(String(onChange.mock.lastCall?.[0] ?? "").length).toBeGreaterThan(100_000);
+    });
+  });
+
   it("refuses underline in Markdown: it couldn't be saved", async () => {
     const box = await markdownEditor({ value: "plain" });
     const editor = lexicalOf(box);
@@ -369,5 +446,32 @@ describe("EntityTextEditor ⏎ creates (quick capture, MOD-117)", () => {
     fireEvent.keyDown(box, { key: "Enter" });
     await settle();
     expect(paragraphs(box)).toBe(2);
+  });
+
+  it("a menu showing nothing to pick yet keeps ⏎: it closes, and only the next ⏎ creates", async () => {
+    const { box, onEnter } = await captureEditor();
+    // Type " @zz" at the caret: the `@` menu opens with no matches.
+    act(() => {
+      lexicalOf(box).update(
+        () => {
+          const p = $getRoot().getFirstChild();
+          if ($isElementNode(p)) {
+            const text = $createTextNode(" @zz");
+            p.append(text);
+            text.selectEnd();
+          }
+        },
+        { discrete: true },
+      );
+    });
+    caretAtEnd(box);
+    await settle();
+    expect(screen.getByText(/No matches|Searching/)).toBeTruthy();
+    fireEvent.keyDown(box, { key: "Enter" });
+    await settle();
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(screen.queryByText(/No matches|Searching/)).toBeNull();
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onEnter).toHaveBeenCalledTimes(1);
   });
 });

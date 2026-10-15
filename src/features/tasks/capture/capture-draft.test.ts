@@ -34,6 +34,17 @@ const draft = (over: Partial<CaptureDraft> = {}): CaptureDraft => ({
 afterEach(() => window.localStorage.clear());
 
 describe("the capture draft", () => {
+  it("keeps the description's @-mentioned people by id only, each once (call #15)", () => {
+    saveDraft("u1", "w1", draft({ description: "Ask @Sam Ortiz", mentions: ["u-sam", "u-sam"] }));
+    const kept = loadDraft("u1", "w1");
+    expect(kept?.mentions).toEqual(["u-sam"]);
+    const stored = JSON.parse(
+      window.localStorage.getItem("moduo:capture-draft:task:u1:w1") ?? "{}",
+    );
+    // Ids only: the name is in the person's own words, never kept beside the id.
+    expect(stored.mentions).toEqual(["u-sam"]);
+  });
+
   it("never keeps the status a group's + opened it with", () => {
     saveDraft("u1", "w1", draft({ fields: { ...EMPTY_FIELDS, status: "wont_do" } }));
     expect(loadDraft("u1", "w1")?.fields.status).toBeNull();

@@ -427,9 +427,33 @@ describe("a crafted description can't freeze the editor", () => {
     ["a million short lines", "a\n".repeat(500_000)],
     ["2,500 short lines under the size limit", "a\n".repeat(2_500)],
     ["many lines past the total", `${"**bold** and `code`\n".repeat(20_000)}`],
+    // Dense emphasis: thousands of formatted runs, slow to read and slower to save.
+    ["a short line of *a", "*a".repeat(2_500)],
+    ["list items of *a", Array.from({ length: 20 }, () => `- ${"*a".repeat(2_400)}`).join("\n")],
+    [
+      "a long list of emphasis",
+      Array.from({ length: 2_000 }, () => "- *a*b* ~~c~~ _d_").join("\n"),
+    ],
+    ["a list item with thousands of lines", `- a\n${"  more [x](\n".repeat(2_000)}`],
+    [
+      "a big list of links",
+      Array.from({ length: 1_200 }, () => `- ${"[x](".repeat(75)}`).join("\n"),
+    ],
+    [
+      "blocks just under each cap",
+      Array.from({ length: 300 }, () => "`a ".repeat(149)).join("\n\n"),
+    ],
+    ["a quote of thousands of lines", "> [x](\n".repeat(3_000)],
+    ["a fence of 100 KB", `\`\`\`\n${"[x]( `a ".repeat(12_000)}\n\`\`\``],
   ] as const) {
-    it(`imports ${name} quickly`, () => {
-      expect(timed(() => load(md))).toBeLessThan(1500);
+    it(`reads and saves ${name} quickly`, () => {
+      let editor = markdownEditor();
+      expect(
+        timed(() => {
+          editor = load(md);
+        }),
+      ).toBeLessThan(1500);
+      expect(timed(() => save(editor))).toBeLessThan(1500);
     });
   }
 
