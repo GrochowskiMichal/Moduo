@@ -101,13 +101,13 @@ export function PlanViewHeader({
             instead of squeezing it away. */}
         <div data-slot="plan-title" className="flex min-w-0 grow basis-40 items-baseline gap-2">
           {project ? (
-            <h1 className="min-w-0 font-display text-lg text-foreground">
+            <h1 className="-mx-1 min-w-0 font-display text-lg text-foreground">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
                     onClick={project.onOpenDetails}
-                    className="-mx-1 block max-w-full truncate rounded-md px-1 text-left outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+                    className="block max-w-full truncate rounded-md px-1 text-left outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     {title}
                   </button>
