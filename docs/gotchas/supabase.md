@@ -231,3 +231,41 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 - **A `LANGUAGE sql` function body is parsed and its functions resolved at `CREATE` time.** A function that may not exist yet can only be reached from plpgsql: guard it with `to_regprocedure` and call it plainly (plpgsql prepares the call on its first run, so it is never resolved while the function is absent). → [record](../build/chat-v2/CV-4.md) (2026-10-14)
 - **A `DO $$ … $$` block whose body contains `$$` anywhere ends early with a confusing syntax error.** Name the outer quote: `DO $do$ … $do$`.
 - **`coalesce(obj_description(…), 'mark') = 'mark'` counts an uncommented object as marked.** Match a marker positively: `obj_description(…) IS NOT DISTINCT FROM 'mark'`, and check the object exists.
+
+## Chat conversation ops (CV-2b, CV-2-fix)
+
+- **`chat_ops.test.sql` already makes people F and H (CV-2a's limits).** `test.person` twice with one letter is a `users_pkey` error: pick a new letter. (CV-2b)
+- **Every op in one test transaction stamps the same `now()`**, so messages sent through ops tie on `created_at` and order by id. To test read marks and counts, insert rows at fixed `created_at` (`chat_counts.test.sql`'s `test.put` does, and fans out like a send). (CV-2b)
+- **Changing a function's return type needs `DROP` + `CREATE`** (bootstrap `void` → row, `chat_unread_counts`' new columns); re-state its grants by name. (CV-2b)
+- **A manager row isn't enough to manage.** Use `chat__can_manage` / `chat__is_manager` (in the channel, a role that posts), never `EXISTS (… chat_channel_managers …)`. (CV-2b)
+- **Check a membership rule ("in the channel") in the op, before any membership upsert the op makes**; the row trigger is the backstop for other writers. (CV-2-fix)
+- **A removal is `removed_at`, never `removed_by`** (`removed_by` goes null with the remover's account). A test that writes a removal directly sets both: CHECK `chat_members_removal_check` ties them. (CV-2-fix)
+
+## Chat catch-up (CV-5)
+
+- **A check that shares a statement with the send it looks at sees the rows as they were when the statement started.** A plain subquery next to `test.send(...)` in one `test.ok(...)` reads nothing new (VOLATILE helper functions do): send first, check in the next statement. (CV-5)
+- **A partial unique index used as an `ON CONFLICT` arbiter needs its predicate in the clause** (`ON CONFLICT (user_id, chain_root_id) WHERE reason = 'reply' AND done_at IS NULL`). Every path that reopens an item reopens at most one per chain or line, and only while none is open (`chat__reopen`). (CV-5)
+- **`module_activity_log` returns nothing, so the bell twin's id needs the row inserted directly.** `chat__activity` mirrors its attribution (the person, or the key with its person's name): a change to one must go to the other. (CV-5)
+- **Two migrations redefining one function: cut the later stamp from the earlier one's body** (CV-5's `chat_op_send` from CV-2-fix's), or a replay in stamp order silently drops a rule. (CV-5)
+
+## Chat device notices (CV-6a)
+
+- **One transaction gives every send the same `now()`:** notices of one test share `created_at`, so tag replacement ("a newer row") needs distinct times set in the test. (CV-6a)
+- **`UPDATE workspace_members SET perms = …` is recomputed by `perm_members_resolve`.** Tests that take chat away use `session_replication_role = replica` (as `chat_foundation` does). (CV-6a)
+- **Heavy sends in one test hit the sending limit:** move each message to an old minute after sending (`test.send` in `chat_notices.test.sql`). (CV-6a)
+
+## Chat store (CV-3)
+
+- **Postgres Changes doesn't filter DELETE events by the binding's `filter`:** every subscriber gets every deleted row's key. Check the key's person before acting on a delete. (CV-3)
+- **realtime-js `channel(topic)` returns the channel that is still leaving when the same topic is asked for again, and `subscribe()` on it does nothing.** Wait for `removeChannel` before joining a named topic again (`whenTopicFree` in `realtime.ts`). (CV-3)
+- **An `async` IIFE assigned to a "running" field runs its `finally` before the assignment when it settles without awaiting:** the field stays set and every later call waits on a finished promise. Chain `.finally` on the promise instead (`drain`, `sync`, `checkAccess` do). (CV-3)
+- **The local stack's send limit counts directly inserted rows by author too:** a probe or spec that seeds messages "now" as a person, then sends as them, gets `PT429`. Seed with an older `created_at`, or insert the later rows directly. (CV-3)
+- **A keyset window around a jumped-to message isn't contiguous with the newest page:** going back to the newest restarts the window at that page (`lo = null`), or the overlap rule draws the gap as if nothing were missing. (CV-3)
+- **`chat_sync_ids` names a moved-away id only for the check after the move:** drop it from the device even when its conversation isn't in memory, or it stays for good. (CV-3)
+- **`rpc(...).select(columns)` narrows a composite op answer on PostgREST (probe-checked):** without it every op answer carries `search_tsv`. (CV-3)
+- **A spec that types writes `chat:typing:<id>` rows to `realtime.messages`.** `chat_privacy.test.sql` now counts only its own conversations' rows; any other test that counts rows across the whole database flakes on a shared stack, so scope counts to the test's own rows. (CV-3)
+
+## The shared local stack (2026-10-15)
+
+- **The shared local stack was reset twice on 2026-10-15 from a fresh prod snapshot newer than every repo migration, so no repo migration replays, and `anon` / `authenticated` keep the EXECUTE and table grants Supabase's default privileges give at load** (prod's dump grants many only to `service_role`). About 19 non-chat `db:test` files fail locally for that reason alone (for example `comments.test.sql`'s grant checks on functions CV-7c doesn't touch). Judge a failure by whether the file touches your block; a migration that re-states its own grants by name passes its own checks.
+- **Tests that count rows across the whole database (typing rows, the blank-deleted job) flake on a shared stack.** Scope every count to the test's own rows (`chat_privacy` counts only its conversations' typing rows; `chat_ops` blanks older deletions before counting its own).
