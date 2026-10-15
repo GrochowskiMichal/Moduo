@@ -13,7 +13,7 @@ Screen-only, no migration. The frame itself is a shell decision: [design-system.
   - Rejected: a control-height chip (32 / 30 / 26: its fill wouldn't match the Inbox row's, and the first lines wouldn't share a centre).
 - **The List's focus on load (agent's fix, seen in passing in MOD-121's audit)** → `task-list-view.tsx`
   - Who: the agent, 2026-10-15 (the brief: "the ring only shows for keyboard focus").
-  - Decision: the List still takes focus on load so j/k work at once, but quietly: no ring until a key on the list (⌘/⌃/⌥ shortcuts aside) or until focus leaves and comes back.
+  - Decision: the List still takes focus on load so j/k work at once, but quietly: no ring until a key on the list (any key but a lone modifier, the list's own ⌘A and ⌥⇧↑ included) or until focus leaves for elsewhere on the page and comes back; switching to another app and back keeps it quiet.
   - Why: a browser counts a script's focus on a fresh load as keyboard focus (`:focus-visible`), so a 2 px ring circled the whole list.
   - Rejected: not focusing on load (j/k would need a click first, or a second page-level key path).
 

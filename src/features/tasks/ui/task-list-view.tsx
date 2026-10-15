@@ -260,6 +260,8 @@ const NO_TEAMS: readonly Team[] = [];
 const NO_STATUS_NAMES: ReadonlyMap<string, ProjectStatus> = new Map<string, ProjectStatus>();
 const NO_EXTRA_GROUPS: readonly ListExtraGroup[] = [];
 const NO_ADD: GroupAddState = { kind: "none" };
+/** Keys that only hold a modifier down: not keyboard use on their own (MOD-121). */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(["Meta", "Control", "Alt", "Shift"]);
 
 /**
  * One line of the List as drawn (TV-D11b): the groups flattened, so the
@@ -974,8 +976,9 @@ export function TaskListView({
     const active = document.activeElement;
     const list = containerRef.current;
     if (!list || (active && active !== document.body)) return;
-    list.dataset.quietFocus = "";
     list.focus();
+    // Same task as the focus, so no frame paints the ring in between.
+    if (document.activeElement === list) list.dataset.quietFocus = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1186,9 +1189,10 @@ export function TaskListView({
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Typing on the list (not a ⌘/⌃/⌥ shortcut out of it) is keyboard use:
-      // the mount's quiet focus shows its ring from here on (MOD-121).
-      if (!e.metaKey && !e.ctrlKey && !e.altKey) delete e.currentTarget.dataset.quietFocus;
+      // Any key but a lone modifier is keyboard use, the list's own ⌘A and
+      // ⌥⇧↑ included: the mount's quiet focus shows its ring from here on
+      // (MOD-121). A shortcut that leaves the list (⌘K) blurs it anyway.
+      if (!MODIFIER_KEYS.has(e.key)) delete e.currentTarget.dataset.quietFocus;
       // While inline-editing a title, the Input stops propagation. During a
       // keyboard reorder the dnd sensor owns the arrows — don't also move the cursor.
       if (editingId || reordering) return;
@@ -2065,9 +2069,13 @@ export function TaskListView({
               ref={containerRef}
               tabIndex={0}
               onKeyDown={onKeyDown}
-              // Once the mount's quiet focus leaves, a later focus rings as usual.
+              // Once the mount's quiet focus leaves for somewhere else on the page,
+              // a later focus rings as usual. The window losing focus (another app)
+              // isn't a move: coming back restores the same quiet focus.
               onBlur={(e) => {
-                if (e.target === e.currentTarget) delete e.currentTarget.dataset.quietFocus;
+                if (e.target === e.currentTarget && document.hasFocus()) {
+                  delete e.currentTarget.dataset.quietFocus;
+                }
               }}
               {...fileDrop.handlers}
               // Chromium focuses a clicked button; after a mouse click on a row's

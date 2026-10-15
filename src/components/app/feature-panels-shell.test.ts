@@ -42,4 +42,13 @@ describe("the panels' padding", () => {
   it("reads no density padding (--pad-*) for the frame", async () => {
     expect(await read()).not.toMatch(/var\(--pad-/);
   });
+
+  it("puts the bottom bar on the panels' 16 px edge line, and keeps the top bar at 20", async () => {
+    const chrome = await fs.readFile(
+      path.join(process.cwd(), "src/components/app/app-chrome.tsx"),
+      "utf8",
+    );
+    expect(chrome).toMatch(/"relative flex flex-row items-center bg-background px-4"/);
+    expect(chrome).toMatch(/"relative grid w-full items-center bg-background px-5"/);
+  });
 });
