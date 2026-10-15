@@ -63,14 +63,14 @@ const DRAIN_ROUNDS = 3;
 /** A little past the hold, so the claim's clock sees it due. */
 const HOLD_SLACK_MS = 250;
 
-const CHAT_KINDS = new Set([
-  "chat_message",
-  "chat_mention",
-  "chat_reply",
-  "chat_announcement",
-  "chat_reminder",
-  "chat_focus_summary",
-]);
+/**
+ * Chat's kinds (`NOTICE_DELIVERY_KINDS` in @contracts, all `chat_*`), read by
+ * prefix so push-send needs no Zod import map and a new chat kind is never
+ * mistaken for a reminder.
+ */
+function isChatKind(kind: string | null | undefined): boolean {
+  return typeof kind === "string" && kind.startsWith("chat_");
+}
 
 /**
  * What a browser gets (public/push-display.js reads these keys): ids and the
@@ -82,7 +82,7 @@ export function pushMessage(delivery: ClaimedDelivery): Record<string, unknown> 
   // Chat (CV-6a): the server wrote "Sofia Ortiz · #plans · Acme" and the
   // text (only while "Show message text" is on) for this person; a burst
   // shares its tag, so the browser replaces the last notice.
-  if (delivery.kind && CHAT_KINDS.has(delivery.kind)) {
+  if (isChatKind(delivery.kind)) {
     return {
       uid: delivery.user_id,
       title: delivery.title.slice(0, 120),

@@ -87,7 +87,10 @@ ALTER TABLE public.notice_deliveries
   ADD COLUMN IF NOT EXISTS tag text,
   ADD COLUMN IF NOT EXISTS push_after timestamptz,
   ADD COLUMN IF NOT EXISTS acked_at timestamptz,
-  ADD COLUMN IF NOT EXISTS held_for_focus boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS held_for_focus boolean NOT NULL DEFAULT false,
+  -- The claim's lease: a run that claimed a row owns it for a minute, so two
+  -- overlapping push-send runs never send it twice.
+  ADD COLUMN IF NOT EXISTS push_claimed_at timestamptz;
 
 ALTER TABLE public.notice_deliveries DROP CONSTRAINT IF EXISTS notice_deliveries_tag_check;
 ALTER TABLE public.notice_deliveries
@@ -114,11 +117,13 @@ CREATE OR REPLACE FUNCTION public.notice_deliveries__chat_visible(p_channel_id u
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-  SELECT (p_channel_id IS NULL OR public.chat__can_read_channel_as(p_channel_id, auth.uid()))
-     AND (p_message_id IS NULL OR EXISTS (
-           SELECT 1 FROM public.chat_messages m
-            WHERE m.id = p_message_id AND m.deleted_at IS NULL
-              AND public.chat__can_read_channel_as(m.channel_id, auth.uid())))
+  -- About a message: that message, not deleted, in a conversation they read
+  -- (wherever it is now). About a conversation only: that conversation.
+  SELECT CASE WHEN p_message_id IS NOT NULL THEN EXISTS (
+                SELECT 1 FROM public.chat_messages m
+                 WHERE m.id = p_message_id AND m.deleted_at IS NULL
+                   AND public.chat__can_read_channel_as(m.channel_id, auth.uid()))
+              ELSE p_channel_id IS NULL OR public.chat__can_read_channel_as(p_channel_id, auth.uid()) END
 $function$;
 
 DROP POLICY IF EXISTS notice_deliveries_own_read ON public.notice_deliveries;
@@ -452,9 +457,13 @@ BEGIN
       SELECT g.u, g.gate,
              CASE WHEN coalesce(up.notice_show_text, true)
                   THEN public.chat__notice_text(p_msg.body, p_channel.workspace_id, g.u) END AS words,
+             -- Earlier notices on the tag about messages still unread.
              1 + (SELECT count(*) FROM public.notice_deliveries d
+                    JOIN public.chat_messages pm ON pm.id = d.message_id AND pm.deleted_at IS NULL
                    WHERE d.user_id = g.u AND d.tag = v_tag AND d.acked_at IS NULL
-                     AND d.created_at > v_now - interval '10 minutes') AS burst
+                     AND d.message_id <> p_msg.id
+                     AND d.created_at > v_now - interval '10 minutes'
+                     AND pm.created_at > coalesce(mem.last_read_at, '-infinity'::timestamptz)) AS burst
         FROM (SELECT DISTINCT u, public.notice__gate(u, p_channel.workspace_id, v_kind, v_now) AS gate
                 FROM unnest(p_users) AS u) g
         LEFT JOIN public.user_preferences up ON up.user_id = g.u
@@ -481,7 +490,7 @@ SELECT pg_temp.recut(
 -- now or within its wait.
 SELECT pg_temp.recut('public.notice_deliveries__kick()'::regprocedure,
   E'    WHERE d.pushed_at IS NULL AND d.push_attempts < 5 AND d.created_at > now() - interval ''1 day''\n      AND EXISTS (SELECT 1 FROM public.push_subscriptions s WHERE s.user_id = d.user_id)) THEN',
-  E'    WHERE d.pushed_at IS NULL AND d.push_attempts < 5 AND d.created_at > now() - interval ''1 day''\n      AND d.acked_at IS NULL AND NOT d.held_for_focus\n      AND (d.tag IS NULL OR NOT EXISTS (SELECT 1 FROM public.notice_deliveries n\n                                         WHERE n.user_id = d.user_id AND n.tag = d.tag AND n.created_at > d.created_at))\n      AND EXISTS (SELECT 1 FROM public.push_subscriptions s WHERE s.user_id = d.user_id)) THEN');
+  E'    WHERE d.pushed_at IS NULL AND d.push_attempts < 5 AND d.created_at > now() - interval ''1 day''\n      AND d.acked_at IS NULL AND NOT d.held_for_focus\n      AND (d.tag IS NULL OR NOT EXISTS (SELECT 1 FROM public.notice_deliveries n\n                                         WHERE n.user_id = d.user_id AND n.tag = d.tag AND n.created_at > d.created_at\n                                           AND (n.acked_at IS NOT NULL OR coalesce(n.push_after, n.created_at) <= now())))\n      AND EXISTS (SELECT 1 FROM public.push_subscriptions s WHERE s.user_id = d.user_id)) THEN');
 
 -- A chat notice for someone with a browser kicks push-send from the write.
 -- Never fails the write that made it.
@@ -530,19 +539,24 @@ BEGIN
       -- Still theirs to see at send time (TV-D10-fix; chat: the conversation
       -- and the message).
       AND (d.task_id IS NULL OR public.tasks__visible_to(d.task_id, d.user_id))
-      AND (d.channel_id IS NULL OR public.chat__can_read_channel_as(d.channel_id, d.user_id))
-      AND (d.message_id IS NULL OR EXISTS (SELECT 1 FROM public.chat_messages m
-                                            WHERE m.id = d.message_id AND m.deleted_at IS NULL
-                                              AND public.chat__can_read_channel_as(m.channel_id, d.user_id)))
-      -- A newer notice on the same tag replaces this one (a burst).
+      AND CASE WHEN d.message_id IS NOT NULL THEN EXISTS (
+                 SELECT 1 FROM public.chat_messages m
+                  WHERE m.id = d.message_id AND m.deleted_at IS NULL
+                    AND public.chat__can_read_channel_as(m.channel_id, d.user_id))
+               ELSE d.channel_id IS NULL OR public.chat__can_read_channel_as(d.channel_id, d.user_id) END
+      -- A newer notice on the same tag replaces this one (a burst) once it is
+      -- due itself or was acknowledged: a steady stream still rings every 8 s.
       AND (d.tag IS NULL OR NOT EXISTS (SELECT 1 FROM public.notice_deliveries n
                                          WHERE n.user_id = d.user_id AND n.tag = d.tag
-                                           AND n.created_at > d.created_at))
+                                           AND n.created_at > d.created_at
+                                           AND (n.acked_at IS NOT NULL OR coalesce(n.push_after, n.created_at) <= now())))
+      -- Not while another run holds it.
+      AND (d.push_claimed_at IS NULL OR d.push_claimed_at < now() - interval '1 minute')
     ORDER BY d.created_at
     LIMIT greatest(least(coalesce(p_limit, 100), 500), 1)
     FOR UPDATE OF d SKIP LOCKED
   ), bumped AS (
-    UPDATE public.notice_deliveries d SET push_attempts = d.push_attempts + 1
+    UPDATE public.notice_deliveries d SET push_attempts = d.push_attempts + 1, push_claimed_at = now()
     FROM picked WHERE d.id = picked.id
     RETURNING d.*
   )
@@ -553,28 +567,54 @@ BEGIN
 END;
 $function$;
 
--- A deleted message's words leave its notices and any waiting email's payload
--- at once (the text is blanked on the server, spec §5).
-CREATE OR REPLACE FUNCTION public.chat__notices_blank_deleted()
+-- A deleted message's notices that haven't gone out are dropped (so an older
+-- one on its tag rings instead); the words leave the rest, and any waiting
+-- email's payload, at once (the text is blanked on the server, spec §5). An
+-- edit redraws the words of its notices, so the old text is never pushed.
+CREATE OR REPLACE FUNCTION public.chat__notices_follow_message()
  RETURNS trigger
  LANGUAGE plpgsql
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
 BEGIN
-  UPDATE public.notice_deliveries d SET body = NULL
-   WHERE d.message_id = NEW.id AND d.body IS NOT NULL;
-  UPDATE public.email_outbox o SET payload = o.payload || '{"text": null}'::jsonb
-   WHERE o.kind = 'chat_waiting' AND o.payload ->> 'text' IS NOT NULL
-     AND o.payload ->> 'path' LIKE '%&m=' || NEW.id::text;
+  IF NEW.deleted_at IS NOT NULL THEN
+    DELETE FROM public.notice_deliveries d WHERE d.message_id = NEW.id AND d.pushed_at IS NULL;
+    UPDATE public.notice_deliveries d SET body = NULL
+     WHERE d.message_id = NEW.id AND d.body IS NOT NULL;
+    UPDATE public.email_outbox o SET payload = o.payload || '{"text": null}'::jsonb
+     WHERE o.kind = 'chat_waiting' AND o.created_at > now() - interval '8 days'
+       AND o.payload ->> 'text' IS NOT NULL
+       AND o.payload ->> 'path' LIKE '%&m=' || NEW.id::text;
+  ELSE
+    -- Only rows that carry words ("Show message text" was on); a burst keeps
+    -- its count.
+    UPDATE public.notice_deliveries d
+       SET body = left(CASE WHEN x.burst IS NOT NULL THEN x.burst || coalesce(': ' || x.words, '')
+                            ELSE x.words END, 500)
+      FROM (SELECT d2.id, substring(d2.body FROM '^([0-9]+ messages)(: |$)') AS burst,
+                   public.chat__notice_text(NEW.body, NEW.workspace_id, d2.user_id) AS words
+              FROM public.notice_deliveries d2
+             WHERE d2.message_id = NEW.id AND d2.body IS NOT NULL) x
+     WHERE d.id = x.id;
+    UPDATE public.email_outbox o
+       SET payload = o.payload || jsonb_build_object('text',
+             public.chat__notice_text(NEW.body, NEW.workspace_id, o.to_user_id))
+     WHERE o.kind = 'chat_waiting' AND o.status = 'queued' AND o.created_at > now() - interval '8 days'
+       AND o.payload ->> 'text' IS NOT NULL
+       AND o.payload ->> 'path' LIKE '%&m=' || NEW.id::text;
+  END IF;
   RETURN NULL;
 END;
 $function$;
 DROP TRIGGER IF EXISTS chat_messages_notices_blank_deleted ON public.chat_messages;
-CREATE TRIGGER chat_messages_notices_blank_deleted
-  AFTER UPDATE OF deleted_at ON public.chat_messages
-  FOR EACH ROW WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
-  EXECUTE FUNCTION public.chat__notices_blank_deleted();
+DROP FUNCTION IF EXISTS public.chat__notices_blank_deleted();
+DROP TRIGGER IF EXISTS chat_messages_notices_follow ON public.chat_messages;
+CREATE TRIGGER chat_messages_notices_follow
+  AFTER UPDATE OF deleted_at, body ON public.chat_messages
+  FOR EACH ROW WHEN ((OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
+                     OR (NEW.deleted_at IS NULL AND OLD.body IS DISTINCT FROM NEW.body))
+  EXECUTE FUNCTION public.chat__notices_follow_message();
 
 -- How long push-send should wait for the next notice inside its hold, in
 -- milliseconds; null when none is due within 10 s.
@@ -865,7 +905,7 @@ BEGIN
     'chat__fan_out(public.chat_messages, public.chat_channels, uuid, public.chat_messages)',
     'notice_deliveries__kick()',
     'notice_deliveries__kick_now()',
-    'chat__notices_blank_deleted()',
+    'chat__notices_follow_message()',
     'notice_deliveries__claim(integer)',
     'notice_deliveries__next_due()',
     'user_clients__purge()',

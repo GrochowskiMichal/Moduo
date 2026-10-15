@@ -104,6 +104,9 @@ BEGIN
   DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id = test.id('vault');
   INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status)
   VALUES (test.id('task:secret'), test.id('W'), test.id('vault'), test.id('O'), 'Acquire Northwind', 'todo');
+  -- Everyone's read mark before the (moved) messages, so bursts count them.
+  UPDATE public.chat_members SET last_read_id = NULL, last_read_at = '2026-09-01 00:00:00+00'
+   WHERE workspace_id = test.id('W');
 END;
 $$;
 
@@ -125,6 +128,19 @@ BEGIN
   v := test.send('A', 'D', 'dm2', 'still there?');
   PERFORM test.ok(test.notice('B', 'dm2') LIKE 'chat_message|A · Acme|2 messages: still there?|%',
     'a burst on one conversation reads "2 messages" with the newest text', test.notice('B', 'dm2'));
+
+  v := test.as_user('A', format($q$SELECT public.chat_op_edit(%L, 'still around?')$q$, test.mid('dm2')));
+  PERFORM test.ok(v = 'ok 1' AND test.notice('B', 'dm2') LIKE 'chat_message|A · Acme|2 messages: still around?|%',
+    'an edit redraws the words of its notices (the old text is never pushed)', test.notice('B', 'dm2'));
+
+  -- B reads the conversation up to now: the next notice counts only what's unread.
+  UPDATE public.chat_members SET last_read_at = '2026-10-01 12:00:00+00'
+   WHERE channel_id = test.ref('D') AND user_id = test.id('B');
+  v := test.send('A', 'D', 'dm2b', 'ok then');
+  PERFORM test.ok(test.notice('B', 'dm2b') LIKE 'chat_message|A · Acme|ok then|%',
+    'a burst counts only messages still unread', test.notice('B', 'dm2b'));
+  UPDATE public.chat_members SET last_read_at = '2026-09-01 00:00:00+00'
+   WHERE channel_id = test.ref('D') AND user_id = test.id('B');
 
   v := test.send('A', 'L', 'm1', format('ping %s and %s and %s', test.uri('person', test.id('B')),
                                         test.uri('person', test.id('Z')), test.uri('person', test.id('X'))));
@@ -171,7 +187,7 @@ BEGIN
     'on Nothing: the Catch up item only, no notice (CH40)');
 
   v := test.send('A', 'L', 'all', '@channel standup moved');
-  PERFORM test.ok(v = 'ok 1' AND test.notice('B', 'all') LIKE 'chat_mention|A · #Plans · Acme|% messages: @channel standup moved|%'
+  PERFORM test.ok(v = 'ok 1' AND test.notice('B', 'all') LIKE 'chat_mention|A · #Plans · Acme|%@channel standup moved|%'
                   AND test.notice('C', 'all') = 'none',
     '@channel: every member not on Nothing gets chat_mention (B); C, on Nothing, none', test.notice('B', 'all'));
 
@@ -184,7 +200,7 @@ BEGIN
   PERFORM test.ok(v = 'ok 1' AND EXISTS (
       SELECT 1 FROM public.notice_deliveries d JOIN public.chat_messages m ON m.id = d.message_id
        WHERE d.user_id = test.id('B') AND m.author_kind = 'api_key'
-         AND d.title = 'Claude Desktop · #Plans · Acme' AND d.body LIKE '% messages: build is green @B'),
+         AND d.title = 'Claude Desktop · #Plans · Acme' AND d.body LIKE '%build is green @B'),
     'an app''s post: the notice is from the app by its name', v);
 
   PERFORM test.ok(public.notice__gate(test.id('B'), test.id('W'), 'chat_message', now()) = 'send'
@@ -193,7 +209,7 @@ BEGIN
 
   v := test.as_user('A', format($q$SELECT public.chat_op_edit(%L, %L)$q$, test.mid('plain'),
     format('lunch? %s', test.uri('person', test.id('B')))));
-  PERFORM test.ok(v = 'ok 1' AND test.notice('B', 'plain') LIKE 'chat_mention|A · #Plans · Acme|% messages: lunch? @B|%'
+  PERFORM test.ok(v = 'ok 1' AND test.notice('B', 'plain') LIKE 'chat_mention|A · #Plans · Acme|%lunch? @B|%'
                   AND test.notices('plain') = 2,
     'a mention added by an edit: only the newly named get a notice', v);
 END;
@@ -363,12 +379,12 @@ BEGIN
    WHERE o.kind = 'chat_waiting' AND o.to_user_id = test.id('B') AND o.payload ->> 'channel_id' = test.ref('D')::text;
   PERFORM test.ok(test.emails('B') = 2
     AND p ->> 'conversation_kind' = 'dm' AND p ->> 'sender_name' = 'A' AND p ->> 'workspace_name' = 'Acme'
-    AND (p ->> 'count')::int = 3 AND p ->> 'text' = 'the secret word'
+    AND (p ->> 'count')::int = 4 AND p ->> 'text' = 'the secret word'
     AND p ->> 'path' = '/chat?c=' || test.ref('D') || '&m=' || test.mid('dm3')
     AND EXISTS (SELECT 1 FROM public.email_outbox o WHERE o.to_email = 'db-test-b@example.com'
                  AND o.dedupe_key = 'chat_waiting:' || test.id('B') || ':' || test.ref('D') || ':'
                                     || to_char(date_trunc('hour', (now() + interval '2 hours') AT TIME ZONE 'UTC'), 'YYYY-MM-DD"T"HH24')),
-    'email: one chat_waiting per conversation an hour away (the DM with its 3 messages and the newest text, and Plans)',
+    'email: one chat_waiting per conversation an hour away (the DM with its 4 messages and the newest text, and Plans)',
     p::text);
   PERFORM test.ok(test.emails('A') = 0, 'email: none for someone whose apps were never seen (A''s reply item is no email reason either)');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_catchup WHERE user_id = test.id('B') AND channel_id = test.ref('D')
