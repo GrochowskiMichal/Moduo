@@ -105,7 +105,7 @@ test("bottom-bar row and Mixed panel: one Undo for the whole change", async ({ p
   if (await expand.isVisible()) await expand.click();
   const panel = page.getByTestId("bulk-panel");
   // "4 tasks ▾" is the panel's title row, its menu still the panel's views (MOD-109).
-  await expect(page.getByRole("button", { name: "Panel view: 4 tasks" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Panel view: Details, 4 tasks" })).toBeVisible();
   await expect(panel.getByRole("list", { name: "Selected tasks" })).toBeVisible();
   const priority = panel.locator('[data-slot="property-row"]', { hasText: "Priority" });
   await expect(priority.getByRole("button")).toHaveText("Mixed");

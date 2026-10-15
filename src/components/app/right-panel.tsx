@@ -282,7 +282,12 @@ function ViewMenu({
         <Button
           variant="ghost"
           size="sm"
-          aria-label={`Panel view: ${title}`}
+          // The open view's name first, then what the row says instead.
+          aria-label={
+            title === active.label
+              ? `Panel view: ${active.label}`
+              : `Panel view: ${active.label}, ${title}`
+          }
           className="-ml-2.5 gap-1 font-medium"
         >
           {title}

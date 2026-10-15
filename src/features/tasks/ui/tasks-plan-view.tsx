@@ -1336,7 +1336,9 @@ export function TasksPlanView({
 
   // The List is in the centre (the body's last branch, no full page over it):
   // the backstop picks only rows it shows (MOD-124), and with none shown the
-  // panel shows what it shows with nothing selected (MOD-123).
+  // panel shows what it shows with nothing selected (MOD-123). Keep it in step
+  // with `body` and `centre` below: a new centre branch that isn't the List
+  // must be excluded here, or the backstop reads the List's last order.
   const listInCentre =
     !(fullPageId && taskById.has(fullPageId)) &&
     selection !== TEMPLATES_SELECTION &&

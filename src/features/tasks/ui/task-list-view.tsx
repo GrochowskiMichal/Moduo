@@ -858,6 +858,9 @@ export function TaskListView({
     return out;
   }, [groups, collapsed, rowsOf, expandedParents, nest, api.subtasksByParent]);
 
+  // The Backlog line you closed on the selection, with nowhere else to move
+  // it: that line doesn't open again for it (MOD-124).
+  const closedOnRef = useRef<{ key: string; id: string } | null>(null);
   const toggleBacklog = useCallback(
     (key: string) => {
       // Closing a line that holds the selection: the selection steps up to the
@@ -874,8 +877,15 @@ export function TaskListView({
             group.tasks[group.tasks.length - 1] ??
             visibleTasks.find((t) => !closing.has(t.id) && !closing.has(t.parentId ?? ""));
           if (next) setSelectedId(next.id);
+          else {
+            // It stays, inside the line you closed: the line mustn't open for it.
+            closedOnRef.current = { key, id: selectedId };
+            setOpenBacklogs((prev) => toggled(prev, key));
+            return;
+          }
         }
       }
+      closedOnRef.current = null;
       setOpenBacklogs((prev) => toggled(prev, key));
     },
     [openBacklogs, groups, selectedId, taskById, visibleTasks, setSelectedId],
@@ -890,10 +900,6 @@ export function TaskListView({
   // switches) never touch collapse state — a group the user closes stays
   // closed.
   const consumedRevealSeqRef = useRef(0);
-  // The selection this effect saw last: a closed Backlog line opens only for
-  // a selection that arrives inside it, never for one you just closed it on
-  // (MOD-124).
-  const seenSelectionRef = useRef<string | null>(null);
   useEffect(() => {
     const reveal =
       revealRequest &&
@@ -902,8 +908,10 @@ export function TaskListView({
         ? revealRequest
         : null;
     if (reveal) consumedRevealSeqRef.current = reveal.seq;
-    const arrived = seenSelectionRef.current !== selectedId;
-    seenSelectionRef.current = selectedId;
+    // The line you closed on the selection stays closed for it, until the
+    // selection moves (MOD-124).
+    const closedOn = closedOnRef.current?.id === selectedId ? closedOnRef.current : null;
+    if (!closedOn) closedOnRef.current = null;
     if (selectedId && visibleTasks.some((t) => t.id === selectedId)) return;
     if (selectedId) {
       const parentId = taskById.get(selectedId)?.parentId;
@@ -921,14 +929,15 @@ export function TaskListView({
           return;
         }
       }
-      // A task selected into a folded Backlog line (a search, a link): the
-      // line opens for it.
-      const inBacklog =
-        arrived || reveal
-          ? groups.find(
-              (g) => !collapsed.has(g.key) && !openBacklogs.has(g.key) && g.backlog.some(holds),
-            )
-          : undefined;
+      // A selected task in a folded Backlog line (a search, a link, its status
+      // set to Backlog): the line opens for it, unless you just closed it on it.
+      const inBacklog = groups.find(
+        (g) =>
+          !collapsed.has(g.key) &&
+          !openBacklogs.has(g.key) &&
+          g.backlog.some(holds) &&
+          (reveal || closedOn?.key !== g.key),
+      );
       if (inBacklog) {
         setOpenBacklogs((prev) => new Set(prev).add(inBacklog.key));
         return;

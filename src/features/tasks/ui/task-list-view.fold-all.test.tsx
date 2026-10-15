@@ -73,13 +73,23 @@ const sections = [section("s1", "Triage", 1), section("s2", "Visual", 2)];
 const boardTasks = [task("a"), task("b", { sectionId: "s1" }), task("c", { sectionId: "s1" })];
 
 function renderPage({
-  tasks = boardTasks,
+  tasks: initialTasks = boardTasks,
   groupBy = "section",
 }: {
   tasks?: Task[];
   groupBy?: GroupBy;
 } = {}) {
-  const api = {
+  const fns = {
+    toggleDone: rs.fn(),
+    toggleQueue: rs.fn(),
+    patchTask: rs.fn(),
+    deleteTask: rs.fn(),
+    setTaskParent: rs.fn(),
+    skipOccurrence: rs.fn(),
+    setTaskStatus: rs.fn(),
+    dropTask: rs.fn(async () => true),
+  };
+  const apiOf = (tasks: Task[]) => ({
     loaded: true,
     tasks,
     queuedTaskIds: new Set<string>(),
@@ -93,19 +103,13 @@ function renderPage({
     statusesForBucket: () => [],
     statuses: [],
     sections,
-    toggleDone: rs.fn(),
-    toggleQueue: rs.fn(),
-    patchTask: rs.fn(),
-    deleteTask: rs.fn(),
-    setTaskParent: rs.fn(),
-    skipOccurrence: rs.fn(),
-    setTaskStatus: rs.fn(),
-    dropTask: rs.fn(async () => true),
-  };
+    ...fns,
+  });
   const picks: (string | null)[] = [];
   const shown = { nothing: false, reports: 0 };
-  const inScope = (id: string) => tasks.some((t) => t.id === id);
-  function Page() {
+  function Page({ tasks }: { tasks: Task[] }) {
+    const api = apiOf(tasks);
+    const inScope = (id: string) => tasks.some((t) => t.id === id);
     const [selected, setSelected] = useState<string | null>(null);
     const orderRef = useRef<readonly string[]>([]);
     const select = (id: string | null) => {
@@ -152,12 +156,19 @@ function renderPage({
       />
     );
   }
-  render(
+  const view = render(
     <TooltipProvider>
-      <Page />
+      <Page tasks={initialTasks} />
     </TooltipProvider>,
   );
-  return { picks, shown };
+  /** The store moves on (a status change, a remote edit): the same page, new tasks. */
+  const update = (tasks: Task[]) =>
+    view.rerender(
+      <TooltipProvider>
+        <Page tasks={tasks} />
+      </TooltipProvider>,
+    );
+  return { picks, shown, update };
 }
 
 const row = (title: string) => screen.queryByRole("button", { name: title });
@@ -232,6 +243,31 @@ describe("a closed Backlog line stays closed (MOD-124)", () => {
     expect(row("Task x")).toBeNull();
     expect(backlogLine().getAttribute("aria-expanded")).toBe("false");
     expect(picks.at(-1)).toBe("a");
+  });
+
+  it("a selected task set to Backlog keeps the selection, and its line opens for it", () => {
+    const start = [task("a"), task("x", { sectionId: "s1" }), task("y", { sectionId: "s1" })];
+    const { picks, update } = renderPage({ tasks: start });
+    fireEvent.click(screen.getByRole("button", { name: "Task x" }));
+    expect(picks.at(-1)).toBe("x");
+    const before = picks.length;
+    // Its status moves to Backlog (the panel's picker, Undo, a teammate).
+    update([task("a"), task("x", { sectionId: "s1", statusCategory: "backlog" }), start[2]]);
+    expect(picks.length).toBe(before);
+    expect(row("Task x")).toBeTruthy();
+    expect(backlogLine().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("closing the line on it, then reopening it, still opens for the selection after", () => {
+    const { picks } = renderPage({ tasks: backlogFirst });
+    fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Visual/ }));
+    fireEvent.click(backlogLine());
+    fireEvent.click(backlogLine());
+    expect(backlogLine().getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(backlogLine());
+    expect(row("Task x")).toBeTruthy();
+    expect(picks.at(-1)).toBe("x");
   });
 
   it("with no other row shown, the selection stays put and the line stays closed", () => {

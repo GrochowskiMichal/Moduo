@@ -127,10 +127,10 @@ describe("the title row names the view and switches it", () => {
 
   it("says the page's title when it gives one, and the ▾ still switches (MOD-109)", () => {
     const { onChange } = renderPanel({ activeId: "detail", title: "4 tasks" });
-    const trigger = screen.getByRole("button", { name: "Panel view: 4 tasks" });
+    const trigger = screen.getByRole("button", { name: "Panel view: Detail, 4 tasks" });
     expect(trigger.textContent).toBe("4 tasks");
     expect(screen.getByText("Detail body")).toBeTruthy();
-    const menu = openMenu("Panel view: 4 tasks");
+    const menu = openMenu("Panel view: Detail, 4 tasks");
     // The open view stays checked under its own name.
     expect(
       within(menu)
