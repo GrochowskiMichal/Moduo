@@ -27,6 +27,7 @@ describe("the north-star kit (DS-6)", () => {
       "Picker pill",
       "EmptyState",
       "Feed",
+      "Filled composer",
       "DateField",
       "Progress",
       "Avatar",

@@ -59,7 +59,10 @@ describe("grammar, handle chip, IME: the grammar", () => {
   it("a pasted Moduo link becomes the reference a pick makes; others stay links", () => {
     expect(appLinkRef(`${ORIGIN}/tasks?id=${ID}`, [ORIGIN])).toEqual({ type: "task", id: ID });
     expect(appLinkRef(`${ORIGIN}/notes?id=${ID}`, [ORIGIN])).toEqual({ type: "note", id: ID });
-    expect(appLinkRef(`${ORIGIN}/calendar?event=${ID}`, [ORIGIN])).toEqual({ type: "event", id: ID });
+    expect(appLinkRef(`${ORIGIN}/calendar?event=${ID}`, [ORIGIN])).toEqual({
+      type: "event",
+      id: ID,
+    });
     expect(appLinkRef(`${ORIGIN}/contacts?type=company&id=${ID}`, [ORIGIN])).toEqual({
       type: "company",
       id: ID,
@@ -138,7 +141,12 @@ function mount(props: Partial<ChatComposerProps> = {}) {
       ...props,
     }),
   );
-  return { box: screen.getByRole("textbox", { name: "Message #general" }), onSend, onEditLast, onEscapeEmpty };
+  return {
+    box: screen.getByRole("textbox", { name: "Message #general" }),
+    onSend,
+    onEditLast,
+    onEscapeEmpty,
+  };
 }
 
 async function settle() {

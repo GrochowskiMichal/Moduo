@@ -45,15 +45,16 @@ import {
   useState,
 } from "react";
 
+import { FEED_COMPOSER_FILLED } from "@/components/ui/feed";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import type { MentionCandidate } from "@/features/spine/mention";
 import { ReferenceViewOverrideProvider } from "@/features/spine/references/mention-view";
 import { $createReferenceNode } from "@/features/spine/references/reference-node";
+import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { CAPTURE_TYPES } from "@/lib/capture-registry";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
-import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import {
   $exportStored,
   $importStored,
@@ -107,7 +108,6 @@ const THEME = {
 
 /** Show the count once a message gets this close to the limit. */
 const COUNT_FROM = MESSAGE_LIMIT - 500;
-
 
 export type ChatComposerHandle = {
   focus: () => void;
@@ -534,7 +534,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           <div
             data-composer-box
             className={cn(
-              "relative flex flex-wrap items-center gap-1 rounded-lg bg-state-hover ring-1 ring-hairline ring-inset",
+              FEED_COMPOSER_FILLED,
+              "relative flex flex-wrap items-center gap-1",
               grown ? "px-1.5 pt-1.5 pb-1" : "min-h-10 px-1.5 py-1",
             )}
           >
