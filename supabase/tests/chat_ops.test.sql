@@ -489,14 +489,14 @@ BEGIN
 
   -- At most 20 kinds per message.
   UPDATE public.chat_messages
-     SET reactions = (SELECT jsonb_object_agg('k' || g, jsonb_build_array(test.id('C')::text)) FROM generate_series(1, 20) g)
+     SET reactions = (SELECT jsonb_object_agg(chr(128512 + g), jsonb_build_array(test.id('C')::text)) FROM generate_series(1, 20) g)
    WHERE id = test.mid('o1');
-  v := test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, 'k21'::text, true)$q$, test.mid('o1')));
+  v := test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, chr(128512 + 21), true)$q$, test.mid('o1')));
   PERFORM test.ok(v = '22023 This message has the most reactions it can hold.', 'react: a 21st kind is refused', v);
-  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, 'k1'::text, true)$q$, test.mid('o1'))) = 'ok 1',
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, chr(128512 + 1), true)$q$, test.mid('o1'))) = 'ok 1',
     'react: joining one of the 20 still works');
   v := test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, %L::text, true)$q$, test.mid('o1'), repeat('x', 33)));
-  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'react: the live key check (CV-7c widens it)', v);
+  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'react: a key is an emoji (the shared check, CV-7c)', v);
 
   -- A paused workspace can still react; it can't post.
   UPDATE public.profiles SET plan_tier = 'free' WHERE id = test.id('O');
