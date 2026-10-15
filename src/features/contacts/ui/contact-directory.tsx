@@ -66,6 +66,8 @@ export function initials(name: string): string {
 type RowProps = {
   rowId: string;
   avatarUrl: string | null;
+  /** A company's logo keeps its shape (contained); a person's photo fills. */
+  logo?: boolean;
   name: string;
   secondary: string | null;
   status?: string;
@@ -84,6 +86,7 @@ type RowProps = {
 function DirectoryRow({
   rowId,
   avatarUrl,
+  logo = false,
   name,
   secondary,
   status,
@@ -119,7 +122,9 @@ function DirectoryRow({
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
       >
         <Avatar size="sm" className="shrink-0">
-          {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+          {avatarUrl ? (
+            <AvatarImage src={avatarUrl} alt="" className={logo ? "object-contain" : undefined} />
+          ) : null}
           <AvatarFallback>{initials(name)}</AvatarFallback>
         </Avatar>
         <span className="min-w-0 flex-1">
@@ -397,6 +402,7 @@ export function ContactDirectory({
   const companyRowProps = (c: Company): RowProps => ({
     rowId: `dir-row-${c.id}`,
     avatarUrl: c.avatarUrl,
+    logo: true,
     name: c.name || "Unnamed company",
     secondary: c.domains[0] ?? c.website,
     selected: selected?.type === "company" && selected.id === c.id,
