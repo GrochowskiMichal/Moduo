@@ -272,6 +272,41 @@ describe("the report (AC6.2, AC6.3)", () => {
     expect(reportRange("last_30", THU, 1)).toEqual({ from: "2026-09-09", to: "2026-10-08" });
     expect(rangeLabel({ from: "2026-10-05", to: "2026-10-11" }, THU)).toBe("Oct 5 – Oct 11");
   });
+
+  it("with the saved zone, periods start from that zone's day, whatever the device's (MOD-110)", () => {
+    // 23:30 UTC on Saturday Oct 31 is already Sunday Nov 1 in Auckland and
+    // still Oct 31 in Los Angeles.
+    const at = new Date("2026-10-31T23:30:00.000Z");
+    expect(reportRange("this_month", at, 1, null, "Pacific/Auckland")).toEqual({
+      from: "2026-11-01",
+      to: "2026-11-30",
+    });
+    expect(reportRange("last_month", at, 1, null, "Pacific/Auckland")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-31",
+    });
+    expect(reportRange("this_month", at, 1, null, "America/Los_Angeles")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-31",
+    });
+    expect(reportRange("this_month", at, 1, null, "UTC")).toEqual({
+      from: "2026-10-01",
+      to: "2026-10-31",
+    });
+    // Sunday ends a Monday week and starts a Sunday one.
+    expect(reportRange("this_week", at, 1, null, "Pacific/Auckland")).toEqual({
+      from: "2026-10-26",
+      to: "2026-11-01",
+    });
+    expect(reportRange("this_week", at, 0, null, "Pacific/Auckland")).toEqual({
+      from: "2026-11-01",
+      to: "2026-11-07",
+    });
+    expect(reportRange("last_30", at, 1, null, "Pacific/Auckland")).toEqual({
+      from: "2026-10-03",
+      to: "2026-11-01",
+    });
+  });
 });
 
 describe("getting a list out (default f)", () => {

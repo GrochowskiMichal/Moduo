@@ -9,7 +9,7 @@
 // In the sidebar a view is the selection `view:<id>`; Pinned holds it the
 // same way (`preferences.tasksSidebar.pinned[ws]`, beside project ids).
 
-import type { TaskViewScope } from "@contracts/vocabularies";
+import type { TasksRole, TaskViewScope } from "@contracts/vocabularies";
 import type { FilterCondition } from "../../components/ui/filter-model";
 import {
   displayOf,
@@ -19,7 +19,6 @@ import {
   tasksViewDefaults,
 } from "./display";
 import { NONE_VALUE, WAITING_ANY } from "./filters";
-import type { TasksRole } from "./onboarding";
 import type { RowPreset } from "./row-layout";
 import type { TaskView } from "./view-row";
 

@@ -57,6 +57,7 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
   }),
 }));
 
+import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
 import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { makeTask } from "../helpers";
@@ -255,6 +256,61 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
     expect(
       description.compareDocumentPosition(strip) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("a small image with no preview shows itself; one missing its preview otherwise stays a file (MOD-132)", async () => {
+    const { runtime, attachments } = fakeRuntime([
+      rec("small", {
+        previewPath: null,
+        previewMime: null,
+        sizeBytes: 40_000,
+        width: 800,
+        height: 600,
+      }),
+      // A preview that never uploaded (an older file): never the full original in a tile.
+      rec("legacy", {
+        fileName: "legacy.jpg",
+        mime: "image/jpeg",
+        previewPath: null,
+        previewMime: null,
+        sizeBytes: 3 * 1048576,
+        width: 3000,
+        height: 2000,
+        objectPath: "w/legacy/original.jpg",
+      }),
+      rec("heic", {
+        fileName: "IMG_1.heic",
+        mime: "image/heic",
+        previewPath: null,
+        previewMime: null,
+        sizeBytes: 2 * 1048576,
+        width: null,
+        height: null,
+        objectPath: "w/heic/original.heic",
+      }),
+    ]);
+    renderPanel(runtime);
+    const strip = await screen.findByRole("list", { name: "Attachments" });
+    const small = within(strip).getByRole("button", { name: "Open small.png" });
+    await waitFor(() =>
+      expect(small.querySelector("img")?.getAttribute("src")).toBe(
+        "https://s/w/small/original.png",
+      ),
+    );
+    // Signed as a preview, for the preview's hour.
+    expect(attachments.signedUrls).toHaveBeenCalledWith(
+      ["w/small/original.png"],
+      ATTACHMENT_LINK_TTL_SECONDS.preview,
+    );
+    for (const name of ["Open legacy.jpg", "Open IMG_1.heic"]) {
+      expect(within(strip).getByRole("button", { name }).querySelector("img")).toBeNull();
+    }
+    // The viewer shows it as a picture, not "No preview for this file".
+    fireEvent.click(small);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("img", { name: "small.png" })).toBeTruthy();
+    expect(within(dialog).queryByText(/No preview/)).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Copy image" })).toBeTruthy();
   });
 
   it("uploads files dropped anywhere on the task, with a drop highlight while dragging", async () => {
@@ -472,6 +528,49 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
     // Too big for any plan right now (50 MB cap): no Upgrade, just the facts.
     expect(screen.getByText("rec.mov is 340 MB — your plan allows 20 MB per file")).toBeTruthy();
     expect(screen.getByText("Storage almost full — 2 of 2 GB")).toBeTruthy();
+  });
+
+  it("a small image uploading shows itself, though it has no preview (MOD-132)", async () => {
+    const { runtime, attachments } = fakeRuntime([]);
+    renderPanel(runtime);
+    await filesRead(attachments);
+    act(() =>
+      fakeQueue.set({
+        items: [
+          {
+            id: "u1",
+            userId: "u1",
+            target: { workspaceId: "w", entityType: "task", entityId: "t1" },
+            batchId: "b1",
+            fileName: "small.png",
+            mime: "image/png",
+            sizeBytes: 40_000,
+            preview: null,
+            previewMime: null,
+            thumbnail: png("small.png"),
+            width: 800,
+            height: 600,
+            attachmentId: null,
+            objectPath: null,
+            previewPath: null,
+            begunAt: null,
+            originalSent: false,
+            previewSent: false,
+            attempts: 0,
+            refusals: 0,
+            nextRetryAt: 0,
+            createdAt: 1,
+            state: "uploading",
+            problem: null,
+            loaded: 20_000,
+            total: 40_000,
+          },
+        ],
+        almostFull: {},
+      }),
+    );
+    const tile = screen.getByRole("img", { name: "Uploading small.png, 50%" });
+    expect(tile.querySelector("img")?.getAttribute("src")).toMatch(/^blob:/);
   });
 
   it("refreshes an open strip when the task's files change elsewhere (AT-3: the store's stamp)", async () => {

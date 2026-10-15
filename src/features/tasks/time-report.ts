@@ -9,6 +9,7 @@
 // lines say.
 
 import { formatDate, formatFullDate, formatWeekdayDate } from "../../lib/time-format";
+import { toFloating } from "../../lib/zoned-time";
 import type { TimeReportRow } from "./model";
 import { dayToDate, isoDay } from "./time-entries";
 import { formatTracked } from "./time-format";
@@ -35,14 +36,20 @@ export const REPORT_PERIOD_LABELS: Record<ReportPeriodId, string> = {
 export type ReportRange = { from: string; to: string };
 
 /** A period's first and last day (inclusive, YYYY-MM-DD), the week starting
- *  where Time & region starts it. `custom` passes the picked range through. */
+ *  where Time & region starts it. `custom` passes the picked range through.
+ *  With `zone` (Time & region's, MOD-110), "today" is that zone's day, the
+ *  one the report dates its entries in; without it, this device's. */
 export function reportRange(
   id: ReportPeriodId,
   now: Date,
   weekStartsOn: number,
   custom?: ReportRange | null,
+  zone?: string | null,
 ): ReportRange {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const wall = zone ? toFloating(now, zone) : null;
+  const today = wall
+    ? new Date(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate())
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const day = (d: Date) => isoDay(d);
   const plus = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
   const weekStart = plus(today, -((today.getDay() - weekStartsOn + 7) % 7));

@@ -88,6 +88,15 @@ Tasks View. Writes that point at another entity (`links_create`,
 check that entity first (`assertReach` in
 [`share.ts`](../supabase/functions/moduo-mcp/share.ts)).
 
+**Comments are Links'.** `comments_list(entity_type, entity_id, limit)` (Links:
+View, MOD-94) reads an item's comments, newest last (the latest `limit`,
+default 50, ≤ 200, and the `total`): `author` (a person's name, an app as
+`"<key name> (app)"`), `at`, `edited`, `body`. It passes `assertReach` first,
+so it needs View on the item's module too and shows only what the key's
+person can open (the app's rule, `comments__item_seen`). `tasks_get` carries a
+task's latest 20 only for a key with Links: View. Writing is `comments_add` /
+`tasks_comment` at Links: Edit.
+
 The secret never changes when scopes do: the connector reads `scopes` per
 request, so a change applies to the key's next call (an MCP client that cached
 its tool list needs a reconnect to see new tools; `listChanged` is false).
@@ -129,7 +138,10 @@ through the same ops and gates as the app; the rule for all of them:
   missing one ("Task not found in this workspace." / "That project isn't in
   this workspace."), and nothing counts hidden items (tag usage counts only
   visible tasks; search limits after the gate).
-- **Every task argument takes a handle or a uuid** (`MOD-142`, any case).
+- **Every task argument takes a handle or a uuid** (`MOD-142`, any case),
+  and so does every argument that points at a task from another tool (a
+  link's ends, a comment's target: `assertReach` resolves it and the op gets
+  the uuid, MOD-112).
 - **Status by category or name:** a category word (`backlog` · `todo` ·
   `in_progress` · `done` · `wont_do`; the older `archived` = won't do), the
   project's own status name, or its id (`tasks__resolve_status`).
@@ -139,8 +151,8 @@ through the same ops and gates as the app; the rule for all of them:
 | `projects_list` | projects the person sees: Inbox (`is_inbox`), status, area, colour, dates, lead, `description` (plain text, when set; TV-U16 · U13b); `include_archived` |
 | `areas_list`, `sections_list`, `statuses_list`, `teams_list` | structure (a team's default project only when visible) |
 | `templates_list` | own and shared task/project templates: name, kind, counts; never the body or its sources |
-| `tasks_list` | paged (`limit` ≤ 200 + `offset`); filters `category` (or a legacy `status` word: `todo` leaves Backlog out), `project_id`, `section_id`, `area_id`, `team_id`, `assignee`, `completed_from/to`, `top_level`, `include_archived` |
-| `tasks_get` | one task in full: edges, subtasks, work sessions, **your** reminders, waiting on, the agent sessions you may see, the trail |
+| `tasks_list` | paged (`limit` ≤ 200 + `offset`); filters `category` (or a legacy `status` word: `todo` leaves Backlog out), `project_id`, `section_id`, `area_id`, `team_id`, `assignee`, `completed_from/to`, `top_level`, `include_archived`. **A short row by default** (MOD-113, `fields: "summary"`): handle, id, title, `status` (category) + `status_name` when the project calls it something else, priority, assignee's name, project (when the list spans projects), section, tags, `due`, and `blocked` / `drifted` / `queued_by_me` / `subtasks` / `parent` only when they apply; names only from projects the person can see. `fields: "full"` answers the full task shape, 25 to a page unless `limit` says otherwise (summary pages default to 100) |
+| `tasks_get` | one task in full: edges, subtasks, work sessions, **your** reminders, waiting on, the agent sessions you may see, with Links: View its latest 20 comments (newest last, `earlier_comments` counts the rest; none without Links), the trail |
 | `tasks_search` | words (`tasks_search` RPC, gated per match), a handle, or an import key (`ENG-123`) |
 | `tasks_history` | a repeat's past cycles (`tasks_op_history`) |
 | `tasks_time_report` | tracked time for a period by task or day (`tasks_time_report`: your own, plus sharers' for the owner) |
@@ -149,7 +161,7 @@ through the same ops and gates as the app; the rule for all of them:
 
 | Write (Edit) | Op |
 | --- | --- |
-| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run); an `id` that's already there answers with that task (`action: "existing"`) and writes nothing more, exactly like `tasks_op_create` |
+| `tasks_create` | `tasks_op_create_with`: fields + project/section/status/assignee/team/due/estimate/repeat + tags (by name; a new one is coloured as the app colours it, MOD-93), reminders, work sessions, `imported_from {source, key}`, `import_id`; atomic; a key you already used on a live task **of yours** updates it (a re-run); an `id` that's already there answers with that task (`action: "existing"`) and writes nothing more, exactly like `tasks_op_create` |
 | `tasks_update` | `tasks_op_update_with`: fields + `tags_add` / `tags_remove` |
 | `tasks_set_status` | `tasks_op_set_status`; finishing a top-level, non-repeating task finishes its open subtasks the person can edit (`also_finished`, call 87) |
 | `tasks_assign`, `tasks_route_team`, `tasks_claim` | `tasks_op_assign`, `tasks_op_update {team_id}`, `tasks_op_claim` |

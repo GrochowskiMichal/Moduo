@@ -16,9 +16,9 @@
 // Only `motion` has a DOM surface (the `data-motion` attribute, layered over the OS
 // prefers-reduced-motion — see tokens.css); the rest are read by their consumers.
 
+import { normalizeTasksRole, type TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
-import { isTasksRole, type TasksRole } from "../features/tasks/onboarding";
 import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
@@ -381,7 +381,7 @@ const workspaceStampsSchema = z
   });
 const tasksOnboardingSchema = z
   .object({
-    role: z.unknown().transform((v) => (isTasksRole(v) ? v : null)),
+    role: z.unknown().transform(normalizeTasksRole),
     roleAt: stampSchema,
     welcomeSeenAt: stampSchema,
     seeded: workspaceStampsSchema,

@@ -9,6 +9,7 @@ import type { AttachmentRecord, ModuoRuntime, StorageStatus } from "@/lib/runtim
 import { undoToast } from "@/lib/undo-toast";
 import { getUploadQueue } from "@/lib/uploads";
 import { targetKey, type UploadTarget, type UploadView } from "@/lib/uploads/queue";
+import { thumbnailPath } from "../files";
 import { clearSignedUrlCache, signPaths } from "../signed-urls";
 
 /** Start the queue for the signed-in person and wake it when the network or
@@ -137,7 +138,9 @@ export function useEntityAttachments({
   const signPreviews = useCallback(
     async (recs: AttachmentRecord[]) => {
       if (!runtime) return;
-      const paths = recs.map((r) => r.previewPath).filter((p): p is string => !!p);
+      // A small image has no preview: its original is signed as one, for the
+      // preview's hour, since it shows no more than a preview would (MOD-132).
+      const paths = recs.map(thumbnailPath).filter((p): p is string => !!p);
       if (paths.length === 0) return;
       try {
         const signed = await signPaths(runtime, paths, ATTACHMENT_LINK_TTL_SECONDS.preview);
