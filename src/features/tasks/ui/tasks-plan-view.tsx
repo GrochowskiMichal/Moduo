@@ -98,7 +98,12 @@ import {
   railDropAction,
   railSortCollision,
 } from "../dnd/rail-drop";
-import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import {
+  type CaptureSeed,
+  offersProjectFilter,
+  showsArchived,
+  statusesLetThrough,
+} from "../filters";
 import type { InFlightItem } from "../focus-screen";
 import { boardFoldKey, listFoldKey } from "../folds";
 import { todayStr } from "../helpers";
@@ -128,7 +133,7 @@ import {
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
-import { projectDeleteSummary, projectOpenWork, projectOrderDrop } from "../sidebar";
+import { orderProjects, projectDeleteSummary, projectOpenWork, projectOrderDrop } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { undatedTasks } from "../timeline-rows";
 import { dayNumOfKey } from "../timeline-scale";
@@ -877,6 +882,17 @@ export function TasksPlanView({
     [place, api.archivedTasks],
   );
 
+  // Filter → Project, where more than one project shows (MOD-141): the
+  // projects in your sidebar's order, and your Inbox where the place lists it
+  // (All never does).
+  const projectFilter = useMemo(
+    () =>
+      offersProjectFilter(place)
+        ? { projects: orderProjects(buckets, projectOrder), inbox: place !== "all" }
+        : null,
+    [place, buckets, projectOrder],
+  );
+
   // Filters and search narrow the center list/board/timeline (rail counts
   // stay whole).
   const filtering = useTasksFilters({
@@ -897,6 +913,8 @@ export function TasksPlanView({
     searchExtra: archivedSearchTasks,
     // "MOD-99" finds that task (MOD-126).
     taskKey,
+    projects: projectFilter,
+    inboxId,
   });
   const scopeTasks = filtering.tasks;
   useLayoutEffect(() => {

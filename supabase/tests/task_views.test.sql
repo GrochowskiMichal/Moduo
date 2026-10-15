@@ -344,10 +344,25 @@ BEGIN
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'assignee', 'operator', 'is',
       'values', jsonb_build_array(test.id('Z')))))));
   PERFORM test.ok(r LIKE 'ok%', 'and anyone may name the assignee of a task they see', r);
+  -- Project (MOD-141): a project of this workspace the saver can see, or
+  -- "inbox" (each reader's own); a hidden project answers like none at all.
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Season 1 and my Inbox',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'any_of',
+      'values', jsonb_build_array(test.id('P'), 'inbox'))))));
+  PERFORM test.ok(r LIKE 'ok%', 'a project you see and your Inbox save as a Project filter', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
       'values', jsonb_build_array(test.id('PB')))))));
-  PERFORM test.ok(r LIKE '22023%', 'a dimension the app doesn''t have (a project id) is refused', r);
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing,
+    'a project you can''t see is refused, the same as one that doesn''t exist', r);
+  r := test.try('O', test.create_sql(jsonb_build_object('name', 'Acquisition',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
+      'values', jsonb_build_array(test.id('PB')))))));
+  PERFORM test.ok(r LIKE 'ok%', 'its owner may filter by it', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
+      'values', jsonb_build_array('season'))))));
+  PERFORM test.ok(r LIKE '22023%', 'a word other than "inbox" is refused', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'status', 'operator', 'is',
       'values', jsonb_build_array(test.id('PB')))))));

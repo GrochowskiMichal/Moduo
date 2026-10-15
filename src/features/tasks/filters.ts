@@ -22,6 +22,8 @@ import type { PriorityLevel, Task, TaskStatus } from "./model";
 import { type StatusKey, statusKeyOf } from "./statuses";
 
 export const TASK_FILTER_DIMENSIONS = [
+  // MOD-141: the project a task is in, where more than one shows.
+  "project",
   "assignee",
   // TV-D13: the team a task is routed to.
   "team",
@@ -47,6 +49,21 @@ export type TaskFilterDimension = (typeof TASK_FILTER_DIMENSIONS)[number];
 /** The value for "nobody" / "no level" / "no tag" on a dimension. */
 export const NONE_VALUE = "none";
 
+/**
+ * Project's value for the reader's own Inbox (MOD-141): a word, not the
+ * Inbox's id, so a shared view "Project is Inbox" shows each reader their own.
+ */
+export const INBOX_VALUE = "inbox";
+
+/**
+ * The places where Filter offers Project (MOD-141): those that show more
+ * than one project's tasks (All, My tasks, Upcoming, Won't do, and the views
+ * over them). Never inside one project or the Inbox.
+ */
+export function offersProjectFilter(place: string): boolean {
+  return place === "all" || place === "mine" || place === "upcoming" || place === "wontdo";
+}
+
 const YES_NO_DIMENSIONS: ReadonlySet<string> = new Set([
   "queued",
   "blocked",
@@ -56,6 +73,7 @@ const YES_NO_DIMENSIONS: ReadonlySet<string> = new Set([
 ]);
 
 export const TASK_FILTER_LABELS: Record<TaskFilterDimension, string> = {
+  project: "Project",
   assignee: "Assignee",
   team: "Team",
   creator: "Creator",
@@ -124,6 +142,8 @@ export type TaskFilterContext = {
   attachmentCount: (taskId: string) => number;
   /** What a task waits on (the kinds of its live Waiting on… entries). */
   waitingKindsOf?: (taskId: string) => readonly string[];
+  /** The reader's own Inbox: its tasks read as Project `inbox`. */
+  inboxId?: string | null;
 };
 
 /** Waiting on's "anything" value: a task with at least one entry. */
@@ -138,6 +158,9 @@ export function taskFilterValues(
   ctx: TaskFilterContext,
 ): readonly string[] {
   switch (dimension as TaskFilterDimension) {
+    case "project":
+      // Every task is in a project or an Inbox: no "none".
+      return [ctx.inboxId && task.bucketId === ctx.inboxId ? INBOX_VALUE : task.bucketId];
     case "assignee":
       return [task.assigneeId ?? NONE_VALUE];
     case "team":
