@@ -63,6 +63,8 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     completed_to: ymd.optional(),
     top_level: z.boolean().optional(),
     include_archived: z.boolean().optional(),
+    // MOD-113: the short row (default) or each task's full shape.
+    fields: z.enum(["summary", "full"]).optional(),
     limit,
     offset: z.coerce.number().int().min(0).optional(),
   }),

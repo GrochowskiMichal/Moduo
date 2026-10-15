@@ -38,7 +38,9 @@ import {
 } from "../../_shared/contracts/vocabularies.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
+  LIST_PAGE,
   MAX_PAGE,
+  type SummaryNames,
   filterByAssignee,
   focusSettingsFrom,
   isDrifted,
@@ -48,6 +50,7 @@ import {
   rowTaskState,
   shapeComment,
   shapeTask,
+  shapeTaskSummary,
   TASK_GET_COMMENTS,
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
@@ -400,7 +403,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list",
       description:
-        "Tasks with computed drift/blocked state, subtasks (parent_id, subtask_count), handle, status and its category, assignee and creator, project, section, team, tags and repeat. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
+        "Tasks, a short row each (fields: summary, the default): handle, id, title, status (its category; status_name when the project calls it something else), priority, assignee's name (none = Unassigned), project (when the list spans projects), section, tags, due (YYYY-MM-DD, with HH:MM when timed), and blocked, drifted, subtasks (a count) and parent only when they apply. fields: full gives each task's full shape instead (ids, people, description excerpt, dates, estimate, repeat, …); tasks_get reads one in full. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -435,7 +438,15 @@ export const tasksConnectorModule: ConnectorModule = {
             type: "boolean",
             description: "Also tasks in archived projects, marked project_archived: true. Default false.",
           },
-          limit: { type: "number", description: `Max tasks per page (default 100, max ${MAX_PAGE}).` },
+          fields: {
+            type: "string",
+            enum: ["summary", "full"],
+            description: "summary (default): the short row. full: every task's full shape (much longer; default page 25).",
+          },
+          limit: {
+            type: "number",
+            description: `Max tasks per page (default ${LIST_PAGE.summary}, or ${LIST_PAGE.full} with fields: full; max ${MAX_PAGE}).`,
+          },
           offset: { type: "number", description: "Skip this many tasks (default 0). A page shorter than limit is the last." },
         },
       },
@@ -477,11 +488,39 @@ export const tasksConnectorModule: ConnectorModule = {
           const inArea = new Set(buckets.filter((b) => b.area_id === areaId).map((b) => b.id));
           list = list.filter((t) => inArea.has(t.bucket_id));
         }
-        list = pageOf(orderByBucket(list, buckets), args.offset, clampLimit(args, 100, MAX_PAGE));
-        return list.map((t) => ({
-          ...shapeTask(t, data, now),
-          ...(archivedIds.has(t.id) ? { project_archived: true } : {}),
-        }));
+        const full = args.fields === "full";
+        list = pageOf(
+          orderByBucket(list, buckets),
+          args.offset,
+          clampLimit(args, full ? LIST_PAGE.full : LIST_PAGE.summary, MAX_PAGE),
+        );
+        const archivedMark = (t: Row) => (archivedIds.has(t.id) ? { project_archived: true } : {});
+        if (full) return list.map((t) => ({ ...shapeTask(t, data, now), ...archivedMark(t) }));
+        // MOD-113: names for the short rows, read only for what's on the page,
+        // and only from projects the person can see (a task shared on its own
+        // doesn't name its project, as in tasks_time_report).
+        const sectionIds = [...new Set(list.map((t) => t.section_id).filter(Boolean))];
+        const statusIds = [...new Set(list.map((t) => t.status_id).filter(Boolean))];
+        const [seenProjects, sections, statuses] = await Promise.all([
+          visibleIds(ctx, "bucket"),
+          sectionIds.length
+            ? rows(ctx.db.from("sections").select("id, name, project_id")
+              .eq("workspace_id", ctx.key.workspaceId).in("id", sectionIds))
+            : Promise.resolve([] as Row[]),
+          statusIds.length
+            ? rows(ctx.db.from("project_statuses").select("id, name, project_id")
+              .eq("workspace_id", ctx.key.workspaceId).in("id", statusIds))
+            : Promise.resolve([] as Row[]),
+        ]);
+        const named = (x: Row) => !x.project_id || seenProjects.has(x.project_id);
+        const names: SummaryNames = {
+          sections: new Map(sections.filter(named).map((x) => [x.id, x.name])),
+          statuses: new Map(statuses.filter(named).map((x) => [x.id, x.name])),
+          ...(projectId
+            ? {}
+            : { projects: new Map(buckets.filter((b) => seenProjects.has(b.id)).map((b) => [b.id, b.name])) }),
+        };
+        return list.map((t) => ({ ...shapeTaskSummary(t, data, now, names), ...archivedMark(t) }));
       },
     },
     {

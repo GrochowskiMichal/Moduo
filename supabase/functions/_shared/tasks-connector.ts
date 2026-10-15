@@ -258,6 +258,67 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   return out;
 }
 
+/** tasks_list's default page: summary rows are small, full ones aren't (MOD-113). */
+export const LIST_PAGE = { summary: 100, full: 25 } as const;
+
+/** Names a summary row shows instead of ids (MOD-113). */
+export type SummaryNames = {
+  /** Section id → name. */
+  sections: ReadonlyMap<string, string>;
+  /** Status id → the name people see (project_statuses). */
+  statuses: ReadonlyMap<string, string>;
+  /** Project id → name; only when the list spans projects. */
+  projects?: ReadonlyMap<string, string>;
+};
+
+/** "In progress", "To do", "Won't do" are just their category, written out. */
+function sameWords(a: string, b: string): boolean {
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  return letters(a) === letters(b);
+}
+
+/**
+ * tasks_list's default row (MOD-113): what an agent triaging a big project
+ * needs, with names instead of ids and nothing it would have to skip. 66
+ * full rows ran to 57,000 characters (a description excerpt, both people as
+ * objects, every legacy field); `fields: "full"` still answers shapeTask's.
+ * Flags show only when they're true; no assignee means Unassigned.
+ */
+export function shapeTaskSummary(t: Row, data: ShapeData, now: Date, names: SummaryNames): Row {
+  const handleOf = (row: Row | undefined) =>
+    row && data.taskKey && row.number != null ? `${data.taskKey}-${row.number}` : undefined;
+  // A row from before TV-D9 has no category: its legacy status reads as one.
+  const category = normalizeTaskStatusCategory(t.status_category ?? t.status);
+  const statusName = typeof t.status_id === "string" ? names.statuses.get(t.status_id) : undefined;
+  const assigneeId = assigneeIdOf(t);
+  const dueDay = t.due_on ?? (typeof t.due_date === "string" ? t.due_date.slice(0, 10) : null);
+  const out: Row = {
+    ...(handleOf(t) ? { handle: handleOf(t) } : {}),
+    id: t.id,
+    title: t.title,
+    status: category,
+    ...(statusName && !sameWords(statusName, category) ? { status_name: statusName } : {}),
+  };
+  if (t.priority) out.priority = t.priority;
+  if (assigneeId) out.assignee = data.names.get(assigneeId) ?? FORMER_MEMBER;
+  const project = names.projects?.get(t.bucket_id);
+  if (project) out.project = project;
+  const section = t.section_id ? names.sections.get(t.section_id) : undefined;
+  if (section) out.section = section;
+  const tags = data.taskTags.get(t.id);
+  if (tags?.length) out.tags = tags;
+  if (dueDay) out.due = t.due_time ? `${dueDay} ${String(t.due_time).slice(0, 5)}` : dueDay;
+  if (data.blockedIds.has(t.id)) out.blocked = true;
+  if (isDrifted(t, now)) out.drifted = true;
+  if (data.queuedByMe?.has(t.id)) out.queued_by_me = true;
+  const subtasks = data.subtaskCounts.get(t.id);
+  if (subtasks) out.subtasks = subtasks;
+  if (t.parent_id && data.byId.has(t.parent_id)) {
+    out.parent = handleOf(data.byId.get(t.parent_id)) ?? t.parent_id;
+  }
+  return out;
+}
+
 /** How many comments tasks_get carries (the latest; tasks_comments_list reads more). */
 export const TASK_GET_COMMENTS = 20;
 

@@ -220,3 +220,127 @@ describe("tasks connector helpers", () => {
     });
   });
 });
+
+describe("tasks_list's summary row (MOD-113)", () => {
+  const now = new Date("2030-01-10T12:00:00Z");
+  const names2 = {
+    sections: new Map([["s1", "Design"]]),
+    statuses: new Map([
+      ["st-review", "In review"],
+      ["st-doing", "In progress"],
+    ]),
+    projects: new Map([["b1", "Launch"]]),
+  };
+  const rows = [
+    task("parent", {
+      number: 1,
+      title: "Ship",
+      status: "in_progress",
+      status_category: "in_progress",
+      status_id: "st-review",
+      priority: "high",
+      section_id: "s1",
+      due_on: "2030-01-12",
+      due_time: "09:30:00",
+      description: "x".repeat(500),
+    }),
+    task("sub", {
+      number: 2,
+      title: "Write",
+      parent_id: "parent",
+      status: "in_progress",
+      status_category: "in_progress",
+      status_id: "st-doing",
+      assignee_id: null,
+      scheduled_at: "2030-01-09T09:00:00Z",
+      due_date: "2030-01-15T12:00:00Z",
+    }),
+    task("old", { number: 3, title: "Old row", status: "archived", assignee_id: "gone" }),
+  ];
+  const data = {
+    ...shapeData(rows),
+    blockedIds: new Set(["parent"]),
+    taskTags: new Map([["parent", ["mcp"]]]),
+    queuedByMe: new Set(["sub"]),
+    taskKey: "MOD",
+  };
+
+  it("names things, keeps flags only when true, and leaves the long fields out", async () => {
+    const { shapeTaskSummary } = await import("./tasks-connector.ts");
+    expect(shapeTaskSummary(rows[0]!, data, now, names2)).toEqual({
+      handle: "MOD-1",
+      id: "parent",
+      title: "Ship",
+      status: "in_progress",
+      status_name: "In review",
+      priority: "high",
+      assignee: "Ada",
+      project: "Launch",
+      section: "Design",
+      tags: ["mcp"],
+      due: "2030-01-12 09:30",
+      blocked: true,
+      subtasks: 1,
+    });
+    // A default status name isn't repeated; Unassigned has no assignee; an
+    // older due date reads as its day; the parent is named by its handle.
+    expect(shapeTaskSummary(rows[1]!, data, now, names2)).toEqual({
+      handle: "MOD-2",
+      id: "sub",
+      title: "Write",
+      status: "in_progress",
+      project: "Launch",
+      due: "2030-01-15",
+      drifted: true,
+      queued_by_me: true,
+      parent: "MOD-1",
+    });
+    // A legacy row reads its status as a category; a former member keeps their tasks.
+    expect(shapeTaskSummary(rows[2]!, data, now, { ...names2, projects: undefined })).toEqual({
+      handle: "MOD-3",
+      id: "old",
+      title: "Old row",
+      status: "wont_do",
+      assignee: FORMER_MEMBER,
+    });
+  });
+
+  it("is a fraction of the full shape", async () => {
+    const { shapeTaskSummary } = await import("./tasks-connector.ts");
+    const size = (x: unknown) => JSON.stringify(x, null, 2).length;
+    const summary = rows.map((t) => shapeTaskSummary(t, data, now, names2));
+    const full = rows.map((t) => shapeTask(t, data, now));
+    expect(size(summary) * 2).toBeLessThan(size(full));
+  });
+});
+
+describe("a task's comments as agents read them (MOD-94)", () => {
+  it("names a person, marks an app, says when it was edited", async () => {
+    const { commentsInOrder, shapeComment } = await import("./tasks-connector.ts");
+    const at = "2030-01-01T10:00:00Z";
+    expect(shapeComment({ id: "c1", created_by: "u2", author_kind: "user", body: "Yes", created_at: at }, names))
+      .toEqual({ id: "c1", author: "Bea", at, body: "Yes" });
+    const app = {
+      id: "c2",
+      created_by: "u1",
+      author_kind: "api_key",
+      author_label: "Claude Code",
+      body: "Q?",
+      created_at: at,
+      edited_at: at,
+    };
+    expect(shapeComment(app, names)).toEqual({ id: "c2", author: "Claude Code (app)", at, edited: true, body: "Q?" });
+    expect(shapeComment({ id: "c3", created_by: "gone", body: null, created_at: at }, names)).toEqual({
+      id: "c3",
+      author: FORMER_MEMBER,
+      at,
+      body: "",
+    });
+    const ordered = commentsInOrder([
+      { id: "b", created_at: "2030-01-02" },
+      { id: "a", created_at: "2030-01-02" },
+      { id: "z", created_at: "2030-01-01" },
+    ]);
+    expect(ordered.map((c) => c.id)).toEqual(["z", "a", "b"]);
+  });
+});

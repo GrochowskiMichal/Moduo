@@ -29,7 +29,7 @@ const A_BEAS = "88888888-8888-4888-8888-888888888888";
 const A_SHARED = "99999999-9999-4999-8999-999999999999";
 const TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-type Filter = { op: "eq" | "neq"; column: string; value: unknown };
+type Filter = { op: "eq" | "neq" | "in"; column: string; value: unknown };
 
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown>) {
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
@@ -57,6 +57,10 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         filters.push({ op: "neq", column, value });
         return query;
       },
+      in: (column: string, value: unknown[]) => {
+        filters.push({ op: "in", column, value });
+        return query;
+      },
       or: () => query,
       order: () => query,
       limit: (n: number) => {
@@ -75,9 +79,13 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
           if (json) return ((row[json[1]!] as Row | null) ?? {})[json[2]!] ?? null;
           return row[column] ?? null;
         };
-        let all = (tables[table] ?? []).filter((row) =>
-          filters.every((f) => (f.op === "eq" ? value(row, f.column) === f.value : value(row, f.column) !== f.value)),
-        );
+        const holds = (row: Row, f: Filter) =>
+          f.op === "eq"
+            ? value(row, f.column) === f.value
+            : f.op === "in"
+              ? (f.value as unknown[]).includes(value(row, f.column))
+              : value(row, f.column) !== f.value;
+        let all = (tables[table] ?? []).filter((row) => filters.every((f) => holds(row, f)));
         if (window) all = all.slice(window[0], window[1] + 1);
         if (cap !== null) all = all.slice(0, cap);
         if (patch) {
@@ -392,6 +400,52 @@ describe("reads never show or count what the key's person can't see", () => {
     expect(await ids({ section_id: "s-1" })).toEqual(["t-team"]);
     expect(await ids({ area_id: A_BEAS })).toEqual([]);
     expect((await ids({ category: "open" })).includes("t-secret")).toBe(false);
+  });
+
+  it("tasks_list answers short rows by default, the full shape on asking (MOD-113)", async () => {
+    const { ctx, tables } = setup();
+    tables.sections = [
+      { id: "s-1", workspace_id: WS, project_id: P_SHARED, name: "Design" },
+      { id: "s-h", workspace_id: WS, project_id: P_HIDDEN, name: "Bea's plans" },
+    ];
+    tables.project_statuses = [{ id: "st-1", workspace_id: WS, project_id: P_SHARED, name: "In review" }];
+    tables.tasks!.find((t) => t.id === "t-team")!.status_id = "st-1";
+    // Shared with me on its own, in a project I can't see: no project or section name.
+    tables.tasks!.push(task("t-alone", 14, { bucket_id: P_HIDDEN, section_id: "s-h" }));
+    const short: Row[] = await call("tasks_list", {}, ctx);
+    const row = (id: string) => short.find((t) => t.id === id)!;
+    expect(row("t-team")).toEqual({
+      handle: "MOD-10",
+      id: "t-team",
+      title: "t-team",
+      status: "todo",
+      status_name: "In review",
+      assignee: "Ada",
+      project: "Launch",
+      section: "Design",
+    });
+    expect(row("t-open")).toMatchObject({ handle: "MOD-1", project: "Launch", tags: ["board"] });
+    expect(row("t-alone")).toEqual({ handle: "MOD-14", id: "t-alone", title: "t-alone", status: "todo", assignee: "Ada" });
+    expect(JSON.stringify(short)).not.toContain("Bea's plans");
+    // One project asked for: its name isn't repeated on every row.
+    const one: Row[] = await call("tasks_list", { project_id: P_SHARED }, ctx);
+    expect(one.some((t) => "project" in t)).toBe(false);
+    // fields: full is the shape tasks_list used to answer.
+    const full: Row[] = await call("tasks_list", { fields: "full" }, ctx);
+    expect(full.find((t) => t.id === "t-team")).toMatchObject({
+      bucket_id: P_SHARED,
+      section_id: "s-1",
+      assignee: { id: ME, name: "Ada" },
+    });
+    await expect(call("tasks_list", { fields: "everything" }, ctx)).rejects.toThrow("fields");
+  });
+
+  it("tasks_list's full rows page by 25 unless asked, the short ones by 100", async () => {
+    const { ctx, tables } = setup();
+    for (let n = 100; n < 160; n += 1) tables.tasks!.push(task(`t-${n}`, n));
+    expect((await call("tasks_list", {}, ctx)).length).toBeGreaterThan(25);
+    expect(await call("tasks_list", { fields: "full" }, ctx)).toHaveLength(25);
+    expect(await call("tasks_list", { fields: "full", limit: 40 }, ctx)).toHaveLength(40);
   });
 
   it("projects_list: the person's Inbox and shared projects, never a hidden one", async () => {
