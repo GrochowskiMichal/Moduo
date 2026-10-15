@@ -422,6 +422,47 @@ describe("a team task (54, 94)", () => {
     expect(mock.bucketId).toBe("p-requests");
     // ...unless a line names its own person.
     expect(review.assigneeId).toBe(SAM);
+    // Nobody picked: the pill says the team's, never "You" (MOD-135).
+    expect(screen.getByRole("button", { name: /^Assign:\s*Design · unclaimed$/ })).toBeTruthy();
+  });
+});
+
+// The pill's name joins its hidden "Assign: " and the value without the space.
+const pillName = (label: string, value: string) => new RegExp(`^${label}:\\s*${value}$`);
+
+describe("the pills say what the task will get (MOD-134, MOD-135)", () => {
+  const draftWith = (fields: Record<string, unknown>) =>
+    saveDraft(ME, WS, {
+      segments: [{ text: "Draw the poster" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: { ...EMPTY_FIELDS, ...fields },
+    });
+
+  it("Assign shows you, with your avatar, while the task will be yours", async () => {
+    renderBody();
+    const pill = await screen.findByRole("button", { name: pillName("Assign", "You") });
+    expect(pill.querySelector('[data-slot="avatar"]')).toBeTruthy();
+  });
+
+  it("Assign says Unassigned once that's picked", async () => {
+    draftWith({ assigneeId: null });
+    renderBody();
+    expect(
+      await screen.findByRole("button", { name: pillName("Assign", "Unassigned") }),
+    ).toBeTruthy();
+  });
+
+  it("Priority shows the app's three bars: all faint unset, the level's once set", async () => {
+    renderBody();
+    const unset = await screen.findByRole("button", { name: "Priority" });
+    expect(unset.querySelector('svg[data-level="0"]')).toBeTruthy();
+    cleanup();
+    draftWith({ priority: "high" });
+    renderBody();
+    const set = await screen.findByRole("button", { name: pillName("Priority", "High") });
+    expect(set.querySelector('svg[data-level="3"]')).toBeTruthy();
   });
 });
 
