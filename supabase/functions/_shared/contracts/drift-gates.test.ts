@@ -23,6 +23,7 @@ import {
   CHAT_EVENT_TYPES,
   CHAT_MENTION_REASONS,
   CHAT_MESSAGE_KINDS,
+  CLIENT_SURFACES,
   CHAT_PLAN_TIERS,
   COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
@@ -118,7 +119,11 @@ describe("cross-runtime drift guards", () => {
   it("email_outbox CHECKs list the canonical email vocabularies", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261008160000_email_outbox.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    expect(sql).toContain(`kind IN (${inList(EMAIL_KINDS)})`);
+    // The kind list was last re-stated by CV-6a (chat_waiting).
+    const notices = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_device_notices.sql"));
+    expect(notices).toBeDefined();
+    const kinds = readFileSync(resolve(MIGRATIONS_DIR, notices ?? ""), "utf8");
+    expect(kinds).toContain(`CHECK (kind IN (${inList(EMAIL_KINDS)}))`);
     expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
   });
@@ -367,11 +372,15 @@ describe("cross-runtime drift guards", () => {
     expect(RECURRENCE_MODES).toEqual(["after_completion"]);
     expect(ops).toContain(`p_rec ->> 'mode' <> '${RECURRENCE_MODES[0]}'`);
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    // TV-D16 re-states the CHECK with the agent's kind.
-    const agents = read("20261013220000_agents_imports_mcp.sql");
-    expect(agents).toContain(
+    // CV-6a re-states the CHECK with chat's kinds (TV-D16 added the agent's).
+    const notices = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_device_notices.sql"));
+    expect(notices).toBeDefined();
+    const sql = read(notices ?? "");
+    expect(sql).toContain(
       `ADD CONSTRAINT notice_deliveries_kind_check CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`,
     );
+    expect(sql).toContain(`surface text NOT NULL CHECK (surface IN (${inList(CLIENT_SURFACES)}))`);
+    expect(sql).toContain(`p_surface NOT IN (${inList(CLIENT_SURFACES)})`);
   });
 
   it("agent session states and import rows match the server's checks (TV-D16)", () => {

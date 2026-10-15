@@ -59,6 +59,15 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
   booking_host_new: { ...BOOKING_FIXTURE, zone: "Europe/Warsaw" },
   booking_host_guest_cancelled: BOOKING_FIXTURE,
   booking_guest_cancelled: BOOKING_ZOOM_FIXTURE,
+  chat_waiting: {
+    workspaceName: "Northwind Studio",
+    conversationKind: "dm",
+    conversationName: null,
+    senderName: "Anna Carter",
+    count: 1,
+    text: "Can you send the logo files before Friday?",
+    path: "/chat?c=5e2b9c1d-7a4f-4e8b-b3c6-0d9f1a2e4b7c&m=8f0c2a4e-1b6d-4c3a-9e7f-2d5b8a1c6e90",
+  },
 };
 
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
@@ -71,4 +80,5 @@ export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   booking_host_new: "C3 · New booking (host)",
   booking_host_guest_cancelled: "C4 · Guest canceled (host)",
   booking_guest_cancelled: "C5 · You canceled (guest)",
+  chat_waiting: "Chat · Messages waiting after an hour away",
 };

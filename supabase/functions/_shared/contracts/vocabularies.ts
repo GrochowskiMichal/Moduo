@@ -369,7 +369,19 @@ export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefi
 
 /** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`):
  *  a reminder, or an agent's needs you · ready for review · failed (TV-D16). */
-export const NOTICE_DELIVERY_KINDS = ["reminder", "agent"] as const;
+export const NOTICE_DELIVERY_KINDS = [
+  "reminder",
+  "agent",
+  // Chat (CV-6a, specs/chat-v2.md §11): a direct message or an Every-message
+  // burst; @you / @Team / @channel; a reply in your chain; an announcement;
+  // Remind me coming due (CV-11); the summary after Focus (CV-18).
+  "chat_message",
+  "chat_mention",
+  "chat_reply",
+  "chat_announcement",
+  "chat_reminder",
+  "chat_focus_summary",
+] as const;
 export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
 export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
 export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
@@ -381,6 +393,22 @@ export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeD
 /** Lax read: an unknown kind reads as a reminder (a plain notice about a task). */
 export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
   return isNoticeDeliveryKind(input) ? input : "reminder";
+}
+
+/** Which kind of app a `user_clients` row is (CV-6a, "one device rings").
+ *  Postgres: `user_clients.surface` CHECK and `user_op_client_seen`. */
+export const CLIENT_SURFACES = ["desktop", "web"] as const;
+export type ClientSurface = (typeof CLIENT_SURFACES)[number];
+export const clientSurfaceSchema = z.enum(CLIENT_SURFACES);
+export function isClientSurface(value: unknown): value is ClientSurface {
+  return typeof value === "string" && (CLIENT_SURFACES as readonly string[]).includes(value);
+}
+export function parseClientSurface(input: unknown): SafeParseResult<ClientSurface> {
+  return parseOrError(clientSurfaceSchema, input);
+}
+/** Lax read: an unknown surface reads as the web app. */
+export function normalizeClientSurface(input: unknown): ClientSurface {
+  return isClientSurface(input) ? input : "web";
 }
 
 /** An agent session's state (TV-D16, spec §12, §Assumptions #15): working,
@@ -789,7 +817,8 @@ export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
 // ---------------------------------------------------------------------------
 // Transactional email — every kind of email Moduo sends (specs/transactional-
 // email.md T11). Defined in full up front so the TX blocks don't collide on
-// this file; the email_outbox CHECK is in 20261008160000_email_outbox.sql (TX-2). The order
+// this file; the email_outbox CHECK is in 20261008160000_email_outbox.sql (TX-2),
+// re-stated with chat_waiting by …_chat_v2_device_notices.sql (CV-6a). The order
 // follows the catalog (A1…E2), then the internal ops alert.
 // ---------------------------------------------------------------------------
 
@@ -816,6 +845,8 @@ export const EMAIL_KINDS = [
   "announcement",
   "build_update",
   "ops_alert",
+  // Chat (CV-6a): unread messages waiting after an hour away.
+  "chat_waiting",
 ] as const;
 export type EmailKind = (typeof EMAIL_KINDS)[number];
 export const emailKindSchema = z.enum(EMAIL_KINDS);
