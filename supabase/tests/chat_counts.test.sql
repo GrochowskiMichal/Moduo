@@ -270,6 +270,14 @@ BEGIN
     'paused: counts still answer when the plan doesn''t include chat', test.counts('B', 'D'));
   v := test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d3')));
   PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'D') = '0/0/0/0', 'paused: marking read still works', v);
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d2'))) = 'ok 1'
+                  AND test.counts('B', 'D') = '2/1/2/2'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::timestamptz)$q$, test.ref('D'), test.at(2))) = 'ok 1'
+                  AND test.counts('B', 'D') = '1/1/1/1'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::timestamptz)$q$, test.ref('D'), test.at(1))) = 'ok 1'
+                  AND test.counts('B', 'D') = '3/1/3/3',
+    'paused: marking unread, and v1''s timestamp signatures, still work');
+  PERFORM test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d3')));
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
 
   PERFORM test.ok(test.value_as('X', format($q$SELECT count(*)::text FROM public.chat_unread_counts(%L)$q$, test.id('W'))) = '0',

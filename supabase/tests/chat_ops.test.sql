@@ -849,6 +849,16 @@ BEGIN
                   AND (SELECT count(*) FROM public.chat_channels WHERE workspace_id = test.id('W4')) = 1
                   AND (test.member(test.id('W4:g'), 'O')).left_at IS NULL,
     'General: an older workspace''s "general" is flagged, not doubled, and its people are put in it', v);
+  -- A member's own channel named "general" never becomes General.
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W5'), test.id('O'), 'Squat');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W5'), test.id('B'), 'member');
+  v := test.as_user('B', format($q$SELECT public.chat_op_create_channel(%L, 'general')$q$, test.id('W5')));
+  v := test.as_user('B', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W5')));
+  PERFORM test.ok(v = 'ok 1'
+                  AND NOT (SELECT is_default FROM public.chat_channels WHERE workspace_id = test.id('W5') AND name = 'general')
+                  AND (SELECT name FROM public.chat_channels WHERE workspace_id = test.id('W5') AND is_default) = 'General 2'
+                  AND (SELECT created_by FROM public.chat_channels WHERE workspace_id = test.id('W5') AND is_default) = test.id('O'),
+    'General: a member''s own "general" isn''t made General; General is the owner''s (its name taken, "General 2")', v);
 END;
 $$;
 
@@ -1164,6 +1174,76 @@ BEGIN
 END;
 $$;
 
+-- ── Who manages, who comes back, where General reaches ─────────────────────
+DO $$
+DECLARE
+  v text;
+  v_r uuid;
+  v_rp uuid;
+  v_vo uuid;
+  v_g uuid := test.ref('G');
+BEGIN
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'Rules', '', false, ARRAY[%L, %L, %L]::uuid[])$q$,
+    test.id('W'), test.id('B'), test.id('C'), test.id('F')));
+  v_r := test.conv('Rules');
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'Rules private', '', true, ARRAY[%L]::uuid[])$q$,
+    test.id('W'), test.id('C')));
+  v_rp := test.conv('Rules private');
+
+  -- Someone removed doesn't bring themselves back.
+  PERFORM test.conv_op('A', 'chat_op_remove_member', v_r, format(', %L::uuid', test.id('C')));
+  v := test.conv_op('C', 'chat_op_add_members', v_r, format(', ARRAY[%L]::uuid[]', test.id('C')));
+  PERFORM test.ok(v = '42501 Your role can''t add people to channels.' AND (test.member(v_r, 'C')).removed_by = test.id('A'),
+    'removed: C can''t add themselves back to the public channel', v);
+  PERFORM test.conv_op('A', 'chat_op_remove_member', v_rp, format(', %L::uuid', test.id('C')));
+  PERFORM test.ok(test.conv_op('C', 'chat_op_join', v_rp) = '42501 You''re not a member of this conversation.'
+                  AND test.conv_op('C', 'chat_op_add_members', v_rp, format(', ARRAY[%L]::uuid[]', test.id('C')))
+                        = '42501 You''re not a member of this conversation.'
+                  AND test.conv_op('C', 'chat_op_mark_read', v_rp, format(', %L::uuid', test.mid('p1')))
+                        = '42501 You''re not a member of this conversation.',
+    'removed: C can''t rejoin, re-add themselves to or mark anything in the private channel');
+
+  -- A manager row alone manages nothing: not after leaving, not in a read-only role.
+  INSERT INTO public.chat_channel_managers (channel_id, user_id) VALUES (v_r, test.id('B')), (v_r, test.id('F'));
+  UPDATE public.chat_members SET left_at = now() WHERE channel_id = v_r AND user_id = test.id('B');
+  v := test.conv_op('B', 'chat_op_update_channel', v_r, ', ''Rules by B''');
+  PERFORM test.ok(v = '42501 Only this channel''s managers and admins can rename it.',
+    'managers: a manager who is no longer in the channel can''t rename it', v);
+  PERFORM test.ok(test.conv_op('F', 'chat_op_update_channel', v_r, ', ''Rules by F''') = 'ok 1',
+    'managers: F, a manager in it, renames it');
+  UPDATE public.workspace_members SET role = 'viewer' WHERE workspace_id = test.id('W') AND user_id = test.id('F');
+  PERFORM test.ok(test.conv_op('F', 'chat_op_update_channel', v_r, ', ''Rules''') = '42501 Only this channel''s managers and admins can rename it.'
+                  AND test.conv_op('F', 'chat_op_remove_member', v_r, format(', %L::uuid', test.id('A')))
+                        = '42501 Only this channel''s managers and admins can remove people.',
+    'managers: once F''s role is read-only, F manages nothing');
+  UPDATE public.workspace_members SET role = 'member' WHERE workspace_id = test.id('W') AND user_id = test.id('F');
+
+  -- "Manage any channel" is what makes an admin.
+  UPDATE public.workspace_chat_caps SET manage_any = false WHERE workspace_id = test.id('W') AND role_key = 'admin';
+  v := test.conv_op('D', 'chat_op_update_channel', v_r, ', ''Rules by D''');
+  PERFORM test.ok(v = '42501 Only this channel''s managers and admins can rename it.',
+    'admins: with "Manage any channel" off, an admin who isn''t its manager can''t rename it (AC1.12)', v);
+  UPDATE public.workspace_chat_caps SET manage_any = true WHERE workspace_id = test.id('W') AND role_key = 'admin';
+
+  -- The hand-over never makes a read-only role a manager.
+  PERFORM test.as_user('C', format($q$SELECT public.chat_op_create_channel(%L, 'Viewers only', '', true, ARRAY[%L]::uuid[])$q$,
+    test.id('W'), test.id('V')));
+  v_vo := test.conv('Viewers only');
+  v := test.conv_op('C', 'chat_op_leave', v_vo);
+  PERFORM test.ok(v = 'ok 1' AND (SELECT count(*) FROM public.chat_channel_managers WHERE channel_id = v_vo) = 0,
+    'last manager: with only a viewer left in it, nobody becomes its manager', v);
+
+  -- General never reaches a private conversation.
+  UPDATE public.chat_channels SET is_private = true WHERE id = v_g;
+  PERFORM test.person('L2');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W'), test.id('L2'), 'member');
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W')));
+  PERFORM test.ok((test.member(v_g, 'L2')).channel_id IS NULL,
+    'General: a private one takes nobody, by trigger or by bootstrap');
+  UPDATE public.chat_channels SET is_private = false WHERE id = v_g;
+END;
+$$;
+
 -- ── Direct messages: 2–9 people, one per set, viewers receive ──────────────
 DO $$
 DECLARE
@@ -1360,6 +1440,7 @@ BEGIN
   PERFORM test.ok(v_bad IS NULL, 'CV-2b definers: search_path pinned, no PUBLIC or anon EXECUTE', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad
     FROM unnest(ARRAY['chat__channel_name(text)', 'chat__channel_topic(text)', 'chat__name_taken(uuid, text, uuid)',
+                      'chat__is_manager(public.chat_channels, uuid)',
                       'chat__can_manage(public.chat_channels, uuid)', 'chat__can_post(public.chat_channels, uuid)',
                       'chat__enter(uuid, uuid, uuid, text)', 'chat__hand_over(uuid, uuid)',
                       'chat__reads_workspace(uuid, uuid)', 'chat__readable(uuid, uuid)',

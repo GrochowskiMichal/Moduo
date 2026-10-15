@@ -9,18 +9,20 @@
 --      in the workspace ignoring case among live channels (refused with 23505).
 --      Topics are up to 250 characters.
 --   2. Who may do what is §12's table: Admin = the workspace owner or a role
---      with "Manage any channel"; Manager = the channel's managers; Poster = a
---      role that can post (managers only in an announcement channel).
+--      with "Manage any channel"; Manager = the channel's managers who are in
+--      it and in a role that posts; Poster = a role that can post (managers
+--      only in an announcement channel).
 --   3. Membership is a stamp, never a deleted row: leaving stamps left_at,
 --      a removal stamps left_at + removed_by (the removed person's own row
 --      changes, so the change reaches them live). Someone a manager removed
 --      comes back only when a manager or admin adds them. A last manager who
 --      leaves (or is removed) hands the channel to the workspace owner if they
---      can read it, else to its earliest remaining member.
+--      can read it, else to its earliest remaining member whose role posts.
 --   4. General: one is_default channel per workspace. chat_op_bootstrap makes
 --      it if missing (or flags a live public "general") and joins every member
 --      who has no row in it; a trigger on workspace_members joins new members
---      (a left_at row keeps someone out: leaving General sticks).
+--      (a left_at row keeps someone out: leaving General sticks). Never into a
+--      private conversation.
 --   5. The read mark is a message: chat_op_mark_read(channel, message) moves
 --      last_read_id forward only; chat_op_mark_unread(channel, message) moves
 --      it to just before that message. v1's (channel, timestamp) signatures
@@ -107,8 +109,25 @@ AS $function$
                     AND c.id IS DISTINCT FROM p_except)
 $function$;
 
+-- One of the channel's managers who still is one in effect: in it (not left)
+-- and in a role that posts. A manager row alone (someone who left before
+-- leaving stamped rows, or whose role became read-only) manages nothing.
+CREATE OR REPLACE FUNCTION public.chat__is_manager(p_channel public.chat_channels, p_user uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  SELECT p_user IS NOT NULL AND p_channel.id IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.chat_channel_managers m
+                  WHERE m.channel_id = p_channel.id AND m.user_id = p_user)
+     AND EXISTS (SELECT 1 FROM public.chat_members mb
+                  WHERE mb.channel_id = p_channel.id AND mb.user_id = p_user AND mb.left_at IS NULL)
+     AND public.chat_has_cap(p_channel.workspace_id, p_user, 'post')
+$function$;
+
 -- Manages this channel: an admin (the owner or "Manage any channel") or one of
--- its managers.
+-- its managers in effect.
 CREATE OR REPLACE FUNCTION public.chat__can_manage(p_channel public.chat_channels, p_user uuid)
  RETURNS boolean
  LANGUAGE sql
@@ -117,8 +136,7 @@ CREATE OR REPLACE FUNCTION public.chat__can_manage(p_channel public.chat_channel
 AS $function$
   SELECT p_user IS NOT NULL AND p_channel.id IS NOT NULL
      AND (public.chat_has_cap(p_channel.workspace_id, p_user, 'manage_any')
-          OR EXISTS (SELECT 1 FROM public.chat_channel_managers m
-                      WHERE m.channel_id = p_channel.id AND m.user_id = p_user))
+          OR public.chat__is_manager(p_channel, p_user))
 $function$;
 
 -- Posts in this conversation: a role that can post, not removed from it, and
@@ -132,9 +150,7 @@ AS $function$
   SELECT p_user IS NOT NULL AND p_channel.id IS NOT NULL
      AND public.chat_has_cap(p_channel.workspace_id, p_user, 'post')
      AND NOT public.chat__was_removed(p_channel.id, p_user)
-     AND (NOT p_channel.managers_only
-          OR EXISTS (SELECT 1 FROM public.chat_channel_managers m
-                      WHERE m.channel_id = p_channel.id AND m.user_id = p_user))
+     AND (NOT p_channel.managers_only OR public.chat__is_manager(p_channel, p_user))
 $function$;
 
 -- Puts someone in a conversation, or back after they left or were removed,
@@ -170,10 +186,12 @@ BEGIN
 END;
 $function$;
 
--- After p_leaving stopped managing a channel: when no manager is left among
--- the people still in it, the workspace owner takes it if they can read it,
--- else its earliest remaining member (the erasure's rule). Returns the new
--- manager, or NULL when none was needed or nobody is left.
+-- After p_leaving stopped managing a channel: when no manager in effect is
+-- left, the workspace owner takes it if they can read it, else its earliest
+-- remaining member whose role posts (a read-only role never manages). Returns
+-- the new manager, or NULL when none was needed or nobody can take it (admins
+-- still manage it). The caller holds the channel row's lock, so two managers
+-- leaving at once can't both skip the hand-over.
 CREATE OR REPLACE FUNCTION public.chat__hand_over(p_channel_id uuid, p_leaving uuid)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -190,10 +208,7 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM public.chat_channel_managers m
               WHERE m.channel_id = p_channel_id AND m.user_id <> p_leaving
-                AND NOT EXISTS (SELECT 1 FROM public.chat_members lm
-                                 WHERE lm.channel_id = p_channel_id AND lm.user_id = m.user_id
-                                   AND lm.left_at IS NOT NULL)
-                AND public.chat_is_workspace_member(v_channel.workspace_id, m.user_id)) THEN
+                AND public.chat__can_manage(v_channel, m.user_id)) THEN
     RETURN NULL;
   END IF;
   SELECT w.owner_id INTO v_owner FROM public.workspaces w WHERE w.id = v_channel.workspace_id;
@@ -204,7 +219,7 @@ BEGIN
     SELECT cm.user_id INTO v_new
       FROM public.chat_members cm
      WHERE cm.channel_id = p_channel_id AND cm.user_id <> p_leaving AND cm.left_at IS NULL
-       AND public.chat_is_workspace_member(v_channel.workspace_id, cm.user_id)
+       AND public.chat_has_cap(v_channel.workspace_id, cm.user_id, 'post')
      ORDER BY cm.joined_at, cm.user_id
      LIMIT 1;
   END IF;
@@ -298,19 +313,22 @@ BEGIN
 
   SELECT * INTO v_general FROM public.chat_channels
    WHERE workspace_id = p_workspace_id AND is_default;
+  SELECT owner_id INTO v_owner FROM public.workspaces WHERE id = p_workspace_id;
   IF v_general.id IS NULL THEN
-    -- A workspace from before General: its live public "general" becomes it.
+    -- A workspace from before General: the live public "general" v1's
+    -- bootstrap made (in the owner's name) becomes it; a member's own channel
+    -- of that name never does.
     UPDATE public.chat_channels c SET is_default = true
      WHERE c.id = (SELECT g.id FROM public.chat_channels g
                     WHERE g.workspace_id = p_workspace_id AND g.kind = 'channel'
                       AND lower(g.name) = 'general' AND g.deleted_at IS NULL
                       AND g.archived_at IS NULL AND NOT g.is_private
+                      AND (g.created_by IS NULL OR g.created_by = v_owner)
                     ORDER BY g.created_at, g.id
                     LIMIT 1)
     RETURNING * INTO v_general;
   END IF;
   IF v_general.id IS NULL THEN
-    SELECT owner_id INTO v_owner FROM public.workspaces WHERE id = p_workspace_id;
     -- Made on the workspace's behalf, whoever opens chat first (a viewer too).
     v_bypass := current_setting('share.bypass', true);
     PERFORM set_config('share.bypass', '1', true);
@@ -332,8 +350,8 @@ BEGIN
   END IF;
 
   -- Everyone in the workspace who has no row in General joins it; a row with
-  -- left_at (they left, or were removed) keeps them out.
-  IF v_general.archived_at IS NULL AND v_general.deleted_at IS NULL THEN
+  -- left_at (they left, or were removed) keeps them out. Never a private one.
+  IF v_general.archived_at IS NULL AND v_general.deleted_at IS NULL AND NOT v_general.is_private THEN
     INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
     SELECT v_general.id, u.user_id, p_workspace_id
       FROM (SELECT wm.user_id FROM public.workspace_members wm WHERE wm.workspace_id = p_workspace_id
@@ -346,7 +364,8 @@ BEGIN
 END;
 $function$;
 
--- New members of a workspace join its General (unless they left it before).
+-- New members of a workspace join its General (unless they left it before;
+-- never a private, archived or deleted one).
 CREATE OR REPLACE FUNCTION public.chat__join_general()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -357,8 +376,8 @@ BEGIN
   INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
   SELECT c.id, NEW.user_id, NEW.workspace_id
     FROM public.chat_channels c
-   WHERE c.workspace_id = NEW.workspace_id AND c.is_default
-     AND c.deleted_at IS NULL AND c.archived_at IS NULL
+   WHERE c.workspace_id = NEW.workspace_id AND c.is_default AND c.kind = 'channel'
+     AND NOT c.is_private AND c.deleted_at IS NULL AND c.archived_at IS NULL
   ON CONFLICT (channel_id, user_id) DO NOTHING;
   RETURN NULL;
 END;
@@ -613,6 +632,8 @@ BEGIN
   IF v_member.channel_id IS NOT NULL THEN
     RETURN v_member;
   END IF;
+  -- (chat_op__channel already refuses a private conversation you aren't in;
+  -- this stays as the rule itself.)
   IF v_channel.kind <> 'channel' OR v_channel.is_private THEN
     RAISE EXCEPTION 'Only someone in this conversation can add you.' USING ERRCODE = '42501';
   END IF;
@@ -653,6 +674,8 @@ BEGIN
   IF v_member.channel_id IS NULL THEN
     RETURN;
   END IF;
+  -- One change of who manages it at a time (see chat__hand_over).
+  PERFORM 1 FROM public.chat_channels WHERE id = p_channel_id FOR UPDATE;
   UPDATE public.chat_members SET left_at = now(), removed_by = NULL
    WHERE channel_id = p_channel_id AND user_id = v_me;
   DELETE FROM public.chat_channel_managers WHERE channel_id = p_channel_id AND user_id = v_me;
@@ -736,6 +759,8 @@ BEGIN
   IF NOT public.chat__can_manage(v_channel, v_me) THEN
     RAISE EXCEPTION 'Only this channel''s managers and admins can remove people.' USING ERRCODE = '42501';
   END IF;
+  -- One change of who manages it at a time (see chat__hand_over).
+  PERFORM 1 FROM public.chat_channels WHERE id = p_channel_id FOR UPDATE;
   UPDATE public.chat_members SET left_at = now(), removed_by = v_me
    WHERE channel_id = p_channel_id AND user_id = p_user_id AND left_at IS NULL;
   IF NOT FOUND THEN
@@ -1055,6 +1080,7 @@ BEGIN
     'chat__channel_name(text)',
     'chat__channel_topic(text)',
     'chat__name_taken(uuid, text, uuid)',
+    'chat__is_manager(public.chat_channels, uuid)',
     'chat__can_manage(public.chat_channels, uuid)',
     'chat__can_post(public.chat_channels, uuid)',
     'chat__enter(uuid, uuid, uuid, text)',
