@@ -1436,7 +1436,8 @@ export function TasksPlanView({
         if (external) markEntityOpenIntent(id);
         onUrlTaskIdChange(id);
       };
-      const local = taskIdForHandle(handle, tasks, taskKey);
+      // Archived projects' tasks too: the mirror writes their handles (MOD-28).
+      const local = taskIdForHandle(handle, linkable.tasks, taskKey);
       if (local) follow(local);
       else if (referenceStore) void referenceStore.resolveHandle(handle).then(follow);
       else follow(null);
@@ -1472,7 +1473,6 @@ export function TasksPlanView({
     api.error,
     api.restLoaded,
     urlTaskId,
-    tasks,
     linkable,
     scopeTasksAll,
     onUrlTaskIdChange,
