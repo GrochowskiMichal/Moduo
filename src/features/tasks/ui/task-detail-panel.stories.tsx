@@ -4,11 +4,12 @@ import type { ReactNode } from "react";
 
 import type { AttachmentRecord, ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { getUploadQueue } from "@/lib/uploads";
+import { RightPanel } from "../../../components/app/right-panel";
 import type { WorkspaceMember } from "../../workspaces/types";
 import { useWorkspace, WorkspaceContext } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { ActivityEntry, Bucket, Task } from "../model";
+import type { ActivityEntry, Bucket, Tag, Task } from "../model";
 import { TaskDetailPanel } from "./task-detail-panel";
 
 // The detail panel per tasks-v2 comp §1 + §5 option C (TV-U3, U3-1/U3-3).
@@ -112,25 +113,32 @@ const COMMENTS: SpineComment[] = [
   },
 ];
 
-function stubApi(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
+function tag(id: string, name: string, color: string): Tag {
   return {
+    id,
+    workspaceId: "w1",
+    ownerId: "storybook-user",
+    name,
+    color,
+    createdAt: ago(240),
+    updatedAt: ago(240),
+    deletedAt: null,
+  };
+}
+
+const TAGS = [tag("g1", "tasks", "violet"), tag("g2", "UI", "green"), tag("g3", "UX", "amber")];
+
+/**
+ * What the panel reads of the module. The hook returns far more than a story
+ * needs, so this is typed as a part of it: every field here is checked, and a
+ * field the panel starts reading must be added (or the story throws).
+ */
+function stubApi(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
+  const api: Partial<TasksModuleApi> = {
     canEdit: true,
     tasks: [t],
-    tags: [
-      { id: "g1", name: "tasks", color: "violet" },
-      { id: "g2", name: "UI", color: "green" },
-      { id: "g3", name: "UX", color: "amber" },
-    ],
-    tagsByTask: new Map([
-      [
-        "t1",
-        [
-          { id: "g1", name: "tasks", color: "violet" },
-          { id: "g2", name: "UI", color: "green" },
-          { id: "g3", name: "UX", color: "amber" },
-        ],
-      ],
-    ]),
+    tags: TAGS,
+    tagsByTask: new Map([["t1", TAGS]]),
     subtasksByParent: new Map(),
     statuses: [],
     statusById: new Map(),
@@ -158,8 +166,29 @@ function stubApi(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
     archiveTask: () => {},
     deleteTask: () => {},
     setTaskParent: () => {},
+    focusOnTask: () => true,
+    restoreTask: async () => true,
+    // The task's own rows and structure (TV-U13), none in these stories.
+    sessions: [],
+    reminders: [],
+    waiting: [],
+    agentSessions: [],
+    teams: [],
+    areas: [],
+    sections: [],
+    inbox: INBOX,
+    commentStamps: new Map(),
+    attachmentStamps: new Map(),
+    addSession: () => true,
+    updateSession: () => true,
+    removeSession: () => true,
+    addReminder: () => true,
+    removeReminder: () => {},
+    addWaiting: () => null,
+    removeWaiting: () => {},
     ...over,
-  } as unknown as TasksModuleApi;
+  };
+  return api as TasksModuleApi;
 }
 
 /** A flat picture standing in for a screenshot (no network in stories). */
@@ -379,4 +408,25 @@ export const ReadOnly: Story = {
 
 export const NothingSelected: Story = {
   args: { task: null },
+};
+
+/**
+ * Hosted as the Tasks page does, at the 280 px floor (round-2b frame 5): the
+ * task's actions in the title row, "Details ▾ ……… Focus ↗ ⋯"; the breadcrumb
+ * line holds only the crumbs and the handle.
+ */
+export const InThePanelAtFloor: Story = {
+  render: (args) => (
+    <div className="h-full w-70 rounded-xl border border-border bg-card p-3">
+      <RightPanel
+        module="tasks"
+        activeId="details"
+        onChange={() => {}}
+        views={{
+          details: () => <TaskDetailPanel {...args} onOpenFullPage={() => {}} />,
+          project: () => null,
+        }}
+      />
+    </div>
+  ),
 };

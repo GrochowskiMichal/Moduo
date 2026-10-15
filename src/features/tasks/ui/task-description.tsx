@@ -86,7 +86,11 @@ export function TaskDescription({
   const counts = hiddenCounts(overflow.hidden);
 
   return (
-    <div className="flex flex-col items-start">
+    // The negative margin keeps the text where the title block puts it (the
+    // soft surface pads 4 px above and below). It sits out here, never on the
+    // editor: inside the measured box it would overflow it, and every
+    // description, even an empty one, would read as folded.
+    <div className="-my-1 flex flex-col items-start">
       <div
         ref={boxRef}
         className={cn(
@@ -109,8 +113,11 @@ export function TaskDescription({
           sourceIcon="task"
           ariaLabel="Description"
           placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
+          // Plain text at rest; editing fills a quiet surface, its padding
+          // inside (MOD-115).
+          surface="soft"
           className="min-h-6 text-base text-foreground/85"
-          placeholderClassName="right-0 truncate text-base"
+          placeholderClassName="truncate text-base"
           onCommit={(html) => {
             if (html !== task.description) api.patchTask(task.id, { description: html });
           }}
@@ -134,7 +141,8 @@ export function TaskDescription({
           size="sm"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
-          className="-ms-2 font-sans text-xs font-normal text-muted-foreground"
+          // Its words start with the text above (the soft surface pads 8 px).
+          className="-ms-0.5 font-sans text-xs font-normal text-muted-foreground"
         >
           {expanded ? "Show less" : counts ? `Show more · ${counts}` : "Show more"}
         </Button>

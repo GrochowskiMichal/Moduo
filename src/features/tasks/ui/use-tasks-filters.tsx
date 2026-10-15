@@ -549,6 +549,7 @@ export function useTasksFilters({
           onValueChange={onConditionsChange}
           open={filterOpen}
           onOpenChange={setFilterOpen}
+          shortcut="F"
         />
       </span>
     ),

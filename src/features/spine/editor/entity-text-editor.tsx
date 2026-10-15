@@ -192,6 +192,13 @@ export type EntityTextEditorProps = {
   ariaLabel?: string;
   /** Extra classes for the editable/readable surface (merged: they win over the defaults). */
   className?: string;
+  /**
+   * How editing shows: `ring` (default) rings the text on focus; `soft` reads
+   * as plain text with no box, and editing fills a quiet surface with the
+   * padding inside it, so nothing reaches past the field (the task panel,
+   * MOD-115). The placeholder takes the same inset.
+   */
+  surface?: "ring" | "soft";
   /** Extra classes for the placeholder (match a changed text size). */
   placeholderClassName?: string;
   onCommit?: (html: string, text: string) => void;
@@ -240,11 +247,13 @@ export function EntityTextEditor({
   placeholder,
   ariaLabel,
   className,
+  surface = "ring",
   placeholderClassName,
   onCommit,
   onMentionPerson,
   onFiles,
 }: EntityTextEditorProps) {
+  const soft = surface === "soft";
   const initialConfig = useMemo(
     () => ({
       namespace: "entity-text",
@@ -315,7 +324,12 @@ export function EntityTextEditor({
               aria-label={ariaLabel ?? "Description"}
               className={cn(
                 "min-h-16 rounded-md text-sm leading-relaxed text-foreground outline-none",
-                editable ? "focus-visible:ring-2 focus-visible:ring-ring" : "cursor-default",
+                soft && "px-2 py-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+                !editable
+                  ? "cursor-default"
+                  : soft
+                    ? "focus:bg-state-hover"
+                    : "focus-visible:ring-2 focus-visible:ring-ring",
                 className,
               )}
             />
@@ -324,7 +338,8 @@ export function EntityTextEditor({
             placeholder ? (
               <div
                 className={cn(
-                  "pointer-events-none absolute left-0 top-0 text-sm text-muted-foreground",
+                  "pointer-events-none absolute text-sm text-muted-foreground",
+                  soft ? "inset-x-2 top-1" : "left-0 top-0",
                   placeholderClassName,
                 )}
               >

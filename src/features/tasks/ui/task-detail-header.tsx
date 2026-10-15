@@ -1,9 +1,13 @@
 // The detail panel's header (Tasks v3 §9, research views-board-detail §7):
-// the breadcrumb "● Project › Section" (each part a picker that moves the
-// task; a subtask goes on to "↳ parent"), the handle (click to copy), a slot
-// for who "is on this" (claims, TV-F7), the Focus toggle and ▶ "Focus on
-// this" (call 31), ⤢ full page, and ⋯ (Copy branch name, Copy link, where
-// an import brought it from (TV-U18), Duplicate, Save as template…, Make it a task, Won't do / Reopen, Delete).
+// the breadcrumb "● Project › Section" on one line (each part a picker that
+// moves the task; a subtask goes on to "↳ parent") and the handle at the
+// line's end (click to copy). Nothing else shares that line, so the names get
+// all of it (MOD-118 follow-up). The task's actions sit in the host's title
+// row instead, on the right ("Details ▾ ……… ↗ ⋯", round-2b frame 5): a slot
+// for who "is on this" (claims, TV-F7), the Focus toggle, ⤢ full page, and ⋯
+// (Focus on this (call 31), Copy branch name, Copy link, where an import
+// brought it from (TV-U18), Attach files… (MOD-115), Duplicate, Save as
+// template…, Make it a task, Won't do / Reopen, Delete).
 
 import {
   Ban,
@@ -20,6 +24,7 @@ import {
   Lock,
   Maximize2,
   Minimize2,
+  Paperclip,
   Play,
   RotateCcw,
   Trash2,
@@ -28,7 +33,7 @@ import {
 import { type ReactNode, useContext, useState } from "react";
 import { toast } from "sonner";
 
-import { Button } from "../../../components/ui/button";
+import { TitleActions } from "../../../components/app/title-actions";
 import {
   Command,
   CommandEmpty,
@@ -42,6 +47,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { IconButton } from "../../../components/ui/icon-button";
@@ -83,6 +89,8 @@ type Props = {
   claimSlot?: ReactNode;
   /** ⋯ → Save as template… (TV-D15). Absent: not offered. */
   onSaveAsTemplate?: () => void;
+  /** ⋯ → Attach files…: the strip's file picker, there even with no files yet (MOD-115). */
+  onAttachFiles?: () => void;
 };
 
 const crumb =
@@ -101,6 +109,7 @@ export function TaskDetailHeader({
   onCloseFullPage,
   claimSlot,
   onSaveAsTemplate,
+  onAttachFiles,
 }: Props) {
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
@@ -141,8 +150,9 @@ export function TaskDetailHeader({
 
   return (
     <div className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
-      {/* Names wrap, never truncate (AC1.16). */}
-      <nav aria-label="Location" className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+      {/* One line (MOD-118, round-2b `.dcrumb`): the project and section
+          names shorten with an ellipsis, full names on hover (AC1.16). */}
+      <nav aria-label="Location" className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5">
         <ProjectCrumb
           task={task}
           bucket={bucket}
@@ -166,122 +176,163 @@ export function TaskDetailHeader({
         {parent ? (
           <>
             <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <button
-              type="button"
-              onClick={() => onOpenTask(parent.id)}
-              aria-label={`Parent task: ${parent.title || "Untitled"}`}
-              className={crumb}
-            >
-              <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
-              <span className="min-w-0 break-words text-left">{parent.title || "Untitled"}</span>
-            </button>
-          </>
-        ) : null}
-        {handle ? (
-          <>
-            <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={() => copy(handle, `Copied ${handle}`)}
-                  aria-label={`Copy ${handle}`}
-                  className={cn(crumb, "shrink-0 whitespace-nowrap tabular-nums")}
-                >
-                  {handle}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy {handle}</TooltipContent>
-            </Tooltip>
+            <CrumbTip label={parent.title || "Untitled"}>
+              <button
+                type="button"
+                onClick={() => onOpenTask(parent.id)}
+                aria-label={`Parent task: ${parent.title || "Untitled"}`}
+                className={crumb}
+              >
+                <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
+                <span className="min-w-0 truncate text-left">{parent.title || "Untitled"}</span>
+              </button>
+            </CrumbTip>
           </>
         ) : null}
       </nav>
-
-      {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />}
-      {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
-      {open && canEdit ? <FocusOnThisButton task={task} api={api} /> : null}
-      {onOpenFullPage ? (
-        <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />
-      ) : null}
-      {onCloseFullPage ? (
-        <IconButton icon={Minimize2} label="Back to the panel" onClick={onCloseFullPage} />
-      ) : null}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton icon={Ellipsis} label="More actions" tooltip={null} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuItem
-            onSelect={() => {
-              const name = branchName(handle, task.title);
-              copy(name, `Copied ${name}`);
-            }}
-          >
-            <GitBranch aria-hidden />
-            Copy branch name
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => copy(taskUrl(task.id), "Link copied")}>
-            <Link2 aria-hidden />
-            Copy link
-          </DropdownMenuItem>
-          {imported ? (
-            <DropdownMenuItem
-              disabled={!imported.key}
-              onSelect={() => imported.key && copy(imported.key, `Copied ${imported.key}`)}
-            >
-              <FileInput aria-hidden />
-              <span className="min-w-0 break-words">
-                {imported.label}
-                {imported.key ? ` · ${imported.key}` : ""}
-              </span>
-            </DropdownMenuItem>
-          ) : null}
-          {onOpenFullPage ? (
-            <DropdownMenuItem onSelect={onOpenFullPage}>
-              <Maximize2 aria-hidden />
-              Open full page
-            </DropdownMenuItem>
-          ) : null}
-          {canEdit ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={duplicate}>
-                <Copy aria-hidden />
-                Duplicate
-              </DropdownMenuItem>
-              {onSaveAsTemplate ? (
-                <DropdownMenuItem onSelect={onSaveAsTemplate}>
-                  <LayoutTemplate aria-hidden />
-                  Save as template…
-                </DropdownMenuItem>
-              ) : null}
-              {parent ? (
-                <DropdownMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
-                  <Unlink aria-hidden />
-                  Make it a task
-                </DropdownMenuItem>
-              ) : null}
-              {task.status === "archived" ? (
-                <DropdownMenuItem onSelect={() => api.patchTask(task.id, { status: "todo" })}>
-                  <RotateCcw aria-hidden />
-                  Reopen
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onSelect={() => api.archiveTask(task.id)}>
-                  <Ban aria-hidden />
-                  Won’t do
-                </DropdownMenuItem>
+      {/* The handle is the task's own, not a place: it sits at the line's
+          end, quieter (round-2b `.dcrumb .hdl`), and never shortens. The
+          crumbs' nav grows to fill the line, which pushes it there. */}
+      {handle ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={() => copy(handle, `Copied ${handle}`)}
+              aria-label={`Copy ${handle}`}
+              className={cn(
+                crumb,
+                "shrink-0 whitespace-nowrap text-subtle-foreground tabular-nums",
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
-                <Trash2 aria-hidden />
-                Delete
+            >
+              {handle}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy {handle}</TooltipContent>
+        </Tooltip>
+      ) : null}
+
+      {/* The task's actions: in the panel's title row, or the full page's
+          header (title-actions.tsx); here only when nothing hosts them. ▶
+          "Focus on this" is in ⋯: with four icons beside "Details ▾", a
+          280 px panel has no room left for who's on the task (round-2b
+          frame 5 shows ↗ and ⋯ there, frames 2–3 the Focus toggle). */}
+      <TitleActions>
+        {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} max={1} />}
+        {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
+        {onOpenFullPage ? (
+          <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />
+        ) : null}
+        {onCloseFullPage ? (
+          <IconButton icon={Minimize2} label="Back to the panel" onClick={onCloseFullPage} />
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton icon={Ellipsis} label="More actions" tooltip={null} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            {open && canEdit ? <FocusOnThisItem task={task} api={api} /> : null}
+            <DropdownMenuItem
+              onSelect={() => {
+                const name = branchName(handle, task.title);
+                copy(name, `Copied ${name}`);
+              }}
+            >
+              <GitBranch aria-hidden />
+              Copy branch name
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => copy(taskUrl(task.id), "Link copied")}>
+              <Link2 aria-hidden />
+              Copy link
+            </DropdownMenuItem>
+            {imported ? (
+              <DropdownMenuItem
+                disabled={!imported.key}
+                onSelect={() => imported.key && copy(imported.key, `Copied ${imported.key}`)}
+              >
+                <FileInput aria-hidden />
+                <span className="min-w-0 break-words">
+                  {imported.label}
+                  {imported.key ? ` · ${imported.key}` : ""}
+                </span>
               </DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            ) : null}
+            {onOpenFullPage ? (
+              <DropdownMenuItem onSelect={onOpenFullPage}>
+                <Maximize2 aria-hidden />
+                Open full page
+              </DropdownMenuItem>
+            ) : null}
+            {canEdit ? (
+              <>
+                <DropdownMenuSeparator />
+                {onAttachFiles ? (
+                  <DropdownMenuItem onSelect={onAttachFiles}>
+                    <Paperclip aria-hidden />
+                    Attach files…
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={duplicate}>
+                  <Copy aria-hidden />
+                  Duplicate
+                </DropdownMenuItem>
+                {onSaveAsTemplate ? (
+                  <DropdownMenuItem onSelect={onSaveAsTemplate}>
+                    <LayoutTemplate aria-hidden />
+                    Save as template…
+                  </DropdownMenuItem>
+                ) : null}
+                {parent ? (
+                  <DropdownMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
+                    <Unlink aria-hidden />
+                    Make it a task
+                  </DropdownMenuItem>
+                ) : null}
+                {task.status === "archived" ? (
+                  <DropdownMenuItem onSelect={() => api.patchTask(task.id, { status: "todo" })}>
+                    <RotateCcw aria-hidden />
+                    Reopen
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onSelect={() => api.archiveTask(task.id)}>
+                    <Ban aria-hidden />
+                    Won’t do
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
+                  <Trash2 aria-hidden />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TitleActions>
     </div>
+  );
+}
+
+/**
+ * A crumb's full name on hover, since the breadcrumb shortens it (MOD-118):
+ * the kit tooltip, like the handle's beside it. A disabled crumb (view only)
+ * never opens one, so it carries a native title instead.
+ */
+function CrumbTip({
+  label,
+  disabled = false,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  children: ReactNode;
+}) {
+  if (disabled) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -310,22 +361,26 @@ function ProjectCrumb({
   }
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={!canEdit}>
-        <button
-          type="button"
-          aria-label={`Project: ${label}. Move to another project`}
-          className={cn(crumb, "-ml-1.5")}
-        >
-          {bucket?.isSystem ? (
-            <Inbox className="size-icon-xs shrink-0" aria-hidden />
-          ) : bucket ? (
-            <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
-          ) : (
-            <Lock className="size-icon-xs shrink-0" aria-hidden />
-          )}
-          <span className="min-w-0 break-words text-left">{label}</span>
-        </button>
-      </PopoverTrigger>
+      <CrumbTip label={label} disabled={!canEdit}>
+        <PopoverTrigger asChild disabled={!canEdit}>
+          <button
+            type="button"
+            aria-label={`Project: ${label}. Move to another project`}
+            // A disabled button never opens a tooltip: the native one stands in.
+            title={canEdit ? undefined : label}
+            className={cn(crumb, "-ml-1.5")}
+          >
+            {bucket?.isSystem ? (
+              <Inbox className="size-icon-xs shrink-0" aria-hidden />
+            ) : bucket ? (
+              <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
+            ) : (
+              <Lock className="size-icon-xs shrink-0" aria-hidden />
+            )}
+            <span className="min-w-0 truncate text-left">{label}</span>
+          </button>
+        </PopoverTrigger>
+      </CrumbTip>
       <PopoverContent align="start" className="w-64 p-0">
         <Command>
           <CommandInput placeholder="Move to…" />
@@ -379,15 +434,19 @@ function SectionCrumb({
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild disabled={!canEdit}>
-        <button
-          type="button"
-          aria-label={`Section: ${section?.name ?? "No section"}. Move to another section`}
-          className={crumb}
-        >
-          <span className="min-w-0 break-words text-left">{section?.name ?? "No section"}</span>
-        </button>
-      </PopoverTrigger>
+      <CrumbTip label={section?.name ?? "No section"} disabled={!canEdit}>
+        <PopoverTrigger asChild disabled={!canEdit}>
+          <button
+            type="button"
+            aria-label={`Section: ${section?.name ?? "No section"}. Move to another section`}
+            // A disabled button never opens a tooltip: the native one stands in.
+            title={canEdit ? undefined : (section?.name ?? "No section")}
+            className={crumb}
+          >
+            <span className="min-w-0 truncate text-left">{section?.name ?? "No section"}</span>
+          </button>
+        </PopoverTrigger>
+      </CrumbTip>
       <PopoverContent align="start" className="w-56 p-0">
         <Command>
           <CommandInput placeholder="Section…" />
@@ -424,23 +483,21 @@ function SectionCrumb({
 }
 
 /**
- * "Focus on this" (call 31): on top of my Up next, with the one clock. Hidden
- * while my session is already on this task.
+ * ⋯ → "Focus on this" (call 31): on top of my Up next, with the one clock;
+ * ⇧F as in the row's menu. Hidden while my session is already on this task.
  */
-function FocusOnThisButton({ task, api }: { task: Task; api: TasksModuleApi }) {
+function FocusOnThisItem({ task, api }: { task: Task; api: TasksModuleApi }) {
   const focus = useFocusTaskState();
   if (focus.active && focus.taskId === task.id) return null;
   return (
-    <IconButton
-      icon={Play}
-      label="Focus on this"
-      tooltip={
-        <>
-          Focus on this <Kbd>⇧F</Kbd>
-        </>
-      }
-      onClick={() => api.focusOnTask(task.id)}
-    />
+    <>
+      <DropdownMenuItem onSelect={() => api.focusOnTask(task.id)}>
+        <Play aria-hidden />
+        Focus on this
+        <DropdownMenuShortcut>⇧F</DropdownMenuShortcut>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+    </>
   );
 }
 
@@ -482,13 +539,23 @@ function QueueButton({
 
   if (!canEdit) {
     if (!queued) return claimMark;
+    // The state without the action: an icon on the same rung as ↗ and ⋯, its
+    // words in the tooltip and the name (a label would push ⋯ out at 280 px).
     return (
       <>
         {claimMark}
-        <span className="flex h-(--ctrl-h-sm) shrink-0 items-center gap-1.5 px-1.5 font-sans text-xs text-muted-foreground">
-          <ListChecks className="size-icon-sm text-primary" aria-hidden />
-          In Focus
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              role="img"
+              aria-label="In Focus"
+              className="flex size-(--ctrl-h-sm) shrink-0 items-center justify-center"
+            >
+              <ListChecks className="size-icon-sm text-primary" aria-hidden />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>In Focus</TooltipContent>
+        </Tooltip>
       </>
     );
   }
@@ -497,27 +564,23 @@ function QueueButton({
   return (
     <>
       {claimMark}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {/* An icon, like ⤢ and ⋯ beside it: the breadcrumb keeps the room
-              (a 280 px panel), and ▶ "Focus on this" sits next to it. */}
-          <Button
-            type="button"
-            variant={queued ? "secondary" : "ghost"}
-            size="icon"
-            aria-pressed={queued}
-            aria-label={queued ? "In Focus" : "Add to Focus"}
-            onClick={() => api.toggleQueue(task.id)}
-            className="shrink-0"
-          >
-            <ListChecks className={queued ? "text-primary" : "text-muted-foreground"} aria-hidden />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          {queued ? "In Focus · " : ""}
-          {action} <Kbd>Q</Kbd>
-        </TooltipContent>
-      </Tooltip>
+      {/* An icon on the same rung as ↗ and ⋯ beside it in the title row: it
+          shows its state ("In Focus"), and "Details ▾" keeps the room. The
+          glyph takes the button's colour, the accent while it's in Focus. */}
+      <IconButton
+        icon={ListChecks}
+        label={queued ? "In Focus" : "Add to Focus"}
+        tooltip={
+          <>
+            {queued ? "In Focus · " : ""}
+            {action} <Kbd>Q</Kbd>
+          </>
+        }
+        variant={queued ? "secondary" : "ghost"}
+        aria-pressed={queued}
+        onClick={() => api.toggleQueue(task.id)}
+        className={cn("shrink-0", queued ? "text-primary" : "text-muted-foreground")}
+      />
     </>
   );
 }
