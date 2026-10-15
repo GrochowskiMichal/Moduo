@@ -1,0 +1,7 @@
+# Extends the default gitleaks rules; the only addition is the allowlist below.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "NR-6: the generated, minified Lexical + Yjs bundle the notes connector loads. Library identifiers (e.g. `_.focus.key`) match generic-api-key: false positives, confirmed by the owner 2026-10-15. Rebuilt with `bun run build:notes-doc`, so a per-commit fingerprint would go stale on every rebuild."
+paths = ['''supabase/functions/_shared/notes-doc/notes-doc\.bundle\.js''']

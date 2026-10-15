@@ -30,6 +30,13 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 import {
+  AgentOrigin,
+  type AgentUndo,
+  createAgentUndo,
+  isAgentOrigin,
+  isForeignOrigin,
+} from "./agent-origin";
+import {
   type DocOutboxEntry,
   deleteDocOutboxEntries,
   deleteMetaOutboxEntries,
@@ -122,12 +129,21 @@ type NoteSession = {
   compactVeto: boolean;
   lastUsedAt: number;
   destroyed: boolean;
+  /** NR-6: Undo for agent writes that reached this session's doc. */
+  agentUndo: AgentUndo;
+  /** This session pushed a local edit (only editors do), so it may hold
+   * text an agent write's body missed. View-only sessions never re-save. */
+  editedLocally: boolean;
 };
 
 /** Keep at most this many idle note sessions alive (fast note switching)
  * before closing the least-recently-used — each holds a Y.Doc + an
  * IndexedDB connection for the whole workspace visit otherwise. */
 const MAX_IDLE_SESSIONS = 8;
+
+/** After an agent write lands, wait this long (for the broadcast and pull
+ * of the same write to settle) before re-saving the merged body. */
+const AGENT_BODY_RESAVE_MS = 1500;
 
 type StatusListener = (status: NotesSyncStatusV2) => void;
 
@@ -271,6 +287,8 @@ export class NotesSyncEngineV2 {
       compactVeto: false,
       lastUsedAt: Date.now(),
       destroyed: false,
+      agentUndo: createAgentUndo(doc),
+      editedLocally: false,
     };
     this.sessions.set(noteId, s);
     this.evictIdleSessions(noteId);
@@ -282,9 +300,19 @@ export class NotesSyncEngineV2 {
 
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (s!.destroyed) return;
+      // An agent's write carries the body as the connector saw the doc; if
+      // this session pushed an edit the connector hadn't seen yet, that body
+      // lacks it. Re-derive once from the merged doc (an update-free save).
+      if (isAgentOrigin(origin) && s!.synced && s!.editedLocally && !this.drafts.has(noteId)) {
+        s!.bodyOwed = true;
+        // Never push back a flush that is already due (local edits waiting).
+        if (!s!.flushTimer) this.scheduleFlush(s!, AGENT_BODY_RESAVE_MS);
+        return;
+      }
       // Ignore what we applied ourselves: remote pulls, the local IDB cache
-      // replaying at boot, and awareness/bootstrap application.
-      if (origin === "remote" || origin === persistence) return;
+      // replaying at boot, agent writes (already stored server-side), and
+      // awareness/bootstrap application.
+      if (isForeignOrigin(origin, persistence)) return;
       // A draft's edits live in the doc (and its local cache) only; promoting
       // it queues the whole state as one update.
       if (this.drafts.has(noteId)) return;
@@ -346,7 +374,13 @@ export class NotesSyncEngineV2 {
         // has them, and a cache-evicted client NEEDS them (skipping by
         // clientId lost history whenever local persistence didn't survive).
         try {
-          Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), "remote");
+          // Agent rows that land while the note is open get an agent origin:
+          // that is what the session's Undo tracks (NR-6). The first pull's
+          // rows are history (possibly days old and built upon), so they
+          // apply as plain remote and are never offered for Undo.
+          const origin =
+            u.origin === "api_key" && s.synced ? new AgentOrigin(u.actorKeyId) : "remote";
+          Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), origin);
           ids.push(u.id);
         } catch (e) {
           // The cursor still advances (or we'd re-pull a poison row forever),
@@ -371,6 +405,7 @@ export class NotesSyncEngineV2 {
   }
 
   private async enqueueLocalUpdate(s: NoteSession, update: Uint8Array): Promise<void> {
+    s.editedLocally = true;
     const { seq, next } = assignSeq(s.state);
     s.state = next;
     s.lastUsedAt = Date.now();
@@ -645,8 +680,14 @@ export class NotesSyncEngineV2 {
     if (s.flushTimer) clearTimeout(s.flushTimer);
     this.sessions.delete(noteId);
     s.provider.awareness.destroy();
+    s.agentUndo.destroy();
     await s.persistence.clearData().catch(() => {});
     s.doc.destroy();
+  }
+
+  /** Undo for agent writes on an open note (null when it isn't open). */
+  agentUndo(noteId: string): AgentUndo | null {
+    return this.sessions.get(noteId)?.agentUndo ?? null;
   }
 
   async pullNote(noteId: string): Promise<void> {
@@ -662,6 +703,7 @@ export class NotesSyncEngineV2 {
     if (s.retryTimer) clearTimeout(s.retryTimer);
     if (s.flushTimer) clearTimeout(s.flushTimer);
     s.provider.awareness.destroy();
+    s.agentUndo.destroy();
     await s.persistence.destroy().catch(() => {});
     s.doc.destroy();
     this.sessions.delete(noteId);
