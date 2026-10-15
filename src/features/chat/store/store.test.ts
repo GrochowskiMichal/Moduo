@@ -8,7 +8,7 @@
 
 import { afterEach, describe, expect, it } from "@rstest/core";
 
-import type { ChatMessage } from "../model";
+import type { ChatMessage, ChatRuntime } from "../model";
 import { emptyMeta, memoryChatCopy, ownerKey } from "./device-copy";
 import { compareKeys, keyOf } from "./keys";
 import { ChatStore, type ChatStoreOptions, PAGE } from "./store";
@@ -21,11 +21,14 @@ const OWNER = ownerKey(ME, WS);
 
 const stores: ChatStore[] = [];
 
-function setup(opts: Partial<ChatStoreOptions> = {}) {
+function setup(
+  opts: Partial<ChatStoreOptions> = {},
+  wrap: (t: ChatRuntime) => ChatRuntime = (t) => t,
+) {
   const server = new FakeChatServer();
   const copy = memoryChatCopy();
   const live = fakeLive();
-  const store = new ChatStore(server.transport(), ME, WS, {
+  const store = new ChatStore(wrap(server.transport()), ME, WS, {
     copy,
     live,
     ...opts,
@@ -215,6 +218,121 @@ describe("device copy, delta, echo, outbox", () => {
     await settle(20);
     expect(server.rows.get(id)?.deletedAt).not.toBeNull();
     expect(store.rowById(id)?.deletedAt).not.toBeNull();
+  });
+
+  it("deleted while sending and the answer is lost: deleted once its echo lands", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    const answer = server.holdNext("send");
+    const id = store.send({ channelId: C, body: "oops" });
+    await settle(2);
+    expect(await store.remove(id)).toEqual({ ok: true });
+    // Out of sight at once, still on its way.
+    expect(ids(store.getSnapshot().windows[C]!.rows)).not.toContain(id);
+    expect(store.getSnapshot().waiting).toBe(0);
+    server.loseAnswer.add("send");
+    answer();
+    await settle(20);
+    expect(server.rows.get(id)?.deletedAt ?? null).toBeNull();
+    live.emit({ type: "message", row: server.rows.get(id)!, insert: true });
+    await settle(20);
+    expect(server.rows.get(id)?.deletedAt).not.toBeNull();
+    expect(store.rowById(id)?.deletedAt).not.toBeNull();
+  });
+
+  it("a waiting send another tab discarded isn't sent from this one", async () => {
+    const { server, copy, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const waiting = uuid(7001);
+    await copy.updateMeta(OWNER, () => ({
+      ...emptyMeta(),
+      conversations: { [C]: { openedAt: 1 } },
+      channels: [server.channels.get(C)!],
+      mine: [member(C)],
+      outbox: [
+        {
+          id: waiting,
+          channelId: C,
+          body: "never mind",
+          replyToId: null,
+          format: "v2",
+          createdAt: server.now(),
+        },
+      ],
+    }));
+    const enabled = server.holdNext("isEnabled");
+    store.acquire();
+    await settle();
+    expect(store.getSnapshot().waiting).toBe(1);
+    // The other tab discards it: it leaves the device's outbox.
+    await copy.updateMeta(OWNER, (m) => ({ ...m!, outbox: [] }));
+    enabled();
+    await store.ready();
+    await settle(40);
+    expect(server.calls).not.toContain("send");
+    expect(server.rows.has(waiting)).toBe(false);
+    expect(store.getSnapshot().waiting).toBe(0);
+    expect(copy.metas.get(OWNER)?.outbox).toEqual([]);
+  });
+
+  it("a live row that landed before opening doesn't hide the gap to the newest page", async () => {
+    const { server, copy, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    for (let i = 0; i < 200; i += 1) server.post(uuid(1000 + i), C);
+    const all = server.fullRead([C]);
+    const device = all.slice(10, 10 + PAGE);
+    await copy.updateMeta(OWNER, () => ({
+      ...emptyMeta(),
+      conversations: { [C]: { openedAt: 1, edge: keyOf(device.at(-1)!) } },
+      channels: [server.channels.get(C)!],
+      mine: [member(C)],
+    }));
+    await copy.put(OWNER, device, 500);
+    store.acquire();
+    await store.ready();
+    const fresh = server.post(uuid(5000), C);
+    live.emit({ type: "message", row: fresh, insert: true });
+    await store.open(C);
+    const win = store.getSnapshot().windows[C]!;
+    // The newest page only: the device's old rows aren't drawn against it.
+    expect(ids(win.rows)).toEqual(ids(server.fullRead([C]).slice(-PAGE)));
+    expect(win.hasOlder).toBe(true);
+  });
+
+  it("a failed background read doesn't refuse your next write", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const mine = server.post(uuid(1), C, { authorId: ME });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    // The last read of a gap fill is lost: the store notes the network as gone.
+    server.loseAnswer.add("syncIds");
+    await store.sync("manual");
+    expect(store.getSnapshot().offline).toBe(true);
+    expect(await store.edit(mine.id, "fixed")).toEqual({ ok: true });
+    expect(server.rows.get(mine.id)?.body).toBe("fixed");
+  });
+
+  it("a delta reads only the conversations the store holds", async () => {
+    const scopes: (readonly string[] | undefined)[] = [];
+    const { server, store } = setup({}, (t) => ({
+      ...t,
+      delta: (args) => {
+        scopes.push(args.channelIds);
+        return t.delta(args);
+      },
+    }));
+    server.addChannel(C, { isDefault: true });
+    server.addChannel(D);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await store.sync("manual");
+    expect(scopes.at(-1)).toEqual([C]);
   });
 
   it("no message is lost at a page boundary: 200 share one timestamp", async () => {

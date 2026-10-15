@@ -155,6 +155,8 @@ export type ChatRuntime = {
     since: string;
     after?: { updatedAt: string; id: string } | null;
     limit: number;
+    /** Only these conversations (omitted: the whole workspace). */
+    channelIds?: readonly string[];
   }): Promise<ChatResult<ChatMessage[]>>;
   /** The access check: what this person may read now (CV-2b). */
   syncIds(workspaceId: string, since: string | null): Promise<ChatResult<ChatSyncRow[]>>;

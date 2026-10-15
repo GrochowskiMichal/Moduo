@@ -9,7 +9,7 @@
 // error state ("Typing isn't available"), never an empty line (AC1.9).
 
 import type { ChatRuntime } from "../model";
-import type { ChatSocket } from "../realtime";
+import { type ChatSocket, leaveTopic, whenTopicFree } from "../realtime";
 
 export type TypingEntry = {
   userId: string;
@@ -30,10 +30,12 @@ const TYPING_ERROR = "Typing isn't available";
 
 type RealtimeChannel = ReturnType<ChatSocket["channel"]>;
 
+const typingTopic = (channelId: string) => `chat:typing:${channelId}`;
+
 export class ChatTypingStore {
   private snapshot: ChatTypingSnapshot = { entries: [], error: null };
   private listeners = new Set<() => void>();
-  private topics = new Map<string, { channel: RealtimeChannel; refs: number }>();
+  private topics = new Map<string, { channel: RealtimeChannel | null; refs: number }>();
   private lastSent = new Map<string, number>();
   private sweep: ReturnType<typeof setInterval> | null = null;
 
@@ -66,23 +68,28 @@ export class ChatTypingStore {
   watch(channelId: string): () => void {
     let entry = this.topics.get(channelId);
     if (!entry) {
-      const channel = this.socket.channel(`chat:typing:${channelId}`, {
-        config: { private: true },
+      const fresh: { channel: RealtimeChannel | null; refs: number } = { channel: null, refs: 0 };
+      entry = fresh;
+      this.topics.set(channelId, fresh);
+      const topic = typingTopic(channelId);
+      whenTopicFree(this.socket, topic, () => {
+        // Released (or disposed) while an earlier channel on the topic was leaving.
+        if (this.topics.get(channelId) !== fresh) return;
+        const channel = this.socket.channel(topic, { config: { private: true } });
+        fresh.channel = channel;
+        channel
+          .on("broadcast", { event: "typing" }, (msg: { payload: unknown }) =>
+            this.receive(msg.payload),
+          )
+          .subscribe((status) => {
+            if (this.topics.get(channelId) !== fresh) return;
+            if (status === "SUBSCRIBED") {
+              if (this.snapshot.error) this.set({ error: null });
+            } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+              this.set({ error: TYPING_ERROR });
+            }
+          });
       });
-      channel
-        .on("broadcast", { event: "typing" }, (msg: { payload: unknown }) =>
-          this.receive(msg.payload),
-        )
-        .subscribe((status) => {
-          if (this.topics.get(channelId)?.channel !== channel) return;
-          if (status === "SUBSCRIBED") {
-            if (this.snapshot.error) this.set({ error: null });
-          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            this.set({ error: TYPING_ERROR });
-          }
-        });
-      entry = { channel, refs: 0 };
-      this.topics.set(channelId, entry);
     }
     const held = entry;
     held.refs += 1;
@@ -93,7 +100,7 @@ export class ChatTypingStore {
       held.refs -= 1;
       if (held.refs > 0 || this.topics.get(channelId) !== held) return;
       this.topics.delete(channelId);
-      void this.socket.removeChannel(held.channel);
+      if (held.channel) leaveTopic(this.socket, typingTopic(channelId), held.channel);
       this.set({
         entries: this.snapshot.entries.filter((t) => t.channelId !== channelId),
         error: this.topics.size === 0 ? null : this.snapshot.error,
@@ -148,7 +155,9 @@ export class ChatTypingStore {
   }
 
   dispose(): void {
-    for (const t of this.topics.values()) void this.socket.removeChannel(t.channel);
+    for (const [id, t] of this.topics) {
+      if (t.channel) leaveTopic(this.socket, typingTopic(id), t.channel);
+    }
     this.topics.clear();
     if (this.sweep) clearInterval(this.sweep);
     this.sweep = null;

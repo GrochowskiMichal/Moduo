@@ -4,7 +4,7 @@
 // state ("Presence isn't available"), never "everyone away" (AC1.9). The
 // "Show me as online" preference and the presence shapes are CV-17's.
 
-import type { ChatSocket } from "../realtime";
+import { type ChatSocket, leaveTopic, whenTopicFree } from "../realtime";
 
 export type ChatPresenceStatus = "connecting" | "online" | "error";
 
@@ -24,6 +24,7 @@ export class ChatPresenceStore {
   private snapshot: ChatPresenceSnapshot = CONNECTING;
   private listeners = new Set<() => void>();
   private channel: RealtimeChannel | null = null;
+  private opening: object | null = null;
   private refs = 0;
 
   constructor(
@@ -60,33 +61,46 @@ export class ChatPresenceStore {
   }
 
   private open(): void {
-    const channel = this.socket.channel(`chat:${this.workspaceId}`, {
-      config: { private: true, presence: { key: this.selfId } },
-    });
-    channel
-      .on("presence", { event: "sync" }, () => {
-        if (this.channel !== channel) return;
-        this.set({
-          status: "online",
-          online: new Set(Object.keys(channel.presenceState())),
-          error: null,
-        });
-      })
-      .subscribe((status) => {
-        if (this.channel !== channel) return;
-        if (status === "SUBSCRIBED") {
-          void channel.track({ at: new Date().toISOString() });
-        } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          this.set({ status: "error", online: new Set(), error: PRESENCE_ERROR });
-        }
+    // A marker until the channel exists: a release meanwhile clears it.
+    const ticket = {};
+    this.opening = ticket;
+    const topic = this.topic();
+    whenTopicFree(this.socket, topic, () => {
+      if (this.opening !== ticket) return;
+      this.opening = null;
+      const channel = this.socket.channel(topic, {
+        config: { private: true, presence: { key: this.selfId } },
       });
-    this.channel = channel;
+      channel
+        .on("presence", { event: "sync" }, () => {
+          if (this.channel !== channel) return;
+          this.set({
+            status: "online",
+            online: new Set(Object.keys(channel.presenceState())),
+            error: null,
+          });
+        })
+        .subscribe((status) => {
+          if (this.channel !== channel) return;
+          if (status === "SUBSCRIBED") {
+            void channel.track({ at: new Date().toISOString() });
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            this.set({ status: "error", online: new Set(), error: PRESENCE_ERROR });
+          }
+        });
+      this.channel = channel;
+    });
+  }
+
+  private topic(): string {
+    return `chat:${this.workspaceId}`;
   }
 
   private close(): void {
     const channel = this.channel;
     this.channel = null;
-    if (channel) void this.socket.removeChannel(channel);
+    this.opening = null;
+    if (channel) leaveTopic(this.socket, this.topic(), channel);
     this.set(CONNECTING);
   }
 }

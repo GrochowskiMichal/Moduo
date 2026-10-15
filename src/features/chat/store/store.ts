@@ -57,6 +57,7 @@ import { planAccess } from "./access";
 import {
   CHAT_COPY_VERSION,
   type ChatDeviceCopy,
+  type ChatHeldConversation,
   type ChatMeta,
   type ChatOutboxEntry,
   chatDeviceCopy,
@@ -189,6 +190,8 @@ export const MEMORY_KEEP = PAGE;
 export const DELTA_LIMIT = 1000;
 /** A delta further behind than this many pages stops; open windows read their newest page again. */
 export const DELTA_MAX_PAGES = 20;
+/** At most this many conversations named in a delta (the request's URL); more: the workspace. */
+export const DELTA_SCOPE_MAX = 100;
 
 export type ChatStoreOptions = {
   copy?: ChatDeviceCopy;
@@ -250,13 +253,13 @@ export class ChatStore {
   /** Outbox ids this tab sent or discarded (another tab's waiting sends are kept). */
   private handled = new Set<string>();
   private inFlight: string | null = null;
-  /** Deleted while being sent: deleted on the server once its answer lands. */
-  private deleteAfterSend = new Set<string>();
+  /** Waiting sends read from the device at start: another tab may send or discard them. */
+  private adopted = new Set<string>();
   private draining: Promise<void> | null = null;
   private drainAgain = false;
   private chainState = new Map<string, { loading: boolean; loaded: boolean }>();
   /** Conversations the device copy holds rows for (meta.conversations). */
-  private held: Record<string, { openedAt: number }> = {};
+  private held: Record<string, ChatHeldConversation> = {};
   private cursor: string | null = null;
   private accessSince: string | null = null;
   private drafts: Record<string, string> = {};
@@ -369,7 +372,7 @@ export class ChatStore {
       unread: Object.fromEntries(this.unread),
       windows,
       chains,
-      waiting: this.outbox.length,
+      waiting: this.outbox.filter((e) => !e.deleted).length,
     };
   }
 
@@ -403,7 +406,7 @@ export class ChatStore {
     rows.sort(compareRows);
     if (!conv.hi) {
       for (const entry of this.outbox) {
-        if (entry.channelId === channelId && !conv.rows.has(entry.id)) {
+        if (entry.channelId === channelId && !entry.deleted && !conv.rows.has(entry.id)) {
           rows.push(this.unsentRow(entry));
         }
       }
@@ -432,7 +435,12 @@ export class ChatStore {
     }
     replies.sort(compareRows);
     for (const entry of this.outbox) {
-      if (entry.replyToId && this.rootOf(entry.replyToId) === rootId && !this.where.has(entry.id)) {
+      if (
+        !entry.deleted &&
+        entry.replyToId &&
+        this.rootOf(entry.replyToId) === rootId &&
+        !this.where.has(entry.id)
+      ) {
         replies.push(this.unsentRow(entry));
       }
     }
@@ -640,6 +648,7 @@ export class ChatStore {
     if (meta.v !== CHAT_COPY_VERSION) {
       // An older shape: its rows go, its waiting sends stay.
       this.outbox = Array.isArray(meta.outbox) ? meta.outbox : [];
+      for (const e of this.outbox) this.adopted.add(e.id);
       await this.copy.deleteWhere((o) => o === this.owner);
       this.metaDirty = true;
       return;
@@ -653,6 +662,7 @@ export class ChatStore {
     this.accessSince = meta.accessSince;
     this.drafts = { ...meta.drafts };
     this.outbox = [...meta.outbox];
+    for (const e of this.outbox) this.adopted.add(e.id);
     if (this.channels.size > 0) {
       this.status = "ready";
       this.fromDevice = true;
@@ -802,6 +812,16 @@ export class ChatStore {
     this.notify();
   }
 
+  /**
+   * The conversations a delta reads: those the store holds (rows of the others
+   * aren't kept). A row moved away is named by the move line its held source
+   * gets. Too many to list in a request: the whole workspace.
+   */
+  private deltaScope(): string[] | undefined {
+    const ids = Object.keys(this.held);
+    return ids.length > 0 && ids.length <= DELTA_SCOPE_MAX ? ids : undefined;
+  }
+
   /** Rows changed since the cursor, five minutes early, in (updated_at, id) pages. */
   private async runDelta(): Promise<boolean> {
     if (!this.cursor) return true;
@@ -814,6 +834,7 @@ export class ChatStore {
         since,
         after,
         limit: this.deltaLimit,
+        channelIds: this.deltaScope(),
       });
       if (res.error) {
         this.noteError(res.error);
@@ -836,6 +857,8 @@ export class ChatStore {
           conv.loaded = false;
           this.touch(id);
         }
+        // Pages by change time: new rows read so far may sit past rows it didn't reach.
+        for (const id of Object.keys(this.held)) this.setEdge(id, null);
         if (this.openId) void this.open(this.openId);
         break;
       }
@@ -958,12 +981,17 @@ export class ChatStore {
     this.landedAt.set(row.id, ++this.seq);
     this.dirtyRows.set(row.id, row);
     this.touch(channelId);
+    // Live while the window reaches the newest message: the run goes on.
+    if (conv.loaded && !conv.hi) this.advanceEdge(channelId, keyOf(row));
     // A confirmed send leaves the outbox (its echo may beat the op's answer).
     const i = this.outbox.findIndex((e) => e.id === row.id);
     if (i >= 0 && row.authorId === this.userId) {
-      this.outbox.splice(i, 1);
+      const [entry] = this.outbox.splice(i, 1);
       this.handled.add(row.id);
+      this.adopted.delete(row.id);
       this.metaDirty = true;
+      // Deleted while it was on its way: now it's on the server, delete it there.
+      if (entry?.deleted && !row.deletedAt) queueMicrotask(() => void this.remove(row.id));
     }
     if (isMoveLine(row)) {
       const moved = row.event?.ids;
@@ -1067,6 +1095,24 @@ export class ChatStore {
     this.chainCache.clear();
   }
 
+  private edgeOf(channelId: string): ChatKey | null {
+    return this.held[channelId]?.edge ?? null;
+  }
+
+  private setEdge(channelId: string, edge: ChatKey | null): void {
+    const held = this.held[channelId];
+    if (!held) return;
+    const was = held.edge ?? null;
+    if (was === edge || (was && edge && compareKeys(was, edge) === 0)) return;
+    this.held[channelId] = { ...held, edge };
+    this.metaDirty = true;
+  }
+
+  private advanceEdge(channelId: string, key: ChatKey): void {
+    const edge = this.edgeOf(channelId);
+    if (!edge || compareKeys(key, edge) > 0) this.setEdge(channelId, key);
+  }
+
   private newestHeld(conv: Conv): ChatKey | null {
     let newest: ChatKey | null = null;
     for (const row of conv.rows.values()) {
@@ -1141,11 +1187,14 @@ export class ChatStore {
     this.wentOnline();
     const page = res.data;
     const full = page.length === PAGE;
-    const heldNewest = this.newestHeld(conv);
+    // Where the held run that reaches the newest page ends. Not the newest row
+    // held: a live row or a delta's row that landed while the conversation
+    // wasn't open sits past a gap and would hide it.
+    const edge = this.edgeOf(channelId);
     const pageLo = page.length > 0 ? keyOf(page[0]!) : null;
     this.reconcile(conv, full ? pageLo : null, null, new Set(page.map((r) => r.id)), start);
     for (const row of page) this.landRow(row);
-    if (pageLo && full && heldNewest && compareKeys(pageLo, heldNewest) > 0) {
+    if (pageLo && full && (!edge || compareKeys(pageLo, edge) > 0)) {
       // A gap between what was held and the newest page: start again at the page.
       const older = [...conv.rows.values()].filter((r) => compareKeys(keyOf(r), pageLo) < 0);
       for (const row of older) {
@@ -1165,6 +1214,8 @@ export class ChatStore {
     }
     conv.hi = null;
     conv.loaded = true;
+    const pageHi = page.length > 0 ? keyOf(page[page.length - 1]!) : null;
+    if (pageHi) this.advanceEdge(channelId, pageHi);
     if (!conv.newAfter) conv.newAfter = this.markKey(channelId);
     this.touch(channelId);
     this.notify();
@@ -1219,6 +1270,8 @@ export class ChatStore {
       for (const row of res.data) this.landRow(row);
       const last = res.data[res.data.length - 1];
       current.hi = res.data.length === PAGE && last ? keyOf(last) : null;
+      // Reached the newest message: the window is the run that ends there.
+      if (!current.hi && last) this.setEdge(channelId, keyOf(last));
     }
     this.touch(channelId);
     this.notify();
@@ -1480,7 +1533,9 @@ export class ChatStore {
 
   /** Mark unread from a message (it and everything after it count again). */
   async markUnread(channelId: string, messageId: string): Promise<ChatWriteResult> {
-    if (this.offline) return { ok: false, offline: true, message: "Offline" };
+    // The browser's own flag: a failed background read doesn't refuse a write
+    // (the write's own answer says whether the network is there).
+    if (browserOffline()) return { ok: false, offline: true, message: "Offline" };
     const res = await this.transport.markUnread({ channelId, messageId });
     if (res.error) return this.failed(res.error);
     const conv = this.convs.get(channelId);
@@ -1544,14 +1599,33 @@ export class ChatStore {
 
   /** Throw away an unsent message. */
   discard(id: string): void {
-    const i = this.outbox.findIndex((e) => e.id === id);
-    if (i < 0) return;
-    const [entry] = this.outbox.splice(i, 1);
-    this.handled.add(id);
-    if (entry) this.touch(entry.channelId);
-    this.metaDirty = true;
+    if (!this.dropEntry(id)) return;
     this.notify();
     void this.persistNow();
+  }
+
+  /** An outbox entry leaves (sent, discarded or gone in another tab). Doesn't notify. */
+  private dropEntry(id: string): boolean {
+    const i = this.outbox.findIndex((e) => e.id === id);
+    if (i < 0) return false;
+    const [entry] = this.outbox.splice(i, 1);
+    this.handled.add(id);
+    this.adopted.delete(id);
+    if (entry) this.touch(entry.channelId);
+    this.metaDirty = true;
+    return true;
+  }
+
+  /**
+   * A waiting send this tab read from the device that another tab has since
+   * sent or discarded (it left the device's outbox): it isn't sent from here.
+   */
+  private async handledElsewhere(id: string): Promise<boolean> {
+    const meta = await this.copy.readMeta(this.owner);
+    if (meta?.v !== CHAT_COPY_VERSION || meta.outbox.some((e) => e.id === id)) return false;
+    this.dropEntry(id);
+    this.notify();
+    return true;
   }
 
   /** Send what waits, in order, each under its own id. */
@@ -1581,6 +1655,8 @@ export class ChatStore {
         this.notify();
         return;
       }
+      if (this.adopted.has(entry.id) && (await this.handledElsewhere(entry.id))) continue;
+      if (!this.running || this.disposed) return;
       this.inFlight = entry.id;
       this.touch(entry.channelId);
       this.notify();
@@ -1600,15 +1676,22 @@ export class ChatStore {
           this.notify();
           return;
         }
-        entry.failed = res.error.message || "Not sent";
+        if (entry.deleted) {
+          // Refused, and you had deleted it anyway: it goes.
+          this.dropEntry(entry.id);
+        } else {
+          entry.failed = res.error.message || "Not sent";
+        }
       } else {
         this.wentOnline();
         const i = this.outbox.findIndex((e) => e.id === entry.id);
-        if (i >= 0) this.outbox.splice(i, 1);
+        const sent = i >= 0 ? this.outbox.splice(i, 1)[0] : undefined;
         this.handled.add(entry.id);
+        this.adopted.delete(entry.id);
         this.ensureConv(res.data.channelId);
         this.landRow(res.data);
-        if (this.deleteAfterSend.delete(entry.id)) void this.remove(entry.id);
+        // Deleted while it was on its way (its echo didn't come first).
+        if (sent?.deleted) void this.remove(entry.id);
       }
       this.touch(entry.channelId);
       this.metaDirty = true;
@@ -1631,7 +1714,7 @@ export class ChatStore {
     apply: (row: ChatMessage) => ChatMessage,
     call: () => Promise<ChatResult<ChatMessage>>,
   ): Promise<ChatWriteResult> {
-    if (this.offline) return { ok: false, offline: true, message: "Offline" };
+    if (browserOffline()) return { ok: false, offline: true, message: "Offline" };
     const channelId = this.where.get(id);
     const op = nextOp++;
     this.overlays.push({ op, id, apply });
@@ -1661,10 +1744,19 @@ export class ChatStore {
   }
 
   remove(id: string): Promise<ChatWriteResult> {
-    if (this.outbox.some((e) => e.id === id)) {
-      // On its way: it may land on the server, so delete it there once it does.
-      if (this.inFlight === id) this.deleteAfterSend.add(id);
-      this.discard(id);
+    const entry = this.outbox.find((e) => e.id === id);
+    if (entry) {
+      if (this.inFlight === id) {
+        // On its way: it may land on the server (even if its answer is lost),
+        // so it stays out of sight and is deleted there once it does.
+        entry.deleted = true;
+        this.touch(entry.channelId);
+        this.metaDirty = true;
+        this.notify();
+        void this.persistNow();
+      } else {
+        this.discard(id);
+      }
       return Promise.resolve({ ok: true });
     }
     const at = new Date().toISOString();
@@ -1818,6 +1910,16 @@ export class ChatStore {
 
   private metaRecord(stored: ChatMeta | null): ChatMeta {
     const current = stored?.v === CHAT_COPY_VERSION ? stored : null;
+    if (current) {
+      // A waiting send read from the device that another tab sent or discarded
+      // since: writing it back would bring it back.
+      const stillThere = new Set(current.outbox.map((e) => e.id));
+      for (const id of [...this.adopted]) {
+        if (!stillThere.has(id) && this.inFlight !== id && this.dropEntry(id)) {
+          queueMicrotask(() => this.notify());
+        }
+      }
+    }
     const mine = new Set(this.outbox.map((e) => e.id));
     // Another tab's waiting sends stay; what this tab sent or discarded goes.
     const others = (current?.outbox ?? []).filter(

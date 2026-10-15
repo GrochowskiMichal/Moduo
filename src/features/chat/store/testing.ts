@@ -257,10 +257,11 @@ export class FakeChatServer {
           const row = this.rows.get(id);
           return ok(row && this.readable.has(row.channelId) ? row : null);
         }),
-      delta: ({ since, after, limit }) =>
+      delta: ({ since, after, limit, channelIds }) =>
         this.gate("delta", () => {
           const rows = [...this.rows.values()]
             .filter((r) => this.readable.has(r.channelId) && us(r.updatedAt) >= us(since))
+            .filter((r) => !channelIds || channelIds.includes(r.channelId))
             .filter(
               (r) =>
                 !after ||

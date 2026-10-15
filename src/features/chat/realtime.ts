@@ -50,6 +50,42 @@ export type ChatLiveSource = (
 export type ChatSocket = Pick<SupabaseClient, "channel" | "removeChannel">;
 
 type Payload = { eventType?: string; new?: unknown; old?: unknown };
+type Channel = ReturnType<ChatSocket["channel"]>;
+
+// realtime-js hands back the channel that is still leaving when a topic is
+// asked for again before its leave finished, and subscribing to that one does
+// nothing: a quick release-and-hold (a switch back, a remount) would end with
+// no live channel. A named topic (typing, presence) joins again once it left.
+const leaving = new WeakMap<ChatSocket, Map<string, Promise<void>>>();
+
+/** Leave a topic; joining it again through `whenTopicFree` waits for this. */
+export function leaveTopic(socket: ChatSocket, topic: string, channel: Channel): void {
+  let topics = leaving.get(socket);
+  if (!topics) {
+    topics = new Map();
+    leaving.set(socket, topics);
+  }
+  const map = topics;
+  const done: Promise<void> = Promise.resolve(socket.removeChannel(channel))
+    .then(
+      () => undefined,
+      () => undefined,
+    )
+    .finally(() => {
+      if (map.get(topic) === done) map.delete(topic);
+    });
+  map.set(topic, done);
+}
+
+/** Run `join` once no earlier channel on the topic is still leaving (at once when none is). */
+export function whenTopicFree(socket: ChatSocket, topic: string, join: () => void): void {
+  const wait = leaving.get(socket)?.get(topic);
+  if (wait) void wait.then(join);
+  else join();
+}
+
+/** Each live source's channels get their own topics (they name nothing shared). */
+let generation = 0;
 
 const str = (v: unknown) => (typeof v === "string" ? v : null);
 const field = (row: unknown, key: string) =>
@@ -104,7 +140,15 @@ export function postgresChangesSource(socket: ChatSocket): ChatLiveSource {
           const row = p.eventType === "DELETE" ? p.old : p.new;
           const channelId = field(row, "channel_id");
           if (!channelId) return;
-          if (p.eventType === "DELETE" || memberLeft(row)) {
+          // Realtime doesn't filter deletes: anyone's removed row arrives (its
+          // old record is the key, which names the person). Only yours counts.
+          if (field(row, "user_id") !== me) return;
+          if (p.eventType === "DELETE") {
+            sink({ type: "member-left", channelId });
+            return;
+          }
+          if (field(row, "workspace_id") !== ws) return;
+          if (memberLeft(row)) {
             sink({ type: "member-left", channelId });
             return;
           }
@@ -120,8 +164,9 @@ export function postgresChangesSource(socket: ChatSocket): ChatLiveSource {
       },
     ];
 
+    const n = ++generation;
     const channels = bindings.map((b) => {
-      const channel = socket.channel(`chat-${b.name}:${ws}:${me}`);
+      const channel = socket.channel(`chat-${b.name}:${ws}:${me}:${n}`);
       // The installed realtime-js types don't name `select`; the server reads it
       // (realtime.subscription.selected_columns, spike 3).
       const binding = {

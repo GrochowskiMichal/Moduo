@@ -69,17 +69,20 @@ function fakeSocket() {
 }
 
 const WS = "ws-1";
+const settle = () => new Promise((r) => setTimeout(r, 0));
 const ME = "me";
 
 describe("postgresChangesSource", () => {
   it("binds the message table with `select`, each source its own channel", () => {
     const { socket, channels } = fakeSocket();
     const stop = postgresChangesSource(socket)({ workspaceId: WS, userId: ME }, () => {});
-    expect(channels.map((c) => c.topic)).toEqual([
-      `chat-messages:${WS}:${ME}`,
-      `chat-channels:${WS}:${ME}`,
-      `chat-members:${WS}:${ME}`,
-      `chat-catchup:${WS}:${ME}`,
+    const topics = channels.map((c) => c.topic);
+    const n = topics[0]!.split(":").at(-1);
+    expect(topics).toEqual([
+      `chat-messages:${WS}:${ME}:${n}`,
+      `chat-channels:${WS}:${ME}:${n}`,
+      `chat-members:${WS}:${ME}:${n}`,
+      `chat-catchup:${WS}:${ME}:${n}`,
     ]);
     const messages = channels[0]!.bindings.find((b) => b.kind === "postgres_changes")!;
     expect(messages.filter).toMatchObject({
@@ -136,6 +139,40 @@ describe("postgresChangesSource", () => {
     messages!.status?.("CHANNEL_ERROR");
     expect(events.at(-1)).toEqual({ type: "lost", source: "messages" });
   });
+
+  it("only your own membership leaves: Realtime doesn't filter deletes (CV-3 review)", () => {
+    const { socket, channels, fire } = fakeSocket();
+    const events: ChatLiveEvent[] = [];
+    postgresChangesSource(socket)({ workspaceId: WS, userId: ME }, (e) => events.push(e));
+    const members = channels[2]!;
+    // Someone else's row removed (their account went): the old record is the key.
+    fire(members, "postgres_changes", {
+      eventType: "DELETE",
+      new: {},
+      old: { channel_id: "general", user_id: "ana" },
+    });
+    // Your row in another workspace stamped as left.
+    fire(members, "postgres_changes", {
+      eventType: "UPDATE",
+      new: { channel_id: "c9", user_id: ME, workspace_id: "ws-2", left_at: "2026-10-14T12:00:00Z" },
+    });
+    expect(events).toEqual([]);
+    fire(members, "postgres_changes", {
+      eventType: "DELETE",
+      new: {},
+      old: { channel_id: "general", user_id: ME },
+    });
+    expect(events).toEqual([{ type: "member-left", channelId: "general" }]);
+  });
+
+  it("a restart joins new channels, never the ones still leaving", () => {
+    const { socket, channels } = fakeSocket();
+    const source = postgresChangesSource(socket);
+    source({ workspaceId: WS, userId: ME }, () => {})();
+    source({ workspaceId: WS, userId: ME }, () => {});
+    const topics = channels.map((c) => c.topic);
+    expect(new Set(topics).size).toBe(8);
+  });
 });
 
 describe("ChatTypingStore", () => {
@@ -153,6 +190,24 @@ describe("ChatTypingStore", () => {
     expect(channels[0]!.removed).toBe(true);
     typing.watch("b");
     expect(channels.at(-1)!.topic).toBe("chat:typing:b");
+  });
+
+  it("watched again while its topic is still leaving: joins once it has left", async () => {
+    const { socket, channels } = fakeSocket();
+    const typing = new ChatTypingStore(socket, { typing: async () => {} }, ME);
+    typing.watch("a")();
+    const release = typing.watch("a");
+    expect(channels).toHaveLength(1);
+    await settle();
+    expect(channels.map((c) => [c.topic, c.removed])).toEqual([
+      ["chat:typing:a", true],
+      ["chat:typing:a", false],
+    ]);
+    // Released before it joined: nothing joins.
+    release();
+    typing.watch("a")();
+    await settle();
+    expect(channels).toHaveLength(2);
   });
 
   it("tells the server at most once every 3 s, stops at once, and never shows yourself", () => {
@@ -221,6 +276,20 @@ describe("ChatPresenceStore", () => {
     expect([...presence.getSnapshot().online].sort()).toEqual(["ana", ME]);
     release();
     expect(ch.removed).toBe(true);
+  });
+
+  it("held again while the last channel is still leaving: joins once it has left", async () => {
+    const { socket, channels } = fakeSocket();
+    const presence = new ChatPresenceStore(socket, WS, ME);
+    presence.acquire()();
+    const release = presence.acquire();
+    // realtime-js would hand back the leaving channel: nothing joins yet.
+    expect(channels).toHaveLength(1);
+    await settle();
+    expect(channels).toHaveLength(2);
+    expect(channels[1]!.removed).toBe(false);
+    release();
+    expect(channels[1]!.removed).toBe(true);
   });
 
   it("a refused join shows as an error, never as everyone away (AC1.9)", () => {

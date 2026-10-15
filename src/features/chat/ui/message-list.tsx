@@ -208,7 +208,8 @@ export function MessageList({
       <button
         type="button"
         onClick={() => {
-          onJumpToLatest?.();
+          // Only a window that doesn't reach the newest message reads again.
+          if (hasNewer) onJumpToLatest?.();
           scrollToBottom(true);
         }}
         className={cn(

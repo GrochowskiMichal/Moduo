@@ -4,7 +4,7 @@
 // boundary: CV-0 spike 2's gotcha). Ids are uuids: Postgres orders them
 // bytewise, which for lowercase text is the string order.
 
-import { timestampMicros } from "../../tasks/live";
+import { stampMinus, timestampMicros } from "../../tasks/live";
 import type { ChatKey, ChatMessage } from "../model";
 
 const micros = (at: string) => timestampMicros(at) ?? 0;
@@ -37,14 +37,7 @@ export function laterStamp(a: string | null, b: string | null): string | null {
 }
 
 /** A server stamp moved back by `ms`, keeping its microseconds (the delta's lookback). */
-export function stampMinus(stamp: string, ms: number): string {
-  const at = timestampMicros(stamp);
-  if (at === null) return stamp;
-  const moved = at - ms * 1000;
-  const whole = Math.floor(moved / 1000);
-  const frac = String(((moved % 1000) + 1000) % 1000).padStart(3, "0");
-  return new Date(whole).toISOString().replace(/Z$/, `${frac}+00:00`);
-}
+export { stampMinus };
 
 /** Whether `incoming` is a newer version than `held` by the server's stamp. */
 export function isNewerRow(incoming: ChatMessage, held: ChatMessage | undefined): boolean {

@@ -147,12 +147,13 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return ok(mapMessage(data));
       }),
 
-    delta: ({ workspaceId, since, after, limit }) =>
+    delta: ({ workspaceId, since, after, limit, channelIds }) =>
       attempt(async () => {
         let query = db()
           .from("chat_messages")
           .select(MESSAGE_COLUMNS)
           .eq("workspace_id", workspaceId);
+        if (channelIds) query = query.in("channel_id", [...channelIds]);
         // Both forms stay a range on (workspace_id, updated_at, id) with the >= bound.
         query = after
           ? query

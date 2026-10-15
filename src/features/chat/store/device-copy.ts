@@ -17,7 +17,14 @@
 // the truth. Where IndexedDB is missing (tests, a locked-down browser) the
 // memory copy stands in, and the store opens from the server.
 
-import type { ChatChannel, ChatMember, ChatMessage, ChatPerson, ChatUnread } from "../model";
+import type {
+  ChatChannel,
+  ChatKey,
+  ChatMember,
+  ChatMessage,
+  ChatPerson,
+  ChatUnread,
+} from "../model";
 import { compareRows, sortableAt } from "./keys";
 
 /** Bumped when the stored shape changes: an older copy's rows go (its outbox is kept). */
@@ -34,13 +41,20 @@ export type ChatOutboxEntry = {
   createdAt: string;
   /** The server refused it: "Not sent · Retry" until retried or discarded. */
   failed?: string;
+  /** Deleted while it was being sent: hidden, and deleted on the server once it lands there. */
+  deleted?: boolean;
 };
+
+export type ChatHeldConversation = { openedAt: number; edge?: ChatKey | null };
 
 export type ChatMeta = {
   v: number;
   savedAt: number;
   /** Every conversation the copy holds rows for: the access check covers exactly these. */
-  conversations: Record<string, { openedAt: number }>;
+  /** `edge`: the newest message of the run that reaches the newest page (a newer
+   *  page that starts after it leaves a gap). Rows that land while the
+   *  conversation isn't open don't move it. */
+  conversations: Record<string, ChatHeldConversation>;
   /** The newest server `updated_at` a delta has read. */
   cursor: string | null;
   /** When the access check last ran (the server's clock). */
@@ -70,13 +84,8 @@ export function emptyMeta(): ChatMeta {
   };
 }
 
-export function ownerKey(userId: string, workspaceId: string): string {
-  return `${userId}:${workspaceId}`;
-}
-
-export function isOwnerOf(owner: string, userId: string): boolean {
-  return owner.startsWith(`${userId}:`);
-}
+// The owner key is the sync copy's record key (`<person>:<workspace>`).
+export { cacheKey as ownerKey, isKeyOf as isOwnerOf } from "../../../lib/sync/cache";
 
 export interface ChatDeviceCopy {
   readMeta(owner: string): Promise<ChatMeta | null>;

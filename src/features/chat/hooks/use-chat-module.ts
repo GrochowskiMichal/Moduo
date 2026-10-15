@@ -313,7 +313,8 @@ export function useChatModule({
   /** "Mark as read": the read mark moves to the newest message held. */
   const markRead = useCallback(
     (channelId: string) => {
-      const rows = snap.windows[channelId]?.rows ?? [];
+      // Read at call time: depending on the snapshot would rebuild the actions on every notify.
+      const rows = store?.getSnapshot().windows[channelId]?.rows ?? [];
       for (let i = rows.length - 1; i >= 0; i -= 1) {
         const m = rows[i]!;
         if (m.sendState) continue;
@@ -321,7 +322,7 @@ export function useChatModule({
         return;
       }
     },
-    [store, snap.windows],
+    [store],
   );
 
   const markUnread = useCallback(
