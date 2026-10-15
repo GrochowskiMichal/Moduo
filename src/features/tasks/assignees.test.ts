@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import type { WorkspaceMember } from "../workspaces/types";
+import { mapMember, withOwnName } from "../workspaces/workspace-mappers";
 import {
   assigneeLabel,
   assigneeOptions,
@@ -96,5 +97,42 @@ describe("whose attention a task needs (D1-6)", () => {
     expect(
       taskAttentionUserId({ assigneeId: null, creatorId: "me", creatorUnknown: true }),
     ).toBeNull();
+  });
+});
+
+describe("profile photos reach Tasks (MOD-96)", () => {
+  it("carries each member's photo from the listMembers row to the assignee", () => {
+    // The exact `listMembers` row shape (`*, profiles(*)`), through the same
+    // mappers the workspace provider runs, to what every Tasks avatar reads.
+    const photo =
+      "https://example.supabase.co/storage/v1/object/public/avatars/profiles/u-mike/avatar.png?v=1";
+    const rows = [
+      {
+        id: "m1",
+        workspace_id: "w1",
+        user_id: "u-mike",
+        role: "editor",
+        is_active: true,
+        perms: ["tasks.view", "tasks.edit"],
+        profiles: { id: "u-mike", display_name: "Mike Grochowski", avatar_url: photo },
+      },
+      {
+        id: "m2",
+        workspace_id: "w1",
+        user_id: "u-me",
+        role: "owner",
+        is_active: true,
+        perms: ["tasks.view", "tasks.edit"],
+        profiles: { id: "u-me", display_name: null, avatar_url: null },
+      },
+    ];
+    const members = withOwnName(rows.map(mapMember), "u-me", "maciej@moduo.app");
+    const people = toAssignees(members, "u-me");
+    expect(people.map((p) => [p.userId, p.avatarUrl])).toEqual([
+      ["u-me", null],
+      ["u-mike", photo],
+    ]);
+    // Someone without a photo still has their own name for the initials.
+    expect(people[0].fullName).toBe("maciej");
   });
 });
