@@ -132,7 +132,7 @@ export function ConversationToolbar({
                 </>
               ) : null}
               {isChannel && (canManage || member) ? <DropdownMenuSeparator /> : null}
-              {isChannel && canManage && !paused ? (
+              {isChannel && canManage && !paused && (!channel.isDefault || channel.archivedAt) ? (
                 <DropdownMenuItem onSelect={() => onArchive?.(!channel.archivedAt)}>
                   {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
                 </DropdownMenuItem>

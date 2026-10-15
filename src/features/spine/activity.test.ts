@@ -148,6 +148,23 @@ describe("spineActivityLine", () => {
     );
   });
 
+  it("renders a conversation's message changes for Details' history (CV-8b)", () => {
+    const m = { message_id: "m1" };
+    expect(spineActivityLine(entry("chat.pin", { ...m, pinned: true }))).toBe("pinned a message");
+    expect(spineActivityLine(entry("chat.pin", { ...m, pinned: false }))).toBe(
+      "unpinned a message",
+    );
+    expect(spineActivityLine(entry("chat.message_edit", m))).toBe("edited a message");
+    expect(spineActivityLine(entry("chat.message_delete", m))).toBe("deleted a message");
+    expect(spineActivityLine(entry("chat.message_restore", m))).toBe("brought back a message");
+    expect(spineActivityLine(entry("chat.react", { ...m, key: "👍", on: true }))).toBe(
+      "reacted to a message",
+    );
+    expect(spineActivityLine(entry("chat.react", { ...m, key: "👍", on: false }))).toBe(
+      "took back a reaction",
+    );
+  });
+
   it("renders chat's bell rows by why they reached you (CV-5)", () => {
     const at = { channel_name: "plans", excerpt: "standup moved" };
     expect(spineActivityLine(entry("chat.mention", { ...at, reason: "person" }))).toBe(

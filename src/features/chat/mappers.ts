@@ -10,6 +10,7 @@ import {
 } from "@contracts/vocabularies";
 import type {
   ChatChannel,
+  ChatHistoryEntry,
   ChatMember,
   ChatMessage,
   ChatPerson,
@@ -192,5 +193,22 @@ export function mapUserChatPrefs(raw: unknown): UserChatPrefs {
     showFocusTask: flag(r.show_focus_task, false),
     noticeShowText: flag(r.notice_show_text, true),
     emailWhenAway: flag(r.email_when_away, true),
+  };
+}
+
+export function mapHistory(raw: unknown): ChatHistoryEntry | null {
+  const r = asRow(raw);
+  const id = str(r?.id);
+  const op = str(r?.op);
+  const createdAt = str(r?.created_at);
+  if (!r || !id || !op || !createdAt) return null;
+  return {
+    id,
+    op,
+    actorType: str(r.actor_type) ?? "user",
+    actorId: str(r.actor_id),
+    actorLabel: str(r.actor_label),
+    payload: asRow(r.payload) ?? {},
+    createdAt,
   };
 }

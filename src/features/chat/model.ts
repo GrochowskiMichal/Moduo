@@ -117,6 +117,39 @@ export type ChatPerson = {
   former?: boolean;
 };
 
+/**
+ * The ops a conversation's history lists (Details, AC15.5): every change to
+ * the conversation and its messages. Not the bell rows (`chat.mention`,
+ * `chat.reply`, `chat.announcement`: who was told, not what changed) and not
+ * reactions (a wall, not a history).
+ */
+export const CHAT_HISTORY_OPS = [
+  "chat.channel_create",
+  "chat.channel_rename",
+  "chat.channel_topic",
+  "chat.channel_archive",
+  "chat.channel_unarchive",
+  "chat.join",
+  "chat.leave",
+  "chat.member_add",
+  "chat.member_remove",
+  "chat.pin",
+  "chat.message_edit",
+  "chat.message_delete",
+  "chat.message_restore",
+] as const;
+
+/** One line of a conversation's history (a `module_activity` row). */
+export type ChatHistoryEntry = {
+  id: string;
+  op: string;
+  actorType: string;
+  actorId: string | null;
+  actorLabel: string | null;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
 /** A position in a conversation's stream: pages key on (created_at, id). */
 export type ChatKey = { at: string; id: string };
 
@@ -196,6 +229,14 @@ export type ChatRuntime = {
   listChannelMembers(channelId: string): Promise<ChatMember[]>;
   unreadCounts(workspaceId: string): Promise<ChatUnread[]>;
   listPinned(channelId: string): Promise<ChatMessage[]>;
+  /** A conversation's quiet history (Details, AC15.5): its logged changes, newest first. */
+  history(args: {
+    workspaceId: string;
+    channelId: string;
+    limit?: number;
+  }): Promise<ChatHistoryEntry[]>;
+  /** How many people are in each of these conversations (Browse channels). */
+  memberCounts(channelIds: readonly string[]): Promise<Record<string, number>>;
   /** Full-text-ish search across messages the user can read (v1; search is its own block). */
   search(args: { workspaceId: string; query: string; limit?: number }): Promise<ChatMessage[]>;
 
@@ -205,6 +246,8 @@ export type ChatRuntime = {
     topic?: string;
     isPrivate?: boolean;
     memberIds?: string[];
+    /** Only managers post (CH23a); the creator is the first manager. */
+    announcement?: boolean;
   }): Promise<ChatChannel>;
   openDm(args: { workspaceId: string; userIds: string[] }): Promise<ChatChannel>;
   updateChannel(args: { channelId: string; name?: string; topic?: string }): Promise<ChatChannel>;

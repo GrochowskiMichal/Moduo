@@ -10,6 +10,7 @@ import { AlertCircle, ArrowRightLeft, Clock, CornerDownRight, MessageSquare } fr
 import type { ReactNode } from "react";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Reactions } from "@/components/ui/reactions";
 import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
@@ -210,7 +211,47 @@ export type RowHandlers = {
   onRetry?: (m: ChatMessage) => void;
   onDiscard?: (m: ChatMessage) => void;
   onPersonClick?: (userId: string) => void;
+  /** A person's card, previewed on hover over an author's name (CV-8b). */
+  personPreview?: (userId: string) => ReactNode;
 };
+
+/** An author's name: opens their card on click, previews it on hover (CV-8b). */
+function AuthorName({
+  name,
+  userId,
+  handlers,
+}: {
+  name: string;
+  userId: string | null;
+  handlers: RowHandlers;
+}) {
+  const className = "truncate text-md font-semibold text-foreground";
+  if (!userId || !handlers.onPersonClick) {
+    return (
+      <span data-slot="message-author" className={className}>
+        {name}
+      </span>
+    );
+  }
+  const button = (
+    <button
+      type="button"
+      data-slot="message-author"
+      tabIndex={-1}
+      onClick={() => handlers.onPersonClick?.(userId)}
+      className={cn(className, "min-w-0 rounded-sm text-left outline-none hover:underline")}
+    >
+      {name}
+    </button>
+  );
+  if (!handlers.personPreview) return button;
+  return (
+    <HoverCard>
+      <HoverCardTrigger asChild>{button}</HoverCardTrigger>
+      <HoverCardContent className="w-auto">{handlers.personPreview(userId)}</HoverCardContent>
+    </HoverCard>
+  );
+}
 
 export function MessageRow({
   message,
@@ -294,12 +335,11 @@ export function MessageRow({
         <div className="min-w-0">
           {first ? (
             <div className="flex min-w-0 items-baseline gap-2 leading-normal">
-              <span
-                data-slot="message-author"
-                className="truncate text-md font-semibold text-foreground"
-              >
-                {name}
-              </span>
+              <AuthorName
+                name={name}
+                userId={message.authorKind === "api_key" ? null : message.authorId}
+                handlers={handlers}
+              />
               {message.authorKind === "api_key" ? (
                 <span className="text-xs text-muted-foreground">app</span>
               ) : null}

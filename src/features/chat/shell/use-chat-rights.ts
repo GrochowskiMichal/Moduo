@@ -8,13 +8,22 @@ import type { WorkspaceRole } from "@contracts/vocabularies";
 import { useEffect, useState } from "react";
 import { supabaseClient } from "@/lib/runtime.web";
 
-type CapsRow = { role_key?: unknown; post?: unknown; manage_any?: unknown };
+type CapsRow = {
+  role_key?: unknown;
+  post?: unknown;
+  manage_any?: unknown;
+  create_public?: unknown;
+  create_private?: unknown;
+};
 
 export type ChatRights = {
   /** Post, react to your own words, start a direct message (a viewer can't). */
   canPost: boolean;
   /** Manage any channel (an admin by default). */
   manageAny: boolean;
+  /** Make a public / a private channel (New conversation, CV-8b). */
+  createPublic: boolean;
+  createPrivate: boolean;
 };
 
 /** The caps row a role reads (the server's mapping in `chat_has_cap`). */
@@ -29,12 +38,27 @@ export function rightsFrom(
   role: WorkspaceRole | null,
   readOnly: boolean,
 ): ChatRights {
-  if (role === "owner") return { canPost: true, manageAny: true };
+  if (role === "owner") {
+    return { canPost: true, manageAny: true, createPublic: true, createPrivate: true };
+  }
   const key = capsRoleKey(role, readOnly);
   const row = rows?.find((r) => r.role_key === key);
   // Before the rows arrive (or if they can't be read): the role's usual rights.
-  if (!row) return { canPost: key !== "viewer", manageAny: key === "admin" };
-  return { canPost: row.post === true, manageAny: row.manage_any === true };
+  if (!row) {
+    const writes = key !== "viewer";
+    return {
+      canPost: writes,
+      manageAny: key === "admin",
+      createPublic: writes,
+      createPrivate: writes,
+    };
+  }
+  return {
+    canPost: row.post === true,
+    manageAny: row.manage_any === true,
+    createPublic: row.create_public === true,
+    createPrivate: row.create_private === true,
+  };
 }
 
 export function useChatRights(

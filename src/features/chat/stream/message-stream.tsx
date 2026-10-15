@@ -142,6 +142,8 @@ export type MessageStreamProps = {
   onRetry: (m: ChatMessage) => void;
   onDiscard: (m: ChatMessage) => void;
   onPersonClick?: (userId: string) => void;
+  /** A person's card for the hover preview on an author's name (CV-8b). */
+  personPreview?: (userId: string) => ReactNode;
   /**
    * ⏎ on a message without replies, Esc, ↓ past the newest: back to typing.
    * A letter that isn't a message key comes along (`typed`): it goes into the
@@ -630,6 +632,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       onRetry: (m: ChatMessage) => live.current.onRetry(m),
       onDiscard: (m: ChatMessage) => live.current.onDiscard(m),
       onPersonClick: props.onPersonClick,
+      personPreview: props.personPreview,
     };
 
     const draw = (row: Row): ReactNode => {

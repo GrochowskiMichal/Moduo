@@ -1155,16 +1155,29 @@ export class ChatStore {
 
   // ── Opening conversations ─────────────────────────────────────────────────
 
+  /** The screen went away: the next open of any conversation is a return. */
+  close(): void {
+    this.openId = null;
+  }
+
   /**
    * Open a conversation: the device's newest page paints at once, then the
    * server's newest page lands. Already open this session: nothing to read
    * (Realtime and the gap fill keep it current).
    */
   async open(channelId: string): Promise<void> {
+    const returning = this.openId !== channelId;
     this.openId = channelId;
     this.trimOthers(channelId);
     let conv = this.convs.get(channelId);
     if (conv?.loading) return;
+    // Back to a conversation already held: the "New" pill moves to where you
+    // read up to since (it never moves while you stay in it).
+    if (conv?.loaded && returning) {
+      conv.newAfter = this.markKey(channelId);
+      this.touch(channelId);
+      this.notify();
+    }
     // Opened again after a jump: back to the newest messages.
     if (conv?.loaded && conv.hi) return this.jumpToLatest(channelId);
     if (conv?.loaded) return;
@@ -1826,6 +1839,7 @@ export class ChatStore {
     topic?: string;
     isPrivate?: boolean;
     memberIds?: string[];
+    announcement?: boolean;
   }): Promise<ChatChannel> {
     const channel = await this.transport.createChannel({ workspaceId: this.workspaceId, ...args });
     this.channels.set(channel.id, channel);
