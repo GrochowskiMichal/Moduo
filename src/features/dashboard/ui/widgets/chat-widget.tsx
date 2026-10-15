@@ -1,12 +1,12 @@
 // Home "Conversations" widget (specs/chat.md §Widget). Conversations that need
-// you (DMs, mentions) first, then the most recently active. Live: it holds the
-// shared chat realtime link (same one the nav badge uses) and recounts on new
-// messages and read changes. Workspaces without chat get a quiet one-liner.
+// you (DMs, mentions) first, then the most recently active. Live: it reads the
+// workspace's chat store (the one the nav badge holds), whose counts move as
+// messages arrive. Workspaces without chat get a quiet one-liner.
 
 import { Hash, Lock } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { ChatChannel, ChatMember, ChatPerson, ChatUnread } from "@/features/chat/model";
-import { acquireChatLink, CHAT_READ_CHANGED_EVENT } from "@/features/chat/realtime";
+import { useChatSnapshot, useChatStore } from "@/features/chat/store/react";
 import { dmOtherIds } from "@/features/chat/timeline";
 import { initialsOf } from "@/features/chat/ui/person-avatar";
 import { shapeChatWidget } from "@/features/chat/widget";
@@ -50,73 +50,23 @@ export function ChatWidget({ size }: WidgetComponentProps) {
   const { runtime, userId } = useAuth();
   const { selectedWorkspaceId } = useWorkspace();
   const density = useDensity();
-  const [data, setData] = useState<Data | null>(null);
-
-  useEffect(() => {
-    setData(null);
-    if (!runtime || !selectedWorkspaceId || !userId) return;
-    let cancelled = false;
-    let release: (() => void) | null = null;
-    let unsubscribe: (() => void) | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const load = async () => {
-      const [channels, mine, unread, members] = await Promise.all([
-        runtime.chat.listChannels(selectedWorkspaceId),
-        runtime.chat.listMyMemberships(selectedWorkspaceId, userId),
-        runtime.chat.unreadCounts(selectedWorkspaceId),
-        runtime.workspace.listMembers(selectedWorkspaceId).catch(() => [] as unknown[]),
-      ]);
-      const people: Record<string, ChatPerson> = {};
-      for (const raw of members) {
-        const row = raw as {
-          user_id?: string;
-          profiles?: { display_name?: string; avatar_url?: string };
-        };
-        if (!row.user_id) continue;
-        people[row.user_id] = {
-          userId: row.user_id,
-          name: row.profiles?.display_name?.trim() || "Member",
-          avatarUrl: row.profiles?.avatar_url ?? null,
-          role: null,
-        };
-      }
-      if (!cancelled) setData({ enabled: true, channels, mine, unread, people });
+  // The workspace's chat store (CV-3): the chrome holds it all session, so this
+  // reads what it already has; a new message costs no request.
+  const store = useChatStore(runtime, userId, selectedWorkspaceId);
+  const snapshot = useChatSnapshot(store);
+  const data = useMemo<Data | null>(() => {
+    if (snapshot.status === "locked") {
+      return { enabled: false, channels: [], mine: [], unread: [], people: {} };
+    }
+    if (snapshot.status !== "ready" && snapshot.status !== "error") return null;
+    return {
+      enabled: true,
+      channels: Object.values(snapshot.channels),
+      mine: Object.values(snapshot.mine),
+      unread: Object.values(snapshot.unread),
+      people: snapshot.people,
     };
-    const schedule = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void load().catch(() => {}), 400);
-    };
-
-    void (async () => {
-      try {
-        const enabled = await runtime.chat.isEnabled(selectedWorkspaceId);
-        if (cancelled) return;
-        if (!enabled) {
-          setData({ enabled: false, channels: [], mine: [], unread: [], people: {} });
-          return;
-        }
-        await load();
-        if (cancelled) return;
-        const held = acquireChatLink(selectedWorkspaceId, userId);
-        release = held.release;
-        unsubscribe = held.link.subscribe((e) => {
-          if (e.type === "message" && (!e.isInsert || e.message.parentId)) return;
-          schedule();
-        });
-      } catch {
-        if (!cancelled) setData({ enabled: true, channels: [], mine: [], unread: [], people: {} });
-      }
-    })();
-    window.addEventListener(CHAT_READ_CHANGED_EVENT, schedule);
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-      window.removeEventListener(CHAT_READ_CHANGED_EVENT, schedule);
-      unsubscribe?.();
-      release?.();
-    };
-  }, [runtime, selectedWorkspaceId, userId]);
+  }, [snapshot]);
 
   const budget = widgetRowBudget(size, density);
   const view = useMemo(

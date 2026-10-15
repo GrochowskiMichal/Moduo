@@ -1,4 +1,6 @@
-// Presence + typing from the shared chat link, as React state.
+// Presence + typing for v1's screens, as React state (CV-3: read from the
+// store's presence and typing stores through the `ChatLink` the module hook
+// hands the page; v1's screens go with CV-8a).
 //
 // useSyncExternalStore requires getSnapshot to return the SAME value until the
 // store changes. The fallbacks below are module-level constants on purpose: an
@@ -7,7 +9,19 @@
 // exceeded"). That shipped once, while the link was still null on page load.
 
 import { useSyncExternalStore } from "react";
-import type { ChatLink, TypingEntry } from "../realtime";
+import type { TypingEntry } from "../store/typing";
+
+export type { TypingEntry };
+
+/** What v1's page reads presence and typing through (and tells "I'm typing" to). */
+export type ChatLink = {
+  sendTyping(channelId: string, parentId: string | null, stop?: boolean): void;
+  watchTyping(channelId: string): () => void;
+  subscribePresence(fn: () => void): () => void;
+  getOnline(): ReadonlySet<string>;
+  subscribeTyping(fn: () => void): () => void;
+  getTyping(): TypingEntry[];
+};
 
 const EMPTY_ONLINE: ReadonlySet<string> = new Set();
 const EMPTY_TYPING: TypingEntry[] = [];

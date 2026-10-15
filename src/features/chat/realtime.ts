@@ -1,339 +1,198 @@
-// Chat realtime — one shared connection per workspace (specs/chat.md §Realtime).
+// Chat realtime (CV-3, round-3 §2.7, CV-0 spike 3): the one adapter the store's
+// live merge takes its input from.
 //
-// Two Supabase channels, ref-counted so the nav badge (always mounted in the
-// app chrome) and the Chat page share them instead of opening duplicates:
+// Today it is Postgres Changes, each its own client channel:
+//   • chat_messages  filtered workspace_id=eq.<ws>, bound with `select` (the
+//     columns the store reads: `search_tsv` and `body_text` stay off the wire;
+//     a publication column list wouldn't narrow it, spike 3);
+//   • chat_channels  filtered workspace_id=eq.<ws>;
+//   • chat_members   filtered to you;
+//   • chat_catchup   filtered to you.
+// Realtime applies each subscriber's read rules. It is latency, never truth:
+// every join (and every rejoin) says `joined` only once Realtime answers
+// "Subscribed to PostgreSQL", and the store fills the gap by a delta read.
+// Spike 3 measured Postgres Changes missing the ≤ 500 ms delivery bar on the
+// local stack (its ~0.5 s WAL poll); if the real project misses it too,
+// Broadcast from the database replaces this source without touching the merge
+// (decisions/chat.md BR-1).
 //
-//   • `chat-db:<ws>`  postgres_changes on chat_messages / chat_channels (per
-//     workspace) and chat_members (mine). Realtime applies the subscriber's RLS,
-//     so private channels and DMs never leak; deletes are soft for that reason.
-//   • `chat:<ws>`     PRIVATE presence (who's online), authorized by the
-//     realtime.messages policies in the chat migrations.
-//   • `chat:typing:<channel>`  PRIVATE broadcast, one per conversation, joined
-//     for the open conversation only (`watchTyping`). Only the people who can
-//     read the conversation may join it, and only the server writes to it:
-//     "I'm typing" goes through the `chat_op_typing` op, which stamps the
-//     sender from the session, so a typing line never shows a name the
-//     sender chose.
-//
-// Realtime is a latency layer, not the source of truth: after a reconnect (or
-// a long sleep) listeners get a `resync` and refetch what they show — a missed
-// event can never become a missing message.
-//
-// Like notes realtime (NO-6) this imports the Supabase client directly:
-// Realtime is a socket concern, not an RPC, so it sits outside the runtime seam.
+// Realtime is a socket concern, not an RPC, so it sits outside the runtime
+// seam and takes the Supabase client as its socket.
 
-import type { RealtimeChannel } from "@supabase/supabase-js";
-import { supabaseClient } from "@/lib/runtime.web";
-import { mapChannel, mapMember, mapMessage } from "./mappers";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { CHAT_MESSAGE_COLUMN_LIST } from "./columns";
+import { mapChannel, mapMember, mapMessage, memberLeft } from "./mappers";
 import type { ChatChannel, ChatMember, ChatMessage } from "./model";
 
-export type ChatDbEvent =
-  | { type: "message"; message: ChatMessage; isInsert: boolean }
+/** What a live source tells the store. Rows arrive whole (or as the `select` list). */
+export type ChatLiveEvent =
+  /** `insert`: a new message (an update is an edit, a reaction, a delete, a move). */
+  | { type: "message"; row: ChatMessage; insert: boolean }
+  /** A hard delete carries only the primary key: the store ignores ids it doesn't hold. */
+  | { type: "message-gone"; id: string }
   | { type: "channel"; channel: ChatChannel }
-  | { type: "membership"; member: ChatMember }
-  | { type: "membership-removed"; channelId: string }
-  | { type: "resync" };
+  | { type: "channel-gone"; id: string }
+  | { type: "member"; member: ChatMember }
+  /** One of your membership rows was stamped `left_at` (or deleted). */
+  | { type: "member-left"; channelId: string }
+  | { type: "catchup" }
+  /** A (re)join is complete: fill the gap. */
+  | { type: "joined"; source: string }
+  /** A source dropped (error, timeout, close): Phoenix rejoins by itself. */
+  | { type: "lost"; source: string };
 
-export type TypingEntry = {
-  userId: string;
-  channelId: string;
-  parentId: string | null;
-  until: number;
-};
+export type ChatLiveSource = (
+  scope: { workspaceId: string; userId: string },
+  sink: (event: ChatLiveEvent) => void,
+) => () => void;
 
-type Listener = (event: ChatDbEvent) => void;
+/** The part of the Supabase client the live layer uses. */
+export type ChatSocket = Pick<SupabaseClient, "channel" | "removeChannel">;
 
-const TYPING_TTL_MS = 6_000;
-const TYPING_THROTTLE_MS = 3_000;
-/** Coming back after this long hidden refetches, even if the socket says it's fine. */
-const STALE_AFTER_HIDDEN_MS = 60_000;
+type Payload = { eventType?: string; new?: unknown; old?: unknown };
+type Channel = ReturnType<ChatSocket["channel"]>;
 
-class WorkspaceLink {
-  private refs = 0;
-  private db: RealtimeChannel | null = null;
-  private live: RealtimeChannel | null = null;
-  private listeners = new Set<Listener>();
-  private presenceSubs = new Set<() => void>();
-  private typingSubs = new Set<() => void>();
-  private online: ReadonlySet<string> = new Set();
-  private typing: TypingEntry[] = [];
-  /** One private topic per conversation being followed, ref-counted. */
-  private typingTopics = new Map<string, { channel: RealtimeChannel; refs: number }>();
-  private dbJoinedOnce = false;
-  private lastTypingSent = new Map<string, number>();
-  private typingSweep: ReturnType<typeof setInterval> | null = null;
-  private hiddenAt: number | null = null;
+// realtime-js hands back the channel that is still leaving when a topic is
+// asked for again before its leave finished, and subscribing to that one does
+// nothing: a quick release-and-hold (a switch back, a remount) would end with
+// no live channel. A named topic (typing, presence) joins again once it left.
+const leaving = new WeakMap<ChatSocket, Map<string, Promise<void>>>();
 
-  constructor(
-    readonly workspaceId: string,
-    readonly selfId: string,
-  ) {}
-
-  acquire(): void {
-    this.refs += 1;
-    if (this.refs === 1) this.open();
+/** Leave a topic; joining it again through `whenTopicFree` waits for this. */
+export function leaveTopic(socket: ChatSocket, topic: string, channel: Channel): void {
+  let topics = leaving.get(socket);
+  if (!topics) {
+    topics = new Map();
+    leaving.set(socket, topics);
   }
-
-  release(): void {
-    this.refs -= 1;
-    if (this.refs <= 0) this.close();
-  }
-
-  get refCount(): number {
-    return this.refs;
-  }
-
-  private open(): void {
-    const ws = this.workspaceId;
-    const db = supabaseClient.channel(`chat-db:${ws}:${this.selfId}`);
-    db.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "chat_messages", filter: `workspace_id=eq.${ws}` },
-      (payload) => {
-        const message = mapMessage(payload.new);
-        if (message)
-          this.emit({ type: "message", message, isInsert: payload.eventType === "INSERT" });
-      },
+  const map = topics;
+  const done: Promise<void> = Promise.resolve(socket.removeChannel(channel))
+    .then(
+      () => undefined,
+      () => undefined,
     )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "chat_channels", filter: `workspace_id=eq.${ws}` },
-        (payload) => {
-          const channel = mapChannel(payload.new);
-          if (channel) this.emit({ type: "channel", channel });
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "chat_members",
-          filter: `user_id=eq.${this.selfId}`,
-        },
-        (payload) => {
-          // Leaving or a removal stamps left_at on the row (CV-2b); v1 deleted it.
-          const deleted = payload.eventType === "DELETE";
-          const row = (deleted ? payload.old : payload.new) as {
-            channel_id?: unknown;
-            left_at?: unknown;
-          };
-          if (deleted || typeof row?.left_at === "string") {
-            const channelId = row?.channel_id;
-            if (typeof channelId === "string") this.emit({ type: "membership-removed", channelId });
+    .finally(() => {
+      if (map.get(topic) === done) map.delete(topic);
+    });
+  map.set(topic, done);
+}
+
+/** Run `join` once no earlier channel on the topic is still leaving (at once when none is). */
+export function whenTopicFree(socket: ChatSocket, topic: string, join: () => void): void {
+  const wait = leaving.get(socket)?.get(topic);
+  if (wait) void wait.then(join);
+  else join();
+}
+
+/** Each live source's channels get their own topics (they name nothing shared). */
+let generation = 0;
+
+const str = (v: unknown) => (typeof v === "string" ? v : null);
+const field = (row: unknown, key: string) =>
+  row && typeof row === "object" ? str((row as Record<string, unknown>)[key]) : null;
+
+/** Postgres Changes as the store's live source. */
+export function postgresChangesSource(socket: ChatSocket): ChatLiveSource {
+  return ({ workspaceId: ws, userId: me }, sink) => {
+    const bindings: {
+      name: string;
+      table: string;
+      filter: string;
+      select?: readonly string[];
+      on: (p: Payload) => void;
+    }[] = [
+      {
+        name: "messages",
+        table: "chat_messages",
+        filter: `workspace_id=eq.${ws}`,
+        select: CHAT_MESSAGE_COLUMN_LIST,
+        on: (p) => {
+          if (p.eventType === "DELETE") {
+            const id = field(p.old, "id");
+            if (id) sink({ type: "message-gone", id });
             return;
           }
-          const member = mapMember(payload.new);
-          if (member && member.workspaceId === ws) this.emit({ type: "membership", member });
+          const row = mapMessage(p.new);
+          if (row) sink({ type: "message", row, insert: p.eventType === "INSERT" });
         },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          // The first join is the initial load's job; every later join is a
-          // reconnect that may have missed events.
-          if (this.dbJoinedOnce) this.emit({ type: "resync" });
-          this.dbJoinedOnce = true;
-        }
-      });
-    this.db = db;
+      },
+      {
+        name: "channels",
+        table: "chat_channels",
+        filter: `workspace_id=eq.${ws}`,
+        on: (p) => {
+          if (p.eventType === "DELETE") {
+            const id = field(p.old, "id");
+            if (id) sink({ type: "channel-gone", id });
+            return;
+          }
+          const channel = mapChannel(p.new);
+          if (!channel) return;
+          if (field(p.new, "deleted_at")) sink({ type: "channel-gone", id: channel.id });
+          else sink({ type: "channel", channel });
+        },
+      },
+      {
+        name: "members",
+        table: "chat_members",
+        filter: `user_id=eq.${me}`,
+        on: (p) => {
+          const row = p.eventType === "DELETE" ? p.old : p.new;
+          const channelId = field(row, "channel_id");
+          if (!channelId) return;
+          // Realtime doesn't filter deletes: anyone's removed row arrives (its
+          // old record is the key, which names the person). Only yours counts.
+          if (field(row, "user_id") !== me) return;
+          if (p.eventType === "DELETE") {
+            sink({ type: "member-left", channelId });
+            return;
+          }
+          if (field(row, "workspace_id") !== ws) return;
+          if (memberLeft(row)) {
+            sink({ type: "member-left", channelId });
+            return;
+          }
+          const member = mapMember(row);
+          if (member && member.workspaceId === ws) sink({ type: "member", member });
+        },
+      },
+      {
+        name: "catchup",
+        table: "chat_catchup",
+        filter: `user_id=eq.${me}`,
+        on: () => sink({ type: "catchup" }),
+      },
+    ];
 
-    const live = supabaseClient.channel(`chat:${ws}`, {
-      config: { private: true, presence: { key: this.selfId } },
+    const n = ++generation;
+    const channels = bindings.map((b) => {
+      const channel = socket.channel(`chat-${b.name}:${ws}:${me}:${n}`);
+      // The installed realtime-js types don't name `select`; the server reads it
+      // (realtime.subscription.selected_columns, spike 3).
+      const binding = {
+        event: "*",
+        schema: "public",
+        table: b.table,
+        filter: b.filter,
+        ...(b.select ? { select: [...b.select] } : {}),
+      };
+      channel
+        .on("postgres_changes", binding as never, (payload: Payload) => b.on(payload))
+        .on("system", {}, (msg: { extension?: string; status?: string }) => {
+          if (msg?.extension !== "postgres_changes") return;
+          if (msg.status === "ok") sink({ type: "joined", source: b.name });
+          else sink({ type: "lost", source: b.name });
+        })
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            sink({ type: "lost", source: b.name });
+          }
+        });
+      return channel;
     });
-    live
-      .on("presence", { event: "sync" }, () => {
-        this.online = new Set(Object.keys(live.presenceState()));
-        for (const fn of this.presenceSubs) fn();
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") void live.track({ at: new Date().toISOString() });
-      });
-    this.live = live;
 
-    this.typingSweep = setInterval(() => {
-      const now = Date.now();
-      const before = this.typing.length;
-      this.typing = this.typing.filter((t) => t.until > now);
-      if (this.typing.length !== before) for (const fn of this.typingSubs) fn();
-    }, 1_000);
-
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", this.onVisibility);
-    }
-    if (typeof window !== "undefined") window.addEventListener("online", this.onOnline);
-  }
-
-  private close(): void {
-    if (this.db) void supabaseClient.removeChannel(this.db);
-    if (this.live) void supabaseClient.removeChannel(this.live);
-    for (const topic of this.typingTopics.values())
-      void supabaseClient.removeChannel(topic.channel);
-    this.typingTopics.clear();
-    this.db = null;
-    this.live = null;
-    this.dbJoinedOnce = false;
-    this.online = new Set();
-    this.typing = [];
-    if (this.typingSweep) clearInterval(this.typingSweep);
-    this.typingSweep = null;
-    if (typeof document !== "undefined") {
-      document.removeEventListener("visibilitychange", this.onVisibility);
-    }
-    if (typeof window !== "undefined") window.removeEventListener("online", this.onOnline);
-  }
-
-  private onVisibility = () => {
-    if (document.visibilityState === "hidden") {
-      this.hiddenAt = Date.now();
-      return;
-    }
-    if (this.hiddenAt && Date.now() - this.hiddenAt > STALE_AFTER_HIDDEN_MS) {
-      this.emit({ type: "resync" });
-    }
-    this.hiddenAt = null;
-  };
-
-  private onOnline = () => this.emit({ type: "resync" });
-
-  private emit(event: ChatDbEvent): void {
-    for (const fn of this.listeners) fn(event);
-  }
-
-  subscribe(fn: Listener): () => void {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
-  }
-
-  // ── presence ──
-  subscribePresence = (fn: () => void) => {
-    this.presenceSubs.add(fn);
-    return () => this.presenceSubs.delete(fn);
-  };
-  getOnline = (): ReadonlySet<string> => this.online;
-
-  // ── typing ──
-  subscribeTyping = (fn: () => void) => {
-    this.typingSubs.add(fn);
-    return () => this.typingSubs.delete(fn);
-  };
-  getTyping = (): TypingEntry[] => this.typing;
-
-  /**
-   * Follow who's typing in one conversation (the open one): joins its private
-   * topic, shared between holders. Release on switch or unmount; the last
-   * release leaves the topic and forgets its entries.
-   */
-  watchTyping(channelId: string): () => void {
-    let entry = this.typingTopics.get(channelId);
-    if (!entry) {
-      const channel = supabaseClient.channel(`chat:typing:${channelId}`, {
-        config: { private: true },
-      });
-      channel.on("broadcast", { event: "typing" }, (msg) => this.onTyping(msg.payload)).subscribe();
-      entry = { channel, refs: 0 };
-      this.typingTopics.set(channelId, entry);
-    }
-    const held = entry;
-    held.refs += 1;
-    let released = false;
     return () => {
-      if (released) return;
-      released = true;
-      held.refs -= 1;
-      if (held.refs > 0 || this.typingTopics.get(channelId) !== held) return;
-      this.typingTopics.delete(channelId);
-      void supabaseClient.removeChannel(held.channel);
-      const before = this.typing.length;
-      this.typing = this.typing.filter((t) => t.channelId !== channelId);
-      if (this.typing.length !== before) for (const fn of this.typingSubs) fn();
+      for (const channel of channels) void socket.removeChannel(channel);
     };
-  }
-
-  /** A typing event the server wrote: its `userId` is the sender's session. */
-  private onTyping(payload: unknown): void {
-    const p = payload as Partial<TypingEntry> & { stop?: boolean };
-    if (typeof p?.userId !== "string" || typeof p.channelId !== "string") return;
-    if (p.userId === this.selfId) return;
-    this.typing = this.typing.filter(
-      (t) =>
-        !(
-          t.userId === p.userId &&
-          t.channelId === p.channelId &&
-          t.parentId === (p.parentId ?? null)
-        ),
-    );
-    if (!p.stop) {
-      this.typing.push({
-        userId: p.userId,
-        channelId: p.channelId,
-        parentId: p.parentId ?? null,
-        until: Date.now() + TYPING_TTL_MS,
-      });
-    }
-    for (const fn of this.typingSubs) fn();
-  }
-
-  /**
-   * Throttled "I'm typing" — `stop` clears it immediately on send/blur. Told to
-   * the server (`chat_op_typing`), which checks that I can read the
-   * conversation and broadcasts it to its members under my session's id;
-   * nothing is broadcast from here.
-   */
-  sendTyping(channelId: string, parentId: string | null, stop = false): void {
-    const key = `${channelId}:${parentId ?? ""}`;
-    const now = Date.now();
-    if (!stop && now - (this.lastTypingSent.get(key) ?? 0) < TYPING_THROTTLE_MS) return;
-    if (stop && !this.lastTypingSent.has(key)) return;
-    if (stop) this.lastTypingSent.delete(key);
-    else this.lastTypingSent.set(key, now);
-    // A PostgREST builder only sends when awaited or then-ed: the `.then` is
-    // what fires the request. Best effort either way: a refused or lost
-    // typing event changes nothing, so both outcomes are ignored.
-    void supabaseClient
-      .rpc("chat_op_typing", { p_channel_id: channelId, p_parent_id: parentId, p_stop: stop })
-      .then(noop, noop);
-  }
-}
-
-const noop = () => {};
-
-const links = new Map<string, WorkspaceLink>();
-
-/**
- * Get (and hold) the shared realtime link for a workspace. Call the returned
- * release on unmount; the sockets close when the last holder lets go.
- */
-export function acquireChatLink(
-  workspaceId: string,
-  selfId: string,
-): {
-  link: WorkspaceLink;
-  release: () => void;
-} {
-  const key = `${workspaceId}:${selfId}`;
-  let link = links.get(key);
-  if (!link) {
-    link = new WorkspaceLink(workspaceId, selfId);
-    links.set(key, link);
-  }
-  link.acquire();
-  const held = link;
-  let released = false;
-  return {
-    link: held,
-    release: () => {
-      if (released) return;
-      released = true;
-      held.release();
-      if (held.refCount <= 0) links.delete(key);
-    },
   };
-}
-
-export type ChatLink = WorkspaceLink;
-
-/** Cross-surface nudge: the page tells the badge "read state changed, recount". */
-export const CHAT_READ_CHANGED_EVENT = "moduo:chat:read-changed";
-export function dispatchChatReadChanged(): void {
-  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(CHAT_READ_CHANGED_EVENT));
 }

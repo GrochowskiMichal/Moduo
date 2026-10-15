@@ -37,6 +37,8 @@ export function MessageList({
   selfId,
   focusId,
   onFocusHandled,
+  hasNewer = false,
+  onJumpToLatest,
 }: {
   /** Changes when the conversation changes — resets scroll state. */
   conversationKey: string;
@@ -51,6 +53,10 @@ export function MessageList({
   selfId: string | null;
   focusId?: string | null;
   onFocusHandled?: () => void;
+  /** The list is a window around a message that doesn't reach the newest one (a jump). */
+  hasNewer?: boolean;
+  /** "Jump to latest" from such a window: the newest messages load first. */
+  onJumpToLatest?: () => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
@@ -201,13 +207,17 @@ export function MessageList({
 
       <button
         type="button"
-        onClick={() => scrollToBottom(true)}
+        onClick={() => {
+          // Only a window that doesn't reach the newest message reads again.
+          if (hasNewer) onJumpToLatest?.();
+          scrollToBottom(true);
+        }}
         className={cn(
           "absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-border bg-popover px-3 py-1 font-display text-xs text-foreground transition-opacity duration-(--motion-fade)",
-          showJump || unseen > 0 ? "opacity-100" : "pointer-events-none opacity-0",
+          showJump || unseen > 0 || hasNewer ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         style={{ boxShadow: "var(--shadow-md)" }}
-        tabIndex={showJump || unseen > 0 ? 0 : -1}
+        tabIndex={showJump || unseen > 0 || hasNewer ? 0 : -1}
       >
         <ArrowDown className="size-icon-sm" aria-hidden />
         {unseen > 0 ? `${unseen} new ${unseen === 1 ? "message" : "messages"}` : "Jump to latest"}
