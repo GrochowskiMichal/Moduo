@@ -967,9 +967,15 @@ export function TaskListView({
 
   // Keyboard-first: focus the list once on mount so j/k work immediately —
   // unless focus is already somewhere intentional (an input, an open dialog).
+  // Quietly: a browser counts a script's focus on a fresh load as keyboard
+  // focus and would ring the whole list, so the ring waits for a key on the
+  // list or for focus to come back by keyboard (MOD-121; onKeyDown, onBlur).
   useEffect(() => {
     const active = document.activeElement;
-    if (!active || active === document.body) containerRef.current?.focus();
+    const list = containerRef.current;
+    if (!list || (active && active !== document.body)) return;
+    list.dataset.quietFocus = "";
+    list.focus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1180,6 +1186,9 @@ export function TaskListView({
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Typing on the list (not a ⌘/⌃/⌥ shortcut out of it) is keyboard use:
+      // the mount's quiet focus shows its ring from here on (MOD-121).
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) delete e.currentTarget.dataset.quietFocus;
       // While inline-editing a title, the Input stops propagation. During a
       // keyboard reorder the dnd sensor owns the arrows — don't also move the cursor.
       if (editingId || reordering) return;
@@ -2056,6 +2065,10 @@ export function TaskListView({
               ref={containerRef}
               tabIndex={0}
               onKeyDown={onKeyDown}
+              // Once the mount's quiet focus leaves, a later focus rings as usual.
+              onBlur={(e) => {
+                if (e.target === e.currentTarget) delete e.currentTarget.dataset.quietFocus;
+              }}
               {...fileDrop.handlers}
               // Chromium focuses a clicked button; after a mouse click on a row's
               // button, hand focus back to the list (as desktop WebKit does), so the
@@ -2071,7 +2084,7 @@ export function TaskListView({
               }}
               role="grid"
               aria-label={`${scopeTitle} tasks`}
-              className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring data-[quiet-focus]:focus-visible:ring-0"
             >
               {!api.loaded ? (
                 <TaskListSkeleton />
