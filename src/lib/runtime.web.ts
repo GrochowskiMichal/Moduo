@@ -1665,6 +1665,42 @@ export const webRuntime: ModuoRuntime = {
       if (error) throw new Error(error.message);
       return data ? timeRegionRowToModel(data) : null;
     },
+    async getEmailPrefs() {
+      const { data, error } = await supabaseClient.rpc("email_prefs");
+      // Before TX-8's migration there are no email switches to show.
+      if (isMissingFunctionError(error, "email_prefs")) return null;
+      if (error) throw new Error(error.message);
+      const row = (Array.isArray(data) ? data[0] : data) as {
+        bookings?: unknown;
+        trial_billing?: unknown;
+        build_updates?: unknown;
+      } | null;
+      if (!row) return null;
+      return {
+        bookings: row.bookings !== false,
+        trialBilling: row.trial_billing !== false,
+        buildUpdates: row.build_updates === true,
+      };
+    },
+    async setEmailPrefs(patch) {
+      const { data, error } = await supabaseClient.rpc("email_prefs_set", {
+        p_bookings: patch.bookings ?? null,
+        p_trial_billing: patch.trialBilling ?? null,
+      });
+      if (isMissingFunctionError(error, "email_prefs_set")) return null;
+      if (error) throw new Error(error.message);
+      const row = (Array.isArray(data) ? data[0] : data) as {
+        bookings?: unknown;
+        trial_billing?: unknown;
+      } | null;
+      if (!row) return null;
+      return { bookings: row.bookings !== false, trialBilling: row.trial_billing !== false };
+    },
+    async setBuildUpdates(on) {
+      const { data, error } = await supabaseClient.rpc("email_build_updates_set", { p_on: on });
+      if (error) throw new Error(error.message);
+      return data === true;
+    },
     async getMinBuild() {
       const { data, error } = await supabaseClient
         .from("app_settings")

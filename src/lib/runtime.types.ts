@@ -116,6 +116,10 @@ export type TasksViewsRuntime = Partial<TasksViewsApi>;
  */
 export type TasksAgentsRuntime = Partial<TasksAgentsApi>;
 
+/** Settings → Preferences → Email (TX-8). */
+export type EmailPrefs = { bookings: boolean; trialBilling: boolean; buildUpdates: boolean };
+export type EmailPrefsPatch = Partial<Pick<EmailPrefs, "bookings" | "trialBilling">>;
+
 /** A comment on any registered entity (spine block CT-5). */
 export type SpineComment = {
   id: string;
@@ -677,6 +681,17 @@ export type ModuoRuntime = {
      * TV-D8), or null when it can't be read (the app then runs as normal).
      */
     getMinBuild(): Promise<string | null>;
+    /**
+     * Settings → Preferences → Email (TX-8): the Bookings and Trial and billing
+     * switches (`email_preferences`, server-side so an older build can't reset
+     * them) and Build updates (a subscription). Null when signed out or before
+     * the migration.
+     */
+    getEmailPrefs(): Promise<EmailPrefs | null>;
+    /** Change one or both switches; the one left out stays as it is. Null before the migration. */
+    setEmailPrefs(patch: EmailPrefsPatch): Promise<Omit<EmailPrefs, "buildUpdates"> | null>;
+    /** Subscribe (no confirmation email: the address is verified) or unsubscribe. */
+    setBuildUpdates(on: boolean): Promise<boolean>;
   };
 
   /**

@@ -42,6 +42,12 @@ export const BOOKING_ZOOM_FIXTURE: BookingEmailData = {
 
 export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
   auth_code: { code: "482913", email: "tom@becker.studio" },
+  account_deleted: {
+    email: "tom@becker.studio",
+    deletedAt: "2026-10-08T10:30:00Z",
+    zone: "Europe/Warsaw",
+    hadBilling: true,
+  },
   waitlist_invite: { email: "tom@becker.studio", joinedAt: "2026-10-02T09:14:00Z" },
   ops_alert: {
     reason: "failures",
@@ -66,6 +72,7 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
 export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   auth_code: "A1 · Sign-in code",
+  account_deleted: "A2 · Account deleted",
   waitlist_invite: "B1 · Waitlist invite",
   ops_alert: "Ops alert (internal)",
   booking_guest_confirmed: "C1 · Booking confirmed (guest)",

@@ -94,6 +94,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_unread_counts",
   "chat_workspace_enabled",
   "contact_merge_candidates",
+  // TX-8: the Email switches in Settings → Preferences.
+  "email_prefs",
   "focus_claims",
   "links_suggest",
   "notes_list_unmaterialized",

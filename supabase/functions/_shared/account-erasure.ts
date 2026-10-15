@@ -27,10 +27,19 @@
  *                     account_erase_workspace_data): private items go with every
  *                     trace, shared ones get a new owner, their tasks are unassigned.
  *   8. waitlist       public.waitlist + founders_interest rows for the account email.
+ *   9. email          the address's email records (TX-8, T25): email_outbox rows sent
+ *                     to it or to the account, its do-not-email entry and its
+ *                     build-updates subscription. email_preferences goes with the auth
+ *                     user (FK cascade).
  *
  * Every step is idempotent and the auth delete runs last, so a failure leaves the
  * account in place and a retry finishes the job. PostHog and Stripe run first: when
  * they fail, nothing in Moduo has been deleted yet.
+ *
+ * After the auth delete, and only then, the "account deleted" email (A2) goes to the
+ * address, sent directly, never queued, so it leaves no record to erase. Nothing
+ * after the auth delete can fail the deletion: a failed send is a warning. An
+ * address on the do-not-email list (a hard bounce or a spam complaint) gets no A2.
  *
  * Plain TypeScript with injected clients (no Deno globals, no URL imports) so the
  * unit tests can run it: see account-erasure.test.ts. The real supabase-js and
@@ -38,6 +47,7 @@
  */
 
 import { ATTACHMENTS_BUCKET } from "./contracts/attachments.ts";
+import type { AccountDeletedData } from "./email/templates/account-deleted.ts";
 import type { ErasurePostHog } from "./posthog-erasure.ts";
 
 // ── The slices of supabase-js and Stripe this module uses ────────────────────
@@ -110,11 +120,20 @@ export type ErasureDeps = {
   /** null when the PostHog secrets aren't configured (posthog-erasure.ts). Required, so
    *  every caller of deleteAccount decides it rather than skipping it by omission. */
   posthog: ErasurePostHog | null;
+  /** Sends the "account deleted" email (A2) once the account is gone; null when Resend
+   *  isn't configured (the deletion then finishes with a warning). Throws on failure. */
+  farewell: ErasureFarewell | null;
   /** Rows per select page. PostgREST caps every response at 1000 rows; tests use less. */
   pageSize?: number;
 };
 
-/** `email` only when the account has confirmed it: it decides whose waitlist rows go. */
+/** What sending A2 needs: the template's data plus the account it was for. */
+export type FarewellEmail = AccountDeletedData & { userId: string };
+
+export type ErasureFarewell = { send(email: FarewellEmail): Promise<void> };
+
+/** `email` only when the account has confirmed it: it decides whose waitlist and
+ *  email rows go, and whether A2 is sent at all. */
 export type AccountUser = { id: string; email: string | null };
 
 export type DeleteAccountResult =
@@ -132,6 +151,7 @@ export type ErasureStep =
   | "contact_notes"
   | "workspace_data"
   | "waitlist"
+  | "email"
   | "auth";
 
 /** A step failed. Steps before it completed; the account itself still exists. */
@@ -239,9 +259,17 @@ export async function deleteAccount(
     runErasureSql(deps.db, "account_erase_workspace_data", user.id),
   );
   await step("waitlist", () => deleteWaitlistEntries(deps, user.email));
+  // Read before the rows go: the do-not-email entry decides whether A2 goes out, and
+  // the person's time zone (user_preferences cascades with the auth user) dates it.
+  const farewell = await step("email", async () => {
+    const facts = await farewellFacts(deps, user, stripeCustomers.length > 0, warnings);
+    await deleteEmailRecords(deps.db, user);
+    return facts;
+  });
   // Last, so every step above can be retried: the FK cascade takes the profile,
   // owned workspaces with everything in them, and the user's memberships elsewhere.
   await step("auth", () => deleteAuthUser(deps.db, user.id));
+  await sendFarewell(deps, farewell, warnings);
   return { status: "deleted", warnings };
 }
 
@@ -601,6 +629,69 @@ async function deleteWaitlistEntries(deps: ErasureDeps, rawEmail: string | null)
   const ids = rows.filter((r) => r.email?.trim().toLowerCase() === email).map((r) => r.id);
   for (const batch of chunks(ids, IN_BATCH)) {
     await deleteRows(deps.db, "founders_interest", (q) => q.in("id", batch));
+  }
+}
+
+// ── Email records and A2 (TX-8) ───────────────────────────────────────────────
+
+/** A2's data, or null when no A2 goes out (no confirmed address, or it's on the
+ *  do-not-email list). */
+async function farewellFacts(
+  deps: ErasureDeps,
+  user: AccountUser,
+  hadBilling: boolean,
+  warnings: string[],
+): Promise<FarewellEmail | null> {
+  const email = user.email?.trim().toLowerCase();
+  if (!email) return null;
+  const suppressed = await deps.db.from("email_suppressions").select("email").eq("email", email);
+  if (suppressed.error) throw new Error(`email_suppressions: ${suppressed.error.message}`);
+  if (((suppressed.data ?? []) as unknown[]).length > 0) {
+    warnings.push("farewell_skipped_suppressed");
+    return null;
+  }
+  // Only for the date's day; a failed read must not hold the deletion up.
+  const prefs = await deps.db.from("user_preferences").select("time_zone").eq("user_id", user.id);
+  const zone = prefs.error
+    ? null
+    : (((prefs.data ?? []) as { time_zone: string | null }[])[0]?.time_zone ?? null);
+  return {
+    userId: user.id,
+    email,
+    deletedAt: new Date().toISOString(),
+    zone,
+    hadBilling,
+  };
+}
+
+/** Every email record of the account and its address. Outbox rows to the account's id
+ *  would go in the daily purge an hour later; rows to the address with no account id
+ *  (a waitlist invite) would stay 30 days, so both go now. */
+async function deleteEmailRecords(db: ErasureDb, user: AccountUser): Promise<void> {
+  await deleteRows(db, "email_outbox", (q) => q.eq("to_user_id", user.id));
+  await deleteRows(db, "email_subscriptions", (q) => q.eq("user_id", user.id));
+  const email = user.email?.trim().toLowerCase();
+  if (!email) return;
+  await deleteRows(db, "email_outbox", (q) => q.eq("to_email", email));
+  await deleteRows(db, "email_suppressions", (q) => q.eq("email", email));
+  await deleteRows(db, "email_subscriptions", (q) => q.eq("email", email));
+}
+
+/** After the auth delete: never throws, the account is already gone. */
+async function sendFarewell(
+  deps: ErasureDeps,
+  email: FarewellEmail | null,
+  warnings: string[],
+): Promise<void> {
+  if (!email) return;
+  if (!deps.farewell) {
+    warnings.push("farewell_not_configured");
+    return;
+  }
+  try {
+    await deps.farewell.send(email);
+  } catch (err) {
+    warnings.push(`farewell_failed: ${errorMessage(err)}`);
   }
 }
 

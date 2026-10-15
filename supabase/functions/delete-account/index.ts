@@ -23,6 +23,10 @@
  * workspaces (account_erase_workspace_data).
  * PRIV-3 adds the app's usage analytics at PostHog, first of all; without the
  * POSTHOG_PERSONAL_API_KEY / POSTHOG_PROJECT_ID secrets that step only logs a warning.
+ * TX-8 erases the address's email records (outbox, do-not-email list, build-updates
+ * subscription) before the auth delete, and after it sends the "account deleted"
+ * email (A2) straight through Resend (RESEND_API_KEY, already set). A failed send
+ * is only a warning: the account is gone by then.
  *
  * Returns:
  *   200 { ok: true }
@@ -39,6 +43,7 @@ import {
   erasureErrorMessage,
 } from "../_shared/account-erasure.ts";
 import { makeStripe, stripeSecretKeyConfigError } from "../_shared/billing.ts";
+import { accountDeletedFarewell } from "../_shared/email/account-deleted-send.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
@@ -85,8 +90,11 @@ Deno.serve(async (req: Request) => {
 
     const posthog = postHogEraserFromEnv((name) => Deno.env.get(name));
 
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    const farewell = resendKey ? accountDeletedFarewell({ apiKey: resendKey, timeoutMs: 5_000 }) : null;
+
     const result = await deleteAccount(
-      { db, stripe, posthog },
+      { db, stripe, posthog, farewell },
       // An unconfirmed address may be someone else's: it must not delete their waitlist rows.
       { id: user.id, email: user.email_confirmed_at ? (user.email ?? null) : null },
     );
