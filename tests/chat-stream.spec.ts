@@ -54,7 +54,7 @@ async function openGeneral(page: Page, extra = ""): Promise<void> {
   await expect(page.getByTestId("message-stream")).toBeVisible({ timeout: 20_000 });
 }
 
-const composer = (page: Page) => page.locator("[data-chat-composer] textarea");
+const composer = (page: Page) => page.locator("[data-chat-composer] [contenteditable=\"true\"]");
 const row = (page: Page, text: string) =>
   page.getByRole("article").filter({ hasText: text }).first();
 
@@ -316,10 +316,14 @@ test("the message keys", async ({ page }) => {
   await page.keyboard.press("+");
   await expect(page.getByRole("button", { name: "React 🙏" })).toBeVisible();
   await page.keyboard.press("Escape");
-  // T makes a task from the message.
+  // T opens the capture as Task, prefilled with the message (AC2.7, CV-7b).
   await pick();
   await page.keyboard.press("t");
-  await expect(page.getByText(/Task created/).first()).toBeVisible({ timeout: 15_000 });
+  const capture = page.getByRole("dialog", { name: "Capture" });
+  await expect(capture).toBeVisible();
+  await expect(capture).toContainText(`keys edited ${tag}`);
+  await page.keyboard.press("Escape");
+  await expect(capture).toHaveCount(0);
   // ⏎ on a message without replies returns to the composer.
   await pick();
   await page.keyboard.press("Enter");

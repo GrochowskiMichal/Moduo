@@ -37,6 +37,7 @@ import { AtSign, Plus, SendHorizontal, Smile } from "lucide-react";
 import {
   forwardRef,
   useCallback,
+  useContext,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -49,11 +50,10 @@ import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import type { MentionCandidate } from "@/features/spine/mention";
 import { ReferenceViewOverrideProvider } from "@/features/spine/references/mention-view";
 import { $createReferenceNode } from "@/features/spine/references/reference-node";
-import { dispatchOpenCapture } from "@/lib/capture-open";
 import { CAPTURE_TYPES } from "@/lib/capture-registry";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
-import { useWorkspace } from "@/providers/workspace-provider";
+import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import {
   $exportStored,
   $importStored,
@@ -63,8 +63,10 @@ import {
 import { PERSON_TYPE } from "../markup-v2/types";
 import type { ChatPerson } from "../model";
 import { Mention } from "../stream/message-body";
+import { openCreateCapture } from "./capture";
 import { ChatEmojiPicker } from "./emoji-picker";
 import {
+  CREATE_COMMANDS,
   type CreateCommand,
   createCommandsFor,
   limitCopy,
@@ -106,7 +108,6 @@ const THEME = {
 /** Show the count once a message gets this close to the limit. */
 const COUNT_FROM = MESSAGE_LIMIT - 500;
 
-const CREATE_TARGET: Record<CreateCommand, string> = { task: "task", note: "note", event: "event" };
 
 export type ChatComposerHandle = {
   focus: () => void;
@@ -259,10 +260,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const savedSelection = useRef<RangeSelection | null>(null);
 
   // Who may create what (their module's Edit), as the capture decides.
-  const { modulePermissions } = useWorkspace();
+  const modulePermissions = useContext(WorkspaceContext)?.modulePermissions;
   const canCreate = useCallback(
     (command: CreateCommand) =>
-      CAPTURE_TYPES.some((t) => t.type === CREATE_TARGET[command] && t.canWrite(modulePermissions)),
+      !!modulePermissions &&
+      CAPTURE_TYPES.some((t) => t.type === command && t.canWrite(modulePermissions)),
     [modulePermissions],
   );
 
@@ -376,11 +378,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   /** Open the app's capture as `command`, and put the new item's chip where the caret was. */
   const openCreate = useCallback(
     (command: CreateCommand, title: string, saved: RangeSelection | null) => {
-      dispatchOpenCapture({
-        type: CREATE_TARGET[command],
-        draft: title,
-        onCreated: (made) => insertAt(saved, () => $insertRef(made.type, made.id)),
-      });
+      openCreateCapture(command, title, (made) =>
+        insertAt(saved, () => $insertRef(made.type, made.id)),
+      );
     },
     [insertAt],
   );
@@ -463,7 +463,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             kind: "action",
             id: `create:${c.id}`,
             label: c.title
-              ? `${c.id === "task" ? "Task" : c.id === "note" ? "Note" : "Event"} “${c.title}”`
+              ? `${CREATE_COMMANDS.find((x) => x.id === c.id)?.label ?? c.id} “${c.title}”`
               : `/${c.id}`,
             hint: "Create, linked",
           }),
