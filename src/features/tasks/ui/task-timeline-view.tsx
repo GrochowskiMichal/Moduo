@@ -1203,7 +1203,8 @@ export function TaskTimelineView({
               />
             </div>
 
-            <div className="relative -mx-(--pad-x) -mb-(--pad-x) min-h-0 flex-1 border-t border-hairline">
+            {/* Out to the centre's edges: its sides and foot are --panel-inset (MOD-121). */}
+            <div className="relative -mx-(--panel-inset) -mb-(--panel-inset) min-h-0 flex-1 border-t border-hairline">
               <TimelineGeometryContext.Provider value={geometry}>
                 <TimelineWindowContext.Provider value={drawn}>
                   <TimelineViewportContext.Provider value={viewport}>
