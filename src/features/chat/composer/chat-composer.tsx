@@ -204,8 +204,9 @@ function CaretAfterChipPlugin({ pending }: { pending: React.RefObject<RangeSelec
       editor.registerCommand(
         FOCUS_COMMAND,
         () => {
+          // Not one-shot: the insert's own focus comes first, then the
+          // closing capture's (the 1 s window bounds it).
           const caret = pending.current;
-          pending.current = null;
           if (caret) queueMicrotask(() => editor.update(() => $restoreOrEnd(caret)));
           return false;
         },
