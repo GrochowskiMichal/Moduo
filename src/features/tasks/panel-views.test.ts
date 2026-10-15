@@ -101,8 +101,13 @@ describe("the panel after the title's ask (MOD-131)", () => {
   });
   // A click on a task ends the ask, the selected task's too.
   const clickTask = (page: Page, id: string): Page => ({ ...page, ask: null, cursor: id });
-  // A pick from the panel's menu ends the ask and is remembered.
-  const pick = (page: Page, view: string): Page => ({ ...page, ask: null, remembered: view });
+  // A pick from the panel's menu ends the ask and is remembered. The panel
+  // reports only a pick of a view other than the one showing, so Project
+  // can't be picked while the ask shows it (that pick changes nothing).
+  const pick = (page: Page, view: string): Page => {
+    if (view === shown(page)) return page;
+    return { ...page, ask: null, remembered: view };
+  };
 
   const start: Page = { ask: null, remembered: "details", cursor: "t1" };
 
@@ -123,9 +128,16 @@ describe("the panel after the title's ask (MOD-131)", () => {
   });
 
   it("Project picked from the panel's menu is remembered for every task after", () => {
-    const picked = pick(clickTitle(start), "project");
+    const picked = pick(start, "project");
     expect(shown(picked)).toBe("project");
     expect(shown(clickTask(picked, "t2"))).toBe("project");
+    // The title's ask on top changes nothing about it.
+    expect(shown(clickTask(clickTitle(picked), "t1"))).toBe("project");
+  });
+
+  it("Project picked while the ask already shows it stays a look", () => {
+    const asked = clickTitle(start);
+    expect(shown(clickTask(pick(asked, "project"), "t2"))).toBe("details");
   });
 
   it("another view picked while the ask stands shows at once, and stays", () => {
