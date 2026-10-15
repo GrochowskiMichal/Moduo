@@ -13,3 +13,6 @@ d10c10b76c14e0369549d63c575d912e3840f24b:supabase/tests/notifications.test.sql:g
 
 # A sign-in email test uses a made-up token hash (a fixture value, not a credential).
 d6447e9e326d7f8a3fc1fd2980b92efe61498c61:supabase/functions/auth-email-hook/handler.test.ts:generic-api-key:10
+
+# The workspace invite email fixture uses a made-up invite token (base64 of plain words, not a credential).
+746423d9c08bd3f7e6b9940583461c7385aaff68:supabase/functions/_shared/email/templates/fixtures.ts:generic-api-key:69
