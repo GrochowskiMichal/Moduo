@@ -112,8 +112,14 @@ class WorkspaceLink {
           filter: `user_id=eq.${this.selfId}`,
         },
         (payload) => {
-          if (payload.eventType === "DELETE") {
-            const channelId = (payload.old as { channel_id?: unknown })?.channel_id;
+          // Leaving or a removal stamps left_at on the row (CV-2b); v1 deleted it.
+          const deleted = payload.eventType === "DELETE";
+          const row = (deleted ? payload.old : payload.new) as {
+            channel_id?: unknown;
+            left_at?: unknown;
+          };
+          if (deleted || typeof row?.left_at === "string") {
+            const channelId = row?.channel_id;
             if (typeof channelId === "string") this.emit({ type: "membership-removed", channelId });
             return;
           }

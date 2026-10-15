@@ -67,11 +67,11 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: #general exists in W', v);
   INSERT INTO test.ids SELECT 'G', id FROM public.chat_channels
-    WHERE workspace_id = test.id('W') AND kind = 'channel' AND name = 'general';
+    WHERE workspace_id = test.id('W') AND kind = 'channel' AND is_default;
   v := test.as_user('A', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W2')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: #general exists in W2', v);
   INSERT INTO test.ids SELECT 'G2', id FROM public.chat_channels
-    WHERE workspace_id = test.id('W2') AND kind = 'channel' AND name = 'general';
+    WHERE workspace_id = test.id('W2') AND kind = 'channel' AND is_default;
 
   v := test.as_user('A', format(
     $q$SELECT public.chat_op_create_channel(%L, 'open-plans', '', false, '{}'::uuid[])$q$, test.id('W')));

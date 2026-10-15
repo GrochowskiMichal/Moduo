@@ -95,11 +95,11 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W')));
   PERFORM test.ok(v LIKE 'ok %', 'grant: A opens chat in W and General is made', v);
   PERFORM test.ok(
-    (SELECT count(*) FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'general') = 1,
+    (SELECT count(*) FROM public.chat_channels WHERE workspace_id = test.id('W') AND is_default) = 1,
     'grant: W has General');
   v := test.as_user('A', format(
     $q$SELECT public.chat_op_send(c.id, 'Kickoff plangrantcheck', NULL, '{}'::uuid[], false, NULL, NULL)
-         FROM public.chat_channels c WHERE c.workspace_id = %L AND c.name = 'general'$q$, test.id('W')));
+         FROM public.chat_channels c WHERE c.workspace_id = %L AND c.is_default$q$, test.id('W')));
   PERFORM test.ok(v = 'ok 1', 'grant: A posts in General', v);
 
   UPDATE test.grants SET tier = 'pro' WHERE workspace_id = test.id('W');
@@ -120,7 +120,7 @@ $$;
 DO $$
 DECLARE
   v text;
-  v_general uuid := (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'general');
+  v_general uuid := (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND is_default);
 BEGIN
   UPDATE test.grants SET ends_at = now() - interval '1 minute' WHERE workspace_id = test.id('W');
   PERFORM test.ok(NOT test.on('W'), 'grant ended: chat is paused in W');
@@ -188,7 +188,7 @@ DROP FUNCTION public.plan_grant_effective_tier(uuid);
 DO $$
 DECLARE
   v text;
-  v_general uuid := (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'general');
+  v_general uuid := (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND is_default);
 BEGIN
   PERFORM test.ok(NOT test.on('W'), 'no grant function: W (Free owner) is off again');
   PERFORM test.ok(

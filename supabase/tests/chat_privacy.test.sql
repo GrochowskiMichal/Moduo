@@ -26,7 +26,7 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: #general exists', v);
   INSERT INTO test.ids SELECT 'G', id FROM public.chat_channels
-    WHERE workspace_id = test.id('W') AND kind = 'channel' AND name = 'general';
+    WHERE workspace_id = test.id('W') AND kind = 'channel' AND is_default;
 
   v := test.as_user('A', format(
     $q$SELECT public.chat_op_create_channel(%L, 'secret-plans', 'quiet', true, ARRAY[%L]::uuid[])$q$,
@@ -58,9 +58,11 @@ BEGIN
     test.ref('D'), test.id('B'), test.id('B')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A mentions B in D', v);
 
-  -- The registry: a row for P, as a later chat op (or a link) would write it.
-  INSERT INTO public.entities (workspace_id, entity_type, entity_id, label)
-  VALUES (test.id('W'), 'chat_channel', test.ref('P'), 'secret-plans');
+  -- The registry: making P wrote its row (CV-2b registers every conversation).
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.entities WHERE workspace_id = test.id('W')
+                            AND entity_type = 'chat_channel' AND entity_id = test.ref('P')
+                            AND label = 'secret-plans'),
+    'setup: making P registered it, its name as the label');
 END;
 $$;
 
@@ -108,8 +110,8 @@ BEGIN
   PERFORM test.ok(test.value_as('A', format($q$SELECT count(*)::text FROM public.chat_channels WHERE id = %L$q$,
       test.ref('P2'))) = '0',
     'activity: A no longer reads P2 itself');
-  PERFORM test.ok(test.activity_rows('A', 'P2') = 1, 'activity: A still reads the row they wrote about P2');
-  PERFORM test.ok(test.activity_rows('B', 'P2') = 1, 'activity: B, in P2, reads it');
+  PERFORM test.ok(test.activity_rows('A', 'P2') = 2, 'activity: A still reads the rows they wrote about P2 (made it, left it)');
+  PERFORM test.ok(test.activity_rows('B', 'P2') = 2, 'activity: B, in P2, reads them');
   PERFORM test.ok(test.activity_rows('C', 'P2') = 0, 'activity: C reads nothing about P2');
 
   PERFORM test.ok(test.value_as('C', format(

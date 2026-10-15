@@ -170,7 +170,7 @@ async function bootstrap(room: Room): Promise<string> {
   await rpc(member, "chat_op_bootstrap", { p_workspace_id: room.ws });
   const generals = await rest<Array<{ id: string }>>(
     member,
-    `chat_channels?workspace_id=eq.${room.ws}&name=eq.general&select=id`,
+    `chat_channels?workspace_id=eq.${room.ws}&is_default=is.true&select=id`,
   );
   expect(generals).toHaveLength(1);
   return generals[0].id;
@@ -179,7 +179,7 @@ async function bootstrap(room: Room): Promise<string> {
 async function generalCount(room: Room): Promise<number> {
   const rows = await rest<unknown[]>(
     "service",
-    `chat_channels?workspace_id=eq.${room.ws}&name=eq.general&select=id`,
+    `chat_channels?workspace_id=eq.${room.ws}&is_default=is.true&select=id`,
   );
   return rows.length;
 }
