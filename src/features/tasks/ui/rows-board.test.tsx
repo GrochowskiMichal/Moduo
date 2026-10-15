@@ -166,6 +166,24 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
   });
 
+  it("Detailed rows show two tags as dot chips, then +n, never a # (MOD-97)", () => {
+    const tags = [
+      { id: "t1", name: "ui", color: "blue" },
+      { id: "t2", name: "notes", color: "green" },
+      { id: "t3", name: "bug", color: "red" },
+    ];
+    renderList([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    const title = rowOf("Task a").querySelector('[data-slot="row-title"]') as HTMLElement;
+    const names = title.querySelector('[data-slot="row-tag-names"]') as HTMLElement;
+    const chips = [...names.querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
+    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes"]);
+    expect(chips.map((c) => c.dataset.label)).toEqual(["blue", "green"]);
+    expect(chips[0]?.className).toContain("h-4.5");
+    expect(screen.getByTitle("Tag: ui")).toBe(chips[0] as HTMLElement);
+    expect(screen.getByText("+1").getAttribute("title")).toBe("bug");
+    expect(names.textContent).not.toContain("#");
+  });
+
   it("counts subtasks as done/total and marks blocked and repeating tasks", () => {
     renderList(
       [task("a", { recurrence: { rrule: "FREQ=DAILY", dtstart: null, nextOccurrence: null } })],
@@ -422,8 +440,12 @@ describe("useJustCompleted", () => {
 });
 
 describe("Board (U1-4)", () => {
-  function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
-    const api = viewApi(tasks);
+  function renderBoard(
+    tasks: Task[],
+    extra: Record<string, unknown> = {},
+    apiExtra: Record<string, unknown> = {},
+  ) {
+    const api = viewApi(tasks, apiExtra);
     render(
       <TooltipProvider>
         <TaskBoardView
@@ -471,6 +493,24 @@ describe("Board (U1-4)", () => {
     expect(meta).not.toBeNull();
     expect(meta.contains(screen.getByLabelText("High priority"))).toBe(true);
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);
+  });
+
+  it("Detailed cards show three tags as dot chips on the second line, layout-neutral (MOD-97)", () => {
+    const tags = ["ui", "notes", "bug", "copy"].map((name, i) => ({
+      id: `t${i}`,
+      name,
+      color: "violet",
+    }));
+    renderBoard([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    const chips = [...card("Task a").querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
+    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes", "bug"]);
+    expect(screen.getByText("+1").getAttribute("title")).toBe("copy");
+    // 18 px chips in a 16 px text line: the list takes -1 px top and bottom,
+    // so the card keeps its height.
+    const list = chips[0]?.closest('[data-slot="tag-chip-list"]') as HTMLElement;
+    expect(list.className).toContain("-my-px");
+    expect(list.closest('[data-slot="item-card-meta"]')).not.toBeNull();
+    expect(card("Task a").textContent).not.toContain("#");
   });
 
   it("done cards fade, and completed cards hide behind each column's line", () => {

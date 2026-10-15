@@ -707,7 +707,7 @@ function LevelValue({
 function TagsValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
   const taskTags = api.tagsByTask.get(task.id) ?? [];
   return (
-    <div className="flex min-h-(--ctrl-h-sm) flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+    <div className="flex min-h-(--ctrl-h-sm) flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
       {taskTags.map((t) => (
         <TagChip
           key={t.id}
