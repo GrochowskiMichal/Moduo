@@ -160,3 +160,16 @@ export const Densities: Story = {
     </AtThreeDensities>
   ),
 };
+
+/** The feed rung (chat's stream, CH29): 32 / 28 / 24 px beside a message. */
+export const Feed: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex items-center gap-2">
+        <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="feed" />
+        <PersonAvatar name="Mike Chen" id="u-mike" size="feed" />
+        <PersonAvatar name="?" size="feed" />
+      </div>
+    </AtThreeDensities>
+  ),
+};

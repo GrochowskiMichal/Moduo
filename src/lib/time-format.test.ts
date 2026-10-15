@@ -7,6 +7,7 @@ import {
   formatDayTime,
   formatDuration,
   formatDurationSeconds,
+  formatPastDay,
   formatStamp,
   formatTime,
   formatWhen,
@@ -54,6 +55,18 @@ describe("one date grammar (decision 41)", () => {
     expect(formatWhen(at(2026, 9, 9, 15, 0), NOW)).toBe(time(at(2026, 9, 9, 15, 0)));
     expect(formatWhen(t, NOW)).toBe(`Tomorrow, ${time(t)}`);
     expect(formatStamp(t, NOW)).toBe(`${monthDay(t)}, ${time(t)}`);
+  });
+
+  it("the recent past reads back: Today · Yesterday · Mon up to six days · Oct 9 · Oct 9, 2025", () => {
+    expect(formatPastDay(at(2026, 9, 9), NOW)).toBe("Today");
+    expect(formatPastDay(at(2026, 9, 8), NOW)).toBe("Yesterday");
+    expect(formatPastDay(at(2026, 9, 7), NOW)).toBe(weekday(at(2026, 9, 7)));
+    expect(formatPastDay(at(2026, 9, 3), NOW)).toBe(weekday(at(2026, 9, 3)));
+    expect(formatPastDay(at(2026, 9, 2), NOW)).toBe(monthDay(at(2026, 9, 2)));
+    expect(formatPastDay(at(2025, 9, 9), NOW)).toBe(monthDayYear(at(2025, 9, 9)));
+    // A clock ahead never says "Tomorrow" in history.
+    expect(formatPastDay(at(2026, 9, 10), NOW)).toBe(monthDay(at(2026, 9, 10)));
+    expect(formatPastDay("nope", NOW)).toBe("");
   });
 
   it("invalid input is empty, never 'Invalid Date'", () => {

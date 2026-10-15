@@ -3,8 +3,13 @@ import type { ChatChannel, ChatMessage } from "./model";
 import {
   badgeCount,
   buildSidebar,
+  buildStream,
   buildTimeline,
   channelTitle,
+  countNewSince,
+  isEmojiOnlyText,
+  lastSeenMessage,
+  localDay,
   mergeMessages,
   normalizeChannelName,
   type SidebarEntry,
@@ -218,5 +223,155 @@ describe("channels", () => {
     expect(s.dms.map((x) => x.channel.id)).toEqual(["dm2", "dm1"]);
     // alpha: 1 mention (default level), zeta: 0 mentions, dm1: 3 unread, muted: 0.
     expect(badgeCount(entries, () => "mentions")).toBe(4);
+  });
+});
+
+// ── Chat v2's stream (CV-7a) ────────────────────────────────────────────────
+
+describe("read mark, New pill, page boundaries", () => {
+  const T = (min: number) => `2026-10-14T10:${String(min).padStart(2, "0")}:00Z`;
+
+  it("draws a centred day separator per local day and starts a person after 5 minutes", () => {
+    const rows = [
+      msg("a", "2026-10-13T10:00:00Z"),
+      msg("b", T(0)),
+      msg("c", T(1)),
+      msg("d", T(9)),
+      msg("e", T(10), { authorId: ME }),
+    ];
+    const items = buildStream(rows);
+    expect(items.map((i) => i.type)).toEqual([
+      "day",
+      "message",
+      "day",
+      "message",
+      "message",
+      "message",
+      "message",
+    ]);
+    const firsts = items.flatMap((i) => (i.type === "message" ? [[i.key, i.first]] : []));
+    expect(firsts).toEqual([
+      ["a", true],
+      ["b", true],
+      ["c", false],
+      ["d", true],
+      ["e", true],
+    ]);
+    expect(items[0]).toMatchObject({ type: "day", key: `d:${localDay(rows[0]!.createdAt)}` });
+  });
+
+  it("the pill sits before the first unseen message from someone else, never on your own", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("b", T(1)),
+      msg("mine", T(2), { authorId: ME }),
+      msg("c", T(3)),
+      msg("d", T(4)),
+    ];
+    const items = buildStream(rows, { newAfter: { at: T(1), id: "b" }, selfId: ME });
+    const keys = items.map((i) => i.key);
+    expect(keys.indexOf("new")).toBe(keys.indexOf("c") - 1);
+    expect(items[keys.indexOf("c")]).toMatchObject({ first: true });
+    // Newer messages arriving later don't move it.
+    const more = buildStream([...rows, msg("e", T(5))], {
+      newAfter: { at: T(1), id: "b" },
+      selfId: ME,
+    });
+    expect(more.map((i) => i.key).indexOf("new")).toBe(keys.indexOf("new"));
+    // Nothing after the mark: no pill.
+    expect(
+      buildStream(rows, { newAfter: { at: T(4), id: "d" }, selfId: ME }).some(
+        (i) => i.type === "new",
+      ),
+    ).toBe(false);
+  });
+
+  it("two messages with one timestamp both appear, once, and the pill splits them by id", () => {
+    const at = "2026-10-14T10:00:00.123456Z";
+    const rows = [msg("a1", at), msg("a2", at), msg("a2", at)];
+    const items = buildStream(rows, { newAfter: { at, id: "a1" }, selfId: ME });
+    expect(items.map((i) => i.key)).toEqual([`d:${localDay(at)}`, "a1", "new", "a2"]);
+  });
+
+  it("microseconds decide the mark inside one millisecond", () => {
+    const rows = [msg("x", "2026-10-14T10:00:00.123400Z"), msg("y", "2026-10-14T10:00:00.123900Z")];
+    const items = buildStream(rows, {
+      newAfter: { at: "2026-10-14T10:00:00.123500Z", id: "zzz" },
+      selfId: ME,
+    });
+    expect(items.map((i) => i.key).slice(1)).toEqual(["x", "new", "y"]);
+  });
+
+  it("the row past the window's edge sets grouping and the separator but isn't drawn", () => {
+    const rows = [msg("edge", T(0)), msg("a", T(1)), msg("b", T(2))];
+    const items = buildStream(rows, { hasOlder: true });
+    expect(items.map((i) => i.key)).toEqual(["a", "b"]);
+    expect(items[0]).toMatchObject({ first: false });
+  });
+
+  it("a deleted message without replies disappears; with replies it reads as deleted", () => {
+    const rows = [
+      msg("a", T(0), { deletedAt: T(5) }),
+      msg("b", T(1), { deletedAt: T(5), replyCount: 2 }),
+      msg("c", T(2)),
+      msg("h", T(3)),
+    ];
+    const items = buildStream(rows, { hidden: new Set(["h"]) });
+    expect(items.map((i) => [i.type, i.key])).toEqual([
+      ["day", `d:${localDay(T(0))}`],
+      ["deleted", "b"],
+      ["message", "c"],
+    ]);
+    expect(items[2]).toMatchObject({ first: true });
+  });
+
+  it("event lines draw through their own row and break a person's run", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("ev", T(1), { kind: "event", event: { type: "moved_out" }, authorId: null }),
+      msg("b", T(2)),
+    ];
+    const items = buildStream(rows);
+    expect(items.map((i) => i.type)).toEqual(["day", "message", "event", "message"]);
+    expect(items[3]).toMatchObject({ first: true });
+  });
+
+  it("the mark moves to the last message on screen, skipping unsent sends and events", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("b", T(1)),
+      msg("ev", T(2), { kind: "event", authorId: null }),
+      msg("s", T(3), { authorId: ME, sendState: "waiting" }),
+    ];
+    const items = buildStream(rows);
+    expect(lastSeenMessage(items, items.length - 1)?.id).toBe("b");
+    expect(lastSeenMessage(items, 1)?.id).toBe("a");
+    expect(lastSeenMessage(items, 0)).toBeNull();
+  });
+
+  it("a reply converted into its root's chain reads with the stream by position", () => {
+    const rows = [
+      msg("root", T(0)),
+      msg("reply", T(1), { parentId: "root", replyToId: "root" }),
+      msg("later", T(2)),
+    ];
+    const items = buildStream(rows, { newAfter: { at: T(1), id: "reply" }, selfId: ME });
+    expect(items.map((i) => i.key).slice(1)).toEqual(["root", "reply", "new", "later"]);
+  });
+
+  it("counts what arrived from others after the last row seen (the floating chip)", () => {
+    const rows = [msg("a", T(0)), msg("b", T(1)), msg("m", T(2), { authorId: ME }), msg("c", T(3))];
+    expect(countNewSince(rows, "a", ME)).toBe(2);
+    expect(countNewSince(rows, "c", ME)).toBe(0);
+    expect(countNewSince(rows, null, ME)).toBe(0);
+  });
+
+  it("emoji-only messages draw large", () => {
+    expect(isEmojiOnlyText("🎉")).toBe(true);
+    expect(isEmojiOnlyText("👍🏽 🇵🇱 👨‍👩‍👧")).toBe(true);
+    expect(isEmojiOnlyText("", 1)).toBe(true);
+    expect(isEmojiOnlyText("ok 🎉")).toBe(false);
+    expect(isEmojiOnlyText("1")).toBe(false);
+    expect(isEmojiOnlyText("🎉".repeat(9))).toBe(false);
   });
 });

@@ -12,14 +12,14 @@ function Avatar({
 }: React.ComponentProps<typeof AvatarPrimitive.Root> & {
   /** `icon` sits on the icon rung (`--icon`, density-scaled): an avatar
    * inline with 16 px icons, e.g. a task row's assignee. */
-  size?: "default" | "sm" | "lg" | "icon";
+  size?: "default" | "sm" | "lg" | "icon" | "feed";
 }) {
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
       data-size={size}
       className={cn(
-        "group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-avatar select-none data-[size=lg]:size-10 data-[size=sm]:size-6 data-[size=icon]:size-icon",
+        "group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-avatar select-none data-[size=lg]:size-10 data-[size=sm]:size-6 data-[size=icon]:size-icon data-[size=feed]:size-(--avatar-feed)",
         className,
       )}
       {...props}
@@ -129,6 +129,8 @@ const personFill = cva(
         sm: "group-data-[size=sm]/avatar:text-2xs",
         default: "text-xs",
         lg: "text-sm",
+        // A feed's person (`--avatar-feed`: 32 / 28 / 24 by density).
+        feed: "group-data-[size=feed]/avatar:text-xs",
       },
     },
     defaultVariants: { size: "default" },
@@ -151,6 +153,8 @@ const identityFill = cva(
 );
 
 type IdentitySize = "icon" | "sm" | "default" | "lg";
+/** A person also has the feed rung: density-scaled, beside a message. */
+type PersonSize = IdentitySize | "feed";
 
 type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>, "children"> & {
   /** The person's name; `null` draws the empty "unassigned" ring. */
@@ -159,7 +163,7 @@ type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>,
   id?: string | null;
   /** A photo, when they have one. The initials show until it loads. */
   src?: string | null;
-  size?: IdentitySize;
+  size?: PersonSize;
 };
 
 /**
