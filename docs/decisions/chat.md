@@ -2,6 +2,231 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index. Earlier chat lines (v1 ships as the 7th tab, 2026-10-06; chat + calls become a planned module, 2026-10-02) stay under Billing and Product in the index.
 
+## 2026-10-14 · Chat v2 build — the orchestrator's later choices, and one call from Maciej
+
+Written into the briefs and the runbook after checkpoint 1 (BR-1…BR-4 are further down). BR-5 and BR-6 are the orchestrator's choices, deferred to by Maciej: confirmed for building, revisitable. BR-7 is Maciej's own call.
+
+- **BR-5 · The bell draws chat excerpts in the stored form, in CV-11, and that completes AC13.7** → CV-11 (`briefs/CV-11.md`)
+  - Who: orchestrator's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: CV-1's conversion rewrites old bell excerpts to the stored form and marks every chat excerpt `payload.format_version = 2`. CV-11 draws a marked excerpt through the stored-form parser, so a converted `moduo://person/<id>` shows the person's name. Until then the bell prints the raw text, so AC13.7 is complete only when CV-11 lands.
+  - Why: no other block draws the bell's chat text with that parser.
+  - Rejected: leaving it to CV-23's cleanup (old excerpts would show raw links until then).
+- **BR-6 · An op that writes event lines in a person's name keeps its own pace** → CV-14, CV-16 (`briefs/CV-14.md`, `briefs/CV-16.md`)
+  - Who: orchestrator's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14 (from CV-2a's review).
+  - Decision: the sending limit doesn't count event lines (CV2a-4), so each op that writes them (moving messages, marking a decision) refuses more than a few per 10 seconds per person with `PT429`, the limit's own code, and has a test for it.
+  - Why: event lines are left out of the limit so that moving many messages doesn't lock the mover out; the ops therefore hold their own pace.
+  - Rejected: counting event lines in the sending limit.
+- **BR-7 · The research workspace was converted to v2 on the local stack** → the runbook (`docs/agents/chat-v2-build.md`)
+  - Who: Maciej's call, 2026-10-14.
+  - Decision: CV-1's conversion migration was applied once to the local stack, so "Chat replan research" (3,032 messages) holds v2 data now. The v1 dump is in the git-ignored `docs/local/chat-v1-fixture/`. The conversion refuses to run again once v2 data exists (CV1-1).
+  - Why: the round trip over this workspace had come out clean, and the blocks after CV-1 build against v2 messages.
+  - Rejected: keeping it as v1 rows, with the conversion proven only by the rolled-back round trip and `chat_convert.test.sql`.
+
+## 2026-10-14 · CV-4 (chat in handed-out Team workspaces) — the agent's choices (deferred to by Maciej)
+
+One migration (`20261014100400_chat_v2_plan_source.sql`), a drift gate and an API-level spec; see [the record](../build/chat-v2/CV-4.md). Proven in rolled-back transactions, then applied to the local stack. Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable. BR-2 above fixed the lookup's name; these are the rest.
+
+- **CV4-1 · The owner's plan is asked first, and the grant only when the plan doesn't include chat** → CV-4, TX-9b
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat_workspace_enabled(ws)` is true when the owner's plan ranks Duo or above (v1's rule). Otherwise it asks `plan_grant_effective_tier(ws)`, if that function exists, and is true when the tier ranks Duo or above. With no such function the owner's plan decides, as in v1.
+  - Why: every paying workspace keeps v1's answer and cost, and a broken or slow grant function can't take chat away from one (the test proves a failing stub is never called for a Duo owner).
+  - Rejected: `greatest(owner rank, grant rank)` in one expression, which always calls the grant function.
+- **CV4-2 · A grant function that fails reads as "no grant", with a log warning** → CV-4, TX-9b
+  - Who: agent's choice (code review), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the error is caught around the call only, and the warning carries just the error code.
+  - Why: the realtime topic rules, v1's unread counts and `isEnabled` ask this function too. An error would break presence and counts in every Free-owner workspace; now only a granted workspace pauses.
+  - Rejected: letting the error through (the first version).
+- **CV4-3 · The grant function is called by name, guarded by `to_regprocedure`** → CV-4, TX-9b
+  - Who: agent's choice (code review), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the call is written plainly inside plpgsql, so the body never needs the function to exist, and it gets a cached plan that is re-planned when the function is replaced (proven in the test).
+  - Why: it works in either merge order with TX-9b.
+  - Rejected: `EXECUTE` (planned on every call); a placeholder function this migration creates for TX-9b to replace (it would break TX-9b's plain `CREATE FUNCTION` and fix its return type).
+- **CV4-4 · The grant's tier is read as text and ranked by `plan_tier_rank`; the grant stays on the server** → CV-4, TX-9b
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: a text or an enum tier both work, and an unknown tier ranks 0 (off). `CHAT_PLAN_TIERS` and `planHasChat` keep their behaviour; the client never learns the grant, and the workspace's answer is `ChatRuntime.isEnabled`. A new drift gate ties the tier list to the newest `plan_tier_rank` body and the lookup to the signature `plan_grant_effective_tier(<one uuid>)`, so a changed signature in TX-9b fails a test instead of switching grants off silently.
+  - Why: a grant isn't a tier of its own, and TX-9b may return either type.
+  - Rejected: fixing the return type here; a client helper `workspaceHasChat(ownerTier, grantTier)` that nothing would call.
+- **CV4-5 · AC10.8 is finished by CV-21 and CV-22, not here** → CV-21, CV-22
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: CV-4 proves that reading and search keep working on a paused plan. v1's Conversations widget and v1's connector still refuse when the plan is off; CV-22 (widgets) and CV-21 (MCP tools) finish AC10.8.
+  - Why: those surfaces belong to those blocks.
+  - Rejected: changing the widget and the connector here.
+
+## 2026-10-14 · CV-2a (message ops v2) — the agent's choices (deferred to by Maciej)
+
+One migration (`20261014150000_chat_v2_core_ops.sql`), proven by `chat_ops.test.sql` (143 checks) and `chat_wrappers.test.sql` (23), and by a parity run of the mentions reader against the client's parser on 23,367 bodies (0 differences); see [the record](../build/chat-v2/CV-2a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, unless marked.
+
+- **CV2a-1 · Mentions are read on the server by a SQL twin of the client's parser** → CV-5, CV-7a, CV-10
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat__mentions` walks blocks the way `chat__body_text` does and reads inline text the way the client's `parseInline` does (code spans, escapes, titled references, link targets, emphasis pairing, a reference ending a word). People, teams and `@channel` come from the text, never from a list the client sends.
+  - Why: one reading of a message on both sides. The 23,367 bodies were the 3,032 converted research messages, spike 4's cases, 45 hand cases and 20,000 fuzzed strings.
+  - Rejected: a regex over the raw text (it counts code and escaped text); trusting the client's list.
+- **CV2a-2 · `@channel` without "Mention everyone" is stored as typed, with the flag off and no error** → CV-7a, CV-7b
+  - Who: agent's choice (the brief said "stored as plain text"), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the message posts, nobody is pinged, and the composer says why.
+  - Why: the brief said to store it as plain text, and the composer tells the sender.
+  - Rejected: refusing the send (v1 did); rewriting the text.
+- **CV2a-3 · A client-minted id is the idempotency key, and a resent id answers only its author** → CV-3
+  - Who: agent's choice (validator round 1 on the `client_id` part), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: a resent id returns the stored row to its author, in its conversation, while they can read it; two sends of one id at once collapse to one. Any other use of an existing id is `22023 That message id is already used.` and returns nothing. While the v1 wrappers live, every send also writes `client_id = id`, and the v1 send wrapper uses v1's client id as the message id.
+  - Why: v1 screens and old builds match their optimistic row by `client_id`; without it each v1 send showed twice.
+  - Rejected: stopping `client_id` at once (CV-23 does it); answering anyone who knows an id.
+- **CV2a-4 · Event lines don't count toward the sending limit, and an API key has its own budget** → CV-14, CV-16, CV-21 (and BR-6 above)
+  - Who: event lines are the agent's choice (the orchestrator's question); the per-key budget is the orchestrator's choice. Both deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the numbers and `PT429` stay as they were. Event lines are neither limited nor counted. A row with `api_key_id` counts against that key's own budget (new partial index), not its person's. An app row without a key id keeps the workspace's shared apps budget until CV-21 writes `api_key_id`.
+  - Why: event lines come from ops (a move's "moved here"), not from a person typing, and a move of many messages must not lock its mover out. One busy app can't silence its person or the workspace's other apps.
+  - Rejected: counting every row.
+- **CV2a-5 · The v1 signatures stay as wrappers for one release** → CV-23
+  - Who: agent's choice (validator and code review on the edit part), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat_op_send` (7 arguments), `chat_op_edit` (3, its default dropped) and `chat_op_react` (2, a toggle) convert v1 markup with `chat__v1_to_v2` and call the v2 ops; `chat_op_agent_post` converts and writes v2. The edit wrapper reads the stored row's format: a v1 row's text is converted whole, and a v2 row's text is kept, with only the tokens v1's pickers add turned into references. A v1 message that would grow past 8,000 characters when converted is refused with the count. The 3-argument edit lost its default because a 2-argument call is otherwise ambiguous in SQL and in PostgREST.
+  - Why: v1's screens and old desktop builds keep working until `min_build` passes them.
+  - Rejected: dropping the 2-argument react wrapper (reactions would fail on old builds); converting an edit's text every time (v1's composer opens an edit with the stored text, so it would be escaped); guessing the format from the text. A v1 emphasis typed during such an edit (`_x_`) stays literal: a loss on v1 screens only.
+- **CV2a-6 · Who may delete, undo a delete, pin and edit** → CV-7a, CV-8a
+  - Who: agent's choice (spec §12 plus the builder), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: delete is the author while their role can post, or anyone with "Delete others' messages". Undo is whoever deleted it (while they still may) or anyone with that permission, so an author can't undo an admin's delete (new column `deleted_by`). Pin is whoever can post there (managers only in an announcement channel) and holders of "Manage any channel", up to 100 live pins; a pinned message restored after its conversation filled its pins comes back unpinned. Edit is the author while their role still posts.
+  - Why: a viewer can't delete even an old message of theirs; reading "who deleted may undo" literally would let an author put back what an admin took down.
+  - Rejected: letting the author undo any delete.
+- **CV2a-7 · Delete hides at once; Undo lasts 8 seconds in the app and 10 on the server** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: delete sets `deleted_at` and `deleted_by` and keeps the text for Undo. The server takes a restore up to 10 seconds after, and a job that runs every minute (`chat-blank-deleted`) blanks the text, mentions, reactions and pin once that passes. The bell's excerpt of the deleted message is blanked with it, since it is the only text a bell row carries.
+  - Why: the extra 2 seconds covers the request in flight.
+  - Rejected: none recorded.
+- **CV2a-8 · An archived conversation is read-only, and a removed person can't post** → CV-2b, CV-15
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: in an archived conversation there is no sending, editing, reacting or pinning; deleting (and its Undo) still works. A person a manager removed from a public channel can't post, edit or pin there any more (`42501 You were removed from this conversation.`), though they still read it and may react; a person who left on their own posts and is back in. The removed rule starts to apply once CV-2b's `chat_op_remove_member` stamps `removed_by`, and CV-2b's join decides whether a removed person may rejoin.
+  - Why: an archived conversation is closed to change; v1 deleted a removed member's row, so a stamp is the only way to tell a removal from leaving.
+  - Rejected: v1's edits, reactions and pins in archived channels.
+- **CV2a-9 · Replies and chains at the edges** → CV-12
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: a reply joins its root's chain (`parent_id` is the root, `reply_to_id` what it quotes). A reply to a deleted message is refused (`P0002`); a reply to a live reply inside a deleted root's chain is taken. Event lines can't be replied to, pinned or reacted to. A reply moves the conversation's `last_message_at`. The chain's counters are recounted on delete and restore, so "N replies" counts live replies. Posting in a public channel joins it, or back (clears `left_at`), as v1 did.
+  - Why: replies are stream messages now; the counters can't drift if they are recounted.
+  - Rejected: v1's decrement-only counters, which had no restore.
+- **CV2a-10 · The bell rings as v1 rang it until CV-5** → CV-5
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: mentioned people, the conversation on `@channel`, the chain's people and the quoted message's author on a reply; only people who can read the conversation, never the sender; teams aren't expanded. The excerpt is the stored form's first 140 characters without half a reference.
+  - Why: CV-5 owns the fan-out and replaces this block.
+  - Rejected: expanding teams here.
+- **CV2a-11 · Activity rows are written only when something changed, with ids only** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: edit, delete, restore, react and pin each write one attributed row (`chat.message_edit`, `chat.message_delete`, `chat.message_restore`, `chat.react`, `chat.pin`) with ids only; a resent react, pin, delete or restore writes none, and neither does a plain send or typing.
+  - Why: the activity feed stays about changes (spec #15), and carries no message text.
+  - Rejected: a row for every call.
+
+## 2026-10-14 · CV-1 (foundation and conversion) — the agent's choices (deferred to by Maciej)
+
+Two migrations (`20261014100000_chat_v2_foundation.sql`, `20261014100100_chat_v2_convert_v1.sql`) and the contracts; see [the record](../build/chat-v2/CV-1.md). The conversion was proven in a rolled-back round trip: 3,111 bodies in 0.49 s, a second pass that changed no row, and the research workspace's 3,032 messages drawn as v1 drew them (BR-7 says it was then applied). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, unless marked.
+
+- **CV1-1 · The conversion runs once, before the v2 ops, and refuses rather than truncates** → CV-2a, the release train
+  - Who: agent's choice (validator round 1), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: it refuses to run once v2 data exists (a v2 `format_version`, a `left_at`, an event line, a quote, a key id, a team mention, a Catch up item that isn't a `level_reset` line, or a chain mute). It also stops before changing anything if a v1 body holds U+0001 or U+0002 (the converter's markers) or would grow past 8,000 characters. Then it runs seven idempotent steps, and the migration file runs it twice and fails unless the second pass changes nothing.
+  - Why: the settings steps can't tell a v1 setting from a v2 choice (a late run would reset someone's v2 "Every message"), and nothing may be lost silently.
+  - Rejected: per-row v1 markers on memberships; widening the 8,000-character CHECK for converted rows.
+- **CV1-2 · The converter and the stripper live in the foundation; the convert file only calls `chat__convert_v1()`** → CV-2a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat__v1_to_v2`, `chat__body_text` and friends are in the foundation file.
+  - Why: `chat_convert.test.sql` must pass on a stack where the conversion isn't applied, and CV-2a's v1 wrappers need `chat__v1_to_v2`.
+  - Rejected: the functions only in the convert file.
+- **CV1-3 · `format_version` defaulted to 1 until CV-2a flipped it to 2** → CV-2a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: v1's live ops kept writing v1 text, so the column's default stayed 1 in this block. CV-2a writes 2 explicitly and flipped the default in its own migration, after which the conversion refuses.
+  - Why: a default of 2 would have marked v1's rows as converted and the conversion would have skipped them.
+  - Rejected: round-3's default of 2 in this block.
+- **CV1-4 · One `level_reset` line per person and conversation, none for an archived channel** → CV-5, CV-11
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: people on "Every message" move to "Mentions and replies" and get one Catch up line for each live conversation.
+  - Why: the copy names one conversation ("Acme now notifies you…") and its Change opens that conversation's setting; `channel_id` stays NOT NULL.
+  - Rejected: one line per person (which conversation would it name?).
+- **CV1-5 · How the oddities of v1 convert** → CV-2b, CV-15
+  - Who: agent's choice (code review on the last two), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: a notes-to-self conversation becomes one private note (each message under a bold `YYYY-MM-DD HH:MM` line in the person's time zone, else `UTC`; deleted messages left out; a person mention reads `@Name` and other references stay `moduo://` URIs; the workspace grant that `share_note_after` adds is removed, so only that person reads it), and the conversation is deleted. An empty one is closed without a note. A DM whose other people left isn't notes to self. `mentions_everyone` is set from `<!channel>` in the v1 text. General is flagged only on a public, unarchived channel named "general", because new members are joined to it.
+  - Why: the note must be readable by its person only, and the General flag is what the new-member join keys on.
+  - Rejected: leaving `moduo://person/<id>` in the note; flagging whatever is named general.
+- **CV1-6 · Bell excerpts: only those holding a v1 token are rewritten, and every chat excerpt is marked `format_version = 2`** → CV-11 (BR-5)
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the v1 client writes excerpts as plain text with names filled in, which the converter would only escape. A server-written raw body carries tokens, and only those are converted. The marker makes the step idempotent, since the converter isn't.
+  - Why: converting a plain-text excerpt would escape `2*3` and `C:\x`.
+  - Rejected: converting every excerpt.
+- **CV1-7 · Typing is for the conversation's members only** → CV-8a, the release
+  - Who: agent's choice (spec #17, round-3 §2.7), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: a person who reads a public channel without being in it gets no typing line there, and neither does someone who left. `chat_privacy.test.sql` changed on purpose: its check "C reads the public channel Q's typing topic" now expects 0 and adds that Q's member A reads it. CV-2a's `chat_op_typing` asks for membership too. This changes behaviour on prod for every conversation, so it ships with the v2 client in the same release; the v2 client joins the typing topic only as a member.
+  - Why: the typing topic is the conversation's members' (spec #17, round-3 §2.7).
+  - Rejected: v1's "anyone who can read it".
+- **CV1-8 · The read rule is written out in two functions, with no nested definer calls, and a parity test guards the copy** → CV-19
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat_can_read_channel` and `chat__can_read_channel_as` carry the rule written out. It no longer asks the plan; people who left, deleted conversations and deleted workspaces drop out. A parity test compares both with `perm_user_has`.
+  - Why: the read policies call it for every row: 3,032 rows read in 406 ms with nested calls and 23–26 ms written out.
+  - Rejected: one function calling the other (and `perm_user_has`): the logic stays in one place but costs about 100 µs a row.
+- **CV1-9 · A link with a conversation or a message at either end is hidden from people who can't read it** → CV-10
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the links read rule checks both ends.
+  - Why: a link from a task to a private message must not reveal that message.
+  - Rejected: checking the source only (round-3's wording).
+- **CV1-10 · Catch up rows are the person's own and aren't gated on the conversation's read rule** → CV-5, CV-11
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat_catchup` is own-rows only. Items carry ids only, and CV-11 closes items when access goes.
+  - Why: a "removed" line has to reach the person who can no longer read the conversation.
+  - Rejected: gating items on the read rule, which would hide that line.
+- **CV1-11 · The name check is added `NOT VALID`** → CV-23
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat_channels_name_trimmed` checks new and changed names, and existing v1 names aren't re-scanned at release. CV-23 validates it once prod has no untrimmed name.
+  - Why: one untrimmed name on prod would roll the whole foundation back.
+  - Rejected: validating at once.
+- **CV1-12 · The body parser's look-aheads are bounded** → CV-2a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `chat__inline_text` shares a budget of 2 × the length + 1,000 characters across its look-aheads, and pairs emphasis markers in two linear passes. Past the budget an unclosed backtick run or a `](` reads as text.
+  - Why: it runs on every message write, and a plpgsql character loop is about 100 times slower than the same loop in JavaScript: an 8,000-character body now takes up to about 70 ms (one took 4.4 s before).
+  - Rejected: the client's unbounded scans, which are fast in JavaScript and slow in plpgsql. Only extreme text reads differently from the client now.
+
+## 2026-10-14 · CV-0 spike 1 (the message list in the real webviews) — the agent's choices (deferred to by Maciej)
+
+Measured with the harness in `scripts/spikes/chat/s1/` (nothing in `src/`), in Chromium 153 and in WebKit through a plain WKWebView host, React Compiler on; see [the spike's record](../build/chat-v2/CV-0-S1.md) for the table. **Verdict: TanStack Virtual stays (decision #16 holds).** Every bar the harness can measure passes in both engines. Not measured yet: the Tauri window itself and real trackpad momentum (both are in the checklist). Each choice is the spike builder's, deferred to by Maciej: confirmed for building, revisitable.
+
+- **S1-1 · TanStack Virtual runs the stream, with four settings** → CV-7a (`scripts/spikes/chat/s1/harness/tanstack-stream.tsx`)
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `@tanstack/react-virtual` 3.14 with `anchorTo: 'end'` and `followOnAppend`, plus `useFlushSync: true`, the size-change rule (S1-3), `contain: layout style` on each row and the density re-anchor (S1-5). Result: 0 px of drift over 10 × 10 prepends, folds, edits above the viewport, arrivals and density switches; jumps land within 0.03 px; no frame over 18 ms in a 2-second fling; at most 200 elements in the stream.
+  - Why: it passes every bar in both engines, uses 7.5 times less DOM than Legend List, and is already in the bundle. Without `contain: layout style` WebKit lays out the whole stream on every frame (19 fps, 233 ms frames).
+  - Rejected: Legend List 3.6.0 (it fails the prepend bar in WebKit by 3.38 px in 5 of 5 runs, keeps about 1,510 elements and brings its own scroller); a custom list.
+- **S1-2 · `useFlushSync: true`** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: TanStack writes the scroll correction and the new row positions in the same frame.
+  - Why: with `false` the correction paints a frame before the rows move: flashes of 221–262 px in Chromium and 124 ms frames in WebKit.
+  - Rejected: VirtualStack's `false` (Tasks). React 19 warns about `flushSync` inside effects; none appeared in these runs.
+- **S1-3 · Every size change that lies wholly above the viewport is compensated** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `shouldAdjustScrollPositionOnItemSizeChange` returns true when the item ends at or above the viewport's top.
+  - Why: TanStack's default skips re-measures while scrolling backward, which is when edits, reactions and late images land above the reader (a 176 px jump).
+  - Rejected: the default; pre-measuring rows off screen before inserting them (7–28 ms per 50 rows, and unneeded once `flushSync` is on).
+- **S1-4 · Rows carry the message before the window, and keys are stable** → CV-3, CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: rows are built with the message just before the window (read, not drawn): it decides the top row's grouping and whether a day separator sits above it. Keys are the message id, `d:YYYY-MM-DD` for a day separator and `c:<root id>` for a folded chain. A prepend then never changes a row already drawn.
+  - Why: otherwise the reader's row is re-keyed and no longer drawn in 5 of 10 prepends, and most others jump 28–668 px.
+  - Rejected: the top row always starting a group under a separator.
+- **S1-5 · Density, font loading and width changes use a synchronous re-anchor** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: take the first message row wholly in view and its offset, switch, remeasure every drawn row, set the scroll position and the virtualizer's offset, and flush a render, all in one task (`setDensityAnchored`).
+  - Why: it holds the reader's row at 0–1 px; TanStack alone moves 4 px (40 px with `flushSync` off).
+  - Rejected: TanStack alone; `measure()` alone (rows above fall back to estimates and the view jumps).
+- **S1-6 · A jump loads a window and remounts the stream** → CV-3, CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the window is `[target − 100, target + 100]`, a new stream keyed by the window, with `scrollToIndex(i, { align: 'center' })` in a layout effect on mount. It lands in the first painted frame.
+  - Why: the list holds about 200 rows, not the whole history.
+  - Rejected: keeping all 10,000 rows (it also lands, within 0.03 px, but holds the whole history).
+- **S1-7 · Image boxes are sized by CSS from the stored size** → CV-9
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: the box takes `--w` and `--h` custom properties, capped at 360 × 240, with `object-fit: cover`.
+  - Why: Tailwind's preflight sets `img { height: auto }`, so with attributes alone the decoded preview's own ratio takes over (a 0.5 px change per image).
+  - Rejected: `width` and `height` attributes alone.
+- **S1-8 · The stream file opts out of the React Compiler, and nothing else does** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `"use no memo"` in the stream file only (confirmed in the dev bundle); the rows stay compiled and take only their row object.
+  - Why: the compiler caches `getVirtualItems()`, read from TanStack's mutable virtualizer (the TV-D11b trap in `docs/gotchas/ui.md`). Not re-measured here.
+  - Rejected: compiling the stream file.
+- **S1-9 · The sticky day header comes from `rangeExtractor`** → CV-7a
+  - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
+  - Decision: `rangeExtractor` keeps the active separator drawn, with `position: sticky; top: 0`. It is up to one stale frame at a crossing in Chromium and none in WebKit; if that shows, update the label imperatively in the scroll handler.
+  - Why: it is VirtualStack's pattern, and it works in both engines.
+  - Rejected for now: `directDomUpdates`, which writes a transform onto the stuck header.
+
 ## 2026-10-14 · CV-0 spike 2 (the chat store and its device copy) — the agent's choices (deferred to by Maciej)
 
 Measured in [the spike's record](../build/chat-v2/CV-0-S2.md) on the local stack, with no migration: the harness is `scripts/spikes/chat/s2/`, the server half a draft in `docs/build/chat-v2/drafts/store.sql`. Every bar passed. Each choice is the spike builder's, deferred to by Maciej: confirmed for building, revisitable. Not measured yet: WebKit (Tauri's macOS webview).
