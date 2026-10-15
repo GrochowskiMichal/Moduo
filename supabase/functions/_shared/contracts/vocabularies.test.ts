@@ -149,6 +149,7 @@ describe("vocabulary value sets", () => {
       "announcement",
       "build_update",
       "ops_alert",
+      "chat_waiting",
     ]);
     expect(isEmailKind("auth_code")).toBe(true);
     expect(isEmailKind("newsletter")).toBe(false);
@@ -455,6 +456,26 @@ describe("chat v2 vocabularies (CV-1)", () => {
     expect(v.normalizeChatMentionReason(undefined)).toBe("person");
     expect(v.normalizeChatMentionReason("everyone")).toBe("everyone");
     expect(v.isChatMentionReason("someone")).toBe(false);
+  });
+  it("device notices: chat's six kinds, and which app a client is (CV-6a)", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.NOTICE_DELIVERY_KINDS]).toEqual([
+      "reminder",
+      "agent",
+      "chat_message",
+      "chat_mention",
+      "chat_reply",
+      "chat_announcement",
+      "chat_reminder",
+      "chat_focus_summary",
+    ]);
+    expect(v.normalizeNoticeDeliveryKind("chat_reply")).toBe("chat_reply");
+    expect(v.normalizeNoticeDeliveryKind("chat_typing")).toBe("reminder");
+    expect([...v.CLIENT_SURFACES]).toEqual(["desktop", "web"]);
+    expect(v.parseClientSurface("desktop").success).toBe(true);
+    expect(v.parseClientSurface("phone").success).toBe(false);
+    expect(v.isClientSurface("web")).toBe(true);
+    expect(v.normalizeClientSurface(undefined)).toBe("web");
   });
 });
 

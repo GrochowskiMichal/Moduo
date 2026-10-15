@@ -11,6 +11,7 @@ import { isAppInBackground } from "../../features/focus/phase-alert";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
 import {
   deliveriesToShow,
+  isChatNotice,
   type NoticeDelivery,
   noticeCopy,
   noticeDeliveryFromRow,
@@ -92,7 +93,10 @@ export function NoticeDeliveries() {
         },
         (payload) => {
           const delivery = noticeDeliveryFromRow((payload as { new?: unknown }).new);
-          if (!delivery) return;
+          // Chat's notices ring only from the client that should (Moduo not in
+          // front, the latest active client, then acknowledged): CV-6b. Until
+          // then this listener leaves them to Catch up.
+          if (!delivery || isChatNotice(delivery)) return;
           pending.push(delivery);
           // A sender run can deliver several at once: show them together.
           if (!timer) timer = setTimeout(flush, 400);

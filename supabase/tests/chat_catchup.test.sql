@@ -323,9 +323,13 @@ BEGIN
                         WHERE k.user_id = test.id('B') AND m.author_kind = 'api_key') = 'mention:api_key:person',
     'app post: naming B gives B the item and the bell, attributed to the key', v);
 
-  -- Device notices are CV-6a's: chat writes none yet.
-  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries WHERE workspace_id = test.id('W')),
-    'no device notice is written yet (CV-6a)');
+  -- Device notices (CV-6a, chat_notices.test.sql): only for people with an
+  -- item, never for a quiet line's people or the sender.
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d
+                               WHERE d.workspace_id = test.id('W') AND d.message_id IS NOT NULL
+                                 AND NOT EXISTS (SELECT 1 FROM public.chat_catchup k
+                                                  WHERE k.user_id = d.user_id AND k.channel_id = d.channel_id)),
+    'a device notice goes only to someone the message is addressed to (CV-6a)');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_catchup WHERE workspace_id = test.id('W') AND held_at IS NOT NULL),
     'held_at stays empty until the holds arrive (CV-18)');
 END;
