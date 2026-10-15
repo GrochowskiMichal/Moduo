@@ -266,9 +266,13 @@ BEGIN
                                             'team_id', test.id('DS'), 'assignee_id', test.id('M')));
   PERFORM test.make('O', jsonb_build_object('id', test.id('C4'), 'title', 'Archived', 'bucket_id', test.id('AR'),
                                             'team_id', test.id('DS'), 'assignee_id', NULL));
-  -- Everything else in the workspace is out of the way of this check.
+  -- Everything else is out of the way of this check: the tasks above in this
+  -- workspace, and any routed task already on the stack in another one (the
+  -- sweep reads every workspace, and a real task left unclaimed for 3 days
+  -- would otherwise be picked up here, depending on the day the test runs).
   UPDATE public.tasks SET team_check_back_at = now()
-  WHERE workspace_id = test.id('W') AND team_id IS NOT NULL AND id NOT IN (test.id('C1'), test.id('C2'), test.id('C3'), test.id('C4'));
+  WHERE team_id IS NOT NULL AND team_check_back_at IS NULL
+    AND id NOT IN (test.id('C1'), test.id('C2'), test.id('C3'), test.id('C4'));
   UPDATE public.buckets SET archived_at = now() WHERE id = test.id('AR');
   UPDATE public.tasks SET team_routed_at = now() - interval '4 days'
   WHERE id IN (test.id('C1'), test.id('C3'), test.id('C4'));
@@ -290,7 +294,7 @@ BEGIN
               AND EXISTS (SELECT 1 FROM public.module_activity a
                           WHERE a.entity_id = test.id('C2') AND a.op = 'tasks.team_check_back' AND a.payload ->> 'reason' = 'due'),
     'from 9:00 the day before it''s due, it checks back', v_count::text);
-  v_count := public.tasks__team_check_backs(now() + interval '1 day', 500);
+  v_count := public.tasks__team_check_backs(((v_today + 1)::timestamp + time '08:00') AT TIME ZONE 'UTC', 500);
   PERFORM test.ok(v_count = 0
               AND (SELECT count(*) FROM public.module_activity a
                    WHERE a.entity_id IN (test.id('C1'), test.id('C2')) AND a.op = 'tasks.team_check_back') = 2,
