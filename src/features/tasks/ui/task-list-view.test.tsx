@@ -2,7 +2,7 @@
 // their Space/Enter (no keyboard drag, no list action), list keys hand focus
 // back to the list, and keys typed in a row's popover never reach the list.
 
-import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
@@ -296,5 +296,85 @@ describe("TaskListView states (TV-P0)", () => {
     expect(screen.getByText("No tasks in Work")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add a task" })).toBeTruthy();
     expect(screen.queryByText("Nothing here yet")).toBeNull();
+  });
+});
+
+// MOD-121: the list takes focus on load so j/k work at once, but a browser
+// counts that script focus as keyboard focus and drew a 2 px ring around the
+// whole list. jsdom has no :focus-visible, so this pins the quiet marker and
+// the class that drops the ring while it's there; the ring itself is checked
+// live (getComputedStyle's box-shadow, on load and after a key).
+describe("the list's focus on load (MOD-121)", () => {
+  const quiet = (grid: HTMLElement) => grid.hasAttribute("data-quiet-focus");
+  // jsdom says the document has no focus while an element blurs; a browser says
+  // so only when the window itself lost focus. Model the browser.
+  let hasFocus: ReturnType<typeof rs.spyOn>;
+  beforeEach(() => {
+    hasFocus = rs.spyOn(document, "hasFocus").mockReturnValue(true);
+  });
+  afterEach(() => hasFocus.mockRestore());
+
+  it("takes focus quietly, and j/k still move the selection", async () => {
+    const { grid } = renderList();
+    await wait();
+    expect(document.activeElement).toBe(grid);
+    expect(quiet(grid)).toBe(true);
+    expect(grid.className).toMatch(/(^|\s)data-\[quiet-focus\]:focus-visible:ring-0(\s|$)/);
+    expect(grid.className).toMatch(/(^|\s)focus-visible:ring-2(\s|$)/);
+
+    expect(selectedTitle()).toBe("Alpha");
+    fireEvent.keyDown(grid, { key: "j", code: "KeyJ" });
+    expect(selectedTitle()).toBe("Beta");
+    // A key on the list is keyboard use: the ring shows from here on.
+    expect(quiet(grid)).toBe(false);
+    fireEvent.keyDown(grid, { key: "k", code: "KeyK" });
+    expect(selectedTitle()).toBe("Alpha");
+  });
+
+  it("a lone modifier leaves it quiet; the list's own ⌘ keys don't", async () => {
+    const { grid } = renderList();
+    await wait();
+    fireEvent.keyDown(grid, { key: "Meta", code: "MetaLeft", metaKey: true });
+    fireEvent.keyDown(grid, { key: "Shift", code: "ShiftLeft", shiftKey: true });
+    expect(quiet(grid)).toBe(true);
+    // ⌘A selects every row: the list is in use from the keyboard.
+    fireEvent.keyDown(grid, { key: "a", code: "KeyA", metaKey: true });
+    expect(quiet(grid)).toBe(false);
+  });
+
+  it("rings as usual once focus has left and come back", async () => {
+    const { grid } = renderList();
+    await wait();
+    act(() => grid.blur());
+    expect(quiet(grid)).toBe(false);
+    act(() => grid.focus());
+    expect(quiet(grid)).toBe(false);
+  });
+
+  it("stays quiet while the window is away (another app), so coming back rings nothing", async () => {
+    const { grid } = renderList();
+    await wait();
+    hasFocus.mockReturnValue(false);
+    fireEvent.blur(grid);
+    expect(quiet(grid)).toBe(true);
+  });
+
+  it("ends the quiet focus when a row's button takes focus (the list's own blur)", async () => {
+    const { grid } = renderList();
+    await wait();
+    const checkOff = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Mark as done"]')!;
+    act(() => checkOff.focus());
+    expect(quiet(grid)).toBe(false);
+  });
+
+  it("leaves focus where it is when something already holds it", async () => {
+    const field = document.createElement("input");
+    document.body.append(field);
+    field.focus();
+    const { grid } = renderList();
+    await wait();
+    expect(document.activeElement).toBe(field);
+    expect(quiet(grid)).toBe(false);
+    field.remove();
   });
 });

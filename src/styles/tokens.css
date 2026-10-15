@@ -714,6 +714,15 @@
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
   --notes-meta-line-space: 2.25rem; /* 36 — room under a note's title for its meta line */
+  /* Shell panels (MOD-121): one inset system for the three panels, fixed
+     across densities (density changes row and control heights, never the
+     frame). --panel-pad is a panel's edge → any fill that touches it (a nav
+     row, the right panel's title chip): 8 = radius-xl − radius-md, so a
+     rounded-md fill sits concentric in the rounded-xl panel (soft 16 − 8 = 8,
+     round 24 − 8 = 16, sharp 0). --panel-inset is a panel's edge → its text
+     column: --panel-pad plus a row's own 8. */
+  --panel-pad:            0.5rem;  /* 8   — panel edge → a fill (nav row, title chip) */
+  --panel-inset:          1rem;    /* 16  — panel edge → the text column */
   --tree-indent:          0.875rem; /* 14  — one level of a nested tree (notes sidebar) */
 
   --bp-sm: 640px;
@@ -721,6 +730,14 @@
   --bp-lg: 1024px;
   --bp-xl: 1280px;
   --bp-2xl: 1536px;
+}
+
+/* The centre's top padding: its 28 px title line (text-lg) centres on the same
+   line as a side panel's first --row-h row (--panel-pad + --row-h / 2), at
+   every density: 12 / 10 / 8. Re-declared wherever a density is scoped. */
+:root,
+[data-density] {
+  --panel-title-top: calc(var(--panel-pad) + (var(--row-h) - 1.75rem) / 2);
 }
 
 /* ============================================================================
