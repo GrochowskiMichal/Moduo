@@ -289,9 +289,13 @@ BEGIN
                   AND test.told('e1', 'chat.mention', 'person') = 'B,O' AND test.bells('e1') = 2,
     'edit: O, named for the first time, is told (one new bell row); B isn''t told again', v);
   v := test.edit('A', 'e1', 'hi ' || test.person_ref('O'));
-  v := v || ' ' || test.edit('A', 'e1', 'hi ' || test.person_ref('O') || ' ' || test.person_ref('B'));
-  PERFORM test.ok(v = 'ok 1 ok 1' AND test.bells('e1') = 2 AND test.reasons('B', 'e1') = 'mention',
-    'edit: taking B out and putting B back tells nobody again', v);
+  PERFORM test.ok(v = 'ok 1' AND test.item('B', 'e1', 'mention') = 'done:closed+bell' AND test.twin_dismissed('B', 'e1', 'mention')
+                  AND test.item('O', 'e1', 'mention') = 'open+bell',
+    'edit: taking B out closes B''s mention and its bell row; O keeps theirs', v);
+  v := test.edit('A', 'e1', 'hi ' || test.person_ref('O') || ' ' || test.person_ref('B'));
+  PERFORM test.ok(v = 'ok 1' AND test.bells('e1') = 2 AND test.reasons('B', 'e1') = 'mention'
+                  AND test.item('B', 'e1', 'mention') = 'done:closed+bell',
+    'edit: putting B back tells nobody again', v);
   v := test.edit('A', 'e1', 'hi ' || test.person_ref('O') || ' ' || test.person_ref('B') || ' moduo://team/' || test.id('T'));
   PERFORM test.ok(v = 'ok 1' AND test.reasons('B', 'e1') = 'mention' AND test.item('C', 'e1', 'team_mention') = 'open'
                   AND test.bells('e1') = 2,
@@ -413,6 +417,22 @@ BEGIN
                   AND test.counts('C', 'G') = '4/1/4/2',
     'mark unread: the Every-message line and the mention come back', v);
 
+  -- A line whose newest message was deleted is read once what's shown is.
+  v := test.send('E', 'G', 'p5', 'five', 40);
+  UPDATE public.chat_messages SET deleted_at = now() WHERE id = test.mid('p5');
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p5', 'every_message') = 'open' AND test.counts('C', 'G') = '4/1/4/1',
+    'deleted: the line moved to p5, and with p5 deleted it leaves the count', test.counts('C', 'G'));
+  v := test.as_user('C', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('G'), test.mid('p4')));
+  PERFORM test.ok(v = 'ok 1' AND test.item('C', 'p5', 'every_message') = 'done:read' AND test.item('C', 'p4', 'mention') = 'done:read+bell',
+    'deleted: reading to p4, the last message shown, closes the line on deleted p5 too', v);
+
+  -- Joining reads to the newest message: what Catch up held there is read.
+  v := test.as_user('O', format($q$SELECT public.chat_op_join(%L::uuid)$q$, test.ref('G')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.item('O', 'r0', 'mention') = 'done:read+bell'
+                  AND (SELECT count(*) FROM public.chat_catchup
+                        WHERE user_id = test.id('O') AND channel_id = test.ref('G') AND done_at IS NULL) = 0,
+    'join: O, named in G before joining, has nothing left open there once in', v);
+
   -- These ops need no plan and log no activity.
   UPDATE public.profiles SET plan_tier = 'free' WHERE id = test.id('O');
   v := test.as_user('B', format($q$SELECT public.chat_op_catchup_done(ARRAY[%L]::uuid[])$q$, test.item_id('B', 'r5', 'reply')));
@@ -420,8 +440,9 @@ BEGIN
   PERFORM test.ok(v = 'ok 1 ok 1' AND test.item('B', 'r5', 'reply') = 'done:done+bell',
     'paused: Done and Stop following still work (no plan needed)', v);
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
-  PERFORM test.ok((SELECT count(*) FROM public.module_activity WHERE workspace_id = test.id('W')) = v_acts,
-    'activity: Catch up''s ops, the bell''s, read marks and following log nothing (B''s plain send rang no bell)');
+  PERFORM test.ok((SELECT count(*) FROM public.module_activity WHERE workspace_id = test.id('W')) = v_acts + 1
+                  AND (SELECT count(*) FROM public.module_activity WHERE workspace_id = test.id('W') AND op = 'chat.join') = 1,
+    'activity: Catch up''s ops, the bell''s, read marks and following log nothing (plain sends ring no bell; O''s join is its own row)');
 END;
 $$;
 

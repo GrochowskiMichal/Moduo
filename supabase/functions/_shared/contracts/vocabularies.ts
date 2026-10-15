@@ -1118,6 +1118,24 @@ export function parseChatCatchupDoneHow(input: unknown): SafeParseResult<ChatCat
   return parseOrError(chatCatchupDoneHowSchema, input);
 }
 
+/** Why a `chat.mention` bell row reached you (its `payload.reason`, written by
+ *  chat__fan_out in …_chat_v2_catchup, CV-5): named in person, through a team
+ *  of yours, or `@channel`. No column holds it, so no CHECK; the drift gate
+ *  reads the fan-out instead. */
+export const CHAT_MENTION_REASONS = ["person", "team", "everyone"] as const;
+export type ChatMentionReason = (typeof CHAT_MENTION_REASONS)[number];
+export const chatMentionReasonSchema = z.enum(CHAT_MENTION_REASONS);
+export function isChatMentionReason(value: unknown): value is ChatMentionReason {
+  return typeof value === "string" && (CHAT_MENTION_REASONS as readonly string[]).includes(value);
+}
+/** Read-side: a v1 row has no reason, and an unknown one reads as an @you ("person"). */
+export function normalizeChatMentionReason(input: unknown): ChatMentionReason {
+  return isChatMentionReason(input) ? input : "person";
+}
+export function parseChatMentionReason(input: unknown): SafeParseResult<ChatMentionReason> {
+  return parseOrError(chatMentionReasonSchema, input);
+}
+
 // ---------------------------------------------------------------------------
 // Content authors — who wrote a chat message or a comment. Mirrors
 // chat_messages_author_kind_check (20261006160000_chat_agent_access) and

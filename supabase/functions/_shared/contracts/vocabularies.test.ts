@@ -447,6 +447,15 @@ describe("chat v2 vocabularies (CV-1)", () => {
     expect(v.isChatCatchupDoneHow("read")).toBe(true);
     expect(v.isChatEventType(42)).toBe(false);
   });
+  it("a chat.mention bell row says why it reached you (CV-5)", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CHAT_MENTION_REASONS]).toEqual(["person", "team", "everyone"]);
+    expect(v.parseChatMentionReason("team").success).toBe(true);
+    expect(v.parseChatMentionReason("channel").success).toBe(false);
+    expect(v.normalizeChatMentionReason(undefined)).toBe("person");
+    expect(v.normalizeChatMentionReason("everyone")).toBe("everyone");
+    expect(v.isChatMentionReason("someone")).toBe(false);
+  });
 });
 
 describe("MCP key scopes: modules, maps and strict parses", () => {

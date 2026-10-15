@@ -4,6 +4,7 @@
 // spine mutation logs an attributed `module_activity` row; this is how that row
 // reads. Newest-first in the hub trail and the notification card.
 
+import { normalizeChatMentionReason } from "@contracts/vocabularies";
 import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
 import { dayShort, time24 } from "../calendar/booking/sentence";
 import { referenceTextToPlain } from "./references/text";
@@ -258,14 +259,15 @@ export function spineActivityLine(
     case "chat.announcement": {
       const name = str(p.channel_name);
       const where = name ? `in #${name}` : "in a direct message";
+      const reason = normalizeChatMentionReason(p.reason);
       const verb =
         entry.op === "chat.reply"
           ? "replied"
           : entry.op === "chat.announcement"
             ? "posted"
-            : p.reason === "team"
+            : reason === "team"
               ? "mentioned your team"
-              : p.reason === "everyone"
+              : reason === "everyone"
                 ? "mentioned everyone"
                 : "mentioned you";
       const excerpt = excerptText(p.excerpt);

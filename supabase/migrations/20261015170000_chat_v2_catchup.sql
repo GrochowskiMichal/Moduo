@@ -38,8 +38,11 @@
 --   2. One state with the bell (§2.15): Done in Catch up dismisses the twin;
 --      dismissing in the bell closes the item, undismissing reopens it; reading
 --      up to a message closes its items and dismisses their twins (sending
---      counts as reading up to your own message); marking unread reopens what
---      reading closed. The bell's own read dot stays the bell's.
+--      counts as reading up to your own message, and so does joining, which
+--      reads to the newest); marking unread reopens what reading closed. A
+--      chain or a line reopens only its newest item. An edit that no longer
+--      names someone closes their mention item. The bell's own read dot stays
+--      the bell's.
 --   3. New ops: chat_op_catchup_done(ids), chat_op_catchup_reopen(ids) (Undo),
 --      chat_op_follow_chain(message, following) ("Stop following" closes the
 --      chain's open item). They need no plan (#25) and log no activity (#15).
@@ -154,9 +157,29 @@ BEGIN
 END;
 $function$;
 
+-- Whether reading up to p_upto covers a message: it is at or before it, or it
+-- was deleted and nothing still shown lies between them (a chain or a line
+-- whose newest message was deleted is read once what's shown is).
+CREATE OR REPLACE FUNCTION public.chat__read_covers(p_upto public.chat_messages, p_message_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE
+ SET search_path TO ''
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.chat_messages m
+     WHERE m.id = p_message_id
+       AND ((m.created_at, m.id) <= (p_upto.created_at, p_upto.id)
+            OR (m.deleted_at IS NOT NULL
+                AND NOT EXISTS (SELECT 1 FROM public.chat_messages x
+                                 WHERE x.channel_id = m.channel_id AND x.deleted_at IS NULL
+                                   AND (x.created_at, x.id) > (p_upto.created_at, p_upto.id)
+                                   AND (x.created_at, x.id) <= (m.created_at, m.id)))))
+$function$;
+
 -- Close a person's open items, and dismiss their twins in the bell. With
--- p_upto (reading), only items still on a message up to it: a send that moved
--- one to a newer message meanwhile keeps it open.
+-- p_upto (reading), only items still on a message it covers: a send that
+-- moved one to a newer message meanwhile keeps it open.
 CREATE OR REPLACE FUNCTION public.chat__close(p_user uuid, p_ids uuid[], p_how text,
                                               p_upto public.chat_messages DEFAULT NULL)
  RETURNS integer
@@ -170,10 +193,7 @@ BEGIN
     UPDATE public.chat_catchup k
        SET done_at = now(), done_how = p_how
      WHERE k.user_id = p_user AND k.id = ANY (coalesce(p_ids, '{}'::uuid[])) AND k.done_at IS NULL
-       AND (p_upto.id IS NULL
-            OR EXISTS (SELECT 1 FROM public.chat_messages m
-                        WHERE m.id = k.message_id
-                          AND (m.created_at, m.id) <= (p_upto.created_at, p_upto.id)))
+       AND (p_upto.id IS NULL OR public.chat__read_covers(p_upto, k.message_id))
     RETURNING k.workspace_id, k.activity_id
   ), dismissed AS (
     INSERT INTO public.notification_state (workspace_id, user_id, activity_id, dismissed_at)
@@ -190,7 +210,8 @@ $function$;
 
 -- Reopen a person's closed items (never one closed because access went), and
 -- undismiss their twins. A chain or an Every-message line reopens only its
--- newest item, and only while no item of it is open.
+-- newest item (an older one stays closed, whatever closed the newer), and only
+-- while no item of it is open.
 CREATE OR REPLACE FUNCTION public.chat__reopen(p_user uuid, p_ids uuid[])
  RETURNS integer
  LANGUAGE plpgsql
@@ -208,7 +229,7 @@ BEGIN
        AND k.done_at IS NOT NULL AND k.done_how <> 'closed'
   ), grouped AS (
     SELECT DISTINCT ON (c.reason, coalesce(c.chain_root_id, c.channel_id))
-           c.id, c.reason, c.channel_id, c.chain_root_id
+           c.id, c.reason, c.channel_id, c.chain_root_id, c.at, c.tie
       FROM cand c
      WHERE c.reason IN ('reply', 'every_message')
      ORDER BY c.reason, coalesce(c.chain_root_id, c.channel_id), c.at DESC, c.tie DESC
@@ -218,9 +239,12 @@ BEGIN
     SELECT g.id FROM grouped g
      WHERE NOT EXISTS (
        SELECT 1 FROM public.chat_catchup o
-        WHERE o.user_id = p_user AND o.done_at IS NULL AND o.reason = g.reason
+         LEFT JOIN public.chat_messages om ON om.id = o.message_id
+        WHERE o.user_id = p_user AND o.reason = g.reason AND o.id <> g.id
           AND CASE WHEN g.reason = 'reply' THEN o.chain_root_id = g.chain_root_id
-                   ELSE o.channel_id = g.channel_id END)
+                   ELSE o.channel_id = g.channel_id END
+          AND (o.done_at IS NULL
+               OR (coalesce(om.created_at, o.created_at), coalesce(om.id, o.id)) > (g.at, g.tie)))
   ), opened AS (
     UPDATE public.chat_catchup k
        SET done_at = NULL, done_how = NULL
@@ -249,10 +273,9 @@ AS $function$
   SELECT public.chat__close(p_user, ARRAY(
     SELECT k.id
       FROM public.chat_catchup k
-      JOIN public.chat_messages m ON m.id = k.message_id
      WHERE k.user_id = p_user AND k.channel_id = p_channel_id AND k.done_at IS NULL
        AND k.reason IN ('dm', 'mention', 'team_mention', 'everyone', 'reply', 'announcement', 'every_message')
-       AND (m.created_at, m.id) <= (p_upto.created_at, p_upto.id)), 'read', p_upto)
+       AND public.chat__read_covers(p_upto, k.message_id)), 'read', p_upto)
 $function$;
 
 -- The fan-out: who a message is addressed to, and why (see the header). On an
@@ -271,7 +294,6 @@ DECLARE
   v_people uuid[] := coalesce(p_msg.mentioned_user_ids, '{}'::uuid[]);
   v_teams uuid[] := coalesce(p_msg.mentioned_team_ids, '{}'::uuid[]);
   v_everyone boolean := coalesce(p_msg.mentions_everyone, false);
-  v_who jsonb;
   v_reason text;
   v_users uuid[];
   v_bell uuid[];
@@ -292,6 +314,7 @@ BEGIN
     END IF;
   END IF;
 
+  FOR v_reason, v_users, v_bell IN
   WITH mem AS (
     SELECT m.user_id, m.notify_level
       FROM public.chat_members m
@@ -359,27 +382,21 @@ BEGIN
      WHERE c.u IS NOT NULL AND c.u IS DISTINCT FROM p_actor
        AND public.chat__can_read_channel_as(p_channel.id, c.u)
   )
-  SELECT coalesce(jsonb_agg(jsonb_build_object(
-           'u', d.u, 'r', d.reason,
-           'b', d.bell_ok AND d.reason IN ('mention', 'team_mention', 'everyone', 'announcement', 'reply'))),
-         '[]'::jsonb)
-    INTO v_who
+  -- Per reason: who, and who of them gets the bell row.
+  SELECT d.reason,
+         array_agg(d.u),
+         coalesce(array_agg(d.u) FILTER (
+           WHERE d.bell_ok AND d.reason IN ('mention', 'team_mention', 'everyone', 'announcement', 'reply')),
+           '{}'::uuid[])
     FROM decided d
    WHERE d.reason IS NOT NULL
      -- Once per message: a send never twice; an edit not to anyone named,
      -- or written to, before.
      AND NOT EXISTS (SELECT 1 FROM public.chat_catchup k
                       WHERE k.user_id = d.u AND k.message_id = p_msg.id
-                        AND (NOT v_edit OR k.reason IN ('dm', 'mention', 'team_mention', 'everyone')));
-
-  FOREACH v_reason IN ARRAY ARRAY['dm', 'mention', 'team_mention', 'everyone', 'announcement', 'reply', 'every_message'] LOOP
-    SELECT coalesce(array_agg((e ->> 'u')::uuid), '{}'::uuid[]),
-           coalesce(array_agg((e ->> 'u')::uuid) FILTER (WHERE (e ->> 'b')::boolean), '{}'::uuid[])
-      INTO v_users, v_bell
-      FROM jsonb_array_elements(v_who) e
-     WHERE e ->> 'r' = v_reason;
-    CONTINUE WHEN cardinality(v_users) = 0;
-
+                        AND (NOT v_edit OR k.reason IN ('dm', 'mention', 'team_mention', 'everyone')))
+   GROUP BY d.reason
+  LOOP
     v_activity := public.chat__activity(p_channel, p_msg, p_actor,
       CASE v_reason WHEN 'reply' THEN 'chat.reply' WHEN 'announcement' THEN 'chat.announcement'
                     ELSE 'chat.mention' END,
@@ -622,8 +639,18 @@ BEGIN
   RETURNING * INTO v_msg;
   PERFORM public.module_activity_log(v_channel.workspace_id, 'chat', 'chat_channel', v_msg.channel_id,
     'chat.message_edit', jsonb_build_object('message_id', v_msg.id));
-  -- CV-5: only people named for the first time hear about it (CH75).
+  -- CV-5: only people named for the first time hear about it (CH75), and
+  -- someone it no longer names at all leaves Catch up and the bell.
   PERFORM public.chat__fan_out(v_msg, v_channel, v_me, v_before);
+  PERFORM public.chat__close(k.user_id, ARRAY[k.id], 'closed')
+     FROM public.chat_catchup k
+    WHERE k.message_id = v_msg.id AND k.done_at IS NULL
+      AND k.reason IN ('mention', 'team_mention', 'everyone')
+      AND NOT (k.user_id = ANY (v_msg.mentioned_user_ids))
+      AND NOT v_msg.mentions_everyone
+      AND NOT EXISTS (SELECT 1 FROM public.team_members tm
+                       WHERE tm.team_id = ANY (v_msg.mentioned_team_ids)
+                         AND tm.user_id = k.user_id AND tm.deleted_at IS NULL);
   RETURN v_msg;
 END;
 $function$;
@@ -701,9 +728,11 @@ begin
     update public.chat_messages
        set reply_count = reply_count + 1, last_reply_at = v_msg.created_at
      where id = v_parent.id;
-  else
-    update public.chat_channels set last_message_at = v_msg.created_at where id = p_channel_id;
   end if;
+  -- Replies post at the bottom too (as a person's send); it also orders this
+  -- post's Catch up writes after a concurrent send's in the channel (CV-5).
+  update public.chat_channels set last_message_at = v_msg.created_at
+   where id = p_channel_id and (last_message_at is null or last_message_at < v_msg.created_at);
 
   -- CV-5: Catch up items and the bell, among people who can read the channel.
   perform public.chat__fan_out(v_msg, v_channel, null);
@@ -712,6 +741,41 @@ end;
 $function$;
 
 -- ── 4. Reading closes items; marking unread reopens what reading closed ─────
+
+-- Joining (or being added back) reads up to the newest message (CV-2b): what
+-- Catch up held up to there is read too (CV-5, the last statement).
+CREATE OR REPLACE FUNCTION public.chat__enter(p_channel_id uuid, p_workspace_id uuid, p_user uuid, p_level text DEFAULT 'mentions'::text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_newest public.chat_messages;
+  v_rows int;
+BEGIN
+  SELECT * INTO v_newest FROM public.chat_messages m
+   WHERE m.channel_id = p_channel_id
+   ORDER BY m.created_at DESC, m.id DESC
+   LIMIT 1;
+  INSERT INTO public.chat_members AS mb
+    (channel_id, user_id, workspace_id, notify_level, last_read_id, last_read_at, joined_at)
+  VALUES
+    (p_channel_id, p_user, p_workspace_id, p_level, v_newest.id, coalesce(v_newest.created_at, now()), now())
+  ON CONFLICT (channel_id, user_id) DO UPDATE
+    SET left_at = NULL,
+        removed_by = NULL,
+        removed_at = NULL,
+        joined_at = now(),
+        last_read_id = excluded.last_read_id,
+        last_read_at = excluded.last_read_at
+    WHERE mb.left_at IS NOT NULL;
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  IF v_rows > 0 AND v_newest.id IS NOT NULL THEN
+    PERFORM public.chat__close_read(p_user, p_channel_id, v_newest);
+  END IF;
+  RETURN v_rows > 0;
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.chat_op_mark_read(p_channel_id uuid, p_message_id uuid)
  RETURNS void
@@ -1034,11 +1098,13 @@ BEGIN
   -- Internal helpers: only the ops and the service role call them.
   FOREACH fn IN ARRAY ARRAY[
     'chat__team_muted(uuid)',
+    'chat__read_covers(public.chat_messages, uuid)',
     'chat__activity(public.chat_channels, public.chat_messages, uuid, text, text, uuid[], uuid[])',
     'chat__close(uuid, uuid[], text, public.chat_messages)',
     'chat__reopen(uuid, uuid[])',
     'chat__close_read(uuid, uuid, public.chat_messages)',
-    'chat__fan_out(public.chat_messages, public.chat_channels, uuid, public.chat_messages)'
+    'chat__fan_out(public.chat_messages, public.chat_channels, uuid, public.chat_messages)',
+    'chat__enter(uuid, uuid, uuid, text)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);

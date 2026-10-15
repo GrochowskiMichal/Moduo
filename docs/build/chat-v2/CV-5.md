@@ -70,7 +70,7 @@
 - **CV-11:** `chat_op_catchup_done` / `_reopen` take item ids (≤ 1,000) and return how many changed; "Done all in this conversation" passes that conversation's open item ids.
 - **CV-15:** archive / delete / removal should close the affected items (`closed`); `chat__close(user, ids, 'closed')` dismisses the twins too. `chat__reopen` never reopens `closed` items.
 - **CV-18:** set `held_at` in the fan-out's item inserts.
-- **CV-21:** `chat_op_agent_post`'s author becomes the key's creator; the fan-out then skips them (it skips `p_actor`); pass the creator as the actor.
+- **CV-21:** `chat_op_agent_post`'s author becomes the key's creator; the fan-out then skips them (it skips `p_actor`); pass the creator as the actor. Its reply branch doesn't move `chat_channels.last_message_at` (a person's reply does: "replies post at the bottom too"), so an app's reply isn't serialised with a person's send in the same channel and, in a narrow race, can move an Every-message line back to the older message; touch the channel row there as `chat_op_send` does.
 
 ## Manual checklist (step → expect → surface)
 
