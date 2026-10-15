@@ -97,10 +97,17 @@ function skeleton(value: string): string {
 /** Words that make a sender name read like us or like a department, not a person. */
 const OFFICIAL = /moduo|\b(?:security|support|billing|account|accounts|admin|administrator|service|help|helpdesk|team|staff|noreply|verification|compliance)\b/;
 
-/** The person's name when it is a plain one that reads like a person, else null. */
+/** Latin mixed with a look-alike script ("Ѕecurity", Cyrillic Ѕ) is a spoof, not a name. */
+const MIXED_SCRIPT = /(?=.*\p{Script=Latin})(?=.*[\p{Script=Cyrillic}\p{Script=Greek}\p{Script=Armenian}\p{Script=Cherokee}])/u;
+
+/**
+ * The person's name when it is a plain one that reads like a person, else
+ * null. Every check runs on the same flattened string the email prints.
+ */
 function plainName(person: WorkspacePerson): string | null {
-  if (!isPlainName(person.name) || OFFICIAL.test(skeleton(person.name))) return null;
-  return name(person.name).replace(/\s+/g, " ").trim();
+  const flat = name(person.name).replace(/\s+/g, " ").trim();
+  if (!isPlainName(flat) || MIXED_SCRIPT.test(flat.normalize("NFKC")) || OFFICIAL.test(skeleton(flat))) return null;
+  return flat;
 }
 
 /** "Anna Carter", or their address when they have no plain name. */

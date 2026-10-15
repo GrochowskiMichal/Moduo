@@ -11,7 +11,9 @@
 --    The inviter is the signed-in caller, never the client-written
 --    `created_by`, which the validate trigger now pins to the caller as well.
 --    Revoking or deleting a pending invite cancels its email if it hasn't gone
---    out yet. An invite's address can't be changed (it would skip all of that).
+--    out yet. An invite's address can't be changed, and a signed-in update
+--    can't extend it, swap its token or bring it back (each would skip all of
+--    that).
 -- 3. An invite only works for the address it was sent to (S1):
 --    `workspace_op_accept_invite` refuses any other signed-in address with
 --    `invite_email_mismatch`, carrying the masked invited address in HINT
@@ -106,6 +108,20 @@ BEGIN
     -- the daily cap and the sign-up allow-list's intent. Invite the new address.
     RAISE EXCEPTION 'An invite''s address can''t be changed. Revoke it and invite the new address.'
       USING ERRCODE = '42501';
+  END IF;
+  IF TG_OP = 'UPDATE' AND v_actor IS NOT NULL THEN
+    -- What the insert set stays set: a signed-in update (the app's role change,
+    -- revoke, or accept through the op) can't extend an invite, swap its token,
+    -- or bring a used or revoked one back (each would be an invite the daily
+    -- cap and B3 never saw). Server SQL (no signed-in person) still can.
+    NEW.token := OLD.token;
+    NEW.created_by := OLD.created_by;
+    NEW.created_at := OLD.created_at;
+    NEW.expires_at := OLD.expires_at;
+    IF NEW.status IS DISTINCT FROM OLD.status
+       AND NOT (OLD.status = 'pending' AND NEW.status IN ('accepted', 'revoked')) THEN
+      RAISE EXCEPTION 'This invite can''t be changed back. Send a new one.' USING ERRCODE = '42501';
+    END IF;
   END IF;
   IF TG_OP = 'INSERT' THEN
     IF coalesce(btrim(NEW.email), '') !~ '^[^[:space:]@]+@[^[:space:]@]+$' THEN

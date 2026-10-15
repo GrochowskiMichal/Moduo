@@ -136,6 +136,16 @@ SELECT test.ok((SELECT status FROM public.email_outbox WHERE kind = 'workspace_i
 SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET email = 'other@becker.studio' WHERE id = %L$q$,
   test.invite_id('tom@becker.studio'))) = '42501 An invite''s address can''t be changed. Revoke it and invite the new address.',
   'an invite''s address cannot be changed');
+SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites
+    SET expires_at = 'infinity', token = 'chosen-token', created_at = now() - interval '9 days' WHERE id = %L$q$,
+  test.invite_id('tom@becker.studio'))) = 'ok 1'
+  , 'the admin edits an invite''s expiry, token and date');
+SELECT test.ok((SELECT expires_at = now() + interval '7 days' AND token <> 'chosen-token' AND created_at = now()
+                  FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')),
+  'none of them change');
+SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET status = 'pending' WHERE id = %L$q$,
+  test.invite_id('gone@becker.studio'))) = '42501 This invite can''t be changed back. Send a new one.',
+  'a revoked invite cannot be brought back');
 SELECT test.ok(test.invite('A', 'W', 'not an address') = '22023 Enter an email address like name@company.com.',
   'an invite to something that is not an address is refused in words');
 

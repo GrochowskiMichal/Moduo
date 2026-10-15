@@ -116,7 +116,7 @@ describe("workspace invite (B3)", () => {
     expect(text).not.toContain("evil");
     expect(text).not.toContain("Moduo Security");
     expect(text).toContain("anna@northwind.studio invited you to their workspace in Moduo.");
-    for (const inviterName of ["Mоduo Team", "Account Security", "Billing Department", "MODUO"]) {
+    for (const inviterName of ["Mоduo Team", "Account Security", "Billing Department", "MODUO", "Ѕecurity Desk", "Ａｃｃｏｕｎｔ Desk"]) {
       expect(OUTBOX_TEMPLATES.workspace_invite?.({ ...INVITE, inviter_name: inviterName }).fromName).toBe("Moduo");
     }
     for (const workspaceName of ["acme.studio", "https://x", "a@b", "ｅｖｉｌ．ｃｏｍ", "go。example", "evil\u2024com"]) {
@@ -126,6 +126,14 @@ describe("workspace invite (B3)", () => {
     for (const workspaceName of ["Acme Inc.", "Studio 54", "Northwind 2.0"]) {
       const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
       expect(subject).toBe(`Anna Carter invited you to ${workspaceName}`);
+    }
+  });
+
+  it("keeps real names in any one script", () => {
+    for (const inviterName of ["Zoë O'Neill", "Łukasz Grzywacz", "Ирина Петрова", "山田 太郎"]) {
+      expect(OUTBOX_TEMPLATES.workspace_invite?.({ ...INVITE, inviter_name: inviterName }).fromName).toBe(
+        `${inviterName} via Moduo`,
+      );
     }
   });
 
