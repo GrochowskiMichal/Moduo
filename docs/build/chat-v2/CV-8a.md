@@ -9,7 +9,9 @@
 - **Kit addition (#32):** `NavRow` gains `unread` (weight + foreground + sr-only "unread"), story `UnreadDensities` at three densities, registered in `kit.ts` / `kit.test.ts` (so `tests/visual/kit.spec.ts` reads it).
 - **The toolbar** (`conversation-toolbar.tsx`): glyph · name (18 px semibold, no `#`) · `linked` slot (CV-13's chip) · "Archived" chip · people count · `huddle` slot before Search (§18, empty) · Search · ⋯ (Pin to sidebar / Unpin, Mark as read, Notify me about: Every message / Mentions and replies / Nothing, Archive / Unarchive for managers, Leave channel except General). An announcement channel reads "Announcements · only managers post" under the name.
 - **Frame 7's states** (`composer-state.ts` decides, `conversation-states.tsx` draws): the start of a conversation (a new channel; General "Everyone in <workspace> is here."; a DM's people), General's one-line welcome until its first message, loading skeleton and older history ("Jump to present", both CV-7a's stream), and one line in the composer's place for archived ("This channel is archived. Everything stays readable and searchable." + Unarchive for managers), paused ("Chat is paused: this workspace's plan doesn't include it. <owner> can turn it back on."; the owner gets "Choose a plan" → Settings › Billing), viewer ("You can read this conversation but not post in it"), non-manager in an announcement channel ("Only managers post here · Reply privately"), former member ("Jana left the workspace"; a deleted account reads "Former member"), and a public channel you're not in ("You're not in this channel" + Join). Offline adds "You're offline · reading from this device" above the composer (sends wait). Message rows of someone who left keep their name with a quiet "former member" label (`stream/rows.tsx`).
-- **A paused plan still reads** (`store/store.ts`): the store no longer stops at "locked"; it loads the sidebar (without bootstrapping General), counts, windows and live rows, and sets `snapshot.paused`; `sync` (rejoin, focus, online, manual) re-reads the plan. `ChatStatus` lost `"locked"`. The Conversations widget keeps showing conversations on a paused plan.
+- **A paused plan still reads** (`store/store.ts`): the store no longer stops at "locked"; it loads the sidebar (without bootstrapping General), counts, windows and live rows, and sets `snapshot.paused`; `sync` (rejoin, focus, online, manual) re-reads the plan, and a plan that comes back re-reads the sidebar making General if none exists. `ChatStatus` lost `"locked"`. The Conversations widget keeps showing conversations on a paused plan.
+- **Posting vs. message tools:** `MessageStream` gains `canUseTools` (default `canWrite`): readers of a live conversation (a viewer, a paused plan, a non-member, a DM with someone who left) keep react, mark unread, copy link, make a task and reply; only posting, edit, delete and typing into the composer need `canWrite`. An archived conversation draws no tools.
+- **Short streams sit at the bottom** by the composer, as frame 7 draws them (`stream/message-stream.tsx`: the virtual list's box takes `mt-auto` in a column scroller; long streams are unchanged).
 - **The page** `src/routes/pages/chat-page.tsx` is a thin adapter for `/chat?c=&m=` (`t` still accepted and lands on the chain's first message until CV-12); the screen is `features/chat/shell/chat-screen.tsx` on `useChatStore` / `useChatSnapshot` directly. An unknown `c` shows "That conversation isn't available" in the centre, without a toast or a redirect (CV-6b's deferral fixed: a notice from another workspace now switches there quietly).
 - **The Chat tab** (`shell/chat-tab.ts`, moved from `hooks/use-chat-badge.ts`): the count, presence and dock badge as before, read from the store; the tab shows with two or more people in the workspace, a one-person workspace keeps it only while chat history exists (`chatTabShows`; an unloaded member list keeps it).
 - **Panel registry:** `PanelModule` gains `chat` with no views yet (`src/features/chat/panel-views.ts`; CV-8b registers them). The right panel is hidden for now; the bottom bar's panel toggles are the app's.
@@ -21,7 +23,7 @@
 | --- | --- |
 | AC1.8 | `tests/visual/chat-states.spec.ts` · "every state" (viewer and announcement lines, no box); `src/features/chat/shell/shell.test.ts` · "tells a non-manager in an announcement channel (AC1.8)" |
 | AC10.3 | `tests/visual/chat-states.spec.ts` · "the left panel" (no `#`, the lock on Founders only) |
-| AC10.9 | `chat-states.spec.ts` · "every state" (viewer: messages readable, a line); `shell.test.ts` · "gives a viewer a line, in channels and direct messages alike (AC10.9)". Reactions stay on for readers (the server allows them). |
+| AC10.9 | `chat-states.spec.ts` · "every state" (viewer: messages readable, a line, the hover toolbar's reactions; the same on a paused plan); `tests/chat-shell.spec.ts` · "an announcement channel and a viewer get a line, never a box" (a viewer reacts on the live stack); `shell.test.ts` · "gives a viewer a line, in channels and direct messages alike (AC10.9)" |
 | AC2.1 | General's welcome: `chat-states.spec.ts` · "every state" ("first"); the grant side is CV-4's `chat_plan.test.sql` |
 | AC6.5 | `chat-states.spec.ts` · "every state" ("former": name kept, the label, "Jana Lis left the workspace"); `shell.test.ts` · "says who left in a direct message with a former member (AC6.5)" |
 | AC14.1 | CV-7a's `tests/visual/chat-stream.spec.ts` (passes on this branch); the frames around it: `chat-states.spec.ts` |
@@ -41,13 +43,16 @@
 - **"You're not in this channel · Join"** in the composer's place for a public channel you opened but haven't joined · agent · v1 had Join in the header; the server refuses a post from a non-member · rejected: posting to join implicitly.
 - **Toolbar Search opens ⌘K** until find-in-conversation (CV-19) · agent · v1's search panel is retired with `ui/*`.
 - **⌘J (switcher) and Esc (close the panel) are gone** with v1's dialogs and panels; ⌥↑/⌥↓ and ⌥⇧↑/⌥⇧↓ step through the open sections · agent.
-- **A chain link (`t`, `onOpenChain`) lands on the chain's first message** until CV-12 · agent · v1's thread panel is retired.
+- **A chain link (`t`, `onOpenChain`) keeps `t=` in the URL and lands on the chain's root** until CV-12 · agent · v1's thread panel is retired; CV-7a's key test expects `t=` · Reply / R change only the URL until then.
+- **An announcement channel's composer area stays empty until its managers load** · agent · a manager must never see "Only managers post here" for a moment.
+- **A link to a conversation the device copy doesn't hold shows the spinner while the screen reads from the device**, then "That conversation isn't available" · agent.
 - **The right panel stays hidden** until CV-8b registers views · agent · `hideRight`, as frame 7's first/new states draw it closed.
 - **The v1 parity harness went with `markup.ts`** (`v1-compare.ts`, `v1-fixture.ts`) · agent · the brief deletes `markup.ts`; the conversion ran (CV-1) and its SQL tests stay · rejected: copying the v1 parser in. `docs/build/chat-v2/drafts/check_v1_to_v2.ts` (a CV-0 one-off) no longer runs.
 - **The Settings › Access "Chat" entry is removed** with `chat-caps-panel.tsx`; CV-15 builds the role editor's chat rows.
 
 ## Gotchas (area: ui)
 
+- A chat person from the workspace list carries `former: false`; `composerLine` treats someone missing from both lists as a former member (a deleted account).
 - `NavRow` spreads extra props onto its outer `div`, not the button: an `aria-label` there names nothing. Put words for screen readers inside the button (the kit's sr-only spans).
 
 ## For later blocks
@@ -80,6 +85,12 @@
 - [ ] One-person workspace with no messages → no Chat tab → web
 
 ## Verify before release
+
+- A paused workspace opened from the device copy shows a working composer until the plan check answers (a send then comes back "Not sent · Retry"); keep `paused` in the device copy if that shows up.
+- Viewer is chosen on the client from the role and chat's module level (`chat-page.tsx`, `readOnly`); the server reads the role's `read_only` / system key. A custom role with chat view-only and `read_only` false would see the viewer line while the server lets it post (the UI errs strict). CV-15's role editor should keep them aligned.
+- Presence is off while paused (the presence topic needs the plan); spec §1 says it keeps working — CV-17.
+- `global-css.test.ts` no longer names a chat pane in its gutter check: `.chat-stream` has no `pane-scroll` (CV-7a's scroller); repoint when the stream takes the gutter.
+- The welcome's disappearance is proven after a reload (`tests/chat-shell.spec.ts`); live it follows the channel's `last_message_at`.
 
 - The Chat tab rule on a workspace whose member list fails to load (treated as "loading": the tab shows).
 - Paused presence: no presence dots while paused (CV-17 drops the plan from the presence topic).

@@ -251,6 +251,7 @@ function ConversationState({ state }: { state: State }) {
         hidden={hidden}
         editingId={null}
         canWrite={line === null}
+        canUseTools={!c.archivedAt}
         intro={
           <ConversationStart
             channel={c}

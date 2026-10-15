@@ -28,6 +28,8 @@ export function ChatPage() {
           name: m.displayName?.trim() || "Member",
           avatarUrl: m.avatarUrl,
           role: m.role,
+          // In the workspace now: never a former member.
+          former: false,
         })),
     [members],
   );

@@ -160,7 +160,9 @@ export function ChatScreen({
   const member = conversationId ? snap.mine[conversationId] : undefined;
   const streamWin = conversationId ? snap.windows[conversationId] : undefined;
   const managers = useChannelManagers(channel?.id ?? null, channel?.kind ?? null);
-  const canManage = !!channel && (rights.manageAny || managers.includes(selfId));
+  const canManage = !!channel && (rights.manageAny || (managers ?? []).includes(selfId));
+  // An announcement channel's line waits for its managers (a manager never sees "Only managers post").
+  const managersPending = managers === null && !!channel?.managersOnly && !rights.manageAny;
 
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
@@ -415,14 +417,22 @@ export function ChatScreen({
       onOpen={(id) => onOpen(id)}
       onOpenCatchup={() => {
         // Catch up's own view is CV-11's: until then, the first conversation waiting for you.
-        const waiting = ordered.find((r) => r.count > 0) ?? ordered.find((r) => r.unread);
+        const all = [...model.pinned, ...model.channels, ...model.dms];
+        const waiting = all.find((r) => r.count > 0) ?? all.find((r) => r.unread);
         if (waiting) onOpen(waiting.channel.id);
       }}
     />
   );
 
   let center: React.ReactNode;
-  if (!channel) {
+  if (!channel && conversationId && snap.fromDevice) {
+    // The device copy may not hold a newer conversation yet: wait for the server.
+    center = (
+      <div className="grid h-full place-items-center text-muted-foreground">
+        <Loader2 className="size-icon animate-spin" aria-label="Loading chat" />
+      </div>
+    );
+  } else if (!channel) {
     // A link to a conversation this workspace doesn't hold: say so, don't bounce
     // (a notice from another workspace switches there; CV-6b's landing).
     center = conversationId ? (
@@ -452,7 +462,7 @@ export function ChatScreen({
       canPost: rights.canPost,
       canManage,
     });
-    const canWrite = line === null;
+    const canWrite = line === null && !managersPending;
     const typingNames = typing.entries
       .filter((t) => t.channelId === channel.id && t.parentId === null && t.userId !== selfId)
       .map((t) => personOf(t.userId)?.name ?? "Someone");
@@ -506,6 +516,8 @@ export function ChatScreen({
           hidden={hidden}
           editingId={editingId}
           canWrite={canWrite}
+          // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
+          canUseTools={!channel.archivedAt}
           intro={
             <ConversationStart
               channel={channel}
@@ -578,7 +590,7 @@ export function ChatScreen({
         />
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
-          {line ? (
+          {managersPending ? null : line ? (
             <ComposerLineView
               line={line}
               onUnarchive={() =>
@@ -589,7 +601,7 @@ export function ChatScreen({
               }
               onChoosePlan={() => dispatchOpenSettings({ section: "billing" })}
               onReplyPrivately={
-                managers.some((id) => id !== selfId) ? () => openDmWith(managers) : undefined
+                managers?.some((id) => id !== selfId) ? () => openDmWith(managers) : undefined
               }
               onJoin={() =>
                 guarded(

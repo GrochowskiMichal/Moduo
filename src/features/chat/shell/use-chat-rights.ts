@@ -58,11 +58,11 @@ export function useChatRights(
   return rightsFrom(rows, role, readOnly);
 }
 
-/** The open channel's managers (empty for a direct message). */
-export function useChannelManagers(channelId: string | null, kind: string | null): string[] {
-  const [ids, setIds] = useState<string[]>([]);
+/** The open channel's managers (empty for a direct message; null while they load). */
+export function useChannelManagers(channelId: string | null, kind: string | null): string[] | null {
+  const [ids, setIds] = useState<string[] | null>(null);
   useEffect(() => {
-    setIds([]);
+    setIds(kind === "channel" ? null : []);
     if (!channelId || kind !== "channel") return;
     let live = true;
     void supabaseClient
@@ -70,7 +70,11 @@ export function useChannelManagers(channelId: string | null, kind: string | null
       .select("user_id")
       .eq("channel_id", channelId)
       .then(({ data }) => {
-        if (!live || !Array.isArray(data)) return;
+        if (!live) return;
+        if (!Array.isArray(data)) {
+          setIds([]);
+          return;
+        }
         setIds(
           data
             .map((r) => (r as { user_id?: unknown }).user_id)

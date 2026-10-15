@@ -105,42 +105,44 @@ export function ConversationToolbar({
       <Toolbar gap="tight" aria-label="Conversation">
         {huddle ? <span data-slot="huddle">{huddle}</span> : null}
         <IconButton icon={Search} label="Search" onClick={onSearch} />
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label="Conversation options" tooltip={null} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {member ? (
-              <>
-                <DropdownMenuItem onSelect={() => onPin?.(!member.starred)}>
-                  {member.starred ? "Unpin from sidebar" : "Pin to sidebar"}
+        {member || (isChannel && canManage && !paused) ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton icon={MoreHorizontal} label="Conversation options" tooltip={null} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {member ? (
+                <>
+                  <DropdownMenuItem onSelect={() => onPin?.(!member.starred)}>
+                    {member.starred ? "Unpin from sidebar" : "Pin to sidebar"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onMarkRead?.()}>Mark as read</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Notify me about</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={level}
+                    onValueChange={(v) => onNotify?.(v as ChatNotifyLevel)}
+                  >
+                    {(Object.keys(NOTIFY_LEVEL_COPY) as ChatNotifyLevel[]).map((key) => (
+                      <DropdownMenuRadioItem key={key} value={key}>
+                        {NOTIFY_LEVEL_COPY[key]}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                </>
+              ) : null}
+              {isChannel && (canManage || member) ? <DropdownMenuSeparator /> : null}
+              {isChannel && canManage && !paused ? (
+                <DropdownMenuItem onSelect={() => onArchive?.(!channel.archivedAt)}>
+                  {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onMarkRead?.()}>Mark as read</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Notify me about</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={level}
-                  onValueChange={(v) => onNotify?.(v as ChatNotifyLevel)}
-                >
-                  {(Object.keys(NOTIFY_LEVEL_COPY) as ChatNotifyLevel[]).map((key) => (
-                    <DropdownMenuRadioItem key={key} value={key}>
-                      {NOTIFY_LEVEL_COPY[key]}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </>
-            ) : null}
-            {isChannel && (canManage || member) ? <DropdownMenuSeparator /> : null}
-            {isChannel && canManage && !paused ? (
-              <DropdownMenuItem onSelect={() => onArchive?.(!channel.archivedAt)}>
-                {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
-              </DropdownMenuItem>
-            ) : null}
-            {isChannel && member && !channel.isDefault ? (
-              <DropdownMenuItem onSelect={() => onLeave?.()}>Leave channel</DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
+              ) : null}
+              {isChannel && member && !channel.isDefault ? (
+                <DropdownMenuItem onSelect={() => onLeave?.()}>Leave channel</DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </Toolbar>
     </header>
   );

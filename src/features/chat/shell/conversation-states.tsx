@@ -126,9 +126,7 @@ export function ComposerLineView({
       text = (
         <>
           {COMPOSER_LINE_COPY.paused}
-          {!line.owner && line.ownerName
-            ? ` ${COMPOSER_LINE_COPY.pausedBackOn(line.ownerName)}`
-            : ""}
+          {!line.owner ? ` ${COMPOSER_LINE_COPY.pausedBackOn(line.ownerName ?? "The owner")}` : ""}
         </>
       );
       if (line.owner && onChoosePlan) {

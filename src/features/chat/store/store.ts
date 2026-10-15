@@ -821,9 +821,11 @@ export class ChatStore {
   private async runSync(
     reason: "rejoin" | "focus" | "online" | "interval" | "manual",
   ): Promise<void> {
-    if (reason !== "interval" && reason !== "focus") {
-      await this.readPlan();
-      await this.readSidebar();
+    const wasPaused = this.paused;
+    if (reason !== "interval") await this.readPlan();
+    if ((reason !== "interval" && reason !== "focus") || wasPaused !== this.paused) {
+      // A plan that came back makes General if the workspace has none yet.
+      await this.readSidebar({ bootstrap: !this.paused });
     }
     const ok = await this.runDelta();
     if (ok) await this.readCounts();

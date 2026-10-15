@@ -132,6 +132,19 @@ test("every state", async ({ page }) => {
   );
   expect(new Set(shapes).size).toBe(1);
 
+  // Readers keep the message tools: a viewer and a paused plan react (AC10.9, §1);
+  // an archived conversation draws none.
+  for (const id of ["viewer", "paused"]) {
+    await state(id).getByRole("article").first().hover();
+    await expect(
+      state(id).getByRole("toolbar", { name: "Message actions" }).getByRole("button", {
+        name: "React 👍",
+      }),
+    ).toBeVisible();
+  }
+  await state("archived").getByRole("article").first().hover();
+  await expect(state("archived").getByRole("toolbar", { name: "Message actions" })).toHaveCount(0);
+
   expect(errors).toEqual([]);
 });
 

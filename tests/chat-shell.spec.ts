@@ -125,7 +125,12 @@ test("an announcement channel and a viewer get a line, never a box (AC1.8, AC10.
       timeout: 20_000,
     });
     await expect(composer(page)).toHaveCount(0);
-    await expect(page.getByRole("article").filter({ hasText: `hello ${tag}` })).toBeVisible();
+    const hello = page.getByRole("article").filter({ hasText: `hello ${tag}` });
+    await expect(hello).toBeVisible();
+    // A viewer still reacts (AC10.9).
+    await hello.hover();
+    await hello.getByRole("button", { name: "React 👍" }).click();
+    await expect(hello.locator("button[aria-pressed='true']")).toBeVisible({ timeout: 15_000 });
   } finally {
     await rest(
       "service",
