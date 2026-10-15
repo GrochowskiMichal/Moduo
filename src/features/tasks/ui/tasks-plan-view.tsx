@@ -53,6 +53,7 @@ import {
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
+import { taskLinkId } from "../../../lib/task-handle";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
@@ -98,7 +99,13 @@ import {
   railDropAction,
   railSortCollision,
 } from "../dnd/rail-drop";
-import { type CaptureSeed, showsArchived, statusesLetThrough } from "../filters";
+import {
+  type CaptureSeed,
+  offersProjectFilter,
+  seededProject,
+  showsArchived,
+  statusesLetThrough,
+} from "../filters";
 import type { InFlightItem } from "../focus-screen";
 import { boardFoldKey, listFoldKey } from "../folds";
 import { todayStr } from "../helpers";
@@ -127,19 +134,26 @@ import {
   panelTaskOf,
   panelTitleOf,
 } from "../panel-views";
+import { commitProjectDrop } from "../project-order";
 import { handleLabel } from "../row-layout";
-import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
+import { handleLinkStep, lookupHandleLink, resolveTasksDeepLink, type TasksPlace } from "../search";
 import { backstopPick, inViewOrder } from "../selection";
-import { projectDeleteSummary, projectOpenWork } from "../sidebar";
+import {
+  projectDeleteSummary,
+  projectOpenWork,
+  projectOrderDrop,
+  sidebarProjects,
+} from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { undatedTasks } from "../timeline-rows";
 import { dayNumOfKey } from "../timeline-scale";
-import { viewIdOf, viewPlace, viewPrefsOf, viewSelection } from "../views";
+import { newViewPrefs, viewIdOf, viewPlace, viewPrefsOf, viewSelection } from "../views";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
   ARCHIVED_SELECTION,
   asRailProject,
   BucketRail,
+  NEW_VIEW_SELECTION,
   parseCollapsedSections,
   TEMPLATES_SELECTION,
   TRASH_SELECTION,
@@ -204,6 +218,8 @@ type Props = {
 
 // The selection→URL mirror writes only at rest (see the mirror effect).
 const URL_MIRROR_DEBOUNCE_MS = 250;
+// A handle link whose lookup failed is asked again this often (MOD-28).
+const HANDLE_RETRY_MS = 30_000;
 
 const EMPTY_IDS: readonly string[] = [];
 const NO_OP = () => {};
@@ -312,6 +328,22 @@ export function TasksPlanView({
     },
     [sidebarPrefs],
   );
+  // This person's own order of the projects (MOD-38, like Slack's channels):
+  // synced in their preferences, so it follows them to every device and
+  // never moves anyone else's sidebar.
+  const projectOrder = sidebarPrefs.projectOrder[workspaceId] ?? EMPTY_IDS;
+  // A sidebar drop: the new order is yours; a drop into another area also
+  // files the project there for everyone, which needs edit access (without
+  // it the drop does nothing).
+  const moveProject = useCallback(
+    (activeId: string, overId: string) => {
+      const drop = projectOrderDrop(buckets, api.areas, projectOrder, activeId, overId, canEdit);
+      if (!drop) return;
+      // A refused area move takes the new order back with it.
+      void commitProjectDrop(workspaceId, drop, (areaId) => api.moveBucketToArea(activeId, areaId));
+    },
+    [buckets, api.areas, api.moveBucketToArea, projectOrder, canEdit, workspaceId],
+  );
   // A project's id, or a saved view's `view:<id>` (TV-U8).
   const togglePin = useCallback(
     (pinId: string) => {
@@ -374,6 +406,22 @@ export function TasksPlanView({
   // A handle deep link (`?id=MOD-142`, RF-1) being looked up, and the URL's
   // latest id (the lookup is dropped if the URL moved on meanwhile).
   const handlePendingRef = useRef<string | null>(null);
+  // A handle whose lookup failed (offline, a server error, MOD-28): it stays
+  // in the URL, unprocessed, and is asked again when the connection comes
+  // back or every half minute; its "take me there" mark is kept meanwhile.
+  const [handleFailed, setHandleFailed] = useState<string | null>(null);
+  const [handleRetry, setHandleRetry] = useState(0);
+  const handleRetryIntentRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!handleFailed) return;
+    const again = () => setHandleRetry((n) => n + 1);
+    const id = window.setTimeout(again, HANDLE_RETRY_MS);
+    window.addEventListener("online", again);
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("online", again);
+    };
+  }, [handleFailed]);
   const latestUrlIdRef = useRef(urlTaskId);
   useLayoutEffect(() => {
     latestUrlIdRef.current = urlTaskId;
@@ -409,13 +457,15 @@ export function TasksPlanView({
   );
 
   // Remember where you were, so the next open lands back on it (REPLAN 30);
-  // Archived projects and Recently deleted aren't places to reopen.
+  // Archived projects and Recently deleted aren't places to reopen, nor is a
+  // new view that was never saved (MOD-142).
   useEffect(() => {
     if (
       selection === ARCHIVED_SELECTION ||
       selection === TRASH_SELECTION ||
       selection === WONTDO_SELECTION ||
-      selection === TEMPLATES_SELECTION
+      selection === TEMPLATES_SELECTION ||
+      selection === NEW_VIEW_SELECTION
     )
       return;
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
@@ -446,6 +496,15 @@ export function TasksPlanView({
   const openFocus = useCallback(() => {
     setFullPageId(null);
     pickSelection("today");
+  }, [pickSelection]);
+
+  // The Views header's + (MOD-142): a new blank view, named when it's saved.
+  // Each one starts blank, even right after another.
+  const [newViewSeq, setNewViewSeq] = useState(0);
+  const startNewView = useCallback(() => {
+    setNewViewSeq((n) => n + 1);
+    setFullPageId(null);
+    pickSelection(NEW_VIEW_SELECTION);
   }, [pickSelection]);
 
   // `?place=upcoming` (Home's Upcoming "+n more"): open it like a sidebar pick
@@ -552,7 +611,10 @@ export function TasksPlanView({
     () => (openViewId ? (views?.find((v) => v.id === openViewId) ?? null) : null),
     [openViewId, views],
   );
-  const place = openView ? viewPlace(openView) : selection;
+  // A new view before it's saved (MOD-142, the Views header's +) shows All
+  // through its own blank Filter and Display.
+  const drafting = selection === NEW_VIEW_SELECTION;
+  const place = openView ? viewPlace(openView) : drafting ? "all" : selection;
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   // A view waits for the server before it counts as gone.
@@ -570,7 +632,8 @@ export function TasksPlanView({
       selection === "mine" ||
       selection === ARCHIVED_SELECTION ||
       selection === TRASH_SELECTION ||
-      selection === TEMPLATES_SELECTION
+      selection === TEMPLATES_SELECTION ||
+      selection === NEW_VIEW_SELECTION
     )
       return;
     if (inboxId && selection === inboxId) return;
@@ -659,9 +722,16 @@ export function TasksPlanView({
   // grouping, its own saved choices) is the Inbox's.
   const displayScope = inboxId && place === inboxId ? "inbox" : place;
   const viewRows = defaultRowsFor(onboardingRole);
+  // A new view works on its own blank copy (MOD-142), never All's own Filter
+  // and Display; each + starts a fresh one.
   const savedView = useMemo(
-    () => (openView ? { id: openView.id, prefs: viewPrefsOf(openView, viewRows) } : null),
-    [openView, viewRows],
+    () =>
+      openView
+        ? { id: openView.id, prefs: viewPrefsOf(openView, viewRows) }
+        : drafting
+          ? { id: `${NEW_VIEW_SELECTION}:${newViewSeq}`, prefs: newViewPrefs(viewRows) }
+          : null,
+    [openView, drafting, newViewSeq, viewRows],
   );
   const tasksDisplay = useTasksDisplay(
     workspaceId,
@@ -860,6 +930,18 @@ export function TasksPlanView({
     [place, api.archivedTasks],
   );
 
+  // Filter → Project, where more than one project shows (MOD-141): the
+  // projects as your sidebar lists them (area-less first, then each area,
+  // each in your own order), and your Inbox where the place lists it (All
+  // never does).
+  const projectFilter = useMemo(
+    () =>
+      offersProjectFilter(place)
+        ? { projects: sidebarProjects(buckets, api.areas, projectOrder), inbox: place !== "all" }
+        : null,
+    [place, buckets, api.areas, projectOrder],
+  );
+
   // Filters and search narrow the center list/board/timeline (rail counts
   // stay whole).
   const filtering = useTasksFilters({
@@ -880,6 +962,8 @@ export function TasksPlanView({
     searchExtra: archivedSearchTasks,
     // "MOD-99" finds that task (MOD-126).
     taskKey,
+    projects: projectFilter,
+    inboxId,
   });
   const scopeTasks = filtering.tasks;
   useLayoutEffect(() => {
@@ -931,9 +1015,11 @@ export function TasksPlanView({
   // What New pre-fills: the filters you can see (none in Focus), and never
   // someone who can't take the task (a former member a stored filter still
   // names: the server would refuse the save).
+  // A Project filter's project (MOD-141) becomes the capture's destination
+  // below, never part of the seed.
   const captureSeed = useMemo<CaptureSeed>(() => {
     if (place === "today") return { tagIds: [] };
-    const seed = filtering.seed;
+    const { projectId: _destination, ...seed } = filtering.seed;
     const id = seed.assigneeId;
     if (id && !assignees.some((a) => a.userId === id && a.canTakeTasks)) {
       const { assigneeId: _dropped, ...rest } = seed;
@@ -941,6 +1027,12 @@ export function TasksPlanView({
     }
     return seed;
   }, [place, filtering.seed, assignees]);
+  // New under "Project is P" files into P (MOD-141), so the task stays in
+  // the filtered list; under "Project is Inbox", the capture's own default.
+  const filterProjectId = useMemo(
+    () => (place === "today" ? null : seededProject(filtering.seed, projectIds)),
+    [place, filtering.seed, projectIds],
+  );
 
   // The place's own name; an open view shows its name instead.
   const placeTitle =
@@ -961,16 +1053,25 @@ export function TasksPlanView({
                   : archivedProject
                     ? archivedProject.name
                     : bucketNameById(place);
-  const scopeTitle = openView ? openView.name : openViewId ? "" : placeTitle;
+  const scopeTitle = openView
+    ? openView.name
+    : openViewId
+      ? ""
+      : drafting
+        ? "Untitled view"
+        : placeTitle;
 
   // Saved views (TV-U8): the sidebar's Views, Save as view…, Save changes,
-  // `?view=` links and onboarding's seeded views.
+  // a new view from the Views header's + (MOD-142), `?view=` links and
+  // onboarding's seeded views.
   const savedViews = useSavedViews({
     api,
     workspaceId,
     userId: currentUserId,
     place,
     openView,
+    drafting,
+    onNewView: startNewView,
     prefs: tasksDisplay.prefs,
     dirty: tasksDisplay.dirty,
     revert: tasksDisplay.revert,
@@ -994,10 +1095,11 @@ export function TasksPlanView({
       ? null
       : (buckets.find((b) => b.id === place && !b.isSystem) ?? null);
     return {
-      projectId: project?.id ?? null,
+      // Across projects, the one a Project filter names (MOD-141).
+      projectId: project?.id ?? filterProjectId,
       queueTop: place === "today",
     };
-  }, [buckets, place, archivedProject]);
+  }, [buckets, place, archivedProject, filterProjectId]);
 
   // All's count is what All lists: never your Inbox (TV-U15).
   const totalOpenCount = useMemo(
@@ -1220,7 +1322,6 @@ export function TasksPlanView({
       api.openTrashRef.current = null;
     };
   }, [api.openTrashRef]);
-  const trashCount = (api.trash?.buckets.length ?? 0) + (api.trash?.tasks.length ?? 0);
 
   // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
   // page, and what a copy settles into the shared store in one step.
@@ -1281,7 +1382,8 @@ export function TasksPlanView({
       onRequestDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
       onRequestArchive={requestArchive}
       onSetBucketColor={api.setBucketColor}
-      onMoveBucket={api.moveBucket}
+      projectOrder={projectOrder}
+      onMoveBucket={moveProject}
       onMoveBucketToArea={api.moveBucketToArea}
       onCaptureInto={(id) => {
         // A project's "+" in the sidebar: capture into that project.
@@ -1300,8 +1402,6 @@ export function TasksPlanView({
       onSetAreaColor={api.setAreaColor}
       onMoveArea={api.moveArea}
       onDeleteArea={api.deleteArea}
-      archivedCount={api.archivedBuckets.length}
-      trashCount={trashCount}
       wontDoCount={wontDoCount}
       templates={
         offersTemplates
@@ -1421,6 +1521,7 @@ export function TasksPlanView({
     }),
     [tasks, buckets, inboxId, api.archivedTasks, api.archivedBuckets],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `handleRetry` asks a failed handle lookup again
   useEffect(() => {
     if (api.loading || api.error) return;
     if (!urlTaskId) {
@@ -1434,19 +1535,28 @@ export function TasksPlanView({
     }
     // Done, Won't do and Backlog tasks arrive after the open ones (the shared
     // store, TV-D11a): a link to one waits for them before it reads as gone.
+    // A handle too (MOD-28: refresh, back and forward arrive as one now).
+    const handleStep = looksLikeHandle(urlTaskId)
+      ? handleLinkStep(urlTaskId, { tasks: linkable.tasks, taskKey, restLoaded: api.restLoaded })
+      : null;
     if (
-      !api.restLoaded &&
-      !looksLikeHandle(urlTaskId) &&
-      resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
+      handleStep
+        ? handleStep.kind === "wait"
+        : !api.restLoaded && resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
     ) {
       return;
     }
     processedUrlIdRef.current = urlTaskId;
-    const external = takeEntityOpenIntent(urlTaskId);
-    // A handle (`?id=MOD-142`, RF-1): find its task (here, else on the server,
-    // which knows the old keys too), then follow the task's own id, keeping a
-    // "take me there" mark. A handle you can't open is a "Private item".
-    if (looksLikeHandle(urlTaskId)) {
+    // A link whose lookup failed keeps its "take me there" mark for the retry.
+    const external = takeEntityOpenIntent(urlTaskId) || handleRetryIntentRef.current === urlTaskId;
+    handleRetryIntentRef.current = null;
+    setHandleFailed(null);
+    // A handle (`?id=MOD-142`, RF-1): find its task (here, archived projects'
+    // too, else on the server, which knows the old keys), then follow the
+    // task's own id, keeping a "take me there" mark. A handle the server says
+    // you can't open is a "Private item"; one it couldn't look up (offline)
+    // stays in the URL and is asked again, never dropped (MOD-28).
+    if (handleStep) {
       const handle = urlTaskId;
       handlePendingRef.current = handle;
       const follow = (id: string | null) => {
@@ -1461,10 +1571,21 @@ export function TasksPlanView({
         if (external) markEntityOpenIntent(id);
         onUrlTaskIdChange(id);
       };
-      const local = taskIdForHandle(handle, tasks, taskKey);
-      if (local) follow(local);
-      else if (referenceStore) void referenceStore.resolveHandle(handle).then(follow);
-      else follow(null);
+      if (handleStep.kind === "task") follow(handleStep.taskId);
+      // Outside the app shell there's no lookup: what's loaded is all there is.
+      else if (!referenceStore) follow(null);
+      else
+        void lookupHandleLink(handle, (h) => referenceStore.lookupHandle(h)).then((answer) => {
+          if (answer.kind !== "failed") {
+            follow(answer.kind === "task" ? answer.taskId : null);
+            return;
+          }
+          if (handlePendingRef.current !== handle) return;
+          handlePendingRef.current = null;
+          if (processedUrlIdRef.current === handle) processedUrlIdRef.current = null;
+          if (external) handleRetryIntentRef.current = handle;
+          setHandleFailed(handle);
+        });
       return;
     }
     // Won't do tasks open too: the selected one stays in scope with Reopen
@@ -1497,30 +1618,50 @@ export function TasksPlanView({
     api.error,
     api.restLoaded,
     urlTaskId,
-    tasks,
     linkable,
     scopeTasksAll,
     onUrlTaskIdChange,
     taskKey,
     referenceStore,
+    handleRetry,
   ]);
+  // Picking a task while a failed handle link waits lets the link go: you
+  // moved on, and a later answer mustn't pull the selection back (MOD-28).
+  const selectionAtFailRef = useRef(selectedTaskId);
+  useEffect(() => {
+    if (!handleFailed) {
+      selectionAtFailRef.current = selectedTaskId;
+      return;
+    }
+    if (selectedTaskId === selectionAtFailRef.current) return;
+    processedUrlIdRef.current = handleFailed;
+    handleRetryIntentRef.current = null;
+    setHandleFailed(null);
+  }, [handleFailed, selectedTaskId]);
 
   // Mirror selection → URL (replace) so refresh keeps it. Trailing-debounced:
   // the URL only needs to be right at rest, and WebKit throttles
   // history.replaceState (~100 calls/30s) — an undebounced j/k key-repeat
   // cursor would trip a SecurityError in the desktop webview. Suspended while
   // an inbound id awaits apply — never overwrite a target before honoring it
-  // (a handle being looked up included).
+  // (a handle being looked up included). The URL names the task by its
+  // handle when it has one (`?id=MOD-142`, MOD-28), else by its id; a link
+  // that arrived by id (an old link, a notification, a chip) is rewritten to
+  // the handle once it's selected, and the apply above reads the handle back
+  // as the mirror's own write (`selfWroteUrlIdRef`), never as a new link.
+  const selectedLinkId = selectedTaskId
+    ? taskLinkId(taskKey, { id: selectedTaskId, number: selectedTask?.number })
+    : null;
   useEffect(() => {
     if (api.loading || inboundPending || handlePendingRef.current) return;
-    if ((selectedTaskId ?? null) === (urlTaskId ?? null)) return;
+    if (selectedLinkId === (urlTaskId ?? null)) return;
     const handle = window.setTimeout(() => {
       if (handlePendingRef.current) return;
-      selfWroteUrlIdRef.current = selectedTaskId;
-      onUrlTaskIdChange(selectedTaskId);
+      selfWroteUrlIdRef.current = selectedLinkId;
+      onUrlTaskIdChange(selectedLinkId);
     }, URL_MIRROR_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [api.loading, inboundPending, selectedTaskId, urlTaskId, onUrlTaskIdChange]);
+  }, [api.loading, inboundPending, selectedLinkId, urlTaskId, onUrlTaskIdChange]);
 
   // Reveal the deep-linked row/card/bar once it exists in the DOM — the scope
   // snap, a collapsed group's reveal, and a nested subtask's parent
@@ -1624,12 +1765,12 @@ export function TasksPlanView({
     [multiSelect, selectEndingAsk],
   );
   const header: PlanHeaderControls = {
-    // Won't do counts what it lists (none of it is open); a saved view, the
-    // tasks it shows ("Done last week" counts its done ones).
+    // Won't do counts what it lists (none of it is open); a saved view (or a
+    // new one), the tasks it shows ("Done last week" counts its done ones).
     count:
       place === WONTDO_SELECTION
         ? scopeTasksAll.length
-        : openView
+        : openView || drafting
           ? scopeTasks.filter((t) => !extraTaskIds.has(t.id) && !isHiddenByDisplay(t)).length
           : openCount(
               extraTaskIds.size === 0
@@ -1648,7 +1789,7 @@ export function TasksPlanView({
       />
     ),
     activeFilters: filtering.activeFilters,
-    viewChanges: savedViews.viewChanges,
+    viewSave: savedViews.viewSave,
     sortedNote:
       view !== "timeline" && order !== "manual" && showsSortedNote(place, order) ? (
         <SortedOrderLine label={sortedByLabel(order)} onManualOrder={backToManualOrder} />

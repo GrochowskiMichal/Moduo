@@ -14,6 +14,17 @@ export function taskHandle(
   return `${taskKey}-${number}`;
 }
 
+/**
+ * What a link to a task names in `?id=` (MOD-28): its handle ("MOD-142") when
+ * it has one, else its id. Both open it: a handle is looked up, an id selects.
+ */
+export function taskLinkId(
+  taskKey: string | null | undefined,
+  task: { id: string; number?: number | null },
+): string {
+  return taskHandle(taskKey, task.number) ?? task.id;
+}
+
 /** What a typed key becomes: trimmed and upper-cased. */
 export function normalizeTaskKey(input: string): string {
   return input.trim().toUpperCase();

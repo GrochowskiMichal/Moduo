@@ -66,6 +66,47 @@ export function taskIdForHandle(
   return tasks.find((t) => t.number === number)?.id ?? null;
 }
 
+/**
+ * What a handle link does next (MOD-28: refresh, back and forward all arrive
+ * as `?id=MOD-142` now): open a loaded task (archived projects' too), wait
+ * while Done, Won't do and Backlog tasks are still loading (the shared store,
+ * TV-D11a), or only then ask the server (an old key, a task not loaded).
+ */
+export type HandleLinkStep =
+  | { kind: "task"; taskId: string }
+  | { kind: "wait" }
+  | { kind: "lookup" };
+
+export function handleLinkStep(
+  handle: string,
+  ctx: {
+    tasks: ReadonlyArray<Pick<Task, "id" | "number">>;
+    taskKey: string | null;
+    restLoaded: boolean;
+  },
+): HandleLinkStep {
+  const local = taskIdForHandle(handle, ctx.tasks, ctx.taskKey);
+  if (local) return { kind: "task", taskId: local };
+  return ctx.restLoaded ? { kind: "lookup" } : { kind: "wait" };
+}
+
+/**
+ * The server's answer for a handle: its task; "gone" only when the server
+ * said there's none the reader can open; "failed" when it couldn't answer
+ * (offline, an error), which a link must never read as gone (MOD-28).
+ */
+export async function lookupHandleLink(
+  handle: string,
+  lookup: (handle: string) => Promise<string | null>,
+): Promise<{ kind: "task"; taskId: string } | { kind: "gone" } | { kind: "failed" }> {
+  try {
+    const id = await lookup(handle);
+    return id ? { kind: "task", taskId: id } : { kind: "gone" };
+  } catch {
+    return { kind: "failed" };
+  }
+}
+
 export function resolveTasksDeepLink(
   id: string,
   ctx: {

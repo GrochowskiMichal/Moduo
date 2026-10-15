@@ -22,9 +22,23 @@ export type MetaChip =
 
 export type NoteMetaLine = {
   chips: MetaChip[];
-  /** "Edited 2 hours ago by Maciej", or null when the note has no edit time. */
+  /** "Edited 2 hours ago by Maciej", or "Research bot edited · 2 minutes ago"
+   * after an agent write (NR-6); null when the note has no edit time. */
   edited: string | null;
+  /** The shown edit is an agent's that this session can undo. */
+  undoable: boolean;
 };
+
+/** The most recent agent write to a note (from its `notes.agent_edit`
+ * activity, or the live broadcast that just delivered it). */
+export type AgentEditMark = {
+  /** The key's name; "Claude" when the key has none. */
+  label: string | null;
+  at: string;
+};
+
+/** What the meta line calls an unnamed agent. */
+export const AGENT_FALLBACK_LABEL = "Claude";
 
 /** At most this many chips; the rest fold into "+N more". */
 export const META_CHIP_CAP = 3;
@@ -56,6 +70,12 @@ export function shapeNoteMetaLine(input: {
   updatedAt: string | null;
   /** Display name of whoever made the last edit, when known. */
   editedBy?: string | null;
+  /** When that person last edited (NR-6); falls back to `updatedAt`. */
+  editedAt?: string | null;
+  /** The latest agent write, when there is one. */
+  agentEdit?: AgentEditMark | null;
+  /** This session holds an undo step for an agent write. */
+  canUndoAgent?: boolean;
   now: Date;
 }): NoteMetaLine {
   const byType = new Map<string, { ref: EntityRef; title: string }[]>();
@@ -87,15 +107,27 @@ export function shapeNoteMetaLine(input: {
     chips.push({ kind: "count", key: "more", label: `+${all.length - META_CHIP_CAP} more` });
   }
 
+  // The agent's write is the one to show when no person has edited since.
+  const agent = input.agentEdit ?? null;
+  const humanAt = input.editedAt ?? null;
+  if (agent && (!humanAt || Date.parse(agent.at) >= Date.parse(humanAt))) {
+    const ago = relativeTimeAgo(agent.at, input.now);
+    if (ago) {
+      const label = agent.label?.trim() || AGENT_FALLBACK_LABEL;
+      return { chips, edited: `${label} edited · ${ago}`, undoable: input.canUndoAgent === true };
+    }
+  }
+
   let edited: string | null = null;
-  if (input.updatedAt) {
-    const ago = relativeTimeAgo(input.updatedAt, input.now);
+  const at = humanAt ?? input.updatedAt;
+  if (at) {
+    const ago = relativeTimeAgo(at, input.now);
     if (ago) {
       const by = input.editedBy?.trim();
       edited = by ? `Edited ${ago} by ${by}` : `Edited ${ago}`;
     }
   }
-  return { chips, edited };
+  return { chips, edited, undoable: false };
 }
 
 /** One backlink row in the footer. */

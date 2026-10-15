@@ -101,6 +101,7 @@ function setup(
     online?: () => boolean;
     claim?: (id: string, fn: () => Promise<void>) => Promise<boolean>;
     readOnly?: () => boolean;
+    prepare?: (file: File) => Promise<PreparedUpload>;
   } = {},
 ) {
   let clock = 1_000_000;
@@ -112,7 +113,7 @@ function setup(
   const queue = new UploadQueue({
     store,
     getApi: () => api,
-    prepare,
+    prepare: opts.prepare ?? prepare,
     now: () => clock,
     random: () => 0.5,
     newId: () => `id${++ids}`,
@@ -669,6 +670,43 @@ describe("UploadQueue", () => {
       state: "rejected",
       problem: { kind: "task_gone" },
     });
+  });
+
+  it("a small image uploads once, with no preview step, and its tile shows it (MOD-132)", async () => {
+    let readOnly = true;
+    const small = png("small.png", 40_000);
+    const big = png("big.png", 900_000);
+    const notes = new File(["n"], "notes.pdf", { type: "application/pdf" });
+    const preview = new Blob(["p"], { type: "image/webp" });
+    const t = setup({
+      readOnly: () => readOnly,
+      prepare: async (f) => ({
+        original: f,
+        fileName: f.name,
+        mime: f.type,
+        preview: f === big ? preview : null,
+        previewMime: f === big ? "image/webp" : null,
+        width: f === notes ? null : 900,
+        height: f === notes ? null : 600,
+      }),
+    });
+    await t.queue.start("u1");
+    await t.queue.add([small, big, notes], TARGET, "u1", status());
+    await settle();
+    // While it waits, each tile's picture: the small image itself, the big
+    // one's preview, nothing for a PDF.
+    expect(t.queue.getSnapshot().items.map((i) => i.thumbnail)).toEqual([small, preview, null]);
+
+    readOnly = false;
+    t.queue.wake();
+    await settle();
+    const begins = t.api.calls.filter((c) => c.step === "begin").map((c) => c.arg);
+    expect(begins[0]).toMatchObject({ fileName: "small.png", previewMime: null });
+    expect(begins[1]).toMatchObject({ fileName: "big.png", previewMime: "image/webp" });
+    // The small image's bytes go up once; only the big one sends a preview.
+    const sent = t.api.calls.filter((c) => c.step === "upload").map((c) => c.arg);
+    expect(sent).toHaveLength(4);
+    expect(sent.filter((p) => String(p).endsWith("/preview.png"))).toEqual(["ws1/a2/preview.png"]);
   });
 
   it("backs off exponentially with jitter, capped at five minutes", () => {

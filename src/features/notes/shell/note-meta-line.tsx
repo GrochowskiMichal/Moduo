@@ -1,6 +1,7 @@
 /**
  * The muted meta line under a note's title (specs/notes-refresh.md NR-3, AC6):
- * linked-entity chips, then "Edited … ago". A named chip opens its entity; a
+ * linked-entity chips, then "Edited … ago" (or an agent's edit with Undo,
+ * NR-6). A named chip opens its entity; a
  * count chip opens the Detail panel, where the full list lives.
  */
 
@@ -14,10 +15,13 @@ export function NoteMetaLineView({
   line,
   onOpenEntity,
   onOpenDetail,
+  onUndo,
 }: {
   line: NoteMetaLine;
   onOpenEntity: (ref: EntityRef) => void;
   onOpenDetail: () => void;
+  /** Revert the agent edit the line names (shown when `line.undoable`). */
+  onUndo?: () => void;
 }) {
   if (line.chips.length === 0 && !line.edited) return null;
   return (
@@ -38,6 +42,14 @@ export function NoteMetaLineView({
         </span>
       ))}
       {line.edited ? <span className="tabular-nums">{line.edited}</span> : null}
+      {line.undoable && onUndo ? (
+        <>
+          <span aria-hidden>·</span>
+          <button type="button" className={CHIP} onClick={onUndo}>
+            Undo
+          </button>
+        </>
+      ) : null}
     </p>
   );
 }

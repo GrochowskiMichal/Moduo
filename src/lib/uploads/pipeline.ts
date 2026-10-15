@@ -6,7 +6,9 @@
 //   - an image over the plan's per-file limit is scaled down instead of refused;
 //   - decodable images get a small preview (1280 px) for thumbnails: WebP where
 //     the browser really encodes WebP, else PNG when the image has alpha, else
-//     JPEG q0.8.
+//     JPEG q0.8. An image already that small (a JPEG, PNG or WebP at most
+//     1280 px on its long edge and 100 KB) gets none: it is its own preview,
+//     and tiles show the original (MOD-132, `originalIsItsOwnPreview`).
 // HEIC the browser can't decode (Chrome/Firefox/Edge on the web) keeps its
 // original and no preview: decided by attempting the decode, never by user agent.
 //
@@ -196,6 +198,78 @@ export function planOriginal(input: {
   return input.alpha ? at("image/png") : at("image/jpeg", JPEG_ORIGINAL_QUALITY);
 }
 
+/** At or under this, with both sides within the preview's own 1280 px, an
+ *  image is its own preview (MOD-132): as quick to load as a preview would be. */
+export const SELF_PREVIEW_MAX_BYTES = 100 * 1024;
+
+/** Formats every engine we ship to shows in an `<img>` as they are. GIF keeps
+ *  its still frame-1 preview (an animated tile), HEIC and the rest a file tile. */
+const SELF_PREVIEW_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/**
+ * Whether a stored image needs no separate preview (MOD-132): a JPEG, PNG or
+ * WebP at most `PREVIEW_MAX_EDGE` on its long edge and `SELF_PREVIEW_MAX_BYTES`
+ * in size. The upload skips the preview then, and every reader shows the
+ * original where it would show the preview. Read from the stored values
+ * (the final original's type, size and pixels), so both sides agree.
+ */
+export function originalIsItsOwnPreview(file: {
+  mime: string;
+  width: number | null;
+  height: number | null;
+  sizeBytes: number;
+}): boolean {
+  return (
+    SELF_PREVIEW_MIMES.has(file.mime) &&
+    !!file.width &&
+    !!file.height &&
+    Math.max(file.width, file.height) <= PREVIEW_MAX_EDGE &&
+    file.sizeBytes > 0 &&
+    file.sizeBytes <= SELF_PREVIEW_MAX_BYTES
+  );
+}
+
+const ascii = (bytes: Uint8Array, at: number) =>
+  String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+
+/**
+ * Is this PNG or WebP animated? An APNG has an `acTL` chunk before its first
+ * `IDAT`; an animated WebP an `ANIM` chunk (or VP8X's animation flag). It
+ * keeps its still preview then, so a tile doesn't play it (MOD-132).
+ * Anything malformed, and every other type, answers false.
+ */
+export function isAnimatedImage(bytes: Uint8Array, mime: string): boolean {
+  if (mime === "image/png") {
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (bytes.length < 8 || sig.some((b, i) => bytes[i] !== b)) return false;
+    let i = 8;
+    while (i + 8 <= bytes.length) {
+      const len =
+        ((bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3]) >>> 0;
+      const type = ascii(bytes, i + 4);
+      if (type === "acTL") return true;
+      if (type === "IDAT" || type === "IEND") return false;
+      i += 12 + len;
+    }
+    return false;
+  }
+  if (mime === "image/webp") {
+    if (bytes.length < 12 || ascii(bytes, 0) !== "RIFF" || ascii(bytes, 8) !== "WEBP") return false;
+    let i = 12;
+    while (i + 8 <= bytes.length) {
+      const type = ascii(bytes, i);
+      const size =
+        (bytes[i + 4] | (bytes[i + 5] << 8) | (bytes[i + 6] << 16) | (bytes[i + 7] << 24)) >>> 0;
+      if (type === "ANIM" || type === "ANMF") return true;
+      if (type === "VP8X" && i + 8 < bytes.length && (bytes[i + 8] & 0x02) !== 0) return true;
+      if (type === "VP8 " || type === "VP8L") return false;
+      i += 8 + size + (size & 1);
+    }
+    return false;
+  }
+  return false;
+}
+
 /** Preview format: WebP only where it's really encodable, PNG to keep alpha
  *  (no black/white matte), else JPEG. */
 export function choosePreviewMime(input: {
@@ -295,6 +369,23 @@ export async function prepareUpload(
           break;
         }
       }
+    }
+
+    // Already small: no second copy (MOD-132); tiles show the original. An
+    // animated one keeps its still preview (the bytes are at most 100 KB).
+    if (
+      originalIsItsOwnPreview({ mime: outMime, width, height, sizeBytes: original.size }) &&
+      !isAnimatedImage(new Uint8Array(await original.arrayBuffer()), outMime)
+    ) {
+      return {
+        original,
+        fileName: outName,
+        mime: outMime,
+        preview: null,
+        previewMime: null,
+        width,
+        height,
+      };
     }
 
     const previewMime = choosePreviewMime({ webpEncodable: webp, alpha });
