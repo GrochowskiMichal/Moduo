@@ -288,6 +288,19 @@ describe("links an agent can touch", () => {
     const kept = linksInScope(ctx({ tasks: "view", notes: "view" }, fakeDb({}).db), links);
     expect(kept.map((l) => l.id)).toEqual(["a"]);
   });
+
+  it("drops listed links with a conversation or a message at either end, even with Chat", () => {
+    const links = [
+      { id: "a", source_type: "task", target_type: "note" },
+      { id: "m", source_type: "chat_channel", target_type: "task" },
+      { id: "t", source_type: "task", target_type: "chat_message" },
+    ];
+    const kept = linksInScope(
+      ctx({ tasks: "view", notes: "view", chat: "edit" }, fakeDb({}).db),
+      links,
+    );
+    expect(kept.map((l) => l.id)).toEqual(["a"]);
+  });
 });
 
 describe("links_search_entities", () => {
