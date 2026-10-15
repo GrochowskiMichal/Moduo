@@ -237,3 +237,35 @@ All agent steps, each needing Maciej's OK in the session, in this order. The wor
    where kind like 'booking_%' order by created_at desc limit 20;
    ```
 
+
+## TX-8 · Email settings + the "account deleted" email: going live
+
+All agent steps, each needing Maciej's OK in the session, on a release train (AGENTS.md). Order matters: the migration first, because the new `delete-account` reads `email_suppressions` and deletes from `email_subscriptions`, which exist already, but the Settings group and the worker's filter need the migration.
+
+1. **Migration** `20261015153000_tx8_email_preferences.sql` (agent, with OK; verified on the local stack by `supabase/probes/email-prefs.probe.sql`). Checks after applying:
+   ```sql
+   select to_regclass('public.email_preferences') is not null,
+          has_function_privilege('anon', 'public.email_prefs()', 'EXECUTE'),
+          has_function_privilege('authenticated', 'public.email_prefs_set(boolean, boolean)', 'EXECUTE'),
+          has_function_privilege('authenticated', 'public.email_outbox__claim(integer, integer)', 'EXECUTE'),
+          position('skipped_pref' in (select prosrc from pg_proc where oid = 'public.email_outbox__claim(integer, integer)'::regprocedure)) > 0;
+   ```
+   Expect `true, false, true, false, true`. Until it's applied, the Settings group stays hidden and every booking/trial email sends.
+2. **`email-worker`: no deploy.** The filter lives in the claim (SQL); `OUTBOX_TEMPLATES` is unchanged (`waitlist_invite`, `ops_alert`, TX-5's booking kinds).
+3. **`delete-account`** (agent, with OK), **from `maciej` after TX-8 has merged**. It uses `RESEND_API_KEY` (already set); without it the deletion still finishes and logs `farewell_not_configured`.
+   ```bash
+   supabase functions deploy delete-account --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+   then `bun run functions:reconcile`.
+4. **Settings → Preferences → Email** ships with the app (develop → staging-app → prod-app).
+5. **Policy:** merge PR #387 into `prod-landing` only after steps 1 and 3 are live.
+6. **Live check** (throwaway account): turn Bookings off, book one of its links from another browser, and read the rows; then delete the account and look for A2 in the inbox and for no rows left:
+   ```sql
+   select kind, status from public.email_outbox where to_email = '<address>' order by created_at desc;
+   select count(*) from public.email_subscriptions where email = '<address>';
+   ```
+   Expect `booking_host_new | skipped_pref` before the deletion and nothing after it.
+
+### Rollback
+
+The switches only ever stop email: to send everything again, `update public.email_preferences set bookings = true, trial_billing = true;`. An older `delete-account` still works with the table in place (it just doesn't erase email rows or send A2).

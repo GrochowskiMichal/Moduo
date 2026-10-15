@@ -335,6 +335,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-15 · TX-8: email switches live in their own table, the worker's claim skips switched-off kinds, and account deletion erases the address's email records, then sends A2 directly
 - 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
 - 2026-10-10 · TX-4: invite-only is a before-user-created hook over three allow sources, a waitlist invite is one queued B1, and a build-updates request outlives the waitlist row
 - 2026-10-09 · TX-3: the outbox queues, retries and suppresses, and the worker's secret lives only in Vault
