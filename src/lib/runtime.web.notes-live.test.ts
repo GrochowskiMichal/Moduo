@@ -178,4 +178,31 @@ describe("joinNoteLive", () => {
     expect(late.removed).toEqual([ch]);
     expect(ch.sent).toEqual([]);
   });
+
+  it("reports nothing after close, even events that arrive before the leave is acked", async () => {
+    const { client, opened } = fakeClient(true);
+    const got: unknown[] = [];
+    const live = joinNoteLive(client, {
+      noteId: NOTE,
+      selfUserId: "me",
+      onBroadcast: (p) => got.push(p),
+      onPresence: (s) => got.push(s),
+    });
+    await flush();
+    const ch = opened[0].channel;
+    ch.status?.("SUBSCRIBED");
+    live.close();
+    ch.emit("presence", "leave");
+    ch.emit("broadcast", "u", { payload: { b64: "QQ==" } });
+    expect(got).toEqual([]);
+  });
+
+  it("leaves when the server refuses the first join, instead of retrying forever", async () => {
+    const { client, opened, removed } = fakeClient(true);
+    joinNoteLive(client, { noteId: NOTE, selfUserId: "me", onBroadcast: noop, onPresence: noop });
+    await flush();
+    const ch = opened[0].channel;
+    ch.status?.("CHANNEL_ERROR");
+    expect(removed).toEqual([ch]);
+  });
 });

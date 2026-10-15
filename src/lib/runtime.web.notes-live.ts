@@ -30,6 +30,7 @@ export function joinNoteLive(
   let closed = false;
   let joined = false;
   let channel: RealtimeChannel | null = null;
+  let everJoined = false;
 
   void (async () => {
     // Asking first keeps a person who can't see the note from retrying a
@@ -53,11 +54,15 @@ export function joinNoteLive(
       config: { private: true, broadcast: { self: false }, presence: { key: selfUserId } },
     });
     channel = live;
-    const syncPresence = () => onPresence(live.presenceState());
+    // Bindings outlive close() until the server acks the leave (our own
+    // untrack is one of those late events): never report into a closed handle.
+    const syncPresence = () => {
+      if (!closed) onPresence(live.presenceState());
+    };
     live
-      .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) =>
-        onBroadcast(msg.payload as Record<string, unknown> | undefined),
-      )
+      .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) => {
+        if (!closed) onBroadcast(msg.payload as Record<string, unknown> | undefined);
+      })
       .on("presence", { event: "sync" }, syncPresence)
       .on("presence", { event: "join" }, syncPresence)
       .on("presence", { event: "leave" }, syncPresence)
@@ -67,11 +72,18 @@ export function joinNoteLive(
         joined = status === "SUBSCRIBED" && !closed;
         // The presence key says who; the payload carries nothing a peer
         // would show (names come from the member list).
-        if (joined) void live.track({ at: Date.now() });
+        if (joined) {
+          everJoined = true;
+          void live.track({ at: Date.now() });
+        } else if (status === "CHANNEL_ERROR" && !everJoined && !closed) {
+          // A first join the server refuses would be retried forever (e.g.
+          // the app shipped ahead of the policy migration): stop, keep pulling.
+          handle.close();
+        }
       });
   })();
 
-  return {
+  const handle: NoteLiveChannel = {
     sendUpdate(updateB64) {
       // `send()` on a channel that isn't joined doesn't drop: realtime-js
       // falls back to REST. Gate on the joined state instead.
@@ -92,4 +104,5 @@ export function joinNoteLive(
       void client.removeChannel(live);
     },
   };
+  return handle;
 }
