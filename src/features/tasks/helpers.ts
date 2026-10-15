@@ -566,13 +566,22 @@ function validDate(iso: string | null): Date | null {
  * tasks) | "today" (the Queue) | "inbox" | a bucket id.
  */
 export function showBucketPill(scope: string, groupBy: GroupBy): boolean {
-  const crossBucket =
+  return spansProjects(scope) && groupBy !== "bucket";
+}
+
+/**
+ * Rail scopes whose rows come from more than one project: All, My tasks, the
+ * Queue (Focus), Upcoming and Won't do. Detailed's Project column starts on
+ * only here (MOD-128).
+ */
+export function spansProjects(scope: string): boolean {
+  return (
     scope === "all" ||
     scope === "mine" ||
     scope === "today" ||
     scope === "upcoming" ||
-    scope === "wontdo";
-  return crossBucket && groupBy !== "bucket";
+    scope === "wontdo"
+  );
 }
 
 /**

@@ -111,6 +111,11 @@ export const linksModuleManifest: ModuleManifest = {
     },
     { name: "links.list", summary: "Every live link touching an entity (the hub roll-up source)." },
     {
+      name: "comments.list",
+      summary:
+        "An item's comments, the newest last, by who wrote them (MCP comments_list, MOD-94).",
+    },
+    {
       name: "links.suggest",
       summary:
         "Deterministic auto-suggested links for an entity (shared tags / email domain / time-window).",

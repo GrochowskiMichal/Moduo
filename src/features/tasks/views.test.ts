@@ -126,6 +126,24 @@ describe("Filter and Display", () => {
     expect(samePrefs(a, { ...a, layout: "list" })).toBe(false);
     expect(samePrefs(a, { ...a, filters: [] })).toBe(false);
   });
+
+  it("a view saved before Columns opens with its place's columns, unchanged (MOD-128, MOD-136)", () => {
+    // Saved before the field: All's columns (Project on), a project's (off).
+    const all = viewPrefsOf(view({ display: { rows: "detailed" } }));
+    expect(all.detailedColumns).toEqual(["handle", "project", "status", "time", "waiting"]);
+    const project = viewPrefsOf(
+      view({ scope: "project", projectId: "p1", display: { rows: "detailed" } }),
+    );
+    expect(project.detailedColumns).toEqual(["handle", "status", "time", "waiting"]);
+    // Opening it is no change; switching a column is "Unsaved changes".
+    expect(samePrefs(all, viewPrefsOf(view({ display: { rows: "detailed" } })))).toBe(true);
+    expect(samePrefs(all, { ...all, detailedColumns: [...all.detailedColumns, "updated"] })).toBe(
+      false,
+    );
+    // A saved switch comes back.
+    const saved = viewPrefsOf(view({ display: { detailedColumns: ["updated", "project"] } }));
+    expect(saved.detailedColumns).toEqual(["project", "updated"]);
+  });
 });
 
 describe("the Views group", () => {

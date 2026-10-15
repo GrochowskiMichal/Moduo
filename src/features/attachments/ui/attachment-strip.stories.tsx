@@ -141,6 +141,35 @@ export const Uploading: Story = {
   },
 };
 
+/** A small image has no preview (MOD-132): its tile shows the original, as
+ *  a preview would; an image missing its preview otherwise stays a file. */
+export const SmallImageNoPreview: Story = {
+  args: {
+    ...BASE,
+    records: [
+      rec("icon", {
+        fileName: "app-icon.png",
+        sizeBytes: 38_000,
+        width: 512,
+        height: 512,
+        previewPath: null,
+        previewMime: null,
+      }),
+      rec("photo", {
+        fileName: "site-photo.jpg",
+        mime: "image/jpeg",
+        sizeBytes: 3.2 * MB,
+        width: 3024,
+        height: 4032,
+        objectPath: "w/photo/original.jpg",
+        previewPath: null,
+        previewMime: null,
+      }),
+    ],
+    previews: new Map([["w/icon/original.png", picture("teal", "white")]]),
+  },
+};
+
 /** Every problem state: its caption and its one way forward (AT2-4). */
 export const Problems: Story = {
   args: {

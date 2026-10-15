@@ -63,7 +63,8 @@ export function TaskListHeader({
         aria-label={
           active
             ? `${label}, sorted ${orderDir === "asc" ? "ascending" : "descending"}`
-            : `Sort by ${label.toLowerCase()}`
+            : // "ID" stays an acronym.
+              `Sort by ${/^[A-Z]+$/.test(label) ? label : label.toLowerCase()}`
         }
         onClick={() => onSort(column)}
         className={cn(
@@ -97,9 +98,9 @@ export function TaskListHeader({
       {expandSlot ? <span aria-hidden className="size-4 shrink-0" /> : null}
       {/* The status icon's place. */}
       <span aria-hidden className="size-icon shrink-0" />
-      {columns.handle ? (
-        <span aria-hidden className="shrink-0 font-sans text-xs min-w-(--tl-col-handle)" />
-      ) : null}
+      {/* "ID" over the handles (round-2b `.colhead`), sorting in number
+          order (MOD-144). */}
+      {columns.handle ? sortCell("id", COLUMN_LABELS.handle, "min-w-(--tl-col-handle)") : null}
       <span className="flex min-w-0 flex-1 items-center">{sortCell("title", "Title", "")}</span>
       <span className="ms-auto flex shrink-0 items-center gap-3">
         {columns.hidden > 0 ? (

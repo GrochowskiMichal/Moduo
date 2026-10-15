@@ -23,7 +23,7 @@ import {
 } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
 import { cn } from "@/lib/utils";
-import { fileIconFor } from "../files";
+import { fileIconFor, thumbnailPath } from "../files";
 
 export type AttachmentStripProps = {
   records: AttachmentRecord[];
@@ -105,7 +105,7 @@ export function AttachmentStrip({
             <li key={rec.id}>
               <ReadyTile
                 rec={rec}
-                previewUrl={rec.previewPath ? (previews.get(rec.previewPath) ?? null) : null}
+                previewUrl={previewUrlOf(rec, previews)}
                 onOpen={() => onOpen(index)}
               />
             </li>
@@ -257,7 +257,9 @@ function ReadyTile({
   // Keyed by link: a fresh link (the old one lapsed) gets another try.
   const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
   const broken = previewUrl != null && brokenUrl === previewUrl;
-  if (rec.previewPath && !broken) {
+  // A picture tile for an image with a preview, or a small one shown as
+  // itself (MOD-132); round-2b's `.atts` draws images as pictures.
+  if (thumbnailPath(rec) && !broken) {
     return (
       <button
         type="button"
@@ -346,6 +348,12 @@ function FileTile({
   );
 }
 
+/** The signed link of the picture a ready tile shows, or null (none, or not signed yet). */
+function previewUrlOf(rec: AttachmentRecord, previews: ReadonlyMap<string, string>): string | null {
+  const path = thumbnailPath(rec);
+  return path ? (previews.get(path) ?? null) : null;
+}
+
 /** A local preview of a file still uploading (the server has no preview yet). */
 function useObjectUrl(blob: Blob | null): string | null {
   const [url, setUrl] = useState<string | null>(null);
@@ -362,7 +370,8 @@ function useObjectUrl(blob: Blob | null): string | null {
 }
 
 function UploadTile({ upload }: { upload: UploadView }) {
-  const url = useObjectUrl(upload.preview);
+  // A small image has no preview: it shows itself (MOD-132).
+  const url = useObjectUrl(upload.thumbnail ?? upload.preview);
   const moving = upload.state === "uploading" || upload.state === "queued";
   const pct = upload.total > 0 ? Math.round((upload.loaded / upload.total) * 100) : 0;
   const StateIcon =
