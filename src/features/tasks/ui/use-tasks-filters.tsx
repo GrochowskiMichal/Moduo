@@ -14,7 +14,9 @@ import {
   CircleDot,
   Clock,
   Flag,
+  FolderKanban,
   Hourglass,
+  Inbox,
   ListChecks,
   ListTree,
   Paperclip,
@@ -34,6 +36,7 @@ import type {
   FilterDimension,
   FilterOption,
 } from "../../../components/ui/filter-model";
+import { NavRowDot } from "../../../components/ui/nav-row";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Assignee } from "../assignees";
 import {
@@ -41,6 +44,7 @@ import {
   type CaptureSeed,
   captureSeed,
   filterTasks,
+  INBOX_VALUE,
   NONE_VALUE,
   type TaskFilterContext,
   type TaskFilterDimension,
@@ -48,8 +52,9 @@ import {
   WAITING_ANY,
 } from "../filters";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Tag, Task, Team } from "../model";
+import type { Bucket, Tag, Task, Team } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
+import { bucketDotColor } from "../sidebar";
 import { STATUS_KEY_LABELS } from "../statuses";
 import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
@@ -57,6 +62,7 @@ import { StatusIcon } from "./status-icon";
 import { TaskSearchField } from "./task-search-field";
 
 const DIMENSION_ICONS: Record<TaskFilterDimension, FilterDimension["icon"]> = {
+  project: FolderKanban,
   assignee: User,
   team: Users,
   creator: UserPen,
@@ -179,16 +185,36 @@ function personOptions(assignees: readonly Assignee[]): FilterOption[] {
   }));
 }
 
+/**
+ * What Filter → Project offers (MOD-141): the projects, in the reader's
+ * sidebar order, and their own Inbox where the place lists Inbox tasks.
+ */
+export type ProjectFilterChoices = {
+  projects: readonly Bucket[];
+  inbox: boolean;
+};
+
 /** The dimension registry: every §7 dimension with this workspace's options
- *  (Team only once the workspace has teams, or a saved filter names one). */
+ *  (Team only once the workspace has teams, or a saved filter names one;
+ *  Project only where more than one project shows, MOD-141). */
 export function taskFilterDimensions(input: {
   assignees: readonly Assignee[];
   tags: readonly Tag[];
   countByTag: ReadonlyMap<string, number>;
   conditions: readonly FilterCondition[];
   teams?: readonly Team[];
+  /** Absent or null: no Project dimension (one project, the Inbox). */
+  projects?: ProjectFilterChoices | null;
 }): FilterDimension[] {
-  const { assignees, tags, countByTag, conditions, teams = [] } = input;
+  const { assignees, tags, countByTag, conditions, teams = [], projects = null } = input;
+  const projectOptions: FilterOption[] = [
+    ...(projects?.inbox ? [{ value: INBOX_VALUE, label: "Inbox", icon: Inbox }] : []),
+    ...(projects?.projects ?? []).map((project) => ({
+      value: project.id,
+      label: project.name,
+      leading: <NavRowDot color={bucketDotColor(project)} />,
+    })),
+  ];
   const teamOptions: FilterOption[] = [...teams]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((team) => ({
@@ -212,6 +238,9 @@ export function taskFilterDimensions(input: {
     }));
   const optionsFor = (id: TaskFilterDimension): FilterOption[] => {
     switch (id) {
+      case "project":
+        // An archived, deleted or no longer visible project keeps a chip.
+        return withUnknown(projectOptions, conditions, id, "Former project");
       case "assignee":
         return withUnknown(
           [...personOptions(assignees), { value: NONE_VALUE, label: "Unassigned", icon: User }],
@@ -240,8 +269,12 @@ export function taskFilterDimensions(input: {
     }
   };
   const usesTeam = teams.length > 0 || conditions.some((c) => c.dimension === "team");
+  // A Project condition that's already there always shows its chip (so it
+  // never filters out of sight), even where Project isn't offered.
+  const usesProject = projects !== null || conditions.some((c) => c.dimension === "project");
   return (Object.keys(DIMENSION_ICONS) as TaskFilterDimension[])
     .filter((id) => id !== "team" || usesTeam)
+    .filter((id) => id !== "project" || usesProject)
     .map((id) => ({
       ...taskFilterShape(id),
       icon: DIMENSION_ICONS[id],
@@ -337,6 +370,8 @@ export function useTasksFilters({
   keepTaskId = null,
   searchExtra,
   taskKey = null,
+  projects = null,
+  inboxId = null,
 }: {
   workspaceId: string;
   scope: string;
@@ -353,6 +388,10 @@ export function useTasksFilters({
   searchExtra?: Task[];
   /** The workspace's task key ("MOD"): search finds a task by its handle (MOD-126). */
   taskKey?: string | null;
+  /** Filter → Project's choices, where more than one project shows (MOD-141). */
+  projects?: ProjectFilterChoices | null;
+  /** The reader's own Inbox (Project's "Inbox"). */
+  inboxId?: string | null;
 }): TasksFilterControls {
   // Search is a live narrowing, not a preference: a new scope starts empty.
   const scopeKey = `${workspaceId}:${scope}`;
@@ -371,8 +410,9 @@ export function useTasksFilters({
         countByTag: api.openTaskCountByTag,
         conditions,
         teams: api.teams,
+        projects,
       }),
-    [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams],
+    [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams, projects],
   );
 
   // "Has attachments" reads the store's live 📎 counts (AT-3): files on tasks
@@ -406,9 +446,11 @@ export function useTasksFilters({
       hasSubtasks: (id) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
       attachmentCount,
       waitingKindsOf: (id) => waitingKinds.get(id) ?? [],
+      inboxId,
     }),
     [
       today,
+      inboxId,
       waitingKinds,
       api.tagsByTask,
       api.queuedTaskIds,

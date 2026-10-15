@@ -19,6 +19,7 @@ import {
   ARCHIVED_SELECTION,
   asRailProject,
   BucketRail,
+  NEW_VIEW_SELECTION,
   parseCollapsedSections,
   TEMPLATES_SELECTION,
   TRASH_SELECTION,
@@ -92,6 +93,7 @@ function renderRail({
   templates = false,
   views,
   canModerate = false,
+  projectOrder,
 }: {
   canEdit?: boolean;
   selection?: string;
@@ -107,6 +109,8 @@ function renderRail({
   /** Saved views (TV-U8); "u" is the signed-in person. */
   views?: TaskView[];
   canModerate?: boolean;
+  /** This person's own project order (MOD-38). */
+  projectOrder?: string[];
 } = {}) {
   const calls = {
     onSelect: rs.fn(),
@@ -132,6 +136,7 @@ function renderRail({
     onDeleteView: rs.fn(),
     onMoveView: rs.fn(),
     onCopyViewLink: rs.fn(),
+    onNewView: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -192,6 +197,7 @@ function renderRail({
         onRequestDelete={calls.onRequestDelete}
         onRequestArchive={calls.onRequestArchive}
         onSetBucketColor={calls.onSetBucketColor}
+        projectOrder={projectOrder}
         onMoveBucket={() => {}}
         onMoveBucketToArea={calls.onMoveBucketToArea}
         onTriageBucket={calls.onTriageBucket}
@@ -200,8 +206,6 @@ function renderRail({
         onSetAreaColor={() => {}}
         onMoveArea={calls.onMoveArea}
         onDeleteArea={calls.onDeleteArea}
-        archivedCount={2}
-        trashCount={5}
         templates={
           templates
             ? {
@@ -220,6 +224,7 @@ function renderRail({
           onDelete: calls.onDeleteView,
           onMove: calls.onMoveView,
           onCopyLink: calls.onCopyViewLink,
+          onNew: calls.onNewView,
           canShare: canEdit,
           canModerate,
         }}
@@ -324,7 +329,7 @@ describe("the decided sidebar (AC11.1)", () => {
   });
 });
 
-describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (AC11.1, AC11.10)", () => {
+describe("Customize sidebar in the ⋯; Archived and Recently deleted in the footer (AC11.1, AC11.10, MOD-140)", () => {
   it("hides Focus, Upcoming, My tasks and All; the Inbox always shows", async () => {
     const calls = renderRail({ hidden: new Set(["focus", "all"]) });
     expect(screen.queryByRole("button", { name: /^Focus/ })).toBeNull();
@@ -345,18 +350,38 @@ describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (
     expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
   });
 
-  it("opens Archived projects and Recently deleted from the ⋯, never as rows", async () => {
+  it("opens Archived and Recently deleted from the footer, under the rows and out of the ⋯", async () => {
     const calls = renderRail();
     const nav = screen.getByRole("navigation", { name: "Tasks" });
+    // Not rows among the projects…
     expect(within(nav).queryByRole("button", { name: /Archived|Recently deleted/ })).toBeNull();
-    await openSidebarMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Archived projects/ }));
-    await settle();
+    // …but the footer's two items, in this order.
+    const footer = screen.getByRole("navigation", { name: "Archive and trash" });
+    expect(
+      within(footer)
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["Archived", "Recently deleted"]);
+    fireEvent.click(within(footer).getByRole("button", { name: "Archived" }));
     expect(calls.onSelect).toHaveBeenCalledWith(ARCHIVED_SELECTION);
-    await openSidebarMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Recently deleted/ }));
-    await settle();
+    fireEvent.click(within(footer).getByRole("button", { name: "Recently deleted" }));
     expect(calls.onSelect).toHaveBeenCalledWith(TRASH_SELECTION);
+    // Listed once: the ⋯ keeps Won't do, not these two.
+    await openSidebarMenu();
+    const menu = screen.getByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: /Archived|Recently deleted/ })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: /^Won’t do/ })).toBeTruthy();
+  });
+
+  it("marks the footer item you're on as the current page", () => {
+    renderRail({ selection: TRASH_SELECTION });
+    const footer = screen.getByRole("navigation", { name: "Archive and trash" });
+    expect(
+      within(footer).getByRole("button", { name: "Recently deleted" }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      within(footer).getByRole("button", { name: "Archived" }).getAttribute("aria-current"),
+    ).toBeNull();
   });
 });
 
@@ -438,6 +463,46 @@ describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Views/ }));
     expect(calls.onToggleCollapsed).toHaveBeenCalledWith("views");
     expect(screen.queryByRole("button", { name: /^Due this week$/ })).toBeNull();
+  });
+
+  it("the header's + opens a new view, the group opening if folded (MOD-142)", () => {
+    const calls = renderRail({ views: VIEWS, collapsed: new Set(["views"]) });
+    fireEvent.click(screen.getByRole("button", { name: "New view" }));
+    expect(calls.onNewView).toHaveBeenCalledTimes(1);
+    expect(calls.onToggleCollapsed).toHaveBeenCalledWith("views");
+  });
+
+  it("a new view sits at the group's end, untitled and current, until it's saved (MOD-142)", () => {
+    renderRail({ views: VIEWS, selection: NEW_VIEW_SELECTION });
+    const rows = order();
+    expect(rows.slice(rows.indexOf("Views"), rows.indexOf("Views") + 5)).toEqual([
+      "Views",
+      "Due this week",
+      "Waiting on client",
+      "Mike's board",
+      "Untitled view",
+    ]);
+    expect(main(/^Untitled view$/).getAttribute("aria-current")).toBe("page");
+    cleanup();
+    // The first view: the group shows for it alone.
+    renderRail({ views: [], selection: NEW_VIEW_SELECTION });
+    expect(order()).toContain("Views");
+    expect(main(/^Untitled view$/).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("the ⋯'s New view makes one before there's any, for a viewer too (MOD-142)", async () => {
+    const calls = renderRail({ views: [], canEdit: false });
+    expect(order()).not.toContain("Views");
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New view" }));
+    expect(calls.onNewView).toHaveBeenCalledTimes(1);
+    cleanup();
+    // With views, it opens a folded group like the header's +.
+    const again = renderRail({ views: VIEWS, collapsed: new Set(["views"]) });
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New view" }));
+    expect(again.onNewView).toHaveBeenCalledTimes(1);
+    expect(again.onToggleCollapsed).toHaveBeenCalledWith("views");
   });
 
   it("your view's ⋯: Rename · Pin · Share · Move · Copy link · Delete", async () => {
@@ -686,6 +751,28 @@ describe("drift and drag", () => {
     fireEvent.click(screen.getByRole("button", { name: "2 drifted · triage" }));
     expect(again.onTriageBucket).toHaveBeenCalledWith("c-acme");
     expect(calls.onTriageBucket).not.toHaveBeenCalled();
+  });
+
+  it("lists the projects in this person's own order, inside each area (MOD-38)", () => {
+    renderRail({ projectOrder: ["d-north", "c-acme"] });
+    expect(order().slice(-6)).toEqual([
+      "Launch v1",
+      "Product",
+      "Website",
+      "Clients",
+      "Northwind",
+      "Acme rebrand",
+    ]);
+  });
+
+  it("someone who can't edit still drags projects into their own order (MOD-38)", () => {
+    renderRail({ dnd: true, canEdit: false });
+    const sortable = document.querySelectorAll('[data-slot="sortable-project"]');
+    expect(sortable.length).toBe(PROJECTS.length);
+    cleanup();
+    // Outside the page's DndContext (stories, tests) rows stay plain.
+    renderRail({ canEdit: false });
+    expect(document.querySelectorAll('[data-slot="sortable-project"]').length).toBe(0);
   });
 
   it("renders sortable project rows inside the page's DndContext", () => {
