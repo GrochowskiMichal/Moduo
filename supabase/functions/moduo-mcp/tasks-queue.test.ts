@@ -228,13 +228,16 @@ describe("the queue tools act on the key creator's queue (TV-D2)", () => {
 
   it("marks queued_by_me in other reads too, never for Bea's queue", async () => {
     const { ctx } = setup();
-    const list = await call("tasks_list", {}, ctx);
-    const byId = new Map(list.map((t: Row) => [t.id, t]));
-    expect((byId.get("t1") as Row).queued_by_me).toBe(true);
-    expect("queued_by_me" in (byId.get("t3") as Row)).toBe(false);
-    // The old shared day column is still shown, apart from the queue (until TV-D7).
-    expect((byId.get("old") as Row).committed_for).toBe("2026-10-08");
-    expect("queued_by_me" in (byId.get("old") as Row)).toBe(false);
+    for (const fields of ["summary", "full"]) {
+      const list = await call("tasks_list", { fields }, ctx);
+      const byId = new Map(list.map((t: Row) => [t.id, t]));
+      expect((byId.get("t1") as Row).queued_by_me).toBe(true);
+      expect("queued_by_me" in (byId.get("t3") as Row)).toBe(false);
+      expect("queued_by_me" in (byId.get("old") as Row)).toBe(false);
+    }
+    // The old shared day column is still in the full shape, apart from the queue (until TV-D7).
+    const full = await call("tasks_list", { fields: "full" }, ctx);
+    expect(full.find((t: Row) => t.id === "old").committed_for).toBe("2026-10-08");
   });
 
   it("tasks_queue_add / remove call the ops for the task and return the queue", async () => {

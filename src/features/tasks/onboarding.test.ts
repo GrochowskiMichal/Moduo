@@ -1,4 +1,4 @@
-import { STARTER_TEMPLATES } from "@contracts/vocabularies";
+import { STARTER_TEMPLATES, TASKS_ROLES } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
 
 import { tasksDisplayDefaults, tasksViewDefaults } from "./display";
@@ -7,7 +7,6 @@ import {
   firstViewFor,
   ROLE_DEFAULTS,
   shouldSeedWorkspace,
-  TASKS_ROLES,
   teachingTaskTitles,
   welcomeDecision,
 } from "./onboarding";
