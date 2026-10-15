@@ -200,8 +200,6 @@ function renderRail({
         onSetAreaColor={() => {}}
         onMoveArea={calls.onMoveArea}
         onDeleteArea={calls.onDeleteArea}
-        archivedCount={2}
-        trashCount={5}
         templates={
           templates
             ? {
@@ -324,7 +322,7 @@ describe("the decided sidebar (AC11.1)", () => {
   });
 });
 
-describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (AC11.1, AC11.10)", () => {
+describe("Customize sidebar in the ⋯; Archived and Recently deleted in the footer (AC11.1, AC11.10, MOD-140)", () => {
   it("hides Focus, Upcoming, My tasks and All; the Inbox always shows", async () => {
     const calls = renderRail({ hidden: new Set(["focus", "all"]) });
     expect(screen.queryByRole("button", { name: /^Focus/ })).toBeNull();
@@ -345,18 +343,36 @@ describe("Customize sidebar, Archived projects and Recently deleted in the ⋯ (
     expect(main(/^Focus, 4 lined up$/)).toBeTruthy();
   });
 
-  it("opens Archived projects and Recently deleted from the ⋯, never as rows", async () => {
+  it("opens Archived and Recently deleted from the footer, under the rows and out of the ⋯", async () => {
     const calls = renderRail();
     const nav = screen.getByRole("navigation", { name: "Tasks" });
+    // Not rows among the projects…
     expect(within(nav).queryByRole("button", { name: /Archived|Recently deleted/ })).toBeNull();
-    await openSidebarMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Archived projects/ }));
-    await settle();
+    // …but the footer's two items, in this order.
+    const footer = screen.getByRole("list", { name: "Archive and trash" });
+    expect(within(footer).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(
+      ["Archived", "Recently deleted"],
+    );
+    fireEvent.click(within(footer).getByRole("button", { name: "Archived" }));
     expect(calls.onSelect).toHaveBeenCalledWith(ARCHIVED_SELECTION);
-    await openSidebarMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Recently deleted/ }));
-    await settle();
+    fireEvent.click(within(footer).getByRole("button", { name: "Recently deleted" }));
     expect(calls.onSelect).toHaveBeenCalledWith(TRASH_SELECTION);
+    // Listed once: the ⋯ keeps Won't do, not these two.
+    await openSidebarMenu();
+    const menu = screen.getByRole("menu");
+    expect(within(menu).queryByRole("menuitem", { name: /Archived|Recently deleted/ })).toBeNull();
+    expect(within(menu).getByRole("menuitem", { name: /^Won’t do/ })).toBeTruthy();
+  });
+
+  it("marks the footer item you're on as the current page", () => {
+    renderRail({ selection: TRASH_SELECTION });
+    const footer = screen.getByRole("list", { name: "Archive and trash" });
+    expect(
+      within(footer).getByRole("button", { name: "Recently deleted" }).getAttribute("aria-current"),
+    ).toBe("page");
+    expect(
+      within(footer).getByRole("button", { name: "Archived" }).getAttribute("aria-current"),
+    ).toBeNull();
   });
 });
 

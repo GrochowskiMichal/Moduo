@@ -2,6 +2,16 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-15 · The sidebar, views and the Filter (dogfood calls #18–#21)
+
+Found while Maciej and Mike dogfood Tasks on prod; Maciej approved each call on 2026-10-15. Frames: the sidebar is [round-1c](../../.design/tasks-v3/prototypes/round-1c.html) frame 1; no frame draws a footer, a new view, a Save button or a Project filter, so those parts are the agent's layout, revisitable.
+
+- **Call #18 (MOD-140) · Archived and Recently deleted are two quiet items at the bottom of the sidebar** → `src/components/app/sidebar-footer.tsx` (+ story), `bucket-rail.tsx`; spec §3, AC11.10
+  - Who: Maciej, 2026-10-15, dogfood call #18 ("there's no way to access archive or trash from the left panel"; "we'll repeat that across other modules").
+  - Decision: "Archived" and "Recently deleted" sit side by side under the sidebar's scrolling rows, pinned there: icon and label while the sidebar is at least 14rem wide (what the two labels take at the roomiest density), the icon alone below that, always named (`aria-label`) and with its tooltip. The place you're on takes the neutral active fill and `aria-current="page"` (R5). They leave the hairline's ⋯, so nothing is listed twice; Won't do and Templates stay there. Built once as `SidebarFooter` (items `{icon, label, onSelect, active}`, a container query on its own width) for other modules to repeat. No counts (the ⋯ showed them as shortcuts; the item shape has none).
+  - Why: from the ⋯ they were out of sight; round-1c frame 2 puts the Notes rail's Archive and Trash at its bottom too (stacked there; side by side is the call's, so the sidebar's rows keep their room).
+  - Rejected: call 98's "from the ⋯, never rows" (supersedes it), and two full-width rows at the bottom (frame 2's stack, two rows of height for two rarely used places).
+
 ## 2026-10-14 · People show their profile photo, initials as the fallback (dogfood MOD-96)
 
 Screen-only, no migration: photos already live on `profiles.avatar_url` (a public URL in the public `avatars` bucket, set in Settings → Account) and reach Tasks through the member list (`listMembers` → `mapMember` → `toAssignees`). The kit's `PersonAvatar` draws them; this change gives the surfaces that dropped them (the capture's pills, its title tokens, the `@` menus, Settings → Teams' people) the photo, fills a non-square photo into the circle (`object-cover`), and re-reads the members when your own profile changes, so your new photo shows at once; a teammate's shows on the next members read (switching workspace or reopening the app).

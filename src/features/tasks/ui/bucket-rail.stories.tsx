@@ -8,8 +8,9 @@ import { TeamWorkspace } from "./tasks-stories-fixtures";
 
 // TV-U6 — the Tasks sidebar (specs/tasks-v3.md §3; prototype round-1c frame
 // 1): Inbox · Focus · Upcoming · My tasks, the hairline (its ⋯ is Customize
-// sidebar, Archived projects and Recently deleted), All · Pinned · projects by
-// area. Baselines are a human capture (tests/visual/sidebar.spec.ts).
+// sidebar), All · Pinned · projects by area, and the footer's Archived ·
+// Recently deleted (MOD-140; icons alone at this 15rem sidebar). Baselines are
+// a human capture (tests/visual/sidebar.spec.ts).
 
 const NOW = "2026-10-01T00:00:00.000Z";
 const project = (id: string, name: string, extra: Partial<Bucket> = {}): Bucket => ({
@@ -137,8 +138,6 @@ function Harness({
       onSetAreaColor={() => {}}
       onMoveArea={() => {}}
       onDeleteArea={() => {}}
-      archivedCount={2}
-      trashCount={5}
     />
   );
 }

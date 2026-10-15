@@ -1218,7 +1218,6 @@ export function TasksPlanView({
       api.openTrashRef.current = null;
     };
   }, [api.openTrashRef]);
-  const trashCount = (api.trash?.buckets.length ?? 0) + (api.trash?.tasks.length ?? 0);
 
   // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
   // page, and what a copy settles into the shared store in one step.
@@ -1298,8 +1297,6 @@ export function TasksPlanView({
       onSetAreaColor={api.setAreaColor}
       onMoveArea={api.moveArea}
       onDeleteArea={api.deleteArea}
-      archivedCount={api.archivedBuckets.length}
-      trashCount={trashCount}
       wontDoCount={wontDoCount}
       templates={
         offersTemplates

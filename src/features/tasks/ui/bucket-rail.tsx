@@ -5,26 +5,31 @@
 //   ─────────────────────────────────── ⋯    ← the hairline; ⋯ = Customize
 //   All · Pinned · Views · projects without an area · areas and their projects
 //   New project
+//   ▣ Archived  ▣ Recently deleted            ← the footer, under the scroll
 //
 // No labels on the blocks (the split is taught in Tasks' welcome), no glyphs
 // on views, one sentence-case header style for every group, headers only when
 // a group has something, every group collapses (remembered per person).
-// Archived projects and Recently deleted open from the hairline's ⋯, never as
-// permanent rows. "Project" everywhere; "bucket" stays a code word until D7.
+// Archived projects and Recently deleted are two quiet items in the sidebar's
+// footer (MOD-140, superseding call 98's ⋯), icons alone when it's narrow.
+// "Project" everywhere; "bucket" stays a code word until D7.
 
 import { useDndMonitor } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  Archive,
   CalendarDays,
   Inbox,
   Layers,
   ListChecks,
   MoreHorizontal,
   Plus,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { SidebarFooter } from "../../../components/app/sidebar-footer";
 import type { LabelColor } from "../../../components/tag-colors";
 import {
   DropdownMenu,
@@ -57,7 +62,7 @@ import { BUCKET_COLOR_OPTIONS, bucketDotColor, sidebarGroups } from "../sidebar"
 import { type TaskView, viewIdOf, viewSelection } from "../views";
 import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
 
-/** The sidebar's selections besides projects: the centre views its ⋯ opens. */
+/** The sidebar's selections besides projects: its footer's (MOD-140) and its ⋯'s. */
 export const ARCHIVED_SELECTION = "archived";
 export const TRASH_SELECTION = "trash";
 /** Templates (TV-D15): opened from the hairline's ⋯ until Settings → Tasks → Templates exists. */
@@ -150,10 +155,7 @@ type Props = {
   onMoveArea: (areaId: string, direction: "up" | "down") => void;
   onDeleteArea: (areaId: string) => void;
 
-  /** Archived projects and Recently deleted: from the ⋯, never rows (98). */
-  archivedCount: number;
-  trashCount: number;
-  /** Won't do tasks (TV-U15): from the ⋯ too. */
+  /** Won't do tasks (TV-U15): from the ⋯. */
   wontDoCount?: number;
   /**
    * Templates (TV-D15): a project's ⋯ → Duplicate… and Save as template…, the
@@ -257,8 +259,6 @@ export function BucketRail({
   onSetAreaColor,
   onMoveArea,
   onDeleteArea,
-  archivedCount,
-  trashCount,
   wontDoCount = 0,
   templates,
   onOpenWelcome,
@@ -473,15 +473,9 @@ export function BucketRail({
             onToggleHidden={onToggleHidden}
             onNewProject={() => setAdding({ kind: "project", areaId: null })}
             onNewArea={() => setAdding({ kind: "area" })}
-            archivedCount={archivedCount}
-            trashCount={trashCount}
-            onOpenArchived={() => onSelect(ARCHIVED_SELECTION)}
-            onOpenTrash={() => onSelect(TRASH_SELECTION)}
             wontDoCount={wontDoCount}
             onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
             wontDoCurrent={selection === WONTDO_SELECTION}
-            archivedCurrent={selection === ARCHIVED_SELECTION}
-            trashCurrent={selection === TRASH_SELECTION}
             onNewFromTemplate={templates?.onNewFromTemplate}
             onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
             templatesCurrent={selection === TEMPLATES_SELECTION}
@@ -625,11 +619,30 @@ export function BucketRail({
           ) : null}
         </nav>
       </div>
+      {/* Pinned under the scrolling rows (MOD-140; round-1c frame 2 puts the
+          Notes rail's Archive and Trash at its bottom too). */}
+      <SidebarFooter
+        label="Archive and trash"
+        items={[
+          {
+            icon: Archive,
+            label: "Archived",
+            active: selection === ARCHIVED_SELECTION,
+            onSelect: () => onSelect(ARCHIVED_SELECTION),
+          },
+          {
+            icon: Trash2,
+            label: "Recently deleted",
+            active: selection === TRASH_SELECTION,
+            onSelect: () => onSelect(TRASH_SELECTION),
+          },
+        ]}
+      />
     </div>
   );
 }
 
-// ── the hairline and its ⋯ (REPLAN 20 A, 29a, 98) ────────────────────────────
+// ── the hairline and its ⋯ (REPLAN 20 A, 29a; MOD-140 moved 98's two out) ────
 
 const HIDEABLE_LABELS: Record<TasksSidebarHideable, string> = {
   focus: "Focus",
@@ -645,12 +658,6 @@ function SidebarHairline({
   onToggleHidden,
   onNewProject,
   onNewArea,
-  archivedCount,
-  trashCount,
-  onOpenArchived,
-  onOpenTrash,
-  archivedCurrent,
-  trashCurrent,
   wontDoCount,
   onOpenWontDo,
   wontDoCurrent,
@@ -666,12 +673,6 @@ function SidebarHairline({
   onToggleHidden: (row: TasksSidebarHideable) => void;
   onNewProject: () => void;
   onNewArea: () => void;
-  archivedCount: number;
-  trashCount: number;
-  onOpenArchived: () => void;
-  onOpenTrash: () => void;
-  archivedCurrent: boolean;
-  trashCurrent: boolean;
   wontDoCount: number;
   onOpenWontDo: () => void;
   wontDoCurrent: boolean;
@@ -752,19 +753,9 @@ function SidebarHairline({
             </>
           ) : null}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={onOpenArchived} data-current={archivedCurrent || undefined}>
-            Archived projects
-            {archivedCount > 0 ? (
-              <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut>
-            ) : null}
-          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenWontDo} data-current={wontDoCurrent || undefined}>
             Won’t do
             {wontDoCount > 0 ? <DropdownMenuShortcut>{wontDoCount}</DropdownMenuShortcut> : null}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onOpenTrash} data-current={trashCurrent || undefined}>
-            Recently deleted
-            {trashCount > 0 ? <DropdownMenuShortcut>{trashCount}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
           {onOpenTemplates ? (
             <DropdownMenuItem
