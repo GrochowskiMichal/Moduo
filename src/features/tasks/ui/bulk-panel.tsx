@@ -1,5 +1,6 @@
-// The right panel on a selection (tasks-v3 §4, call 82: "4 tasks", the values
-// they share and "Mixed" where they differ, as in Figma; TV-U12). Each value
+// The right panel on a selection (tasks-v3 §4, call 82: "4 tasks" in the
+// panel's title row since MOD-109, the values they share and "Mixed" where
+// they differ, as in Figma; TV-U12). Each value
 // opens the same picker as the bottom bar's row, so a change here is one
 // write with one Undo too. Prototype round-2b, frame 1 (Bulk).
 
@@ -7,7 +8,7 @@ import { taskCategoryOf } from "@contracts/vocabularies";
 import type { ReactNode } from "react";
 import { PropertyRow, PropertyValue } from "../../../components/ui/property-row";
 import { useAssignees } from "../assignees";
-import { dayWordOf, dueDayOf, type Shared, sharedValue, singleProject, tasksWord } from "../bulk";
+import { dayWordOf, dueDayOf, type Shared, sharedValue, singleProject } from "../bulk";
 import { LEVEL_OPTIONS } from "../helpers";
 import type { ProjectStatus, Section, Tag, Task, Team } from "../model";
 import { statusNameOf } from "../statuses";
@@ -74,8 +75,9 @@ export function BulkPanel({
   }
 
   return (
+    // "4 tasks" is the panel's title row (MOD-109, round-2b frame 1): the body
+    // starts with the tasks.
     <div className="flex flex-col gap-4 p-4" data-testid="bulk-panel">
-      <h2 className="font-display text-base text-foreground">{tasksWord(tasks.length)}</h2>
       <ul className="flex flex-col gap-1" aria-label="Selected tasks">
         {tasks.slice(0, LISTED).map((t) => (
           <li key={t.id} className="flex items-start gap-2 font-sans text-sm text-foreground">

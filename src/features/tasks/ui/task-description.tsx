@@ -1,8 +1,9 @@
-// The task's description (Tasks v3 call 56): in the panel it shows about
-// eight lines, then fades into "Show more · 2 tasks · 1 email", counting the
-// references hidden below the fold; "Show less" sits at the end. Editing
-// always shows the whole text, and the full page never folds. Every item it
-// mentions is also in Linked, with its card.
+// The task's description (Tasks v3 call 56, MOD-36): in the panel it shows
+// about eight lines, then fades into "Show more · 2 tasks · 1 email", counting
+// the references hidden below the fold; "Show less" sits at the end. A short
+// or empty one never offers either. Editing always shows the whole text, and
+// the full page never folds. Every item it mentions is also in Linked, with
+// its card.
 
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -94,8 +95,12 @@ export function TaskDescription({
       <div
         ref={boxRef}
         className={cn(
-          "w-full",
-          folded && "max-h-48 overflow-hidden",
+          // The text's own size and leading, so `lh` is one of its lines.
+          "w-full text-base",
+          // About eight lines (MOD-36), counted in lines rather than pixels so
+          // the fold holds whatever the type size; the half line under the
+          // fade shows there's more (round-1c frame 3's 8.6).
+          folded && "max-h-[8.5lh] overflow-hidden",
           folded && overflow.folds && "mask-b-from-60%",
         )}
         onFocusCapture={() => setEditing(true)}

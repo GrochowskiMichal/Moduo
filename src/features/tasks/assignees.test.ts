@@ -1,6 +1,6 @@
 // TV-D1 D1-8: every assignee picker offers Unassigned plus the members, a
-// viewer can't be picked, someone who left reads "Former member", and the
-// detail panel says who created the task when that's known.
+// viewer can't be picked, and someone who left reads "Former member". (Who
+// created the task is the feed's first line since MOD-129.)
 
 import { describe, expect, it } from "@rstest/core";
 
@@ -9,7 +9,6 @@ import { mapMember, withOwnName } from "../workspaces/workspace-mappers";
 import {
   assigneeLabel,
   assigneeOptions,
-  createdByLabel,
   fromAssigneeValue,
   toAssignees,
   toAssigneeValue,
@@ -71,18 +70,6 @@ describe("Unassigned option + former member", () => {
     expect(assigneeLabel(null, byId)).toBe("Unassigned");
     expect(assigneeLabel("mike", byId)).toBe("Mike");
     expect(assigneeLabel("gone", byId)).toBe("Former member");
-  });
-});
-
-describe("Created by", () => {
-  it("names the creator, says you for yourself, and stays quiet when unknown", () => {
-    expect(createdByLabel({ creatorId: "mike", creatorUnknown: false }, byId)).toBe("Mike");
-    expect(createdByLabel({ creatorId: "me", creatorUnknown: false }, byId)).toBe("you");
-    expect(createdByLabel({ creatorId: "gone", creatorUnknown: false }, byId)).toBe(
-      "a former member",
-    );
-    expect(createdByLabel({ creatorId: "mike", creatorUnknown: true }, byId)).toBeNull();
-    expect(createdByLabel({ creatorId: "", creatorUnknown: false }, byId)).toBeNull();
   });
 });
 

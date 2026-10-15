@@ -1,7 +1,7 @@
 // TV-U16 · The project overview's numbers and lists (AC6.6 "Done this month ·
 // 14 · 22h", AC6.4's client rollup, AC5.6's departure words): what's next,
 // sections, who's on it, completions in a month in the reader's zone, waiting,
-// what happened lately, and what someone leaving hands on.
+// what happened recently, and what someone leaving hands on.
 
 import { describe, expect, it } from "@rstest/core";
 
