@@ -101,3 +101,8 @@ Read before working in `src/features/notes/`, Lexical surfaces, import. Index of
 - **Lexical's list transform merges two adjacent lists of one kind in the editor itself.** Any tree that holds two such lists must merge them too, or the editor-to-stored-to-editor round trip stops matching. → [canonical.ts](../../src/features/chat/markup-v2/canonical.ts), [record](../build/chat-v2/CV-0-S4.md)
 - **`editor.read()` is read-only: building nodes inside it (`$createParagraphNode`) throws.** Take the tree in a read, build the nodes in an `update`. → [lexical.ts](../../src/features/chat/markup-v2/lexical.ts)
 - **`KeyboardEventInit` has no `keyCode`, and WebKit's IME-committing Enter is `keyCode` 229 with `isComposing` false.** A test sets `keyCode` with `Object.defineProperty`, and the send-on-⏎ guard must swallow both `isComposing` and 229, or ⏎ sends in the middle of a Japanese composition in Safari and the desktop app. → [enter.ts](../../src/features/chat/markup-v2/enter.ts)
+
+## Chat composer (CV-7b)
+
+- **Lexical command priorities decide who gets ⏎.** The shared menus take ⏎ / Tab at HIGH with no IME check; a chat-only CRITICAL ⏎ handler must swallow the composing ⏎ first, or an IME commit picks a menu item. (CV-7b)
+- **An edit's "unchanged" check compares with the re-exported body, not the stored string:** a non-canonical body would save a phantom "(edited)" (DF-23's trap again). (CV-7b)

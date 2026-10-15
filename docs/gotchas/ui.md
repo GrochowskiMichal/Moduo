@@ -272,3 +272,25 @@ Read before working in `src/components/`, `src/routes/`, `.storybook/`, dashboar
 ## E2E waits (CV-E2E)
 
 - **A loading skeleton that shares the real view's `data-slot` makes "the view is visible" a wait that passes on the skeleton.** `FocusSkeleton` is `data-slot="focus-view"` with `aria-busy="true"`: wait for `[data-slot="focus-view"]:not([aria-busy="true"])`, or for the first line of real content with the 20 s first-load wait, never the bare slot. The same goes for a spec that deep-links (`/tasks?id=…`) and asserts store-dependent content at the default 5 s: until the store has loaded the page is the Inbox and the panel says "No project here". On a busy Mac (several worktrees building) the load alone can pass 5 s. (2026-10-14)
+
+## The chat stream (CV-7a)
+
+- **An intro row made `rows` non-empty under the loading skeleton**, so the open-at-bottom ran before the scroller existed. Open only when a message and the scroller are both there. (CV-7a)
+- **TanStack's measurement memo is keyed on `estimateSize` / `getItemKey`:** build the rows array with `useMemo` (the stream file has no compiler), or every render re-walks every row. (CV-7a)
+- **A density switch re-anchors on the message's text, not its wrapper:** a row that starts a person carries the gap inside it, so its wrapper and its text move differently (8 px at comfortable → dense). (CV-7a)
+- **In the full e2e run the first ↑ in the stream sometimes selected a row above the newest;** the spec steps down to its message. Worth a look when the composer's ↑ / Esc hand-off changes. (CV-7a)
+- **Playwright `/new/` matched another button:** match the "N new" chip as `^\d+ new$`. (CV-7a)
+
+## The chat composer (CV-7b)
+
+- **A closing Radix popover's `onCloseAutoFocus` refocusing the editor steals focus from a popover that just opened** (the emoji picker closed itself). Refocus only when focus isn't already in another popper. (CV-7b)
+- **`bun ./scripts/check-arbitrary-tw.ts` flags a function named `capitalize`** (the small-caps rule): name helpers differently. (CV-7b)
+
+## Chat notices on the device (CV-6b)
+
+- **The stale-answer check compares this client's clock with the server's `created_at`:** a client clock 8 s or more fast never rings (its rows go to the push); 8 s or more slow can ring a row the push also rang. (CV-6b)
+- **`chat_catchup` has the default replica identity:** a Realtime DELETE carries only `id`, so the store's recount can't filter deletes by workspace (an extra recount is harmless). (CV-6b)
+- **`@tauri-apps/plugin-notification`'s `sendNotification` calls `window.Notification`** (Tauri injects its own); a test records OS notifications by replacing it. (CV-6b)
+- **The push worker used to drop every push while any Moduo window was focused:** a chat notice must ring there, since the tab may be on Tasks. (CV-6b)
+- **A web build aliases `@tauri-apps/plugin-notification` to `src/lib/tauri-plugin-notification-stub.ts`;** the stub now does what the plugin's JS does (`window.Notification`), so the desktop simulation can record notifications. Only code behind `isTauriRuntime()` reaches it. (CV-6b)
+- **Headless Chromium answers `Notification.permission === "denied"` before anyone asks:** the ask's e2e stubs the permission and needs a VAPID public key in the build (`PUBLIC_VAPID_PUBLIC_KEY`, any valid P-256 key; the spec skips the ask without one). (CV-6b)
