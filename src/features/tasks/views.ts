@@ -62,7 +62,10 @@ export function viewScopeOf(
 /** A view's Filter and Display as the page uses them: read through the same
  *  sanitiser as a place's own, against its place's defaults (a choice that
  *  place doesn't offer falls back). */
-export function viewPrefsOf(view: TaskView, rows: RowPreset = "standard"): TasksViewPrefs {
+export function viewPrefsOf(
+  view: Pick<TaskView, "scope" | "projectId" | "filters" | "display">,
+  rows: RowPreset = "standard",
+): TasksViewPrefs {
   const place = viewPlace(view);
   const display = view.display && typeof view.display === "object" ? view.display : {};
   return sanitizeTasksView(
@@ -70,6 +73,15 @@ export function viewPrefsOf(view: TaskView, rows: RowPreset = "standard"): Tasks
     tasksViewDefaults(place, undefined, rows),
     place,
   );
+}
+
+/**
+ * A new view's starting Filter and Display (MOD-142, the Views header's +):
+ * a blank view over All, as a saved view with no choices reads, so nothing
+ * from All's own Filter comes along.
+ */
+export function newViewPrefs(rows: RowPreset = "standard"): TasksViewPrefs {
+  return viewPrefsOf({ scope: "all", projectId: null, filters: [], display: {} }, rows);
 }
 
 /** What a view stores for the page's Filter and Display. */

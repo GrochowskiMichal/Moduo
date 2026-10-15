@@ -1,8 +1,10 @@
-// Saved views' page parts (TV-U8): the "Save as view…" dialog, and the line
-// under the toolbar while an open view's Filter or Display differs from what
-// it saved ("Unsaved changes · Save · Revert"; someone else's view offers
-// "Save as new view…" instead, since only its maker changes it).
+// Saved views' page parts (TV-U8): the "Save as view…" dialog, and the
+// toolbar's Save while an open view's Filter or Display differs from what it
+// saved (MOD-142: a clear button, where TV-U8 had a quiet "Unsaved changes ·
+// Save · Revert" line under the toolbar; someone else's view offers "Save as
+// new view…" instead, since only its maker changes it).
 
+import { ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
@@ -14,6 +16,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
+import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 
 export function SaveViewDialog({
@@ -93,46 +102,54 @@ export function SaveViewDialog({
   );
 }
 
-/** "Unsaved changes · Save · Revert" under the toolbar of an open view. */
-export function ViewChangesLine({
-  canSave,
-  onSave,
-  onSaveAsNew,
-  onRevert,
+export type ViewSaveAction = { label: string; onSelect: () => void };
+
+/**
+ * The toolbar's Save (MOD-142, agent's layout, revisitable): while one of
+ * your saved views has unsaved changes, a clear Save button sits in the
+ * toolbar, its ▾ holding "Save as new view…" and "Revert changes" (someone
+ * else's view leads with "Save as new view…"; a new view with "Save view…").
+ * A secondary button: New stays the toolbar's one primary (R5).
+ */
+export function ViewSaveControl({
+  primary,
+  more = [],
 }: {
-  /** The view is yours: Save writes into it. Else only Save as new view…. */
-  canSave: boolean;
-  onSave: () => void;
-  /** Absent when the view's place is gone (a deleted project): nothing to save over. */
-  onSaveAsNew?: () => void;
-  onRevert: () => void;
+  primary: ViewSaveAction;
+  /** The ▾ menu's items; none, no ▾. */
+  more?: readonly ViewSaveAction[];
 }) {
-  const action =
-    "rounded-sm text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+  const split = more.length > 0;
   return (
-    <p
-      className="flex items-center gap-1.5 px-1 font-sans text-xs text-muted-foreground"
-      data-testid="view-changes"
-    >
-      <span>Unsaved changes</span>
-      <span aria-hidden>·</span>
-      {canSave ? (
-        <button type="button" onClick={onSave} className={action}>
-          Save
-        </button>
+    <div role="group" aria-label="Saved view" data-testid="view-changes" className="flex gap-px">
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={primary.onSelect}
+        className={split ? "rounded-r-none" : undefined}
+      >
+        {primary.label}
+      </Button>
+      {split ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              icon={ChevronDown}
+              label="More ways to save"
+              tooltip={null}
+              variant="secondary"
+              className="rounded-l-none"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-44">
+            {more.map((item) => (
+              <DropdownMenuItem key={item.label} onSelect={item.onSelect}>
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       ) : null}
-      {canSave ? <span aria-hidden>·</span> : null}
-      {onSaveAsNew ? (
-        <>
-          <button type="button" onClick={onSaveAsNew} className={action}>
-            Save as new view…
-          </button>
-          <span aria-hidden>·</span>
-        </>
-      ) : null}
-      <button type="button" onClick={onRevert} className={action}>
-        Revert
-      </button>
-    </p>
+    </div>
   );
 }

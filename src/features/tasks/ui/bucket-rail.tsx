@@ -71,6 +71,9 @@ export const TEMPLATES_SELECTION = "templates";
 export const UPCOMING_SELECTION = "upcoming";
 /** Won't do: the reachable list with Reopen (tasks-v3 §2), from the ⋯ (TV-U15). */
 export const WONTDO_SELECTION = "wontdo";
+/** A new view, not saved yet (MOD-142): All through a blank Filter and
+ *  Display, named on Save. Never `view:…` (that's a saved view's). */
+export const NEW_VIEW_SELECTION = "new-view";
 
 /** The keys collapse is remembered by: Pinned, Views, and each area. */
 export const PINNED_GROUP = "pinned";
@@ -223,6 +226,8 @@ export type ViewActions = {
   onDelete: (viewId: string) => void;
   onMove: (viewId: string, direction: "up" | "down") => void;
   onCopyLink: (viewId: string) => void;
+  /** A new blank view (MOD-142): the Views header's + and the ⋯'s New view. */
+  onNew?: () => void;
   /** Sharing a view needs edit access. */
   canShare: boolean;
   /** The workspace's owner or an admin: may unshare or delete a shared view. */
@@ -303,6 +308,8 @@ export function BucketRail({
     return bucket ? [{ kind: "project", bucket }] : [];
   });
   const ownViews = views.filter((v) => v.ownerId === viewActions?.currentUserId);
+  // A new view that isn't saved yet (MOD-142) shows at the Views group's end.
+  const draftingView = selection === NEW_VIEW_SELECTION;
   const viewRow = (view: TaskView, opts?: { pinnedCopy?: boolean }) => {
     const selectionKey = viewSelection(view.id);
     const mine = view.ownerId === viewActions?.currentUserId;
@@ -481,6 +488,7 @@ export function BucketRail({
             onToggleHidden={onToggleHidden}
             onNewProject={() => setAdding({ kind: "project", areaId: null })}
             onNewArea={() => setAdding({ kind: "area" })}
+            onNewView={viewActions?.onNew}
             wontDoCount={wontDoCount}
             onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
             wontDoCurrent={selection === WONTDO_SELECTION}
@@ -523,15 +531,36 @@ export function BucketRail({
           ) : null}
 
           {/* Views (TV-U8, 29c–29e): no glyphs (names line up with the
-              projects'), no header until there's one. */}
-          {views.length > 0 ? (
+              projects'), no header until there's one; its + opens a new
+              blank view (MOD-142; before the first view, the ⋯'s New view),
+              which sits at the group's end as "Untitled view" until saved. */}
+          {views.length > 0 || draftingView ? (
             <div className="mt-2 flex flex-col gap-px">
               <NavSectionHeader
                 label="Views"
                 collapsed={collapsed.has(VIEWS_GROUP)}
                 onToggle={() => onToggleCollapsed(VIEWS_GROUP)}
+                onAdd={
+                  viewActions?.onNew
+                    ? () => {
+                        // Like an area's +: the group opens to show it.
+                        if (collapsed.has(VIEWS_GROUP)) onToggleCollapsed(VIEWS_GROUP);
+                        viewActions.onNew?.();
+                      }
+                    : undefined
+                }
+                addLabel="New view"
               />
               {collapsed.has(VIEWS_GROUP) ? null : views.map((v) => viewRow(v))}
+              {draftingView ? (
+                <NavRow
+                  navId={NEW_VIEW_SELECTION}
+                  label="Untitled view"
+                  icon={<span aria-hidden />}
+                  current
+                  onSelect={() => onSelect(NEW_VIEW_SELECTION)}
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -666,6 +695,7 @@ function SidebarHairline({
   onToggleHidden,
   onNewProject,
   onNewArea,
+  onNewView,
   wontDoCount,
   onOpenWontDo,
   wontDoCurrent,
@@ -681,6 +711,8 @@ function SidebarHairline({
   onToggleHidden: (row: TasksSidebarHideable) => void;
   onNewProject: () => void;
   onNewArea: () => void;
+  /** A new blank view (MOD-142). */
+  onNewView?: () => void;
   wontDoCount: number;
   onOpenWontDo: () => void;
   wontDoCurrent: boolean;
@@ -744,17 +776,28 @@ function SidebarHairline({
               {HIDEABLE_LABELS[row]}
             </DropdownMenuCheckboxItem>
           ))}
-          {canEdit ? (
+          {canEdit || onNewView ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={afterClose(onNewProject)}>New project</DropdownMenuItem>
-              {onNewFromTemplate ? (
-                <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
-                  New project from template…
-                </DropdownMenuItem>
+              {canEdit ? (
+                <>
+                  <DropdownMenuItem onSelect={afterClose(onNewProject)}>
+                    New project
+                  </DropdownMenuItem>
+                  {onNewFromTemplate ? (
+                    <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
+                      New project from template…
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
+                </>
               ) : null}
-              <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
-              {onImport ? (
+              {/* Anyone keeps views of their own (TV-U8); the Views header's +
+                  does the same once there's a view (MOD-142). */}
+              {onNewView ? (
+                <DropdownMenuItem onSelect={onNewView}>New view</DropdownMenuItem>
+              ) : null}
+              {canEdit && onImport ? (
                 // Opens a dialog: wait for the menu to close (gotchas/ui.md).
                 <DropdownMenuItem onSelect={afterClose(onImport)}>Import tasks…</DropdownMenuItem>
               ) : null}

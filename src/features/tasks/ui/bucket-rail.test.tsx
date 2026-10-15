@@ -19,6 +19,7 @@ import {
   ARCHIVED_SELECTION,
   asRailProject,
   BucketRail,
+  NEW_VIEW_SELECTION,
   parseCollapsedSections,
   TEMPLATES_SELECTION,
   TRASH_SELECTION,
@@ -135,6 +136,7 @@ function renderRail({
     onDeleteView: rs.fn(),
     onMoveView: rs.fn(),
     onCopyViewLink: rs.fn(),
+    onNewView: rs.fn(),
   };
   function Harness() {
     const [selection, setSelection] = useState(initialSelection);
@@ -222,6 +224,7 @@ function renderRail({
           onDelete: calls.onDeleteView,
           onMove: calls.onMoveView,
           onCopyLink: calls.onCopyViewLink,
+          onNew: calls.onNewView,
           canShare: canEdit,
           canModerate,
         }}
@@ -460,6 +463,39 @@ describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Views/ }));
     expect(calls.onToggleCollapsed).toHaveBeenCalledWith("views");
     expect(screen.queryByRole("button", { name: /^Due this week$/ })).toBeNull();
+  });
+
+  it("the header's + opens a new view, the group opening if folded (MOD-142)", () => {
+    const calls = renderRail({ views: VIEWS, collapsed: new Set(["views"]) });
+    fireEvent.click(screen.getByRole("button", { name: "New view" }));
+    expect(calls.onNewView).toHaveBeenCalledTimes(1);
+    expect(calls.onToggleCollapsed).toHaveBeenCalledWith("views");
+  });
+
+  it("a new view sits at the group's end, untitled and current, until it's saved (MOD-142)", () => {
+    renderRail({ views: VIEWS, selection: NEW_VIEW_SELECTION });
+    const rows = order();
+    expect(rows.slice(rows.indexOf("Views"), rows.indexOf("Views") + 5)).toEqual([
+      "Views",
+      "Due this week",
+      "Waiting on client",
+      "Mike's board",
+      "Untitled view",
+    ]);
+    expect(main(/^Untitled view$/).getAttribute("aria-current")).toBe("page");
+    cleanup();
+    // The first view: the group shows for it alone.
+    renderRail({ views: [], selection: NEW_VIEW_SELECTION });
+    expect(order()).toContain("Views");
+    expect(main(/^Untitled view$/).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("the ⋯'s New view makes one before there's any, for a viewer too (MOD-142)", async () => {
+    const calls = renderRail({ views: [], canEdit: false });
+    expect(order()).not.toContain("Views");
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New view" }));
+    expect(calls.onNewView).toHaveBeenCalledTimes(1);
   });
 
   it("your view's ⋯: Rename · Pin · Share · Move · Copy link · Delete", async () => {

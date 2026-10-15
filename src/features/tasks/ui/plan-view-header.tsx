@@ -43,8 +43,12 @@ export type PlanHeaderControls = {
   /** "Sorted by due date · Back to manual order", when a project view is
    *  sorted (`SortedOrderLine`, default m). */
   sortedNote?: ReactNode;
-  /** An open saved view whose Filter or Display changed: Save · Revert (TV-U8). */
-  viewChanges?: ReactNode;
+  /**
+   * An open saved view whose Filter or Display changed, or a new view not
+   * saved yet: the toolbar's Save (MOD-142; TV-U8's quiet line under the
+   * toolbar went unnoticed). Sits right after Search · Filter · Display.
+   */
+  viewSave?: ReactNode;
   /**
    * The project this view shows (MOD-95, round-2b): its title opens Project
    * details in the right panel, and a ⋯ beside it offers the project's own
@@ -83,7 +87,7 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges, project } =
+  const { count, search, filter, display, more, activeFilters, sortedNote, viewSave, project } =
     controls;
   return (
     // A container, so the controls read its width: under 36rem (576 px) Filter
@@ -133,6 +137,12 @@ export function PlanViewHeader({
             {display}
             {more}
           </Toolbar.Group>
+          {viewSave ? (
+            <>
+              <ToolbarSeparator />
+              {viewSave}
+            </>
+          ) : null}
           <ToolbarSeparator />
           <ViewSwitcher view={view} onViewChange={onViewChange} />
           {/* Read-only views have no New (research §9: no add in that project). */}
@@ -150,7 +160,6 @@ export function PlanViewHeader({
         </Toolbar.Group>
       </Toolbar>
       {activeFilters}
-      {viewChanges}
       {sortedNote}
     </div>
   );

@@ -137,12 +137,13 @@ import { orderProjects, projectDeleteSummary, projectOpenWork, projectOrderDrop 
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { undatedTasks } from "../timeline-rows";
 import { dayNumOfKey } from "../timeline-scale";
-import { viewIdOf, viewPlace, viewPrefsOf, viewSelection } from "../views";
+import { newViewPrefs, viewIdOf, viewPlace, viewPrefsOf, viewSelection } from "../views";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "./archived-projects-view";
 import {
   ARCHIVED_SELECTION,
   asRailProject,
   BucketRail,
+  NEW_VIEW_SELECTION,
   parseCollapsedSections,
   TEMPLATES_SELECTION,
   TRASH_SELECTION,
@@ -431,13 +432,15 @@ export function TasksPlanView({
   );
 
   // Remember where you were, so the next open lands back on it (REPLAN 30);
-  // Archived projects and Recently deleted aren't places to reopen.
+  // Archived projects and Recently deleted aren't places to reopen, nor is a
+  // new view that was never saved (MOD-142).
   useEffect(() => {
     if (
       selection === ARCHIVED_SELECTION ||
       selection === TRASH_SELECTION ||
       selection === WONTDO_SELECTION ||
-      selection === TEMPLATES_SELECTION
+      selection === TEMPLATES_SELECTION ||
+      selection === NEW_VIEW_SELECTION
     )
       return;
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
@@ -468,6 +471,15 @@ export function TasksPlanView({
   const openFocus = useCallback(() => {
     setFullPageId(null);
     pickSelection("today");
+  }, [pickSelection]);
+
+  // The Views header's + (MOD-142): a new blank view, named when it's saved.
+  // Each one starts blank, even right after another.
+  const [newViewSeq, setNewViewSeq] = useState(0);
+  const startNewView = useCallback(() => {
+    setNewViewSeq((n) => n + 1);
+    setFullPageId(null);
+    pickSelection(NEW_VIEW_SELECTION);
   }, [pickSelection]);
 
   // `?place=upcoming` (Home's Upcoming "+n more"): open it like a sidebar pick
@@ -574,7 +586,10 @@ export function TasksPlanView({
     () => (openViewId ? (views?.find((v) => v.id === openViewId) ?? null) : null),
     [openViewId, views],
   );
-  const place = openView ? viewPlace(openView) : selection;
+  // A new view before it's saved (MOD-142, the Views header's +) shows All
+  // through its own blank Filter and Display.
+  const drafting = selection === NEW_VIEW_SELECTION;
+  const place = openView ? viewPlace(openView) : drafting ? "all" : selection;
 
   // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
   // A view waits for the server before it counts as gone.
@@ -592,7 +607,8 @@ export function TasksPlanView({
       selection === "mine" ||
       selection === ARCHIVED_SELECTION ||
       selection === TRASH_SELECTION ||
-      selection === TEMPLATES_SELECTION
+      selection === TEMPLATES_SELECTION ||
+      selection === NEW_VIEW_SELECTION
     )
       return;
     if (inboxId && selection === inboxId) return;
@@ -681,9 +697,16 @@ export function TasksPlanView({
   // grouping, its own saved choices) is the Inbox's.
   const displayScope = inboxId && place === inboxId ? "inbox" : place;
   const viewRows = defaultRowsFor(onboardingRole);
+  // A new view works on its own blank copy (MOD-142), never All's own Filter
+  // and Display; each + starts a fresh one.
   const savedView = useMemo(
-    () => (openView ? { id: openView.id, prefs: viewPrefsOf(openView, viewRows) } : null),
-    [openView, viewRows],
+    () =>
+      openView
+        ? { id: openView.id, prefs: viewPrefsOf(openView, viewRows) }
+        : drafting
+          ? { id: `${NEW_VIEW_SELECTION}:${newViewSeq}`, prefs: newViewPrefs(viewRows) }
+          : null,
+    [openView, drafting, newViewSeq, viewRows],
   );
   const tasksDisplay = useTasksDisplay(
     workspaceId,
@@ -996,16 +1019,25 @@ export function TasksPlanView({
                   : archivedProject
                     ? archivedProject.name
                     : bucketNameById(place);
-  const scopeTitle = openView ? openView.name : openViewId ? "" : placeTitle;
+  const scopeTitle = openView
+    ? openView.name
+    : openViewId
+      ? ""
+      : drafting
+        ? "Untitled view"
+        : placeTitle;
 
   // Saved views (TV-U8): the sidebar's Views, Save as view…, Save changes,
-  // `?view=` links and onboarding's seeded views.
+  // a new view from the Views header's + (MOD-142), `?view=` links and
+  // onboarding's seeded views.
   const savedViews = useSavedViews({
     api,
     workspaceId,
     userId: currentUserId,
     place,
     openView,
+    drafting,
+    onNewView: startNewView,
     prefs: tasksDisplay.prefs,
     dirty: tasksDisplay.dirty,
     revert: tasksDisplay.revert,
@@ -1633,12 +1665,12 @@ export function TasksPlanView({
     [multiSelect, selectEndingAsk],
   );
   const header: PlanHeaderControls = {
-    // Won't do counts what it lists (none of it is open); a saved view, the
-    // tasks it shows ("Done last week" counts its done ones).
+    // Won't do counts what it lists (none of it is open); a saved view (or a
+    // new one), the tasks it shows ("Done last week" counts its done ones).
     count:
       place === WONTDO_SELECTION
         ? scopeTasksAll.length
-        : openView
+        : openView || drafting
           ? scopeTasks.filter((t) => !extraTaskIds.has(t.id) && !isHiddenByDisplay(t)).length
           : openCount(
               extraTaskIds.size === 0
@@ -1657,7 +1689,7 @@ export function TasksPlanView({
       />
     ),
     activeFilters: filtering.activeFilters,
-    viewChanges: savedViews.viewChanges,
+    viewSave: savedViews.viewSave,
     sortedNote:
       view !== "timeline" && order !== "manual" && showsSortedNote(place, order) ? (
         <SortedOrderLine label={sortedByLabel(order)} onManualOrder={backToManualOrder} />

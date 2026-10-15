@@ -117,3 +117,35 @@ describe("a narrow toolbar keeps the title (MOD-95 follow-up)", () => {
     }
   });
 });
+
+describe("a saved view's Save in the toolbar (MOD-142)", () => {
+  it("sits among the controls, after Search · Filter · Display and before the view switch", () => {
+    render(
+      <TooltipProvider>
+        <PlanViewHeader
+          title="Waiting"
+          view="list"
+          onViewChange={() => {}}
+          controls={{
+            count: 3,
+            filter: <FilterButton dimensions={[]} value={[]} onValueChange={() => {}} />,
+            viewSave: (
+              <button type="button" data-testid="view-save">
+                Save
+              </button>
+            ),
+          }}
+          canEdit
+          onRequestCapture={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    const controls = document.querySelector("[data-slot=plan-controls]") as HTMLElement;
+    const save = screen.getByTestId("view-save");
+    expect(controls.contains(save)).toBe(true);
+    const inOrder = Array.from(controls.querySelectorAll("button, [role=radiogroup]"));
+    const at = (el: Element) => inOrder.indexOf(el);
+    expect(at(save)).toBeGreaterThan(at(screen.getByRole("button", { name: "Filter" })));
+    expect(at(save)).toBeLessThan(at(screen.getByRole("radiogroup", { name: "View" })));
+  });
+});

@@ -11,6 +11,7 @@ import { tasksViewDefaults } from "./display";
 import { sanitizeTaskFilters } from "./filters";
 import {
   freeViewName,
+  newViewPrefs,
   ROLE_SEED_VIEWS,
   samePrefs,
   seedViewsFor,
@@ -111,6 +112,12 @@ describe("Filter and Display", () => {
     expect(prefs.rows).toBe("standard");
     expect(prefs.properties).toEqual(["date"]);
     expect(prefs.filters).toEqual([{ dimension: "due", operator: "is", values: ["week"] }]);
+  });
+
+  it("a new view starts blank over All: All's defaults, no filter, the role's rows (MOD-142)", () => {
+    const blank = newViewPrefs();
+    expect(blank).toEqual({ ...tasksViewDefaults("all"), filters: [] });
+    expect(newViewPrefs("detailed").rows).toBe("detailed");
   });
 
   it("a view that remembers no rows takes the role's", () => {

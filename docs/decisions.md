@@ -227,6 +227,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-15 · A + on the Views header opens a new blank view over All, "Untitled view" until it's named on Save; while your view has unsaved changes the toolbar shows a clear Save (▾: Save as new view…, Revert changes) instead of the 12px line (Maciej, dogfood call #19, MOD-142; agent's layout, revisitable) → decisions/tasks.md
 - 2026-10-15 · Filter gets Project wherever more than one project shows (All, My tasks, Upcoming, Won't do, views over them), never inside one; "Inbox" is each reader's own; views save it (server keeps only projects the saver sees; migration 20261015214512, not on prod) (Maciej, dogfood call #20, MOD-141) → decisions/tasks.md
 - 2026-10-15 · Each person keeps their own order of projects in the sidebar, synced in their preferences; a drag never moves anyone else's, a drop into another area still files it for everyone (edit only); sections and areas keep one shared order (Maciej, dogfood call #21, MOD-38) → decisions/tasks.md
 - 2026-10-15 · Archived and Recently deleted are two quiet items side by side at the bottom of the sidebar, icons alone when it's narrow, out of the ⋯ (Maciej, dogfood call #18, MOD-140; supersedes 98); built once as the shared `SidebarFooter` → decisions/tasks.md
