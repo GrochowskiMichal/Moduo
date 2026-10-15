@@ -10,7 +10,7 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Hash, Loader2, Lock, MessagesSquare } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { Button } from "../../components/ui/button";
@@ -18,8 +18,11 @@ import { EmptyState } from "../../components/ui/empty-state";
 import { useChatOnline, useChatTyping } from "../../features/chat/hooks/use-chat-live";
 import { useChatModule } from "../../features/chat/hooks/use-chat-module";
 import { decodeForComposer, toPlainText } from "../../features/chat/markup";
+import { messageTree, toBodyText } from "../../features/chat/markup-v2";
 import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../../features/chat/model";
 import type { ChatSearch } from "../../features/chat/search";
+import type { ChatWindow } from "../../features/chat/store/store";
+import { MessageStream, type MessageStreamHandle } from "../../features/chat/stream/message-stream";
 import {
   buildSidebar,
   buildTimeline,
@@ -38,7 +41,6 @@ import { ChatSidebar } from "../../features/chat/ui/chat-sidebar";
 import { Composer } from "../../features/chat/ui/composer";
 import { ConversationHeader } from "../../features/chat/ui/conversation-header";
 import { type MessageActions, MessageItem } from "../../features/chat/ui/message-item";
-import { MessageList } from "../../features/chat/ui/message-list";
 import { PersonAvatar } from "../../features/chat/ui/person-avatar";
 import { DetailsPanel, SearchPanel, ThreadPanel } from "../../features/chat/ui/side-panels";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../features/layout/panel-events";
@@ -47,6 +49,19 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 type RightPanel = "details" | "search" | null;
+
+/** "Deleted · Undo" stays this long; then the server deletes (§6 #10). */
+const DELETE_UNDO_MS = 8000;
+
+const EMPTY_WINDOW: ChatWindow = {
+  rows: [],
+  hasOlder: false,
+  hasNewer: false,
+  loading: true,
+  loaded: false,
+  newAfter: null,
+  target: null,
+};
 
 function typingLine(names: string[]): string | null {
   if (names.length === 0) return null;
@@ -77,7 +92,7 @@ export function ChatPage() {
   const [channelMembers, setChannelMembers] = useState<ChatMember[]>([]);
   const [pinVersion, setPinVersion] = useState(0);
 
-  const { state, link, actions } = useChatModule({
+  const { state, link, actions, store, snap, markSeen } = useChatModule({
     runtime,
     workspaceId: selectedWorkspaceId,
     userId,
@@ -152,29 +167,9 @@ export function ChatPage() {
     ? (win?.items.find((m) => m.id === activeThreadId) ?? thread?.parent ?? null)
     : null;
 
-  // The read mark at the moment the conversation opened — the "New" marker
-  // must not jump while you read.
-  const [entryReadMark, setEntryReadMark] = useState<{
-    channelId: string;
-    at: string | null;
-  } | null>(null);
-  useEffect(() => {
-    if (!activeChannelId || state.status !== "ready") return;
-    setEntryReadMark((prev) =>
-      prev?.channelId === activeChannelId
-        ? prev
-        : { channelId: activeChannelId, at: state.mine[activeChannelId]?.lastReadAt ?? null },
-    );
-  }, [activeChannelId, state.status, state.mine]);
-
-  const rows = useMemo(
-    () =>
-      buildTimeline(win?.items ?? [], {
-        lastReadAt: entryReadMark?.channelId === activeChannelId ? entryReadMark.at : null,
-        selfId,
-      }),
-    [win?.items, entryReadMark, activeChannelId, selfId],
-  );
+  // v2's stream reads the store's window: the "New" pill sits at the read
+  // mark the store kept when the conversation opened (it never jumps).
+  const streamWin = activeChannelId ? snap.windows[activeChannelId] : undefined;
 
   // Default landing: the first conversation in the rail (or #general).
   useEffect(() => {
@@ -287,10 +282,6 @@ export function ChatPage() {
       },
       onMarkUnread: (m) => {
         void actions.markUnread(m);
-        setEntryReadMark({
-          channelId: m.channelId,
-          at: new Date(Date.parse(m.createdAt) - 1).toISOString(),
-        });
       },
       onCopyLink: (m) => {
         const params = new URLSearchParams({
@@ -379,14 +370,117 @@ export function ChatPage() {
     [typing, state.people],
   );
 
+  // ── v2's stream (CV-7a) ───────────────────────────────────────────────────
+  const streamRef = useRef<MessageStreamHandle | null>(null);
+
+  /** ↑ in an empty composer edits your last message; with none, it steps into the stream. */
   const editLast = useCallback(
-    (items: ChatMessage[]) => {
+    (items: ChatMessage[], inStream = false) => {
       const mine = [...items]
         .reverse()
-        .find((m) => m.authorId === selfId && !m.deletedAt && !m.pending && !m.failed);
+        .find(
+          (m) =>
+            m.authorId === selfId &&
+            m.kind !== "event" &&
+            !m.deletedAt &&
+            !m.sendState &&
+            !m.pending &&
+            !m.failed,
+        );
       if (mine) setEditingId(mine.id);
+      else if (inStream) streamRef.current?.focusLast();
     },
     [selfId],
+  );
+
+  const returnToComposer = useCallback(() => {
+    document.querySelector<HTMLElement>("[data-chat-composer] textarea")?.focus();
+  }, []);
+
+  // Delete hides the message at once with "Deleted · Undo" for 8 s, no
+  // confirm (§6 #10); the server deletes it when the toast's time is up.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingDeletes = useRef(
+    new Map<string, { timer: ReturnType<typeof setTimeout>; message: ChatMessage }>(),
+  );
+  const unhide = useCallback((id: string) => {
+    setHidden((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+  const commitDelete = useCallback(
+    (id: string) => {
+      const pending = pendingDeletes.current.get(id);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      pendingDeletes.current.delete(id);
+      void actions.remove(pending.message).finally(() => unhide(id));
+    },
+    [actions, unhide],
+  );
+  const commitRef = useRef(commitDelete);
+  commitRef.current = commitDelete;
+  // Leaving the page (or Chat) sends the deletes still waiting for their time.
+  useEffect(() => {
+    const flush = () => {
+      for (const id of [...pendingDeletes.current.keys()]) commitRef.current(id);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
+  const deleteWithUndo = useCallback(
+    (m: ChatMessage) => {
+      if (m.sendState) {
+        store?.discard(m.id);
+        return;
+      }
+      setHidden((prev) => new Set(prev).add(m.id));
+      const timer = setTimeout(() => commitRef.current(m.id), DELETE_UNDO_MS);
+      pendingDeletes.current.set(m.id, { timer, message: m });
+      toast("Deleted", {
+        id: `chat-delete-${m.id}`,
+        duration: DELETE_UNDO_MS,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            const pending = pendingDeletes.current.get(m.id);
+            if (pending) clearTimeout(pending.timer);
+            pendingDeletes.current.delete(m.id);
+            unhide(m.id);
+          },
+        },
+      });
+    },
+    [store, unhide],
+  );
+
+  const makeTaskFrom = useCallback(
+    (m: ChatMessage) => {
+      if (!runtime || !selectedWorkspaceId) return;
+      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body)).slice(0, 200);
+      void createCapturedEntity({
+        runtime,
+        workspaceId: selectedWorkspaceId,
+        target: "task",
+        body: text,
+      })
+        .then((created) =>
+          toast(`Task created: ${created.title}`, {
+            description: created.description,
+            action: { label: "Open", onClick: () => void navigate({ to: "/tasks" }) },
+          }),
+        )
+        .catch((err: unknown) =>
+          toast(err instanceof Error ? err.message : "Couldn't create the task."),
+        );
+    },
+    [runtime, selectedWorkspaceId, navigate],
   );
 
   // ── render: states ────────────────────────────────────────────────────────
@@ -522,22 +616,47 @@ export function ChatPage() {
         onArchive={(archived) => void actions.archiveChannel(channel.id, archived)}
         onJoin={() => void actions.join(channel.id)}
       />
-      <MessageList
-        conversationKey={channel.id}
-        rows={rows}
-        hasMore={win?.hasMore ?? true}
-        loading={win?.loading ?? true}
-        loaded={win?.loaded ?? false}
-        onLoadOlder={() => void actions.loadOlder(channel.id)}
-        hasNewer={win?.hasNewer ?? false}
-        onJumpToLatest={() => void actions.jumpToLatest(channel.id)}
-        renderMessage={(row) => renderMessage(row.message, row.grouped)}
-        intro={intro}
+      <MessageStream
+        key={channel.id}
+        ref={streamRef}
+        conversationId={channel.id}
+        window={streamWin ?? EMPTY_WINDOW}
         selfId={selfId}
-        focusId={focusId}
-        onFocusHandled={() => setFocusId(null)}
+        personOf={personOf}
+        rowById={(id) => store?.rowById(id)}
+        hidden={hidden}
+        editingId={editingId}
+        canWrite={!!member && !channel.archivedAt}
+        intro={intro}
+        onLoadOlder={() => void actions.loadOlder(channel.id)}
+        onLoadNewer={() => void store?.loadNewer(channel.id)}
+        onJumpToLatest={() => void actions.jumpToLatest(channel.id)}
+        onSeen={(id) => markSeen(channel.id, id)}
+        onStartEdit={(m) => setEditingId(m.id)}
+        onCancelEdit={() => {
+          setEditingId(null);
+          returnToComposer();
+        }}
+        onSaveEdit={(m, body) => {
+          setEditingId(null);
+          returnToComposer();
+          void store?.edit(m.id, body, "v2").then((res) => {
+            if (!res.ok) toast(res.offline ? "Offline" : res.message);
+          });
+        }}
+        onDelete={deleteWithUndo}
+        onReact={(m, key) => void actions.react(m, key)}
+        onPin={(m) => messageActions.onPin?.(m, !m.pinnedAt)}
+        onTask={makeTaskFrom}
+        onCopyLink={(m) => messageActions.onCopyLink?.(m)}
+        onMarkUnread={(m) => void actions.markUnread(m)}
+        onOpenChain={(m) => go({ c: m.channelId, t: m.parentId ?? m.id })}
+        onRetry={(m) => actions.retry(m)}
+        onDiscard={(m) => store?.discard(m.id)}
+        onPersonClick={(id) => messageActions.onPersonClick?.(id)}
+        onReturnToComposer={returnToComposer}
       />
-      <div className="shrink-0 px-3 pb-3">
+      <div data-chat-composer className="shrink-0 px-3 pb-3">
         {channel.archivedAt ? (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2.5">
             <span className="text-sm text-muted-foreground">
@@ -560,7 +679,7 @@ export function ChatPage() {
             draftKey={channel.id}
             autoFocus
             onSubmit={(text, picks) => actions.send({ channelId: channel.id, text, picks })}
-            onEditLast={() => editLast(win?.items ?? [])}
+            onEditLast={() => editLast(streamWin?.rows ?? [], true)}
             onTyping={() => link?.sendTyping(channel.id, null)}
             typingLine={typingLine(typingNames(channel.id, null))}
           />

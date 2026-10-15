@@ -135,7 +135,6 @@ function sameAuthor(a: ChatMessage, b: ChatMessage): boolean {
   );
 }
 
-
 /**
  * The stream's rows.
  * - `hasOlder`: the window's oldest row is the one past the edge (the store
@@ -250,7 +249,8 @@ export function countNewSince(
 // Emoji-only messages draw large ("jumbo", CH29): one paragraph of at most
 // this many emoji and nothing else but spaces.
 export const JUMBO_MAX = 8;
-const EMOJI_RUN = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Component}|️|‍|\s)+$/u;
+const EMOJI_RUN =
+  /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Component}|️|‍|\s)+$/u;
 const EMOJI_ONE =
   /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?(?:‍\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?)*/gu;
 

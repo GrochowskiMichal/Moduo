@@ -223,29 +223,13 @@ export function useChatModule({
     });
   }, [store, ready, activeChannelId, focusMessageId, win]);
 
-  // ── the read mark: the newest message on screen ───────────────────────────
-  // v1's list shows the newest messages when a conversation opens; v2's stream
-  // (CV-7a) reports the last row it actually drew.
-  const markSeen = useCallback(() => {
-    if (!store || !activeChannelId || !win || win.hasNewer) return;
-    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-    for (let i = win.rows.length - 1; i >= 0; i -= 1) {
-      const m = win.rows[i]!;
-      if (m.sendState) continue;
-      store.markSeen(activeChannelId, m.id);
-      return;
-    }
-  }, [store, activeChannelId, win]);
-  useEffect(() => {
-    if (win?.loaded) markSeen();
-  }, [win, markSeen]);
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible") markSeen();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [markSeen]);
+  // ── the read mark ─────────────────────────────────────────────────────────
+  // The stream (CV-7a's MessageStream) is the only caller: it reports the last
+  // message that was on screen, never "now" (§6 #17); the store moves forward only.
+  const markSeen = useCallback(
+    (channelId: string, messageId: string) => store?.markSeen(channelId, messageId),
+    [store],
+  );
 
   // ── message writes ────────────────────────────────────────────────────────
   const send = useCallback(
@@ -527,7 +511,8 @@ export function useChatModule({
     ],
   );
 
-  return { state, link, actions };
+  // v2's stream reads the store's own window and writes v2 bodies (CV-7a).
+  return { state, link, actions, store, snap, markSeen };
 }
 
 export type ChatModule = ReturnType<typeof useChatModule>;
