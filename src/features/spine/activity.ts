@@ -250,13 +250,25 @@ export function spineActivityLine(
       return "added this company";
     case "companies.update":
       return "updated this company";
-    // Chat (specs/chat.md). Only mentions + thread replies notify (quiet bar).
+    // Chat's bell rows (specs/chat-v2.md §11, CV-5): @you, @Team, @channel, a
+    // reply in a chain you're in, an announcement. The excerpt is the stored
+    // form, so its references are named for this reader.
     case "chat.mention":
-    case "chat.reply": {
+    case "chat.reply":
+    case "chat.announcement": {
       const name = str(p.channel_name);
       const where = name ? `in #${name}` : "in a direct message";
-      const verb = entry.op === "chat.mention" ? "mentioned you" : "replied in a thread";
-      const excerpt = str(p.excerpt);
+      const verb =
+        entry.op === "chat.reply"
+          ? "replied"
+          : entry.op === "chat.announcement"
+            ? "posted"
+            : p.reason === "team"
+              ? "mentioned your team"
+              : p.reason === "everyone"
+                ? "mentioned everyone"
+                : "mentioned you";
+      const excerpt = excerptText(p.excerpt);
       return excerpt ? `${verb} ${where}: “${excerpt}”` : `${verb} ${where}`;
     }
     case "chat.channel_create": {

@@ -281,7 +281,8 @@ BEGIN
          (test.id('W'), test.id('C'), test.ref('Q'), NULL, 'everyone');
   INSERT INTO public.chat_chain_mutes (user_id, root_id, workspace_id) VALUES (test.id('B'), test.ref('M'), test.id('W'));
   PERFORM test.ok(
-    test.reads('B', 'chat_catchup', 'true') = 1 AND test.reads('C', 'chat_catchup', 'true') = 1
+    -- (message_id IS NULL: the rows written here, not the setup sends' items, CV-5)
+    test.reads('B', 'chat_catchup', 'message_id IS NULL') = 1 AND test.reads('C', 'chat_catchup', 'message_id IS NULL') = 1
     AND test.reads('A', 'chat_catchup', 'true') = 0 AND test.reads('X', 'chat_catchup', 'true') = 0
     AND test.reads('B', 'chat_chain_mutes', 'true') = 1 AND test.reads('A', 'chat_chain_mutes', 'true') = 0,
     'own rows: each person reads only their own Catch up items and chain mutes');

@@ -160,7 +160,9 @@ BEGIN
   v := test.send('D', 'N', 'n3', 'admin');
   PERFORM test.ok(v = '42501 Only managers can post in this channel.', 'send: an admin who isn''t its manager is refused too', v);
 
-  PERFORM test.ok(test.all_acts() = v_acts, 'send: a plain send logs no activity row');
+  -- The announcement in N rang the bell (CV-5's fan-out); the sends themselves log nothing.
+  PERFORM test.ok(test.all_acts() = v_acts + 1 AND test.acts('n1', 'chat.announcement', 'A') = 1,
+    'send: a plain send logs no activity row (N''s post rings the bell: CV-5)');
   PERFORM test.ok((test.msg('b1')).format_version = 2 AND (test.msg('b1')).kind = 'message'
                   AND (test.msg('b1')).author_id = test.id('B') AND (test.msg('b1')).client_id = test.mid('b1')
                   AND (test.msg('b1')).body_text = 'from a member',
@@ -272,8 +274,8 @@ BEGIN
   PERFORM test.ok(v = 'ok 1' AND (test.msg('b1')).edited_at IS NOT NULL
                   AND (test.msg('b1')).mentioned_user_ids = ARRAY[test.id('A')]
                   AND test.acts('b1', 'chat.message_edit', 'B') = 1
-                  AND test.acts('b1', 'chat.mention') = 0,
-    'edit: the author edits; mentions are read again; one attributed row; nobody is pinged here (CV-5)', v);
+                  AND test.acts('b1', 'chat.mention') = 1,
+    'edit: the author edits; mentions are read again; one attributed row; A, named for the first time, hears it (CV-5)', v);
   v := test.as_user('B', format($q$SELECT public.chat_op_edit(%L::uuid, %L::text)$q$, test.mid('b1'),
     format('from a member, now with moduo://person/%s', test.id('A'))));
   PERFORM test.ok(v = 'ok 1' AND test.acts('b1', 'chat.message_edit') = 1, 'edit: the same text again changes nothing', v);

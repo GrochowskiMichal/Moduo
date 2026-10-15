@@ -148,6 +148,37 @@ describe("spineActivityLine", () => {
     );
   });
 
+  it("renders chat's bell rows by why they reached you (CV-5)", () => {
+    const at = { channel_name: "plans", excerpt: "standup moved" };
+    expect(spineActivityLine(entry("chat.mention", { ...at, reason: "person" }))).toBe(
+      "mentioned you in #plans: “standup moved”",
+    );
+    expect(spineActivityLine(entry("chat.mention", { ...at, reason: "team" }))).toBe(
+      "mentioned your team in #plans: “standup moved”",
+    );
+    expect(spineActivityLine(entry("chat.mention", { ...at, reason: "everyone" }))).toBe(
+      "mentioned everyone in #plans: “standup moved”",
+    );
+    expect(spineActivityLine(entry("chat.reply", at))).toBe("replied in #plans: “standup moved”");
+    expect(spineActivityLine(entry("chat.announcement", at))).toBe(
+      "posted in #plans: “standup moved”",
+    );
+    // A v1 row has no reason: it reads as @you.
+    expect(spineActivityLine(entry("chat.mention", { channel_name: "plans" }))).toBe(
+      "mentioned you in #plans",
+    );
+    // The excerpt is the stored form: a person reads as a name, never as a URI.
+    expect(
+      spineActivityLine(
+        entry("chat.mention", {
+          channel_name: "plans",
+          excerpt: "over to moduo://person/7b0c2b6e-0b1d-4c55-9a51-3f0e4f6b8a01",
+        }),
+        { referenceName: () => "Sofia" },
+      ),
+    ).toBe("mentioned you in #plans: “over to Sofia”");
+  });
+
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(spineActivityLine(entry("links.future_op"))).toBe("links.future_op");
   });

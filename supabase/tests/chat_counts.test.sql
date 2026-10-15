@@ -8,7 +8,8 @@
 -- Cast: O owns workspace W (Duo); A, B and C are members; X is in no
 -- workspace; K is A's API key. Messages are written straight into the tables
 -- at fixed times (one transaction gives every op the same now()), after each
--- reader's mark.
+-- reader's mark, then fanned out as chat_op_send would (CV-5: Catch up items,
+-- which the catchup column counts).
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'A', 'B', 'C', 'X']) AS n;
 UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
@@ -31,19 +32,25 @@ $$;
 CREATE FUNCTION test.at(p_n int) RETURNS timestamptz LANGUAGE sql IMMUTABLE AS $$
   SELECT '2026-10-01 09:00:00+00'::timestamptz + make_interval(mins => p_n)
 $$;
--- A message by p_who in p_conv at minute p_n (a reply when p_root is given).
+-- A message by p_who in p_conv at minute p_n (a reply when p_root is given),
+-- then its Catch up items and bell rows, as chat_op_send writes them (CV-5).
 CREATE FUNCTION test.put(p_conv text, p_who text, p_msg text, p_n int, p_body text DEFAULT 'hello',
                          p_root text DEFAULT NULL, p_quote text DEFAULT NULL,
-                         p_mentions text[] DEFAULT '{}', p_everyone boolean DEFAULT false)
+                         p_mentions text[] DEFAULT '{}', p_everyone boolean DEFAULT false,
+                         p_teams text[] DEFAULT '{}')
 RETURNS void LANGUAGE sql AS $$
   INSERT INTO public.chat_messages
     (id, workspace_id, channel_id, author_id, body, created_at, parent_id, reply_to_id,
-     mentioned_user_ids, mentions_everyone)
+     mentioned_user_ids, mentioned_team_ids, mentions_everyone)
   VALUES
     (test.mid(p_msg), test.id('W'), test.ref(p_conv), test.id(p_who), p_body, test.at(p_n),
      CASE WHEN p_root IS NOT NULL THEN test.mid(p_root) END,
      CASE WHEN coalesce(p_quote, p_root) IS NOT NULL THEN test.mid(coalesce(p_quote, p_root)) END,
-     ARRAY(SELECT test.id(u) FROM unnest(p_mentions) u), p_everyone)
+     ARRAY(SELECT test.id(u) FROM unnest(p_mentions) u), ARRAY(SELECT test.id(t) FROM unnest(p_teams) t),
+     p_everyone);
+  SELECT public.chat__fan_out(m, c, m.author_id)
+    FROM public.chat_messages m JOIN public.chat_channels c ON c.id = m.channel_id
+   WHERE m.id = test.mid(p_msg);
 $$;
 -- Everyone's read mark in p_conv back to before minute 0.
 CREATE FUNCTION test.unread_all(p_conv text) RETURNS void LANGUAGE sql AS $$
@@ -111,8 +118,7 @@ BEGIN
 
   PERFORM test.put('L', 'C', 'l3', 3, 'over to moduo://person/' || test.id('B'), p_mentions => ARRAY['B']);
   PERFORM test.ok(test.counts('B', 'L') = '3/1/1/1', 'mentions level: @B counts for B', test.counts('B', 'L'));
-  PERFORM test.put('L', 'C', 'l4', 4, 'design moduo://team/' || test.id('T'));
-  UPDATE public.chat_messages SET mentioned_team_ids = ARRAY[test.id('T')] WHERE id = test.mid('l4');
+  PERFORM test.put('L', 'C', 'l4', 4, 'design moduo://team/' || test.id('T'), p_teams => ARRAY['T']);
   PERFORM test.ok(test.counts('B', 'L') = '4/2/2/2' AND test.counts('A', 'L') = '4/0/0/0',
     'mentions level: @Design counts for B, in the team, and not for A', test.counts('B', 'L'));
   PERFORM test.put('L', 'C', 'l5', 5, '@channel heads up', p_everyone => true);
@@ -156,8 +162,8 @@ DECLARE
   v text;
 BEGIN
   v := test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L, 'all', NULL)$q$, test.ref('L')));
-  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'L') = '9/3/9/6',
-    'Every message: every unread message counts; in Catch up the plain ones are one item (the mentions and the chain keep theirs)',
+  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'L') = '9/3/9/5',
+    'Every message: every unread message counts; Catch up keeps the items written as they came (switching adds no line for what came before, CV-5)',
     test.counts('B', 'L'));
   PERFORM test.ok(test.counts('C', 'L') = '3/0/1/1',
     'counts: your own messages are never unread (C wrote most of them); B''s reply in C''s chain counts for C', test.counts('C', 'L'));
@@ -248,12 +254,11 @@ BEGIN
   PERFORM test.put('L', 'C', 'v1root', 20, 'old thread');
   PERFORM test.put('L', 'C', 'v1reply', 40, 'old reply', p_root => 'v1root');
   UPDATE public.chat_messages SET v1_thread_reply = true WHERE id = test.mid('v1reply');
-  UPDATE public.chat_members SET last_read_id = test.mid('v1root'), last_read_at = test.at(20)
-   WHERE channel_id = test.ref('L') AND user_id = test.id('A');
+  -- (Through the ops, so Catch up's items close and reopen with the mark, CV-5.)
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('L'), test.mid('v1root')));
   PERFORM test.ok(test.counts('A', 'L') = '0/0/0/0',
     'v1 replies: read root, so its converted reply isn''t unread (v1 never counted it)', test.counts('A', 'L'));
-  UPDATE public.chat_members SET last_read_id = test.mid('l5'), last_read_at = test.at(5)
-   WHERE channel_id = test.ref('L') AND user_id = test.id('A');
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::uuid)$q$, test.ref('L'), test.mid('r1')));
   -- After l5: r1a, r1b, b1, q1, r1c, r1d (A's chain r1 has four of them), the v1 root and its reply.
   PERFORM test.ok(test.counts('A', 'L') = '8/0/4/1',
     'v1 replies: with its root unread, the converted reply is unread too', test.counts('A', 'L'));
@@ -289,5 +294,36 @@ BEGIN
   PERFORM test.ok(v LIKE '42501 %', 'a key: refused (counts are people''s)', v);
   v := test.as_user('B', format($q$SELECT public.chat_op_leave(%L)$q$, test.ref('L')));
   PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'L') = 'none', 'left: a conversation you left has no counts', v);
+END;
+$$;
+
+-- ── An "Every message" conversation is one Catch up item in the tab's count (AC1.7, CV-5) ──
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'Busy', '', false, ARRAY[%L, %L]::uuid[])$q$,
+    test.id('W'), test.id('B'), test.id('C')));
+  INSERT INTO test.ids SELECT 'Y', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Busy';
+  PERFORM test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L, 'all', NULL)$q$, test.ref('Y')));
+  PERFORM test.unread_all('Y');
+  PERFORM test.put('Y', 'C', 'y1', 1, 'one');
+  PERFORM test.put('Y', 'C', 'y2', 2, 'two');
+  PERFORM test.put('Y', 'C', 'y3', 3, 'three');
+  PERFORM test.ok(test.counts('B', 'Y') = '3/0/3/1'
+                  AND (SELECT array_agg(message_id) FROM public.chat_catchup
+                        WHERE user_id = test.id('B') AND channel_id = test.ref('Y')) = ARRAY[test.mid('y3')],
+    'Every message: three messages count 3 on the conversation and are one line in Catch up (the tab counts 1), at the newest',
+    test.counts('B', 'Y'));
+  PERFORM test.put('Y', 'C', 'y4', 4, 'and you', p_mentions => ARRAY['B']);
+  PERFORM test.ok(test.counts('B', 'Y') = '4/1/4/2', 'Every message: a mention there is its own item', test.counts('B', 'Y'));
+  v := test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('Y'), test.mid('y2')));
+  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'Y') = '2/1/2/2',
+    'Every message: reading part of it keeps the line (its newest message is unread)', test.counts('B', 'Y'));
+  v := test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('Y'), test.mid('y3')));
+  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'Y') = '1/1/1/1',
+    'Every message: reading to its newest message closes the line', test.counts('B', 'Y'));
+  PERFORM test.put('Y', 'C', 'y5', 5, 'five');
+  PERFORM test.ok(test.counts('B', 'Y') = '2/1/2/2', 'Every message: the next message opens a new line', test.counts('B', 'Y'));
 END;
 $$;

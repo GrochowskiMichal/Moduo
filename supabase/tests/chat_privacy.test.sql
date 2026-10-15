@@ -57,6 +57,11 @@ BEGIN
     $q$SELECT public.chat_op_send(%L, 'psst <@%s>', NULL, ARRAY[%L]::uuid[], false, NULL, 'psst @B')$q$,
     test.ref('D'), test.id('B'), test.id('B')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A mentions B in D', v);
+  -- A direct message rings no bell (CV-5), so A's edit writes the row about D.
+  v := test.as_user('A', format(
+    $q$SELECT public.chat_op_edit(m.id, 'psst again'::text) FROM public.chat_messages m WHERE m.channel_id = %L$q$,
+    test.ref('D')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A edits the message in D', v);
 
   -- The registry: making P wrote its row (CV-2b registers every conversation).
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.entities WHERE workspace_id = test.id('W')
