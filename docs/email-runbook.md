@@ -237,12 +237,35 @@ All agent steps, each needing Maciej's OK in the session, in this order. The wor
    where kind like 'booking_%' order by created_at desc limit 20;
    ```
 
+## TX-6 · Reminders + host cancel: going live
+
+Prod changes ship with a release train (docs/decisions/workflow.md). In this order, each with Maciej's OK:
+
+1. **Worker** from a branch holding every kind the live worker sends (TX-4 + TX-5 + TX-6), then `bun run functions:reconcile`:
+   ```bash
+   supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+   It must be live before step 2: the migration's triggers start queueing C6/C7.
+2. **Migration** `20261014170000_tx6_booking_reminders.sql`. Check:
+   ```sql
+   select tgname from pg_trigger where tgname in ('calendar_events_booking_follow', 'slot_bookings_email_follow');
+   select count(*) filter (where guest_reminder_minutes = 1440), count(*) from public.exposed_slot_links;
+   ```
+   Expect both triggers, and every existing link at 1440.
+3. **Booking function** (`booking-public`), so new bookings save their email context:
+   ```bash
+   supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+4. **The app** (the link editor's "Remind guests") ships with the train's app promotion. Until then links keep the 24-hour default.
+5. **Watch:** `select kind, status, send_after, last_error from public.email_outbox where kind in ('booking_guest_reminder', 'booking_guest_host_cancelled') order by created_at desc limit 20;`
+
+Bookings confirmed before step 3 have no email context and get no reminder or C6.
 
 ## TX-7 · Workspace emails: going live
 
 All agent steps, each needing Maciej's OK in the session, in this order. Until step 2, prod keeps its old invite trigger, which posts to `send-workspace-invite` and gets a 503 (no email, no harm), so don't undeploy that function before the migration.
 
-1. **Worker** (agent, with OK), **from `maciej` after TX-7 has merged.** It must hold every kind the live worker sends: `waitlist_invite` (TX-4), the five `booking_*` kinds (TX-5), `ops_alert` (TX-3) and now `workspace_invite`, `workspace_owner`, `workspace_removed`. A test pins that list (`templates/workspace.test.ts` › "the worker's templates"). Check no newer worker is live first (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`):
+1. **Worker** (agent, with OK), **from `maciej` after TX-7 has merged.** It must hold every kind the live worker sends: `waitlist_invite` (TX-4), the five `booking_*` kinds of TX-5 and the two of TX-6 (`booking_guest_host_cancelled`, `booking_guest_reminder`), `ops_alert` (TX-3) and now `workspace_invite`, `workspace_owner`, `workspace_removed`. A test pins that list (`templates/workspace.test.ts` › "the worker's templates"). Check no newer worker is live first (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`):
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```

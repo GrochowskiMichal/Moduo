@@ -17,6 +17,8 @@ import {
   bookingGuestAddedEmail,
   bookingGuestCancelledEmail,
   bookingGuestConfirmedEmail,
+  bookingGuestHostCancelledEmail,
+  bookingGuestReminderEmail,
   bookingHostGuestCancelledEmail,
   bookingHostNewEmail,
 } from "./booking.ts";
@@ -65,6 +67,8 @@ export interface EmailTemplateData {
   booking_host_new: BookingEmailData;
   booking_host_guest_cancelled: BookingEmailData;
   booking_guest_cancelled: BookingEmailData;
+  booking_guest_host_cancelled: BookingEmailData;
+  booking_guest_reminder: BookingEmailData;
   workspace_invite: WorkspaceInviteData;
   workspace_owner: WorkspaceOwnerData;
   workspace_removed: WorkspaceRemovedData;
@@ -81,6 +85,8 @@ export const EMAIL_TEMPLATES: { [K in BuiltEmailKind]: (data: EmailTemplateData[
   booking_host_new: bookingHostNewEmail,
   booking_host_guest_cancelled: bookingHostGuestCancelledEmail,
   booking_guest_cancelled: bookingGuestCancelledEmail,
+  booking_guest_host_cancelled: bookingGuestHostCancelledEmail,
+  booking_guest_reminder: bookingGuestReminderEmail,
   workspace_invite: workspaceInviteEmail,
   workspace_owner: workspaceOwnerEmail,
   workspace_removed: workspaceRemovedEmail,
