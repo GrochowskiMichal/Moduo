@@ -25,12 +25,12 @@
 | AC1.1, AC1.14 | `tests/chat-stream.spec.ts` · "offline send, retry, undo delete" (offline ⏎ shows "Waiting to send" and sends on reconnect; a refused send (plan paused) shows "Not sent", Retry sends once allowed; delete hides with Undo, Undo restores and the server keeps it; without Undo the server deletes it after 8 s) |
 | AC1.6, AC1.3 | `tests/chat-stream.spec.ts` · "floating chip, jump bar, deep link" ("1 new" while scrolled up, the reader's row moves ≤ 1 px; a deep link lights the message in a window with the jump bar; Jump to present) · "the New pill sits at the read mark and never jumps" |
 | AC1.11 | `tests/chat-stream.spec.ts` · "live chips, honest errors" (the task chip changes title in place after another context's change) |
-| AC2.7 (message keys) | `tests/chat-stream.spec.ts` · "the message keys" (↑ edits your last, Esc back to the composer, ↑ in the stream selects, E edits, R opens the chain, Esc returns) |
-| AC1.15, AC12.3 | `tests/perf/chat-10k.spec.ts` · "the budgets", local dev build: warm open 31 ms (≤ 100), own message 30 ms (≤ 50), 196 elements in the stream (≤ 3,000), worst frame in a 2 s fling 33 ms (≤ 50), anchor drift 0 px on prepend, an edit above and a density switch |
+| AC2.7 (message keys) | `tests/chat-stream.spec.ts` · "the message keys" (↑ edits your last, Esc back to the composer, ↑↓ select, E edits, R opens the chain, P pins, + opens the six reactions, T makes a task, ⏎ returns to the composer, ⌘⌫ deletes with Undo) |
+| AC1.15, AC12.3 | `tests/perf/chat-10k.spec.ts` · "the budgets", local dev build: warm open 31 ms (≤ 100), own message 30 ms (≤ 50), 196 elements in the stream (≤ 3,000), worst frame in a 2 s fling 33 ms (≤ 50), anchor drift 0 px on a held-then-released prepend (7,020 px), a live edit above and a density switch |
 | AC14.1, AC14.3 | `tests/visual/chat-stream.spec.ts` · "the look at three densities" (15 px everywhere, names by weight, 32/28/24 avatar, 6 px and 24/20/16 px rhythm, one left edge, centred separator, the pill); `lint:tw` + `lint:css` pass |
 | AC1.2–1.4 (pure) | `src/features/chat/timeline.test.ts` · "read mark, New pill, page boundaries" (11 tests); `src/lib/time-format.test.ts` · recent past |
 
-`bun run verify`: typecheck, Biome, `lint:tw`, `lint:css` pass; 4,466 of 4,467 tests pass. The one failure is the shared-stack check `supabase/tests/chat_privacy.test.sql` ("typing: a refusal writes nothing"), which this branch doesn't touch (runbook: the shared stack). e2e: `tests/chat-stream.spec.ts` 5/5; perf 1/1; visual 1/1.
+`bun run verify`: typecheck, Biome, `lint:tw`, `lint:css` pass; 4,466 of 4,467 tests pass. The one failure is the shared-stack check `supabase/tests/chat_privacy.test.sql` ("typing: a refusal writes nothing"), which this branch doesn't touch (runbook: the shared stack). e2e: `tests/chat-stream.spec.ts` 5/5 (after the review fixes); perf 1/1; visual 1/1.
 
 ## Agent's choices (deferred to by Maciej: confirmed for building, may be reconsidered)
 
@@ -44,7 +44,23 @@
 - **A refused send also offers "Delete"** beside Retry (discard): agent's choice · otherwise a refused message can't be cleared.
 - **⇧D (decision) and H (remind me) do nothing yet**; their menu items are hidden until CV-13 / CV-14.
 
+## Review (validator, round 1)
+
+No BLOCKER; 5 MAJOR, all addressed:
+1. Undo could be offered after the server delete (sonner pauses its clock on hover / a hidden tab, the page's own timer didn't) → the delete now runs from the toast's own `onAutoClose` / `onDismiss`; the pagehide/unmount flush dismisses the toast.
+2. A newer page landing in a jump window could pull the reader to its end (`followOnAppend` doesn't know `hasNewer`) → follow only while neither this nor the previous window has newer messages.
+3. Your own message sent while scrolled up wasn't on screen → the composer's submit calls the stream's `showLatest()` (jumps to the present from a jump window).
+4. ↑-edit of an off-screen message did nothing visible / lost typing on scroll → the edited row is always drawn (`rangeExtractor`) and scrolled into view when editing starts; `editLast` skips ids inside their Undo and the undrawn edge row.
+5. Keys untested → "the message keys" e2e now also presses P, +, T, ⏎ and ⌘⌫ (with Undo). **T's wording is open (❓ below).**
+MINORs fixed: the perf spec now holds the older page at the network and releases it inside the sampling window (asserts a prepend landed: 7,020 px, drift 0 px) and waits for the live edit to be drawn (drift 0 px); the hover toolbar and context menu are hidden where you can't write. MINORs left (recorded): the chip test changes the title, not the status, and proves the in-place update through the window-return re-read; the deep-link test's target isn't a reply (chain opening is CV-12's panel); feed a11y (`aria-activedescendant` / `aria-posinset`) and "any unbound letter types into the composer" → CV-7b with the composer; unsent rows from v1's composer show v1 tokens until CV-7b sends v2; Mark unread no longer moves the pill while open; the pagehide delete is a plain fetch (no keepalive); two edit boxes if the v1 thread panel edits the same message (CV-12 replaces it). For the orchestrator (CV-3's store): `open()` returns early for a conversation already loaded, so `newAfter` isn't refreshed on a return to a small conversation.
+
+## ❓ Needs Maciej
+
+- **T / "Task" on a message**: the AC says it "opens the capture"; it creates the task at once from the message's text (v1's behaviour, toast "Task created · Open"), because the capture's request type can't carry a title or the message as source yet. Agent's choice for now; to open the capture prefilled, `CaptureRequest` needs a seed for the title/source (a small change in the capture shell, its own block).
+
 ## Gotchas (area: ui)
+
+- In the full e2e run the first ↑ in the stream sometimes selected a row above the newest; the spec steps down to its message. Worth a look in CV-7b when the composer's ↑/Esc hand-off is rebuilt.
 
 - The intro row made `rows` non-empty under the loading skeleton, so the open-at-bottom ran before the scroller existed; open only when a message and the scroller are there.
 - TanStack's measurement memo is keyed on `estimateSize` / `getItemKey`: build the rows array with `useMemo` (the file has no compiler), or every render re-walks every row.

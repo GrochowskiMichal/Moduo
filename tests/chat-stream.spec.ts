@@ -282,4 +282,52 @@ test("the message keys", async ({ page }) => {
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("Escape");
   await expect(composer(page)).toBeFocused();
+
+  const stream = page.getByTestId("message-stream");
+  // Select our message by stepping up from the newest (another spec's
+  // message may have landed after it).
+  const pick = async () => {
+    await stream.focus();
+    await page.keyboard.press("ArrowUp");
+    for (let i = 0; i < 8; i++) {
+      const text = (await page.locator("[data-selected]").textContent()) ?? "";
+      if (text.includes(`keys edited ${tag}`)) return;
+      await page.keyboard.press("ArrowDown");
+    }
+    const seen = await stream.locator("[role=article]").allTextContents();
+    throw new Error(
+      `couldn't select the message by key: ${seen.slice(-4).join(" | ")} / sel=${await page.locator("[data-selected]").count()} focus=${await page.evaluate(() => document.activeElement?.getAttribute("data-testid"))}`,
+    );
+  };
+  // P pins.
+  await pick();
+  await page.keyboard.press("p");
+  await expect
+    .poll(async () => {
+      const [r] = await rest<Array<{ pinned_at: string | null }>>(
+        "service",
+        `chat_messages?id=eq.${(await serverRow(`keys edited ${tag}`))?.id}&select=pinned_at`,
+      );
+      return r?.pinned_at ?? null;
+    })
+    .not.toBeNull();
+  // + opens the menu with the six quick reactions on top.
+  await pick();
+  await page.keyboard.press("+");
+  await expect(page.getByRole("button", { name: "React 🙏" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  // T makes a task from the message.
+  await pick();
+  await page.keyboard.press("t");
+  await expect(page.getByText(/Task created/).first()).toBeVisible({ timeout: 15_000 });
+  // ⏎ on a message without replies returns to the composer.
+  await pick();
+  await page.keyboard.press("Enter");
+  await expect(composer(page)).toBeFocused();
+  // ⌘⌫ deletes your own, with Undo.
+  await pick();
+  await page.keyboard.press("ControlOrMeta+Backspace");
+  await expect(row(page, `keys edited ${tag}`)).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(row(page, `keys edited ${tag}`)).toBeVisible();
 });

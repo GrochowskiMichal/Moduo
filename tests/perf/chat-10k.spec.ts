@@ -163,15 +163,30 @@ test("the budgets", async ({ page }) => {
   expect(worstFrame).toBeLessThanOrEqual(MAX_FRAME_MS);
 
   // A prepend near the top: the reader's row stays put.
+  // The older page is held at the network until the reader's row is pinned,
+  // then released inside the sampling window, so the prepend itself is measured.
   await page.waitForTimeout(800);
   const stream = page.getByTestId("message-stream");
-  const prepend = await driftWhile(page, async () => {
-    await stream.evaluate((el) => {
-      el.scrollTop = Math.min(el.scrollTop, 900);
-      el.dispatchEvent(new Event("scroll"));
-    });
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
   });
-  console.log(`drift on prepend: ${prepend.toFixed(2)} px`);
+  await page.route("**/rest/v1/chat_messages?*", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await stream.evaluate((el) => {
+    el.scrollTop = 300;
+  });
+  await page.waitForTimeout(500);
+  const before = await stream.evaluate((el) => el.scrollHeight);
+  const prepend = await driftWhile(page, async () => {
+    release();
+  });
+  await page.unroute("**/rest/v1/chat_messages?*");
+  const after = await stream.evaluate((el) => el.scrollHeight);
+  console.log(`drift on prepend: ${prepend.toFixed(2)} px (${after - before} px prepended)`);
+  expect(after, "an older page landed").toBeGreaterThan(before);
 
   // An edit above the viewport (a longer body arrives live): the row stays put.
   const above = await stream.evaluate((el) => {
@@ -179,16 +194,23 @@ test("the budgets", async ({ page }) => {
     const rows = [...el.querySelectorAll<HTMLElement>("[data-message-id]")];
     return rows.filter((r) => r.getBoundingClientRect().bottom < box.top).pop()?.dataset.messageId;
   });
-  let edit = 0;
-  if (above) {
-    edit = await driftWhile(page, async () => {
+  expect(above, "a drawn message above the viewport").toBeTruthy();
+  const edited = `Edited above the reader ${Date.now()}.\n\nA second paragraph.\n\nAnd a third one.`;
+  const edit = await driftWhile(
+    page,
+    async () => {
       await rest("service", `chat_messages?id=eq.${above}`, {
         method: "PATCH",
-        body: { body: "Edited above the reader.\n\nA second paragraph.\n\nAnd a third one." },
+        body: { body: edited, edited_at: new Date().toISOString() },
       });
-    });
-    console.log(`drift on an edit above: ${edit.toFixed(2)} px`);
-  }
+    },
+    6000,
+  );
+  console.log(`drift on an edit above: ${edit.toFixed(2)} px`);
+  // The edit really landed (live) while the row was sampled.
+  await expect(stream.locator(`[data-message-id="${above}"]`)).toContainText("A second paragraph", {
+    timeout: 1000,
+  });
 
   // A density switch while reading history.
   const density = await driftWhile(page, async () => {

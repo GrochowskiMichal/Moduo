@@ -375,11 +375,12 @@ export function ChatPage() {
 
   /** ↑ in an empty composer edits your last message; with none, it steps into the stream. */
   const editLast = useCallback(
-    (items: ChatMessage[], inStream = false) => {
+    (items: ChatMessage[], inStream = false, skip: ReadonlySet<string> = new Set()) => {
       const mine = [...items]
         .reverse()
         .find(
           (m) =>
+            !skip.has(m.id) &&
             m.authorId === selfId &&
             m.kind !== "event" &&
             !m.deletedAt &&
@@ -400,9 +401,9 @@ export function ChatPage() {
   // Delete hides the message at once with "Deleted · Undo" for 8 s, no
   // confirm (§6 #10); the server deletes it when the toast's time is up.
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
-  const pendingDeletes = useRef(
-    new Map<string, { timer: ReturnType<typeof setTimeout>; message: ChatMessage }>(),
-  );
+  // The toast's own clock decides (it pauses while hovered or the tab is
+  // hidden), so "Undo" is never offered after the server has deleted.
+  const pendingDeletes = useRef(new Map<string, { message: ChatMessage }>());
   const unhide = useCallback((id: string) => {
     setHidden((prev) => {
       if (!prev.has(id)) return prev;
@@ -415,8 +416,8 @@ export function ChatPage() {
     (id: string) => {
       const pending = pendingDeletes.current.get(id);
       if (!pending) return;
-      clearTimeout(pending.timer);
       pendingDeletes.current.delete(id);
+      toast.dismiss(`chat-delete-${id}`);
       void actions.remove(pending.message).finally(() => unhide(id));
     },
     [actions, unhide],
@@ -440,17 +441,18 @@ export function ChatPage() {
         store?.discard(m.id);
         return;
       }
+      if (pendingDeletes.current.has(m.id)) return;
       setHidden((prev) => new Set(prev).add(m.id));
-      const timer = setTimeout(() => commitRef.current(m.id), DELETE_UNDO_MS);
-      pendingDeletes.current.set(m.id, { timer, message: m });
+      pendingDeletes.current.set(m.id, { message: m });
       toast("Deleted", {
         id: `chat-delete-${m.id}`,
         duration: DELETE_UNDO_MS,
+        // Time up, or closed without Undo: the delete goes to the server.
+        onAutoClose: () => commitRef.current(m.id),
+        onDismiss: () => commitRef.current(m.id),
         action: {
           label: "Undo",
           onClick: () => {
-            const pending = pendingDeletes.current.get(m.id);
-            if (pending) clearTimeout(pending.timer);
             pendingDeletes.current.delete(m.id);
             unhide(m.id);
           },
@@ -678,8 +680,18 @@ export function ChatPage() {
             placeholder={placeholder}
             draftKey={channel.id}
             autoFocus
-            onSubmit={(text, picks) => actions.send({ channelId: channel.id, text, picks })}
-            onEditLast={() => editLast(streamWin?.rows ?? [], true)}
+            onSubmit={(text, picks) => {
+              actions.send({ channelId: channel.id, text, picks });
+              streamRef.current?.showLatest();
+            }}
+            onEditLast={() =>
+              editLast(
+                // The row past the window's edge isn't drawn; ids inside their Undo are gone.
+                (streamWin?.hasOlder ? streamWin.rows.slice(1) : streamWin?.rows) ?? [],
+                true,
+                hidden,
+              )
+            }
             onTyping={() => link?.sendTyping(channel.id, null)}
             typingLine={typingLine(typingNames(channel.id, null))}
           />

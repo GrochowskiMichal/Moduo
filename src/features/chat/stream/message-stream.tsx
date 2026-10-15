@@ -99,6 +99,8 @@ function currentDensity(): string {
 export type MessageStreamHandle = {
   /** Select the newest message and focus the stream (from the composer). */
   focusLast: () => void;
+  /** Go to the newest message (after you send, from anywhere in history). */
+  showLatest: () => void;
 };
 
 export type MessageStreamProps = {
@@ -194,8 +196,25 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       }
       activeSticky.current = active;
       if (active >= 0 && !shown.includes(active)) shown.unshift(active);
+      // The message being edited stays drawn wherever it is, so its box (and
+      // what's typed in it) never unmounts while you scroll.
+      const editing = editIndex.current;
+      if (editing >= 0 && !shown.includes(editing)) {
+        shown.push(editing);
+        shown.sort((a, b) => a - b);
+      }
       return shown;
     };
+    const editIndex = useRef(-1);
+    editIndex.current = editingId ? rows.findIndex((r) => r.key === editingId) : -1;
+
+    // Follow new messages only in a window that reaches the present: a newer
+    // page landing in a jump window must never pull the reader to its end.
+    const prevHasNewer = useRef(win.hasNewer);
+    const follow = !win.hasNewer && !prevHasNewer.current;
+    useLayoutEffect(() => {
+      prevHasNewer.current = win.hasNewer;
+    });
 
     // Stable per rows: the virtualizer's measurement memo is keyed on them.
     const estimateSize = useCallback(
@@ -215,7 +234,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       rangeExtractor,
       overscan: 6,
       anchorTo: "end",
-      followOnAppend: true,
+      followOnAppend: follow,
       scrollEndThreshold: END_PX,
       useFlushSync: true,
     });
@@ -448,7 +467,22 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         select(last);
         scrollRef.current?.focus({ preventScroll: true });
       },
+      showLatest: () => {
+        // Your own message is on screen right after ⏎, wherever you were reading.
+        if (live.current.window.hasNewer) {
+          live.current.onJumpToLatest();
+          return;
+        }
+        requestAnimationFrame(() => virtualizer.scrollToEnd());
+      },
     }));
+
+    // Editing starts on a row that may be off screen (↑ from the composer): bring it in.
+    useLayoutEffect(() => {
+      if (!editingId) return;
+      const i = indexOfKey(editingId);
+      if (i >= 0) virtualizer.scrollToIndex(i, { align: "auto" });
+    }, [editingId, indexOfKey, virtualizer]);
 
     const messageOf = (key: string | null): ChatMessage | null => {
       if (!key) return null;
@@ -583,6 +617,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           const quotedPerson = quoted?.authorId ? personOf(quoted.authorId) : undefined;
           const editing = editingId === m.id;
           const showTools =
+            canWrite &&
             !editing &&
             !m.sendState &&
             (hovered === row.key || selected === row.key || menu?.key === row.key);
