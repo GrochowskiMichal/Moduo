@@ -5,7 +5,7 @@
 // new view…" instead, since only its maker changes it).
 
 import { ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -123,8 +123,37 @@ export function ViewSaveControl({
   // "Save as new view…" opens a dialog: run it once the menu has closed, so
   // the closing menu doesn't take focus back from it (gotchas/ui.md).
   const afterClose = useRef<(() => void) | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // The control goes once the view is saved or reverted. Focus that was in
+  // it, or that its closing menu left on the page, moves to Display beside it
+  // (else the toolbar's first control), never the page body. A layout
+  // cleanup runs while the control is still in the page, so it can tell.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    return () => {
+      if (!root) return;
+      const active = document.activeElement;
+      if (active && active !== document.body && !root.contains(active)) return;
+      const toolbar = root.closest<HTMLElement>('[role="toolbar"]');
+      setTimeout(() => {
+        const now = document.activeElement;
+        if (now && now !== document.body && now.isConnected) return;
+        if (!toolbar?.isConnected) return;
+        const target =
+          toolbar.querySelector<HTMLElement>('[data-slot="plan-display"] button') ??
+          toolbar.querySelector<HTMLElement>("button");
+        target?.focus();
+      }, 0);
+    };
+  }, []);
   return (
-    <div role="group" aria-label="Saved view" data-testid="view-changes" className="flex gap-px">
+    <div
+      ref={rootRef}
+      role="group"
+      aria-label="Saved view"
+      data-testid="view-changes"
+      className="flex gap-px"
+    >
       <Button
         size="sm"
         variant="secondary"

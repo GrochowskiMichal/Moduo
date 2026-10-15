@@ -134,7 +134,10 @@ export function PlanViewHeader({
           <Toolbar.Group gap="snug">
             {search}
             {filter}
-            {display}
+            {/* Found by the view's Save (MOD-142): focus lands here when it goes. */}
+            <span data-slot="plan-display" className="contents">
+              {display}
+            </span>
             {more}
           </Toolbar.Group>
           {viewSave ? (

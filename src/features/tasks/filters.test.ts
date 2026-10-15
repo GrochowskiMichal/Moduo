@@ -13,6 +13,7 @@ import {
   INBOX_VALUE,
   offersProjectFilter,
   sanitizeTaskFilters,
+  seededProject,
   showsArchived,
   showsDone,
   statusesLetThrough,
@@ -364,5 +365,19 @@ describe("captureSeed (U2-5)", () => {
 
   it("other dimensions don't seed", () => {
     expect(captureSeed([is("status", "todo"), is("due", "today")])).toEqual({ tagIds: [] });
+  });
+
+  it("a Project filter names where New files the task (MOD-141)", () => {
+    expect(captureSeed([is("project", "p2", "p1")])).toEqual({ tagIds: [], projectId: "p2" });
+    // Inbox: the reader's own; "is not" says nothing.
+    expect(captureSeed([is("project", INBOX_VALUE)])).toEqual({ tagIds: [], projectId: null });
+    expect(captureSeed([isNot("project", "p1")])).toEqual({ tagIds: [] });
+    // Only a project the reader holds; the Inbox and a gone one are the
+    // capture's own default (the Inbox).
+    const live = ["p1", "p2"];
+    expect(seededProject(captureSeed([is("project", "p2")]), live)).toBe("p2");
+    expect(seededProject(captureSeed([is("project", INBOX_VALUE)]), live)).toBeNull();
+    expect(seededProject(captureSeed([is("project", "gone")]), live)).toBeNull();
+    expect(seededProject(captureSeed([is("tag", "t1")]), live)).toBeNull();
   });
 });

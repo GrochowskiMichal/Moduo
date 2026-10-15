@@ -101,6 +101,7 @@ import {
 import {
   type CaptureSeed,
   offersProjectFilter,
+  seededProject,
   showsArchived,
   statusesLetThrough,
 } from "../filters";
@@ -130,6 +131,7 @@ import {
   NO_DATE_PANEL_VIEW,
   type ProjectAsk,
 } from "../panel-views";
+import { commitProjectDrop } from "../project-order";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
@@ -332,11 +334,8 @@ export function TasksPlanView({
     (activeId: string, overId: string) => {
       const drop = projectOrderDrop(buckets, api.areas, projectOrder, activeId, overId, canEdit);
       if (!drop) return;
-      if (drop.areaChanged) api.moveBucketToArea(activeId, drop.areaId);
-      const now = currentPreferences().tasksSidebar;
-      updatePreferences({
-        tasksSidebar: { ...now, projectOrder: { ...now.projectOrder, [workspaceId]: drop.order } },
-      });
+      // A refused area move takes the new order back with it.
+      void commitProjectDrop(workspaceId, drop, (areaId) => api.moveBucketToArea(activeId, areaId));
     },
     [buckets, api.areas, api.moveBucketToArea, projectOrder, canEdit, workspaceId],
   );
@@ -995,9 +994,11 @@ export function TasksPlanView({
   // What New pre-fills: the filters you can see (none in Focus), and never
   // someone who can't take the task (a former member a stored filter still
   // names: the server would refuse the save).
+  // A Project filter's project (MOD-141) becomes the capture's destination
+  // below, never part of the seed.
   const captureSeed = useMemo<CaptureSeed>(() => {
     if (place === "today") return { tagIds: [] };
-    const seed = filtering.seed;
+    const { projectId: _destination, ...seed } = filtering.seed;
     const id = seed.assigneeId;
     if (id && !assignees.some((a) => a.userId === id && a.canTakeTasks)) {
       const { assigneeId: _dropped, ...rest } = seed;
@@ -1005,6 +1006,12 @@ export function TasksPlanView({
     }
     return seed;
   }, [place, filtering.seed, assignees]);
+  // New under "Project is P" files into P (MOD-141), so the task stays in
+  // the filtered list; under "Project is Inbox", the capture's own default.
+  const filterProjectId = useMemo(
+    () => (place === "today" ? null : seededProject(filtering.seed, projectIds)),
+    [place, filtering.seed, projectIds],
+  );
 
   // The place's own name; an open view shows its name instead.
   const placeTitle =
@@ -1067,10 +1074,11 @@ export function TasksPlanView({
       ? null
       : (buckets.find((b) => b.id === place && !b.isSystem) ?? null);
     return {
-      projectId: project?.id ?? null,
+      // Across projects, the one a Project filter names (MOD-141).
+      projectId: project?.id ?? filterProjectId,
       queueTop: place === "today",
     };
-  }, [buckets, place, archivedProject]);
+  }, [buckets, place, archivedProject, filterProjectId]);
 
   // All's count is what All lists: never your Inbox (TV-U15).
   const totalOpenCount = useMemo(

@@ -2899,13 +2899,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [allBuckets, editProject],
   );
 
-  /** Move a project into an area (null: none), last in it (TV-U6). */
+  /** Move a project into an area (null: none), last in it (TV-U6). Answers
+   *  whether it's there (a refused move puts it back; MOD-38's drop asks). */
   const moveBucketToArea = useCallback(
-    (id: string, areaId: string | null) => {
+    (id: string, areaId: string | null): Promise<boolean> => {
       const existing = allBuckets.find((b) => b.id === id);
-      if (!existing || (existing.areaId ?? null) === areaId) return;
+      if (!existing) return Promise.resolve(false);
+      if ((existing.areaId ?? null) === areaId) return Promise.resolve(true);
       const position = projectEndPosition(allBuckets);
-      void editProject(id, { areaId, position }, { areaId, position });
+      return editProject(id, { areaId, position }, { areaId, position });
     },
     [allBuckets, editProject],
   );
