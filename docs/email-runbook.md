@@ -269,6 +269,8 @@ All agent steps, each needing Maciej's OK in the session, on a release train (AG
    select count(*) from public.email_subscriptions where email = '<address>';
    ```
    Expect `booking_host_new | skipped_pref` before the deletion and nothing after it.
+7. **A2 bounce check** (once the Resend webhook is connected): delete a throwaway account whose address is Resend's bounce test address (`bounced@resend.dev`), then `select * from public.email_suppressions where email = 'bounced@resend.dev';` must return nothing. A row means Resend's bounce event doesn't carry our `kind` tag and `resend-webhook` re-suppressed the deleted address: delete the row and fix the classifier.
+8. **`suppression_not_erased`** in the `delete-account` logs means the do-not-email entry of a deleted account stayed behind (the step after the auth delete only warns). Delete it by hand: `delete from public.email_suppressions where email = '<address>';`.
 
 ### Rollback
 
