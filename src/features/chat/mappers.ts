@@ -51,6 +51,7 @@ export function mapChannel(raw: unknown): ChatChannel | null {
     archivedAt: str(r.archived_at),
     lastMessageAt: str(r.last_message_at),
     isDefault: r.is_default === true,
+    managersOnly: r.managers_only === true,
   };
 }
 

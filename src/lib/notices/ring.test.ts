@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { catchupCount } from "../../features/chat/hooks/use-chat-badge";
+import { catchupCount } from "../../features/chat/shell/chat-tab";
 import type { ChatMember } from "../../features/chat/model";
 import { titleWithCount } from "./app-badge";
 import { noticesOffInBrowser, shouldAskChat } from "./chat-ask";

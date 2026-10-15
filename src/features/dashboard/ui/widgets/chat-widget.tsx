@@ -8,7 +8,7 @@ import { useMemo } from "react";
 import type { ChatChannel, ChatMember, ChatPerson, ChatUnread } from "@/features/chat/model";
 import { useChatSnapshot, useChatStore } from "@/features/chat/store/react";
 import { dmOtherIds } from "@/features/chat/timeline";
-import { initialsOf } from "@/features/chat/ui/person-avatar";
+import { initialsOf } from "@/lib/initials";
 import { shapeChatWidget } from "@/features/chat/widget";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
@@ -55,9 +55,7 @@ export function ChatWidget({ size }: WidgetComponentProps) {
   const store = useChatStore(runtime, userId, selectedWorkspaceId);
   const snapshot = useChatSnapshot(store);
   const data = useMemo<Data | null>(() => {
-    if (snapshot.status === "locked") {
-      return { enabled: false, channels: [], mine: [], unread: [], people: {} };
-    }
+    // A paused plan still reads (CH4a): the widget keeps showing conversations.
     if (snapshot.status !== "ready" && snapshot.status !== "error") return null;
     return {
       enabled: true,

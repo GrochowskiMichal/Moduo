@@ -192,6 +192,12 @@ type NavRowProps = Omit<React.ComponentProps<"div">, "children" | "onSelect"> & 
   countLabel?: string;
   /** The destination you are on: `aria-current="page"`, neutral active fill. */
   current?: boolean;
+  /**
+   * Something new is waiting here (Chat's conversations, spec §2): the label
+   * turns to the strong weight and the foreground colour. Weight, never a
+   * coloured pill; the count stays for what is addressed to you.
+   */
+  unread?: boolean;
   onSelect?: () => void;
   /** An always-visible mark before the slot (drift, unread). Never swaps. */
   indicator?: React.ReactNode;
@@ -226,6 +232,7 @@ function NavRow({
   count,
   countLabel,
   current = false,
+  unread = false,
   onSelect,
   indicator,
   menu,
@@ -272,6 +279,7 @@ function NavRow({
       data-slot="nav-row"
       data-nav-id={navId}
       data-current={current || undefined}
+      data-unread={unread || undefined}
       data-drop-target={dropTarget || undefined}
       data-dragging={dragging || undefined}
       className={cn(
@@ -283,6 +291,7 @@ function NavRow({
         current
           ? "bg-state-active text-foreground"
           : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
+        unread && "font-semibold text-foreground",
         // DS-4's shared drag look; after the row's own classes so its hover:
         // copy replaces the row's hover (the dragged overlay passes the pointer through).
         dropTarget && [DROP_TARGET, "text-foreground"],
@@ -326,6 +335,7 @@ function NavRow({
             <span data-slot="nav-row-label" className="min-w-0 flex-1 truncate">
               {label}
             </span>
+            {unread ? <span className="sr-only">, unread</span> : null}
             {showCount ? <span className="sr-only">, {countLabel ?? String(count)}</span> : null}
           </button>
           {indicator ? (

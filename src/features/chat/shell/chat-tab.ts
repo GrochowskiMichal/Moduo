@@ -1,4 +1,4 @@
-// The Chat nav-tab count + the app-wide presence holder.
+// The Chat tab: its count, whether it shows, and the app-wide presence holder.
 //
 // Mounted once in the app chrome, so you appear online while you're anywhere in
 // Moduo (not only on the Chat tab). It holds the workspace's chat store for the
@@ -7,7 +7,8 @@
 // workspace's open Catch up items: an "Every message" conversation is one item,
 // a conversation on Nothing never counts. It also feeds the switcher and the
 // dock badge (`lib/notices/chat-counts`) and answers which conversations this
-// workspace holds (a notice's landing, its sound).
+// workspace holds (a notice's landing, its sound). CV-8a moved it here from
+// v1's `hooks/use-chat-badge.ts`.
 
 import { useCallback, useEffect, useMemo } from "react";
 import { setLiveChatCount } from "@/lib/notices/chat-counts";
@@ -26,27 +27,49 @@ export function catchupCount(snapshot: Pick<ChatSnapshot, "mine" | "unread">): n
   return n;
 }
 
-export type ChatBadge = {
+/** Any message was ever written in a conversation this person can read. */
+export function hasChatHistory(snapshot: Pick<ChatSnapshot, "channels">): boolean {
+  return Object.values(snapshot.channels).some((c) => c.lastMessageAt !== null);
+}
+
+/**
+ * Whether the Chat tab shows (spec §1): with two or more people in the
+ * workspace; a one-person workspace keeps it only while chat history exists.
+ * `memberCount` 0 means the member list hasn't loaded: keep the tab (no flicker).
+ */
+export function chatTabShows(memberCount: number, snapshot: ChatSnapshot): boolean {
+  if (memberCount === 0 || memberCount >= 2) return true;
+  if (snapshot.status !== "ready") return true;
+  return hasChatHistory(snapshot);
+}
+
+export type ChatTab = {
+  /** The store has loaded (a paused plan included): chat chrome may show. */
   enabled: boolean;
   count: number;
+  /** The tab shows (two or more people, or history in a one-person workspace). */
+  shows: boolean;
   /** The conversation's kind when this workspace's store holds it, else null. */
   conversationKind: (channelId: string) => string | null;
 };
 
-export function useChatBadge({
+export function useChatTab({
   runtime,
   workspaceId,
   userId,
+  memberCount,
 }: {
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
   userId: string | null;
-}): ChatBadge {
+  /** People in the workspace (0 while the list loads). */
+  memberCount: number;
+}): ChatTab {
   const store = useChatStore(runtime, userId, workspaceId);
   const snapshot = useChatSnapshot(store);
-  // A workspace without chat (or not loaded yet, or offline with no copy) shows no chat chrome.
   const enabled = snapshot.status === "ready";
-  useChatPresence(workspaceId, userId, enabled);
+  // The workspace presence topic still asks for the plan (CV-17 drops that).
+  useChatPresence(workspaceId, userId, enabled && !snapshot.paused);
 
   const { mine, unread } = snapshot;
   const count = useMemo(
@@ -64,5 +87,5 @@ export function useChatBadge({
     [enabled, channels],
   );
 
-  return { enabled, count, conversationKind };
+  return { enabled, count, shows: chatTabShows(memberCount, snapshot), conversationKind };
 }

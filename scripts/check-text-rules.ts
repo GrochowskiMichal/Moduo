@@ -77,10 +77,6 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
   "src/features/calendar/ui/calendar-rail.tsx": ["capitalize"],
   "src/features/calendar/booking/sentence-ui.tsx": ["parts.weekday"],
-  // Chat: rail sections ("Starred", "Channels", "Direct messages"); the kind
-  // of thing in a reference result ("project", "task").
-  "src/features/chat/ui/chat-sidebar.tsx": ["label"],
-  "src/features/chat/ui/composer.tsx": ["capitalize"],
   // Spine: module names and relation kinds.
   "src/features/spine/ui/entity-hub.tsx": [
     "section.label",

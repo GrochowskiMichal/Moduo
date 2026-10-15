@@ -31,6 +31,8 @@ export type ChatChannel = {
   lastMessageAt: string | null;
   /** General: everyone in the workspace is put in it (v2). */
   isDefault?: boolean;
+  /** An announcement channel: only its managers post (CH23a). */
+  managersOnly?: boolean;
 };
 
 /** The current user's own state in a channel (or another member's row). */

@@ -19,7 +19,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { ChatBadge } from "../../features/chat/hooks/use-chat-badge";
+import type { ChatTab } from "../../features/chat/shell/chat-tab";
 import { isAppInBackground } from "../../features/focus/phase-alert";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
 import { showAppBadge } from "../../lib/notices/app-badge";
@@ -98,7 +98,7 @@ async function readConversationKind(channelId: string): Promise<string | null> {
 export function NoticeDeliveries({
   chat,
 }: {
-  chat?: Pick<ChatBadge, "enabled" | "conversationKind">;
+  chat?: Pick<ChatTab, "enabled" | "conversationKind">;
 }) {
   const { userId } = useAuth();
   const { refreshNotifications, selectedWorkspaceId, selectWorkspace, workspaces } = useWorkspace();

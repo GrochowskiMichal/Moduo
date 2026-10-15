@@ -21,6 +21,7 @@ const KIT: readonly KitEntry[] = [
   { name: "PropertyRow / PropertyValue", file: "property-row", story: "Densities" },
   { name: "CollectionHeader", file: "collection-header", story: "Densities" },
   { name: "NavRow", file: "nav-row", story: "Densities" },
+  { name: "NavRow unread", file: "nav-row", story: "UnreadDensities" },
   { name: "Toolbar", file: "toolbar", story: "Densities" },
   { name: "FilterBar", file: "filter-bar", story: "Densities" },
   { name: "DisplayMenu", file: "display-menu", story: "Densities" },
