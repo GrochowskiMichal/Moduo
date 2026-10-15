@@ -3,7 +3,8 @@
 // the words in the tooltip and the accessible name. Nothing else about their
 // session shows (no clock, no queue). Reads the claims the app shell polls
 // (`claims.ts`); renders nothing when nobody is on it. The detail panel's
-// header shows it; TV-F7 reuses it on the Focus screen and rows.
+// title row shows one avatar and "+n" (its room is a 280 px panel's);
+// TV-F7 reuses it on the Focus screen and rows.
 
 import { useContext } from "react";
 
@@ -15,9 +16,12 @@ import { onThisLabel, useTaskClaim } from "../claims";
 export function TaskClaimMark({
   workspaceId,
   taskId,
+  max = 3,
 }: {
   workspaceId: string | null | undefined;
   taskId: string;
+  /** Avatars drawn before "+n"; the tooltip names everyone. */
+  max?: number;
 }) {
   const ids = useTaskClaim(workspaceId, taskId);
   // Read without requiring the provider, so a panel renders in isolation.
@@ -28,6 +32,7 @@ export function TaskClaimMark({
     return { id, name: member?.displayName?.trim() || "Someone", src: member?.avatarUrl ?? null };
   });
   const label = onThisLabel(people.map((p) => p.name));
+  const more = people.length - max;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -38,7 +43,7 @@ export function TaskClaimMark({
           className="flex shrink-0 items-center gap-1 px-1"
         >
           <span className="flex -space-x-1">
-            {people.slice(0, 3).map((p) => (
+            {people.slice(0, max).map((p) => (
               <PersonAvatar
                 key={p.id}
                 id={p.id}
@@ -48,6 +53,11 @@ export function TaskClaimMark({
               />
             ))}
           </span>
+          {more > 0 ? (
+            <span className="font-sans text-xs text-subtle-foreground tabular-nums" aria-hidden>
+              +{more}
+            </span>
+          ) : null}
           <span className="size-1.5 rounded-full bg-muted-foreground" aria-hidden />
         </span>
       </TooltipTrigger>

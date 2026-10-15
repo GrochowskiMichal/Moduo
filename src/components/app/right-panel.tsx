@@ -5,8 +5,11 @@
 // each with its ⌥ shortcut. A reference opened in the panel is an item, not a
 // view: the title becomes the item's name with a back arrow to the view you
 // were on ("← item"), and items stack. Collapse and expand stay in the bottom
-// bar (72a), so the header has no close button. Keys: ⌥1–9 pick a view, Esc
-// goes back one item (keymap.md, rules 4 and 8).
+// bar (72a), so the header has no close button. The row's right end is the
+// open view's (or item's) own actions: its body puts them in `TitleActions`
+// (title-actions.tsx), as the task's ↗ and ⋯ do (MOD-118 follow-up), then an
+// item's "Open in …" last. Keys: ⌥1–9 pick a view, Esc goes back one item
+// (keymap.md, rules 4 and 8).
 
 import { ArrowLeft, ChevronDown, ExternalLink, type LucideIcon } from "lucide-react";
 import {
@@ -39,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { IconButton } from "../ui/icon-button";
+import { TitleActionsScope } from "./title-actions";
 
 /** Something opened in the panel on top of the current view ("← item"). */
 export type PanelItem = {
@@ -174,6 +178,9 @@ export function RightPanel({
     setCrossfade(true);
   }
 
+  // Where the body's `TitleActions` show (state, so the body re-renders into it).
+  const [actionsSlot, setActionsSlot] = useState<HTMLDivElement | null>(null);
+
   // Going back unmounts the back arrow that had focus, which would drop it on
   // <body>. After the item on top changes, put focus on the title row, but only
   // if it fell out or was already in the panel (never steal it from the page).
@@ -219,9 +226,23 @@ export function RightPanel({
             {active.label}
           </h2>
         )}
+        {/* The body's own actions, right-aligned; hidden while it has none. */}
+        <div
+          ref={setActionsSlot}
+          data-slot="panel-title-actions"
+          className="ml-auto flex shrink-0 items-center gap-1 empty:hidden"
+        />
+        {item?.open ? (
+          <IconButton
+            icon={ExternalLink}
+            label={item.open.label}
+            onClick={item.open.onOpen}
+            className="shrink-0"
+          />
+        ) : null}
       </div>
       <div key={bodyKey} className={cn("min-h-0 flex-1", crossfade && "motion-view")}>
-        {body}
+        <TitleActionsScope slot={actionsSlot}>{body}</TitleActionsScope>
       </div>
     </div>
   );
@@ -299,14 +320,6 @@ function ItemTitle({
         {Icon ? <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden /> : null}
         <span className="min-w-0 break-words">{item.title}</span>
       </h2>
-      {item.open ? (
-        <IconButton
-          icon={ExternalLink}
-          label={item.open.label}
-          onClick={item.open.onOpen}
-          className="shrink-0"
-        />
-      ) : null}
     </>
   );
 }

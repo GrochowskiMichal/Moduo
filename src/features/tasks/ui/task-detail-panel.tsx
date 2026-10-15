@@ -1,8 +1,9 @@
 // The task's details (Tasks v3 §9, research views-board-detail §7–12): one
 // view of the right panel (hosted by Tasks, Calendar, Notes and Email), and
 // the full page in the centre (call 32). Top to bottom, as the approved
-// prototypes have it (round-2b, MOD-116): the header (project › section, the
-// handle, a claims slot, queue, ⤢, ⋯), the status toggle and the title, the
+// prototypes have it (round-2b, MOD-116): the header (project › section and
+// the handle; its claims slot, Focus toggle, ⤢ and ⋯ show in the host's title
+// row, MOD-118 follow-up), the status toggle and the title, the
 // agent session line's slot, the description (folded at ~8 lines in the
 // panel), its attachments (AT-2: files pasted or dropped anywhere on the task
 // attach to it), the Done / Won't do line with the properties, the
