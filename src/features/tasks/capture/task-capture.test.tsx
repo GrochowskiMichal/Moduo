@@ -865,9 +865,8 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     keptIsThere();
   });
 
-  it("T, ⏎ refused, then Restore: it opens in its own draft (files too), the kept one stays", async () => {
-    keepDraft();
-    registerCaptureAttachments(() => {});
+  /** T, a description and a file, ⏎ refused, then the toast's Restore: the request it opens. */
+  async function refuseThenRestore(): Promise<CaptureRequest | undefined> {
     fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
       throw new Error("You can't add tasks here.");
     });
@@ -896,17 +895,25 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     // The newest toast is the front one (earlier tests' toasts stay in sonner).
     fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0] as HTMLElement);
     window.removeEventListener(CAPTURE_OPEN_EVENT, onOpen);
+    return opened.at(-1);
+  }
+  /** The shell's context for a Restore's open (a fresh `held`). */
+  const restoreOpen = (request: CaptureRequest | undefined, openId: number) => ({
+    ...request,
+    openId,
+    held: { current: null },
+  });
+
+  it("T, ⏎ refused, then Restore: it opens in its own draft (files too), the kept one stays", async () => {
+    keepDraft();
+    const uploads: File[][] = [];
+    registerCaptureAttachments((input) => uploads.push(input.files));
+    const request = await refuseThenRestore();
     keptIsThere();
     // Kept until it's made: an open that doesn't happen loses nothing.
     expect(loadDraft(ME, WS, "refused")?.description).toBe("the refused one's words");
-    const request = opened.at(-1);
     expect(request).toMatchObject({ type: "task", draft: "From chat", fromRefused: true });
-    // The shell opens it as a prefilled open (its own `held`).
-    const second = renderBody(
-      { ...request, openId: 3, held: { current: null } },
-      referenceStore({}),
-      request?.draft ?? "",
-    );
+    const second = renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
     await waitFor(() => expect(document.body.textContent).toContain("From chat"));
     expect(
       (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
@@ -917,15 +924,65 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     second.unmount();
     keptIsThere();
     expect(loadDraft(ME, WS, "refused")).not.toBeNull();
-    // Opened again and made: only the refused one goes.
-    renderBody({ ...request, openId: 4, held: { current: null } }, referenceStore({}), "From chat");
+    // Opened again, switched to another type and back, and made: only the
+    // refused one goes, and its file goes up once, with it.
+    const again = restoreOpen(request, 4);
+    const third = renderBody(again, referenceStore({}), "From chat");
     expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    third.unmount();
+    renderBody(again, referenceStore({}), "From chat");
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    uploads.length = 0;
     await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
     fireEvent.click(createButton(/^Create⏎?$/));
     await waitFor(() => expect(loadDraft(ME, WS, "refused")).toBeNull());
+    expect(uploads.map((files) => files.map((f) => f.name))).toEqual([["shot.png"]]);
     cleanup();
     keptIsThere();
+    // Nothing of it comes back on a later open (no duplicate).
+    window.localStorage.clear();
+    renderBody({ openId: 5 }, referenceStore({}), "");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
     registerCaptureAttachments(null);
+  });
+
+  it("a restored capture made with Create more is no longer kept", async () => {
+    keepDraft();
+    registerCaptureAttachments(() => {});
+    const request = await refuseThenRestore();
+    renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create more/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    cleanup();
+    expect(loadDraft(ME, WS, "refused")).toBeNull();
+    keptIsThere();
+    window.localStorage.removeItem(`moduo:capture-draft:task:${ME}:${WS}`);
+    renderBody({ openId: 4 }, referenceStore({}), "");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(screen.queryByText(/Draft restored/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
+    registerCaptureAttachments(null);
+  });
+
+  it("a Restore that finds no refused capture here (another workspace) starts empty", async () => {
+    keepDraft();
+    renderBody(
+      { draft: "Words from elsewhere", fromRefused: true, openId: 3, held: { current: null } },
+      referenceStore({}),
+      "Words from elsewhere",
+    );
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(document.body.textContent).not.toContain("Words from elsewhere");
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    keptIsThere();
   });
 
   it("a normal open keeps today's draft: what's typed is kept on the device", async () => {

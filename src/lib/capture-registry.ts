@@ -87,7 +87,11 @@ export type CaptureContext = CaptureRequest & {
    * the person's kept draft is never read, written or cleared by it. Only the
    * Task body writes it (its `CaptureDraft`).
    */
-  held?: { current: unknown };
+  held?: {
+    current: unknown;
+    /** What the body started from (the Task body's refused capture), its own. */
+    from?: unknown;
+  };
 };
 
 /** What the capture hands the type's body. */

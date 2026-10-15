@@ -149,6 +149,9 @@ function takeRefusedFiles(
   return files;
 }
 
+/** What a refused capture's Restore started from: its slot (as read) and files. */
+type RefusedOrigin = { json: string; files: File[] };
+
 /** A refused capture's files, left waiting (a Restore that may be closed unmade). */
 function peekRefusedFiles(userId: string | null, workspaceId: string | null): File[] {
   const key = `${userId ?? ""}:${workspaceId ?? ""}`;
@@ -229,16 +232,27 @@ export function TaskCaptureBody({
   const held = context?.held;
   /** Forget the draft this capture writes to (a prefilled open's own, or the kept one). */
   const forgetDraft = () => {
-    if (held) {
-      held.current = null;
-      // A restored refused capture is made: it's no longer kept.
-      if (context?.fromRefused) {
-        clearDraft(owner.userId, owner.workspaceId, "refused");
-        takeRefusedFiles(owner.userId, owner.workspaceId);
-      }
-    } else {
+    if (held) held.current = null;
+    else {
       clearDraft(owner.userId, owner.workspaceId);
       lastTitleWords = "";
+    }
+  };
+  /**
+   * A restored refused capture was handed off (made, or waiting to sync): it's
+   * no longer kept. Only if its slot and files are still the ones it started
+   * from (another capture refused meanwhile keeps its own).
+   */
+  const consumeRefused = () => {
+    const from = held?.from as RefusedOrigin | undefined;
+    if (!held || !from) return;
+    held.from = undefined;
+    const now = loadDraft(owner.userId, owner.workspaceId, "refused");
+    if (now && JSON.stringify(now) === from.json) {
+      clearDraft(owner.userId, owner.workspaceId, "refused");
+    }
+    if (peekRefusedFiles(owner.userId, owner.workspaceId) === from.files) {
+      takeRefusedFiles(owner.userId, owner.workspaceId);
     }
   };
   const [initial] = useState(() => {
@@ -247,23 +261,34 @@ export function TaskCaptureBody({
     // draft is never read, written or cleared by it.
     if (held) {
       const mine = held.current as CaptureDraft | null;
-      // A refused capture's Restore (`fromRefused`): it starts from the
-      // refused one, read (not taken) from its slot, files and all.
-      const refusedHere =
-        !mine && context?.fromRefused
-          ? loadDraft(owner.userId, owner.workspaceId, "refused")
-          : null;
-      let start: CaptureDraft = mine ??
-        refusedHere ?? {
-          ...EMPTY_DRAFT,
-          segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
-        };
+      // A refused capture's Restore (`fromRefused`): it starts from this
+      // owner's refused one, read (not taken) from its slot, files and all;
+      // both stay kept until it's made (`consumeRefused`). None here (a
+      // switch of workspace since): it starts empty, not with another's words.
+      if (!mine && context?.fromRefused) {
+        const refusedHere = loadDraft(owner.userId, owner.workspaceId, "refused");
+        held.from = refusedHere
+          ? {
+              json: JSON.stringify(refusedHere),
+              files: peekRefusedFiles(owner.userId, owner.workspaceId),
+            }
+          : undefined;
+      }
+      const from = held.from as RefusedOrigin | undefined;
+      let start: CaptureDraft =
+        mine ??
+        (from
+          ? (JSON.parse(from.json) as CaptureDraft)
+          : context?.fromRefused
+            ? EMPTY_DRAFT
+            : { ...EMPTY_DRAFT, segments: shellDraft ? [{ text: shellDraft }] : [] });
       // Typed under another type (⌘2, then back): those words come along.
       if (mine && shellDraft.trim() && shellDraft !== plainText(mine.segments)) {
         start = { ...start, segments: [{ text: shellDraft }] };
       }
-      // Its files stay waiting too (read, not taken) until it's made.
-      const files = refusedHere ? peekRefusedFiles(owner.userId, owner.workspaceId) : [];
+      // Its files, while they still wait (a type switch and back too).
+      const waiting = from ? peekRefusedFiles(owner.userId, owner.workspaceId) : [];
+      const files = from && waiting === from.files ? waiting : [];
       return { draft: start, restored: false, files };
     }
     const stored = loadDraft(owner.userId, owner.workspaceId);
@@ -1162,6 +1187,7 @@ export function TaskCaptureBody({
     const kept = currentDraft();
     const handler = files.length > 0 ? captureAttachments() : null;
     const filesNow = files;
+    consumeRefused();
     // The capture closes (or clears) at once; the task saves behind it.
     if (more) resetForMore();
     else {
@@ -1255,6 +1281,7 @@ export function TaskCaptureBody({
       setApplyingTemplate(false);
       // Refused or offline (the provider said why): the capture stays as it was.
       if (!created) return;
+      consumeRefused();
       if (more) {
         setTemplate(null);
         resetForMore();
@@ -1302,6 +1329,7 @@ export function TaskCaptureBody({
     const kept: CaptureDraft = { ...EMPTY_DRAFT, fields, pasted };
     const handler = files.length > 0 ? captureAttachments() : null;
     const filesNow = files;
+    consumeRefused();
     setPasted(null);
     if (more) setFiles([]);
     else onDone();
