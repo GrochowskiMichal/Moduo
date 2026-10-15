@@ -1220,7 +1220,8 @@ function BoardColumnView({
         className={cn(
           // Linear-quiet: columns are transparent on the canvas; cards carry the
           // elevation (bg-card + hairline). Only a drag-over state lights up.
-          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+          // It scrolls down only: sideways is the board's (MOD-143).
+          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
           accepting ? DROP_TARGET : "bg-transparent",
         )}
       >
