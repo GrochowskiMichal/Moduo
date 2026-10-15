@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 import type { EntityRecord } from "./entity-links";
-import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "./palette-search";
+import { groupPaletteResults, PALETTE_ENTITY_TYPES, withHandleHit } from "./palette-search";
 
 function rec(type: string, id: string, label: string): EntityRecord {
   return { workspaceId: "w1", type, id, label, icon: null, deletedAt: null };
@@ -72,5 +72,27 @@ describe("groupPaletteResults", () => {
       "email_thread",
       "event",
     ]);
+  });
+});
+
+describe("withHandleHit — a task named by its ID leads (MOD-144)", () => {
+  it("puts the task first in Tasks, once", () => {
+    const hit = rec("task", "t99", "Fix the login");
+    const merged = withHandleHit(
+      [rec("task", "t990", "Found by its handle's start"), rec("task", "t99", "Fix the login")],
+      hit,
+    );
+    expect(merged.map((r) => r.id)).toEqual(["t99", "t990"]);
+    expect(groupPaletteResults(merged)[0].items[0].id).toBe("t99");
+  });
+
+  it('adds the task when the registry found nothing ("mod 99" never reaches it)', () => {
+    const merged = withHandleHit([], rec("task", "t99", "Fix the login"));
+    expect(merged.map((r) => r.id)).toEqual(["t99"]);
+  });
+
+  it("leaves the results as they are without one", () => {
+    const results = [rec("note", "n1", "Meeting notes")];
+    expect(withHandleHit(results, null)).toBe(results);
   });
 });

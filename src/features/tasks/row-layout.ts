@@ -38,8 +38,25 @@ export const DEFAULT_ROW_PROPERTIES: readonly RowProperty[] = ["priority", "date
 /** Display → Rows. */
 export type RowPreset = "standard" | "detailed";
 
+/**
+ * Display → Columns (MOD-128, MOD-136): the Detailed list's own columns, each
+ * switched on or off, in column order. The rest (priority, energy, the dates,
+ * the assignee) follow "Show on rows" in both presets.
+ */
+export const DETAILED_COLUMNS = [
+  "handle",
+  "project",
+  "status",
+  "time",
+  "waiting",
+  "updated",
+] as const;
+export type DetailedColumn = (typeof DETAILED_COLUMNS)[number];
+
 /** Which columns the rows of one view render. */
 export type RowColumns = Readonly<{
+  /** Detailed rows (Display → Rows), whichever of its columns are on. */
+  detailed: boolean;
   priority: boolean;
   energy: boolean;
   /** Standard's one date. */
@@ -73,6 +90,7 @@ export type RowColumns = Readonly<{
 }>;
 
 const NO_COLUMNS: RowColumns = {
+  detailed: false,
   priority: false,
   energy: false,
   date: false,
@@ -105,6 +123,9 @@ export type RowColumnsContext = {
   properties: readonly string[];
   /** Display → Rows. Standard when absent. */
   rows?: RowPreset;
+  /** Display → Columns: the Detailed columns that are on. Every one when
+   *  absent (a row rendered on its own: tests, stories). */
+  detailedColumns?: readonly string[];
   /** A team workspace, outside My tasks (where every row is mine, D4-4). */
   showAssignee: boolean;
   canEdit: boolean;
@@ -125,15 +146,21 @@ export type RowColumnsContext = {
  * The columns for a view, from every row it can render (pass the shown rows
  * and their subtasks, so expanding a parent never pops a column in). A column
  * is on when its property is on and at least one row has a value for it;
- * Detailed always names the project, the status and the last change.
+ * Detailed names the project, the status and the last change on every row
+ * while Display → Columns has them on (MOD-128, MOD-136).
  */
 export function rowColumns(tasks: readonly Task[], ctx: RowColumnsContext): RowColumns {
   const on = new Set(ctx.properties);
   const any = (test: (task: Task) => boolean) => tasks.some(test);
   const detailed = ctx.rows === "detailed";
+  const shown = ctx.detailedColumns ? new Set(ctx.detailedColumns) : null;
+  // A Detailed column of its own, switched on in Display → Columns.
+  const col = (c: DetailedColumn) => detailed && (shown?.has(c) ?? true);
   const some = tasks.length > 0;
   const assignee = on.has("assignee") && ctx.showAssignee && any((t) => !!t.assigneeId);
   return {
+    // The preset's, whichever of its columns are off.
+    detailed,
     priority: on.has("priority") && any((t) => t.priority !== null),
     energy: on.has("energy") && any((t) => t.energyLevel !== null),
     date:
@@ -147,15 +174,15 @@ export function rowColumns(tasks: readonly Task[], ctx: RowColumnsContext): RowC
       (t) => isUnfinished(t) && (ctx.canEdit || ctx.isQueued(t.id) || ctx.isClaimed(t.id)),
     ),
     queueWide: any((t) => isUnfinished(t) && ctx.isQueued(t.id) && ctx.isClaimed(t.id)),
-    handle: detailed && !!ctx.taskKey && any((t) => typeof t.number === "number"),
-    project: detailed && some,
-    status: detailed && some,
+    handle: col("handle") && !!ctx.taskKey && any((t) => typeof t.number === "number"),
+    project: col("project") && some,
+    status: col("status") && some,
     due: detailed && on.has("date") && any((t) => t.dueDate !== null),
     session: detailed && on.has("date") && any((t) => t.scheduledAt !== null),
-    time: detailed && any((t) => rowTime(t) !== null),
-    waiting: detailed && !!ctx.isWaiting && any((t) => ctx.isWaiting?.(t.id) ?? false),
+    time: col("time") && any((t) => rowTime(t) !== null),
+    waiting: col("waiting") && !!ctx.isWaiting && any((t) => ctx.isWaiting?.(t.id) ?? false),
     assigneeName: detailed && assignee,
-    updated: detailed && some,
+    updated: col("updated") && some,
     hidden: 0,
   };
 }
@@ -181,7 +208,8 @@ export type SizedColumn = (typeof SIZED_COLUMNS)[number];
 export type RowTexts = Partial<Record<SizedColumn, string | null>>;
 
 /** Detailed's header labels (also the narrowest each column gets). */
-export const COLUMN_LABELS: Record<Exclude<SizedColumn, "handle" | "date">, string> = {
+export const COLUMN_LABELS: Record<Exclude<SizedColumn, "date">, string> = {
+  handle: "ID",
   project: "Project",
   status: "Status",
   due: "Due",
@@ -278,7 +306,7 @@ function columnPx(
   widths: Record<SizedColumn, number>,
   chPx: number,
 ): number {
-  if (!cols[col] || col === "hidden" || col === "queueWide") return 0;
+  if (!cols[col] || col === "hidden" || col === "queueWide" || col === "detailed") return 0;
   switch (col) {
     case "priority":
     case "energy":
