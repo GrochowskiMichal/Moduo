@@ -57,13 +57,10 @@ function TokenChip({ token }: { token: CaptureToken }) {
       </span>
     );
   }
+  const person = token.kind === "person" ? personOf(token.userId) : null;
   const icon: ReactNode | undefined =
     token.kind === "person" ? (
-      <PersonAvatar
-        name={personOf(token.userId)?.name ?? token.label}
-        id={token.userId}
-        src={personOf(token.userId)?.avatarUrl}
-      />
+      <PersonAvatar name={person?.name ?? token.label} id={token.userId} src={person?.avatarUrl} />
     ) : token.kind === "team" ? (
       <TeamMark
         name={token.label}
