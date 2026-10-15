@@ -113,6 +113,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-15 · Connector gaps (MOD-92…113, agent's choices): `tasks_list` answers a short row by default (`fields: "full"` for the old shape), agents read a task's comments, a task handle works in the link tools, connector-made tags get the app's colour, and a tool's listing and parser can't drift apart.
 - 2026-10-09 · API keys can expire (optional, 90 days by default in the picker) and Settings flags expired and unused keys; no per-key rate limit.
 - 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
 - 2026-10-08 · A key's tool list is honest per module: tools that also touch another module need it too, and None means none across modules.
