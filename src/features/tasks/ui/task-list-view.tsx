@@ -428,6 +428,10 @@ export function TaskListView({
   // folded Backlog was opened; both reset when the scope or grouping changes.
   const [revealedGroups, setRevealedGroups] = useState<ReadonlySet<string>>(NO_IDS);
   const [openBacklogs, setOpenBacklogs] = useState<ReadonlySet<string>>(NO_IDS);
+  // The Backlog line you closed on the selection, with nowhere else to move
+  // it: that line doesn't open again for it until the selection moves or you
+  // open it yourself (MOD-124).
+  const closedOnRef = useRef<{ key: string; id: string } | null>(null);
 
   // Completed tasks Display hides drop out of each group, behind its
   // "N completed · show" line (tasks-v2 §6), and Backlog tasks behind
@@ -581,6 +585,7 @@ export function TaskListView({
     setExpandedParents(new Set());
     setRevealedGroups(NO_IDS);
     setOpenBacklogs(NO_IDS);
+    closedOnRef.current = null;
   }, [viewSignature]);
 
   const toggleRevealGroup = useCallback((key: string) => {
@@ -858,9 +863,6 @@ export function TaskListView({
     return out;
   }, [groups, collapsed, rowsOf, expandedParents, nest, api.subtasksByParent]);
 
-  // The Backlog line you closed on the selection, with nowhere else to move
-  // it: that line doesn't open again for it (MOD-124).
-  const closedOnRef = useRef<{ key: string; id: string } | null>(null);
   const toggleBacklog = useCallback(
     (key: string) => {
       // Closing a line that holds the selection: the selection steps up to the
@@ -885,7 +887,8 @@ export function TaskListView({
           }
         }
       }
-      closedOnRef.current = null;
+      // Opening that same line again is yours to do; another line leaves it shut.
+      if (closedOnRef.current?.key === key) closedOnRef.current = null;
       setOpenBacklogs((prev) => toggled(prev, key));
     },
     [openBacklogs, groups, selectedId, taskById, visibleTasks, setSelectedId],

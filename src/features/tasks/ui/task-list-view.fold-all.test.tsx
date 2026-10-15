@@ -270,6 +270,27 @@ describe("a closed Backlog line stays closed (MOD-124)", () => {
     expect(picks.at(-1)).toBe("x");
   });
 
+  it("opening another Backlog line leaves the one closed on the selection shut", () => {
+    const { picks } = renderPage({
+      tasks: [
+        task("a"),
+        task("x", { sectionId: "s1", statusCategory: "backlog" }),
+        task("z", { sectionId: "s2", statusCategory: "backlog" }),
+      ],
+    });
+    const lines = () => screen.getAllByRole("button", { name: /^Backlog, / });
+    fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
+    fireEvent.click(lines()[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Task x" }));
+    fireEvent.click(lines()[0]);
+    expect(lines().map((l) => l.getAttribute("aria-expanded"))).toEqual(["false", "false"]);
+    expect(picks.at(-1)).toBe("x");
+    // Visual's line opens; Triage's stays shut, and the selection moves to a row shown.
+    fireEvent.click(lines()[1]);
+    expect(lines().map((l) => l.getAttribute("aria-expanded"))).toEqual(["false", "true"]);
+    expect(picks.at(-1)).toBe("z");
+  });
+
   it("with no other row shown, the selection stays put and the line stays closed", () => {
     const { picks, shown } = renderPage({ tasks: backlogFirst });
     fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
