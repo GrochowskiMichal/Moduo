@@ -762,6 +762,24 @@ describe("comments on a task (U3-2)", () => {
   });
 });
 
+describe("an unset priority draws the bars, as capture does (MOD-134)", () => {
+  it("shows the three faint bars, never a flag, in the value and the menu's None", async () => {
+    renderPanel(task({ priority: null }), api(task({ priority: null })));
+    const value = screen.getByRole("button", { name: "Priority: none" });
+    expect(value.querySelector('svg[data-level="0"]')).toBeTruthy();
+    expect(value.querySelector(".lucide-flag")).toBeNull();
+    fireEvent.pointerDown(value, { button: 0, pointerType: "mouse" });
+    const none = await screen.findByRole("menuitemradio", { name: "None" });
+    expect(none.querySelector('svg[data-level="0"]')).toBeTruthy();
+  });
+
+  it("a set priority still shows its filled bars", () => {
+    renderPanel(task({ priority: "high" }), api(task({ priority: "high" })));
+    const value = screen.getByRole("button", { name: "Priority: High" });
+    expect(value.querySelector('svg[data-level="3"]')).toBeTruthy();
+  });
+});
+
 describe("the activity reads like a thread, its box always in reach (MOD-129)", () => {
   const commentBox = () => screen.getByRole("textbox", { name: "Comment on this task" });
 
