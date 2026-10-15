@@ -276,6 +276,7 @@ describe("a reference's label", () => {
       "bucket",
       "tag",
       "mystery",
+      "constructor",
     ]) {
       expect(referenceWord(type)).toBe(referenceNoun(referenceKind(type)));
     }
