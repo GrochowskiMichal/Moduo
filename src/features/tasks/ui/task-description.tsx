@@ -117,14 +117,17 @@ export function TaskDescription({
           sourceLabel={task.title}
           sourceIcon="task"
           ariaLabel="Description"
+          // Stored as Markdown; an older HTML description turns into
+          // Markdown on its next edit (call #15, MOD-120).
+          format="markdown"
           placeholder={canEdit ? "Add a description…  @ or / to link" : undefined}
           // Plain text at rest; editing fills a quiet surface, its padding
           // inside (MOD-115).
           surface="soft"
           className="min-h-6 text-base text-foreground/85"
           placeholderClassName="truncate text-base"
-          onCommit={(html) => {
-            if (html !== task.description) api.patchTask(task.id, { description: html });
+          onCommit={(markdown) => {
+            if (markdown !== task.description) api.patchTask(task.id, { description: markdown });
           }}
           onFiles={onFiles}
           // TV-D12: an @person in the description notifies them (people who

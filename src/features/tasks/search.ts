@@ -3,6 +3,7 @@
 // links (dashboard widget rows, contact-hub rollups, note /task chips) land on
 // the right task instead of whatever the page last showed.
 
+import { descriptionPlainText } from "../../../supabase/functions/_shared/description-markdown";
 import { taskHandle } from "../../lib/task-handle";
 import { findSigilWords } from "../spine/grammar";
 import type { Bucket, Task } from "./model";
@@ -90,24 +91,15 @@ export function resolveTasksDeepLink(
 
 // ── Live search (`/`, tasks-v2 §7, U2-4) ────────────────────────────────────
 
-const ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-  "&nbsp;": " ",
-};
-
 /** A description's text, lower-cased, cached by its source (they're long and
  *  searched on every keystroke). */
 const textCache = new Map<string, string>();
 
 /**
- * The words a description shows: the editor stores HTML (`<p dir="ltr"><span
- * style="white-space: pre-wrap;">…`), so its tags and attributes are dropped
- * and entities decoded; otherwise "pre" or "span" would match every task with
- * a description (TV-U2 review). Plain text is read as it is.
+ * The words a description shows, lower-cased, for search: from its Markdown,
+ * or from an older one's HTML (call #15 stores Markdown; nothing converts the
+ * old ones in bulk), never their markup, so "pre", "span" or "**" match
+ * nothing (TV-U2 review). A reference's stored text is left out (RF-1).
  */
 export function descriptionText(description: string | null | undefined): string {
   if (!description) return "";
@@ -121,16 +113,12 @@ export function descriptionText(description: string | null | undefined): string 
 
 /**
  * A description's words as it shows them (case kept), for a Board card's
- * preview (AC7.4): tags dropped, entities decoded, a reference's stored text
- * left out (it may name an item the reader can't see, RF-1).
+ * preview (AC7.4): no Markdown symbols or HTML tags, a link as its words, a
+ * date chip as its date, and a reference left out (it may name an item the
+ * reader can't see, RF-1). Either stored form (Markdown, or the old HTML).
  */
 export function descriptionWords(description: string | null | undefined): string {
-  if (!description) return "";
-  if (!/^\s*</.test(description)) return description;
-  return description
-    .replace(/<span\b[^>]*\bdata-lexical-entity-ref\b[^>]*>[^<]*<\/span>/g, " ")
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&[a-z#0-9]+;/gi, (m) => ENTITIES[m.toLowerCase()] ?? m);
+  return descriptionPlainText(description);
 }
 
 /**

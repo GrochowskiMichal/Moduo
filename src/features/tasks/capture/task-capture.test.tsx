@@ -5,6 +5,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { $getRoot, type LexicalEditor } from "lexical";
 
 import type { CaptureContext } from "../../../lib/capture-registry";
 import { ReferenceStoreProvider } from "../../spine/references/context";
@@ -651,6 +652,19 @@ describe("From template (`/template`, More → Template…, TV-D15)", () => {
   });
 });
 
+// The description is a Lexical editor (call #15). jsdom has no ClipboardEvent
+// or DragEvent, and Lexical tells them apart by class name: stand-ins, and
+// events built on their prototypes (docs/gotchas/notes.md, AT-2).
+const events = globalThis as Record<string, unknown>;
+events.ClipboardEvent ??= class ClipboardEvent extends Event {};
+events.DragEvent ??= class DragEvent extends Event {};
+function dispatchAs(kind: "ClipboardEvent" | "DragEvent", el: Element, type: string, data: object) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.assign(event, data);
+  Object.setPrototypeOf(event, (events[kind] as typeof Event).prototype);
+  el.dispatchEvent(event);
+}
+
 describe("Files on a capture (AT-3, AT3-2)", () => {
   const shot = () => new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
   const clipboard = (files: File[], text = "") => ({
@@ -661,6 +675,11 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
       getData: (type: string) => (type === "text/plain" ? text : ""),
     },
   });
+  const paste = (el: Element, data: object) =>
+    act(async () => {
+      dispatchAs("ClipboardEvent", el, "paste", data);
+      await new Promise((r) => setTimeout(r, 0));
+    });
   let handled: Array<Parameters<CaptureAttachmentHandler>[0]>;
   beforeEach(() => {
     handled = [];
@@ -683,7 +702,7 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
 
   it("a screenshot pasted into the description becomes a chip; Create sends it with the new task", async () => {
     await openWithTitle();
-    fireEvent.paste(description(), clipboard([shot()]));
+    await paste(description(), clipboard([shot()]));
     expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     expect(document.querySelector('[data-slot="capture-files"]')?.textContent).toContain(
       "shot.png",
@@ -702,7 +721,7 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
       throw new Error("You can't add tasks here.");
     });
     await openWithTitle();
-    fireEvent.paste(description(), clipboard([shot()]));
+    await paste(description(), clipboard([shot()]));
     await screen.findByRole("button", { name: "Remove shot.png" });
     fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
     await waitFor(() => expect(loadDraft(ME, WS, "refused")).not.toBeNull());
@@ -715,28 +734,37 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
 
   it("text pasted into the description stays text", async () => {
     await openWithTitle();
-    fireEvent.paste(description(), clipboard([], "notes"));
+    await paste(description(), clipboard([], "notes"));
     expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+
+  const dropOf = (files: File[]) => ({
+    dataTransfer: {
+      types: ["Files"],
+      files,
+      items: files.map((f) => ({
+        kind: "file",
+        getAsFile: () => f,
+        webkitGetAsEntry: () => ({ isDirectory: false }),
+      })),
+    },
   });
 
   it("files dropped on the capture become chips; a chip comes off again", async () => {
     await openWithTitle();
-    fireEvent.drop(description(), {
-      dataTransfer: {
-        types: ["Files"],
-        files: [shot()],
-        items: [
-          {
-            kind: "file",
-            getAsFile: () => shot(),
-            webkitGetAsEntry: () => ({ isDirectory: false }),
-          },
-        ],
-      },
-    });
+    fireEvent.drop(screen.getByRole("button", { name: "Destination: Inbox" }), dropOf([shot()]));
     expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove shot.png" }));
     expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
+  });
+
+  it("a file dropped on the description's text becomes one chip (its editor takes the drop)", async () => {
+    await openWithTitle();
+    await act(async () => {
+      dispatchAs("DragEvent", description(), "drop", dropOf([shot()]));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await screen.findAllByRole("button", { name: "Remove shot.png" })).toHaveLength(1);
   });
 
   it("a folder dropped on the capture is left out", async () => {
@@ -751,6 +779,81 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
       },
     });
     expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+});
+
+describe("The description: one editor, Markdown, ⏎ creates (call #15, MOD-117)", () => {
+  const TASK_ID = "11111111-1111-4111-8111-111111111111";
+  // A focused editor measures its caret; jsdom's Range can't.
+  const rangeProto = Range.prototype as unknown as Record<string, unknown>;
+  rangeProto.getBoundingClientRect ??= () => ({
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+  });
+  rangeProto.getClientRects ??= () => [];
+
+  async function openWith(description: string) {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Fix the login screen" }],
+      keep: [],
+      description,
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody();
+    await screen.findByText(/Draft restored/);
+    const box = screen.getByRole("textbox", { name: "Description" });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The caret at the end of the text, where Lexical reads it on a key.
+    box.focus();
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    let last: Node | null = null;
+    while (walker.nextNode()) last = walker.currentNode;
+    const range = document.createRange();
+    range.setStart(last ?? box, last ? (last.textContent?.length ?? 0) : 0);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    act(() => {
+      (box as HTMLElement & { __lexicalEditor: LexicalEditor }).__lexicalEditor.update(
+        () => $getRoot().selectEnd(),
+        { discrete: true },
+      );
+    });
+    return box;
+  }
+
+  it("shows its Markdown formatted, and ⏎ in it creates the task with that Markdown", async () => {
+    const box = await openWith(`Check **this** with [task](moduo://task/${TASK_ID})`);
+    expect(box.querySelector("strong")?.textContent).toBe("this");
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.title).toBe("Fix the login screen");
+    expect(fake.saved[0]?.description).toBe(`Check **this** with [task](moduo://task/${TASK_ID})`);
+    // What it references links once the task exists, as the title's things do.
+    await waitFor(() =>
+      expect(fake.links).toContainEqual(
+        expect.objectContaining({
+          target: { type: "task", id: TASK_ID },
+          relationKind: "mentions",
+        }),
+      ),
+    );
+  });
+
+  it("⇧⏎ in it starts a new line and creates nothing", async () => {
+    const box = await openWith("First line");
+    fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fake.saved).toHaveLength(0);
+    expect(box.querySelectorAll("p")).toHaveLength(2);
   });
 });
 

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 import {
+  descriptionWords,
   resolveTasksDeepLink,
   takeSearchTokens,
   taskIdForHandle,
@@ -174,6 +175,37 @@ describe("taskMatchesQuery", () => {
     };
     expect(taskMatchesQuery(withChip, "northwind")).toBe(false);
     expect(taskMatchesQuery(withChip, "first")).toBe(true);
+  });
+
+  it("reads a Markdown description's words, never its symbols or a reference's address (call #15)", () => {
+    const md = {
+      title: "Dogfood board",
+      description:
+        "**Adding an issue**\n- Put it in *Triage*\n- [x] snake_case `code`\n\nSee [task](moduo://task/11111111-1111-4111-8111-111111111111) by [Oct 17](moduo://date/2026-10-17), [the docs](https://example.com).",
+    };
+    expect(taskMatchesQuery(md, "adding issue")).toBe(true);
+    expect(taskMatchesQuery(md, "triage snake_case code")).toBe(true);
+    expect(taskMatchesQuery(md, "oct 17")).toBe(true);
+    expect(taskMatchesQuery(md, "the docs")).toBe(true);
+    for (const markup of ["**", "moduo", "11111111", "example.com", "[x]"]) {
+      expect(taskMatchesQuery(md, markup)).toBe(false);
+    }
+  });
+
+  it("finds the same words in a description whichever way it's stored", () => {
+    const html = {
+      title: "x",
+      description:
+        '<p class="mb-2 last:mb-0"><b><strong class="font-semibold" style="white-space: pre-wrap;">Book</strong></b><span style="white-space: pre-wrap;"> the venue</span></p>',
+    };
+    const markdown = { title: "x", description: "**Book** the venue" };
+    for (const task of [html, markdown]) {
+      expect(taskMatchesQuery(task, "book the venue")).toBe(true);
+      expect(taskMatchesQuery(task, "strong")).toBe(false);
+    }
+    expect(descriptionWords(html.description).trim()).toBe(
+      descriptionWords(markdown.description).trim(),
+    );
   });
 });
 

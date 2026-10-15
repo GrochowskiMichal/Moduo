@@ -1,0 +1,109 @@
+/* ═══ A task's description: its Markdown lists (dogfood call #15) ═══
+ *
+ * The description editor's list classes (spine/editor/entity-text-editor.tsx,
+ * MARKDOWN_THEME). Bullets follow round-1c frame 3's `.ldesc`: no marker, a
+ * 4 px dot in the third text level, 14 px in, items 2 px apart. Numbered and
+ * checkbox lists aren't drawn (agent's layout, revisitable): numbers in the
+ * same third level, and the checkbox mirrors Notes' round one (notes-prose.css)
+ * so a checkbox reads the same everywhere. Tokens only.
+ */
+
+.desc-ul,
+.desc-ol {
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+
+.desc-ul:last-child,
+.desc-ol:last-child {
+  margin-bottom: 0;
+}
+
+.desc-ul {
+  list-style: none;
+}
+
+.desc-li + .desc-li {
+  margin-top: 2px;
+}
+
+/* Bullets: a dot where the frame draws it. Not on a checkbox item, and not on
+   the item Lexical wraps a nested list in (it has no text of its own). */
+.desc-ul:not(.desc-checklist) > .desc-li {
+  position: relative;
+  padding-left: 14px;
+}
+
+.desc-ul:not(.desc-checklist) > .desc-li:not(.desc-li-nested)::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0.7em;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--subtle-foreground);
+}
+
+.desc-ol {
+  list-style: decimal outside;
+  padding-left: 1.25rem;
+}
+
+.desc-ol > .desc-li::marker {
+  color: var(--subtle-foreground);
+}
+
+.desc-li-nested {
+  list-style: none;
+}
+
+/* Checkboxes: the round box sits in the item's left padding, which is where
+   Lexical's CheckListPlugin takes a click as a toggle. */
+.desc-checklist > .desc-li-unchecked,
+.desc-checklist > .desc-li-checked {
+  position: relative;
+  padding-left: 1.5rem;
+  list-style: none;
+  outline: none;
+}
+
+.desc-checklist > .desc-li-unchecked::before,
+.desc-checklist > .desc-li-checked::before {
+  content: "";
+  position: absolute;
+  left: 0.125rem;
+  top: calc(0.5lh - 0.4375rem);
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in oklab, var(--muted-foreground) 50%, transparent);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fade) var(--ease-out),
+    border-color var(--motion-fade) var(--ease-out);
+}
+
+.desc-checklist > .desc-li-unchecked:hover::before {
+  border-color: var(--foreground);
+}
+
+.desc-checklist > .desc-li-checked::before {
+  content: "✓";
+  display: grid;
+  place-items: center;
+  font-size: var(--text-3xs);
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.desc-checklist > .desc-li-checked {
+  color: var(--muted-foreground);
+}
+
+.desc-checklist > .desc-li-unchecked:focus-visible::before,
+.desc-checklist > .desc-li-checked:focus-visible::before {
+  box-shadow: 0 0 0 2px var(--ring);
+}

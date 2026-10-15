@@ -147,6 +147,28 @@ const plan = (tasks: CaptureTaskPlan[], over: Partial<CapturePlan> = {}): Captur
 });
 
 describe("runCapture through the shared store", () => {
+  it("the people the description @-mentions are told once the task exists (call #15)", async () => {
+    const { store } = fakeStore();
+    const runtime = {
+      ...fakeRuntime(),
+      tasks: { ...fakeRuntime().tasks, mentionInTask: rs.fn(async () => {}) },
+    };
+    const one = item({ title: "A", description: "Ask @Sam Ortiz", mentions: ["u-sam"] });
+    const quiet = item({ title: "B" });
+    const result = await runCapture(plan([one, quiet]), {
+      runtime: runtime as never,
+      userId: ME,
+      store,
+    });
+    expect(result.error).toBeNull();
+    expect(runtime.tasks.mentionInTask).toHaveBeenCalledTimes(1);
+    expect(runtime.tasks.mentionInTask).toHaveBeenCalledWith({
+      workspaceId: WS,
+      taskId: one.id,
+      userIds: ["u-sam"],
+    });
+  });
+
   it("one capture: through the store's create, into the Inbox it holds, on top", async () => {
     const { store, sent } = fakeStore();
     const runtime = fakeRuntime();
