@@ -54,7 +54,7 @@ async function openGeneral(page: Page, extra = ""): Promise<void> {
   await expect(page.getByTestId("message-stream")).toBeVisible({ timeout: 20_000 });
 }
 
-const composer = (page: Page) => page.locator("[data-chat-composer] [contenteditable=\"true\"]");
+const composer = (page: Page) => page.locator('[data-chat-composer] [contenteditable="true"]');
 const row = (page: Page, text: string) =>
   page.getByRole("article").filter({ hasText: text }).first();
 

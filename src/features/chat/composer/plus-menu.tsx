@@ -30,6 +30,13 @@ const CREATE_ICON: Record<CreateCommand, typeof ListTodo> = {
   event: Calendar,
 };
 
+/** What a row's type reads as. */
+const META: Record<string, string> = {
+  bucket: "project",
+  chat_channel: "conversation",
+  email_thread: "email",
+};
+
 export type PlusPick =
   | { kind: "ref"; type: string; id: string; label: string }
   | { kind: "create"; command: CreateCommand };
@@ -127,7 +134,7 @@ export function PlusMenu({
               key={`${c.ref.type}:${c.ref.id}`}
               icon={<Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />}
               label={c.label}
-              meta={c.ref.type === "bucket" ? "project" : c.ref.type.replace(/_/g, " ")}
+              meta={META[c.ref.type] ?? c.ref.type.replace(/_/g, " ")}
               onPick={() => onPick({ kind: "ref", type: c.ref.type, id: c.ref.id, label: c.label })}
             />
           );

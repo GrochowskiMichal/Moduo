@@ -366,6 +366,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     });
   }, []);
 
+  /** A menu closed: back to the text, unless focus already went to another one. */
+  const backToText = useCallback((e: Event) => {
+    e.preventDefault();
+    if (document.activeElement?.closest("[data-radix-popper-content-wrapper]")) return;
+    editorRef.current?.focus();
+  }, []);
+
   const rememberCaret = useCallback(() => {
     const editor = editorRef.current;
     savedSelection.current =
@@ -556,10 +563,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                   side="top"
                   align="start"
                   className="w-auto p-0"
-                  onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    editorRef.current?.focus();
-                  }}
+                  onCloseAutoFocus={backToText}
                 >
                   <PlusMenu
                     runtime={runtime}
@@ -626,10 +630,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                 side="top"
                 align="end"
                 className="w-auto p-0"
-                onCloseAutoFocus={(e) => {
-                  e.preventDefault();
-                  editorRef.current?.focus();
-                }}
+                onCloseAutoFocus={backToText}
               >
                 <ChatEmojiPicker
                   onPick={(emoji) => {

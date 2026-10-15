@@ -134,7 +134,9 @@ test("/task opens the capture; the new task lands as a chip", async ({ page }) =
   await openGeneral(page);
   const box = composer(page);
   await box.pressSequentially(`/task Order frames ${tag}`);
-  await expect(page.getByRole("option", { name: new RegExp(`Task “Order frames ${tag}”`) })).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: new RegExp(`Task “Order frames ${tag}”`) }),
+  ).toBeVisible();
   await page.keyboard.press("Enter");
   const capture = page.getByRole("dialog", { name: "Capture" });
   await expect(capture).toBeVisible();
