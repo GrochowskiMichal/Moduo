@@ -218,6 +218,7 @@ export function ProjectMenu({
   open,
   onOpenChange,
   actions,
+  className,
 }: {
   task: Task;
   inboxId: string | null;
@@ -228,6 +229,8 @@ export function ProjectMenu({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   actions: Pick<TaskRowActions, "patchTask">;
+  /** The trigger's place in its line (a List row lets the name give way). */
+  className?: string;
 }) {
   const isInbox = task.bucketId === inboxId;
   const label =
@@ -261,6 +264,7 @@ export function ProjectMenu({
               "shrink-0 items-center font-sans text-xs min-w-(--tl-col-project) max-w-(--tl-col-project)",
             // Takes no width and gives back the row's gap, so nothing shifts.
             implied && "pointer-events-none -ms-2.5 w-0 overflow-hidden px-0 opacity-0",
+            className,
           )}
         >
           {label}

@@ -172,9 +172,9 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     // Hovering names them as words, in the kit tooltip.
     fireEvent.pointerMove(count, { pointerType: "mouse" });
     expect((await screen.findByRole("tooltip")).textContent).toBe("ui, notes, bug");
-    // The count sits in the title cell, right after the title.
+    // The count sits in the title cell, in the row's details (MOD-138).
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
-    expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
+    expect(title.querySelector('[data-slot="row-details"]')?.contains(count)).toBe(true);
   });
 
   it("Detailed rows show two tags as dot chips, then +n, never a # (MOD-97)", async () => {
@@ -379,6 +379,140 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(title.className).toContain("flex-1");
     const columns = rowOf("Task a").querySelector('[data-slot="row-columns"]') as HTMLElement;
     expect(columns.className).toContain("shrink-0");
+  });
+});
+
+describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
+  const working = {
+    id: "s1",
+    workspaceId: "w",
+    taskId: "a",
+    userId: "someone",
+    agent: "Claude",
+    state: "needs_you",
+    note: null,
+    step: null,
+    steps: null,
+    links: [],
+    earlier: [],
+    summaryAt: null,
+    summaryPostedAt: null,
+    startedAt: OLD,
+    updatedAt: OLD,
+    stoppedAt: null,
+  };
+  const detailsOf = (row: HTMLElement) =>
+    row.querySelector('[data-slot="row-details"]') as HTMLElement | null;
+  const titleCell = (row: HTMLElement) =>
+    row.querySelector('[data-slot="row-title"]') as HTMLElement;
+
+  it("Standard: the agent's mark and the counts are one group at the title cell's end", () => {
+    renderList(
+      [task("a", { title: "Hero banner for the homepage" })],
+      { selection: "all", scopeTitle: "All" },
+      {
+        commentCounts: new Map([["a", 3]]),
+        attachmentCounts: new Map([["a", 2]]),
+        agentSessions: [working],
+      },
+    );
+    const row = rowOf("Hero banner for the homepage");
+    const details = detailsOf(row) as HTMLElement;
+    // The last thing in the title cell, pushed to its end, so it never moves
+    // with the title's length; the project's name stays with the title.
+    expect(titleCell(row).lastElementChild).toBe(details);
+    expect(details.className).toContain("ms-auto");
+    const project = row.querySelector(
+      '[data-slot="row-title"] button[aria-label^="Project"]',
+    ) as HTMLElement;
+    expect(
+      project.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The agent first, then the counts (round-2b `.ind`).
+    const agent = details.querySelector('[data-slot="row-agent"]') as HTMLElement;
+    const counts = details.querySelector('[data-slot="row-details-counts"]') as HTMLElement;
+    expect(agent.compareDocumentPosition(counts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(counts.textContent).toContain("2 files");
+    expect(counts.textContent).toContain("3 comments");
+    // The agent's words give way first: it starts at nothing and grows to
+    // its words, never under its dot.
+    expect(agent.className).toContain("basis-0");
+    expect(agent.className).toContain("max-w-max");
+    expect(agent.className).toContain("min-w-3");
+    // Then the counts, whole and from their start: laid out from the end,
+    // each count an item of its own, in its own order (tags, files, comments).
+    expect(counts.className).toContain("flex-row-reverse");
+    expect(counts.className).toContain("flex-wrap");
+    expect(counts.className).toContain("overflow-hidden");
+    const spoken = [...counts.children].map((c) => c.querySelector(".sr-only")?.textContent);
+    expect(spoken).toEqual(["2 files", "3 comments"]);
+    // Nothing inside spills over the columns.
+    expect((details.lastElementChild as HTMLElement).className).toContain("overflow-x-clip");
+  });
+
+  it("the title gives way first, never below about ten characters", () => {
+    renderList([
+      task("a", { title: "Hero banner for the homepage" }),
+      task("b", { title: "Pay rent" }),
+    ]);
+    const long = rowOf("Hero banner for the homepage").querySelector(
+      "[data-row-title]",
+    ) as HTMLElement;
+    expect(long.className).toContain("min-w-[min(10ch,100%)]");
+    // From its floor it grows to its own width, never past its words.
+    expect(long.className).toContain("max-w-max");
+    expect(long.className).toContain("truncate");
+    // A short title keeps its whole width.
+    const short = rowOf("Pay rent").querySelector("[data-row-title]") as HTMLElement;
+    expect(short.className).toContain("shrink-0");
+    expect(short.className).not.toContain("min-w-[min(10ch,100%)]");
+    // The cell is a container, so the details can say less when it's narrow.
+    expect(titleCell(rowOf("Pay rent")).className).toContain("@container/title");
+  });
+
+  it("the agent's mark is a dot, its agent and what it does, shorter as the cell narrows", async () => {
+    renderList([task("a", { title: "Hero banner" })], {}, { agentSessions: [working] });
+    const agent = rowOf("Hero banner").querySelector('[data-slot="row-agent"]') as HTMLElement;
+    // Needs you reads in the text colour (round-1c `.agent.needs`).
+    expect(agent.dataset.tone).toBe("loud");
+    expect(agent.className).toContain("text-foreground");
+    expect(agent.querySelector("span[aria-hidden]")?.className).toContain("rounded-full");
+    expect(agent.textContent).toBe("A teammate's Claude · needs you");
+    // Under 16rem the state goes, under 12rem the agent too: still read aloud.
+    const words = agent.lastElementChild as HTMLElement;
+    expect(words.className).toContain("@max-[12rem]/title:sr-only");
+    expect((words.lastElementChild as HTMLElement).className).toContain("@max-3xs/title:sr-only");
+    fireEvent.pointerMove(agent, { pointerType: "mouse" });
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "A teammate's Claude · needs you",
+    );
+  });
+
+  it("Detailed keeps them right after the title", () => {
+    renderList(
+      [task("a", { title: "Hero banner" })],
+      { rows: "detailed" },
+      { commentCounts: new Map([["a", 3]]) },
+    );
+    const row = rowOf("Hero banner");
+    const details = detailsOf(row) as HTMLElement;
+    expect(details.className).not.toContain("ms-auto");
+    const title = row.querySelector("[data-row-title]") as HTMLElement;
+    expect(title.nextElementSibling).toBe(details);
+  });
+
+  it("a late row's fixes sit beside the details, never over them", () => {
+    renderList(
+      [task("a", { title: "Hero banner", dueOn: "2020-01-01", dueDate: "2020-01-01T00:00:00Z" })],
+      {},
+      { commentCounts: new Map([["a", 3]]), setTaskStatus: rs.fn() },
+    );
+    const details = detailsOf(rowOf("Hero banner")) as HTMLElement;
+    const fixes = details.querySelector('[data-slot="row-late-fixes"]')?.parentElement
+      ?.parentElement as HTMLElement;
+    // Anchored to the group's start, outside its clipped box.
+    expect(fixes.className).toContain("end-full");
+    expect(fixes.parentElement).toBe(details);
   });
 });
 
