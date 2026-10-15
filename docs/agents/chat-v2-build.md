@@ -63,7 +63,7 @@ A Sonnet helper folds the record files into `specs/BUILD_ORDER.md` (ticks, "From
 
 ## Usage limits
 
-On a usage-limit error the orchestrator notes the reset time, sleeps in the background until then, and resumes each stopped builder with a message. Nothing waits for a human.
+On a usage-limit error the orchestrator notes the reset time, sleeps in the background until then, and resumes each stopped builder with a message. Nothing waits for a human. The orchestrator also holds new builders once the weekly window reaches 90%. A background sleep only fires if the Mac stays awake: request keep-awake (`session_idle`) before a long wait; a closed lid or a manual sleep still stops it (2026-10-14's overnight timer was lost that way), and on wake the orchestrator resumes from "Where it stands".
 
 ## Dependencies outside the spec
 
@@ -72,4 +72,4 @@ On a usage-limit error the orchestrator notes the reset time, sleeps in the back
 
 ## Where it stands
 
-Kept current by the orchestrator. **2026-10-14, evening:** landed: the kit, the v1 privacy rules and the v1 sending/typing limits (both live on prod), CV-0 (five spikes), the briefs, the e2e isolation fix, CV-1 (+ its conversion, applied to the local stack with Maciej's OK), CV-2a and CV-4, all migrations applied locally in that order. **Paused at 91% of the weekly usage window** (the 90% hold); it resets 2026-10-15 08:00 UTC. **Next on resume:** CV-2b (holds the migration turn; its file is `<stamp>_chat_v2_conversation_ops.sql`; it also stamps `removed_by`, which CV-2a's removed-member rule waits on, and the General-join that lets every reader type), then CV-3 and CV-5 in parallel (both need 2b; CV-5's migration after CV-3's if both have one), then checkpoint 2 (fold CV-0 spike 1, CV-1, CV-2a, CV-4, the hotfix; full verify; the full e2e run through `scripts/agent/e2e.sh`).
+Kept current by the orchestrator. **2026-10-14, evening:** landed: the kit, the v1 privacy rules and the v1 sending/typing limits (both live on prod), CV-0 (five spikes), the briefs, the e2e isolation fix, CV-1 (+ its conversion, applied to the local stack with Maciej's OK), CV-2a and CV-4, all migrations applied locally in that order. Paused overnight at 91% of the weekly window; **resumed 2026-10-15 11:50 UTC** (the Mac had slept through the timer). **Now:** CV-2b (holds the migration turn; its file is `<stamp>_chat_v2_conversation_ops.sql`; it also stamps `removed_by`, which CV-2a's removed-member rule waits on, and the General-join that lets every reader type), then CV-3 and CV-5 in parallel (both need 2b; CV-5's migration after CV-3's if both have one), then checkpoint 2 (fold CV-0 spike 1, CV-1, CV-2a, CV-4, the hotfix; full verify; the full e2e run through `scripts/agent/e2e.sh`).
