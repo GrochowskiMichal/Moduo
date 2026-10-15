@@ -597,6 +597,9 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     expect(titleActions().childElementCount).toBe(0);
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("button", { name: /to Focus|in Focus/i })).toBeNull();
+    // "2 tasks" is the title row's (the page's `title`, MOD-109), not a heading in the body.
+    expect(screen.queryByRole("heading", { name: "2 tasks" })).toBeNull();
+    expect(screen.getByRole("list", { name: "Selected tasks" })).toBeTruthy();
   });
 
   it("on the full page they sit in its header after ↑ ↓ (the prototype's `.fphead`)", () => {

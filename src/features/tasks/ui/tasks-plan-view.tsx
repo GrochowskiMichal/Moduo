@@ -124,10 +124,12 @@ import {
   IN_FLIGHT_PANEL_VIEW,
   NO_DATE_PANEL_VIEW,
   type ProjectAsk,
+  panelTaskOf,
+  panelTitleOf,
 } from "../panel-views";
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
-import { inViewOrder } from "../selection";
+import { backstopPick, inViewOrder } from "../selection";
 import { projectDeleteSummary, projectOpenWork } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { undatedTasks } from "../timeline-rows";
@@ -1332,13 +1334,27 @@ export function TasksPlanView({
   );
   const panelCanEdit = canEdit && !selectedArchivedTask;
 
+  // The List is in the centre (the body's last branch, no full page over it):
+  // the backstop picks only rows it shows (MOD-124), and with none shown the
+  // panel shows what it shows with nothing selected (MOD-123).
+  const listInCentre =
+    !(fullPageId && taskById.has(fullPageId)) &&
+    selection !== TEMPLATES_SELECTION &&
+    selection !== TRASH_SELECTION &&
+    selection !== ARCHIVED_SELECTION &&
+    selection !== "today" &&
+    view !== "board" &&
+    view !== "timeline";
+  const [listShowsNothing, setListShowsNothing] = useState(false);
+
   // Scope-level selection validity (the state lives here, so its backstop does
   // too): when the selected task leaves the scope (archived, moved, deleted,
-  // scope/workspace switch), fall back to the first task in scope. The List view
-  // refines this against its collapse-aware visible rows; Board has no own logic
-  // and relies on this entirely. A subtask whose *parent* is in scope also
-  // counts as in-scope — it can be selected from under the parent (expanded
-  // list rows, the detail panel's subtask list) even from another bucket.
+  // scope/workspace switch), fall back to the first task in scope, or while
+  // the List shows, to its first row (`backstopPick`). The List refines this
+  // against its collapse-aware visible rows; Board has no own logic and relies
+  // on this entirely. A subtask whose *parent* is in scope also counts as
+  // in-scope — it can be selected from under the parent (expanded list rows,
+  // the detail panel's subtask list) even from another bucket.
   useEffect(() => {
     if (api.loading || inboundPending) return;
     // Focus shows more than its line-up (the Now task's subtasks, today's
@@ -1357,11 +1373,17 @@ export function TasksPlanView({
       }
       return;
     }
-    if (selectedTaskId && scopeTasks.some((t) => t.id === selectedTaskId)) return;
-    if (selectedTask?.parentId && scopeTasks.some((t) => t.id === selectedTask.parentId)) return;
-    // Never a completed task Display hides (TV-U1): the Board has no
-    // fallback of its own, so it would open the panel on a card it doesn't show.
-    setSelectedTaskId(scopeTasks.find((t) => !isHiddenByDisplay(t))?.id ?? null);
+    const pick = backstopPick({
+      selectedId: selectedTaskId,
+      selectedParentId: selectedTask?.parentId ?? null,
+      inScope: (id) => scopeIdSet.has(id),
+      // The List wrote what it shows in its layout effect, before this runs.
+      listOrder: listInCentre ? viewOrderRef.current : null,
+      // Never a completed task Display hides (TV-U1): the Board has no
+      // fallback of its own, so it would open the panel on a card it doesn't show.
+      firstInScope: scopeTasks.find((t) => !isHiddenByDisplay(t))?.id ?? null,
+    });
+    if (pick !== undefined) setSelectedTaskId(pick);
   }, [
     api.loading,
     inboundPending,
@@ -1370,7 +1392,9 @@ export function TasksPlanView({
     selectedTaskId,
     selectedTask,
     scopeTasks,
+    scopeIdSet,
     isHiddenByDisplay,
+    listInCentre,
   ]);
 
   // ── DF-1: URL-held selection ─────────────────────────────────────────────────
@@ -1980,6 +2004,7 @@ export function TasksPlanView({
         groupBy={tasksDisplay.display.group}
         onManualOrder={backToManualOrder}
         revealRequest={revealRequest}
+        onShowsNothing={setListShowsNothing}
         {...listExtras}
         {...viewExtras}
         onViewKey={onViewKey}
@@ -2191,16 +2216,22 @@ export function TasksPlanView({
     }),
     [pushPanel, referenceStore, canEdit],
   );
+  // None while the List shows no row (every group folded): the panel reads as
+  // with nothing selected, never a task you can't see (MOD-123).
+  const panelTask = panelTaskOf(selectedTask, {
+    inCentre: listInCentre,
+    showsNothing: listShowsNothing,
+  });
   const detailPanel = (
     <TaskDetailPanel
-      task={selectedTask}
+      task={panelTask}
       buckets={selectedArchivedTask ? [...buckets, ...api.archivedBuckets] : buckets}
       inbox={inbox}
       canEdit={panelCanEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
       onOpenTask={openTaskInPanel}
-      onOpenFullPage={selectedTask ? () => setFullPageId(selectedTask.id) : undefined}
+      onOpenFullPage={panelTask ? () => setFullPageId(panelTask.id) : undefined}
       api={viewApi}
       runtime={runtime}
       workspaceId={workspaceId}
@@ -2232,8 +2263,8 @@ export function TasksPlanView({
       canEdit={canEdit}
       onBack={() => setPrivateLinkId(null)}
     />
-  ) : selectedTask ? (
-    <HubDropZone target={{ type: "task", id: selectedTask.id }} disabled={!panelCanEdit}>
+  ) : panelTask ? (
+    <HubDropZone target={{ type: "task", id: panelTask.id }} disabled={!panelCanEdit}>
       {detailPanel}
     </HubDropZone>
   ) : (
@@ -2314,10 +2345,10 @@ export function TasksPlanView({
     : null;
   const panelProject =
     askedProject ??
-    (selectedTask
-      ? (buckets.find((b) => b.id === selectedTask.bucketId && !b.isSystem) ??
+    (panelTask
+      ? (buckets.find((b) => b.id === panelTask.bucketId && !b.isSystem) ??
         // A task of an archived project shows that project, read-only (TV-U16).
-        api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
+        api.archivedBuckets.find((b) => b.id === panelTask.bucketId) ??
         null)
       : scopeProject);
   const projectView = panelProject ? (
@@ -2339,16 +2370,17 @@ export function TasksPlanView({
     />
   ) : null;
   // The panel remembers its view; the title's ask shows Project only while
-  // it stands (MOD-131). Nothing selected inside a project, or a task in the
-  // centre, shows Project too; the Timeline's No date stays open while you
-  // work the canvas (TV-TL2). The rule: `activePanelView`.
+  // it stands (MOD-131). Nothing selected inside a project (or every List
+  // group folded, MOD-123), or a task in the centre, shows Project too; the
+  // Timeline's No date stays open while you work the canvas (TV-TL2). The
+  // rule: `activePanelView`.
   const panelActive = activePanelView({
     asked: askedProject !== null,
     multi: multiSelect.multi,
     remembered: panelView,
     noDateShown: timelineShown && !fullPageTask,
     projectInstead: Boolean(
-      projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject)),
+      projectView && (fullPageTask || (!panelTask && !privateLinkId && scopeProject)),
     ),
   });
 
@@ -2403,6 +2435,9 @@ export function TasksPlanView({
           : undefined,
       }}
       activeId={panelActive}
+      // "4 tasks ▾" while several are selected (MOD-109, round-2b frame 1's
+      // title row); the full page's Details is "Shown in the centre" instead.
+      title={fullPageTask ? undefined : panelTitleOf(panelActive, bulkTasks.length)}
       onChange={pickPanelView}
       items={panelItems}
       onBack={panelStack.back}
