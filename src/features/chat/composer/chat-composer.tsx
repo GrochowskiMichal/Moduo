@@ -126,8 +126,8 @@ export type ChatComposerProps = {
   /** The stored text it opens with: the conversation's draft, or the message being edited. */
   initial?: string;
   autoFocus?: boolean;
-  /** ⏎: the stored text to send (message) or save (edit). */
-  onSend: (stored: string) => void;
+  /** ⏎: the stored text to send (message) or save (edit). `false`: not sent, keep it. */
+  onSend: (stored: string) => boolean | void;
   /** The stored text as it changes, for the conversation's draft (message mode). */
   onDraftChange?: (stored: string) => void;
   /** Typing started (true, at most every few seconds by the caller) or stopped (false). */
@@ -140,11 +140,15 @@ export type ChatComposerProps = {
   className?: string;
 };
 
+/** Put the caret back where it was (`saved`), else keep the live one, else at the end. */
 function $restoreOrEnd(saved: RangeSelection | null): void {
-  if (saved && $getNodeByKey(saved.anchor.key) && $getNodeByKey(saved.focus.key)) {
+  const anchor = saved ? $getNodeByKey(saved.anchor.key) : null;
+  const focus = saved ? $getNodeByKey(saved.focus.key) : null;
+  if (saved && anchor?.isAttached() && focus?.isAttached()) {
     $setSelection(saved.clone());
     return;
   }
+  if (!saved && $isRangeSelection($getSelection())) return;
   $getRoot().selectEnd();
 }
 
@@ -239,8 +243,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   ref,
 ) {
   const editorRef = useRef<LexicalEditor | null>(null);
+  // What an untouched edit exports (a body written elsewhere may not be in the
+  // canonical form): ⏎ on it saves nothing.
+  const baseline = useRef<string | null>(null);
   const setEditor = useCallback((editor: LexicalEditor) => {
     editorRef.current = editor;
+    baseline.current = editor.getEditorState().read($exportStored);
   }, []);
   const [empty, setEmpty] = useState(() => initial.trim() === "");
   const [grown, setGrown] = useState(() => initial.includes("\n"));
@@ -335,11 +343,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
       return;
     }
     if (mode === "edit") {
-      if (stored === initial) onCancel?.();
+      if (stored === initial || stored === baseline.current) onCancel?.();
       else onSend(stored);
       return;
     }
-    onSend(stored);
+    // Nothing could be sent (no store yet): the text stays.
+    if (onSend(stored) === false) return;
     editor.update(
       () => {
         const root = $getRoot();

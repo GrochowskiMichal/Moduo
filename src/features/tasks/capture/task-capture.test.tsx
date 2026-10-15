@@ -708,3 +708,20 @@ describe("taskForFiles (the file seam's task, AT3-2)", () => {
     await expect(taskForFiles(Promise.reject(new Error("no")), "t1")).resolves.toBeNull();
   });
 });
+
+describe("a prefilled open (chat's T and /task, CV-7b)", () => {
+  it("starts fresh: an earlier draft's words and fields don't ride in", async () => {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Old abandoned task" }],
+      keep: [],
+      description: "old description",
+      subtasks: ["old subtask"],
+      fields: EMPTY_FIELDS,
+    });
+    renderBody({ draft: "Order frames" }, referenceStore({}), "Order frames");
+    await waitFor(() => expect(document.body.textContent).toContain("Order frames"));
+    expect(document.body.textContent).not.toContain("Old abandoned task");
+    expect(document.body.textContent).not.toContain("old subtask");
+    expect(screen.queryByText(/Draft restored/)).toBeNull();
+  });
+});

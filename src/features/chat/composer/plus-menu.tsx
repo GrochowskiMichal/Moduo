@@ -7,10 +7,11 @@
 import { Calendar, FileText, ListTodo, User } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Separator } from "@/components/ui/separator";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
 import { resolveEntityIcon } from "@/features/spine/icon-map";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { cn } from "@/lib/utils";
 import type { ChatPerson } from "../model";
 import { CREATE_COMMANDS, type CreateCommand, peopleFor } from "./grammar";
 
@@ -107,25 +108,16 @@ export function PlusMenu({
   return (
     <div className="w-75 p-1">
       <p className="px-2 pt-1 pb-1 text-xs font-medium text-muted-foreground">Link something</p>
-      <div className="flex gap-0.5 px-1 pb-1" role="tablist" aria-label="Link something">
-        {TABS.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={tab === id}
-            onClick={() => setTab(id)}
-            className={cn(
-              "inline-flex h-6 items-center gap-1 rounded-sm px-1.5 text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground",
-              tab === id && "bg-state-active text-foreground",
-            )}
-          >
-            {Icon ? <Icon className="size-icon-xs" aria-hidden /> : null}
-            {label}
-          </button>
-        ))}
+      <div className="px-1 pb-1">
+        <SegmentedControl
+          size="sm"
+          aria-label="Link something"
+          value={tab}
+          onValueChange={(v) => setTab(v as Tab)}
+          items={TABS.map(({ id, label, Icon }) => ({ value: id, label, icon: Icon }))}
+        />
       </div>
-      <div className="flex flex-col" role="tabpanel">
+      <div className="flex flex-col">
         {things.map((c) => {
           if (c.kind !== "entity") return null;
           const Icon = resolveEntityIcon(c.ref.type, c.icon);
@@ -156,7 +148,7 @@ export function PlusMenu({
       </div>
       {creates.length > 0 ? (
         <>
-          <hr className="my-1 border-border" />
+          <Separator className="my-1" />
           <p className="px-2 pt-1 pb-1 text-xs font-medium text-muted-foreground">
             Create, linked to this conversation
           </p>

@@ -596,7 +596,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           verbs.onTask();
           return;
         default:
-          typeIntoComposer(e);
+          if (canWrite) typeIntoComposer(e);
           return;
       }
     };
@@ -654,7 +654,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               target={lit === row.key}
               domId={`chat-msg-${row.key}`}
               position={positions.get(row.key)}
-              setSize={win.hasOlder ? -1 : positions.size}
+              setSize={win.hasOlder || win.hasNewer ? -1 : positions.size}
               handlers={handlers}
               onPointerEnter={() => setHovered(row.key)}
               onContextMenu={(e) => {

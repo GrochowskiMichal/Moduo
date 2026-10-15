@@ -32,6 +32,7 @@ import {
   $isElementNode,
   $isRangeSelection,
   $isRootOrShadowRoot,
+  COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_HIGH,
   COMMAND_PRIORITY_LOW,
   FORMAT_TEXT_COMMAND,
@@ -122,6 +123,13 @@ export function ComposerKeysPlugin({
   useEffect(
     () =>
       mergeRegister(
+        // An input method's ⏎ (WebKit's commit Enter, keyCode 229) belongs to
+        // it, before any menu can take it as a pick.
+        editor.registerCommand(
+          KEY_ENTER_COMMAND,
+          (event) => enterIntent(event, editor.isComposing()) === "compose",
+          COMMAND_PRIORITY_CRITICAL,
+        ),
         // ⏎ sends, never during IME composition; ⇧⏎ makes a new line (a new
         // item inside a list). The menus claim ⏎ first, at a higher priority.
         editor.registerCommand(
@@ -237,9 +245,9 @@ export function CleanPastePlugin({ origins }: { origins: readonly string[] }) {
         (event) => {
           if (!(event instanceof ClipboardEvent) || !event.clipboardData) return false;
           const data = event.clipboardData;
-          if (data.files.length > 0) return false;
           const html = data.getData("text/html");
           const text = data.getData("text/plain");
+          // Only files: left alone (uploads are CV-9's). Files with words: the words, clean.
           if (!html && !text) return false;
           event.preventDefault();
           editor.update(() => {
@@ -406,7 +414,9 @@ export function EmojiTypeaheadPlugin({ onOpenChange }: { onOpenChange?: (open: b
     if (query === null || list) return;
     void loadChatEmoji()
       .then((data) => setList(data.list))
-      .catch(() => setList([]));
+      .catch(() => {
+        // Tried again on the next keystroke.
+      });
   }, [query, list]);
 
   const options = query && list ? matchEmoji(list, query).map((e) => new EmojiOption(e)) : [];

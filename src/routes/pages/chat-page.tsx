@@ -406,6 +406,9 @@ export function ChatPage() {
   // `@channel` from a role that may not mention everyone is sent as text; the
   // server decides (CV-2a) and the composer says so once the message is back.
   const [channelNote, setChannelNote] = useState<{ id: string; note: string | null } | null>(null);
+  // The note belongs to the conversation it was sent in.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  useEffect(() => setChannelNote(null), [activeChannelId]);
   useEffect(() => {
     if (!channelNote || channelNote.note) return;
     const row = store?.rowById(channelNote.id);
@@ -716,6 +719,7 @@ export function ChatPage() {
                   id && mentionsOf(parseStored(body)).channel ? { id, note: null } : null,
                 );
                 streamRef.current?.showLatest();
+                return id !== null;
               }}
               onDraftChange={(stored) => store?.setDraft(channel.id, null, stored)}
               onTyping={(active) => link?.sendTyping(channel.id, null, !active)}

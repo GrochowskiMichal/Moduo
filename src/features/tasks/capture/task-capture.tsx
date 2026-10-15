@@ -220,6 +220,19 @@ export function TaskCaptureBody({
 
   // ── the draft (restored on open, research §1.8) ──────────────────────────
   const [initial] = useState(() => {
+    // An opener that prefills the line (chat's T, `/task`) starts a fresh
+    // task: nothing kept from an earlier capture rides into it.
+    const prefilled = context?.draft !== undefined;
+    if (prefilled) {
+      return {
+        draft: {
+          ...EMPTY_DRAFT,
+          segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
+        },
+        restored: false,
+        files: [] as File[],
+      };
+    }
     const stored = loadDraft(owner.userId, owner.workspaceId);
     // A capture the server refused comes back when nothing else is waiting.
     const refused = loadDraft(owner.userId, owner.workspaceId, "refused");
@@ -1195,6 +1208,8 @@ export function TaskCaptureBody({
       });
     }
     void applying.then((created) => {
+      // The opener asked to hear about it (chat's `/task`).
+      if (created) context?.onCreated?.({ type: "task", id: created }, madeTitle);
       if (!mounted.current) return;
       setApplyingTemplate(false);
       // Refused or offline (the provider said why): the capture stays as it was.
