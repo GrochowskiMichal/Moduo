@@ -1,7 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
-
-import { catchupCount } from "../../features/chat/shell/chat-tab";
 import type { ChatMember } from "../../features/chat/model";
+import { catchupCount } from "../../features/chat/shell/chat-tab";
 import { titleWithCount } from "./app-badge";
 import { noticesOffInBrowser, shouldAskChat } from "./chat-ask";
 import { getChatCounts, refreshChatCounts, resetChatCounts, setLiveChatCount } from "./chat-counts";

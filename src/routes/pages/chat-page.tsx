@@ -34,8 +34,14 @@ export function ChatPage() {
   const ownerName = members.find((m) => m.role === "owner")?.displayName?.trim() || null;
 
   const onOpen = useCallback(
-    (c: string | null, opts: { messageId?: string; replace?: boolean } = {}) => {
-      const next: ChatSearch = c ? { c, ...(opts.messageId ? { m: opts.messageId } : {}) } : {};
+    (c: string | null, opts: { messageId?: string; chainId?: string; replace?: boolean } = {}) => {
+      const next: ChatSearch = c
+        ? {
+            c,
+            ...(opts.chainId ? { t: opts.chainId } : {}),
+            ...(opts.messageId ? { m: opts.messageId } : {}),
+          }
+        : {};
       void navigate({ to: "/chat", search: next as Record<string, string>, replace: opts.replace });
     },
     [navigate],

@@ -38,12 +38,10 @@ test("every state", async ({ page }) => {
   await expect(toolbar.getByRole("button", { name: "Search" })).toBeVisible();
   await expect(toolbar.getByRole("button", { name: "Conversation options" })).toBeVisible();
   await expect(toolbar.locator('[data-slot="huddle"]')).toHaveCount(0);
-  const title = await toolbar
-    .locator("h1")
-    .evaluate((h) => ({
-      px: getComputedStyle(h).fontSize,
-      w: Number(getComputedStyle(h).fontWeight),
-    }));
+  const title = await toolbar.locator("h1").evaluate((h) => ({
+    px: getComputedStyle(h).fontSize,
+    w: Number(getComputedStyle(h).fontWeight),
+  }));
   expect(title.px).toBe("18px");
   expect(title.w).toBeGreaterThanOrEqual(600);
 

@@ -92,7 +92,11 @@ export type ChatScreenProps = {
   /** A message the link names (`m`): the stream lands on it. */
   messageId: string | null;
   /** Open a conversation (null: none named, so Chat lands on General). */
-  onOpen: (conversationId: string | null, opts?: { messageId?: string; replace?: boolean }) => void;
+  onOpen: (
+    conversationId: string | null,
+    /** `chainId`: a reply chain's root (the link's `t`; its panel is CV-12's). */
+    opts?: { messageId?: string; chainId?: string; replace?: boolean },
+  ) => void;
 };
 
 export function ChatScreen({
@@ -564,7 +568,7 @@ export function ChatScreen({
               .then((res) => failed(res, "Couldn't mark as unread."));
           }}
           // Reply chains are CV-12's: until then a chain opens at its first message.
-          onOpenChain={(m) => onOpen(m.channelId, { messageId: m.parentId ?? m.id })}
+          onOpenChain={(m) => onOpen(m.channelId, { chainId: m.parentId ?? m.id })}
           onRetry={(m) => store?.retry(m.id)}
           onDiscard={(m) => store?.discard(m.id)}
           onPersonClick={(id) => {
