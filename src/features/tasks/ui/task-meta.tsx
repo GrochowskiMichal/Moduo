@@ -4,7 +4,6 @@
 import {
   CircleDashed,
   Clock,
-  Hash,
   Hourglass,
   Inbox,
   ListChecks,
@@ -12,8 +11,10 @@ import {
   MessageSquare,
   Paperclip,
   Repeat,
+  Tag as TagIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { TagChipList } from "../../../components/tag-chip";
 import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
@@ -60,10 +61,12 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
 /**
  * The counts right after a title, in their fixed order (tasks-v3 §4): tags ·
  * files (📎, AT-3) · comments · subtasks done/total · blocked · waiting ·
- * repeats · waiting to sync. Muted, each hidden at zero. Tags are a count,
- * never chips (U1-2), with their names in the tooltip; Detailed rows name up
- * to two (`tagNames`). Rows and cards never show thumbnails. The facts are the
- * row's own (row-facts.ts, TV-D11b).
+ * repeats · waiting to sync. Muted, each hidden at zero. Standard rows and
+ * cards show tags as a tag icon and a count, with their names in the tooltip
+ * (U1-2; the icon since MOD-97); Detailed
+ * rows show up to two dot chips in its place (`tagNames`, MOD-97). Rows and
+ * cards never show thumbnails. The facts are the row's own (row-facts.ts,
+ * TV-D11b).
  */
 type CountsFacts = Pick<TaskFacts, "tags" | "progress" | "blockedLabel"> &
   Partial<Pick<TaskFacts, "comments" | "attachments" | "waiting" | "pending">>;
@@ -83,13 +86,13 @@ export function hasTaskCounts(task: Task, facts: CountsFacts, opts: CountsOption
 }
 
 type CountsOptions = {
-  /** Name up to two tags, then "+n" (Detailed rows). */
+  /** Show up to two tags as dot chips, then "+n" (Detailed rows). */
   tagNames?: boolean;
   /** The waiting line has a column of its own (Detailed): no mark here. */
   waitingColumn?: boolean;
 };
 
-/** How many tag names a Detailed row spells out before "+n". */
+/** How many tag chips a Detailed row shows before "+n". */
 const TAG_NAMES_SHOWN = 2;
 
 export function TaskCounts({
@@ -104,29 +107,24 @@ export function TaskCounts({
 } & CountsOptions) {
   if (!hasTaskCounts(task, facts, opts)) return null;
   const { tags, progress, blockedLabel, comments = 0, attachments = 0, waiting, pending } = facts;
-  const tagList = tags.map((t) => `#${t.name}`).join(" ");
+  // The names as words ("ui, notes"): "#" is only how you type a tag (MOD-97).
+  const tagList = tags.map((t) => t.name).join(", ");
   return (
     <MetaCounts className={className}>
       {tags.length > 0 && opts.tagNames ? (
-        <Tip label={tagList}>
-          <span
-            data-slot="row-tag-names"
-            className="inline-flex shrink-0 items-center gap-1.5 font-sans text-xs whitespace-nowrap text-muted-foreground"
-          >
-            {tags.slice(0, TAG_NAMES_SHOWN).map((t) => (
-              <span key={t.id}>#{t.name}</span>
-            ))}
-            {tags.length > TAG_NAMES_SHOWN ? (
-              <span className="tabular-nums">+{tags.length - TAG_NAMES_SHOWN}</span>
-            ) : null}
-          </span>
-        </Tip>
+        // Dot chips (MOD-97): each says "Tag: <name>" on hover and "+n" names
+        // the rest, so no tooltip wraps them (it would double the hover text).
+        <span data-slot="row-tag-names" className="inline-flex shrink-0 items-center">
+          <TagChipList tags={tags} max={TAG_NAMES_SHOWN} />
+        </span>
       ) : tags.length > 0 ? (
+        // A tag icon + the number, like files, comments and subtasks (MOD-97,
+        // Maciej 2026-10-15): no hue, since a dot alone means other things here.
         <Tip label={tagList}>
           <MetaCount
-            icon={Hash}
+            icon={TagIcon}
             count={tags.length}
-            label={(n) => (n === 1 ? `1 tag: ${tags[0]?.name}` : `${n} tags`)}
+            label={(n) => `${n} ${n === 1 ? "tag" : "tags"}: ${tagList}`}
           />
         </Tip>
       ) : null}

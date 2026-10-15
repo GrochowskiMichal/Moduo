@@ -14,12 +14,12 @@ import {
   CircleDot,
   Clock,
   Flag,
-  Hash,
   Hourglass,
   ListChecks,
   ListTree,
   Paperclip,
   Repeat,
+  Tag as TagIcon,
   User,
   UserPen,
   Users,
@@ -60,7 +60,8 @@ const DIMENSION_ICONS: Record<TaskFilterDimension, FilterDimension["icon"]> = {
   assignee: User,
   team: Users,
   creator: UserPen,
-  tag: Hash,
+  // The tag icon, as on the rows' count (MOD-97): "#" is only how you type one.
+  tag: TagIcon,
   status: CircleDot,
   completed: CalendarCheck,
   priority: Flag,
@@ -205,7 +206,7 @@ export function taskFilterDimensions(input: {
         <span
           aria-hidden
           data-label={normalizeLabelColor(tag.color)}
-          className="tag-dot size-2.5 shrink-0 rounded-full"
+          className="tag-dot size-1.5 shrink-0 rounded-full"
         />
       ),
     }));
