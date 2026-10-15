@@ -179,6 +179,9 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes"]);
     expect(chips.map((c) => c.dataset.label)).toEqual(["blue", "green"]);
     expect(chips[0]?.className).toContain("h-4.5");
+    // The names stay at full width, so each chip is capped: the title keeps its room.
+    expect(names.className).toContain("shrink-0");
+    for (const chip of chips) expect(chip.className).toContain("max-w-24");
     expect(screen.getByTitle("Tag: ui")).toBe(chips[0] as HTMLElement);
     const more = names.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
     expect(more.textContent).toBe("+1");

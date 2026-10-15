@@ -105,10 +105,16 @@ export function TagChip({
   );
 }
 
+/** The widest a chip gets in a list, so long names never squeeze the title out. */
+const LIST_CHIP_MAX = "max-w-24";
+
 /**
  * A capped row of chips for dense surfaces (Detailed rows, Board cards): the
- * first `max`, then a quiet "+n" whose tooltip names the rest. Chips shrink
- * and truncate before the row grows.
+ * first `max`, then a quiet "+n" whose tooltip names the rest. Each chip is at
+ * most 96 px wide (`max-w-24`) and cuts a long name with an ellipsis; its hover
+ * text keeps the full name. The list never wraps. In a Detailed row it holds
+ * its width (two capped chips at most), so the title keeps the rest; in a Board
+ * card's meta line it may shrink further, and the chips cut sooner.
  */
 export function TagChipList({
   tags,
@@ -132,6 +138,7 @@ export function TagChipList({
           name={t.name}
           color={t.color}
           onClick={onTagClick ? () => onTagClick(t.id) : undefined}
+          className={LIST_CHIP_MAX}
         />
       ))}
       {rest.length > 0 ? (

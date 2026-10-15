@@ -133,6 +133,19 @@ describe("TagChipList", () => {
     expect((await screen.findByRole("tooltip")).textContent).toBe("errand, someday");
   });
 
+  it("caps each chip's width so a long name cuts, with the full name on hover", () => {
+    const long = "a-very-long-tag-name-that-would-push-the-title-out";
+    render(
+      <TooltipProvider>
+        <TagChipList tags={[{ id: "1", name: long, color: "teal" }]} />
+      </TooltipProvider>,
+    );
+    const chip = chipOf(long);
+    expect(chip.className).toContain("max-w-24");
+    expect(chip.className).not.toContain("max-w-full");
+    expect(screen.getByText(long).className).toContain("truncate");
+  });
+
   it("renders nothing without tags", () => {
     const { container } = render(<TagChipList tags={[]} />);
     expect(container.innerHTML).toBe("");
