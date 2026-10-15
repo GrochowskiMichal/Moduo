@@ -150,7 +150,8 @@ export async function drainPush(deps: PushDeps): Promise<{ claimed: number; sent
     total.sent += summary.sent;
     total.failed += summary.failed;
     if (round >= DRAIN_ROUNDS || !deps.nextDue || !deps.sleep) break;
-    const wait = await deps.nextDue();
+    // A database without the wait (before CV-6a's migration) just stops here.
+    const wait = await deps.nextDue().catch(() => null);
     if (wait === null || !Number.isFinite(wait) || wait < 0 || wait > HOLD_WAIT_MAX_MS) break;
     await deps.sleep(wait + HOLD_SLACK_MS);
   }

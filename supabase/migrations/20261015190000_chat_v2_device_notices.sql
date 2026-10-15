@@ -4,8 +4,10 @@
 -- …_chat_v2_catchup (CV-5), whose fan-out it extends. It runs again cleanly
 -- over itself.
 --
--- Prod order: email-worker with the chat_waiting template deploys BEFORE this
--- migration (TX-3's rule: a kind the worker can't render waits and retries).
+-- Prod order: email-worker with the chat_waiting template and push-send (chat
+-- copy, tags, the wait) deploy BEFORE this migration (TX-3's rule: a kind the
+-- worker can't render waits and retries; push-send without
+-- notice_deliveries__next_due just claims once).
 --
 -- What it does:
 --   1. Device notices for chat. The fan-out (chat__fan_out) now writes, per
@@ -60,7 +62,7 @@
 
 SET LOCAL lock_timeout = '5s';
 
-CREATE FUNCTION pg_temp.recut(p_fn regprocedure, p_old text, p_new text)
+CREATE OR REPLACE FUNCTION pg_temp.recut(p_fn regprocedure, p_old text, p_new text)
 RETURNS void
 LANGUAGE plpgsql
 AS $$
@@ -367,7 +369,7 @@ DECLARE
 BEGIN
   -- 1. References become placeholders (an escaped "moduo\://" is text, not a reference).
   LOOP
-    m := regexp_match(v_src, '^(.*?)moduo://(?:date/([0-9]{4}-[0-9]{2}-[0-9]{2})|([a-z][a-z_]{0,31})/([0-9a-fA-F-]{36}))(.*)$', 's');
+    m := regexp_match(v_src, '^(.*?)moduo://(?:date/([0-9]{4}-[0-9]{2}-[0-9]{2})|([a-z][a-z_-]{0,31})/([0-9a-fA-F-]{36}))(.*)$', 's');
     EXIT WHEN m IS NULL;
     v_out := v_out || m[1] || chr(1) || (cardinality(v_names) + 1) || chr(2);
     v_names := v_names || CASE
@@ -530,7 +532,8 @@ BEGIN
       AND (d.task_id IS NULL OR public.tasks__visible_to(d.task_id, d.user_id))
       AND (d.channel_id IS NULL OR public.chat__can_read_channel_as(d.channel_id, d.user_id))
       AND (d.message_id IS NULL OR EXISTS (SELECT 1 FROM public.chat_messages m
-                                            WHERE m.id = d.message_id AND m.deleted_at IS NULL))
+                                            WHERE m.id = d.message_id AND m.deleted_at IS NULL
+                                              AND public.chat__can_read_channel_as(m.channel_id, d.user_id)))
       -- A newer notice on the same tag replaces this one (a burst).
       AND (d.tag IS NULL OR NOT EXISTS (SELECT 1 FROM public.notice_deliveries n
                                          WHERE n.user_id = d.user_id AND n.tag = d.tag
@@ -549,6 +552,29 @@ BEGIN
   FROM bumped b;
 END;
 $function$;
+
+-- A deleted message's words leave its notices and any waiting email's payload
+-- at once (the text is blanked on the server, spec §5).
+CREATE OR REPLACE FUNCTION public.chat__notices_blank_deleted()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  UPDATE public.notice_deliveries d SET body = NULL
+   WHERE d.message_id = NEW.id AND d.body IS NOT NULL;
+  UPDATE public.email_outbox o SET payload = o.payload || '{"text": null}'::jsonb
+   WHERE o.kind = 'chat_waiting' AND o.payload ->> 'text' IS NOT NULL
+     AND o.payload ->> 'path' LIKE '%&m=' || NEW.id::text;
+  RETURN NULL;
+END;
+$function$;
+DROP TRIGGER IF EXISTS chat_messages_notices_blank_deleted ON public.chat_messages;
+CREATE TRIGGER chat_messages_notices_blank_deleted
+  AFTER UPDATE OF deleted_at ON public.chat_messages
+  FOR EACH ROW WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)
+  EXECUTE FUNCTION public.chat__notices_blank_deleted();
 
 -- How long push-send should wait for the next notice inside its hold, in
 -- milliseconds; null when none is due within 10 s.
@@ -662,7 +688,13 @@ AS $function$
 DECLARE
   v_n integer;
 BEGIN
-  DELETE FROM public.user_clients c WHERE c.last_seen_at < now() - interval '30 days';
+  -- Each person keeps their newest client, so the email job still knows them
+  -- as someone who uses Moduo after a long time away.
+  DELETE FROM public.user_clients c
+   WHERE c.last_seen_at < now() - interval '30 days'
+     AND EXISTS (SELECT 1 FROM public.user_clients n
+                  WHERE n.user_id = c.user_id
+                    AND (n.last_seen_at, n.id) > (c.last_seen_at, c.id));
   GET DIAGNOSTICS v_n = ROW_COUNT;
   RETURN v_n;
 END;
@@ -833,6 +865,7 @@ BEGIN
     'chat__fan_out(public.chat_messages, public.chat_channels, uuid, public.chat_messages)',
     'notice_deliveries__kick()',
     'notice_deliveries__kick_now()',
+    'chat__notices_blank_deleted()',
     'notice_deliveries__claim(integer)',
     'notice_deliveries__next_due()',
     'user_clients__purge()',

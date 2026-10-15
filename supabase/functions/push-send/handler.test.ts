@@ -139,6 +139,25 @@ describe("push-send", () => {
     });
     await handlePushRequest({ method: "POST", secret: SECRET }, none.deps);
     expect(claims).toBe(1);
+
+    claims = 0;
+    const reports: string[] = [];
+    const old = deps({
+      claim: async () => {
+        claims += 1;
+        return [];
+      },
+      nextDue: async () => {
+        throw new Error("function notice_deliveries__next_due does not exist");
+      },
+      sleep: async () => {},
+      report: (event: string) => {
+        reports.push(event);
+      },
+    });
+    await handlePushRequest({ method: "POST", secret: SECRET }, old.deps);
+    expect(claims).toBe(1);
+    expect(reports).not.toContain("run_failed");
   });
 
   it("says an agent's state with the task's title (TV-D16)", () => {

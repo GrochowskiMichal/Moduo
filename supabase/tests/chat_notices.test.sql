@@ -170,6 +170,11 @@ BEGIN
                   AND EXISTS (SELECT 1 FROM public.chat_catchup WHERE user_id = test.id('C') AND message_id = test.mid('quiet')),
     'on Nothing: the Catch up item only, no notice (CH40)');
 
+  v := test.send('A', 'L', 'all', '@channel standup moved');
+  PERFORM test.ok(v = 'ok 1' AND test.notice('B', 'all') LIKE 'chat_mention|A · #Plans · Acme|% messages: @channel standup moved|%'
+                  AND test.notice('C', 'all') = 'none',
+    '@channel: every member not on Nothing gets chat_mention (B); C, on Nothing, none', test.notice('B', 'all'));
+
   v := test.send('A', 'P', 'priv', format('secret plan %s', test.uri('person', test.id('C'))));
   PERFORM test.ok(test.notice('C', 'priv') = 'none' AND test.notice('B', 'priv') = 'none',
     'a private conversation: named but not in it (C), no notice; a plain message there pings nobody');
@@ -240,6 +245,8 @@ BEGIN
     'B reads B''s notice; A, who sent it, doesn''t');
   PERFORM test.ok(test.value_as('B', format($q$SELECT count(*)::text FROM public.notice_deliveries WHERE message_id = %L$q$, test.mid('m2'))) = '0',
     'a deleted message''s notice is no longer readable');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries WHERE message_id = test.mid('m2') AND body IS NOT NULL),
+    'and its words are gone from every notice about it');
   UPDATE public.chat_members SET left_at = now() WHERE channel_id = test.ref('N') AND user_id = test.id('B');
   PERFORM test.ok(test.value_as('B', format($q$SELECT count(*)::text FROM public.notice_deliveries WHERE message_id = %L$q$, test.mid('ann'))) = '1',
     'a public conversation stays readable after leaving it');
