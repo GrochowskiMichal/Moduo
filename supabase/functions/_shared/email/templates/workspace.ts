@@ -78,7 +78,14 @@ export type WorkspaceRemovedData = {
 const ZONE = "UTC";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
 
-const name = (value: string) => singleLine(value, TEXT_LIMITS.name);
+/**
+ * Invisible format characters (zero-width space and joiner, word joiner, soft
+ * hyphen, …). Removed before any check and before printing, so what is checked
+ * is what the reader sees: "Mo\u200Bduo" must not pass as anything but "Moduo".
+ */
+const INVISIBLE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+
+const name = (value: string) => singleLine(value.replace(INVISIBLE, ""), TEXT_LIMITS.name);
 
 /** A link, a domain or an address, in any dot (fullwidth and ideographic included). */
 const LINK_LIKE = /https?:|\/\/|www[.\uFF0E\u3002]|[\p{L}\p{N}][.\uFF0E\u3002]\p{L}{2,}|[@\uFF20]/iu;
@@ -91,7 +98,7 @@ const LOOKALIKES: Record<string, string> = {
 
 /** NFKC, lower case, look-alikes folded: what a reader takes the text to say. */
 function skeleton(value: string): string {
-  return Array.from(value.normalize("NFKC").toLowerCase(), (ch) => LOOKALIKES[ch] ?? ch).join("");
+  return Array.from(value.normalize("NFKC").replace(INVISIBLE, "").toLowerCase(), (ch) => LOOKALIKES[ch] ?? ch).join("");
 }
 
 /** Words that make a sender name read like us or like a department, not a person. */

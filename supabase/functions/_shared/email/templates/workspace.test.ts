@@ -123,10 +123,16 @@ describe("workspace invite (B3)", () => {
       const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
       expect(subject).toBe("Anna Carter invited you to a workspace");
     }
-    for (const workspaceName of ["Moduo Billing", "Mоduo", "Nоrthwind Studio"]) {
+    for (const inviterName of ["Mo\u200Bduo Team", "Acc\u2060ount Security", "Mo\u00ADduo"]) {
+      expect(OUTBOX_TEMPLATES.workspace_invite?.({ ...INVITE, inviter_name: inviterName }).fromName).toBe("Moduo");
+    }
+    for (const workspaceName of ["Moduo Billing", "Mоduo", "Nоrthwind Studio", "Mo\u200Bduo", "evil\u200B.com", "Mo\u2060duo"]) {
       const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
       expect(subject).toBe("Anna Carter invited you to a workspace");
     }
+    expect(
+      workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: "North\u200Bwind" })).subject,
+    ).toBe("Anna Carter invited you to Northwind");
     for (const workspaceName of ["Acme Inc.", "Studio 54", "Northwind 2.0", "Студия Север"]) {
       const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
       expect(subject).toBe(`Anna Carter invited you to ${workspaceName}`);
