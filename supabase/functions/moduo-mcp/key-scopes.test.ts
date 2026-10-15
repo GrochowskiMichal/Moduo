@@ -37,6 +37,8 @@ type Filter = { op: "eq" | "is" | "in" | "ilike" | "lt" | "gte"; column: string;
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown> = {}) {
   const queries: Array<{ table: string; filters: Filter[] }> = [];
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  /** `.or()` filter strings, as sent (the fake doesn't apply them). */
+  const ors: string[] = [];
   const matches = (row: Row, f: Filter): boolean => {
     const v = row[f.column];
     switch (f.op) {
@@ -73,6 +75,10 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       ilike: add("ilike"),
       lt: add("lt"),
       gte: add("gte"),
+      or: (expr: string) => {
+        ors.push(expr);
+        return query;
+      },
       order: (column: string) => {
         orderBy = column;
         return query;
@@ -103,7 +109,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
     const impl = rpcs[fn];
     return impl ? { data: impl(args), error: null } : { data: null, error: { message: `unexpected rpc ${fn}` } };
   }
-  return { db: { from, rpc }, queries, rpcCalls };
+  return { db: { from, rpc }, queries, rpcCalls, ors };
 }
 
 const WS = "11111111-1111-4111-8111-111111111111";
@@ -250,6 +256,61 @@ describe("reaching one item", () => {
     await expect(assertReach(ctx({ email: "view" }, db), "email_thread", TASK)).rejects.toThrow(
       "No email thread with that id in this workspace.",
     );
+  });
+
+  it("takes a task's handle as well as its uuid, and answers the uuid (MOD-112)", async () => {
+    const tables = { workspaces: [{ id: WS, task_key: "MOD" }], tasks: [{ ...live, number: 142 }] };
+    const { db } = fakeDb(tables, seen(true));
+    const reach = (ref: string) => assertReach(ctx({ tasks: "view" }, db), "task", ref);
+    expect(await reach("MOD-142")).toBe(TASK);
+    expect(await reach("mod-142")).toBe(TASK);
+    expect(await reach(TASK)).toBe(TASK);
+    const missing = "No task with that id in this workspace.";
+    await expect(reach("MOD-9")).rejects.toThrow(missing);
+    await expect(reach("ENG-142")).rejects.toThrow(missing);
+    // A hidden task's handle reads exactly like a missing one.
+    const hidden = fakeDb(tables, seen(false));
+    await expect(assertReach(ctx({ tasks: "view" }, hidden.db), "task", "MOD-142")).rejects.toThrow(missing);
+    // Without Tasks on the key, the handle isn't looked up at all.
+    const none = fakeDb(tables, seen(true));
+    await expect(assertReach(ctx({ links: "edit" }, none.db), "task", "MOD-142")).rejects.toThrow(
+      "This API key has no access to Tasks.",
+    );
+    expect(none.queries).toEqual([]);
+  });
+
+  it("links and comments name a task by its handle; the ops get its uuid (MOD-112)", async () => {
+    const NOTE = "66666666-6666-4666-8666-666666666666";
+    const tables = {
+      workspaces: [{ id: WS, task_key: "MOD" }],
+      tasks: [{ ...live, number: 142 }],
+      notes: [{ id: NOTE, workspace_id: WS, deleted_at: null }],
+      entity_links: [],
+    };
+    const { db, rpcCalls, ors } = fakeDb(tables, {
+      ...seen(true),
+      links_op_create: (a) => ({ id: LINK, ...a }),
+      comments_op_add: () => ({ id: "c-1", created_at: "2030-01-01T00:00:00Z" }),
+      links_suggest: () => [],
+    });
+    const c = ctx({ tasks: "edit", notes: "edit", links: "edit" }, db);
+    await tool(linksConnectorModule, "links_create").handler(
+      { source_type: "task", source_id: "MOD-142", target_type: "note", target_id: NOTE },
+      c,
+    );
+    await tool(linksConnectorModule, "comments_add").handler(
+      { entity_type: "task", entity_id: "MOD-142", body: "Done?" },
+      c,
+    );
+    await tool(linksConnectorModule, "links_list").handler({ entity_type: "task", entity_id: "MOD-142" }, c);
+    await tool(linksConnectorModule, "links_suggest").handler({ entity_type: "task", entity_id: "MOD-142" }, c);
+    const sent = (fn: string) => rpcCalls.find((call) => call.fn === fn)?.args;
+    expect(sent("links_op_create")).toMatchObject({ p_source_id: TASK, p_target_id: NOTE });
+    expect(sent("comments_op_add")).toMatchObject({ p_entity_type: "task", p_entity_id: TASK });
+    expect(sent("links_suggest")).toMatchObject({ p_entity_id: TASK });
+    expect(ors).toEqual([
+      `and(source_type.eq.task,source_id.eq.${TASK}),and(target_type.eq.task,target_id.eq.${TASK})`,
+    ]);
   });
 });
 

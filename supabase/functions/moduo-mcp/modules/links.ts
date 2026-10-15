@@ -78,9 +78,9 @@ async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row | nu
 
 const entityRefProps = {
   source_type: { type: "string", description: "Source entity type (task|contact|company|note|…)." },
-  source_id: { type: "string", description: "Source entity uuid." },
+  source_id: { type: "string", description: "Source entity uuid (a task's handle, e.g. MOD-142, works too)." },
   target_type: { type: "string", description: "Target entity type." },
-  target_id: { type: "string", description: "Target entity uuid." },
+  target_id: { type: "string", description: "Target entity uuid (or a task's handle)." },
 } as const;
 
 /**
@@ -171,14 +171,14 @@ export const linksConnectorModule: ConnectorModule = {
         type: "object",
         properties: {
           entity_type: { type: "string", description: "The focus entity type." },
-          entity_id: { type: "string", description: "The focus entity uuid." },
+          entity_id: { type: "string", description: "The focus entity uuid (or a task's handle, e.g. MOD-142)." },
         },
         required: ["entity_type", "entity_id"],
       },
       handler: async (args, ctx) => {
         const type = safeToken(args, "entity_type");
-        const id = safeToken(args, "entity_id");
-        await assertReach(ctx, type, id);
+        // The canonical uuid (a handle resolved), safe in the .or() below.
+        const id = await assertReach(ctx, type, safeToken(args, "entity_id"));
         const data = await rows(
           ctx.db
             .from("entity_links")
@@ -204,15 +204,14 @@ export const linksConnectorModule: ConnectorModule = {
         type: "object",
         properties: {
           entity_type: { type: "string", description: "The focus entity type." },
-          entity_id: { type: "string", description: "The focus entity uuid." },
+          entity_id: { type: "string", description: "The focus entity uuid (or a task's handle, e.g. MOD-142)." },
           limit: { type: "number", description: "Max candidate rows (default 25)." },
         },
         required: ["entity_type", "entity_id"],
       },
       handler: async (args, ctx) => {
         const type = str(args, "entity_type");
-        const id = str(args, "entity_id");
-        await assertReach(ctx, type, id);
+        const id = await assertReach(ctx, type, str(args, "entity_id"));
         const { data, error } = await ctx.db.rpc("links_suggest", {
           p_workspace_id: ctx.key.workspaceId,
           p_entity_type: type,
@@ -244,13 +243,13 @@ export const linksConnectorModule: ConnectorModule = {
         required: ["source_type", "source_id", "target_type", "target_id"],
       },
       handler: async (args, ctx) => {
-        await assertReach(ctx, str(args, "source_type"), str(args, "source_id"));
-        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
+        const sourceId = await assertReach(ctx, str(args, "source_type"), str(args, "source_id"));
+        const targetId = await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "links_op_create", {
           p_source_type: str(args, "source_type"),
-          p_source_id: str(args, "source_id"),
+          p_source_id: sourceId,
           p_target_type: str(args, "target_type"),
-          p_target_id: str(args, "target_id"),
+          p_target_id: targetId,
           p_relation_kind: str(args, "relation_kind", false) || "references",
           p_origin: "manual",
         });
@@ -302,7 +301,7 @@ export const linksConnectorModule: ConnectorModule = {
         type: "object",
         properties: {
           entity_type: { type: "string", description: "Commented entity type." },
-          entity_id: { type: "string", description: "Commented entity uuid." },
+          entity_id: { type: "string", description: "Commented entity uuid (or a task's handle, e.g. MOD-142)." },
           body: { type: "string", description: "Comment text." },
           mentioned_user_ids: {
             type: "array",
@@ -316,10 +315,10 @@ export const linksConnectorModule: ConnectorModule = {
         const mentioned = Array.isArray(args.mentioned_user_ids)
           ? args.mentioned_user_ids.filter((m) => typeof m === "string")
           : [];
-        await assertReach(ctx, str(args, "entity_type"), str(args, "entity_id"));
+        const entityId = await assertReach(ctx, str(args, "entity_type"), str(args, "entity_id"));
         const comment = await callOp(ctx, "comments_op_add", {
           p_entity_type: str(args, "entity_type"),
-          p_entity_id: str(args, "entity_id"),
+          p_entity_id: entityId,
           p_body: str(args, "body"),
           p_mentioned_user_ids: mentioned,
         });

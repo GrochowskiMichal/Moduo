@@ -4,6 +4,7 @@ import {
   MCP_KEY_MODULE_LABELS,
 } from "../_shared/contracts/mcp-key-scopes.ts";
 import type { ToolContext } from "./registry.ts";
+import { resolveTaskRef, TASK_NOT_FOUND } from "./task-ref.ts";
 
 /** Ids of this type the key's creator can view. Service role bypasses RLS, so
  * every MCP read has to pass through this. */
@@ -57,9 +58,13 @@ export async function canReach(ctx: ToolContext, type: string, id: string): Prom
   return seen.data === true;
 }
 
-/** Throws unless the key can reach the entity. A private item reads as not
- * found, so the error never confirms that it exists. */
-export async function assertReach(ctx: ToolContext, type: string, id: string): Promise<void> {
+/**
+ * Throws unless the key can reach the entity, and answers its uuid: a task
+ * can be named by its handle too (MOD-142), as in the Tasks tools (MOD-112).
+ * Pass the answer to the op, never the agent's own spelling. A private item
+ * reads as not found, so the error never confirms that it exists.
+ */
+export async function assertReach(ctx: ToolContext, type: string, ref: string): Promise<string> {
   const module = entityTypeKeyModule(type);
   if (!module || !ENTITY_TABLES[type]) {
     throw new Error(`Agents can't work with "${type}" items.`);
@@ -67,9 +72,17 @@ export async function assertReach(ctx: ToolContext, type: string, id: string): P
   if (!keyCanSeeEntityType(ctx.key.scopes, type)) {
     throw new Error(`This API key has no access to ${MCP_KEY_MODULE_LABELS[module]}.`);
   }
-  if (!(await canReach(ctx, type, id))) {
-    throw new Error(`No ${type.replace("_", " ")} with that id in this workspace.`);
+  const notFound = `No ${type.replace("_", " ")} with that id in this workspace.`;
+  let id = ref.trim();
+  if (type === "task") {
+    try {
+      id = await resolveTaskRef(ctx, id);
+    } catch (err) {
+      throw err instanceof Error && err.message === TASK_NOT_FOUND ? new Error(notFound) : err;
+    }
   }
+  if (!(await canReach(ctx, type, id))) throw new Error(notFound);
+  return id;
 }
 
 /** Throws unless the key can see both endpoints' modules (a link's two ends). */
