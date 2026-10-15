@@ -310,8 +310,15 @@ function ChangePlugin({
   useEffect(() => {
     let last = serialize(editor, format).value;
     return editor.registerUpdateListener(({ dirtyElements, dirtyLeaves, tags }) => {
-      if (tags.has(SEED_TAG) || (dirtyElements.size === 0 && dirtyLeaves.size === 0)) return;
+      if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
       const { value } = serialize(editor, format);
+      // Text the host put in (a cleared "Create more", a restored draft) isn't
+      // reported, but it's the new baseline: typing the old words again after
+      // a clear must still be reported.
+      if (tags.has(SEED_TAG)) {
+        last = value;
+        return;
+      }
       if (value === last) return;
       last = value;
       onChangeRef.current(value);
@@ -394,8 +401,11 @@ function LinkOpenPlugin({
         const link = node ? $findMatchingParent(node, $isLinkNode) : null;
         return $isLinkNode(link) ? link.sanitizeUrl(link.getURL()) : null;
       });
-      if (!url || !/^(?:https?:|mailto:|tel:)/i.test(url)) return;
+      if (url === null) return;
+      // The browser never follows a description's link itself: a relative
+      // one (`/settings`) would take the app's own window somewhere.
       event.preventDefault();
+      if (!/^(?:https?:|mailto:|tel:)/i.test(url)) return;
       const rt = runtimeRef.current;
       if (isTauriRuntime() && rt) void rt.window.openExternalUrl(url);
       else window.open(url, "_blank", "noopener,noreferrer");

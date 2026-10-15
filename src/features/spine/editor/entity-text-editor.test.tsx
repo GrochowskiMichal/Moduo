@@ -15,7 +15,11 @@ import {
   KEY_ENTER_COMMAND,
   type LexicalEditor,
 } from "lexical";
-import { EntityTextEditor, type EntityTextEditorProps } from "./entity-text-editor";
+import {
+  EntityTextEditor,
+  type EntityTextEditorApi,
+  type EntityTextEditorProps,
+} from "./entity-text-editor";
 
 afterEach(cleanup);
 
@@ -251,6 +255,49 @@ describe("EntityTextEditor markdown (call #15)", () => {
       );
     });
     expect(onChange).toHaveBeenLastCalledWith("Seeded and \\*more\\*");
+  });
+
+  it("after the host replaces the text, typing the old words again is still reported (Create more)", async () => {
+    const onChange = rs.fn();
+    const apiRef: { current: EntityTextEditorApi | null } = { current: null };
+    const box = await markdownEditor({ value: "", onChange, apiRef });
+    const type = (words: string) =>
+      act(() => {
+        lexicalOf(box).update(
+          () => {
+            const p = $getRoot().getFirstChild();
+            if ($isElementNode(p)) p.append($createTextNode(words));
+          },
+          { discrete: true },
+        );
+      });
+    type("abc");
+    expect(onChange).toHaveBeenLastCalledWith("abc");
+    act(() => apiRef.current?.setValue(""));
+    await settle();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    type("abc");
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenLastCalledWith("abc");
+  });
+
+  it("a read-only link opens outside the app, and the window never follows one itself", async () => {
+    const open = rs.spyOn(window, "open").mockImplementation(() => null);
+    const box = await markdownEditor({
+      value: "[docs](https://example.com) and [settings](/settings)",
+      editable: false,
+    });
+    const click = (a: Element) => {
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+      a.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const [docs, settings] = [...box.querySelectorAll("a")];
+    expect(click(docs as Element)).toBe(true);
+    expect(open).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
+    expect(click(settings as Element)).toBe(true);
+    expect(open).toHaveBeenCalledTimes(1);
+    open.mockRestore();
   });
 
   it("refuses underline in Markdown: it couldn't be saved", async () => {

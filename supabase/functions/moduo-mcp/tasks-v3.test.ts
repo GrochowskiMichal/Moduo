@@ -633,6 +633,17 @@ describe("writes go through the ops, checked before anything is written", () => 
     });
   });
 
+  it("a description is taken as Markdown: words that start like HTML keep their < escaped (call #15)", async () => {
+    const { ctx, rpcCalls } = setup({ rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] } });
+    await call("tasks_update", { task_id: "MOD-1", description: "<span> wraps **wrong**" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "- [ ] **Check** it" }, ctx);
+    const patches = rpcCalls.filter((c) => c.fn === "tasks_op_update_with").map((c) => c.args.p_patch);
+    expect(patches).toEqual([
+      { description: "\\<span> wraps **wrong**" },
+      { description: "- [ ] **Check** it" },
+    ]);
+  });
+
   it("a tag the op makes gets the colour the app would pick, oldest bare tag first (MOD-93)", async () => {
     const tagRow = (id: string, name: string, color: string | null, at: string): Row => ({
       id, workspace_id: WS, name, color, created_at: at, deleted_at: null,

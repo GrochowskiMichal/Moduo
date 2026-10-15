@@ -218,6 +218,46 @@ describe("an old HTML description reads into the editor as Markdown", () => {
   });
 });
 
+describe("a crafted description can't freeze the editor", () => {
+  const timed = (fn: () => unknown) => {
+    const start = performance.now();
+    fn();
+    return performance.now() - start;
+  };
+  for (const [name, md] of [
+    ["a long line of code ticks", "`a ".repeat(25_000)],
+    ["a long line of links that never close", "[x](".repeat(15_000)],
+    ["a long line of [", "[".repeat(60_000)],
+    ["many lines past the total", `${"**bold** and `code`\n".repeat(20_000)}`],
+  ] as const) {
+    it(`imports ${name} quickly`, () => {
+      expect(timed(() => load(md))).toBeLessThan(2000);
+    });
+  }
+
+  it("a line past the limit comes in as plain text; the lines before it stay Markdown", () => {
+    const long = "x".repeat(6_000);
+    const editor = load(`**short** line\n\n${long}`);
+    const nodes = all(editor);
+    const bold = editor.getEditorState().read(() =>
+      nodes
+        .filter($isTextNode)
+        .filter((n) => n.hasFormat("bold"))
+        .map((n) => n.getTextContent()),
+    );
+    expect(bold).toEqual(["short"]);
+    expect(save(editor)).toBe(`**short** line\n\n${long}`);
+  });
+
+  it("a long ordinary description, read in chunks, comes back as it went in", () => {
+    const block = (i: number) =>
+      `**Part ${i}** with a [link](https://example.com/${i}) and \`code\`.\nIts second line.\n\n- one\n- two\n\n- [ ] three\n- [x] four\n\n> quoted ${i}`;
+    const md = Array.from({ length: 120 }, (_, i) => block(i)).join("\n\n");
+    expect(md.length).toBeGreaterThan(10_000);
+    expect(save(load(md))).toBe(md);
+  });
+});
+
 describe("a reference's label", () => {
   it("is the app's word for its kind (the connector and the editor agree)", () => {
     for (const type of [
@@ -232,6 +272,7 @@ describe("a reference's label", () => {
       "bucket",
       "tag",
       "mystery",
+      "constructor",
     ]) {
       expect(referenceWord(type)).toBe(referenceNoun(referenceKind(type)));
     }

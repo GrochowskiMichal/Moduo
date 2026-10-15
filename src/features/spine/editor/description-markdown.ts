@@ -12,6 +12,7 @@
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
+  $generateNodesFromMarkdownString,
   BOLD_ITALIC_STAR,
   BOLD_ITALIC_UNDERSCORE,
   BOLD_STAR,
@@ -28,7 +29,7 @@ import {
   type Transformer,
   UNORDERED_LIST,
 } from "@lexical/markdown";
-import { $createParagraphNode, $getRoot } from "lexical";
+import { $createParagraphNode, $createTextNode, $getRoot } from "lexical";
 
 import {
   DESCRIPTION_LINK,
@@ -98,17 +99,64 @@ export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
   LINK,
 ];
 
+/**
+ * How Markdown is read in pieces. Lexical's importer slows down sharply on one
+ * long block: a long line of crafted delimiters (`[`, `` ` ``, `[x](`: seconds
+ * at 50 KB) or thousands of lines in one paragraph (4 s at 100 KB), which
+ * would freeze the panel for everyone who opens the task. So a description
+ * past CHUNK_LIMIT is read a chunk at a time, cut at a blank line where it
+ * can; a line longer than LINE_LIMIT, and everything past TOTAL_LIMIT, comes
+ * in as plain text (it saves back escaped, which only text that size meets).
+ */
+const CHUNK_LIMIT = 5_000;
+const LINE_LIMIT = 5_000;
+const TOTAL_LIMIT = 100_000;
+
+/** Import a long description a chunk at a time (see CHUNK_LIMIT). */
+function $importInChunks(markdown: string): void {
+  const root = $getRoot();
+  let chunk: string[] = [];
+  let chunkSize = 0;
+  let used = 0;
+  const flush = () => {
+    if (chunk.length > 0) {
+      root.append(...$generateNodesFromMarkdownString(chunk.join("\n"), DESCRIPTION_TRANSFORMERS));
+    }
+    chunk = [];
+    chunkSize = 0;
+  };
+  for (const line of markdown.split("\n")) {
+    used += line.length + 1;
+    if (used > TOTAL_LIMIT || line.length > LINE_LIMIT) {
+      flush();
+      if (line) root.append($createParagraphNode().append($createTextNode(line)));
+      continue;
+    }
+    // A blank line past half the chunk is a clean place to cut; past the
+    // whole chunk, cut anyway (a paragraph that long becomes two).
+    if ((line === "" && chunkSize > CHUNK_LIMIT / 2) || chunkSize + line.length > CHUNK_LIMIT)
+      flush();
+    chunk.push(line);
+    chunkSize += line.length + 1;
+  }
+  flush();
+}
+
 /** Fill the editor from a stored description: Markdown, or the old HTML read as Markdown. */
 export function $importDescription(value: string): void {
   const root = $getRoot();
   root.clear();
   const markdown = descriptionToMarkdown(value);
-  if (markdown.trim()) $convertFromMarkdownString(markdown, DESCRIPTION_TRANSFORMERS);
+  if (markdown.trim()) {
+    if (markdown.length <= CHUNK_LIMIT)
+      $convertFromMarkdownString(markdown, DESCRIPTION_TRANSFORMERS);
+    else $importInChunks(markdown);
+  }
   if (root.getChildrenSize() === 0) root.append($createParagraphNode());
 }
 
 /** The editor's content as the Markdown a description stores ("" when empty). */
 export function $exportDescription(): string {
-  const markdown = $convertToMarkdownString(DESCRIPTION_TRANSFORMERS).replace(/\s+$/, "");
+  const markdown = $convertToMarkdownString(DESCRIPTION_TRANSFORMERS).trimEnd();
   return markdown.trim() ? guardMarkdownStart(markdown) : "";
 }

@@ -24,23 +24,23 @@
 }
 
 .desc-li + .desc-li {
-  margin-top: 2px;
+  margin-top: 0.125rem;
 }
 
 /* Bullets: a dot where the frame draws it. Not on a checkbox item, and not on
    the item Lexical wraps a nested list in (it has no text of its own). */
 .desc-ul:not(.desc-checklist) > .desc-li {
   position: relative;
-  padding-left: 14px;
+  padding-left: 0.875rem;
 }
 
 .desc-ul:not(.desc-checklist) > .desc-li:not(.desc-li-nested)::before {
   content: "";
   position: absolute;
-  left: 3px;
+  left: 0.1875rem;
   top: 0.7em;
-  width: 4px;
-  height: 4px;
+  width: 0.25rem;
+  height: 0.25rem;
   border-radius: var(--radius-full);
   background: var(--subtle-foreground);
 }

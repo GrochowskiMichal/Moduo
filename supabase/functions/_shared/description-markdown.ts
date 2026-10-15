@@ -61,7 +61,8 @@ const WORDS: Record<string, string> = {
 };
 
 export function referenceWord(type: string): string {
-  return WORDS[type] ?? "item";
+  // Own keys only: "constructor" is a type a crafted description can name.
+  return Object.hasOwn(WORDS, type) ? WORDS[type] : "item";
 }
 
 /** A reference as the description stores it. A chip (the default) has no title. */
@@ -159,7 +160,8 @@ function decodeEntities(text: string): string {
       const n = code[1] === "x" || code[1] === "X" ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
       return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : m;
     }
-    return NAMED[code.toLowerCase()] ?? m;
+    const name = code.toLowerCase();
+    return Object.hasOwn(NAMED, name) ? NAMED[name] : m;
   });
 }
 

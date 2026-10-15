@@ -37,6 +37,7 @@ import {
   normalizeTaskStatusCategory,
 } from "../../_shared/contracts/vocabularies.ts";
 import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
+import { guardMarkdownStart } from "../../_shared/description-markdown.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
   LIST_PAGE,
@@ -100,7 +101,9 @@ const DESCRIPTION_MARKDOWN =
 function taskFieldsFromArgs(args: Row): Row {
   const fields: Row = {};
   if (typeof args.title === "string") fields.title = str(args, "title");
-  if (typeof args.description === "string") fields.description = args.description;
+  // Taken as Markdown (call #15): words that start like the old HTML ("<span>
+  // wraps…") keep their first `<` escaped, so no reader parses them as markup.
+  if (typeof args.description === "string") fields.description = guardMarkdownStart(args.description);
   if ("due_on" in args) fields.due_on = args.due_on === null ? null : dayOrThrow(str(args, "due_on"), "due_on");
   if ("due_time" in args) fields.due_time = args.due_time ?? null;
   for (const name of ["due_date", "scheduled_at"]) {

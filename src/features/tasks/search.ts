@@ -113,6 +113,9 @@ export function descriptionText(description: string | null | undefined): string 
   return text;
 }
 
+/** A description's words, cached by its source (every Board card reads them on each render). */
+const wordsCache = new Map<string, string>();
+
 /**
  * A description's words as it shows them (case kept), for a Board card's
  * preview (AC7.4): no Markdown symbols or HTML tags, a link as its words, a
@@ -120,7 +123,13 @@ export function descriptionText(description: string | null | undefined): string 
  * reader can't see, RF-1). Either stored form (Markdown, or the old HTML).
  */
 export function descriptionWords(description: string | null | undefined): string {
-  return descriptionPlainText(description);
+  if (!description) return "";
+  const cached = wordsCache.get(description);
+  if (cached !== undefined) return cached;
+  const words = descriptionPlainText(description);
+  if (wordsCache.size > 2000) wordsCache.clear();
+  wordsCache.set(description, words);
+  return words;
 }
 
 /**

@@ -86,6 +86,7 @@ import {
   type CapturePlan,
   type CaptureResult,
   type CaptureTaskPlan,
+  mentionsStillIn,
   newTaskId,
   runCapture,
   undoCapture,
@@ -1135,13 +1136,7 @@ export function TaskCaptureBody({
         ...describedThings.map((ref) => ({ ref, label: "" })),
       ],
       // A person whose "@Name" was taken out again isn't told.
-      mentions: [
-        ...new Set(
-          mentioned
-            .filter((p) => descriptionPlainText(describedAs).includes(`@${p.label}`))
-            .map((p) => p.id),
-        ),
-      ],
+      mentions: mentionsStillIn(mentioned, descriptionPlainText(describedAs)),
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
@@ -1417,9 +1412,12 @@ export function TaskCaptureBody({
         if (dragHasFiles(e.dataTransfer)) e.preventDefault();
       }}
       onDrop={(e) => {
-        // The description's editor takes its own drops (to `onFiles`) and
-        // lets the event bubble on: one drop attaches once.
-        if (e.target instanceof Element && e.target.closest("[data-capture-description]")) return;
+        // The description's editor takes a drop on its text (to `onFiles`,
+        // marking it handled) and lets the event bubble on: one drop attaches
+        // once. A drop on the box around it is still this one's.
+        const inDescription =
+          e.target instanceof Element && e.target.closest("[data-capture-description]");
+        if (inDescription && e.nativeEvent.defaultPrevented) return;
         // Folders are left out (AT-3); a drop of only folders does nothing.
         const dropped = filesFromDataTransfer(e.dataTransfer);
         if (dropped.length === 0) return;

@@ -767,6 +767,14 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
     expect(await screen.findAllByRole("button", { name: "Remove shot.png" })).toHaveLength(1);
   });
 
+  it("a file dropped on the box around the description's text becomes a chip too", async () => {
+    await openWithTitle();
+    const box = document.querySelector("[data-capture-description]");
+    if (!box) throw new Error("no description box");
+    fireEvent.drop(box, dropOf([shot()]));
+    expect(await screen.findAllByRole("button", { name: "Remove shot.png" })).toHaveLength(1);
+  });
+
   it("a folder dropped on the capture is left out", async () => {
     await openWithTitle();
     fireEvent.drop(description(), {

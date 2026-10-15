@@ -141,6 +141,9 @@ describe("the reference syntax", () => {
       `[email](moduo://email_thread/${NOTE} "link")`,
     );
     expect(referenceMarkdown("widget", NOTE, "nonsense")).toBe(`[item](moduo://widget/${NOTE})`);
+    // A type named like an object's own key is still just an item.
+    expect(referenceMarkdown("constructor", NOTE)).toBe(`[item](moduo://constructor/${NOTE})`);
+    expect(htmlToMarkdown(`${P}${span("&constructor; &amp;")}</p>`)).toBe("&constructor; &");
     expect(dateMarkdown("2026-10-17", "Oct 17")).toBe("[Oct 17](moduo://date/2026-10-17)");
   });
 

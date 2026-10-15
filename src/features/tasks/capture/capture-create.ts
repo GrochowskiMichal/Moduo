@@ -65,6 +65,31 @@ export type CapturePlan = {
   queueTop: boolean;
 };
 
+/**
+ * The people `@`-mentioned in a capture's description whose "@Name" is still
+ * in its words (one taken out again isn't told), each once. A name counts
+ * whole: "@Anna" doesn't keep "Ann".
+ */
+export function mentionsStillIn(
+  mentioned: ReadonlyArray<{ id: string; label: string }>,
+  words: string,
+): string[] {
+  const out = new Set<string>();
+  for (const person of mentioned) {
+    const name = `@${person.label}`;
+    let at = words.indexOf(name);
+    while (at >= 0) {
+      const next = words[at + name.length];
+      if (next === undefined || !/[\p{L}\p{N}_]/u.test(next)) {
+        out.add(person.id);
+        break;
+      }
+      at = words.indexOf(name, at + 1);
+    }
+  }
+  return [...out];
+}
+
 /** A new id for a task (the create op takes the client's). */
 export function newTaskId(): string {
   return crypto.randomUUID();
