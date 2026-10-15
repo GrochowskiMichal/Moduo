@@ -20,20 +20,28 @@ export function useToday(zone?: string): string {
     setZoneOfToday(zone);
     setToday(dayKey(zone));
   }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `today` re-arms the timer for the next midnight
+  // Bumped when the timer fired before the day changed, to arm it again.
+  const [rearm, setRearm] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `today` and `rearm` arm the timer for the next midnight
   useEffect(() => {
     const now = new Date();
     const midnight = zone
       ? nextZonedMidnight(now, zone)
       : new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     // A second past midnight, so the new day is certainly here; a timer that
-    // fires late (a sleeping laptop) still lands on the right day.
+    // fires late (a sleeping laptop) still lands on the right day. One that
+    // fires while it's still the same day (the clock was set back) waits for
+    // the next midnight instead of stopping for good.
     const id = window.setTimeout(
-      () => setToday(dayKey(zone)),
+      () => {
+        const next = dayKey(zone);
+        if (next === today) setRearm((n) => n + 1);
+        else setToday(next);
+      },
       midnight.getTime() - now.getTime() + 1000,
     );
     return () => window.clearTimeout(id);
-  }, [today, zone]);
+  }, [today, zone, rearm]);
   return today;
 }
 
