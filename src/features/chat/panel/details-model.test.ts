@@ -9,6 +9,7 @@ import {
   browseChannels,
   channelNameProblem,
   detailsPeople,
+  detailsStamp,
   dmIntent,
   pickable,
 } from "./details-model";
@@ -149,5 +150,24 @@ describe("a message in context (spec #10)", () => {
       page: async () => ({ data: [], error: null }),
     } as unknown as Pick<ChatRuntime, "message" | "page">;
     expect(await readInContext(chat, "m1")).toBeNull();
+  });
+});
+
+describe("when Details reads again", () => {
+  const row = (id: string, over: Partial<ChatMessage> = {}) =>
+    ({
+      id,
+      kind: "message",
+      pinnedAt: null,
+      editedAt: null,
+      deletedAt: null,
+      ...over,
+    }) as ChatMessage;
+  it("never for a plain new message; for a pin, an edit, a delete or an event line", () => {
+    const base = [row("a"), row("b")];
+    expect(detailsStamp([...base, row("c")])).toBe(detailsStamp(base));
+    expect(detailsStamp([...base, row("c", { pinnedAt: "t" })])).not.toBe(detailsStamp(base));
+    expect(detailsStamp([...base, row("c", { editedAt: "t" })])).not.toBe(detailsStamp(base));
+    expect(detailsStamp([...base, row("c", { kind: "event" })])).not.toBe(detailsStamp(base));
   });
 });

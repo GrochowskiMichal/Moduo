@@ -27,6 +27,7 @@ import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
 import { MessageInContext } from "../panel/message-in-context";
 import { PersonCard } from "../panel/person-card";
@@ -40,6 +41,7 @@ import {
 } from "../store/react";
 import type { ChatWindow, ChatWriteResult } from "../store/store";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
+import { authorName } from "../stream/rows";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
 import { composerLine } from "./composer-state";
@@ -67,19 +69,7 @@ export type ChatScreenPerson = ChatPerson;
 /** What the right panel's "← item" stack holds (spec #10): items, not views. */
 type ChatPanelEntry =
   | { key: string; type: "person"; id: string }
-  | { key: string; type: "message"; id: string; channelId: string; authorId: string | null };
-
-/** A conversation's pins, edits and deletes in the window: Details reads again when they change. */
-function detailsStamp(rows: readonly ChatMessage[] | undefined): string {
-  if (!rows) return "";
-  let out = "";
-  for (const r of rows) {
-    if (r.pinnedAt || r.editedAt || r.deletedAt) {
-      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""};`;
-    }
-  }
-  return out;
-}
+  | { key: string; type: "message"; id: string; channelId: string; author: string };
 
 function typingLine(names: string[]): string | null {
   if (names.length === 0) return null;
@@ -212,6 +202,9 @@ export function ChatScreen({
     if (store && ready && conversationId && known) void store.open(conversationId);
   }, [store, ready, conversationId, known]);
 
+  // Leaving Chat closes the open conversation, so coming back counts as a return (the "New" pill).
+  useEffect(() => () => store?.close(), [store]);
+
   // A message named by the link that isn't in the window: load the window around it.
   const landed = useRef<string | null>(null);
   useEffect(() => {
@@ -257,15 +250,23 @@ export function ChatScreen({
         type: "message",
         id: m.id,
         channelId: m.channelId,
-        authorId: m.authorId,
+        author: authorName(m, m.authorId ? personOf(m.authorId) : undefined),
       }),
-    [openInPanel],
+    [openInPanel, personOf],
   );
   const details = useConversationDetails(
     runtime?.chat ?? null,
     workspaceId,
     channel?.id ?? null,
-    `${channel?.updatedAt ?? ""}|${member ? `${member.joinedAt}` : "-"}|${detailsStamp(streamWin?.rows)}`,
+    [
+      channel?.name,
+      channel?.topic,
+      channel?.archivedAt,
+      channel?.isPrivate,
+      channel?.managersOnly,
+      member ? member.joinedAt : "-",
+      detailsStamp(streamWin?.rows),
+    ].join("|"),
   );
 
   // ── New conversation (⌘N, the bottom bar's +, the left panel's row) ───────
@@ -798,10 +799,9 @@ export function ChatScreen({
         ),
       };
     }
-    const author = entry.authorId ? personOf(entry.authorId) : undefined;
     return {
       key: entry.key,
-      title: `Message from ${author?.name ?? "Former member"}`,
+      title: `Message from ${entry.author}`,
       icon: MessageSquareText,
       open: {
         label: "Open in conversation",
@@ -835,7 +835,12 @@ export function ChatScreen({
             members={details.members}
             pinned={details.pinned}
             history={details.history}
-            canArchive={channel.kind === "channel" && canManage && !snap.paused}
+            canArchive={
+              channel.kind === "channel" &&
+              canManage &&
+              !snap.paused &&
+              (!channel.isDefault || !!channel.archivedAt)
+            }
             onNotify={(notifyLevel) =>
               guarded(
                 () => store?.setPrefs(channel.id, { notifyLevel }) ?? Promise.resolve(),

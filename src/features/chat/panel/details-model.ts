@@ -2,7 +2,7 @@
 // in a conversation and in what order, what Browse channels lists, and what
 // New conversation may send. The screens draw these; the server decides.
 
-import type { ChatChannel, ChatMember, ChatPerson } from "../model";
+import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../model";
 
 /** A person in Details' People list. */
 export type DetailsPerson = {
@@ -104,4 +104,20 @@ export function pickable(
     .filter((p) => !q || p.name.toLowerCase().includes(q))
     .sort((a, b) => a.name.localeCompare(b.name))
     .slice(0, limit);
+}
+
+/**
+ * When Details reads again: the window's pins, edits, deletes and event lines
+ * (joins, leaves, moves). Never on a plain new message: every send stamps the
+ * channel row, so its `updatedAt` would re-read on each one.
+ */
+export function detailsStamp(rows: readonly ChatMessage[] | undefined): string {
+  if (!rows) return "";
+  let out = "";
+  for (const r of rows) {
+    if (r.pinnedAt || r.editedAt || r.deletedAt || r.kind === "event") {
+      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""};`;
+    }
+  }
+  return out;
 }

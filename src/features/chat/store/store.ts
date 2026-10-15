@@ -1160,6 +1160,11 @@ export class ChatStore {
    * server's newest page lands. Already open this session: nothing to read
    * (Realtime and the gap fill keep it current).
    */
+  /** The screen went away: the next open of any conversation is a return. */
+  close(): void {
+    this.openId = null;
+  }
+
   async open(channelId: string): Promise<void> {
     const returning = this.openId !== channelId;
     this.openId = channelId;

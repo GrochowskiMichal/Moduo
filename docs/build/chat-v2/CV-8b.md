@@ -14,7 +14,9 @@
 - **New conversation** (`dialogs/new-conversation-dialog.tsx`, frame 3 "New channel" / "New direct message"): opened by ⌘N and the bottom bar's + (`onCreateNew`), the left panel's "+ New conversation" (now passed), and Browse channels' "New channel". Tabs Channel · Direct message (the kit's `SegmentedControl`). Channel: Name (as typed, 1–80; the server's clash message shows inline), Topic, People (chips + find by name, ↵ adds the first, ⌫ removes the last), Private, **Only managers can post** (`p_announcement`, newly passed through `ChatRuntime.createChannel` → `chat_op_create_channel`). Direct message: To (up to nine with you); only yourself → "A conversation with only yourself is a note" + **Capture a note** (opens the app's capture as a note); more than eight others → a line to make a channel. Hidden for viewers and on a paused plan; the tabs follow `create_public` / `create_private` (`use-chat-rights.ts` now reads them).
 - **Browse channels** (`shell/browse-channels.tsx`, frame 3 "Browse channels"): a centre surface at `/chat?view=browse` (keeps `c`, so Details stays on the right), opened from the hairline's ⋯ and the dialog's footer. Title + count, a filter (the search icon), "New channel"; public channels by name with topic · N people · you're in, Join (secondary) or Open; then **Archived** (read only, Open). `runtime.chat.memberCounts` reads the counts in one request per 100 channels.
 - **Toolbar people count** comes from Details' member read for every channel (CV-8a's note).
-- **The "New" pill read mark** (CV-3 / CV-7a / CV-8a's note): `store.open()` now moves `newAfter` to your read mark when you return to a conversation it already holds (never while you stay in it). `store.test.ts` · "returning to a loaded conversation moves the New pill to your read mark" (fails without the fix).
+- **Details reads again only on what it draws** (`detailsStamp` in `panel/details-model.ts`: the window's pins, edits, deletes and event lines, plus the channel's name, topic, archive, privacy, announcement flag and your membership), never on a plain new message (every send stamps the channel's `updated_at`).
+- **Archive is never offered on General** (Details and the toolbar's ⋯; the server refuses it).
+- **The "New" pill read mark** (CV-3 / CV-7a / CV-8a's note): `store.open()` now moves `newAfter` to your read mark when you return to a conversation it already holds (never while you stay in it). Leaving Chat (the screen unmounting) calls the new `store.close()`, so coming back to the same conversation from another module counts as a return too. `store.test.ts` · "returning to a loaded conversation moves the New pill to your read mark" (fails without the fix).
 
 ## Acceptance criteria proven
 
@@ -22,8 +24,8 @@
 | --- | --- |
 | AC15.5 | `tests/chat-details.spec.ts` · "Details: history, decisions, chains, people" ("You created a channel", "Piotr Wis pinned a message" in the history); `spine/activity.test.ts` · "renders a conversation's message changes for Details' history (CV-8b)" |
 | AC8.7 (frames) | same spec: the Decisions and Reply chains sections with their empty lines (content is CV-14 / CV-12) |
-| AC11.4 (people with state, partial) | same spec: People, you first, the presence dot; `panel/details-model.test.ts` · "Details' people (frame 4)". Statuses complete with CV-17 |
-| AC10.9 | `tests/chat-details.spec.ts` · "a direct message with only yourself offers a note; a viewer can't start one (AC10.9)" (no "New conversation", no Archive, no Message on a person card) |
+| AC11.4 (people with state, partial) | same spec: People, you first, your own presence dot; another person's dot is proven only in `panel/details-model.test.ts` · "Details' people (frame 4)" (`online(id)`). Statuses complete with CV-17 |
+| AC10.9 (partial: never starts a conversation) | `tests/chat-details.spec.ts` · "a direct message with only yourself offers a note; a viewer can't start one (AC10.9)" (no "New conversation", no Message on a person card); reacting and receiving are CV-8a's / CV-7c's tests |
 | §12 New conversation | same specs (create a channel with a person; DM with yourself → Capture a note); `details-model.test.ts` · "New conversation (frame 3)" |
 | §12 Browse channels | `tests/chat-details.spec.ts` · "Browse channels joins a public channel"; `details-model.test.ts` · "Browse channels (frame 3)"; `search.test.ts` · the `view` param |
 | #10 panel registry | `src/lib/panel-registry.test.ts` · "gives Chat Details · Reply chains · Files on ⌥1–3, Details alone until the others render" |
@@ -82,4 +84,9 @@ Screens compared with round 5 (1440 × 900): Details vs frame 4 (member), the di
 
 - History reads `module_activity` under its existing read rule (workspace member + `perm_can_see_entity` for `chat_channel`); confirm on staging that a member of a private channel sees its history and a non-member doesn't.
 - `memberCounts` counts members of public channels you can read; confirm counts on a workspace with more than 100 public channels (batched by 100).
-- Details reads members, pins and history again on every pin / edit / delete in the window (three small reads); watch the request count in a busy channel.
+- Details reads members, pins and history again on every pin / edit / delete / event line in the window (three small reads); watch the request count in a busy channel.
+- `memberCounts` pages chat_members 1,000 rows at a time per 100 channels; a grouped-count RPC would be one request (a migration; not worth one here).
+
+## Review (validator, round 1)
+
+One MAJOR fixed (Details re-read on every message: the refresh key used the channel's `updated_at`). MINORs fixed: Archive on General, `memberCounts` truncation at the API's row cap, the pill on returning from another module, "Message from Former member" for app messages, the viewer test's empty Archive check. MINORs left: the author name in the stream isn't a keyboard stop (`tabIndex -1`, like the row's other mouse affordances; the card is reachable from Details' People) and the New conversation people picker has no combobox semantics or arrow keys (↵ adds the first match; Tab reaches the suggestions) — a kit people-picker is the better fix, for CV-15's add-people. NITs left: History reads the newest 50 ("Show all 50" can hide older lines); a failed read shows the empty line rather than an error; sections carry `aria-label` beside their heading.

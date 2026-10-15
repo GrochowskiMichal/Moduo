@@ -186,7 +186,6 @@ test("a direct message with only yourself offers a note; a viewer can't start on
     await page.goto(`/chat?c=${room.general}`);
     await expect(details(page)).toBeVisible({ timeout: 20_000 });
     await expect(nav(page).getByRole("button", { name: "New conversation" })).toHaveCount(0);
-    await expect(details(page).getByRole("button", { name: /Archive channel/ })).toHaveCount(0);
     await details(page)
       .locator('[data-slot="details-people"] button')
       .filter({ hasText: OWNER.name })

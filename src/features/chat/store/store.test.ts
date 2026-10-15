@@ -524,6 +524,13 @@ describe("device copy, delta, echo, outbox", () => {
     const win = store.getSnapshot().windows[C]!;
     expect(compareKeys(win.newAfter!, keyOf(rows[4]!))).toBe(0);
     expect(ids(win.rows).at(-1)).toBe(fresh.id);
+
+    // Leaving Chat and coming back to the same conversation is a return too.
+    store.markSeen(C, fresh.id);
+    await settle();
+    store.close();
+    await store.open(C);
+    expect(compareKeys(store.getSnapshot().windows[C]!.newAfter!, keyOf(fresh))).toBe(0);
   });
 
   it("lands on a message from last month: a window around it, its chain named", async () => {
