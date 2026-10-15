@@ -1,15 +1,17 @@
 name: checks
 
+# Lean mode (pre-alpha): the full suite runs once, on PRs into develop/main and on pushes to them.
+# Other branches get only the fast secret scan (secret-scan.yml). No job here is ever skipped,
+# so the required `static-checks` context can't be satisfied by a skipped run.
 on:
   pull_request:
+    branches: [develop, main]
   push:
-    branches:
-      - main
-      - develop
-      - maciej
-      - mike
-      - "t/maciej/**"
-      - "t/mike/**"
+    branches: [develop, main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
