@@ -8,9 +8,10 @@
 // These calls go straight to Supabase like the listener that uses them
 // (`components/app/notice-deliveries.tsx`): the desktop app is cloud-first too.
 
+import type { ClientSurface } from "@contracts/vocabularies";
 import { supabaseClient } from "../runtime.web";
 
-export type ClientSurface = "desktop" | "web";
+export type { ClientSurface };
 
 const CLIENT_KEY = "moduo:client-id";
 /** The heartbeat (the server counts a client open for three minutes after it). */

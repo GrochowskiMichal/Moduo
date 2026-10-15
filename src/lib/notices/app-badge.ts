@@ -69,8 +69,13 @@ function setFaviconDot(on: boolean): void {
 
 async function setDockBadge(count: number): Promise<void> {
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    await getCurrentWindow().setBadgeCount(count > 0 ? count : undefined);
+    // What `getCurrentWindow().setBadgeCount` sends, through `api/core` (a web
+    // build aliases it to a stub), so no window API ships in the web bundle.
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke("plugin:window|set_badge_count", {
+      label: "main",
+      value: count > 0 ? count : undefined,
+    });
   } catch {
     // Windows has no badge count (an overlay icon instead); never an error.
   }

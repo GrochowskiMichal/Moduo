@@ -284,7 +284,12 @@ export function NoticeDeliveries({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "chat_catchup", filter: `user_id=eq.${userId}` },
-        () => {
+        (payload) => {
+          // The open workspace counts live from its store.
+          const row = ((payload as { new?: unknown }).new ?? (payload as { old?: unknown }).old) as
+            | { workspace_id?: unknown }
+            | undefined;
+          if (row?.workspace_id && row.workspace_id === selectedWorkspaceId) return;
           if (timer) clearTimeout(timer);
           timer = setTimeout(reread, COUNTS_SETTLE_MS);
         },

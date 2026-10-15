@@ -9,6 +9,8 @@
 //   rung on this tag a moment ago → acknowledge quietly (one notice per burst)
 //   otherwise                 → ring (an OS notification), acknowledge
 
+import type { ClientSurface } from "@contracts/vocabularies";
+
 /** One notice per conversation (its tag) for about a minute. */
 export const TAG_THROTTLE_MS = 60_000;
 /** A focus this soon after a ring is the click on it: land on the message. */
@@ -42,7 +44,7 @@ export function decideChatNotice(input: {
   inFront: boolean;
   /** The server's answer to "am I the most recently active client" (null: unknown). */
   latest: boolean | null;
-  surface: "desktop" | "web";
+  surface: ClientSurface;
   /** The notice's switch in Settings → Preferences → Chat is off. */
   switchedOff: boolean;
   /** When this client last rang this notice's tag (ms), if it did. */
