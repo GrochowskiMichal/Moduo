@@ -203,7 +203,7 @@ export type ActivityLine = {
 };
 
 /**
- * What happened lately in a project, from what the reader's copy holds:
+ * What happened recently in a project (the overview's Recently), from what the reader's copy holds:
  * tasks finished (each completion) and tasks added, newest first. Comments
  * aren't here: the copy keeps only that a task has them, not who wrote them.
  */

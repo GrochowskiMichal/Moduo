@@ -597,6 +597,9 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     expect(titleActions().childElementCount).toBe(0);
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("button", { name: /to Focus|in Focus/i })).toBeNull();
+    // "2 tasks" is the title row's (the page's `title`, MOD-109), not a heading in the body.
+    expect(screen.queryByRole("heading", { name: "2 tasks" })).toBeNull();
+    expect(screen.getByRole("list", { name: "Selected tasks" })).toBeTruthy();
   });
 
   it("on the full page they sit in its header after ↑ ↓ (the prototype's `.fphead`)", () => {
@@ -756,6 +759,84 @@ describe("comments on a task (U3-2)", () => {
     });
     await waitFor(() => expect(addComment).toHaveBeenCalledTimes(1));
     expect(addComment.mock.calls[0][0]).toMatchObject({ body: "never mind", mentionedUserIds: [] });
+  });
+});
+
+describe("an unset priority draws the bars, as capture does (MOD-134)", () => {
+  it("shows the three faint bars, never a flag, in the value and the menu's None", async () => {
+    renderPanel(task({ priority: null }), api(task({ priority: null })));
+    const value = screen.getByRole("button", { name: "Priority: none" });
+    expect(value.querySelector('svg[data-level="0"]')).toBeTruthy();
+    expect(value.querySelector(".lucide-flag")).toBeNull();
+    fireEvent.pointerDown(value, { button: 0, pointerType: "mouse" });
+    const none = await screen.findByRole("menuitemradio", { name: "None" });
+    expect(none.querySelector('svg[data-level="0"]')).toBeTruthy();
+  });
+
+  it("a set priority still shows its filled bars", () => {
+    renderPanel(task({ priority: "high" }), api(task({ priority: "high" })));
+    const value = screen.getByRole("button", { name: "Priority: High" });
+    expect(value.querySelector('svg[data-level="3"]')).toBeTruthy();
+  });
+});
+
+describe("the activity reads like a thread, its box always in reach (MOD-129)", () => {
+  const commentBox = () => screen.getByRole("textbox", { name: "Comment on this task" });
+
+  it("in the panel, the comment box is pinned under the scrolling body", () => {
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task()), runtime);
+    const pinned = commentBox().closest('[data-slot="task-composer"]') as HTMLElement;
+    expect(pinned).toBeTruthy();
+    // Outside the scroll box (its sibling above), so it stays put as the body scrolls.
+    const body = pinned.previousElementSibling as HTMLElement;
+    expect(body.className).toContain("overflow-y-auto");
+    expect(body.contains(commentBox())).toBe(false);
+    // It's still the feed's: posting goes through its thread (the tests above).
+    const feed = screen.getByRole("region", { name: "Comments and activity" });
+    expect(feed.contains(commentBox())).toBe(false);
+  });
+
+  it("on the full page, the box ends the activity", () => {
+    const { runtime } = fakeRuntime();
+    const t = task();
+    render(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={t}
+          buckets={[APP]}
+          inbox={INBOX}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          api={api(t)}
+          runtime={runtime}
+          workspaceId="w"
+          layout="page"
+        />
+      </TooltipProvider>,
+    );
+    const feed = screen.getByRole("region", { name: "Comments and activity" });
+    expect(feed.contains(commentBox())).toBe(true);
+    expect(feed.lastElementChild?.contains(commentBox())).toBe(true);
+    expect(document.querySelector('[data-slot="task-composer"]')).toBeNull();
+  });
+
+  it('drops the "Created by · Updated" line: the trail already says both', async () => {
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task()), runtime);
+    const feed = screen.getByRole("region", { name: "Comments and activity" });
+    await waitFor(() => expect(within(feed).getByText(/created this/)).toBeTruthy());
+    expect(within(feed).queryByText(/Created by/)).toBeNull();
+    expect(within(feed).queryByText(/Updated/)).toBeNull();
+  });
+
+  it("a viewer who can't comment gets no empty pinned strip", () => {
+    renderPanel(task(), api(task()), null);
+    expect(screen.queryByRole("textbox", { name: "Comment on this task" })).toBeNull();
+    const slot = document.querySelector('[data-slot="task-composer"]') as HTMLElement;
+    expect(slot.childElementCount).toBe(0);
+    expect(slot.className).toContain("empty:hidden");
   });
 });
 
