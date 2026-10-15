@@ -229,6 +229,47 @@ export function originalIsItsOwnPreview(file: {
   );
 }
 
+const ascii = (bytes: Uint8Array, at: number) =>
+  String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+
+/**
+ * Is this PNG or WebP animated? An APNG has an `acTL` chunk before its first
+ * `IDAT`; an animated WebP an `ANIM` chunk (or VP8X's animation flag). It
+ * keeps its still preview then, so a tile doesn't play it (MOD-132).
+ * Anything malformed, and every other type, answers false.
+ */
+export function isAnimatedImage(bytes: Uint8Array, mime: string): boolean {
+  if (mime === "image/png") {
+    const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    if (bytes.length < 8 || sig.some((b, i) => bytes[i] !== b)) return false;
+    let i = 8;
+    while (i + 8 <= bytes.length) {
+      const len =
+        ((bytes[i] << 24) | (bytes[i + 1] << 16) | (bytes[i + 2] << 8) | bytes[i + 3]) >>> 0;
+      const type = ascii(bytes, i + 4);
+      if (type === "acTL") return true;
+      if (type === "IDAT" || type === "IEND") return false;
+      i += 12 + len;
+    }
+    return false;
+  }
+  if (mime === "image/webp") {
+    if (bytes.length < 12 || ascii(bytes, 0) !== "RIFF" || ascii(bytes, 8) !== "WEBP") return false;
+    let i = 12;
+    while (i + 8 <= bytes.length) {
+      const type = ascii(bytes, i);
+      const size =
+        (bytes[i + 4] | (bytes[i + 5] << 8) | (bytes[i + 6] << 16) | (bytes[i + 7] << 24)) >>> 0;
+      if (type === "ANIM" || type === "ANMF") return true;
+      if (type === "VP8X" && i + 8 < bytes.length && (bytes[i + 8] & 0x02) !== 0) return true;
+      if (type === "VP8 " || type === "VP8L") return false;
+      i += 8 + size + (size & 1);
+    }
+    return false;
+  }
+  return false;
+}
+
 /** Preview format: WebP only where it's really encodable, PNG to keep alpha
  *  (no black/white matte), else JPEG. */
 export function choosePreviewMime(input: {
@@ -330,8 +371,12 @@ export async function prepareUpload(
       }
     }
 
-    // Already small: no second copy (MOD-132); tiles show the original.
-    if (originalIsItsOwnPreview({ mime: outMime, width, height, sizeBytes: original.size })) {
+    // Already small: no second copy (MOD-132); tiles show the original. An
+    // animated one keeps its still preview (the bytes are at most 100 KB).
+    if (
+      originalIsItsOwnPreview({ mime: outMime, width, height, sizeBytes: original.size }) &&
+      !isAnimatedImage(new Uint8Array(await original.arrayBuffer()), outMime)
+    ) {
       return {
         original,
         fileName: outName,

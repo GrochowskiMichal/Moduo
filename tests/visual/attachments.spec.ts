@@ -15,6 +15,10 @@ const STORIES = [
   { name: "attachments-empty", id: "attachments-attachmentstrip--empty" },
   { name: "attachments-read-only", id: "attachments-attachmentstrip--read-only" },
   { name: "attachments-uploading", id: "attachments-attachmentstrip--uploading" },
+  {
+    name: "attachments-small-image-no-preview",
+    id: "attachments-attachmentstrip--small-image-no-preview",
+  },
   { name: "attachments-problems", id: "attachments-attachmentstrip--problems" },
   { name: "attachments-problems-member", id: "attachments-attachmentstrip--problems-as-member" },
   { name: "attachments-viewer", id: "attachments-attachmentstrip--viewer" },

@@ -4,6 +4,7 @@ import {
   effectiveMime,
   fitWithin,
   type ImageEnv,
+  isAnimatedImage,
   isHeic,
   isImageCandidate,
   jpegHasExif,
@@ -27,6 +28,66 @@ function jpegBytes({ exif }: { exif: boolean }): Uint8Array {
   }
   parts.push(0xff, 0xda, 0x00, 0x02, 0x11, 0x22);
   return new Uint8Array(parts);
+}
+
+/** A PNG's chunks: IHDR, an `acTL` when animated (an APNG), then IDAT and IEND. */
+function pngBytes({ animated }: { animated: boolean }): Uint8Array {
+  const chunk = (type: string, len: number) => [
+    0,
+    0,
+    0,
+    len,
+    ...Array.from(type, (c) => c.charCodeAt(0)),
+    ...new Array(len).fill(0),
+    0,
+    0,
+    0,
+    0,
+  ];
+  return new Uint8Array([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...chunk("IHDR", 13),
+    ...(animated ? chunk("acTL", 8) : []),
+    ...chunk("IDAT", 4),
+    ...chunk("IEND", 0),
+  ]);
+}
+
+/** A WebP's RIFF chunks: animated by an ANIM chunk or VP8X's flag, or still. */
+function webpBytes(kind: "anim" | "flag" | "still" | "still-x"): Uint8Array {
+  const chunk = (type: string, data: number[]) => [
+    ...Array.from(type, (c) => c.charCodeAt(0)),
+    data.length,
+    0,
+    0,
+    0,
+    ...data,
+    ...(data.length % 2 ? [0] : []),
+  ];
+  const body =
+    kind === "anim"
+      ? [...chunk("VP8X", new Array(10).fill(0)), ...chunk("ANIM", new Array(6).fill(0))]
+      : kind === "flag"
+        ? chunk("VP8X", [0x02, ...new Array(9).fill(0)])
+        : kind === "still-x"
+          ? [...chunk("VP8X", [0x10, ...new Array(9).fill(0)]), ...chunk("VP8L", [0, 0, 0])]
+          : chunk("VP8 ", [0, 0, 0, 0]);
+  return new Uint8Array([
+    ...Array.from("RIFF", (c) => c.charCodeAt(0)),
+    body.length + 4,
+    0,
+    0,
+    0,
+    ...Array.from("WEBP", (c) => c.charCodeAt(0)),
+    ...body,
+  ]);
 }
 
 type FakeImage = { width: number; height: number; alpha?: boolean };
@@ -285,6 +346,33 @@ describe("a small image is its own preview (MOD-132)", () => {
     const out = await prepareUpload(wide, { env: env2 });
     expect(out.preview).not.toBeNull();
     expect(env2.renders).toEqual([{ width: 1280, height: 853, mime: "image/jpeg", quality: 0.8 }]);
+  });
+
+  it("tells an animated PNG or WebP from a still one", () => {
+    expect(isAnimatedImage(pngBytes({ animated: true }), "image/png")).toBe(true);
+    expect(isAnimatedImage(pngBytes({ animated: false }), "image/png")).toBe(false);
+    expect(isAnimatedImage(webpBytes("anim"), "image/webp")).toBe(true);
+    expect(isAnimatedImage(webpBytes("flag"), "image/webp")).toBe(true);
+    expect(isAnimatedImage(webpBytes("still"), "image/webp")).toBe(false);
+    expect(isAnimatedImage(webpBytes("still-x"), "image/webp")).toBe(false);
+    // Junk, a truncated header, or another type: not animated.
+    expect(isAnimatedImage(new Uint8Array([1, 2, 3]), "image/png")).toBe(false);
+    expect(isAnimatedImage(pngBytes({ animated: true }).slice(0, 20), "image/png")).toBe(false);
+    expect(isAnimatedImage(pngBytes({ animated: true }), "image/jpeg")).toBe(false);
+  });
+
+  it("keeps a small animated PNG or WebP's still preview", async () => {
+    const apng = file(pngBytes({ animated: true }), "spinner.png", "image/png");
+    const env1 = fakeEnv({ "spinner.png": { width: 64, height: 64, alpha: true } });
+    expect((await prepareUpload(apng, { env: env1 })).preview).not.toBeNull();
+
+    const anim = file(webpBytes("anim"), "wave.webp", "image/webp");
+    const env2 = fakeEnv({ "wave.webp": { width: 200, height: 200 } });
+    expect((await prepareUpload(anim, { env: env2 })).preview).not.toBeNull();
+
+    const still = file(pngBytes({ animated: false }), "icon.png", "image/png");
+    const env3 = fakeEnv({ "icon.png": { width: 64, height: 64, alpha: true } });
+    expect((await prepareUpload(still, { env: env3 })).preview).toBeNull();
   });
 
   it("keeps a small GIF's still preview", async () => {
