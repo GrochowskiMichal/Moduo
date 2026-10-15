@@ -15,11 +15,13 @@
 --    `workspace_op_accept_invite` refuses any other signed-in address with
 --    `invite_email_mismatch`, carrying the masked invited address in HINT
 --    (the recipient can't read the invite row) for the join page.
--- 4. At most 20 invites per workspace per 24 hours (S2), counted over every
---    invite created in that window whatever its status (revoking and
---    re-inviting doesn't free a slot), checked on every insert whoever makes
---    it. `created_at` is pinned to now() so a client can't backdate it out of
---    the window.
+-- 4. At most 20 invites per workspace per 24 hours (S2), checked on every
+--    insert whoever makes it. The count is the larger of the invites created
+--    in the window (whatever their status, so revoking doesn't free a slot;
+--    this one also sees earlier rows of a many-row insert) and the B3 emails
+--    queued for the workspace in the window (admins can delete invite rows or
+--    edit their `created_at`, but nobody but the server touches the outbox).
+--    `created_at` is pinned to now() on insert.
 -- 5. B4 when ownership is transferred, to the new owner; B5 when an owner or
 --    admin removes someone, to that person. Leaving a workspace yourself is a
 --    direct delete of your own membership row (runtime.workspace.leave), so it
@@ -84,6 +86,9 @@ $$;
 
 CREATE INDEX IF NOT EXISTS workspace_invites_workspace_created_idx
   ON public.workspace_invites (workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS email_outbox_workspace_invite_idx
+  ON public.email_outbox ((payload ->> 'workspace_id'), created_at)
+  WHERE kind = 'workspace_invite';
 
 CREATE OR REPLACE FUNCTION public.perm_invites_validate()
 RETURNS trigger
@@ -102,9 +107,15 @@ BEGIN
     -- S2: at most 20 invites per workspace in 24 hours. The lock makes two
     -- invites sent at once count each other.
     PERFORM pg_advisory_xact_lock(hashtextextended('workspace_invites:' || NEW.workspace_id::text, 0));
-    IF (SELECT count(*) FROM public.workspace_invites i
-         WHERE i.workspace_id = NEW.workspace_id
-           AND i.created_at > now() - interval '24 hours') >= 20 THEN
+    IF greatest(
+         (SELECT count(*) FROM public.workspace_invites i
+           WHERE i.workspace_id = NEW.workspace_id
+             AND i.created_at > now() - interval '24 hours'),
+         (SELECT count(*) FROM public.email_outbox o
+           WHERE o.kind = 'workspace_invite'
+             AND o.payload ->> 'workspace_id' = NEW.workspace_id::text
+             AND o.created_at > now() - interval '24 hours')
+       ) >= 20 THEN
       RAISE EXCEPTION 'You''ve sent 20 invites today. You can send more tomorrow.'
         USING ERRCODE = 'P0001', HINT = 'invite_daily_limit';
     END IF;
@@ -173,6 +184,7 @@ BEGIN
     NULL,
     jsonb_build_object(
       'invite_id', NEW.id,
+      'workspace_id', NEW.workspace_id,
       'email', lower(btrim(NEW.email)),
       'workspace_name', coalesce(nullif(btrim(v_workspace), ''), 'a workspace'),
       'inviter_name', v_inviter ->> 'name',

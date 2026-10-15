@@ -175,9 +175,23 @@ BEGIN
 END $$;
 SELECT test.ok(test.invite('A', 'W', 'cap21@becker.studio', NULL, '2000-01-01') LIKE 'P0001 %',
   'a backdated created_at does not dodge the count');
+-- Deleting invites (admins may) or moving their created_at doesn't free a
+-- slot: the queued emails still count.
+SELECT test.ok(test.as_user('A', format($q$DELETE FROM public.workspace_invites WHERE workspace_id = %L AND email LIKE 'cap1%%'$q$,
+  test.id('W'))) = 'ok 10', 'the admin deletes ten of the day''s invites');
+SELECT test.ok(test.invite('A', 'W', 'cap21@becker.studio') LIKE 'P0001 You''ve sent 20 invites today.%',
+  'deleting invites does not free a slot');
+SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET created_at = now() - interval '2 days' WHERE workspace_id = %L$q$,
+  test.id('W'))) LIKE 'ok %', 'the admin backdates the rest');
+SELECT test.ok(test.invite('A', 'W', 'cap21@becker.studio') LIKE 'P0001 You''ve sent 20 invites today.%',
+  'backdating invites does not free a slot');
+-- A many-row insert counts its own earlier rows.
+SELECT test.ok(test.as_user('O', format($q$INSERT INTO public.workspace_invites (workspace_id, email, role)
+    SELECT %L, 'bulk' || g || '@becker.studio', 'member' FROM generate_series(1, 21) g$q$, test.id('W2')))
+    LIKE 'P0001 You''ve sent 20 invites today.%', 'one insert of 21 invites is refused');
 -- A day later the window has moved on.
-UPDATE public.workspace_invites SET created_at = now() - interval '24 hours 1 second'
- WHERE workspace_id = test.id('W') AND email LIKE 'cap1%';
+UPDATE public.email_outbox SET created_at = now() - interval '24 hours 1 second'
+ WHERE kind = 'workspace_invite' AND to_email LIKE 'cap1%';
 SELECT test.ok(test.invite('A', 'W', 'cap21@becker.studio') = 'ok 1', 'invites older than 24 hours stop counting');
 
 -- ── AC38: B4 on transfer, B5 on removal, nothing on leaving ──────────────────

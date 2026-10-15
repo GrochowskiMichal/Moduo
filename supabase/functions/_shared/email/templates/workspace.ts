@@ -11,6 +11,13 @@
  *   `workspace_op_remove_member` (an owner or admin removing someone; leaving
  *   a workspace yourself is a direct delete and sends nothing).
  *
+ * The names in these emails are typed by the inviter (their display name, the
+ * workspace's name) and B3 goes to any address they choose, from our domain.
+ * So a person's name only appears when it is a plain name (the booking
+ * emails' allow-list), else their address does; a workspace name that looks
+ * like a link or an address becomes "a workspace"; there is no message field.
+ * With the 20-a-day cap (S2) that leaves nothing worth sending as spam.
+ *
  * The payloads are written by SQL in snake_case (20261015090000_tx7_workspace_emails.sql)
  * and carry every date the email prints, so a retry renders the same body
  * (docs/gotchas/email.md). Dates are written in UTC: Moduo stores no zone for
@@ -24,6 +31,7 @@ import { dayLong } from "../format.ts";
 import type { QueuedEmail } from "../outbox.ts";
 import { TEXT_LIMITS } from "../render.ts";
 import { viaModuo } from "../send.ts";
+import { isPlainName } from "./booking.ts";
 
 /** Where B4's button goes: Settings → Workspace. */
 export const WORKSPACE_SETTINGS_URL = `${CANONICAL_APP_ORIGIN}/settings?section=workspace`;
@@ -71,9 +79,28 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
 
 const name = (value: string) => singleLine(value, TEXT_LIMITS.name);
 
-/** "Anna Carter", or their address when they never set a name. */
+/** A link, a domain or an address, in any dot (fullwidth and ideographic included). */
+const LINK_LIKE = /https?:|\/\/|www[.\uFF0E\u3002]|[\p{L}\p{N}][.\uFF0E\u3002]\p{L}{2,}|[@\uFF20]/iu;
+
+/** The person's name when it is a plain one that doesn't borrow ours, else null. */
+function plainName(person: WorkspacePerson): string | null {
+  if (!isPlainName(person.name) || /moduo/i.test(person.name)) return null;
+  return name(person.name).replace(/\s+/g, " ").trim();
+}
+
+/** "Anna Carter", or their address when they have no plain name. */
 function who(person: WorkspacePerson): string {
-  return name(person.name) || singleLine(person.email, 254);
+  return plainName(person) ?? singleLine(person.email, 254);
+}
+
+/** A typed label (workspace, role) when it is set and doesn't read like a link, else null. */
+function linkFree(value: string): string | null {
+  const label = name(value);
+  return label && !LINK_LIKE.test(label) ? label : null;
+}
+
+function workspaceLabel(value: string): string {
+  return linkFree(value) ?? "a workspace";
 }
 
 /** "15 October" */
@@ -91,7 +118,7 @@ function asRole(data: WorkspaceInviteData): string {
     case "viewer":
       return "a viewer";
     default:
-      return name(data.roleName) || "a member";
+      return linkFree(data.roleName) ?? "a member";
   }
 }
 
@@ -157,12 +184,10 @@ export function parseWorkspaceRemovedPayload(payload: Record<string, unknown>): 
 
 /** B3 · Workspace invite. */
 export function workspaceInviteEmail(data: WorkspaceInviteData): EmailDoc {
-  const workspace = name(data.workspaceName);
+  const workspace = workspaceLabel(data.workspaceName);
   const inviter = who(data.inviter);
-  const inviterLine = name(data.inviter.name)
-    ? `${inviter} (${singleLine(data.inviter.email, 254)})`
-    : inviter;
-  const role = name(data.roleName) || "Member";
+  const inviterLine = plainName(data.inviter) ? `${inviter} (${singleLine(data.inviter.email, 254)})` : inviter;
+  const role = linkFree(data.roleName) ?? "Member";
   const until = dayMonth(data.expiresAt);
   return {
     subject: `${inviter} invited you to ${workspace}`,
@@ -190,7 +215,7 @@ export function workspaceInviteEmail(data: WorkspaceInviteData): EmailDoc {
 
 /** B4 · You're the owner now. */
 export function workspaceOwnerEmail(data: WorkspaceOwnerData): EmailDoc {
-  const workspace = name(data.workspaceName);
+  const workspace = workspaceLabel(data.workspaceName);
   const by = who(data.previousOwner);
   return {
     subject: `You're now the owner of ${workspace}`,
@@ -211,9 +236,9 @@ export function workspaceOwnerEmail(data: WorkspaceOwnerData): EmailDoc {
 
 /** B5 · Removed from a workspace. */
 export function workspaceRemovedEmail(data: WorkspaceRemovedData): EmailDoc {
-  const workspace = name(data.workspaceName);
+  const workspace = workspaceLabel(data.workspaceName);
   const by = who(data.removedBy);
-  const ask = name(data.removedBy.name) ? (name(data.removedBy.name).split(/\s+/)[0] ?? by) : by;
+  const ask = plainName(data.removedBy)?.split(" ")[0] ?? by;
   return {
     subject: `You no longer have access to ${workspace}`,
     preheader: "Your own workspaces and account aren't affected.",
@@ -236,11 +261,12 @@ export const WORKSPACE_QUEUED: Record<
 > = {
   workspace_invite: (payload) => {
     const data = parseWorkspaceInvitePayload(payload);
-    // Sent on the inviter's behalf only when they have a name; an address in
-    // the From name reads like a spoof, so a nameless inviter sends as Moduo.
+    // Sent on the inviter's behalf only under a plain name; anything else (an
+    // address, a link, "Moduo Security") sends as Moduo.
+    const inviter = plainName(data.inviter);
     return {
       doc: workspaceInviteEmail(data),
-      fromName: name(data.inviter.name) ? viaModuo(data.inviter.name) : "Moduo",
+      fromName: inviter ? viaModuo(inviter) : "Moduo",
       replyTo: data.inviter.email,
     };
   },

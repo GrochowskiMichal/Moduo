@@ -99,6 +99,33 @@ describe("workspace invite (B3)", () => {
     expect(formatFrom(from, "hello@moduo.app")).toMatch(/^"[^"\r\n<>]+" <hello@moduo\.app>$/);
   });
 
+  it("never mails a link, an address or our name as a name (phishing relay)", () => {
+    const payload = {
+      ...INVITE,
+      inviter_name: "Moduo Security",
+      workspace_name: "Verify your account at evil.example",
+      role_name: "see www.evil.example",
+      role_key: null,
+    };
+    const queued = OUTBOX_TEMPLATES.workspace_invite?.(payload);
+    expect(queued?.fromName).toBe("Moduo");
+    const doc = workspaceInviteEmail(parseWorkspaceInvitePayload(payload));
+    expect(doc.subject).toBe("anna@northwind.studio invited you to a workspace");
+    expect(doc.preheader).toBe("Join as a member. The invite works until 15 October.");
+    const text = textOf(doc);
+    expect(text).not.toContain("evil");
+    expect(text).not.toContain("Moduo Security");
+    expect(text).toContain("anna@northwind.studio invited you to their workspace in Moduo.");
+    for (const workspaceName of ["acme.studio", "https://x", "a@b", "ｅｖｉｌ．ｃｏｍ", "go。example"]) {
+      const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
+      expect(subject).toBe("Anna Carter invited you to a workspace");
+    }
+    for (const workspaceName of ["Acme Inc.", "Studio 54", "Northwind 2.0"]) {
+      const subject = workspaceInviteEmail(parseWorkspaceInvitePayload({ ...INVITE, workspace_name: workspaceName })).subject;
+      expect(subject).toBe(`Anna Carter invited you to ${workspaceName}`);
+    }
+  });
+
   it("refuses a payload it can't render", () => {
     expect(() => parseWorkspaceInvitePayload({})).toThrow("email missing");
     expect(() => parseWorkspaceInvitePayload({ ...INVITE, token: "" })).toThrow("token missing");

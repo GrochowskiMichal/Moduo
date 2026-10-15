@@ -83,6 +83,7 @@ import {
   type TrackTimeInput,
 } from "../features/tasks/model";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
+import { InviteEmailMismatchError, isInviteEmailMismatch } from "../features/workspaces/invite-join";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 // Any missing table (develop's deploy-gap guard); task-rows' version names the table.
@@ -843,6 +844,8 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) {
         const message = error.message ?? "";
+        // Signed in with another address than the invite's (TX-7, S1).
+        if (isInviteEmailMismatch(message)) throw new InviteEmailMismatchError(error.hint);
         if (/already a member/i.test(message)) {
           throw new Error("You're already a member of this workspace.");
         }
