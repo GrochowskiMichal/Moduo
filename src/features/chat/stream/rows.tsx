@@ -283,7 +283,12 @@ export function MessageRow({
         <div className="min-w-0">
           {first ? (
             <div className="flex min-w-0 items-baseline gap-2 leading-normal">
-              <span className="truncate text-md font-semibold text-foreground">{name}</span>
+              <span
+                data-slot="message-author"
+                className="truncate text-md font-semibold text-foreground"
+              >
+                {name}
+              </span>
               {message.authorKind === "api_key" ? (
                 <span className="text-xs text-muted-foreground">app</span>
               ) : null}

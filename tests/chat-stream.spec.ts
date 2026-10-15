@@ -246,3 +246,40 @@ test("the New pill sits at the read mark and never jumps", async ({ page }) => {
     );
   expect(again[again.indexOf("NEW") + 1]).toContain(`unread one ${tag}`);
 });
+
+test("the message keys", async ({ page }) => {
+  await openGeneral(page);
+  await composer(page).fill(`keys ${tag}`);
+  await composer(page).press("Enter");
+  await expect(row(page, `keys ${tag}`)).toBeVisible();
+  await expect.poll(async () => (await serverRow(`keys ${tag}`))?.id ?? null).not.toBeNull();
+
+  // ↑ in an empty composer edits your last message; Esc puts it back.
+  await composer(page).press("ArrowUp");
+  const edit = page.getByRole("textbox", { name: "Edit message" });
+  await expect(edit).toBeVisible();
+  await edit.press("Escape");
+  await expect(edit).toHaveCount(0);
+  await expect(composer(page)).toBeFocused();
+
+  // In the stream, ↑↓ step through messages; E edits your own; R opens its chain.
+  await page.getByTestId("message-stream").focus();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.locator("[data-selected]")).toContainText(`keys ${tag}`);
+  await page.keyboard.press("e");
+  await expect(edit).toBeVisible();
+  await edit.fill(`keys edited ${tag}`);
+  await edit.press("Enter");
+  await expect(row(page, `keys edited ${tag}`)).toContainText("(edited)");
+  await expect.poll(async () => (await serverRow(`keys edited ${tag}`))?.id ?? null).not.toBeNull();
+  await page.getByTestId("message-stream").focus();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("r");
+  await expect(page).toHaveURL(/[?&]t=/);
+  // Esc leaves the selection and returns to typing.
+  await page.goto(`/chat?c=${room.general}`);
+  await page.getByTestId("message-stream").focus();
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Escape");
+  await expect(composer(page)).toBeFocused();
+});
