@@ -196,6 +196,14 @@ describe("Board v3 (TV-U11)", () => {
     expect(columnNames()).toEqual(["You", "Mike", "Unassigned"]);
   });
 
+  it("your column reads You, and its buttons say you (MOD-137)", () => {
+    renderBoard([task("a", { assigneeId: "u1" })], { boardGroupBy: "assignee" });
+    expect(columnNames()).toContain("You");
+    expect(screen.getByRole("button", { name: "Add a task to you" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Your column options" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add a task to You" })).toBeNull();
+  });
+
   it("lanes: one header per lane with cards, each folds (call 85)", () => {
     renderBoard([task("a", { priority: "high" }), task("b")], { lanes: "priority" });
     const lanes = [...document.querySelectorAll<HTMLElement>("[data-board-lane-key]")].map(

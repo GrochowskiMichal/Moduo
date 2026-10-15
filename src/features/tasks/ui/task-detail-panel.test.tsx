@@ -794,7 +794,9 @@ describe("one way to name you (MOD-137)", () => {
     expect(value.textContent).toContain("You");
     fireEvent.click(value);
     expect(await screen.findByRole("option", { name: /Alex Rivera \(you\)$/ })).toBeTruthy();
-    expect(screen.queryByRole("option", { name: /\bMe$/ })).toBeNull();
+    // Typing "me" still finds you (your name holds no "m").
+    fireEvent.change(screen.getByPlaceholderText("Assign to…"), { target: { value: "me" } });
+    expect(screen.getByRole("option", { name: /Alex Rivera \(you\)$/ })).toBeTruthy();
   });
 
   it("an empty Reminder reads Add reminder, never Remind me", async () => {

@@ -43,7 +43,13 @@ import {
   type SubtaskMode,
   type TaskOrder,
 } from "../display";
-import { type BoardCellRef, planBoardDrop, targetAccepts, targetName } from "../dnd/board-drop";
+import {
+  type BoardCellRef,
+  isSelfTarget,
+  planBoardDrop,
+  targetAccepts,
+  targetName,
+} from "../dnd/board-drop";
 import { positionNextTo } from "../dnd/drop-mode";
 import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
@@ -258,7 +264,7 @@ export function TaskBoardView({
 
   const inboxId = inbox?.id ?? null;
   const today = useToday();
-  const { assignees, byId } = useAssignees();
+  const { assignees, byId, currentUserId } = useAssignees();
   const detailed = rows === "detailed";
 
   // Subtasks whose parent is on this board stay off it — the parent card
@@ -633,7 +639,7 @@ export function TaskBoardView({
     inboxId,
     statusesFor,
     parent: task.parentId ? (taskById.get(task.parentId) ?? null) : null,
-    selfId: api.currentUserId,
+    selfId: currentUserId,
   });
 
   // Screen readers hear titles and column names, never ids (standalone
@@ -693,7 +699,7 @@ export function TaskBoardView({
       void api.bulkWaiting(
         ids,
         decision.entry,
-        targetName(dest.column.target, dest.column.label, api.currentUserId),
+        targetName(dest.column.target, dest.column.label, currentUserId),
         api.waiting,
       );
     } else if (decision.kind === "write") {
@@ -768,7 +774,7 @@ export function TaskBoardView({
         void api.bulkWaiting(
           [task.id],
           decision.entry,
-          targetName(column.target, column.label, api.currentUserId),
+          targetName(column.target, column.label, currentUserId),
           api.waiting,
         );
       }
@@ -969,6 +975,7 @@ export function TaskBoardView({
         onFold={() => setFold(column.id, true)}
         section={sectionEdits(column)}
         onEditStatuses={canEdit && column.statusId ? onEditStatuses : null}
+        self={isSelfTarget(column.target, currentUserId)}
       />
     );
 

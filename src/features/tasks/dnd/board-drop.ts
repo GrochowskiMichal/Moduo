@@ -55,6 +55,19 @@ export type BoardDropContext = {
   selfId?: string | null;
 };
 
+/** Whether a column or lane is the reader's own: theirs to take, or waiting
+ *  on them (MOD-137). */
+export function isSelfTarget(
+  target: BoardTarget | null,
+  selfId: string | null | undefined,
+): boolean {
+  if (!selfId || !target) return false;
+  return (
+    (target.field === "assignee" && target.value === selfId) ||
+    (target.field === "waiting" && target.kind === "person" && target.ref === selfId)
+  );
+}
+
 /**
  * A target's name inside a sentence: "you" when it names the reader (whose
  * column reads "You", MOD-137), otherwise the column's label.
@@ -64,11 +77,7 @@ export function targetName(
   label: string,
   selfId: string | null | undefined,
 ): string {
-  if (!selfId || !target) return label;
-  const self =
-    (target.field === "assignee" && target.value === selfId) ||
-    (target.field === "waiting" && target.kind === "person" && target.ref === selfId);
-  return self ? "you" : label;
+  return isSelfTarget(target, selfId) ? "you" : label;
 }
 
 /** Whether a target takes this task: never the Inbox for a project's task. */

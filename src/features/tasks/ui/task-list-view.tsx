@@ -1878,6 +1878,7 @@ export function TaskListView({
                 }
               : null
           }
+          self={groupBy === "assignee" && !!currentUserId && group.key === currentUserId}
         />
       );
     }

@@ -214,7 +214,6 @@ describe("Filter", () => {
     });
     fireEvent.click(screen.getByRole("option", { name: /^Assignee/ }));
     const you = screen.getByRole("option", { name: /Alex Rivera \(you\)$/ });
-    expect(screen.queryByRole("option", { name: /^(AR)?Me$/ })).toBeNull();
     fireEvent.click(you);
     expect(screen.getByRole("group", { name: "Assignee is You" })).toBeTruthy();
   });

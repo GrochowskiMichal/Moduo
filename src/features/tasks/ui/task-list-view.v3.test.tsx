@@ -263,6 +263,16 @@ describe("group headers (default n)", () => {
     expect(onRequestCapture).toHaveBeenCalledWith({ projectId: "p1", sectionId: "s1" });
   });
 
+  it("your own group reads You and its + says Add a task to you (MOD-137)", () => {
+    renderList([task("a", { assigneeId: "u1" }), task("b", { assigneeId: "u2" })], {
+      groupBy: "assignee",
+    });
+    expect(screen.getByRole("button", { name: /^You/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a task to you" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a task to Mike" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add a task to You" })).toBeNull();
+  });
+
   it("a project grouped by section ends with + Add section", () => {
     const onAddSection = rs.fn();
     renderList(tasks(), { groupBy: "section", sections, onAddSection });

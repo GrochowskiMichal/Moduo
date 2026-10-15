@@ -619,7 +619,10 @@ function PreviewStep({
                   }
                 >
                   <SelectTrigger aria-label={`Assignee for ${p.label}`} className="w-40">
-                    <SelectValue />
+                    {/* The menu lists "Name (you)"; the picked value reads "You" (MOD-137). */}
+                    <SelectValue>
+                      {takers.find((a) => a.userId === assigneeOf.get(p.key))?.name ?? "Unassigned"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
