@@ -6,6 +6,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  CONVERT_LIMIT,
   dateMarkdown,
   descriptionPlainText,
   descriptionReferences,
@@ -171,6 +172,67 @@ describe("descriptionPlainText (search, the Board card's preview)", () => {
     expect(words.replace(/\s+/g, " ").trim()).toBe("Fix the pre span");
     expect(words).not.toContain("strong");
     expect(words).not.toContain("Northwind");
+  });
+});
+
+describe("a crafted description can't stall a reader (the connector runs this)", () => {
+  /** Run `fn` and say how long it took, in ms. */
+  function timed(fn: () => unknown): number {
+    const start = performance.now();
+    fn();
+    return performance.now() - start;
+  }
+  const HTML: Array<[string, string]> = [
+    ["a run of <", `<p>${"<".repeat(200_000)}</p>`],
+    ["a run of < then one >", `<p>${"<".repeat(200_000)}>`],
+    ["tags that never close", `<p>${"<a b=".repeat(60_000)}`],
+    ["nesting 100,000 deep", `<p>${"<b><i>".repeat(100_000)}x`],
+    ["unclosed quotes in a tag", `<p><span ${'a=" '.repeat(60_000)}>x</span></p>`],
+    ["comments that never end", `<p>${"<!--".repeat(60_000)}`],
+    ["long whitespace inside words", `<p><b>a${" ".repeat(200_000)}b</b>${"\n ".repeat(50_000)}c</p>`],
+    ["a style made of one word", `<p><span style="${"text-decoration".repeat(20_000)}">x</span></p>`],
+    ["ampersands", `<p>${"&a".repeat(100_000)}${"&".repeat(100_000)}</p>`],
+    ["stars and brackets", `<p>${"*[_`~".repeat(60_000)}</p>`],
+    ["a code span of backticks", `<p><code>${"` ".repeat(100_000)}</code></p>`],
+    ["a list 10,000 items long", `<ul>${"<li>x</li>".repeat(10_000)}</ul>`],
+  ];
+  for (const [name, html] of HTML) {
+    it(`HTML: ${name}`, () => {
+      expect(isHtmlDescription(html)).toBe(true);
+      expect(timed(() => htmlToMarkdown(html))).toBeLessThan(1500);
+      expect(timed(() => descriptionPlainText(html))).toBeLessThan(1500);
+    });
+  }
+  const MARKDOWN: Array<[string, string]> = [
+    ["a run of [", "[".repeat(200_000)],
+    ["a run of *", "*".repeat(200_000)],
+    ["openers that never close", "**a ".repeat(60_000)],
+    ["underscores", "_a ".repeat(60_000)],
+    ["links that never close", '[a](x "b'.repeat(40_000)],
+    ["pointy links that never close", "[a](<b".repeat(40_000)],
+    ["references cut short", `[task](moduo://task/${"a".repeat(30)}`.repeat(20_000)],
+    ["spaces", `a${" ".repeat(200_000)}b`],
+    ["quote and list markers", "> - [ ] ".repeat(60_000)],
+  ];
+  for (const [name, md] of MARKDOWN) {
+    it(`Markdown: ${name}`, () => {
+      expect(timed(() => descriptionPlainText(md))).toBeLessThan(1500);
+      expect(timed(() => descriptionReferences(md))).toBeLessThan(1500);
+      expect(timed(() => markdownExcerpt(md, 280))).toBeLessThan(50);
+    });
+  }
+
+  it("converts only the first CONVERT_LIMIT characters; the rest follows as plain words, a stored title dropped", () => {
+    const filler = `${P}<b><strong class="font-semibold">Head</strong></b>${span(" words ".repeat(20))}</p>`;
+    let html = "";
+    while (html.length < CONVERT_LIMIT + 5_000) html += filler;
+    html += `${P}<b><strong class="font-semibold">Tail</strong></b>${span(" end ")}<span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${TASK}">Acquire Northwind</span></p>`;
+    const md = htmlToMarkdown(html);
+    expect(md.startsWith("**Head** words")).toBe(true);
+    expect(md).toContain("Tail end");
+    expect(md).not.toContain("**Tail**");
+    expect(md).not.toContain("Northwind");
+    expect(md).not.toContain("<");
   });
 });
 
