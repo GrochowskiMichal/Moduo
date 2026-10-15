@@ -51,14 +51,16 @@ export type TasksDeepLinkTarget =
 /**
  * A handle deep link (`?id=MOD-142`, RF-1) resolved against the loaded tasks:
  * the task whose number it names under the workspace's current key, or null
- * (not loaded, an old key, someone else's: the server answers those).
+ * (not loaded, an old key, someone else's: the server answers those). The ⌘K
+ * palette asks it too (MOD-144), where people type "mod 99" as often as
+ * "MOD-99": a space reads as the hyphen, as in `taskMatchesQuery`.
  */
 export function taskIdForHandle(
   handle: string,
   tasks: ReadonlyArray<Pick<Task, "id" | "number">>,
   taskKey: string | null,
 ): string | null {
-  const m = /^([A-Za-z]{2,5})-(\d{1,9})$/.exec(handle.trim());
+  const m = /^([A-Za-z]{2,5})(?:-|\s+)(\d{1,9})$/.exec(handle.trim());
   if (!m || !taskKey || m[1].toUpperCase() !== taskKey.toUpperCase()) return null;
   const number = Number(m[2]);
   return tasks.find((t) => t.number === number)?.id ?? null;

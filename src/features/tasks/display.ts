@@ -18,9 +18,17 @@ import {
   isProjectScope,
   LEVEL_ORDER,
   STATUS_ORDER,
+  spansProjects,
 } from "./helpers";
 import type { Task } from "./model";
-import { DEFAULT_ROW_PROPERTIES, type RowPreset, type RowProperty } from "./row-layout";
+import {
+  COLUMN_LABELS,
+  DEFAULT_ROW_PROPERTIES,
+  DETAILED_COLUMNS,
+  type DetailedColumn,
+  type RowPreset,
+  type RowProperty,
+} from "./row-layout";
 import { statusKeyOf } from "./statuses";
 import type { TimelineDeps } from "./timeline-deps";
 import {
@@ -57,7 +65,9 @@ export type TaskOrder =
   | "created"
   | "updated"
   | "title"
-  | "status";
+  | "status"
+  /** The task's ID (MOD-144): in number order, MOD-2 before MOD-10. */
+  | "id";
 /** Which way a sort runs (a Detailed header clicked twice, TV-U10). */
 export type OrderDirection = "asc" | "desc";
 export type SubtaskMode = "nested" | "flat";
@@ -88,6 +98,9 @@ export type TasksDisplay = {
   subtasks: SubtaskMode;
   rows: RowPreset;
   properties: RowProperty[];
+  /** Display → Columns (MOD-128, MOD-136): the Detailed list's own columns
+   *  that are on (the ones "Show on rows" doesn't already switch). */
+  detailedColumns: DetailedColumn[];
   /** The Timeline (TV-TL1): its zoom, Group by, Colour by, extras and subtasks. */
   timelineZoom: TimelineZoom;
   timelineGroup: TimelineGroup;
@@ -113,6 +126,7 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   subtasks: "nested",
   rows: "standard",
   properties: [...DEFAULT_ROW_PROPERTIES],
+  detailedColumns: detailedColumnsDefault("all"),
   timelineZoom: "month",
   timelineGroup: "project",
   colorBy: "none",
@@ -120,6 +134,18 @@ export const TASKS_DISPLAY_DEFAULTS: TasksDisplay = {
   timelineSubtasks: "hidden",
   timelineDeps: "selected",
 };
+
+/**
+ * Display → Columns as a scope starts (MOD-128, MOD-136): every Detailed
+ * column but Updated, and Project only where tasks come from more than one
+ * project (All, My tasks, Focus, Upcoming, Won't do). Inside a project, and
+ * in the Inbox, it would repeat the page's title on every row.
+ */
+export function detailedColumnsDefault(scope: string): DetailedColumn[] {
+  return DETAILED_COLUMNS.filter(
+    (c) => c !== "updated" && (c !== "project" || spansProjects(scope)),
+  );
+}
 
 /** Which shape of Timeline rows a scope gets (REPLAN 67). */
 export function timelineScopeOf(scope: string): TimelineScope {
@@ -165,7 +191,12 @@ export function tasksDisplayDefaults(
   rows: RowPreset = "standard",
   role: TimelineRoleDefaults = NO_ROLE_DEFAULTS,
 ): TasksDisplay {
-  const base = { ...TASKS_DISPLAY_DEFAULTS, rows, ...timelineDefaults(scope, role) };
+  const base = {
+    ...TASKS_DISPLAY_DEFAULTS,
+    rows,
+    detailedColumns: detailedColumnsDefault(scope),
+    ...timelineDefaults(scope, role),
+  };
   if (scope === "mine") return { ...base, group: "status" };
   // Upcoming (TV-U15) groups by its days and orders its own rows; dated
   // subtasks show flat, with "↳ Parent" (research §6).
@@ -341,6 +372,7 @@ const ORDER_CONTROL: DisplayControl<TasksDisplay> = {
     { value: "updated", label: "Updated" },
     { value: "title", label: "Title" },
     { value: "status", label: "Status" },
+    { value: "id", label: "ID" },
   ],
 };
 
@@ -375,6 +407,19 @@ const PROPERTIES_CONTROL: DisplayControl<TasksDisplay> = {
     { value: "date", label: "Date" },
     { value: "assignee", label: "Assignee" },
   ],
+};
+
+/**
+ * Display → Columns (MOD-128, MOD-136): the Detailed list's own columns, each
+ * on or off, shown only while the List's rows are Detailed. Priority, Energy,
+ * Date and Assignee stay under "Show on rows", so no column has two switches.
+ * Never on the Board, whose Group by was once called Columns (call 22a).
+ */
+const COLUMNS_CONTROL: DisplayControl<TasksDisplay> = {
+  type: "toggles",
+  id: "detailedColumns",
+  label: "Columns",
+  options: DETAILED_COLUMNS.map((value) => ({ value, label: COLUMN_LABELS[value] })),
 };
 
 /** The same choices on the Board, named for what it shows. */
@@ -487,22 +532,25 @@ function timelineControls(scope: string): DisplayControl<TasksDisplay>[] {
  *   Subtasks; its zoom sits on its own bar.
  * - The Board has its own Group by (call 22), Lanes (85), Rows (Standard or
  *   Detailed cards) and the Description preview (AC7.4) (TV-U11).
+ * - The List's Detailed rows add Columns (MOD-128, MOD-136).
  */
 export function tasksDisplayControls(
   scope: string,
   layout: TaskLayout = "list",
   choices: GroupChoices = ALL_CHOICES,
+  rows: RowPreset = "standard",
 ): DisplayControl<TasksDisplay>[] {
   if (layout === "timeline") return [LAYOUT_CONTROL, ...timelineControls(scope)];
+  const columns = rows === "detailed" ? [COLUMNS_CONTROL] : [];
   // Upcoming's List groups by its days in its own order (TV-U15): no Group
   // by, Order by or nesting to choose.
   if (scope === "upcoming" && layout === "list") {
-    return [LAYOUT_CONTROL, COMPLETED_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
+    return [LAYOUT_CONTROL, COMPLETED_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL, ...columns];
   }
   if (scope === "today") {
     return layout === "board"
       ? [LAYOUT_CONTROL, ROWS_CONTROL, CARD_PROPERTIES_CONTROL, DESCRIPTION_CONTROL]
-      : [LAYOUT_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL];
+      : [LAYOUT_CONTROL, ROWS_CONTROL, PROPERTIES_CONTROL, ...columns];
   }
   if (layout === "board") {
     return [
@@ -525,6 +573,7 @@ export function tasksDisplayControls(
     SUBTASKS_CONTROL,
     ROWS_CONTROL,
     PROPERTIES_CONTROL,
+    ...columns,
   ];
 }
 
@@ -541,6 +590,8 @@ function scopeControls(scope: string): DisplayControl<TasksDisplay>[] {
     SUBTASKS_CONTROL,
     ROWS_CONTROL,
     PROPERTIES_CONTROL,
+    // Kept while the rows are Standard too, so a switch back finds them.
+    COLUMNS_CONTROL,
     ...timelineControls(scope),
   ];
 }
@@ -609,6 +660,9 @@ const SORT_KEYS: Record<Exclude<TaskOrder, "manual" | "title">, (t: Task) => num
     return x === null ? null : -x;
   },
   status: (t) => STATUS_RANK[statusKeyOf(t)] ?? null,
+  // The number, not the handle's text (MOD-144): MOD-2 before MOD-10. A task
+  // not saved yet has none.
+  id: (t) => (typeof t.number === "number" ? t.number : null),
 };
 
 function compareBy(order: Exclude<TaskOrder, "manual">, dir: OrderDirection) {
@@ -635,7 +689,8 @@ function compareBy(order: Exclude<TaskOrder, "manual">, dir: OrderDirection) {
  * Orders tasks for Display → Order by. Manual keeps the incoming (position)
  * order; every other order is stable, so ties keep the manual order. Dates
  * run earliest first, priority high to none, Created / Updated newest first,
- * titles A to Z, statuses in the List's order (In progress first); `desc`
+ * titles A to Z, statuses in the List's order (In progress first), IDs in
+ * number order (MOD-2 before MOD-10, MOD-144); `desc`
  * turns each around, and a task without the value sorts last either way.
  */
 export function orderTasks<T extends Task>(

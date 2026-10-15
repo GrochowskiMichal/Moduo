@@ -223,6 +223,14 @@ describe("taskIdForHandle — `?id=MOD-142` (RF-1)", () => {
     expect(taskIdForHandle("MOD-9", tasks, "MOD")).toBeNull();
     expect(taskIdForHandle("MOD-142", tasks, null)).toBeNull();
   });
+  it("reads a space as the hyphen, as typed in ⌘K (MOD-144)", () => {
+    expect(taskIdForHandle("mod 142", tasks, "MOD")).toBe("a");
+    expect(taskIdForHandle(" MOD  7 ", tasks, "MOD")).toBe("b");
+    // A key alone, a number alone or more words name no task.
+    expect(taskIdForHandle("mod", tasks, "MOD")).toBeNull();
+    expect(taskIdForHandle("142", tasks, "MOD")).toBeNull();
+    expect(taskIdForHandle("mod 142 copy", tasks, "MOD")).toBeNull();
+  });
 });
 
 describe("takeSearchTokens", () => {

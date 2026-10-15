@@ -1694,6 +1694,8 @@ export function TasksPlanView({
   const projectScope = buckets.some((b) => b.id === place);
   const listExtras = {
     taskKey,
+    // Display → Columns (MOD-128, MOD-136): Detailed's own columns that are on.
+    detailedColumns: display.detailedColumns,
     sections: api.sections,
     teams: api.teams,
     filteredOut: filtering.active
