@@ -80,6 +80,14 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
     removedBy: { name: "Anna Carter", email: "anna@northwind.studio" },
     at: "2026-10-08T09:12:00Z",
   },
+  welcome: {
+    name: "Tom Becker",
+    workspaceName: "Northwind Studio",
+    trialEndsAt: "2026-10-22T09:12:00Z",
+    zone: "Europe/Warsaw",
+  },
+  trial_ending: { endsAt: "2026-10-22T09:12:00Z", zone: "Europe/Warsaw" },
+  trial_ended: {},
 };
 
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
@@ -97,4 +105,7 @@ export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   workspace_invite: "B3 · Workspace invite",
   workspace_owner: "B4 · You're the owner now",
   workspace_removed: "B5 · Removed from a workspace",
+  welcome: "D1 · Welcome",
+  trial_ending: "D2 · Trial ends in 3 days",
+  trial_ended: "D3 · Trial ended",
 };

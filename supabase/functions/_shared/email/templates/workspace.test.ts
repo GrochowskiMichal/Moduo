@@ -207,7 +207,7 @@ describe("removed from a workspace (B5)", () => {
 });
 
 describe("the worker's templates", () => {
-  it("send the workspace kinds and keep every kind already live (TX-3 to TX-6)", () => {
+  it("send the workspace kinds and keep every kind already live (TX-3 to TX-9a)", () => {
     expect(Object.keys(OUTBOX_TEMPLATES).sort()).toEqual(
       [
         "booking_guest_added",
@@ -222,6 +222,9 @@ describe("the worker's templates", () => {
         "workspace_invite",
         "workspace_owner",
         "workspace_removed",
+        "welcome",
+        "trial_ending",
+        "trial_ended",
       ].sort(),
     );
   });

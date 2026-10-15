@@ -138,8 +138,8 @@ describe("claim, send, retry", () => {
 
   it("never sends a row it can't render; a kind without a template waits for a deploy, a bad payload fails", async () => {
     const queue = fakeQueue([
-      row({ id: "a", kind: "welcome" }),
-      row({ id: "a5", kind: "welcome", attempts: OUTBOX_MAX_ATTEMPTS }),
+      row({ id: "a", kind: "founder_access" }),
+      row({ id: "a5", kind: "founder_access", attempts: OUTBOX_MAX_ATTEMPTS }),
       row({ id: "b", kind: "not_a_kind" }),
       row({ id: "c", payload: { reason: "nonsense" } }),
       row({ id: "d", payload: null }),
@@ -147,8 +147,8 @@ describe("claim, send, retry", () => {
     await runOutbox(queue.deps);
     expect(queue.sent).toHaveLength(0);
     expect(queue.finished.map((outcome) => [outcome.id, outcome.outcome, "error" in outcome ? outcome.error : ""])).toEqual([
-      ["a", "retry", "no_template:welcome"],
-      ["a5", "failed", "no_template:welcome"],
+      ["a", "retry", "no_template:founder_access"],
+      ["a5", "failed", "no_template:founder_access"],
       ["b", "failed", "unknown_kind:not_a_kind"],
       ["c", "failed", "render_failed:ops_alert: unknown reason"],
       ["d", "failed", "payload_not_object"],
