@@ -494,7 +494,7 @@ const EMAILS = [
       ["muted", "Reply to this email to reach Anna."],
     ],
     why: "You got this email because you had a meeting with Anna Carter booked through Moduo.",
-    notes: ["Sent even when Google sends its own cancellation, because only ours has the rebooking link (Q35).", "Waits 2 minutes, so undoing the delete in Moduo cancels it.", "Today nothing happens at all: the slot stays blocked and the guest hears nothing from Moduo."] },
+    notes: ["Sent even when Google sends its own cancellation, because only ours has the rebooking link (Q35).", "Waits 2 minutes, so undoing the delete in Moduo cancels it.", "Today nothing happens at all: the slot stays blocked and the guest hears nothing from Moduo.", "TX-6: on Zoom-only bookings it carries the cancelling calendar file (as C5 does), and it goes to anyone the booker added too. Not sent for a meeting that already started, nor when the host only disconnects the calendar account."] },
 
   { g: "bookings", id: "C7", name: "Meeting reminder (guest)", status: "new",
     when: "24 hours (or 1 hour) before the meeting, if the booking link's reminder is on.",
@@ -509,7 +509,7 @@ const EMAILS = [
     ],
     why: "You got this reminder because Anna's booking link sends one a day before each meeting.",
     sent: true,
-    notes: ["Your Q36: the host sets it on each booking link (Off, 1 hour or 24 hours before). That's how Calendly, Cal.com and SavvyCal do it. New links start at 24 hours, the standard default.", "Skipped when the meeting is booked inside that window.", "Added guests get the cancel link only if they booked."] },
+    notes: ["Your Q36: the host sets it on each booking link (Off, 1 hour or 24 hours before). That's how Calendly, Cal.com and SavvyCal do it. New links start at 24 hours, the standard default.", "Skipped when the meeting is booked inside that window.", "Added guests get the cancel link only if they booked.", "TX-6 (agent copy, in the ratified voice, flagged for Maciej): on a 1-hour link the subject reads \"Today at 14:00: Anna Carter\" and the sentence \"You're meeting Anna {today} at {14:00}.\"; the footer says \"…sends one an hour before each meeting.\" When the meeting is neither today nor tomorrow at send time (a meeting moved), the date is written out: \"Friday 16 October at 14:00: Anna Carter\"."] },
 
   { g: "trial", id: "D1", name: "Welcome", status: "new",
     when: "A few minutes after someone sets up their first workspace.",

@@ -42,7 +42,15 @@ export type EntryEffect =
 
 export type MenuEntries = { candidates: MentionCandidate[]; effects: Map<string, EntryEffect> };
 
-export type CapturePerson = { userId: string; name: string; isMe: boolean };
+export type CapturePerson = {
+  userId: string;
+  name: string;
+  isMe: boolean;
+  /** Their own name, for the avatar's initials; empty when unset ("?"). */
+  fullName?: string;
+  /** Their profile photo, for the menu's avatar (MOD-96). */
+  avatarUrl?: string | null;
+};
 
 const includesWord = (name: string, query: string) => {
   const q = query.trim().toLowerCase();
@@ -81,7 +89,14 @@ export function mentionEntries(
   const effects = new Map<string, EntryEffect>();
   const out: MentionCandidate[] = [];
   for (const p of ctx.people.filter((p) => includesWord(p.name, query)).slice(0, 3)) {
-    out.push({ kind: "person", memberId: p.userId, label: personLabel(p), icon: null });
+    out.push({
+      kind: "person",
+      memberId: p.userId,
+      label: personLabel(p),
+      icon: null,
+      name: (p.fullName ?? p.name) || "?",
+      avatarUrl: p.avatarUrl ?? null,
+    });
   }
   for (const t of ctx.teams.filter((t) => includesWord(t.name, query)).slice(0, 2)) {
     out.push({

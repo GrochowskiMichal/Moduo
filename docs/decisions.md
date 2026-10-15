@@ -227,6 +227,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-14 · People show their profile photo (Maciej, dogfood MOD-96): the photo when set, the two initials on their stable colour as the fallback (no photo, loading, failed); supersedes call 43's initials only; the capture's pills and tokens and the `@` menus now get the photo too → decisions/tasks.md MOD-96
 - 2026-10-14 · The task's actions sit in the panel's title row, right of "Details ▾" (Maciej, dogfood MOD-118 follow-up): the breadcrumb line holds only the crumbs and the handle; the full page's header holds them after ↑ ↓; ▶ Focus on this moves into ⋯ (⇧F), the Focus toggle stays an icon (agent's choice); any panel view can use the slot (`TitleActions`).
 - 2026-10-14 · Task details match the approved prototypes (Maciej, dogfood MOD-116/114/118/115/119/95): the description and its files sit above the properties (supersedes U13-5's order); the breadcrumb and the "+" property line stay on one line and shorten ("+n"), every other panel value still wraps (AC1.16 amended); no files, no strip (Attach files… in ⋯); the agent line never widens its column; a project's title opens its overview, with a ⋯, and keeps its room in a narrow toolbar.
 - 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 (agent's choices): Home's Upcoming fills its cell and its "+n more" opens Upcoming (`?place=upcoming`); Timeline hover labels shut during a drag, a zoom holds Today, a month's name never shows as a fragment, a mixed move names the tasks it skipped; plain-text Markdown bullets read as "•" lines; the `@ # /` menu keeps inside its dialog; an unsaved task reads nothing by its temporary id; small ones (client row, Storage's task link, the Board's "+n", Move's toast after the moves, teaching tasks only in a new workspace, numbered Trello members, no stray entry script) → decisions/tasks.md PL2-1…PL2-9
@@ -334,6 +335,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-14 · TX-6: reminders and the host's cancel are queued by Postgres triggers from an email context saved on the booking
 - 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
 - 2026-10-10 · TX-4: invite-only is a before-user-created hook over three allow sources, a waitlist invite is one queued B1, and a build-updates request outlives the waitlist row
 - 2026-10-09 · TX-3: the outbox queues, retries and suppresses, and the worker's secret lives only in Vault

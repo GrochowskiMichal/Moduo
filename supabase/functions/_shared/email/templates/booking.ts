@@ -11,6 +11,10 @@
  * - C4 `booking_host_guest_cancelled` → the host, replies go to the guest.
  * - C5 `booking_guest_cancelled` → the booker; on a Zoom-only booking also each
  *   extra guest (`recipient: "added"`), whose C2 calendar file it cancels.
+ * - C6 `booking_guest_host_cancelled` → the booker and each extra guest, 2
+ *   minutes after the host deleted the meeting (TX-6; queued by SQL).
+ * - C7 `booking_guest_reminder` → the booker and each extra guest, the link's
+ *   "Remind guests" time before the meeting (TX-6; queued by SQL).
  *
  * A calendar file goes with C1/C2 (REQUEST) and C5 (CANCEL, same UID) only when
  * Google isn't sending its own invite (`googleInvites === false`).
@@ -33,6 +37,7 @@ import {
   paragraph,
   sentence,
 } from "../blocks.ts";
+import { daysBetween, zoneKey } from "../../../../../src/features/calendar/booking/sentence.ts";
 import { dayLong, dayShort, time24, usableTimeZone, zoneLabel } from "../format.ts";
 import { icsAttachment, type IcsEvent } from "../ics.ts";
 import type { QueuedEmail } from "../outbox.ts";
@@ -76,6 +81,10 @@ export type BookingEmailData = {
   note?: string | null;
   /** C3: the answers to the link's questions. */
   answers?: { label: string; value: string }[];
+  /** C7: how long before the meeting the reminder goes (60 or 1440). */
+  reminderMinutes?: number;
+  /** C7: when the reminder is due, ISO; "today"/"tomorrow" are counted from it. */
+  sendAt?: string;
 };
 
 export const BOOKING_SETTINGS_URL = `${CANONICAL_APP_ORIGIN}/settings?section=preferences`;
@@ -309,6 +318,62 @@ export function bookingGuestCancelledEmail(data: BookingEmailData): EmailDoc {
   };
 }
 
+/** C6 · Host canceled (guest): the booker and every extra guest. */
+export function bookingGuestHostCancelledEmail(data: BookingEmailData): EmailDoc {
+  const w = when(data);
+  const host = name(data.hostName);
+  const first = firstName(data.hostName);
+  const blocks: Block[] = [
+    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
+    sentence(`${first} canceled your meeting on `, fixed(w.day), " at ", fixed(w.time), "."),
+  ];
+  if (!data.googleInvites) blocks.push(attachmentNote());
+  if (data.rebookUrl) blocks.push(button("Pick another time", data.rebookUrl));
+  blocks.push(muted(`Reply to this email to reach ${first}.`));
+  return {
+    subject: `${host} canceled your meeting on ${w.short}`,
+    preheader: `Pick another time, or reply to reach ${first}.`,
+    blocks,
+    footer: { reason: `You got this email because you had a meeting with ${host} booked through Moduo.` },
+  };
+}
+
+/** "today", "tomorrow", or null: the meeting's day counted from when the reminder goes, in the reader's zone. */
+function relativeDay(data: BookingEmailData, zone: string): "today" | "tomorrow" | null {
+  if (!data.sendAt) return null;
+  const gap = daysBetween(zoneKey(new Date(data.sendAt), zone), zoneKey(new Date(data.start), zone));
+  return gap === 0 ? "today" : gap === 1 ? "tomorrow" : null;
+}
+
+/** C7 · Meeting reminder (guest). The cancel link only for the person who booked. */
+export function bookingGuestReminderEmail(data: BookingEmailData): EmailDoc {
+  const w = when(data);
+  const host = name(data.hostName);
+  const first = firstName(data.hostName);
+  const relative = relativeDay(data, w.zone);
+  const details = detailsLine(data, w);
+  const blocks: Block[] = [
+    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
+    relative
+      ? sentence(`You're meeting ${first} `, fixed(relative), " at ", fixed(w.time), ".")
+      : sentence(`You're meeting ${first} on `, fixed(w.day), " at ", fixed(w.time), "."),
+    paragraph(details),
+  ];
+  if (data.joinUrl) blocks.push(button(`Join ${name(data.video)}`, data.joinUrl));
+  if (data.recipient !== "added" && data.cancelUrl) blocks.push(link("Can't make it? Cancel the meeting", data.cancelUrl));
+  const lead = relative ? `${relative === "today" ? "Today" : "Tomorrow"} at ${w.time}` : `${w.day} at ${w.time}`;
+  const howLong = data.reminderMinutes === 60 ? "an hour" : "a day";
+  return {
+    subject: `${lead}: ${host}`,
+    preheader: details,
+    blocks,
+    footer: {
+      reason: `You got this reminder because ${first}'s booking link sends one ${howLong} before each meeting.`,
+      scheduledWith: true,
+    },
+  };
+}
+
 // ---- the payload, checked ----
 
 function text(payload: Record<string, unknown>, key: string, required = true): string {
@@ -342,6 +407,7 @@ export function parseBookingPayload(payload: Record<string, unknown>): BookingEm
       })
     : [];
   const optional = (key: string) => text(payload, key, false) || undefined;
+  const sendAt = optional("sendAt");
   return {
     bookingId: text(payload, "bookingId"),
     linkName: text(payload, "linkName", false),
@@ -365,6 +431,8 @@ export function parseBookingPayload(payload: Record<string, unknown>): BookingEm
     openUrl: optional("openUrl"),
     note: optional("note") ?? null,
     answers,
+    reminderMinutes: typeof payload.reminderMinutes === "number" ? payload.reminderMinutes : undefined,
+    sendAt: sendAt && !Number.isNaN(Date.parse(sendAt)) ? sendAt : undefined,
   };
 }
 
@@ -374,7 +442,9 @@ export const BOOKING_QUEUED: Record<
   | "booking_guest_added"
   | "booking_host_new"
   | "booking_host_guest_cancelled"
-  | "booking_guest_cancelled",
+  | "booking_guest_cancelled"
+  | "booking_guest_host_cancelled"
+  | "booking_guest_reminder",
   (payload: Record<string, unknown>) => QueuedEmail
 > = {
   booking_guest_confirmed: (payload) => {
@@ -409,5 +479,18 @@ export const BOOKING_QUEUED: Record<
       fromName: viaModuo(data.hostName),
       attachments: calendarFile(data, "CANCEL"),
     };
+  },
+  booking_guest_host_cancelled: (payload) => {
+    const data = parseBookingPayload(payload);
+    return {
+      doc: bookingGuestHostCancelledEmail(data),
+      fromName: viaModuo(data.hostName),
+      replyTo: data.hostEmail,
+      attachments: calendarFile(data, "CANCEL"),
+    };
+  },
+  booking_guest_reminder: (payload) => {
+    const data = parseBookingPayload(payload);
+    return { doc: bookingGuestReminderEmail(data), fromName: viaModuo(data.hostName) };
   },
 };

@@ -1,7 +1,8 @@
 // A recognised token in the capture title (TV-U14): the kit Chip at the inline
 // rung with the active fill, so the title shows what the `@ # /` menus
 // understood and its pill fills at the same moment (research §2). A person is
-// round, a team square (95); a linked thing is a live Reference chip.
+// round, a team square (95); a linked thing is a live Reference chip. A person
+// shows their profile photo when they have one (MOD-96), else their initials.
 
 import {
   $applyNodeReplacement,
@@ -12,7 +13,7 @@ import {
   type Spread,
 } from "lexical";
 import { Bell, CalendarClock, CalendarDays, Flag, Repeat, Timer } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext } from "react";
 
 import { PersonAvatar, TeamMark } from "../../../components/ui/avatar";
 import { Chip } from "../../../components/ui/chip";
@@ -28,7 +29,19 @@ const FALLBACK: Partial<Record<CaptureToken["kind"], string>> = {
 
 export type SerializedCaptureTokenNode = Spread<{ token: CaptureToken }, SerializedLexicalNode>;
 
+/** How a person token's avatar draws: their photo and their own name. */
+export type TokenPerson = { avatarUrl: string | null; name: string };
+
+/**
+ * A person's avatar facts by id, for their tokens (MOD-96). The Task body
+ * provides them from the member list, so a photo URL never rides in the token
+ * or the device's draft, and a changed photo follows the list. Without a
+ * provider a token shows the initials of its label.
+ */
+export const TokenPersonContext = createContext<(userId: string) => TokenPerson | null>(() => null);
+
 function TokenChip({ token }: { token: CaptureToken }) {
+  const personOf = useContext(TokenPersonContext);
   if (token.kind === "thing") {
     // In the capture a click never opens it (that would leave the capture);
     // the hover card still shows what it is.
@@ -44,9 +57,10 @@ function TokenChip({ token }: { token: CaptureToken }) {
       </span>
     );
   }
+  const person = token.kind === "person" ? personOf(token.userId) : null;
   const icon: ReactNode | undefined =
     token.kind === "person" ? (
-      <PersonAvatar name={token.label} id={token.userId} />
+      <PersonAvatar name={person?.name ?? token.label} id={token.userId} src={person?.avatarUrl} />
     ) : token.kind === "team" ? (
       <TeamMark
         name={token.label}

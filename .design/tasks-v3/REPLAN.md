@@ -1207,6 +1207,8 @@ No. The first draft was badly worded. The proposal doesn't cut the levels we use
 
 ✅ **Decided 2026-10-09:** yes.
 
+↪ **Superseded 2026-10-14 by MOD-96:** Maciej: "show profile photos". A person's profile photo shows when they have one; the two initials and the stable colour stay as the fallback (no photo, while it loads, when it fails). See docs/decisions/tasks.md.
+
 **44 · Density applies to everything** — cards, menus, tabs and pills.
 
 ✅ **Decided 2026-10-09:** yes.

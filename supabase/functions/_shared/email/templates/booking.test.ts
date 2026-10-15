@@ -207,3 +207,52 @@ describe("booking payload", () => {
     expect(text).toContain("on Google Meet, UTC.");
   });
 });
+
+describe("booking emails · host cancel and reminder (TX-6)", () => {
+  it("C6 tells guests the host canceled, replies to the host, offers another time", () => {
+    const queued = BOOKING_QUEUED.booking_guest_host_cancelled(payload(BOOKING_FIXTURE));
+    const { subject, preheader, text } = renderEmail(queued.doc);
+    expect(queued.fromName).toBe("Anna Carter via Moduo");
+    expect(queued.replyTo).toBe("anna@northwind.studio");
+    expect(subject).toBe("Anna Carter canceled your meeting on Fri 16 Oct");
+    expect(preheader).toBe("Pick another time, or reply to reach Anna.");
+    expect(text).toContain("Anna canceled your meeting on Friday 16 October at 14:00.");
+    expect(text).toContain("https://moduo.app/book/anna");
+    expect(text).toContain("Reply to this email to reach Anna.");
+    expect(text).not.toContain("Scheduled with Moduo");
+    expect(queued.attachments).toBeUndefined();
+    const zoom = BOOKING_QUEUED.booking_guest_host_cancelled(payload(BOOKING_ZOOM_FIXTURE));
+    expect(decode(zoom.attachments?.[0]?.content ?? "")).toContain("METHOD:CANCEL");
+  });
+
+  it("C7 says tomorrow a day ahead, in the guest's zone, with the cancel link for the booker only", () => {
+    const data = { ...BOOKING_FIXTURE, reminderMinutes: 1440, sendAt: "2026-10-15T12:00:00Z" };
+    const queued = BOOKING_QUEUED.booking_guest_reminder(payload(data));
+    const { subject, text } = renderEmail(queued.doc);
+    expect(queued.fromName).toBe("Anna Carter via Moduo");
+    expect(queued.attachments).toBeUndefined();
+    expect(subject).toBe("Tomorrow at 14:00: Anna Carter");
+    expect(text).toContain("You're meeting Anna tomorrow at 14:00.");
+    expect(text).toContain("30 minutes on Google Meet, Warsaw time.");
+    expect(text).toContain("https://moduo.app/book/cancel?token=3c1e6f7a");
+    expect(text).toContain("sends one a day before each meeting");
+    expect(text).toContain("Scheduled with Moduo");
+    const added = renderEmail(BOOKING_QUEUED.booking_guest_reminder(payload({ ...data, recipient: "added" })).doc);
+    expect(added.text).not.toContain("cancel?token");
+  });
+
+  it("C7 says today an hour ahead, and the date when neither word fits", () => {
+    const hour = renderEmail(
+      BOOKING_QUEUED.booking_guest_reminder(
+        payload({ ...BOOKING_FIXTURE, reminderMinutes: 60, sendAt: "2026-10-16T11:00:00Z" }),
+      ).doc,
+    );
+    expect(hour.subject).toBe("Today at 14:00: Anna Carter");
+    expect(hour.text).toContain("sends one an hour before each meeting");
+    const far = renderEmail(
+      BOOKING_QUEUED.booking_guest_reminder(payload({ ...BOOKING_FIXTURE, sendAt: "2026-10-13T12:00:00Z" })).doc,
+    );
+    expect(far.subject).toBe("Friday 16 October at 14:00: Anna Carter");
+    expect(far.text).toContain("You're meeting Anna on Friday 16 October at 14:00.");
+  });
+});
