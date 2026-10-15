@@ -260,7 +260,9 @@ BEGIN
   PERFORM test.ok(v = '42501 You''re not a member of this conversation.', 'typing: C, not in P, is refused', v);
   v := test.as_user('C', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('D')));
   PERFORM test.ok(v = '42501 You''re not a member of this conversation.', 'typing: C is refused for the direct message D', v);
-  PERFORM test.ok((SELECT count(*) FROM realtime.messages WHERE topic LIKE 'chat:typing:%') = 0,
+  -- Only this test's conversations: a live client on the shared stack may type elsewhere.
+  PERFORM test.ok((SELECT count(*) FROM realtime.messages
+                   WHERE topic IN ('chat:typing:' || test.ref('Q')::text, v_p, 'chat:typing:' || test.ref('D')::text)) = 0,
     'typing: a refusal writes nothing');
 
   v := test.as_user('B', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('P')));
