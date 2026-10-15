@@ -52,7 +52,7 @@ Pick the tier by what the diff touches; details and commands are in the `/s3` sk
 
 - **Tier 0, every block:** `bun run verify` + hooks + Rust LSP diagnostics, then the `validator` subagent and `/code-review high`.
 - **Tier 1, every PR into `develop`:** `/code-review high <PR>` on the PR plus the review checklist in [REVIEW.md](./REVIEW.md).
-- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add `/code-review ultra <PR>` and a `/claude-security` diff scan before merging.
+- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add a `/claude-security` diff scan before merging. `/code-review ultra` is **paused until the live beta** (designer's call, 2026-10-15): don't ask for it or block on it; re-enable it when beta ships.
 - **Tier 3, promotion to `prod-app`:** the designer's manual checklist pass.
 
 ## Product north star (read before designing any module)

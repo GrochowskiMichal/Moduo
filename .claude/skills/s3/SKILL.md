@@ -13,7 +13,7 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
 - **Merging into the personal branch (`mike`/`maciej`) is pre-authorized** (standing, 2026-06-27), with a merge commit, never a fast-forward.
 - **Merging personal → `develop` is pre-authorized for bigger chunks** (standing, 2026-08-17).
 - **The duplication guard gates every auto-merge.** If a competing open PR touches the same block, files or migrations, stop and surface it.
-- **A Tier 2 diff never merges without its deep review** (step 3).
+- **A Tier 2 diff never merges without its `claude-security` scan** (step 3). `/code-review ultra` is paused until the live beta (designer's call, 2026-10-15): never ask for it or block a merge on it.
 - Force-push only your own task branch, only with `--force-with-lease`.
 
 ## Steps
@@ -25,7 +25,7 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
    - Optionally run the `retro` skill. When it proposes a harness change, note it under **🔎 Found** instead of applying it silently.
 3. **Review gate by risk.** List the changed files with `git diff --name-only origin/<personal>...HEAD`.
    - **Tier 1 (every PR):** if `/s2` didn't already review the final diff, run `/code-review high` on it and check it against `REVIEW.md`. Fix Important findings and log the rest in the PR body.
-   - **Tier 2 (risky paths):** the diff touches `supabase/migrations/`, `supabase/functions/_shared/contracts/`, `delete-account`, `create-checkout-session`, `create-portal-session`, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater or signing code in `src-tauri/`, or `.github/workflows/`. Run the `claude-security` skill on the branch diff. Then ask the designer to start `/code-review ultra <PR-number>` themselves: it runs in the cloud and bills usage credits after the free runs, so it needs their go-ahead. Merge only after its verified findings are fixed or explicitly accepted.
+   - **Tier 2 (risky paths):** the diff touches `supabase/migrations/`, `supabase/functions/_shared/contracts/`, `delete-account`, `create-checkout-session`, `create-portal-session`, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater or signing code in `src-tauri/`, or `.github/workflows/`. Run the `claude-security` skill on the branch diff and merge only after its verified findings are fixed or explicitly accepted. **`/code-review ultra` is paused until the live beta** (designer's call, 2026-10-15): skip it and don't mention it. Re-enable by restoring the old step: ask the designer to start `/code-review ultra <PR-number>` themselves (it runs in the cloud and bills usage credits).
 4. **Commit.** Stage the session's work and commit with a concise present-tense imperative subject, a short body (what was built, decisions, what's deferred), and the Co-Authored-By trailer. The `guard-secrets.sh` hook scans the staged changes.
 5. **Push the task branch** (`t/<owner>/<kebab>`).
 6. **PR + merge into the personal branch.** If `/s2` opened a draft PR, mark it ready (`gh pr ready <n>`). Otherwise open one into `maciej` or `mike`, never `main`, linking the spec and the test checklist.
@@ -39,7 +39,7 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
    - Open with **Status: Landed · Built, not landed · Blocked** (as defined in `/s2`'s report), plus the PR links and what merged where.
    - **Changed**: what shipped, whether `bun run verify` is green, which gates ran and what they found.
    - **To finish this block**: what still stands between this block and Landed, numbered, or "Nothing".
-   - **❓ Needs you**: numbered decisions or actions only the designer can take (`/code-review ultra`, a prod go-ahead, a product call), each with your recommendation.
+   - **❓ Needs you**: numbered decisions or actions only the designer can take (a prod go-ahead, a product call), each with your recommendation.
    - **🔎 Found, not needed for this block**: one line each, with where it's logged.
    - **Session**: "Safe to archive", or "Keep: <why>" (an open PR waiting on Needs you, work not yet pushed).
    - Then the next-session suggestions from step 8.

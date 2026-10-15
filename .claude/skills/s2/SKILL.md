@@ -41,7 +41,7 @@ Open with one line: **Status: Built, not landed · Blocked · Not started**, plu
 - **Changed**: what was built (files and behavior), tight.
 - **Test this**: concrete steps the designer runs (step → expected → surface).
 - **To finish this block**: only the steps still required for this block to count as done, numbered (a validator re-run, a prod apply, `/s3`). Write "Nothing; run `/s3`" when that's all. Never list anything outside the block here.
-- **❓ Needs you** *(only if applicable)*: numbered decisions or actions only the designer can take: product calls, validator findings that need one, prod go-aheads, `/code-review ultra`. Each one says what you recommend and what happens on yes.
+- **❓ Needs you** *(only if applicable)*: numbered decisions or actions only the designer can take: product calls, validator findings that need one, prod go-aheads. Each one says what you recommend and what happens on yes.
 - **⚠ Broke** *(only if applicable)*: what failed, plus the designer's options.
 - **🔎 Found, not needed for this block** *(only if applicable)*: one line each, with where you logged it (gotchas, BUILD_ORDER). Context only: nothing here blocks the block.
 - **Session**: "Safe to archive once landed", or "Keep: <why>" (uncommitted work, a commit that only exists locally, waiting on Needs you #n).
