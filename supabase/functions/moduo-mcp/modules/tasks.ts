@@ -102,7 +102,7 @@ const DEPRECATED = "Deprecated (kept until TV-D7):";
  * as. References keep no title (RF-1), only the item's kind.
  */
 const DESCRIPTION_MARKDOWN =
-  'Markdown: **bold**, *italic*, `code`, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes. Reference an item as [task](moduo://task/<uuid>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it), a date as [Oct 17](moduo://date/2026-10-17).';
+  'Markdown: **bold**, *italic*, `code`, ``` fenced code ```, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes (HTML is converted). Reference an item as [task](moduo://task/<uuid or handle, e.g. MOD-12>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it, an item you can't reach stays as its words, and each one is linked from the task), a date as [Oct 17](moduo://date/2026-10-17).';
 
 /** How many different items one description written through the connector may reference. */
 const MAX_DESCRIPTION_REFERENCES = 50;

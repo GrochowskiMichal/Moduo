@@ -148,7 +148,12 @@ through the same ops and gates as the app; the rule for all of them:
   280-character excerpt never ends in half a link. A reference is
   `[task](moduo://task/<uuid>)` (the kind's word, never a title; `"card"` or
   `"link"` as the link's title for how it shows), a date chip
-  `[Oct 17](moduo://date/2026-10-17)`.
+  `[Oct 17](moduo://date/2026-10-17)`. On write (`tasks_create`,
+  `tasks_update`) HTML is converted as on read, a task's handle in a
+  reference (`moduo://task/MOD-12`) becomes its uuid, an item the key can't
+  reach goes back to its label as plain words, and each reachable item is
+  linked from the task (`links_op_create`, `mentions`, origin `mention`; quiet
+  when the key has no Links access).
 - **Status by category or name:** a category word (`backlog` · `todo` ·
   `in_progress` · `done` · `wont_do`; the older `archived` = won't do), the
   project's own status name, or its id (`tasks__resolve_status`).
