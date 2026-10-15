@@ -8,7 +8,7 @@ import {
 } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
 
-import { EMOJI_GROUPS } from "@/features/chat/emoji";
+import { loadChatEmoji } from "@/features/chat/composer/emoji-data";
 
 import { commentBodyWithReferences, editableComment } from "./comments";
 import { toggledReactions } from "./hooks/use-comment-thread";
@@ -24,10 +24,17 @@ const names: Record<string, string> = { u1: "Maciej", u2: "Mike", u3: "Anna" };
 const nameOf = (id: string) => names[id] ?? null;
 
 describe("the picker's emoji (CV-7c)", () => {
-  it("are keys stored as they are, so a picked emoji and its chip are one", () => {
-    const all = EMOJI_GROUPS.flatMap((g) => g.items.map((i) => i.e));
+  it("each make a stored key, so a picked emoji and its chip are one", async () => {
+    // The composer's picker is the one "any emoji" opens (CV-7b; v1's list went
+    // with CV-8a). A pick is stored by its canonical key (the stream's onPick).
+    const all = (await loadChatEmoji()).list.map((e) => e.emoji);
     expect(all.length).toBeGreaterThan(100);
-    expect(all.filter((e) => !isReactionKey(e) || canonicalReactionKey(e) !== e)).toEqual([]);
+    expect(
+      all.filter((e) => {
+        const key = canonicalReactionKey(e);
+        return !key || !isReactionKey(key) || canonicalReactionKey(key) !== key;
+      }),
+    ).toEqual([]);
   });
 });
 

@@ -173,3 +173,17 @@ export const Densities: Story = {
     </AtThreeDensities>
   ),
 };
+
+/** Unread is weight (Chat's conversations): bold label, foreground colour, no pill; a count only for what is addressed to you. Three densities. */
+export const UnreadDensities: Story = {
+  render: () => (
+    <AtThreeDensities direction="column">
+      <nav aria-label="Conversations" className="flex flex-col gap-px">
+        <NavRow label="General" icon={<Hash aria-hidden />} />
+        <NavRow label="Launch v1" icon={<Hash aria-hidden />} unread />
+        <NavRow label="Acme rebrand" icon={<Hash aria-hidden />} unread count={2} current />
+        <NavRow label="Random" icon={<Hash aria-hidden />} unread />
+      </nav>
+    </AtThreeDensities>
+  ),
+};

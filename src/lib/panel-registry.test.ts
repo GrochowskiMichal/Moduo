@@ -26,11 +26,13 @@ describe("the registered views", () => {
     expect(ids("email")).toEqual(["contact", "detail", "reader", "task"]);
     expect(ids("notes")).toEqual(["comments", "detail", "outline"]);
     expect(ids("contacts")).toEqual(["notes"]);
+    // Chat is registered (CV-8a); its views arrive with CV-8b.
+    expect(ids("chat")).toEqual([]);
   });
 
   it("keeps each module's list short, unique and labelled", () => {
     for (const [module, views] of Object.entries(PANEL_VIEWS)) {
-      expect(views.length, module).toBeGreaterThan(0);
+      if (module !== "chat") expect(views.length, module).toBeGreaterThan(0);
       expect(views.length, module).toBeLessThanOrEqual(MAX_PANEL_VIEWS);
       expect(new Set(views.map((v) => v.id)).size, module).toBe(views.length);
       for (const view of views) {

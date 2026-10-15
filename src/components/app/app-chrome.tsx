@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from "sonner";
 import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
-import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
+import { useChatTab } from "../../features/chat/shell/chat-tab";
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
@@ -125,15 +125,22 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   // AT-2: pending uploads resume for whoever is signed in.
   useUploadQueueBoot(userId ?? null, runtime);
-  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace } =
+  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace, members } =
     useWorkspace();
   // What a deep link to another workspace needs, without re-adding the listener.
   const workspaceNav = useRef({ selectedWorkspaceId, workspaces, selectWorkspace });
   useLayoutEffect(() => {
     workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
   });
-  // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
-  const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
+  // Chat tab: its count, whether it shows, and app-wide presence (you show as
+  // online anywhere in Moduo). It reads the chat store (CV-8a).
+  const chatMemberCount = members.filter((m) => m.isActive && !m.removedAt).length;
+  const chatBadge = useChatTab({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    userId,
+    memberCount: chatMemberCount,
+  });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
   useShortcut(
     "new-note",
@@ -307,9 +314,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
   }, [navigate]);
 
+  const chatTabShows = chatBadge.shows;
   const modulesNavItems = useMemo(
-    () => visibleModuleNavItems(modulePermissions),
-    [modulePermissions],
+    () =>
+      visibleModuleNavItems(modulePermissions).filter(
+        (tab) => tab.module !== "chat" || chatTabShows,
+      ),
+    [modulePermissions, chatTabShows],
   );
 
   const navHrefs = useMemo(() => modulesNavItems.map((tab) => tab.href), [modulesNavItems]);

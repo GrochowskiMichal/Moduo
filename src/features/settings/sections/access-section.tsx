@@ -15,7 +15,6 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import { ChatCapsPanel } from "../../sharing/chat-caps-panel";
 import { ShareDefaultsPanel } from "../../sharing/share-defaults-panel";
 import { countOverrides, type WorkspaceRoleDef } from "../../workspaces/access";
 import { PersonAvatar } from "../access/access-ui";
@@ -31,7 +30,6 @@ type Selection =
   | { kind: "person"; id: string }
   | { kind: "invite" }
   | { kind: "defaults" }
-  | { kind: "chat" }
   | { kind: "team"; id: string }
   | { kind: "new-team" };
 
@@ -260,21 +258,14 @@ export function AccessSection() {
                 </RailItem>
               ) : null}
               {/* Workspace-wide settings: the server only lets role managers save them. */}
+              {/* Chat's rights move into the role editor (CV-15). */}
               {canManageRoles ? (
-                <>
-                  <RailItem
-                    selected={selection?.kind === "defaults"}
-                    onSelect={() => select({ kind: "defaults" })}
-                  >
-                    <span>Defaults</span>
-                  </RailItem>
-                  <RailItem
-                    selected={selection?.kind === "chat"}
-                    onSelect={() => select({ kind: "chat" })}
-                  >
-                    <span>Chat</span>
-                  </RailItem>
-                </>
+                <RailItem
+                  selected={selection?.kind === "defaults"}
+                  onSelect={() => select({ kind: "defaults" })}
+                >
+                  <span>Defaults</span>
+                </RailItem>
               ) : null}
             </div>
 
@@ -324,8 +315,6 @@ export function AccessSection() {
               <InvitePanel />
             ) : selection?.kind === "defaults" && selectedWorkspace ? (
               <ShareDefaultsPanel workspaceId={selectedWorkspace.id} />
-            ) : selection?.kind === "chat" && selectedWorkspace ? (
-              <ChatCapsPanel workspaceId={selectedWorkspace.id} />
             ) : selectedPerson ? (
               <PersonEditor
                 key={selectedPerson.id}

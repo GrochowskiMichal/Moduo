@@ -20,6 +20,7 @@ describe("the north-star kit (DS-6)", () => {
       "PropertyRow / PropertyValue",
       "CollectionHeader",
       "NavRow",
+      "NavRow unread",
       "Toolbar",
       "FilterBar",
       "DisplayMenu",

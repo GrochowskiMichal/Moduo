@@ -40,7 +40,8 @@ export type MessageVerbs = {
   onTask: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
-  onPin: () => void;
+  /** Pinning writes (a reader on a paused plan or a viewer can't): absent = no item. */
+  onPin?: () => void;
   onCopyLink: () => void;
   onMarkUnread: () => void;
 };
@@ -107,11 +108,13 @@ function ActionsMenu({
           <DropdownMenuShortcut>T</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={verbs.onPin}>
-          <Pin aria-hidden />
-          {pinned ? "Unpin" : "Pin to conversation"}
-          <DropdownMenuShortcut>P</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        {verbs.onPin ? (
+          <DropdownMenuItem onSelect={verbs.onPin}>
+            <Pin aria-hidden />
+            {pinned ? "Unpin" : "Pin to conversation"}
+            <DropdownMenuShortcut>P</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onSelect={verbs.onCopyLink}>
           <Link2 aria-hidden />
           Copy link

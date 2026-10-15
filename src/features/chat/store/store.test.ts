@@ -530,3 +530,25 @@ describe("device copy, delta, echo, outbox", () => {
     expect(store.getSnapshot().windows[C]!.hasNewer).toBe(false);
   });
 });
+
+describe("a paused plan (CV-8a, CH4a)", () => {
+  it("still loads every conversation and its messages, and notices the plan coming back", async () => {
+    const { server, store } = setup();
+    server.enabled = false;
+    server.addChannel(C, { isDefault: true });
+    server.post(uuid(7001), C);
+    store.acquire();
+    await settle();
+    const snap = store.getSnapshot();
+    expect(snap.status).toBe("ready");
+    expect(snap.paused).toBe(true);
+    expect(Object.keys(snap.channels)).toEqual([C]);
+    await store.open(C);
+    await settle();
+    expect(store.getSnapshot().windows[C]?.rows.map((r) => r.id)).toEqual([uuid(7001)]);
+
+    server.enabled = true;
+    await store.sync("manual");
+    expect(store.getSnapshot().paused).toBe(false);
+  });
+});

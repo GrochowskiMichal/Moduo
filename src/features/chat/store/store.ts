@@ -70,7 +70,7 @@ import { classifyChatError, newMessageId } from "./outbox";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
-export type ChatStatus = "idle" | "loading" | "locked" | "ready" | "error";
+export type ChatStatus = "idle" | "loading" | "ready" | "error";
 
 /** One conversation's stream as the screen draws it. */
 export type ChatWindow = {
@@ -103,6 +103,11 @@ export type ChatSnapshot = {
   fromDevice: boolean;
   /** No network: "You're offline · reading from this device". */
   offline: boolean;
+  /**
+   * The workspace's plan doesn't include chat (CH4a, spec §1): every
+   * conversation stays readable and searchable, writing waits for the plan.
+   */
+  paused: boolean;
   channels: Record<string, ChatChannel>;
   mine: Record<string, ChatMember>;
   people: Record<string, ChatPerson>;
@@ -121,6 +126,7 @@ export const EMPTY_CHAT_SNAPSHOT: ChatSnapshot = {
   error: null,
   fromDevice: false,
   offline: false,
+  paused: false,
   channels: {},
   mine: {},
   people: {},
@@ -236,6 +242,7 @@ export class ChatStore {
   private error: string | null = null;
   private fromDevice = false;
   private offline = browserOffline();
+  private paused = false;
 
   private channels = new Map<string, ChatChannel>();
   private mine = new Map<string, ChatMember>();
@@ -366,6 +373,7 @@ export class ChatStore {
       error: this.error,
       fromDevice: this.fromDevice,
       offline: this.offline,
+      paused: this.paused,
       channels: Object.fromEntries(this.channels),
       mine: Object.fromEntries(this.mine),
       people: Object.fromEntries(this.people),
@@ -529,7 +537,7 @@ export class ChatStore {
     };
   }
 
-  /** The first load is done (or settled on locked / error / offline). */
+  /** The first load is done (or settled on error / offline). */
   ready(): Promise<void> {
     return this.booting ?? Promise.resolve();
   }
@@ -601,13 +609,9 @@ export class ChatStore {
       return;
     }
     if (!this.running) return;
-    if (!enabled) {
-      this.status = "locked";
-      this.error = null;
-      this.notify();
-      return;
-    }
-    const sidebar = await this.readSidebar({ bootstrap: true });
+    // A paused plan still reads (CH4a): the conversations load, only writing waits.
+    this.paused = !enabled;
+    const sidebar = await this.readSidebar({ bootstrap: enabled });
     if (sidebar.error) {
       this.failedBoot(new Error(sidebar.error.message), sidebar.error);
       return;
@@ -762,6 +766,18 @@ export class ChatStore {
     }
   }
 
+  /** Whether the plan includes chat now (a plan can lapse or come back mid-session). */
+  private async readPlan(): Promise<void> {
+    try {
+      const enabled = await this.transport.isEnabled(this.workspaceId);
+      if (this.paused === !enabled) return;
+      this.paused = !enabled;
+      this.notify();
+    } catch {
+      // Unknown: keep what we had.
+    }
+  }
+
   private async readCounts(): Promise<void> {
     const res = await this.transport.counts(this.workspaceId);
     if (res.error) {
@@ -805,7 +821,12 @@ export class ChatStore {
   private async runSync(
     reason: "rejoin" | "focus" | "online" | "interval" | "manual",
   ): Promise<void> {
-    if (reason !== "interval" && reason !== "focus") await this.readSidebar();
+    const wasPaused = this.paused;
+    if (reason !== "interval") await this.readPlan();
+    if ((reason !== "interval" && reason !== "focus") || wasPaused !== this.paused) {
+      // A plan that came back makes General if the workspace has none yet.
+      await this.readSidebar({ bootstrap: !this.paused });
+    }
     const ok = await this.runDelta();
     if (ok) await this.readCounts();
     if (reason !== "interval") await this.checkAccess();

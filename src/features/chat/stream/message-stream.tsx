@@ -115,8 +115,13 @@ export type MessageStreamProps = {
   /** Ids deleted here and still inside their Undo time. */
   hidden: ReadonlySet<string>;
   editingId: string | null;
-  /** Viewers and archived conversations draw no write verbs. */
+  /** You may post here: edit, delete and typing into the composer (a viewer, a paused plan can't). */
   canWrite: boolean;
+  /**
+   * The message tools (react, mark unread, copy link, make a task, reply):
+   * any reader of a live conversation has them (default: `canWrite`).
+   */
+  canUseTools?: boolean;
   /** The conversation's beginning (drawn above the oldest message). */
   intro?: ReactNode;
   onLoadOlder: () => void;
@@ -156,6 +161,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       hidden,
       editingId,
       canWrite,
+      canUseTools = canWrite,
       intro,
     } = props;
     // Handlers change identity every render; the effects read the latest.
@@ -518,7 +524,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onTask: () => p.onTask(m),
         onEdit: canWrite && own(m) ? () => p.onStartEdit(m) : undefined,
         onDelete: canWrite && own(m) ? () => p.onDelete(m) : undefined,
-        onPin: () => p.onPin(m),
+        onPin: canWrite ? () => p.onPin(m) : undefined,
         onCopyLink: () => p.onCopyLink(m),
         onMarkUnread: () => p.onMarkUnread(m),
         onCustomize: () => dispatchOpenSettings({ section: "chat" }),
@@ -573,7 +579,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         }
         return;
       }
-      if (!canWrite && e.key !== "r" && e.key !== "R") return;
+      if (!canUseTools && e.key !== "r" && e.key !== "R") return;
       switch (e.key) {
         case "r":
         case "R":
@@ -595,7 +601,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "p":
         case "P":
           e.preventDefault();
-          verbs.onPin();
+          verbs.onPin?.();
           return;
         case "t":
         case "T":
@@ -645,7 +651,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           const quotedPerson = quoted?.authorId ? personOf(quoted.authorId) : undefined;
           const editing = editingId === m.id;
           const showTools =
-            canWrite &&
+            canUseTools &&
             !editing &&
             !m.sendState &&
             (hovered === row.key || selected === row.key || menu?.key === row.key);
@@ -726,9 +732,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               }
             }}
             data-testid="message-stream"
-            className="chat-stream min-h-0 flex-1 px-2 outline-none"
+            className="chat-stream flex min-h-0 flex-1 flex-col px-2 outline-none"
           >
-            <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+            {/* A short conversation sits at the bottom, by the composer (frame 7). */}
+            <div
+              className="relative mt-auto w-full shrink-0"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
               {virtualItems.map((v) => {
                 const row = rows[v.index];
                 if (!row) return null;

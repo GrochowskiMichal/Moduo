@@ -294,7 +294,7 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
 
     /** Chat is on: the owner's plan includes it or the workspace holds a dated grant
      *  (decided server-side, CV-4). Off means paused: the server still serves
-     *  reads, but v1's screens show ChatLocked until CV-8a's paused state. */
+     *  reads, and Chat shows its paused state (CV-8a). */
     async isEnabled(workspaceId) {
       const { data, error } = await db().rpc("chat_workspace_enabled", {
         p_workspace_id: workspaceId,
