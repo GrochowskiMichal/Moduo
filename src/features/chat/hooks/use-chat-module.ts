@@ -19,6 +19,8 @@ import type { ChatLink } from "./use-chat-live";
 export type ChannelWindow = {
   items: ChatMessage[];
   hasMore: boolean;
+  /** A window around a linked message that doesn't reach the newest one. */
+  hasNewer: boolean;
   loading: boolean;
   loaded: boolean;
 };
@@ -98,6 +100,7 @@ function v1State(snap: ChatSnapshot, members: Record<string, ChatPerson>): State
     messages[id] = {
       items: w.rows.filter((m) => isV1Message(m) && !m.parentId).map(v1Row),
       hasMore: w.hasOlder,
+      hasNewer: w.hasNewer,
       loading: w.loading,
       // Rows from the device show before the server answers.
       loaded: w.loaded || w.rows.length > 0,
@@ -336,6 +339,14 @@ export function useChatModule({
     [store],
   );
 
+  /** Back to the newest messages from a window around a linked message. */
+  const jumpToLatest = useCallback(
+    async (channelId: string) => {
+      await store?.jumpToLatest(channelId);
+    },
+    [store],
+  );
+
   const loadThread = useCallback(
     async (parentId: string) => {
       await store?.openChain(parentId);
@@ -477,6 +488,7 @@ export function useChatModule({
       markRead,
       markUnread,
       loadOlder,
+      jumpToLatest,
       loadThread,
       createChannel,
       openDm,
@@ -499,6 +511,7 @@ export function useChatModule({
       markRead,
       markUnread,
       loadOlder,
+      jumpToLatest,
       loadThread,
       createChannel,
       openDm,

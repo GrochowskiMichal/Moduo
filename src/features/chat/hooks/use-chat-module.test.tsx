@@ -158,6 +158,11 @@ describe("useChatModule", () => {
       expect(result.current.state.messages[GENERAL]?.items.map((m) => m.id)).toContain(old),
     );
     expect(server.calls).toContain("message");
+    // The window doesn't reach the newest messages until "Jump to latest".
+    expect(result.current.state.messages[GENERAL]?.hasNewer).toBe(true);
+    await result.current.actions.jumpToLatest(GENERAL);
+    await waitFor(() => expect(result.current.state.messages[GENERAL]?.hasNewer).toBe(false));
+    expect(result.current.state.messages[GENERAL]?.items.at(-1)?.id).toBe(uuid(300));
     unmount();
   });
 });

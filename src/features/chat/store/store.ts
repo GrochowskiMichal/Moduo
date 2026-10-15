@@ -250,6 +250,8 @@ export class ChatStore {
   /** Outbox ids this tab sent or discarded (another tab's waiting sends are kept). */
   private handled = new Set<string>();
   private inFlight: string | null = null;
+  /** Deleted while being sent: deleted on the server once its answer lands. */
+  private deleteAfterSend = new Set<string>();
   private draining: Promise<void> | null = null;
   private drainAgain = false;
   private chainState = new Map<string, { loading: boolean; loaded: boolean }>();
@@ -263,6 +265,10 @@ export class ChatStore {
   private dirtyRows = new Map<string, ChatMessage>();
   private goneIds = new Set<string>();
   private goneConvs = new Set<string>();
+  /** Conversations this tab dropped this session (another tab's meta doesn't bring them back). */
+  private droppedConvs = new Set<string>();
+  /** Draft keys this tab cleared this session. */
+  private clearedDrafts = new Set<string>();
   private metaDirty = false;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private persisting: Promise<void> = Promise.resolve();
@@ -489,8 +495,13 @@ export class ChatStore {
   setDraft(channelId: string, chainId: string | null, text: string): void {
     const key = `${channelId}:${chainId ?? ""}`;
     if ((this.drafts[key] ?? "") === text) return;
-    if (text) this.drafts[key] = text;
-    else delete this.drafts[key];
+    if (text) {
+      this.drafts[key] = text;
+      this.clearedDrafts.delete(key);
+    } else {
+      delete this.drafts[key];
+      this.clearedDrafts.add(key);
+    }
     this.metaDirty = true;
     this.schedulePersist();
   }
@@ -829,6 +840,8 @@ export class ChatStore {
         break;
       }
     }
+    // Rows a delta brought for conversations that aren't open don't stay in memory.
+    if (this.openId) this.trimOthers(this.openId);
     this.metaDirty = true;
     this.schedulePersist();
     return true;
@@ -854,6 +867,9 @@ export class ChatStore {
   }
 
   private async runAccessCheck(): Promise<void> {
+    // What the store held when the check began is what it judges: a
+    // conversation opened while it runs waits for the next check.
+    const held = new Set([...this.convs.keys(), ...Object.keys(this.held)]);
     const knownChannels = new Set(this.channels.keys());
     const knownMine = new Set(this.mine.keys());
     const res = await this.transport.syncIds(this.workspaceId, this.accessSince);
@@ -861,10 +877,12 @@ export class ChatStore {
       this.noteError(res.error);
       return;
     }
-    const plan = planAccess([...this.convs.keys(), ...Object.keys(this.held)], res.data);
+    const plan = planAccess(held, res.data);
     if (!plan) return;
     this.forgetConversations(plan.dropConversations);
-    this.forgetIds(plan.dropIds.filter((id) => this.where.has(id)));
+    // Moved away: gone from memory and the device, held in memory or not (the
+    // server names an id once, for the check after the move).
+    this.forgetIds(plan.dropIds);
     // What the sidebar knew when the check began follows it (newer rows wait for the next).
     for (const id of knownChannels) if (!plan.readable.has(id)) this.channels.delete(id);
     for (const id of knownMine) {
@@ -952,7 +970,14 @@ export class ChatStore {
       const ids = Array.isArray(moved)
         ? moved.filter((v): v is string => typeof v === "string")
         : [];
-      this.forgetIds(ids.filter((id) => this.where.get(id) === channelId));
+      // Still filed here, or not in memory (then only the device has it): a
+      // row re-filed somewhere this store holds landed before its line.
+      this.forgetIds(
+        ids.filter((id) => {
+          const filed = this.where.get(id);
+          return filed === undefined || filed === channelId;
+        }),
+      );
     }
     this.schedulePersist();
     return true;
@@ -990,11 +1015,15 @@ export class ChatStore {
       this.windowCache.delete(id);
       delete this.held[id];
       this.goneConvs.add(id);
+      this.droppedConvs.add(id);
       this.channels.delete(id);
       this.mine.delete(id);
       this.unread.delete(id);
       for (const key of Object.keys(this.drafts)) {
-        if (key.startsWith(`${id}:`)) delete this.drafts[key];
+        if (key.startsWith(`${id}:`)) {
+          delete this.drafts[key];
+          this.clearedDrafts.add(key);
+        }
       }
     }
     this.chainCache.clear();
@@ -1068,7 +1097,10 @@ export class ChatStore {
     this.openId = channelId;
     this.trimOthers(channelId);
     let conv = this.convs.get(channelId);
-    if (conv?.loaded || conv?.loading) return;
+    if (conv?.loading) return;
+    // Opened again after a jump: back to the newest messages.
+    if (conv?.loaded && conv.hi) return this.jumpToLatest(channelId);
+    if (conv?.loaded) return;
     conv = this.ensureConv(channelId);
     conv.loading = true;
     conv.newAfter = this.markKey(channelId);
@@ -1196,7 +1228,10 @@ export class ChatStore {
   async jumpToLatest(channelId: string): Promise<void> {
     const conv = this.convs.get(channelId);
     if (!conv) return this.open(channelId);
+    // The jump window isn't contiguous with the newest page: the window starts
+    // again at it (older pages load from there).
     conv.hi = null;
+    conv.lo = null;
     conv.target = null;
     conv.loading = true;
     this.touch(channelId);
@@ -1310,12 +1345,13 @@ export class ChatStore {
         if (changed || counted) this.notify();
         return;
       }
-      case "message-gone":
-        if (this.where.has(event.id)) {
-          this.forgetIds([event.id]);
-          this.notify();
-        }
+      case "message-gone": {
+        // Only the id arrives; the device may hold it though memory doesn't.
+        const shown = this.where.has(event.id);
+        this.forgetIds([event.id]);
+        if (shown) this.notify();
         return;
+      }
       case "channel":
         this.channels.set(event.channel.id, event.channel);
         this.metaDirty = true;
@@ -1572,6 +1608,7 @@ export class ChatStore {
         this.handled.add(entry.id);
         this.ensureConv(res.data.channelId);
         this.landRow(res.data);
+        if (this.deleteAfterSend.delete(entry.id)) void this.remove(entry.id);
       }
       this.touch(entry.channelId);
       this.metaDirty = true;
@@ -1625,6 +1662,8 @@ export class ChatStore {
 
   remove(id: string): Promise<ChatWriteResult> {
     if (this.outbox.some((e) => e.id === id)) {
+      // On its way: it may land on the server, so delete it there once it does.
+      if (this.inFlight === id) this.deleteAfterSend.add(id);
       this.discard(id);
       return Promise.resolve({ ok: true });
     }
@@ -1772,23 +1811,38 @@ export class ChatStore {
     if (goneConvs.length) await this.copy.removeConversations(this.owner, goneConvs);
     if (goneIds.length) await this.copy.removeIds(this.owner, goneIds);
     // A sign-out that landed meanwhile wipes the copy: no rows after it.
-    if (rows.length && !this.wiped) await this.copy.put(this.owner, rows, DEVICE_KEEP);
+    if (rows.length && !this.wiped) {
+      await this.copy.put(this.owner, rows, DEVICE_KEEP, () => this.wiped);
+    }
   }
 
   private metaRecord(stored: ChatMeta | null): ChatMeta {
+    const current = stored?.v === CHAT_COPY_VERSION ? stored : null;
     const mine = new Set(this.outbox.map((e) => e.id));
     // Another tab's waiting sends stay; what this tab sent or discarded goes.
-    const others = (stored?.v === CHAT_COPY_VERSION ? stored.outbox : []).filter(
+    const others = (current?.outbox ?? []).filter(
       (e) => !mine.has(e.id) && !this.handled.has(e.id),
     );
+    // Another tab's conversations and drafts stay registered: the check must
+    // see every conversation the copy keeps rows for. What this tab dropped goes.
+    const conversations: ChatMeta["conversations"] = {};
+    for (const [id, at] of Object.entries(current?.conversations ?? {})) {
+      if (!this.droppedConvs.has(id)) conversations[id] = at;
+    }
+    Object.assign(conversations, this.held);
+    const drafts: ChatMeta["drafts"] = {};
+    for (const [key, text] of Object.entries(current?.drafts ?? {})) {
+      if (!this.clearedDrafts.has(key)) drafts[key] = text;
+    }
+    Object.assign(drafts, this.drafts);
     return {
       ...emptyMeta(),
       savedAt: Date.now(),
-      conversations: { ...this.held },
+      conversations,
       cursor: this.cursor,
       accessSince: this.accessSince,
       outbox: [...this.outbox, ...others],
-      drafts: { ...this.drafts },
+      drafts,
       channels: [...this.channels.values()],
       mine: [...this.mine.values()],
       people: [...this.people.values()],

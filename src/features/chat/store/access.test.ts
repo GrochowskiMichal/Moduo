@@ -159,4 +159,66 @@ describe("losing access without an event", () => {
       ),
     ).toMatchObject({ dropConversations: [PRIV], checkedAt: "t" });
   });
+
+  it("moved-away messages leave the device even when their conversation isn't in memory", async () => {
+    const server = new FakeChatServer();
+    const copy = memoryChatCopy();
+    server.addChannel(PUB, { isDefault: true });
+    server.addChannel(SRC);
+    server.addChannel(HIDDEN, { readable: false, member: false, isPrivate: true });
+    for (let i = 0; i < 61; i += 1) server.post(uuid(i + 1), SRC);
+    server.post(uuid(100), PUB);
+    const { store } = make(server, copy);
+    store.acquire();
+    await store.ready();
+    await store.open(SRC);
+    await store.loadOlder(SRC);
+    await store.persistNow();
+    // Opening another conversation trims SRC (61 rows) from memory: only the device holds it.
+    await store.open(PUB);
+    const away = server.fullRead([SRC]).slice(-3);
+    expect(store.rowById(away[0]!.id)).toBeUndefined();
+    expect(deviceIds(copy).has(away[0]!.id)).toBe(true);
+    for (const row of away) {
+      server.change(row.id, { channelId: HIDDEN });
+      server.movedAway.push({ id: row.id, source: SRC, at: server.now() });
+    }
+    await store.checkAccess();
+    await store.persistNow();
+    for (const row of away) expect(deviceIds(copy).has(row.id)).toBe(false);
+    // The rest of SRC stays on the device.
+    expect(
+      [...deviceIds(copy)].filter((id) => server.rows.get(id)?.channelId === SRC),
+    ).toHaveLength(58);
+  });
+
+  it("two tabs keep each other's conversations registered", async () => {
+    const server = new FakeChatServer();
+    const copy = memoryChatCopy();
+    server.addChannel(PUB, { isDefault: true });
+    server.addChannel(SRC);
+    server.post(uuid(1), PUB);
+    server.post(uuid(2), SRC);
+    const one = make(server, copy).store;
+    const two = make(server, copy).store;
+    one.acquire();
+    two.acquire();
+    await Promise.all([one.ready(), two.ready()]);
+    await one.open(PUB);
+    await one.persistNow();
+    await two.open(SRC);
+    await two.persistNow();
+    expect(Object.keys(copy.metas.get(OWNER)?.conversations ?? {}).sort()).toEqual(
+      [PUB, SRC].sort(),
+    );
+    // Losing PUB, the next store that opens from the copy drops its rows.
+    server.readable.delete(PUB);
+    server.memberOf.delete(PUB);
+    const three = make(server, copy).store;
+    three.acquire();
+    await three.ready();
+    await three.persistNow();
+    expect(deviceChannels(copy).has(PUB)).toBe(false);
+    expect(Object.keys(copy.metas.get(OWNER)?.conversations ?? {})).toEqual([SRC]);
+  });
 });

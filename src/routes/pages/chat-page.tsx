@@ -529,6 +529,8 @@ export function ChatPage() {
         loading={win?.loading ?? true}
         loaded={win?.loaded ?? false}
         onLoadOlder={() => void actions.loadOlder(channel.id)}
+        hasNewer={win?.hasNewer ?? false}
+        onJumpToLatest={() => void actions.jumpToLatest(channel.id)}
         renderMessage={(row) => renderMessage(row.message, row.grouped)}
         intro={intro}
         selfId={selfId}

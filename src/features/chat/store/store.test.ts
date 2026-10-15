@@ -94,7 +94,7 @@ describe("device copy, delta, echo, outbox", () => {
   });
 
   it("after 1,000 missed changes a delta read equals a full read (a late commit included)", async () => {
-    const { server, store, live } = setup({ deltaLimit: 100 });
+    const { server, copy, store, live } = setup({ deltaLimit: 100 });
     server.addChannel(C, { isDefault: true });
     server.addChannel(D);
     // A private conversation the reader can't see: its changes never arrive.
@@ -132,26 +132,89 @@ describe("device copy, delta, echo, outbox", () => {
         server.change(row.id, { channelId: row.channelId === C ? D : C });
       }
     }
-    // A transaction that wrote before the cursor and committed late.
-    const late = server.post(uuid(++n), C, { createdAt: stampOf(server.clock - 60 * 1_000_000) });
-
     const before = server.calls.length;
     live.emit({ type: "joined", source: "messages" });
     await settle(80);
     // The delta paged under (updated_at, id), 100 rows a page.
     expect(server.calls.slice(before).filter((c) => c === "delta").length).toBeGreaterThan(1);
 
+    // The open conversation's window, and both on the device (D, not open,
+    // left memory after the delta: only the copy holds it now).
+    const expectedC = server.fullRead([C]);
+    const gotC = serverRows(store.getSnapshot().windows[C]!.rows);
+    expect(ids(gotC)).toEqual(ids(expectedC));
+    expect(gotC.map((r) => r.updatedAt)).toEqual(expectedC.map((r) => r.updatedAt));
+    await store.persistNow();
     for (const id of [C, D]) {
       const expected = server.fullRead([id]);
-      const got = serverRows(store.getSnapshot().windows[id]!.rows);
-      expect(ids(got)).toEqual(ids(expected));
-      expect(got.map((r) => r.updatedAt)).toEqual(expected.map((r) => r.updatedAt));
+      const onDevice = await copy.newest(OWNER, id, 500);
+      expect(ids(onDevice)).toEqual(ids(expected));
+      expect(onDevice.map((r) => r.updatedAt)).toEqual(expected.map((r) => r.updatedAt));
     }
-    expect(store.rowById(late.id)?.updatedAt).toBe(late.updatedAt);
     // Nothing from the conversation you can't read.
     for (const row of server.rows.values()) {
       if (row.channelId === P) expect(store.rowById(row.id)).toBeUndefined();
     }
+
+    // A transaction that wrote a minute before the cursor (the newest stamp
+    // just read) and committed late: only the next delta's lookback reads it.
+    const at = stampOf(server.clock - 60 * 1_000_000);
+    const late = server.post(uuid(++n), C, { createdAt: at, updatedAt: at });
+    live.emit({ type: "joined", source: "messages" });
+    await settle(40);
+    expect(store.rowById(late.id)?.updatedAt).toBe(at);
+  });
+
+  it("a late commit older than the lookback is missed without it (the negative control)", async () => {
+    const { server, store, live } = setup({ timing: { lagMs: 0 } });
+    server.addChannel(C, { isDefault: true });
+    server.post(uuid(1), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    server.clock += 10 * 60 * 1_000_000;
+    server.post(uuid(2), C);
+    live.emit({ type: "joined", source: "messages" });
+    await settle(40);
+    const at = stampOf(server.clock - 60 * 1_000_000);
+    const late = server.post(uuid(3), C, { createdAt: at, updatedAt: at });
+    live.emit({ type: "joined", source: "messages" });
+    await settle(40);
+    expect(store.rowById(late.id)).toBeUndefined();
+  });
+
+  it("a jump window opened again goes back to the newest messages", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    for (let i = 0; i < 400; i += 1) server.post(uuid(i + 1), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await store.openAt(C, uuid(150));
+    const fresh = server.post(uuid(500), C);
+    live.emit({ type: "message", row: fresh, insert: true });
+    expect(ids(store.getSnapshot().windows[C]!.rows)).not.toContain(fresh.id);
+    await store.open(C);
+    const win = store.getSnapshot().windows[C]!;
+    expect(win.hasNewer).toBe(false);
+    expect(ids(win.rows).at(-1)).toBe(fresh.id);
+    expect(ids(win.rows)).toEqual(ids(server.fullRead([C]).slice(-PAGE)));
+  });
+
+  it("deleting a message while it is being sent deletes it on the server once it lands", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    const answer = server.holdNext("send");
+    const id = store.send({ channelId: C, body: "oops" });
+    await settle(2);
+    expect(await store.remove(id)).toEqual({ ok: true });
+    answer();
+    await settle(20);
+    expect(server.rows.get(id)?.deletedAt).not.toBeNull();
+    expect(store.rowById(id)?.deletedAt).not.toBeNull();
   });
 
   it("no message is lost at a page boundary: 200 share one timestamp", async () => {

@@ -84,8 +84,14 @@ export interface ChatDeviceCopy {
   updateMeta(owner: string, next: (stored: ChatMeta | null) => ChatMeta): Promise<void>;
   /** A conversation's newest rows, oldest first. */
   newest(owner: string, channelId: string, limit: number): Promise<ChatMessage[]>;
-  /** Upsert rows by id; keep only the newest `keep` of each conversation touched. */
-  put(owner: string, rows: readonly ChatMessage[], keep: number): Promise<void>;
+  /** Upsert rows by id; keep only the newest `keep` of each conversation touched.
+   *  `stop`: checked before each transaction (a sign-out mid-write writes no more). */
+  put(
+    owner: string,
+    rows: readonly ChatMessage[],
+    keep: number,
+    stop?: () => boolean,
+  ): Promise<void>;
   removeIds(owner: string, ids: readonly string[]): Promise<void>;
   removeConversations(owner: string, channelIds: readonly string[]): Promise<void>;
   /** Everything goes (sign-out, account deletion). */
@@ -139,9 +145,10 @@ export function memoryChatCopy(): ChatDeviceCopy & {
       list.sort(compareRows);
       return clone(list.slice(Math.max(0, list.length - limit)));
     },
-    async put(owner, list, keep) {
+    async put(owner, list, keep, stop) {
       const held = of(owner);
       for (let i = 0; i < list.length; i += CHUNK) {
+        if (stop?.()) return;
         const chunk = list.slice(i, i + CHUNK);
         transactions.push(chunk.length);
         const touched = new Set<string>();
@@ -295,10 +302,11 @@ export function idbChatCopy(factory: IDBFactory): ChatDeviceCopy {
         return [];
       }
     },
-    async put(owner, list, keep) {
+    async put(owner, list, keep, stop) {
       try {
         const d = await open();
         for (let i = 0; i < list.length; i += CHUNK) {
+          if (stop?.()) return;
           const chunk = list.slice(i, i + CHUNK);
           const tx = d.transaction(MESSAGES, "readwrite");
           const store = tx.objectStore(MESSAGES);
