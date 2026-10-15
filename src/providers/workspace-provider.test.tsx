@@ -122,6 +122,30 @@ describe("WorkspaceProvider members after a profile change (MOD-96)", () => {
     await waitFor(() => expect(result.current.members[0]?.avatarUrl).toBe(PHOTO));
   });
 
+  it("of two quick profile changes, only the newest read applies", async () => {
+    runtime.workspace.listMembers.mockImplementation(async () => [row(null)]);
+    const { result } = renderHook(() => useWorkspace(), { wrapper: WorkspaceProvider });
+    await waitFor(() => expect(result.current.members[0]?.displayName).toBe("Ada Lovelace"));
+
+    // The first read answers last, with the older photo.
+    const older = "https://example.supabase.co/storage/v1/object/public/avatars/old.png";
+    let answerFirst: (rows: unknown[]) => void = () => {};
+    runtime.workspace.listMembers.mockImplementationOnce(
+      () => new Promise<unknown[]>((resolve) => (answerFirst = resolve)),
+    );
+    runtime.workspace.listMembers.mockImplementationOnce(async () => [row(PHOTO)]);
+    act(() => {
+      window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT));
+      window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT));
+    });
+    await waitFor(() => expect(result.current.members[0]?.avatarUrl).toBe(PHOTO));
+    await act(async () => {
+      answerFirst([row(older)]);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(result.current.members[0]?.avatarUrl).toBe(PHOTO);
+  });
+
   it("keeps the roster it has when that read fails", async () => {
     runtime.workspace.listMembers.mockImplementation(async () => [row(PHOTO)]);
     const { result } = renderHook(() => useWorkspace(), { wrapper: WorkspaceProvider });

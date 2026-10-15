@@ -629,14 +629,19 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     // Members carry each person's name and photo: a new one saved in Settings
     // shows on every avatar now, not on the next launch (MOD-96). A failed
-    // read keeps the roster it has.
+    // read keeps the roster it has; of two quick changes only the newest read
+    // applies, whichever answers last.
     if (!runtime || !selectedWorkspaceId) return;
     let active = true;
+    let latest = 0;
     const onProfileUpdated = () => {
+      const req = ++latest;
       runtime.workspace
         .listMembers(selectedWorkspaceId)
         .then((rows) => {
-          if (active) setMembers(withOwnName(rows.map(mapMember), userId, userEmail));
+          if (active && req === latest) {
+            setMembers(withOwnName(rows.map(mapMember), userId, userEmail));
+          }
         })
         .catch(() => {});
     };
