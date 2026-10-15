@@ -913,12 +913,13 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     ).toBe("the refused one's words");
     expect(screen.getByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("Kept with Esc");
-    // Esc: both stay kept.
+    // Esc: both stay kept, files too.
     second.unmount();
     keptIsThere();
     expect(loadDraft(ME, WS, "refused")).not.toBeNull();
     // Opened again and made: only the refused one goes.
     renderBody({ ...request, openId: 4, held: { current: null } }, referenceStore({}), "From chat");
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
     fireEvent.click(createButton(/^Create⏎?$/));
     await waitFor(() => expect(loadDraft(ME, WS, "refused")).toBeNull());

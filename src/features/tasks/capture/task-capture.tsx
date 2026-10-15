@@ -149,6 +149,12 @@ function takeRefusedFiles(
   return files;
 }
 
+/** A refused capture's files, left waiting (a Restore that may be closed unmade). */
+function peekRefusedFiles(userId: string | null, workspaceId: string | null): File[] {
+  const key = `${userId ?? ""}:${workspaceId ?? ""}`;
+  return refusedFiles?.key === key ? refusedFiles.files : [];
+}
+
 /**
  * The capture's task as the file seam needs it (AT-3): made on the server,
  * waiting on this device to sync (offline: the files wait with it), or not
@@ -226,7 +232,10 @@ export function TaskCaptureBody({
     if (held) {
       held.current = null;
       // A restored refused capture is made: it's no longer kept.
-      if (context?.fromRefused) clearDraft(owner.userId, owner.workspaceId, "refused");
+      if (context?.fromRefused) {
+        clearDraft(owner.userId, owner.workspaceId, "refused");
+        takeRefusedFiles(owner.userId, owner.workspaceId);
+      }
     } else {
       clearDraft(owner.userId, owner.workspaceId);
       lastTitleWords = "";
@@ -253,7 +262,8 @@ export function TaskCaptureBody({
       if (mine && shellDraft.trim() && shellDraft !== plainText(mine.segments)) {
         start = { ...start, segments: [{ text: shellDraft }] };
       }
-      const files = refusedHere ? takeRefusedFiles(owner.userId, owner.workspaceId) : [];
+      // Its files stay waiting too (read, not taken) until it's made.
+      const files = refusedHere ? peekRefusedFiles(owner.userId, owner.workspaceId) : [];
       return { draft: start, restored: false, files };
     }
     const stored = loadDraft(owner.userId, owner.workspaceId);
