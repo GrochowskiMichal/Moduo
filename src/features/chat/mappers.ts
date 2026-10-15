@@ -16,6 +16,7 @@ import type {
   ChatReactions,
   ChatSyncRow,
   ChatUnread,
+  UserChatPrefs,
 } from "./model";
 
 type Row = Record<string, unknown>;
@@ -178,4 +179,17 @@ export function mapRows<T>(rows: unknown, mapper: (r: unknown) => T | null): T[]
     if (m) out.push(m);
   }
   return out;
+}
+
+/** `user_chat_prefs()` → your settings; a missing field reads as its default. */
+export function mapUserChatPrefs(raw: unknown): UserChatPrefs {
+  const r = asRow(raw) ?? {};
+  const flag = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
+  return {
+    reactionRow: Array.isArray(r.reaction_row) ? strArr(r.reaction_row) : null,
+    showOnline: flag(r.show_online, true),
+    showFocusTask: flag(r.show_focus_task, false),
+    noticeShowText: flag(r.notice_show_text, true),
+    emailWhenAway: flag(r.email_when_away, true),
+  };
 }

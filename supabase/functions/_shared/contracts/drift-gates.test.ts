@@ -25,8 +25,9 @@ import {
   CHAT_MESSAGE_KINDS,
   CLIENT_SURFACES,
   CHAT_PLAN_TIERS,
-  COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
+  DEFAULT_QUICK_REACTIONS,
+  REACTION_KEY_SET,
   DATE_ORDERS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
@@ -319,15 +320,54 @@ describe("cross-runtime drift guards", () => {
     }
   });
 
-  it("the six comment reactions match TV-U13's CHECK and op", () => {
-    const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261013100000_comment_reactions_edits.sql"),
-      "utf8",
-    );
-    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    expect(sql).toContain(`CHECK (reaction IN (${inList(COMMENT_REACTIONS)}))`);
-    expect(sql).toContain(`p_reaction NOT IN (${opList(COMMENT_REACTIONS)})`);
+  it("one reaction key: CV-7c's check, used by comments, chat and the quick row", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261015200000_chat_v2_reactions.sql"), "utf8");
+    // The same rule as isReactionKey: the length, and the pattern spelled with
+    // the same code points as REACTION_KEY_SET, in the same order.
+    expect(sql).toContain("char_length(p_key) BETWEEN 1 AND 32");
+    expect(sql).toContain("AND p_key ~ public.reactions__key_pattern()");
+    const fnBody = (name: string) => {
+      const at = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
+      expect(at, name).toBeGreaterThan(-1);
+      return sql.slice(at, sql.indexOf("$function$;", at)).replace(/\s+/g, " ");
+    };
+    // Each list spelled as the SQL spells it: chr(n) for one code point,
+    // chr(a) || '-' || chr(b) for a range, so the range ends are checked too.
+    type R = number | readonly [number, number];
+    const spell = (ranges: readonly R[]) =>
+      ranges
+        .map((r) => (typeof r === "number" ? `chr(${r})` : `chr(${r[0]}) || '-' || chr(${r[1]})`))
+        .join(" || ");
+    const s = REACTION_KEY_SET;
+    const pattern = fnBody("reactions__key_pattern");
+    expect(pattern).toContain(`'[' || ${spell(s.base)} || ']' AS base`);
+    expect(pattern).toContain(`'[' || ${spell(s.vs)} || ']' AS vs`);
+    expect(pattern).toContain(`'[' || ${spell(s.skin)} || ']' AS skin`);
+    expect(pattern).toContain(`'[' || ${spell(s.tag)} || ']' AS tag`);
+    expect(pattern).toContain(`chr(${s.tagEnd}) AS tag_end`);
+    expect(pattern).toContain(`chr(${s.zwj}) AS zwj`);
+    expect(pattern).toContain(`chr(${s.keycap}) AS keycap`);
+    expect(pattern).toContain(`'[' || ${spell(s.ri)} || ']' AS ri`);
+    const keycapBases = s.keycapBase
+      .map((r) => (typeof r === "number" ? String.fromCodePoint(r) : `${String.fromCodePoint(r[0])}-${String.fromCodePoint(r[1])}`))
+      .join("");
+    expect(pattern).toContain(`'|[${keycapBases}]'`);
+    // The one spelling: the keycap bases, then the text-default pictographs.
+    const canonical = fnBody("reactions__key_canonical");
+    expect(canonical).toContain(`SELECT '[${keycapBases}' || ${spell(s.textDefault)} || ']' AS td`);
+    expect(sql).toContain("CHECK (public.reactions__key_ok(reaction))");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(p_reaction) THEN");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(p_key) THEN");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(v_item) THEN");
+    // The six TV-U13 words became the six defaults, in order.
+    const words = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"];
+    const mapping = words.map((w, i) => `('${w}', '${DEFAULT_QUICK_REACTIONS[i]}')`);
+    let at = 0;
+    for (const pair of mapping) {
+      const next = sql.indexOf(pair, at);
+      expect(next, pair).toBeGreaterThan(-1);
+      at = next;
+    }
   });
 
   it("template kinds and link types match TV-D15's op guards", () => {

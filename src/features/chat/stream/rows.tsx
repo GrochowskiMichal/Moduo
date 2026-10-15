@@ -10,9 +10,10 @@ import { AlertCircle, ArrowRightLeft, Clock, CornerDownRight, MessageSquare } fr
 import type { ReactNode } from "react";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { ChipButton } from "@/components/ui/chip";
+import { Reactions } from "@/components/ui/reactions";
 import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
 import { messageTree, toBodyText } from "../markup-v2";
 import type { ChatMessage, ChatPerson } from "../model";
 import { type BodyContext, MessageBody } from "./message-body";
@@ -124,37 +125,36 @@ function SendState({
   return null;
 }
 
-function Reactions({
+/** The kit's reaction chips (CV-7c): yours on the active fill, who on hover. */
+function MessageReactions({
   message,
   selfId,
+  personOf,
   onReact,
 }: {
   message: ChatMessage;
   selfId: string | null;
+  personOf: (id: string) => ChatPerson | undefined;
   onReact?: (key: string, on: boolean) => void;
 }) {
-  const entries = Object.entries(message.reactions).filter(([, ids]) => ids.length > 0);
-  if (entries.length === 0) return null;
+  const groups = groupMessageReactions(
+    message.reactions,
+    selfId,
+    (id) => personOf(id)?.name ?? null,
+  );
+  if (groups.length === 0) return null;
   return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
-      {entries.map(([key, ids]) => {
-        const mine = !!selfId && ids.includes(selfId);
-        return (
-          <ChipButton
-            key={key}
-            size="xs"
-            shape="full"
-            active={mine}
-            aria-pressed={mine}
-            aria-label={`${key} ${ids.length}`}
-            onClick={() => onReact?.(key, !mine)}
-          >
-            <span className="text-base leading-none">{key}</span>
-            <span className="tabular-nums text-muted-foreground">{ids.length}</span>
-          </ChipButton>
-        );
-      })}
-    </div>
+    <Reactions
+      className="mt-1.5"
+      onToggle={onReact}
+      items={groups.map((g) => ({
+        key: g.key,
+        count: g.count,
+        mine: g.mine,
+        label: reactionName(g.key),
+        who: reactedBy(g.people),
+      }))}
+    />
   );
 }
 
@@ -320,9 +320,10 @@ export function MessageRow({
             onRetry={() => handlers.onRetry?.(message)}
             onDiscard={() => handlers.onDiscard?.(message)}
           />
-          <Reactions
+          <MessageReactions
             message={message}
             selfId={ctx.selfId}
+            personOf={ctx.personOf}
             onReact={(key, on) => handlers.onReact?.(message, key, on)}
           />
           <RepliesLine message={message} onOpenChain={() => handlers.onOpenChain?.(message)} />

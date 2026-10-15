@@ -418,7 +418,7 @@ BEGIN
    WHERE channel_id = test.ref('P') AND user_id = test.id('B');
   PERFORM test.ok(test.send('B', 'P', 'p2', 'still here?') = '42501 You''re not a member of this conversation.'
                   AND test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('p1')))
-                        = '42501 You''re not a member of this conversation.',
+                        = 'P0002 That message no longer exists.',
     'removed: B, removed from the private P, can''t post or react there');
   UPDATE public.chat_members SET left_at = NULL, removed_at = NULL, removed_by = NULL
    WHERE channel_id = test.ref('P') AND user_id = test.id('B');
@@ -444,7 +444,7 @@ BEGIN
                   AND test.as_user('C', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('old2')))
                         = 'P0002 That conversation no longer exists.'
                   AND test.as_user('D', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('old2')))
-                        = 'P0002 That conversation no longer exists.'
+                        = 'P0002 That message no longer exists.'
                   AND test.send('D', 'OLD', 'old6', 'hello?') = 'P0002 That conversation no longer exists.',
     'deleted channel: it is gone for everyone, an admin included');
 END;
@@ -475,11 +475,11 @@ BEGIN
   v := test.as_user('V', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, false)$q$, test.mid('a1')));
   PERFORM test.ok(v = 'ok 1' AND test.acts('a1', 'chat.react', 'V') = 2, 'react: off twice is off once', v);
   v := test.as_user('C', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('p1')));
-  PERFORM test.ok(v = '42501 You''re not a member of this conversation.', 'react: C can''t react in P, which C can''t read', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'react: C can''t react in P, which C can''t read (same answer as a missing message)', v);
   v := test.as_user('X', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('a1')));
-  PERFORM test.ok(v = '42501 You don''t have access to this workspace.', 'react: an outsider is refused', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'react: an outsider is refused (same answer as a missing message)', v);
   v := test.as_key('K', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('a1')));
-  PERFORM test.ok(v LIKE '42501 %', 'react: a key is refused', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'react: a key is refused', v);
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity WHERE payload ->> 'message_id' = test.mid('a1')::text
                                 AND op IN ('chat.mention', 'chat.reply')),
     'react: never notifies');
@@ -489,14 +489,14 @@ BEGIN
 
   -- At most 20 kinds per message.
   UPDATE public.chat_messages
-     SET reactions = (SELECT jsonb_object_agg('k' || g, jsonb_build_array(test.id('C')::text)) FROM generate_series(1, 20) g)
+     SET reactions = (SELECT jsonb_object_agg(chr(128512 + g), jsonb_build_array(test.id('C')::text)) FROM generate_series(1, 20) g)
    WHERE id = test.mid('o1');
-  v := test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, 'k21'::text, true)$q$, test.mid('o1')));
+  v := test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, chr(128512 + 21), true)$q$, test.mid('o1')));
   PERFORM test.ok(v = '22023 This message has the most reactions it can hold.', 'react: a 21st kind is refused', v);
-  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, 'k1'::text, true)$q$, test.mid('o1'))) = 'ok 1',
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, chr(128512 + 1), true)$q$, test.mid('o1'))) = 'ok 1',
     'react: joining one of the 20 still works');
   v := test.as_user('B', format($q$SELECT public.chat_op_react(%L::uuid, %L::text, true)$q$, test.mid('o1'), repeat('x', 33)));
-  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'react: the live key check (CV-7c widens it)', v);
+  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'react: a key is an emoji (the shared check, CV-7c)', v);
 
   -- A paused workspace can still react; it can't post.
   UPDATE public.profiles SET plan_tier = 'free' WHERE id = test.id('O');

@@ -190,8 +190,8 @@ BEGIN
     'search_tsv: "zolw" finds "Żółw" (simple + unaccent)');
 
   SELECT updated_at INTO v_before FROM public.chat_messages WHERE id = test.ref('N');
-  v := test.as_user('C', format($q$SELECT public.chat_op_react(%L, 'thumbs_up')$q$, test.ref('M')));
-  v := test.as_user('A', format($q$SELECT public.chat_op_react(%L, 'thumbs_up')$q$, test.ref('M')));
+  v := test.as_user('C', format($q$SELECT public.chat_op_react(%L, '👍')$q$, test.ref('M')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_react(%L, '👍')$q$, test.ref('M')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A reacts to M', v);
   SELECT updated_at INTO v_after FROM public.chat_messages WHERE id = test.ref('M');
   PERFORM test.ok(v_after > (SELECT created_at FROM public.chat_messages WHERE id = test.ref('M'))

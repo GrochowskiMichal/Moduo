@@ -30,6 +30,7 @@ describe("the north-star kit (DS-6)", () => {
       "DateField",
       "Progress",
       "Avatar",
+      "Reactions",
     ]);
   });
 

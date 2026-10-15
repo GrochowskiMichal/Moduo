@@ -541,6 +541,75 @@ describe("content author kinds (chat messages and comments)", () => {
   });
 });
 
+describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", () => {
+  it("default to Moduo's six, in order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.DEFAULT_QUICK_REACTIONS.join("")).toBe("👍✅👀🙏❤️😄");
+    expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.isReactionKey(k))).toBe(true);
+    // Stored as they are: a quick-row key and the key it reacts with are one chip.
+    expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.canonicalReactionKey(k) === k)).toBe(true);
+    expect(v.MAX_REACTION_KINDS).toBe(20);
+    expect(v.MAX_QUICK_REACTIONS).toBe(6);
+  });
+
+  it("accept exactly what the server accepts (the corpus in chat_reactions.test.sql)", async () => {
+    const v = await import("./vocabularies.ts");
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      "utf8",
+    );
+    const block = sql.slice(sql.indexOf("-- corpus:begin"), sql.indexOf("-- corpus:end"));
+    const rows = [...block.matchAll(/\('([0-9A-F ]*)', (true|false)\)/g)];
+    expect(rows.length).toBeGreaterThan(40);
+    for (const [, hex, ok] of rows) {
+      const key = hex ? String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16))) : "";
+      expect(v.isReactionKey(key), `[${hex}]`).toBe(ok === "true");
+      expect(v.parseReactionKey(key).success, `[${hex}]`).toBe(ok === "true");
+      const once = v.canonicalReactionKey(key);
+      expect(v.canonicalReactionKey(once), `[${hex}] spelled twice`).toBe(once);
+    }
+  });
+
+  it("have one spelling, the same as the server's (the canonical corpus)", async () => {
+    const v = await import("./vocabularies.ts");
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      "utf8",
+    );
+    const block = sql.slice(sql.indexOf("-- canonical:begin"), sql.indexOf("-- canonical:end"));
+    const rows = [...block.matchAll(/\('([0-9A-F ]+)', '([0-9A-F ]+)'\)/g)];
+    expect(rows.length).toBeGreaterThan(5);
+    const fromHex = (hex: string) =>
+      String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16)));
+    for (const [, hex, want] of rows) {
+      expect(v.canonicalReactionKey(fromHex(hex)), `[${hex}]`).toBe(fromHex(want));
+      expect(v.canonicalReactionKey(fromHex(want)), `[${want}] again`).toBe(fromHex(want));
+      expect(v.isReactionKey(fromHex(want)), `[${want}]`).toBe(true);
+    }
+  });
+
+  it("refuse what the database can't even hold, and anything not a string", async () => {
+    const v = await import("./vocabularies.ts");
+    const lone = String.fromCharCode(0xd83d);
+    for (const k of [lone, `👍${String.fromCharCode(0xdc00)}`, "👍".repeat(400), "x".repeat(1024), null, 42, {}]) {
+      expect(v.isReactionKey(k), String(k).slice(0, 8)).toBe(false);
+    }
+  });
+
+  it("read: only a key shows; anything else stored is left out", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeReactionKey("🎉")).toBe("🎉");
+    expect(v.normalizeReactionKey(`👍${String.fromCodePoint(0x202e)}`)).toBeNull();
+    expect(v.normalizeReactionKey("thumbs_up")).toBeNull();
+    expect(v.normalizeReactionKey("")).toBeNull();
+    expect(v.normalizeReactionKey(7)).toBeNull();
+  });
+});
+
 describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
   it("are the five fixed categories, in order", async () => {
     const v = await import("./vocabularies.ts");

@@ -3,11 +3,21 @@
 // Reply · Task · ⋯ (Reply before Task). ⋯ holds the verbs whose blocks exist
 // today: Edit (own) · Delete (own) · Pin to conversation · Make a task ·
 // Copy link · Mark unread. Mark as decision, Reply to…, Move to…, Make a note
-// and Remind me join with their blocks (CV-13, CV-12, CV-16, CV-15, CV-14);
-// "any emoji" joins with the picker (CV-7b). Right-click opens the same menu
-// with all six quick reactions on top.
+// and Remind me join with their blocks (CV-13, CV-12, CV-16, CV-15, CV-14).
+// Right-click opens the same menu with your whole quick row on top and
+// "Customize…" (CV-7c, CH16a); "any emoji" shows once the picker passes
+// `onAnyEmoji` (CV-7b).
 
-import { CheckSquare, Link2, MoreHorizontal, Pencil, Pin, Reply, Trash2 } from "lucide-react";
+import {
+  CheckSquare,
+  Link2,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  Reply,
+  SmilePlus,
+  Trash2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,11 +30,12 @@ import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "../model";
 
-/** Moduo's six default quick reactions (spec §6, CH16a); the personal row is CV-7c's. */
-export const DEFAULT_QUICK_ROW = ["👍", "✅", "👀", "🙏", "❤️", "😄"] as const;
-
 export type MessageVerbs = {
   onReact: (key: string) => void;
+  /** Settings → Chat, where your quick row is set. */
+  onCustomize?: () => void;
+  /** The full picker (CV-7b's seam). Absent: no ☺ button. */
+  onAnyEmoji?: () => void;
   onReply: () => void;
   onTask: () => void;
   onEdit?: () => void;
@@ -43,12 +54,14 @@ function ActionsMenu({
   open,
   onOpenChange,
   withReactions,
+  quickRow,
 }: {
   message: ChatMessage;
   verbs: MessageVerbs;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   withReactions: boolean;
+  quickRow: readonly string[];
 }) {
   const pinned = !!message.pinnedAt;
   return (
@@ -62,7 +75,7 @@ function ActionsMenu({
         {withReactions ? (
           <>
             <div className="flex items-center justify-between px-1 py-1">
-              {DEFAULT_QUICK_ROW.map((key) => (
+              {quickRow.map((key) => (
                 <button
                   key={key}
                   type="button"
@@ -77,6 +90,9 @@ function ActionsMenu({
                 </button>
               ))}
             </div>
+            {verbs.onCustomize ? (
+              <DropdownMenuItem onSelect={verbs.onCustomize}>Customize…</DropdownMenuItem>
+            ) : null}
             <DropdownMenuSeparator />
           </>
         ) : null}
@@ -128,12 +144,15 @@ export function HoverToolbar({
   menuOpen,
   onMenuOpenChange,
   menuWithReactions,
+  quickRow,
 }: {
   message: ChatMessage;
   verbs: MessageVerbs;
   menuOpen: boolean;
   onMenuOpenChange: (open: boolean) => void;
   menuWithReactions: boolean;
+  /** Your quick row, resolved (CV-7c): the first three show here. */
+  quickRow: readonly string[];
 }) {
   return (
     <div
@@ -144,7 +163,7 @@ export function HoverToolbar({
         "absolute -top-4 right-(--pad-x-sm) z-10 flex items-center gap-px p-0.5 shadow-md",
       )}
     >
-      {DEFAULT_QUICK_ROW.slice(0, 3).map((key) => (
+      {quickRow.slice(0, 3).map((key) => (
         <button
           key={key}
           type="button"
@@ -155,6 +174,16 @@ export function HoverToolbar({
           {key}
         </button>
       ))}
+      {verbs.onAnyEmoji ? (
+        <button
+          type="button"
+          aria-label="Any emoji"
+          onClick={verbs.onAnyEmoji}
+          className={toolButton}
+        >
+          <SmilePlus aria-hidden className="size-icon" />
+        </button>
+      ) : null}
       <span aria-hidden className="mx-1 h-4 w-px bg-hairline" />
       <button type="button" onClick={verbs.onReply} className={cn(toolButton, "text-sm")}>
         <Reply aria-hidden className="size-icon" />
@@ -170,6 +199,7 @@ export function HoverToolbar({
         open={menuOpen}
         onOpenChange={onMenuOpenChange}
         withReactions={menuWithReactions}
+        quickRow={quickRow}
       />
     </div>
   );

@@ -31,6 +31,7 @@ const KIT: readonly KitEntry[] = [
   { name: "DateField", file: "date-field", story: "Densities" },
   { name: "Progress", file: "progress", story: "Densities" },
   { name: "Avatar", file: "avatar", story: "Densities" },
+  { name: "Reactions", file: "reactions", story: "Densities" },
 ];
 
 /** Storybook's id for an export: "PickerPillDensities" → "picker-pill-densities". */

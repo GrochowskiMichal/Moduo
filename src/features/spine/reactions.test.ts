@@ -1,54 +1,101 @@
-// TV-U13 (REPLAN 88, AC11.8): the six fixed reactions, who reacted, and an
-// edit that keeps what a comment stores.
+// TV-U13 (AC11.8) and CV-7c (CH16a): any emoji, your quick row, who reacted,
+// and an edit that keeps what a comment stores.
 
-import { COMMENT_REACTIONS } from "@contracts/vocabularies";
+import {
+  canonicalReactionKey,
+  DEFAULT_QUICK_REACTIONS,
+  isReactionKey,
+} from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
+
+import { EMOJI_GROUPS } from "@/features/chat/emoji";
 
 import { commentBodyWithReferences, editableComment } from "./comments";
 import { toggledReactions } from "./hooks/use-comment-thread";
-import { groupReactions, REACTION_GLYPHS, REACTION_NAMES, reactedBy } from "./reactions";
+import {
+  groupMessageReactions,
+  groupReactions,
+  reactedBy,
+  reactionName,
+  resolveQuickRow,
+} from "./reactions";
 
 const names: Record<string, string> = { u1: "Maciej", u2: "Mike", u3: "Anna" };
 const nameOf = (id: string) => names[id] ?? null;
 
-describe("the six reactions", () => {
-  it("are fixed, in order, each with a glyph and a spoken name", () => {
-    expect([...COMMENT_REACTIONS]).toEqual([
-      "thumbs_up",
-      "check",
-      "eyes",
-      "pray",
-      "heart",
-      "smile",
-    ]);
-    expect(COMMENT_REACTIONS.map((r) => REACTION_GLYPHS[r]).join("")).toBe("👍✅👀🙏❤️😄");
-    for (const r of COMMENT_REACTIONS) expect(REACTION_NAMES[r]).toBeTruthy();
+describe("the picker's emoji (CV-7c)", () => {
+  it("are keys stored as they are, so a picked emoji and its chip are one", () => {
+    const all = EMOJI_GROUPS.flatMap((g) => g.items.map((i) => i.e));
+    expect(all.length).toBeGreaterThan(100);
+    expect(all.filter((e) => !isReactionKey(e) || canonicalReactionKey(e) !== e)).toEqual([]);
+  });
+});
+
+describe("your quick row (CH16a)", () => {
+  it("is Moduo's six when you set none", () => {
+    expect(resolveQuickRow(null).join("")).toBe("👍✅👀🙏❤️😄");
+    expect(resolveQuickRow([])).toEqual([...DEFAULT_QUICK_REACTIONS]);
   });
 
-  it("group by reaction in the fixed order, with me first in who reacted", () => {
+  it("keeps yours in order, skips what can't be used, and fills from the six", () => {
+    expect(resolveQuickRow(["🎉", "👀"])).toEqual(["🎉", "👀", "👍", "✅", "🙏", "❤️"]);
+    // A custom emoji missing here (CV-20) or anything not a key is skipped.
+    expect(resolveQuickRow([":gone:", "🎉", "🎉", "party"])).toEqual([
+      "🎉",
+      "👍",
+      "✅",
+      "👀",
+      "🙏",
+      "❤️",
+    ]);
+    expect(resolveQuickRow(["🎉", "🔥", "🚀", "🙌", "💯", "🤔", "👏"])).toHaveLength(6);
+  });
+
+  it("names Moduo's six for screen readers; any other emoji reads as itself", () => {
+    for (const k of DEFAULT_QUICK_REACTIONS) expect(reactionName(k)).not.toBe(k);
+    expect(reactionName("👍")).toBe("Thumbs up");
+    expect(reactionName("🎉")).toBe("🎉");
+  });
+});
+
+describe("who reacted", () => {
+  it("groups a comment's marks by emoji, first used first, me first in who", () => {
     const groups = groupReactions(
       [
-        { userId: "u2", reaction: "heart" },
-        { userId: "u3", reaction: "thumbs_up" },
-        { userId: "u1", reaction: "thumbs_up" },
+        { userId: "u2", reaction: "❤️" },
+        { userId: "u3", reaction: "🎉" },
+        { userId: "u1", reaction: "🎉" },
       ],
       "u1",
       nameOf,
     );
     expect(groups).toEqual([
-      { reaction: "thumbs_up", count: 2, mine: true, people: ["You", "Anna"] },
-      { reaction: "heart", count: 1, mine: false, people: ["Mike"] },
+      { key: "❤️", count: 1, mine: false, people: ["Mike"] },
+      { key: "🎉", count: 2, mine: true, people: ["You", "Anna"] },
     ]);
     expect(reactedBy(["You", "Anna", "Mike"])).toBe("You, Anna and Mike");
     expect(reactedBy(["Mike"])).toBe("Mike");
   });
 
+  it("groups a message's reactions the same way, skipping empty ones", () => {
+    expect(
+      groupMessageReactions(
+        { "👍": ["u2", "u1"], "👀": [], "🎉": ["x"], party: ["u2"] },
+        "u1",
+        nameOf,
+      ),
+    ).toEqual([
+      { key: "👍", count: 2, mine: true, people: ["You", "Mike"] },
+      { key: "🎉", count: 1, mine: false, people: ["Former member"] },
+    ]);
+  });
+
   it("toggle mine on and off without touching anyone else's", () => {
-    const start = [{ userId: "u2", reaction: "eyes" as const }];
-    const on = toggledReactions(start, "u1", "eyes", true);
+    const start = [{ userId: "u2", reaction: "👀" }];
+    const on = toggledReactions(start, "u1", "👀", true);
     expect(on).toHaveLength(2);
-    expect(toggledReactions(on, "u1", "eyes", false)).toEqual(start);
-    expect(toggledReactions(on, "u1", "eyes", true)).toHaveLength(2);
+    expect(toggledReactions(on, "u1", "👀", false)).toEqual(start);
+    expect(toggledReactions(on, "u1", "👀", true)).toHaveLength(2);
   });
 });
 

@@ -14,6 +14,7 @@
 // without taking focus; ↑↓ step through messages and the message keys act on
 // the selected one.
 
+import { canonicalReactionKey } from "@contracts/vocabularies";
 import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
 import {
@@ -34,6 +35,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { formatPastDay } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+import { dispatchOpenSettings } from "../../settings/settings-events";
+import { useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import type { ChatMessage, ChatPerson } from "../model";
 import type { ChatWindow } from "../store/store";
 import { buildStream, countNewSince, lastSeenMessage, type StreamItem } from "../timeline";
@@ -447,6 +450,8 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     const [hovered, setHovered] = useState<string | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
     const [menu, setMenu] = useState<{ key: string; reactions: boolean } | null>(null);
+    // Your quick row (CV-7c): the hover shows its first three, the menu all six.
+    const { row: quickRow } = useQuickReactions(selfId);
 
     const messageKeys = (): string[] =>
       rowsRef.current.flatMap((r) => (r.type === "message" ? [r.key] : []));
@@ -495,7 +500,8 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     const verbsFor = (m: ChatMessage): MessageVerbs => {
       const p = live.current;
       return {
-        onReact: (key) => {
+        onReact: (picked) => {
+          const key = canonicalReactionKey(picked);
           const mine = !!selfId && (m.reactions[key] ?? []).includes(selfId);
           p.onReact(m, key, !mine);
         },
@@ -506,6 +512,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onPin: () => p.onPin(m),
         onCopyLink: () => p.onCopyLink(m),
         onMarkUnread: () => p.onMarkUnread(m),
+        onCustomize: () => dispatchOpenSettings({ section: "chat" }),
       };
     };
 
@@ -645,6 +652,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
                     verbs={verbsFor(m)}
                     menuOpen={menu?.key === row.key}
                     menuWithReactions={menu?.key === row.key && menu.reactions}
+                    quickRow={quickRow}
                     onMenuOpenChange={(open) =>
                       setMenu(open ? { key: row.key, reactions: false } : null)
                     }
