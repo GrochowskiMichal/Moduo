@@ -128,7 +128,7 @@ import {
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
-import { projectDeleteSummary, projectOpenWork } from "../sidebar";
+import { projectDeleteSummary, projectOpenWork, projectOrderDrop } from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { undatedTasks } from "../timeline-rows";
 import { dayNumOfKey } from "../timeline-scale";
@@ -309,6 +309,25 @@ export function TasksPlanView({
       updatePreferences({ tasksSidebar: { ...sidebarPrefs, hidden } });
     },
     [sidebarPrefs],
+  );
+  // This person's own order of the projects (MOD-38, like Slack's channels):
+  // synced in their preferences, so it follows them to every device and
+  // never moves anyone else's sidebar.
+  const projectOrder = sidebarPrefs.projectOrder[workspaceId] ?? EMPTY_IDS;
+  // A sidebar drop: the new order is yours; a drop into another area also
+  // files the project there for everyone, which needs edit access (without
+  // it the drop does nothing).
+  const moveProject = useCallback(
+    (activeId: string, overId: string) => {
+      const drop = projectOrderDrop(buckets, api.areas, projectOrder, activeId, overId, canEdit);
+      if (!drop) return;
+      if (drop.areaChanged) api.moveBucketToArea(activeId, drop.areaId);
+      const now = currentPreferences().tasksSidebar;
+      updatePreferences({
+        tasksSidebar: { ...now, projectOrder: { ...now.projectOrder, [workspaceId]: drop.order } },
+      });
+    },
+    [buckets, api.areas, api.moveBucketToArea, projectOrder, canEdit, workspaceId],
   );
   // A project's id, or a saved view's `view:<id>` (TV-U8).
   const togglePin = useCallback(
@@ -1278,7 +1297,8 @@ export function TasksPlanView({
       onRequestDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
       onRequestArchive={requestArchive}
       onSetBucketColor={api.setBucketColor}
-      onMoveBucket={api.moveBucket}
+      projectOrder={projectOrder}
+      onMoveBucket={moveProject}
       onMoveBucketToArea={api.moveBucketToArea}
       onCaptureInto={(id) => {
         // A project's "+" in the sidebar: capture into that project.

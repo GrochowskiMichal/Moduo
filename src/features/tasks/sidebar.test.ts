@@ -1,5 +1,5 @@
 // TV-U6 — the sidebar's project rules: colours, areas and their projects,
-// reorder positions, what a delete or an archive will do (REPLAN 78), archive
+// each person's own order (MOD-38), what a delete or an archive will do (REPLAN 78), archive
 // filtering, and remembered collapse.
 
 import { describe, expect, it } from "@rstest/core";
@@ -10,10 +10,11 @@ import {
   areaMoveAfter,
   BUCKET_COLOR_OPTIONS,
   bucketDotColor,
+  orderProjects,
   projectDeletePlan,
   projectDeleteSummary,
-  projectDropPatch,
   projectOpenWork,
+  projectOrderDrop,
   sidebarGroups,
   storedBucketColor,
 } from "./sidebar";
@@ -132,7 +133,7 @@ describe("areas and their projects (REPLAN 14)", () => {
   });
 });
 
-describe("reorder positions (U6-1)", () => {
+describe("each person's own project order (MOD-38)", () => {
   const areas = [area("clients", 1)];
   const a = bucket("a", "0000000100");
   const b = bucket("b", "0000000200");
@@ -140,31 +141,63 @@ describe("reorder positions (U6-1)", () => {
   const x = bucket("x", "0000000150", { areaId: "clients" });
   const y = bucket("y", "0000000250", { areaId: "clients" });
   const list = [a, x, b, y, c];
-  const sorted = (ids: Bucket[]) => ids.slice().sort((p, q) => (p.position < q.position ? -1 : 1));
+  const ids = (projects: Bucket[]) => projects.map((p) => p.id);
+  /** The sidebar as one person sees it with this order. */
+  const shown = (order: readonly string[]) => {
+    const groups = sidebarGroups(list, areas, order);
+    return { loose: ids(groups.loose), clients: ids(groups.areas[0]?.projects ?? []) };
+  };
 
-  it("moving down places it after the target", () => {
-    const patch = projectDropPatch(list, areas, "a", "b");
-    expect(patch?.areaId).toBeNull();
-    const moved = sorted([{ ...a, position: patch!.position }, b, c]).map((r) => r.id);
-    expect(moved).toEqual(["b", "a", "c"]);
+  it("without an order of your own, the workspace's", () => {
+    expect(shown([])).toEqual({ loose: ["a", "b", "c"], clients: ["x", "y"] });
+  });
+
+  it("your placed projects in your order, then the rest in the workspace's", () => {
+    expect(ids(orderProjects([a, b, c], ["c", "a"]))).toEqual(["c", "a", "b"]);
+    // A project made since you last dragged lands at the end of its area.
+    expect(shown(["c", "b", "y", "x"])).toEqual({ loose: ["c", "b", "a"], clients: ["y", "x"] });
+  });
+
+  it("moving down places it after the target, in your order only", () => {
+    const drop = projectOrderDrop(list, areas, [], "a", "b", true);
+    expect(drop).toEqual({ order: ["b", "a", "c", "x", "y"], areaId: null, areaChanged: false });
+    expect(shown(drop!.order).loose).toEqual(["b", "a", "c"]);
   });
 
   it("moving up places it before the target", () => {
-    const patch = projectDropPatch(list, areas, "c", "a");
-    const moved = sorted([a, b, { ...c, position: patch!.position }]).map((r) => r.id);
-    expect(moved).toEqual(["c", "a", "b"]);
+    const drop = projectOrderDrop(list, areas, [], "c", "a", true);
+    expect(shown(drop!.order).loose).toEqual(["c", "a", "b"]);
   });
 
-  it("dropping on a project in another area moves it into that area, before it", () => {
-    const patch = projectDropPatch(list, areas, "b", "y");
-    expect(patch?.areaId).toBe("clients");
-    const clients = sorted([x, { ...b, position: patch!.position }, y]).map((r) => r.id);
-    expect(clients).toEqual(["x", "b", "y"]);
+  it("works from the order you already have", () => {
+    const drop = projectOrderDrop(list, areas, ["c", "b", "a", "y", "x"], "a", "c", true);
+    expect(shown(drop!.order)).toEqual({ loose: ["a", "c", "b"], clients: ["y", "x"] });
+  });
+
+  it("a drop on a project in another area lands before it and names that area", () => {
+    const drop = projectOrderDrop(list, areas, [], "b", "y", true);
+    expect(drop?.areaId).toBe("clients");
+    expect(drop?.areaChanged).toBe(true);
+    // Once the project is filed there, it sits where it was dropped.
+    const filed = list.map((p) => (p.id === "b" ? { ...p, areaId: "clients" } : p));
+    const groups = sidebarGroups(filed, areas, drop!.order);
+    expect(ids(groups.areas[0]!.projects)).toEqual(["x", "b", "y"]);
+  });
+
+  it("someone who can't edit reorders inside an area, never into another one", () => {
+    expect(projectOrderDrop(list, areas, [], "y", "x", false)?.order).toEqual([
+      "a",
+      "b",
+      "c",
+      "y",
+      "x",
+    ]);
+    expect(projectOrderDrop(list, areas, [], "b", "y", false)).toBeNull();
   });
 
   it("dropping on itself or an unknown project changes nothing", () => {
-    expect(projectDropPatch(list, areas, "a", "a")).toBeNull();
-    expect(projectDropPatch(list, areas, "a", "nope")).toBeNull();
+    expect(projectOrderDrop(list, areas, [], "a", "a", true)).toBeNull();
+    expect(projectOrderDrop(list, areas, [], "a", "nope", true)).toBeNull();
   });
 });
 

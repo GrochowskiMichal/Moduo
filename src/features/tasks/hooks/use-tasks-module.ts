@@ -98,7 +98,6 @@ import {
   areaMoveAfter,
   projectDeletePlan,
   projectDeleteSummary,
-  projectDropPatch,
   projectEndPosition,
   projectOpenWork,
   storedBucketColor,
@@ -2911,21 +2910,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [allBuckets, editProject],
   );
 
-  /** Drop a dragged project on another one (TV-U6): it takes that place, and
-   *  that project's area. */
-  const moveBucket = useCallback(
-    (activeId: string, overId: string) => {
-      const patch = projectDropPatch(buckets, areas, activeId, overId);
-      if (!patch) return;
-      void editProject(
-        activeId,
-        { areaId: patch.areaId, position: patch.position },
-        { areaId: patch.areaId, position: patch.position },
-      );
-    },
-    [buckets, areas, editProject],
-  );
-
   /** Bring an archived project back (TV-U6). Its tasks aren't re-queued. */
   const unarchiveBucket = useCallback(
     (id: string) => editProject(id, { archived: false }, { archivedAt: null }),
@@ -3929,7 +3913,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     deleteBucket,
     setBucketGroup,
     setBucketColor,
-    moveBucket,
     moveBucketToArea,
     /** Archived projects (TV-U6), position-sorted, and their tasks. */
     archivedBuckets,

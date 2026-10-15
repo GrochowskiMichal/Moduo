@@ -97,7 +97,7 @@ type Props = {
   /** "inbox" | "today" (Focus) | "upcoming" | "mine" | "all" | "archived" | "trash" | project id */
   selection: string;
   onSelect: (selection: string) => void;
-  /** Live projects (the Inbox excluded), in position order. */
+  /** Live projects (the Inbox excluded), in position order; shown in `projectOrder`. */
   buckets: Bucket[];
   areas: Area[];
   inbox: Bucket | null;
@@ -135,7 +135,13 @@ type Props = {
   /** Archive: asks first when the project has open work (REPLAN 78). */
   onRequestArchive: (bucket: Bucket) => void;
   onSetBucketColor: (id: string, color: LabelColor) => void;
-  /** A project dragged onto another one: it takes that place and area. */
+  /**
+   * This person's own order of the projects (MOD-38), from their synced
+   * preferences: placed ones first, the rest in the workspace's order.
+   */
+  projectOrder?: readonly string[];
+  /** A project dragged onto another one: it takes that place in this
+   *  person's order (and that project's area, for someone who can edit). */
   onMoveBucket: (activeId: string, overId: string) => void;
   onMoveBucketToArea: (id: string, areaId: string | null) => void;
   /** A project's hover "+": a new task in it. */
@@ -248,6 +254,7 @@ export function BucketRail({
   onRequestDelete,
   onRequestArchive,
   onSetBucketColor,
+  projectOrder,
   onMoveBucket,
   onMoveBucketToArea,
   onCaptureInto,
@@ -279,10 +286,11 @@ export function BucketRail({
   const focusRowSoon = (navId: string | null) =>
     setTimeout(() => focusNavRow(nav.current, navId), 0);
 
-  const groups = sidebarGroups(buckets, areas);
+  const groups = sidebarGroups(buckets, areas, projectOrder);
   const inboxDrift = inbox ? (driftCountByBucket.get(inbox.id) ?? 0) : 0;
-  // Drag to reorder needs edit access and the page's DndContext.
-  const sortable = canEdit && !!dropAccepts;
+  // Drag to reorder needs only the page's DndContext: the order is this
+  // person's own, so someone who can't edit orders their sidebar too (MOD-38).
+  const sortable = !!dropAccepts;
   const pinnedIds = new Set(pinned);
   // Pinned projects and views, in pin order (one that's gone drops out).
   const pinnedEntries = pinned.flatMap((id): PinnedEntry[] => {
@@ -359,7 +367,7 @@ export function BucketRail({
     );
   };
   // One sortable list per area: a drop on another area's project moves the
-  // dragged one into that area (projectDropPatch).
+  // dragged one into that area, for someone who can edit (projectOrderDrop).
   const projectList = (list: Bucket[]) =>
     sortable ? (
       <SortableContext

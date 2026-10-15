@@ -1,5 +1,6 @@
 // The Tasks sidebar's project rules (TV-U6, specs/tasks-v3.md §3 + §15):
-// colour dots, areas and their projects, drag to reorder, archived projects,
+// colour dots, areas and their projects, each person's own project order
+// (MOD-38), archived projects,
 // what deleting a project will do, and what it shows before the server
 // answers. Pure, no React or IO.
 
@@ -10,7 +11,7 @@ import {
   type LabelColor,
   normalizeLabelColor,
 } from "../../components/tag-colors";
-import { betweenPositions, endPosition } from "./helpers";
+import { endPosition } from "./helpers";
 import type { Area, Bucket, Task } from "./model";
 
 // ── colours ──────────────────────────────────────────────────────────────────
@@ -49,19 +50,44 @@ function areaKey(project: Pick<Bucket, "areaId">, areaIds: ReadonlySet<string>):
 export type SidebarArea = { area: Area; projects: Bucket[] };
 
 /**
+ * Projects in one person's own order (MOD-38, like Slack's channels): the
+ * ones they've placed, as they placed them, then the rest in the workspace's
+ * order (so a project made since lands at the end of its area). Without an
+ * order of their own, the workspace's.
+ */
+export function orderProjects<T extends Pick<Bucket, "id" | "position">>(
+  projects: ReadonlyArray<T>,
+  order: readonly string[] = [],
+): T[] {
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return projects.slice().sort((a, b) => {
+    const ra = rank.get(a.id);
+    const rb = rank.get(b.id);
+    if (ra !== undefined && rb !== undefined) return ra - rb;
+    if (ra !== undefined) return -1;
+    if (rb !== undefined) return 1;
+    return byPosition(a, b);
+  });
+}
+
+/**
  * The workspace block's project rows: projects without an area first, then
- * each live area in its order with its projects (REPLAN 14's sidebar). A
- * project filed under an area the reader doesn't hold (deleted, or not
- * visible) shows with the area-less ones. An area with no project still
- * shows (it was made on purpose).
+ * each live area in its order with its projects (REPLAN 14's sidebar), each
+ * list in the reader's own order (MOD-38). A project filed under an area the
+ * reader doesn't hold (deleted, or not visible) shows with the area-less
+ * ones. An area with no project still shows (it was made on purpose).
  */
 export function sidebarGroups(
   projects: ReadonlyArray<Bucket>,
   areas: ReadonlyArray<Area>,
+  order: readonly string[] = [],
 ): { loose: Bucket[]; areas: SidebarArea[] } {
   const live = areas.slice().sort(byAreaPosition);
   const ids = new Set(live.map((a) => a.id));
-  const sorted = projects.filter((p) => !p.isSystem).sort(byPosition);
+  const sorted = orderProjects(
+    projects.filter((p) => !p.isSystem),
+    order,
+  );
   return {
     loose: sorted.filter((p) => areaKey(p, ids) === null),
     areas: live.map((area) => ({
@@ -72,34 +98,39 @@ export function sidebarGroups(
 }
 
 /**
- * Where a project dropped on another one lands: in the target's area, after
- * it when moving down within the same area and before it otherwise (the order
- * a sortable list shows while dragging). `projects` are the sidebar's projects
- * in position order. Null when nothing would change.
+ * A project dropped on another one in the sidebar (MOD-38): the reader's new
+ * order of every project, as the sidebar shows them, with the dragged one
+ * after the target when moving down within the same area and before it
+ * otherwise (the order a sortable list shows while dragging), and the area it
+ * lands in (the target's). Only the order is the reader's own; a new area is
+ * the workspace's, so a drop into another area needs `canEdit` (the caller
+ * files it there). Null when nothing would change, or the drop isn't allowed.
  */
-export function projectDropPatch(
+export function projectOrderDrop(
   projects: ReadonlyArray<Bucket>,
   areas: ReadonlyArray<Area>,
+  order: readonly string[],
   activeId: string,
   overId: string,
-): { position: string; areaId: string | null } | null {
+  canEdit: boolean,
+): { order: string[]; areaId: string | null; areaChanged: boolean } | null {
   if (activeId === overId) return null;
+  const groups = sidebarGroups(projects, areas, order);
+  const lists = [groups.loose, ...groups.areas.map((g) => g.projects)];
+  const listOf = (id: string) => lists.findIndex((list) => list.some((b) => b.id === id));
+  const from = listOf(activeId);
+  const to = listOf(overId);
+  if (from === -1 || to === -1 || (from !== to && !canEdit)) return null;
+  const shown = lists.flat().map((b) => b.id);
+  const after = from === to && shown.indexOf(activeId) < shown.indexOf(overId);
+  const rest = shown.filter((id) => id !== activeId);
+  const at = rest.indexOf(overId) + (after ? 1 : 0);
   const ids = new Set(areas.map((a) => a.id));
-  const active = projects.find((b) => b.id === activeId);
   const over = projects.find((b) => b.id === overId);
-  if (!active || !over) return null;
-  const area = areaKey(over, ids);
-  const list = projects.filter((b) => areaKey(b, ids) === area).sort(byPosition);
-  const after =
-    areaKey(active, ids) === area &&
-    list.findIndex((b) => b.id === activeId) < list.findIndex((b) => b.id === overId);
-  const rest = list.filter((b) => b.id !== activeId);
-  const at = rest.findIndex((b) => b.id === overId);
-  const prev = after ? rest[at] : (rest[at - 1] ?? null);
-  const next = after ? (rest[at + 1] ?? null) : rest[at];
   return {
-    position: betweenPositions(prev?.position ?? null, next?.position ?? null),
-    areaId: area,
+    order: [...rest.slice(0, at), activeId, ...rest.slice(at)],
+    areaId: over ? areaKey(over, ids) : null,
+    areaChanged: from !== to,
   };
 }
 

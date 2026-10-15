@@ -28,7 +28,12 @@ function renderFooter(active: "archived" | "trash" | null = null) {
         label="Archive and trash"
         items={[
           { icon: Archive, label: "Archived", active: active === "archived", onSelect: onArchived },
-          { icon: Trash2, label: "Recently deleted", active: active === "trash", onSelect: onTrash },
+          {
+            icon: Trash2,
+            label: "Recently deleted",
+            active: active === "trash",
+            onSelect: onTrash,
+          },
         ]}
       />
     </TooltipProvider>,

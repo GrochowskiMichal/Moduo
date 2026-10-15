@@ -92,6 +92,7 @@ function renderRail({
   templates = false,
   views,
   canModerate = false,
+  projectOrder,
 }: {
   canEdit?: boolean;
   selection?: string;
@@ -107,6 +108,8 @@ function renderRail({
   /** Saved views (TV-U8); "u" is the signed-in person. */
   views?: TaskView[];
   canModerate?: boolean;
+  /** This person's own project order (MOD-38). */
+  projectOrder?: string[];
 } = {}) {
   const calls = {
     onSelect: rs.fn(),
@@ -192,6 +195,7 @@ function renderRail({
         onRequestDelete={calls.onRequestDelete}
         onRequestArchive={calls.onRequestArchive}
         onSetBucketColor={calls.onSetBucketColor}
+        projectOrder={projectOrder}
         onMoveBucket={() => {}}
         onMoveBucketToArea={calls.onMoveBucketToArea}
         onTriageBucket={calls.onTriageBucket}
@@ -350,9 +354,11 @@ describe("Customize sidebar in the ⋯; Archived and Recently deleted in the foo
     expect(within(nav).queryByRole("button", { name: /Archived|Recently deleted/ })).toBeNull();
     // …but the footer's two items, in this order.
     const footer = screen.getByRole("list", { name: "Archive and trash" });
-    expect(within(footer).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(
-      ["Archived", "Recently deleted"],
-    );
+    expect(
+      within(footer)
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label")),
+    ).toEqual(["Archived", "Recently deleted"]);
     fireEvent.click(within(footer).getByRole("button", { name: "Archived" }));
     expect(calls.onSelect).toHaveBeenCalledWith(ARCHIVED_SELECTION);
     fireEvent.click(within(footer).getByRole("button", { name: "Recently deleted" }));
@@ -702,6 +708,18 @@ describe("drift and drag", () => {
     fireEvent.click(screen.getByRole("button", { name: "2 drifted · triage" }));
     expect(again.onTriageBucket).toHaveBeenCalledWith("c-acme");
     expect(calls.onTriageBucket).not.toHaveBeenCalled();
+  });
+
+  it("lists the projects in this person's own order, inside each area (MOD-38)", () => {
+    renderRail({ projectOrder: ["d-north", "c-acme"] });
+    expect(order().slice(-6)).toEqual([
+      "Launch v1",
+      "Product",
+      "Website",
+      "Clients",
+      "Northwind",
+      "Acme rebrand",
+    ]);
   });
 
   it("renders sortable project rows inside the page's DndContext", () => {
