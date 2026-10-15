@@ -825,6 +825,30 @@ export function isEmailKind(input: unknown): input is EmailKind {
 }
 
 /**
+ * Booking links' "Remind guests" (TX-6): minutes before the meeting. Off is
+ * NULL in `exposed_slot_links.guest_reminder_minutes`; the CHECK lists these.
+ */
+export const GUEST_REMINDER_MINUTES = [60, 1440] as const;
+export type GuestReminderMinute = (typeof GUEST_REMINDER_MINUTES)[number];
+export const guestReminderMinuteSchema = z.union([z.literal(60), z.literal(1440)]);
+
+export function isGuestReminderMinute(input: unknown): input is GuestReminderMinute {
+  return guestReminderMinuteSchema.safeParse(input).success;
+}
+
+/** Strict, for writes: a saved reminder or null (off); anything else throws. */
+export function parseGuestReminderMinutes(input: unknown): GuestReminderMinute | null {
+  if (input === null) return null;
+  return guestReminderMinuteSchema.parse(input);
+}
+
+/** Lax, for reads: null stays off, an unknown or missing value reads as the 24-hour default. */
+export function normalizeGuestReminderMinutes(input: unknown): GuestReminderMinute | null {
+  if (input === null) return null;
+  return isGuestReminderMinute(input) ? input : 1440;
+}
+
+/**
  * Which sender and reputation an email goes out on (T2): the account stream
  * from hello@moduo.app, build updates from updates@news.moduo.app. CHECK on
  * public.email_outbox.stream (20261008160000_email_outbox.sql).

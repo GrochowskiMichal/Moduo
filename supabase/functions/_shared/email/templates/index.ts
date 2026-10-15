@@ -17,6 +17,8 @@ import {
   bookingGuestAddedEmail,
   bookingGuestCancelledEmail,
   bookingGuestConfirmedEmail,
+  bookingGuestHostCancelledEmail,
+  bookingGuestReminderEmail,
   bookingHostGuestCancelledEmail,
   bookingHostNewEmail,
 } from "./booking.ts";
@@ -47,6 +49,8 @@ export interface EmailTemplateData {
   booking_host_new: BookingEmailData;
   booking_host_guest_cancelled: BookingEmailData;
   booking_guest_cancelled: BookingEmailData;
+  booking_guest_host_cancelled: BookingEmailData;
+  booking_guest_reminder: BookingEmailData;
 }
 
 export type BuiltEmailKind = keyof EmailTemplateData & EmailKind;
@@ -60,6 +64,8 @@ export const EMAIL_TEMPLATES: { [K in BuiltEmailKind]: (data: EmailTemplateData[
   booking_host_new: bookingHostNewEmail,
   booking_host_guest_cancelled: bookingHostGuestCancelledEmail,
   booking_guest_cancelled: bookingGuestCancelledEmail,
+  booking_guest_host_cancelled: bookingGuestHostCancelledEmail,
+  booking_guest_reminder: bookingGuestReminderEmail,
 };
 
 export const BUILT_EMAIL_KINDS = Object.keys(EMAIL_TEMPLATES) as BuiltEmailKind[];

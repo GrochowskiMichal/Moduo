@@ -59,6 +59,8 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
   booking_host_new: { ...BOOKING_FIXTURE, zone: "Europe/Warsaw" },
   booking_host_guest_cancelled: BOOKING_FIXTURE,
   booking_guest_cancelled: BOOKING_ZOOM_FIXTURE,
+  booking_guest_host_cancelled: BOOKING_FIXTURE,
+  booking_guest_reminder: { ...BOOKING_FIXTURE, reminderMinutes: 1440, sendAt: "2026-10-15T12:00:00Z" },
 };
 
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
@@ -71,4 +73,6 @@ export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   booking_host_new: "C3 · New booking (host)",
   booking_host_guest_cancelled: "C4 · Guest canceled (host)",
   booking_guest_cancelled: "C5 · You canceled (guest)",
+  booking_guest_host_cancelled: "C6 · Host canceled (guest)",
+  booking_guest_reminder: "C7 · Meeting reminder (guest)",
 };

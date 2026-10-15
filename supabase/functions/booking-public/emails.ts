@@ -93,6 +93,20 @@ function extraGuests(facts: BookingFacts): string[] {
   return [...seen];
 }
 
+/**
+ * What the reminder (C7) and host-cancel (C6) emails are built from, saved on
+ * the booking when it is confirmed (slot_bookings.email_context, TX-6): SQL
+ * queues those later with nobody's request open, adding the booking's current
+ * times, the send moment and the recipient. Written in the guest's zone.
+ */
+export function emailContext(facts: BookingFacts, extra: { cancelUrl: string; rebookUrl: string }): BookingEmailData {
+  return {
+    ...base(facts, guestTimeZone(facts.guestZone, facts.link.hostZone)),
+    cancelUrl: extra.cancelUrl,
+    rebookUrl: extra.rebookUrl,
+  };
+}
+
 export function bookEmails(
   facts: BookingFacts,
   extra: {
