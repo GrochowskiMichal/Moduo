@@ -2,6 +2,36 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-15 · List rows, Display → Columns and IDs (dogfood calls #5, #6, #7)
+
+Screen-only, no migration: Display's choices already persist in the view prefs and in a saved view's `display` (its check takes the new field and values). The row frame is [round-2b](../../.design/tasks-v3/prototypes/round-2b.html)'s `.tcell` (`.t` then `.ind`: the agent's mark, then the counts) and [round-1c](../../.design/tasks-v3/prototypes/round-1c.html)'s `.agent` / `.adot`; round-2b's Detailed header (`.colhead`) names the handle column "ID". No frame draws a Columns group.
+
+- **Call #5 (MOD-128, MOD-136) · Display → Columns for the Detailed list** → `display.ts` (`detailedColumns`, `COLUMNS_CONTROL`, `detailedColumnsDefault`), `row-layout.ts` (`DETAILED_COLUMNS`, `rowColumns`), `helpers.ts` `spansProjects`, `task-list-view.tsx`, `task-row.tsx`; §4 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-15, dogfood call #5.
+  - Decision: while the List's rows are Detailed, Display shows "Columns" with an on/off switch per column; stored in the view prefs, so a saved view keeps it and "Unsaved changes" sees it. Project starts off inside a project and on in All and the other places across projects; Updated starts off everywhere. Prefs and views saved before read as those defaults.
+  - Why: inside a project the Project column repeats the page's title on every row, and Updated took room few people read.
+  - Rejected: hiding Project only, with no switch (MOD-128 asks for one elsewhere).
+- **Columns holds Detailed's own columns; the Inbox hides Project too** → `display.ts`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-15 (agent's layout, revisitable).
+  - Decision: Columns lists ID, Project, Status, Time, Waiting on and Updated, as the "Show on rows" toggles look (structure.html's Display popover); Priority, Energy, Date and Assignee stay in "Show on rows", which both presets share. The Inbox counts as one place (its Project column would say "Inbox" on every row). The Board never shows Columns (its Group by was once called that, call 22a). Updated off also stops the list's minute redraw.
+  - Why: no column gets two switches, and Standard's choices still carry over to Detailed.
+  - Rejected: one Columns group of every Detailed column (Priority would then live in two places, or Standard and Detailed would part ways).
+- **Call #6 (MOD-138, MOD-125) · A row's details sit at its end; the title keeps about ten characters** → `task-row.tsx` (`RowAgentMark`, `COUNTS_FROM_END`), `task-meta.tsx` `TaskCounts bare`, `task-row-cells.tsx` `ProjectMenu className`, `spine/agent-session.ts` `agentRowMarkParts`; §4 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-15, dogfood call #6.
+  - Decision: in Standard rows the agent's mark and the counts (tags · files · comments · n/m · blocked · waiting · repeat · to sync) are one group pinned to the title cell's end, beside the columns; the title shortens first (ellipsis) but never below about ten characters, nor past its cell; on narrow rows the group shrinks to icon + count. Detailed keeps them after the title.
+  - Why: files and comments moved with each title's length, so they were hard to notice; beside an agent's mark a title shrank to one letter.
+  - Rejected: the drawn place right after the title (round-2b), kept for Detailed only.
+- **How the group gives way** → `task-row.tsx`
+  - Who: agent's choice, deferred to by Maciej, 2026-10-15 (agent's layout, revisitable).
+  - Decision: the agent's mark is a dot and its words (round-1c), "needs you" in the text colour; under a 16rem title cell it says its agent alone, under 12rem only the dot (tooltip and screen readers keep it all); between those steps its words shorten before any count. The dot always shows: in a cell narrower than the title's floor (about 100 px, e.g. a 340 px centre beside wide columns) the title leaves it room, and that's all that shows there; the counts need a wider cell. The counts then give way whole, tags first, files and comments last (in Detailed too, where the ones left sit right after the title); nothing is drawn over the columns. A hidden count can leave up to one count's room blank beside the title in Standard (a wrapping box keeps its width). An inline project name gives way before the title, like the Inbox's source; a late row's fixes sit beside the group, never over it.
+  - Why: the cut points are where a mark and one count would push the title under its floor at 340–440 px centres; a half-cut icon reads as broken; "needs you" must never vanish.
+  - Rejected: cutting icons in half at the group's edge, and letting the title shrink again once the counts run out of room.
+- **Call #7 (MOD-144 and Maciej's addition) · IDs sort in number order and find a task in ⌘K** → `display.ts` (`TaskOrder` `id`), `order.ts`, `task-list-header.tsx`, `search.ts` `taskIdForHandle`, `lib/palette-search.ts` `withHandleHit`, `components/app/global-command-palette.tsx`; §4 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+  - Who: Maciej, 2026-10-15, dogfood call #7.
+  - Decision: Order by offers ID (MOD-2 before MOD-10); Detailed's "ID" header sorts ascending, then descending, then back. In ⌘K, "MOD-99", "mod-99" or "mod 99" lists that task first, at once, from the workspace's Tasks copy (the handle rule Tasks' own search and links use); every task result shows its ID, quiet, after its title, as the details header does.
+  - Why: people quote IDs; text order put MOD-10 before MOD-2, and the registry search never matched "mod 99".
+  - Rejected: sorting the handle as text, and a second handle parser for the palette.
+
 ## 2026-10-15 · The task's details and activity (dogfood calls 9–13: MOD-129, MOD-36, MOD-139, MOD-123, MOD-124, MOD-109)
 
 Screen-only, no migration. Frames matched: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) frame 5 (the panel's feed and its comment box) and frame 1 (Bulk's title row), [round-1c](../../.design/tasks-v3/prototypes/round-1c.html) frame 3 (the description's fold) and its docked chat composer (`.composer2`) for the pinned box.
