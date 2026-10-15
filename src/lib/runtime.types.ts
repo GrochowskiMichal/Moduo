@@ -141,6 +141,25 @@ export type SpineComment = {
 /** One person's reaction on a comment. */
 export type CommentReactionMark = { userId: string; reaction: CommentReaction };
 
+/** NR-7: what `notesV2.joinLive` reports to the open editor. */
+export type NoteLiveJoin = {
+  noteId: string;
+  selfUserId: string;
+  /** A broadcast on the note's `NOTE_UPDATE_EVENT`: a peer's update or the agent cue. */
+  onBroadcast(payload: Record<string, unknown> | undefined): void;
+  /** Presence after every sync/join/leave: presence key (user id) → metas. */
+  onPresence(state: Record<string, Array<Record<string, unknown>>>): void;
+};
+
+/** NR-7: a joined (or joining) note live channel. */
+export type NoteLiveChannel = {
+  /** Relay a merged local update. Dropped unless joined: durability rides the
+   * outbox and the peer's next pull, never the socket. */
+  sendUpdate(updateB64: string): void;
+  /** Untrack and leave. Safe to call before the join finished. */
+  close(): void;
+};
+
 export type RuntimeSession = {
   access_token: string;
   refresh_token?: string | null;
@@ -638,6 +657,15 @@ export type ModuoRuntime = {
       workspaceId: string;
       ids: string[];
     }): Promise<{ id: string; title: string; bodyMd: string }[]>;
+    /**
+     * NR-7: join the note's private live channel (`note:<id>`): peers' edits,
+     * the agent's "pull" cue and presence. The server admits only people who
+     * can view the note and lets only editors broadcast (`realtime.messages`
+     * policies), so a refused join simply never delivers anything and the
+     * editor keeps pulling. Presence is keyed by `selfUserId`; nothing else
+     * is tracked (names come from the member list, never from the channel).
+     */
+    joinLive(input: NoteLiveJoin): NoteLiveChannel;
   };
 
   migration: {

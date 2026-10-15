@@ -2,8 +2,6 @@ import { describe, expect, it } from "@rstest/core";
 import * as Y from "yjs";
 import {
   coalesceUpdates,
-  initialsFor,
-  nameFromEmail,
   noteChannelName,
   type PresenceState,
   presenceViewers,
@@ -33,50 +31,43 @@ describe("coalesceUpdates", () => {
 });
 
 describe("presenceViewers", () => {
-  const state: PresenceState = {
-    u1: [{ userId: "u1", name: "Alice", at: 100 }],
-    // Same person in two tabs → one viewer, earliest join kept.
-    u2: [
-      { userId: "u2", name: "Bob", at: 200 },
-      { userId: "u2", name: "Bob", at: 50 },
-    ],
-    self: [{ userId: "self", name: "Me", at: 10 }],
+  const members: Record<string, { name: string; avatarUrl?: string | null }> = {
+    u1: { name: "Alice", avatarUrl: "https://x/alice.png" },
+    u2: { name: "Bob" },
+    self: { name: "Me" },
   };
+  const personOf = (id: string) => members[id] ?? null;
 
-  it("excludes self, de-dupes by user, sorts by name, derives initials", () => {
-    const v = presenceViewers(state, "self");
-    expect(v.map((x) => x.userId)).toEqual(["u1", "u2"]);
-    expect(v[0]).toEqual({ userId: "u1", name: "Alice", initials: "AL" });
-    expect(v[1].initials).toBe("BO");
+  it("names and pictures viewers from the member list, excludes self, one avatar per person", () => {
+    const state: PresenceState = {
+      u2: [{ at: 200 }, { at: 50 }], // two tabs → one viewer
+      u1: [{ at: 100 }],
+      self: [{ at: 10 }],
+    };
+    expect(presenceViewers(state, "self", personOf)).toEqual([
+      { userId: "u1", name: "Alice", avatarUrl: "https://x/alice.png" },
+      { userId: "u2", name: "Bob", avatarUrl: null },
+    ]);
   });
 
-  it("ignores malformed metas and missing fields", () => {
-    const messy: PresenceState = {
-      a: [{ userId: "a" } as Record<string, unknown>],
-      b: [{ name: "NoId", at: 1 }],
-      c: [{ userId: 42, name: "Bad" } as unknown as Record<string, unknown>],
+  it("never shows what a peer sent: a claimed name is ignored, an unknown id is left out", () => {
+    const state: PresenceState = {
+      u1: [{ name: "The CEO", userId: "u2" }],
+      stranger: [{ name: "Alice", at: 1 }],
+      u2: [],
     };
-    const v = presenceViewers(messy, null);
-    expect(v.map((x) => x.userId)).toEqual(["a"]);
-    expect(v[0].name).toBe("Someone");
+    expect(presenceViewers(state, null, personOf)).toEqual([
+      { userId: "u1", name: "Alice", avatarUrl: "https://x/alice.png" },
+    ]);
   });
 });
 
-describe("initialsFor / nameFromEmail / noteChannelName", () => {
-  it("initialsFor handles full names, single handles, and empties", () => {
-    expect(initialsFor("Ada Lovelace")).toBe("AL");
-    expect(initialsFor("ada.lovelace")).toBe("AL");
-    expect(initialsFor("ada")).toBe("AD");
-    expect(initialsFor("")).toBe("?");
-  });
-
-  it("nameFromEmail takes the local part with a safe fallback", () => {
-    expect(nameFromEmail("ada@x.com")).toBe("ada");
-    expect(nameFromEmail(null)).toBe("Someone");
-    expect(nameFromEmail("")).toBe("Someone");
-  });
-
-  it("noteChannelName namespaces by the note id", () => {
-    expect(noteChannelName("abc")).toBe("notes:abc");
+describe("noteChannelName", () => {
+  it("is the private topic shape the realtime.messages policies parse", () => {
+    const id = "0b5c3a8e-6f1d-4c2a-9e7b-1a2b3c4d5e6f";
+    expect(noteChannelName(id)).toBe(`note:${id}`);
+    expect(noteChannelName(id)).toMatch(
+      /^note:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
   });
 });

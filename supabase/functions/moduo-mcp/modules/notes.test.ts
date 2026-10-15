@@ -40,7 +40,8 @@ const b64ToBytes = (b64: string) => Uint8Array.from(Buffer.from(b64, "base64"));
 function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
   const tables: Record<string, Row[]> = { notes: [note], note_updates: [] };
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
-  const broadcasts: Array<{ topic: string; event: string; payload: Row }> = [];
+  const broadcasts: Array<{ topic: string; event: string; payload: Row; private: boolean }> =
+    [];
   let nextId = 1;
   function from(table: string) {
     const filters: Array<(r: Row) => boolean> = [];
@@ -103,9 +104,9 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
     }
     return { data: null, error: { message: `unexpected rpc ${fn}` } };
   }
-  const channel = (topic: string) => ({
+  const channel = (topic: string, opts?: { config?: { private?: boolean } }) => ({
     httpSend: async (event: string, payload: Row) => {
-      broadcasts.push({ topic, event, payload });
+      broadcasts.push({ topic, event, payload, private: opts?.config?.private === true });
     },
   });
   const db = { from, rpc, channel, removeChannel: async () => {} };
@@ -169,9 +170,9 @@ describe("crdt write", () => {
     expect(clientMarkdown(tables, NOTE)).toBe(expected);
     expect(tables.note_updates!.every((u) => u.origin === "api_key")).toBe(true);
 
-    // A content-free cue on the app's own channel: editors pull the row.
+    // A content-free cue on the note's private channel: editors pull the row.
     expect(broadcasts).toEqual([
-      { topic: `notes:${NOTE}`, event: "u", payload: { origin: "api_key" } },
+      { topic: `note:${NOTE}`, event: "u", payload: { origin: "api_key" }, private: true },
     ]);
   });
 

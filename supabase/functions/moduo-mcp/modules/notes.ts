@@ -231,7 +231,9 @@ async function cueOpenEditors(ctx: ToolContext, noteId: string) {
   const lib = await notesDoc();
   const payload = { origin: lib.AGENT_WRITE_CUE };
   try {
-    const channel = ctx.db.channel(lib.noteChannelName(noteId));
+    // The note's private channel (NR-7): the service role passes its
+    // `realtime.messages` policies; the cue itself stays content-free.
+    const channel = ctx.db.channel(lib.noteChannelName(noteId), { config: { private: true } });
     try {
       if (typeof channel.httpSend === "function") {
         await channel.httpSend(lib.NOTE_UPDATE_EVENT, payload);

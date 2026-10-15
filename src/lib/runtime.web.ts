@@ -129,6 +129,7 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { createTasksAgents } from "./runtime.web.agents";
+import { joinNoteLive } from "./runtime.web.notes-live";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
@@ -1566,6 +1567,10 @@ export const webRuntime: ModuoRuntime = {
         title: (r.title as string) ?? "",
         bodyMd: (r.body_md as string) ?? "",
       }));
+    },
+
+    joinLive(input) {
+      return joinNoteLive(supabaseClient, input);
     },
   },
 
