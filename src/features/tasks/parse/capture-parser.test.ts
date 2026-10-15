@@ -449,6 +449,20 @@ describe("keepOnClear — a date cleared by hand stays cleared (MOD-133)", () =>
     ).toEqual([]);
   });
 
+  it("a kept weekday label is a whole word: longer words around it still read", () => {
+    // A cleared Due token picked a few days out keeps its "Mon" or "Sat".
+    const monthly = parseCapture("Pay rent Mon every month", FRIDAY_10AM, { keep: ["Mon"] });
+    expect(monthly.recurrence?.rrule).toContain("FREQ=MONTHLY");
+    expect(monthly.title).toBe("Pay rent Mon");
+    const monday = parseCapture("Pay rent Mon next Monday", FRIDAY_10AM, { keep: ["Mon"] });
+    expect(local(monday.dueDate)?.getDate()).toBe(12);
+    const saturday = parseCapture("Walk Saturday 3pm", FRIDAY_10AM, { keep: ["Sat"] });
+    expect(local(saturday.scheduledAt)?.getDate()).toBe(10);
+    expect(local(saturday.scheduledAt)?.getHours()).toBe(15);
+    // The label itself stays a word.
+    expect(parseCapture("Ship Mon", FRIDAY_10AM, { keep: ["Mon"] }).matched).toBe(false);
+  });
+
   it("date words a hand pick was hiding are kept once it's cleared", () => {
     // The pick won over the words; cleared, the words would set it again.
     const kept = keepOnClear(words("Essay due Friday"), "due", {

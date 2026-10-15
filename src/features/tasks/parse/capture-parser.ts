@@ -299,15 +299,26 @@ function mergeRanges(ranges: ReadonlyArray<readonly [number, number]>): Array<[n
   return out;
 }
 
-/** Every occurrence of the kept phrases in `text` (any case, whole words). */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/**
+ * Every occurrence of the kept phrases in `text` (any case, whole words): a
+ * cleared pill keeps a weekday's "Mon" (MOD-133), which must leave "every
+ * month" and "next Monday" readable.
+ */
 function keptRanges(text: string, keep: readonly string[]): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   const lower = text.toLowerCase();
+  const wordAt = (i: number) => i >= 0 && i < lower.length && WORD_CHAR.test(lower[i]);
   for (const phrase of keep) {
     const needle = phrase.trim().toLowerCase();
     if (!needle) continue;
+    const opensWord = WORD_CHAR.test(needle[0]);
+    const closesWord = WORD_CHAR.test(needle[needle.length - 1]);
     for (let i = lower.indexOf(needle); i !== -1; i = lower.indexOf(needle, i + 1)) {
-      out.push([i, i + needle.length]);
+      const end = i + needle.length;
+      if ((opensWord && wordAt(i - 1)) || (closesWord && wordAt(end))) continue;
+      out.push([i, end]);
     }
   }
   return out;
