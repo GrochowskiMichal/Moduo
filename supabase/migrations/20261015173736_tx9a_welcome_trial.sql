@@ -26,6 +26,9 @@
 -- "Trial and billing" off (TX-8's email_preferences) mutes D2/D3 when the
 -- worker claims them, through `to_user_id`; D1 always sends.
 --
+-- 5. People in a workspace when this ships are marked welcomed (no D1 for
+--    them); a deleted account's waiting D1/D2/D3 are cancelled.
+--
 -- Every payload carries the dates it prints and the recipient's zone
 -- (`user_preferences.time_zone`, UTC when unset), so a retry renders the same
 -- body (TX-3). Kinds welcome / trial_ending / trial_ended are already in
@@ -176,6 +179,7 @@ BEGIN
 
   IF OLD.subscription_status = 'trialing'
      AND NEW.subscription_status = 'canceled'
+     AND to_regclass('stripe.subscriptions') IS NOT NULL
      AND NEW.plan_tier::text = 'free'
      AND NOT EXISTS (
        SELECT 1 FROM stripe.subscriptions s
@@ -214,6 +218,39 @@ DROP TRIGGER IF EXISTS profiles_trial_emails ON public.profiles;
 CREATE TRIGGER profiles_trial_emails
   AFTER UPDATE OF display_name, plan_tier, subscription_status, current_period_end ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.profiles__trial_emails();
+
+-- A deleted account gets nothing still waiting (D1 waits 5 minutes; the
+-- outbox purge only reaches a deleted account's rows after an hour).
+CREATE OR REPLACE FUNCTION public.profiles__forget_trial_emails()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM public.email_cancel('D1:' || OLD.id::text);
+  PERFORM public.email_cancel('D2:' || OLD.id::text || ':');
+  PERFORM public.email_cancel('D3:' || OLD.id::text || ':');
+  RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'trial emails for deleted profile % not cancelled: %', OLD.id, SQLERRM;
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS profiles_forget_trial_emails ON public.profiles;
+CREATE TRIGGER profiles_forget_trial_emails
+  AFTER DELETE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.profiles__forget_trial_emails();
+
+-- People already in Moduo when this ships (owners or members of any
+-- workspace) are past their welcome; only someone still to make or join a
+-- workspace gets one.
+UPDATE public.profiles p
+   SET welcome_email_at = now()
+ WHERE p.welcome_email_at IS NULL
+   AND (EXISTS (SELECT 1 FROM public.workspaces w WHERE w.owner_id = p.id)
+        OR EXISTS (SELECT 1 FROM public.workspace_members m WHERE m.user_id = p.id));
 
 -- ---------------------------------------------------------------------------
 -- 3. D2, the hourly sweep
@@ -260,6 +297,13 @@ BEGIN
             AND coalesce(c.invoice_settings ->> 'default_payment_method', '') <> ''
        )
        AND NOT EXISTS (SELECT 1 FROM stripe.payment_methods pm WHERE pm.customer = p.stripe_customer_id)
+       -- A trial longer than the no-card 14 days was extended because a card
+       -- is on file (extend-trial), even if the mirror never saw the card.
+       AND NOT EXISTS (
+         SELECT 1 FROM stripe.subscriptions s
+          WHERE s.id = p.stripe_subscription_id
+            AND s.trial_end - s.trial_start > 15 * 86400
+       )
        -- No plan chosen alongside the trial.
        AND NOT EXISTS (
          SELECT 1 FROM stripe.subscriptions s
@@ -268,19 +312,24 @@ BEGIN
        )
   LOOP
     CONTINUE WHEN EXISTS (SELECT 1 FROM public.email_outbox o WHERE o.dedupe_key = r.dedupe_key);
-    PERFORM public.email_enqueue(
-      'trial_ending',
-      r.email,
-      r.id,
-      jsonb_build_object(
-        'user_id', r.id,
-        'ends_at', public.email__iso_time(r.current_period_end),
-        'zone', public.email__user_zone(r.id)
-      ),
-      r.dedupe_key,
-      NULL
-    );
-    v_count := v_count + 1;
+    -- One address the outbox refuses must not stop everyone else's D2.
+    BEGIN
+      PERFORM public.email_enqueue(
+        'trial_ending',
+        r.email,
+        r.id,
+        jsonb_build_object(
+          'user_id', r.id,
+          'ends_at', public.email__iso_time(r.current_period_end),
+          'zone', public.email__user_zone(r.id)
+        ),
+        r.dedupe_key,
+        NULL
+      );
+      v_count := v_count + 1;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'trial-ending email for profile % not queued: %', r.id, SQLERRM;
+    END;
   END LOOP;
   RETURN v_count;
 END;
@@ -307,6 +356,7 @@ BEGIN
     'public.email__welcome_profile(public.profiles)',
     'public.workspaces__enqueue_welcome()',
     'public.profiles__trial_emails()',
+    'public.profiles__forget_trial_emails()',
     'public.email__trial_ending_sweep(timestamptz)'
   ]
   LOOP

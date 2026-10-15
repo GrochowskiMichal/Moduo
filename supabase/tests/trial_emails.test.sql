@@ -11,7 +11,7 @@
 -- account; Q pays; V's subscription disappears. Queued emails kick the worker
 -- through pg_net, which only sends after commit, so the rollback sends nothing.
 
-SELECT test.person(n) FROM unnest(ARRAY['U', 'L', 'E', 'N', 'C', 'P', 'D', 'Q', 'V', 'K']) AS n;
+SELECT test.person(n) FROM unnest(ARRAY['U', 'L', 'E', 'N', 'C', 'P', 'D', 'Q', 'V', 'K', 'B', 'G']) AS n;
 UPDATE public.profiles SET display_name = 'Tom Becker' WHERE id = test.id('U');
 INSERT INTO public.user_preferences (user_id, time_zone) VALUES (test.id('U'), 'Europe/Warsaw')
 ON CONFLICT (user_id) DO UPDATE SET time_zone = excluded.time_zone;
@@ -30,6 +30,7 @@ DECLARE
     'status', p_status,
     'created', extract(epoch FROM now())::bigint,
     'trial_end', floor(extract(epoch FROM p_end))::bigint,
+    'trial_start', floor(extract(epoch FROM p_end - interval '14 days'))::bigint,
     'current_period_end', floor(extract(epoch FROM p_end))::bigint,
     'metadata', jsonb_build_object('supabase_user_id', test.id(p_who)),
     'items', '{"data": [{"price": {"id": "price_dbtest_pro"}}]}'::jsonb
@@ -131,6 +132,19 @@ INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('WK'), test.i
 SELECT test.ok(EXISTS (SELECT 1 FROM public.workspaces WHERE id = test.id('WK')) AND test.mails('welcome', 'K') = 0,
   'an owner without an address still gets the workspace, and no email');
 
+-- An email the outbox refuses rolls back the marker and never the workspace.
+UPDATE auth.users SET email = 'not-an-address' WHERE id = test.id('B');
+INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('WB'), test.id('B'), 'Refused');
+SELECT test.ok(EXISTS (SELECT 1 FROM public.workspaces WHERE id = test.id('WB'))
+               AND (SELECT welcome_email_at IS NULL FROM public.profiles WHERE id = test.id('B'))
+               AND test.mails('welcome', 'B') = 0,
+  'a refused address keeps the workspace, queues nothing and leaves the person unwelcomed');
+
+-- Deleting the account cancels a welcome still waiting.
+INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('WG'), test.id('G'), 'Gone soon');
+DELETE FROM public.profiles WHERE id = test.id('G');
+SELECT test.ok((test.outbox('D1:' || test.id('G'))).status = 'cancelled', 'a deleted account''s waiting D1 is cancelled');
+
 -- ── AC45 · D2 once, about 3 days before a no-card trial ends ─────────────────
 
 SELECT test.sub('U', 'trialing', now() + interval '48 hours');
@@ -138,6 +152,9 @@ SELECT test.sub('C', 'trialing', now() + interval '48 hours');
 INSERT INTO stripe.payment_methods (_raw_data, _account_id)
 VALUES ('{"id": "pm_dbtest_c", "customer": "cus_dbtest_c", "type": "card"}', 'acct_dbtest');
 SELECT test.sub('P', 'trialing', now() + interval '100 hours');
+-- E's trial was stretched to 30 days by a card the mirror never saw.
+SELECT test.sub('E', 'trialing', now() + interval '48 hours',
+  jsonb_build_object('trial_start', floor(extract(epoch FROM now() + interval '48 hours' - interval '30 days'))::bigint));
 SELECT test.sub('Q', 'trialing', now() + interval '48 hours', '{"default_payment_method": "pm_dbtest_q"}');
 
 SELECT test.ok(public.email__trial_ending_sweep(now()) >= 1, 'the sweep queues D2s');
@@ -153,6 +170,7 @@ SELECT public.email__trial_ending_sweep(now() + interval '1 hour');
 SELECT test.ok(test.mails('trial_ending', 'U') = 1, 'the next hours'' sweeps queue no second D2');
 SELECT test.ok(test.mails('trial_ending', 'C') = 0, 'a trial with a card saved gets no D2');
 SELECT test.ok(test.mails('trial_ending', 'Q') = 0, 'a trial with its own payment method gets no D2');
+SELECT test.ok(test.mails('trial_ending', 'E') = 0, 'a trial longer than 14 days (extended by a card) gets no D2');
 SELECT test.ok(test.mails('trial_ending', 'P') = 0, 'a trial ending in more than 3 days gets no D2 yet');
 SELECT public.email__trial_ending_sweep(now() + interval '30 hours');
 SELECT test.ok(test.mails('trial_ending', 'P') = 1, '… and gets it once inside the 3 days');

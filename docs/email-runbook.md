@@ -305,13 +305,14 @@ All agent steps, each needing Maciej's OK in the session, in this order.
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
-2. **Migration** `20261015173736_tx9a_welcome_trial.sql` (agent, with OK, per the release-train rule; independent of TX-7's). It adds `profiles.welcome_email_at`, the D1 trigger on `workspaces`, the profile trigger (D3, and keeping a waiting D1 current), the hourly D2 sweep (`email-trial-ending`, minute 41) and re-asserts the client column grants on `profiles`. Check:
+2. **Migration** `20261015173736_tx9a_welcome_trial.sql` (agent, with OK; before applying, confirm prod's client grants on `profiles` are exactly the 20261006120000 lists, since the migration re-asserts them: `select grantee, privilege_type, column_name from information_schema.column_privileges where table_schema = 'public' and table_name = 'profiles' and grantee in ('anon', 'authenticated') and privilege_type in ('INSERT', 'UPDATE');`; per the release-train rule; independent of TX-7's). It adds `profiles.welcome_email_at`, the D1 trigger on `workspaces`, the profile trigger (D3, and keeping a waiting D1 current), the hourly D2 sweep (`email-trial-ending`, minute 41) and re-asserts the client column grants on `profiles`. Check:
    ```sql
-   select tgname from pg_trigger where tgname in ('workspaces_enqueue_welcome', 'profiles_trial_emails');
+   select tgname from pg_trigger where tgname in ('workspaces_enqueue_welcome', 'profiles_trial_emails', 'profiles_forget_trial_emails');
+   select count(*) from public.profiles p where p.welcome_email_at is null and exists (select 1 from public.workspace_members m where m.user_id = p.id);
    select jobname, schedule from cron.job where jobname = 'email-trial-ending';
    select has_column_privilege('authenticated', 'public.profiles', 'welcome_email_at', 'UPDATE');
    ```
-   Expect both triggers, `email-trial-ending | 41 * * * *`, `false`. The first sweep queues D2 for every no-card trial already inside its last 72 hours (correct: their date is right).
+   Expect the three triggers, `0` (everyone already in a workspace is marked welcomed), `email-trial-ending | 41 * * * *`, `false`. The first sweep queues D2 for every no-card trial already inside its last 72 hours (correct: their date is right).
 3. **The app** (onboarding says "14-day trial") ships with the next app promotion; nothing depends on its order.
 4. **Live check** (docs/testing/ checklist for TX-9a): a fresh invited account that makes its first workspace gets D1 about 5 minutes later, greeting by first name, with its trial's end date. Read the rows:
    ```sql
@@ -321,8 +322,8 @@ All agent steps, each needing Maciej's OK in the session, in this order.
 
 ### Day to day
 
-- **D1** goes once per person, ever (`profiles.welcome_email_at`), about 5 minutes after the first workspace they own; never for someone who owned a workspace before. If the trial reaches the profile from Stripe during those 5 minutes, the email picks up its date; without a trial (founders) it leaves that line out.
-- **D2** goes to no-card trials ending within 72 hours with no plan chosen: no card saved on the customer or the subscription, no active or past-due subscription. A trial with a card turns into a paid plan, so it gets nothing.
+- **D1** goes once per person, ever (`profiles.welcome_email_at`), about 5 minutes after the first workspace they own; never for someone who owned a workspace before, or who was in any workspace when TX-9a shipped. Someone who joins later through an invite gets it when they first make a workspace of their own. Deleting the account cancels a D1/D2/D3 still waiting. If the trial reaches the profile from Stripe during those 5 minutes, the email picks up its date; without a trial (founders) it leaves that line out.
+- **D2** goes to no-card trials ending within 72 hours with no plan chosen: no card saved on the customer or the subscription, a trial no longer than the no-card 14 days (a longer one was extended by a card), no active or past-due subscription. A trial with a card turns into a paid plan, so it gets nothing.
 - **D3** goes when the profile moves trialing → canceled on Free. Never when one of the person's subscriptions was canceled as "Moduo account deleted", and never when the subscription just disappears (`inactive`).
 - **"Trial and billing" off** (TX-8) mutes D2 and D3 when the worker claims them; until TX-8 is live they always send.
 - **Stop them** without touching the rest of the queue: `select cron.unschedule('email-trial-ending');` for D2 (re-run the migration's `cron.schedule` to resume), `alter table public.workspaces disable trigger workspaces_enqueue_welcome;` for D1, `alter table public.profiles disable trigger profiles_trial_emails;` for D3.
