@@ -254,6 +254,25 @@ export function useChatModule({
     [store, link],
   );
 
+  /**
+   * Send v2's stored form (CV-7b's composer): the body is sent as written,
+   * under a client-minted id; typing stops. Returns the id (null without a store).
+   */
+  const sendStored = useCallback(
+    (args: { channelId: string; body: string; parentId?: string | null }): string | null => {
+      if (!store || !args.body.trim()) return null;
+      const id = store.send({
+        channelId: args.channelId,
+        body: args.body,
+        replyToId: args.parentId ?? null,
+        format: "v2",
+      });
+      link?.sendTyping(args.channelId, args.parentId ?? null, true);
+      return id;
+    },
+    [store, link],
+  );
+
   const retry = useCallback((msg: ChatMessage) => store?.retry(msg.id), [store]);
 
   const edit = useCallback(
@@ -465,6 +484,7 @@ export function useChatModule({
   const actions = useMemo(
     () => ({
       send,
+      sendStored,
       retry,
       edit,
       remove,
@@ -488,6 +508,7 @@ export function useChatModule({
     }),
     [
       send,
+      sendStored,
       retry,
       edit,
       remove,
