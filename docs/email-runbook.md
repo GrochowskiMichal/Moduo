@@ -261,3 +261,38 @@ Prod changes ship with a release train (docs/decisions/workflow.md). In this ord
 
 Bookings confirmed before step 3 have no email context and get no reminder or C6.
 
+## TX-7 · Workspace emails: going live
+
+All agent steps, each needing Maciej's OK in the session, in this order. Until step 2, prod keeps its old invite trigger, which posts to `send-workspace-invite` and gets a 503 (no email, no harm), so don't undeploy that function before the migration.
+
+1. **Worker** (agent, with OK), **from `maciej` after TX-7 has merged.** It must hold every kind the live worker sends: `waitlist_invite` (TX-4), the five `booking_*` kinds of TX-5 and the two of TX-6 (`booking_guest_host_cancelled`, `booking_guest_reminder`), `ops_alert` (TX-3) and now `workspace_invite`, `workspace_owner`, `workspace_removed`. A test pins that list (`templates/workspace.test.ts` › "the worker's templates"). Check no newer worker is live first (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`):
+   ```bash
+   supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
+   ```
+2. **Migration** `20261015153935_tx7_workspace_emails.sql` (agent, with OK, per the release-train rule). It drops `on_workspace_invite_inserted` and `trigger_send_workspace_invite()`, adds the B3 trigger, the 20-a-day cap, the address check on accept, and B4/B5. Check:
+   ```sql
+   select tgname from pg_trigger where tgrelid = 'public.workspace_invites'::regclass and not tgisinternal order by 1;
+   select to_regprocedure('public.trigger_send_workspace_invite()');
+   select position('invite_email_mismatch' in prosrc) > 0 from pg_proc where proname = 'workspace_op_accept_invite';
+   ```
+   Expect `perm_invites_validate` and `workspace_invites_enqueue_email` (no `on_workspace_invite_inserted`), `null`, `true`.
+3. **Retire the old function** (agent, with OK):
+   ```bash
+   supabase functions delete send-workspace-invite --project-ref wtoonrvuqumihpkbvwvs
+   curl -s -o /dev/null -w '%{http_code}\n' https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/send-workspace-invite
+   bun run functions:reconcile
+   ```
+   Expect `404` (the gateway's `NOT_FOUND`) and a clean reconcile. Its secret `WORKSPACE_INVITE_WEBHOOK_SECRET` was never set, so there is nothing to remove.
+4. **The app** (join page mismatch state, the pending-join fix, the "Invite sent" toast) ships through develop → `staging-app` → "Promote to production" → `app`, **in the same train as step 2 or after it**: before the migration, the toast says "Invite sent" while the old trigger still sends nothing. Until then an invitee on the old build who signs in with a code lands in onboarding and has to open the invite link again, and a mismatched address sees the raw `invite_email_mismatch`.
+5. **Live check** (docs/testing/ checklist for TX-7): invite a throwaway address you can read from Settings → Members and access → B3 "<you> invited you to <workspace>" from "<you> via Moduo", reply-to you → "Accept invite" opens `app.moduo.app/join?invite=…` → sign in with a code → you land in the workspace, not onboarding. Read the rows:
+   ```sql
+   select kind, status, attempts, last_error, dedupe_key from public.email_outbox
+   where kind like 'workspace_%' order by created_at desc limit 20;
+   ```
+
+### Day to day
+
+- **Invites** need the invite power (owners and admins, or a custom role that has it). 20 per workspace per 24 hours, counted from the emails queued, so revoking or deleting invites doesn't free a slot. The 21st says "You've sent 20 invites today. You can send more tomorrow."
+- **Revoking** a pending invite cancels its B3 if it hasn't gone out, and takes the address off the allow-list (TX-4's hook stops matching). It can't undo an account the address already created by asking for a code.
+- **An invite only works for its address.** Anyone else signed in sees "This invite is for t•••@becker.studio. Sign in with that address to join." with Sign out.
+- **Stop B3** without touching the rest of the queue: `alter table public.workspace_invites disable trigger workspace_invites_enqueue_email;` (and `enable` to resume). The daily cap counts queued emails, so while it's off the cap only counts invite rows.

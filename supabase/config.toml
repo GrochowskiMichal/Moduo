@@ -476,10 +476,6 @@ import_map = "./functions/deno.json"
 verify_jwt = false
 import_map = "./functions/deno.json"
 
-[functions.send-workspace-invite]
-verify_jwt = false
-import_map = "./functions/deno.json"
-
 [functions.start-trial]
 verify_jwt = false
 import_map = "./functions/deno.json"

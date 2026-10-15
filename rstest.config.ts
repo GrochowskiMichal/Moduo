@@ -38,7 +38,6 @@ export default defineConfig({
     // The MCP connector's own tests mock its esm.sh imports (Deno-only).
     "supabase/functions/moduo-mcp/**/*.test.ts",
     "supabase/functions/_shared/email/**/*.test.ts",
-    "supabase/functions/send-workspace-invite/*.test.ts",
     "supabase/functions/auth-email-hook/*.test.ts",
     "supabase/functions/email-worker/*.test.ts",
     "supabase/functions/booking-public/*.test.ts",

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
+import { PENDING_JOIN_KEY, setPendingJoin } from "@/features/workspaces/invite-join";
 import type { ModuoRuntime } from "@/lib/runtime";
 import { AuthContext, type AuthContextValue } from "@/providers/auth-provider";
 
@@ -215,5 +216,42 @@ describe("EmailAuthPanel resend countdown", () => {
     expect(screen.getByRole("alert").textContent).toBe(
       "We couldn't send your code. Try again in a minute.",
     );
+  });
+});
+
+describe("EmailAuthPanel pending workspace invite (TX-7 AC36)", () => {
+  afterEach(() => window.localStorage.clear());
+
+  it("after the code, a pending invite goes to /join before onboarding", async () => {
+    let listed = 0;
+    const value: AuthContextValue = {
+      ...auth,
+      runtime: {
+        ...cloudRuntime,
+        auth: {
+          sendOtp: async () => ({ data: {}, error: null }),
+          verifyOtp: async () => ({ data: { isNewUser: true }, error: null }),
+        },
+        workspace: {
+          list: async () => {
+            listed += 1;
+            return [];
+          },
+        },
+      } as unknown as ModuoRuntime,
+    };
+    setPendingJoin("ab+cd/ef==");
+    renderPanel(null, value);
+    await screen.findByPlaceholderText("you@example.com");
+    await requestCode();
+    fireEvent.change(screen.getByPlaceholderText("000000"), { target: { value: "123456" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    });
+
+    // The invite is taken (so /join doesn't loop) and onboarding is never asked about.
+    expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBeNull();
+    expect(listed).toBe(0);
+    expect(window.sessionStorage.getItem("moduo:auth_resolving")).toBeNull();
   });
 });
