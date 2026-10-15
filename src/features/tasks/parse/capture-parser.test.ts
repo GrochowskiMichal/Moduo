@@ -8,7 +8,13 @@ import { applyTimeRegion, EMPTY_TIME_REGION } from "../../../lib/time-region";
 beforeAll(() => applyTimeRegion({ ...EMPTY_TIME_REGION, weekStart: 1 }, null));
 
 import { parseCapture } from "./capture-parser";
-import { captureDates, resolveTitle, segmentsFromLine, type TitleSegment } from "./capture-tokens";
+import {
+  captureDates,
+  keepOnClear,
+  resolveTitle,
+  segmentsFromLine,
+  type TitleSegment,
+} from "./capture-tokens";
 
 // Friday 9 October 2026, 10:00 local — the research probe's reference time.
 const FRIDAY_10AM = new Date(2026, 9, 9, 10, 0, 0, 0);
@@ -355,5 +361,114 @@ describe("capture title tokens — grammar tokens (AC10.3, AC10.4)", () => {
     expect(r.title).toBe("Ship it");
     expect(r.single.priority?.level).toBe("high");
     expect(r.tags.map((t) => t.label)).toEqual(["one", "two"]);
+  });
+});
+
+describe("parseCapture — “now” is a word (MOD-133)", () => {
+  it("stays in the sentence, wherever it is", () => {
+    for (const text of ["Call back now", "Do it right now", "Now fix the bug", "Fine for now"]) {
+      const p = parseCapture(text, FRIDAY_10AM);
+      expect(p.title).toBe(text);
+      expect(p.matched).toBe(false);
+      expect(p.spans).toEqual([]);
+    }
+  });
+
+  it("a real time beside it still reads", () => {
+    const p = parseCapture("Call back now or at 5", FRIDAY_10AM);
+    expect(local(p.scheduledAt)?.getHours()).toBe(17);
+    expect(p.title).toBe("Call back now or");
+  });
+
+  it("today, tonight, a weekday, a date and a time all still read", () => {
+    expect(local(parseCapture("Ship today", FRIDAY_10AM).dueDate)?.getDate()).toBe(9);
+    expect(parseCapture("Ship tonight", FRIDAY_10AM).matched).toBe(true);
+    expect(local(parseCapture("Ship Monday", FRIDAY_10AM).dueDate)?.getDate()).toBe(12);
+    expect(local(parseCapture("Ship Oct 20", FRIDAY_10AM).dueDate)?.getDate()).toBe(20);
+    expect(local(parseCapture("Ship at 3pm", FRIDAY_10AM).scheduledAt)?.getHours()).toBe(15);
+  });
+});
+
+describe("keepOnClear — a date cleared by hand stays cleared (MOD-133)", () => {
+  const words = (text: string): TitleSegment[] => [{ text }];
+
+  it("keeps the date words it came from, and the title keeps them too", () => {
+    const segments = words("Call the printer tomorrow 3pm");
+    expect(captureDates(resolveTitle(segments, { now: FRIDAY_10AM })).scheduledAt).toBeTruthy();
+    const kept = keepOnClear(segments, "schedule", { now: FRIDAY_10AM });
+    expect(kept).toEqual(["tomorrow 3pm"]);
+    const after = resolveTitle(segments, { now: FRIDAY_10AM, keep: kept });
+    expect(captureDates(after).scheduledAt).toBeNull();
+    expect(after.title).toBe("Call the printer tomorrow 3pm");
+  });
+
+  it("keeps a token's words, which would read as a date once they're text", () => {
+    const segments: TitleSegment[] = [
+      { text: "Pay the rent " },
+      { token: { kind: "due", day: "2026-10-10", label: "Tomorrow" } },
+    ];
+    const kept = keepOnClear(segments, "due", { now: FRIDAY_10AM });
+    expect(kept).toEqual(["Tomorrow"]);
+    // The token falls back to its words: kept, they set nothing.
+    const after = resolveTitle(words("Pay the rent Tomorrow"), { now: FRIDAY_10AM, keep: kept });
+    expect(captureDates(after).dueDay).toBeNull();
+    expect(after.title).toBe("Pay the rent Tomorrow");
+  });
+
+  it("a reminder's token words are kept (they hold a date and a time)", () => {
+    const segments: TitleSegment[] = [
+      { text: "Pay the rent " },
+      {
+        token: {
+          kind: "remind",
+          at: new Date(2026, 9, 16, 16).toISOString(),
+          label: "Remind Oct 16, 4:00 PM",
+        },
+      },
+    ];
+    expect(keepOnClear(segments, "remind", { now: FRIDAY_10AM })).toEqual([
+      "Remind Oct 16, 4:00 PM",
+    ]);
+  });
+
+  it("a cleared repeat keeps only the repeat's words: the date still schedules", () => {
+    const segments = words("Standup tomorrow 9am every weekday");
+    const kept = keepOnClear(segments, "repeat", { now: FRIDAY_10AM });
+    expect(kept).toEqual(["every weekday"]);
+    const dates = captureDates(resolveTitle(segments, { now: FRIDAY_10AM, keep: kept }));
+    expect(dates.recurrence).toBeNull();
+    expect(local(dates.scheduledAt)?.getHours()).toBe(9);
+  });
+
+  it("a date picked by hand, with no words behind it, keeps nothing", () => {
+    expect(
+      keepOnClear(words("Pay the rent"), "due", {
+        now: FRIDAY_10AM,
+        manualDates: { dueDay: "2026-10-12" },
+      }),
+    ).toEqual([]);
+  });
+
+  it("a kept weekday label is a whole word: longer words around it still read", () => {
+    // A cleared Due token picked a few days out keeps its "Mon" or "Sat".
+    const monthly = parseCapture("Pay rent Mon every month", FRIDAY_10AM, { keep: ["Mon"] });
+    expect(monthly.recurrence?.rrule).toContain("FREQ=MONTHLY");
+    expect(monthly.title).toBe("Pay rent Mon");
+    const monday = parseCapture("Pay rent Mon next Monday", FRIDAY_10AM, { keep: ["Mon"] });
+    expect(local(monday.dueDate)?.getDate()).toBe(12);
+    const saturday = parseCapture("Walk Saturday 3pm", FRIDAY_10AM, { keep: ["Sat"] });
+    expect(local(saturday.scheduledAt)?.getDate()).toBe(10);
+    expect(local(saturday.scheduledAt)?.getHours()).toBe(15);
+    // The label itself stays a word.
+    expect(parseCapture("Ship Mon", FRIDAY_10AM, { keep: ["Mon"] }).matched).toBe(false);
+  });
+
+  it("date words a hand pick was hiding are kept once it's cleared", () => {
+    // The pick won over the words; cleared, the words would set it again.
+    const kept = keepOnClear(words("Essay due Friday"), "due", {
+      now: FRIDAY_10AM,
+      manualDates: { dueDay: "2026-10-12" },
+    });
+    expect(kept).toEqual(["Friday"]);
   });
 });

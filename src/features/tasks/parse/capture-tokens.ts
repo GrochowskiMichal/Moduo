@@ -248,6 +248,63 @@ export function captureDates(resolved: ResolvedTitle, manual: ManualDates = {}):
   };
 }
 
+// ── a date cleared by hand (MOD-133) ────────────────────────────────────────
+
+/** The pills a hand clear empties that the title could fill again. */
+export type ClearedDateField = "due" | "schedule" | "repeat" | "remind";
+
+/** Where each date pill's value sits, in the pills' and the dates' shape alike. */
+const DATE_KEY = { due: "dueDay", schedule: "scheduledAt", repeat: "recurrence" } as const;
+
+/**
+ * The phrases to keep as words when a date pill is cleared by hand (its × or
+ * its picker's clear), so the clear sticks (MOD-133). Otherwise the next read
+ * sets it again: the field's token falls back to its words ("Tomorrow",
+ * "Remind Oct 16, 4:00 PM"), which the date reader reads, and date words the
+ * value came from are still in the title. Kept, they stay the person's words,
+ * as Esc on a highlight keeps them. Of the date words, only the phrase behind
+ * this field when one is ("every week" for a cleared repeat, so "tomorrow
+ * 3pm" still schedules), else all of them.
+ */
+export function keepOnClear(
+  segments: readonly TitleSegment[],
+  field: ClearedDateField,
+  opts: ResolveOptions = {},
+): string[] {
+  const added: string[] = [];
+  // The title once the field's tokens have fallen back to their words.
+  const after = segments.map((s): TitleSegment => {
+    if (!("token" in s) || s.token.kind !== field) return s;
+    const text = tokenText(s.token);
+    if (text.trim()) added.push(text);
+    return { text };
+  });
+  // A reminder is never read from words: its token's words are enough.
+  if (field === "remind") return added;
+  const key = DATE_KEY[field];
+  const manual: ManualDates = { ...opts.manualDates, [key]: null };
+  const read = (extra: readonly string[]) => {
+    const keep = [...(opts.keep ?? []), ...added, ...extra];
+    const resolved = resolveTitle(after, { ...opts, keep, manualDates: manual });
+    return { resolved, value: captureDates(resolved, manual)[key] };
+  };
+  // A round per phrase the words could still set it from; three is plenty.
+  for (let round = 0; round < 3; round++) {
+    const { resolved, value } = read([]);
+    // Unset, or set by something other than words (a repeat's next session).
+    if (!value || !resolved.words) break;
+    const fresh = resolved.phrases.filter((p) => !added.includes(p));
+    if (fresh.length === 0) break;
+    const behind = fresh.find((p) => !read([p]).value);
+    if (behind) {
+      added.push(behind);
+      break;
+    }
+    added.push(...fresh);
+  }
+  return added;
+}
+
 // ── typed lines (subtasks, pasted lists) ────────────────────────────────────
 
 /** Who and what a typed line's `@` and `#` words can name. */
