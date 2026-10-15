@@ -310,7 +310,7 @@ BEGIN
   PERFORM test.ok(
     (SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname IN (
       'chat_messages_stream_idx', 'chat_messages_delta_idx', 'chat_messages_search_idx',
-      'chat_channels_live_name_uq', 'chat_channels_default_uq', 'chat_channels_delta_idx',
+      'chat_channels_public_name_uq', 'chat_channels_default_uq', 'chat_channels_delta_idx',
       'chat_channels_deleted_idx', 'chat_members_delta_idx', 'chat_catchup_open_idx',
       'chat_catchup_channel_open_idx', 'chat_catchup_later_idx', 'chat_catchup_message_reason_uq',
       'chat_catchup_level_reset_uq')) = 13,
