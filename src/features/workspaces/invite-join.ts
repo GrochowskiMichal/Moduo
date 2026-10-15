@@ -20,16 +20,32 @@ function storage(): Storage | null {
   }
 }
 
-export function setPendingJoin(token: string): void {
-  storage()?.setItem(PENDING_JOIN_KEY, token);
+/** A pending join older than this is someone's abandoned sign-in, not this one's. */
+export const PENDING_JOIN_TTL_MS = 60 * 60 * 1000;
+
+export function setPendingJoin(token: string, now: number = Date.now()): void {
+  storage()?.setItem(PENDING_JOIN_KEY, JSON.stringify({ token, at: now }));
 }
 
-/** The pending invite token, removed as it is read; null when there is none. */
-export function takePendingJoin(): string | null {
+/**
+ * The pending invite token, removed as it is read; null when there is none or
+ * it is older than an hour. A bare token (written by builds before TX-7)
+ * counts as fresh.
+ */
+export function takePendingJoin(now: number = Date.now()): string | null {
   const store = storage();
-  const token = store?.getItem(PENDING_JOIN_KEY)?.trim() || null;
-  if (token) store?.removeItem(PENDING_JOIN_KEY);
-  return token;
+  const raw = store?.getItem(PENDING_JOIN_KEY)?.trim();
+  if (!raw) return null;
+  store?.removeItem(PENDING_JOIN_KEY);
+  if (!raw.startsWith("{")) return raw;
+  try {
+    const value = JSON.parse(raw) as { token?: unknown; at?: unknown };
+    const token = typeof value.token === "string" ? value.token.trim() : "";
+    const at = typeof value.at === "number" ? value.at : 0;
+    return token && now - at <= PENDING_JOIN_TTL_MS ? token : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The /join URL that accepts `token`. */

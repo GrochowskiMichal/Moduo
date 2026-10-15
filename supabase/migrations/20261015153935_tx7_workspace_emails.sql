@@ -10,7 +10,8 @@
 --    `B3:<invite id>`), from "<Inviter> via Moduo" with replies to the inviter.
 --    The inviter is the signed-in caller, never the client-written
 --    `created_by`, which the validate trigger now pins to the caller as well.
---    Revoking a pending invite cancels its email if it hasn't gone out yet.
+--    Revoking or deleting a pending invite cancels its email if it hasn't gone
+--    out yet. An invite's address can't be changed (it would skip all of that).
 -- 3. An invite only works for the address it was sent to (S1):
 --    `workspace_op_accept_invite` refuses any other signed-in address with
 --    `invite_email_mismatch`, carrying the masked invited address in HINT
@@ -100,7 +101,16 @@ DECLARE
   r public.workspace_roles;
   v_actor uuid := auth.uid();
 BEGIN
+  IF TG_OP = 'UPDATE' AND lower(btrim(NEW.email)) IS DISTINCT FROM lower(btrim(OLD.email)) THEN
+    -- An invite belongs to its address (S1): re-pointing one would skip B3,
+    -- the daily cap and the sign-up allow-list's intent. Invite the new address.
+    RAISE EXCEPTION 'An invite''s address can''t be changed. Revoke it and invite the new address.'
+      USING ERRCODE = '42501';
+  END IF;
   IF TG_OP = 'INSERT' THEN
+    IF coalesce(btrim(NEW.email), '') !~ '^[^[:space:]@]+@[^[:space:]@]+$' THEN
+      RAISE EXCEPTION 'Enter an email address like name@company.com.' USING ERRCODE = '22023';
+    END IF;
     -- The inviter is whoever is signed in; the row's timestamps are the server's.
     IF v_actor IS NOT NULL THEN NEW.created_by := v_actor; END IF;
     NEW.created_at := now();
@@ -116,8 +126,7 @@ BEGIN
              AND o.payload ->> 'workspace_id' = NEW.workspace_id::text
              AND o.created_at > now() - interval '24 hours')
        ) >= 20 THEN
-      RAISE EXCEPTION 'You''ve sent 20 invites today. You can send more tomorrow.'
-        USING ERRCODE = 'P0001', HINT = 'invite_daily_limit';
+      RAISE EXCEPTION 'You''ve sent 20 invites today. You can send more tomorrow.';
     END IF;
   END IF;
   IF NEW.role_id IS NULL
@@ -161,7 +170,11 @@ DECLARE
   v_workspace text;
   v_role public.workspace_roles;
 BEGIN
-  -- Revoking stops a B3 that hasn't gone out yet.
+  -- Revoking or deleting stops a B3 that hasn't gone out yet.
+  IF TG_OP = 'DELETE' THEN
+    PERFORM public.email_cancel('B3:' || OLD.id::text);
+    RETURN NULL;
+  END IF;
   IF TG_OP = 'UPDATE' THEN
     IF OLD.status = 'pending' AND NEW.status = 'revoked' THEN
       PERFORM public.email_cancel('B3:' || NEW.id::text);
@@ -203,7 +216,7 @@ $$;
 
 DROP TRIGGER IF EXISTS workspace_invites_enqueue_email ON public.workspace_invites;
 CREATE TRIGGER workspace_invites_enqueue_email
-  AFTER INSERT OR UPDATE OF status ON public.workspace_invites
+  AFTER INSERT OR UPDATE OF status OR DELETE ON public.workspace_invites
   FOR EACH ROW EXECUTE FUNCTION public.workspace_invites__enqueue_email();
 
 -- ---------------------------------------------------------------------------

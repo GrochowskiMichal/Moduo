@@ -119,6 +119,18 @@ SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET s
 SELECT test.ok((test.outbox('B3:' || test.invite_id('gone@becker.studio'))).status = 'cancelled',
   'revoking cancels the queued B3');
 
+-- Deleting one cancels it too; an invite can't be re-pointed at another address.
+SELECT test.ok(test.invite('A', 'W', 'deleted@becker.studio') = 'ok 1', 'an invite to delete');
+SELECT test.ok(test.as_user('A', format($q$DELETE FROM public.workspace_invites WHERE id = %L$q$,
+  test.invite_id('deleted@becker.studio'))) = 'ok 1', 'the admin deletes it');
+SELECT test.ok((SELECT status FROM public.email_outbox WHERE kind = 'workspace_invite' AND to_email = 'deleted@becker.studio') = 'cancelled',
+  'deleting cancels the queued B3');
+SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites SET email = 'other@becker.studio' WHERE id = %L$q$,
+  test.invite_id('Tom@Becker.Studio '))) = '42501 An invite''s address can''t be changed. Revoke it and invite the new address.',
+  'an invite''s address cannot be changed');
+SELECT test.ok(test.invite('A', 'W', 'not an address') = '22023 Enter an email address like name@company.com.',
+  'an invite to something that is not an address is refused in words');
+
 -- ── AC35: only the invited address can accept ───────────────────────────────
 
 SELECT test.ok(
@@ -148,10 +160,11 @@ SELECT test.ok((SELECT status FROM public.workspace_invites WHERE id = test.invi
 
 -- ── AC37: 20 invites per workspace per 24 hours ─────────────────────────────
 
-SELECT test.ok((SELECT count(*) FROM public.workspace_invites WHERE workspace_id = test.id('W')) = 2,
-  'two invites so far today (accepted and revoked ones count)');
+SELECT test.ok((SELECT count(*) FROM public.email_outbox WHERE kind = 'workspace_invite'
+                  AND payload ->> 'workspace_id' = test.id('W')::text) = 3,
+  'three invites emailed so far today (accepted, revoked and deleted ones count)');
 SELECT test.ok(bool_and(test.invite('A', 'W', 'cap' || g || '@becker.studio') = 'ok 1'),
-  'invites 3 to 20 go through') FROM generate_series(3, 20) g;
+  'invites 4 to 20 go through') FROM generate_series(4, 20) g;
 SELECT test.ok(test.invite('A', 'W', 'cap21@becker.studio')
     = 'P0001 You''ve sent 20 invites today. You can send more tomorrow.',
   'the 21st is refused with the daily-limit copy', test.invite('A', 'W', 'cap21@becker.studio'));

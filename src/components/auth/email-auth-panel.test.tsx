@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { PENDING_JOIN_KEY } from "@/features/workspaces/invite-join";
+import { PENDING_JOIN_KEY, setPendingJoin } from "@/features/workspaces/invite-join";
 import type { ModuoRuntime } from "@/lib/runtime";
 import { AuthContext, type AuthContextValue } from "@/providers/auth-provider";
 
@@ -240,7 +240,7 @@ describe("EmailAuthPanel pending workspace invite (TX-7 AC36)", () => {
         },
       } as unknown as ModuoRuntime,
     };
-    window.localStorage.setItem(PENDING_JOIN_KEY, "ab+cd/ef==");
+    setPendingJoin("ab+cd/ef==");
     renderPanel(null, value);
     await screen.findByPlaceholderText("you@example.com");
     await requestCode();

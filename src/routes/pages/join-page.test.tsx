@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { InviteEmailMismatchError, PENDING_JOIN_KEY } from "../../features/workspaces/invite-join";
+import { InviteEmailMismatchError, takePendingJoin } from "../../features/workspaces/invite-join";
 import { JoinPage } from "./join-page";
 
 const h = rs.hoisted(() => ({
@@ -68,8 +68,26 @@ describe("JoinPage — invite for another address (TX-7 AC35)", () => {
     });
 
     expect(h.signOut).toHaveBeenCalledTimes(1);
-    expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBe("ab+cd/ef==");
+    expect(takePendingJoin()).toBe("ab+cd/ef==");
     expect(h.navigate).toHaveBeenCalledWith({ to: "/auth", replace: true });
+  });
+
+  it("stays put when signing out fails, instead of bouncing back from /auth", async () => {
+    h.joinInvite.mockImplementation(() =>
+      Promise.reject(new InviteEmailMismatchError("t•••@becker.studio")),
+    );
+    h.signOut.mockImplementationOnce(() => Promise.reject(new Error("offline")));
+    render(<JoinPage />);
+    await accept();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Sign out/ }));
+    });
+
+    expect(h.navigate).not.toHaveBeenCalled();
+    expect(takePendingJoin()).toBeNull();
+    expect((screen.getByRole("button", { name: /Sign out/ }) as HTMLButtonElement).disabled).toBe(
+      false,
+    );
   });
 
   it("other refusals keep the existing message", async () => {
@@ -88,7 +106,7 @@ describe("JoinPage — signed out (TX-7 AC36)", () => {
     render(<JoinPage />);
     fireEvent.click(screen.getByRole("button", { name: /Sign in to accept/ }));
 
-    expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBe("ab+cd/ef==");
+    expect(takePendingJoin()).toBe("ab+cd/ef==");
     expect(h.navigate).toHaveBeenCalledWith({ to: "/auth", replace: true });
   });
 });

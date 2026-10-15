@@ -87,12 +87,16 @@ export function JoinPage() {
   const handleSignOut = async () => {
     if (signingOut) return;
     setSigningOut(true);
-    if (inviteToken) setPendingJoin(inviteToken);
     try {
       await signOut();
-    } finally {
-      void navigate({ to: "/auth", replace: true });
+    } catch {
+      // Still signed in: /auth would send them straight back here.
+      toast.error("We couldn't sign you out. Try again.");
+      setSigningOut(false);
+      return;
     }
+    if (inviteToken) setPendingJoin(inviteToken);
+    void navigate({ to: "/auth", replace: true });
   };
 
   if (loading) {

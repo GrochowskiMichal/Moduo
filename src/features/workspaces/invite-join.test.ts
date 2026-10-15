@@ -5,6 +5,7 @@ import {
   isInviteEmailMismatch,
   joinPath,
   PENDING_JOIN_KEY,
+  PENDING_JOIN_TTL_MS,
   setPendingJoin,
   takePendingJoin,
 } from "./invite-join";
@@ -14,9 +15,22 @@ afterEach(() => window.localStorage.clear());
 describe("pending join", () => {
   it("is read once", () => {
     setPendingJoin("ab+cd/ef==");
-    expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBe("ab+cd/ef==");
     expect(takePendingJoin()).toBe("ab+cd/ef==");
     expect(takePendingJoin()).toBeNull();
+    expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBeNull();
+  });
+
+  it("is dropped after an hour, so an abandoned invite doesn't hijack a later sign-in", () => {
+    setPendingJoin("ab+cd/ef==", 0);
+    expect(takePendingJoin(PENDING_JOIN_TTL_MS + 1)).toBeNull();
+    expect(window.localStorage.getItem(PENDING_JOIN_KEY)).toBeNull();
+    setPendingJoin("ab+cd/ef==", 0);
+    expect(takePendingJoin(PENDING_JOIN_TTL_MS)).toBe("ab+cd/ef==");
+  });
+
+  it("still reads a bare token an older build wrote", () => {
+    window.localStorage.setItem(PENDING_JOIN_KEY, "ab+cd/ef==");
+    expect(takePendingJoin()).toBe("ab+cd/ef==");
   });
 
   it("links to /join with the token encoded (invite tokens are base64)", () => {
