@@ -86,7 +86,7 @@ AS $function$
 $function$;
 
 -- One spelling per emoji, as Emojibase writes it: the text selector (U+FE0E)
--- goes; U+FE0F goes before a skin tone and unless it follows a text-default
+-- goes, a run of U+FE0F becomes one; U+FE0F goes before a skin tone and unless it follows a text-default
 -- code point; a text-default pictograph (Unicode's Emoji_Presentation=No, read
 -- from emoji-test.txt 18.0) or a keycap's #, * or digit gets U+FE0F unless one
 -- or a skin tone already follows. So ❤ and ❤️ are one key, ✅ stays ✅ and ✅️
@@ -142,7 +142,8 @@ AS $function$
   )
   SELECT regexp_replace(
            regexp_replace(
-             regexp_replace(replace(p_key, chr(65038), ''),
+             regexp_replace(regexp_replace(replace(p_key, chr(65038), ''),
+                                           chr(65039) || '+', chr(65039), 'g'),
                             chr(65039) || '(?=' || skin || ')', '', 'g'),
              '(?<!' || td || ')' || chr(65039), '', 'g'),
            '(' || td || ')(?![' || chr(65039) || chr(127995) || '-' || chr(127999) || '])',
@@ -193,8 +194,9 @@ GRANT EXECUTE ON FUNCTION public.comment_reactions__words_to_emoji() TO service_
 -- Stored keys in the one spelling: a key someone stored as ✅️ or ❤ before
 -- this migration (chat v1, or a comment) becomes ✅ or ❤️, so a chip and the
 -- key it reacts with match and the person can take it off. Two spellings one
--- person holds become one (the earliest is kept). What isn't a key is left as
--- it is. A chat message it changes gets a new updated_at, as a reaction does.
+-- person holds become one (the stored spelling wins, else the earliest). A key
+-- that isn't a key is left as it is, and a message holding anything but lists
+-- of people is left whole. A chat message it changes gets a new updated_at, as a reaction does.
 CREATE OR REPLACE FUNCTION public.reactions__respell_stored()
 RETURNS integer
 LANGUAGE plpgsql
@@ -246,6 +248,8 @@ BEGIN
                       CASE WHEN jsonb_typeof(kv.value) = 'array' THEN kv.value ELSE '[]'::jsonb END
                     ) WITH ORDINALITY AS p(person, po)
                    WHERE jsonb_typeof(m2.reactions) = 'object'
+                     AND NOT EXISTS (SELECT 1 FROM jsonb_each(m2.reactions) v2
+                                      WHERE jsonb_typeof(v2.value) <> 'array')
                      AND EXISTS (SELECT 1 FROM jsonb_object_keys(m2.reactions) k2
                                   WHERE public.reactions__key_ok(k2)
                                     AND k2 <> public.reactions__key_canonical(k2))
@@ -347,9 +351,10 @@ BEGIN
     RAISE EXCEPTION 'Say whether the reaction is on or off.' USING ERRCODE = '22023';
   END IF;
   -- A message the caller can't read gets the same answer as a missing one.
-  SELECT * INTO v_msg FROM public.chat_messages WHERE id = p_message_id FOR UPDATE;
-  IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL
-     OR NOT public.chat_can_read_channel(v_msg.channel_id) THEN
+  SELECT * INTO v_msg FROM public.chat_messages
+   WHERE id = p_message_id AND public.chat_can_read_channel(channel_id)
+     FOR UPDATE;
+  IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   IF (public.chat_op__reader(v_msg.channel_id)).archived_at IS NOT NULL THEN

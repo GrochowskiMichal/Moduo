@@ -1275,13 +1275,17 @@ const isSkin = (n: number | undefined) => n !== undefined && inRanges(n, REACTIO
 
 /**
  * One spelling per emoji, as Emojibase writes it (the same steps as the
- * server's reactions__key_canonical): the text selector U+FE0E goes; U+FE0F
- * goes before a skin tone and unless it follows a text-default code point; a
+ * server's reactions__key_canonical): the text selector U+FE0E goes, a run of
+ * U+FE0F becomes one; U+FE0F goes before a skin tone and unless it follows a
+ * text-default code point; a
  * text-default pictograph or keycap base gets U+FE0F unless one or a skin
  * tone follows. So ❤ and ❤️ are one key, ✅ stays ✅, and ✅️ becomes ✅.
  */
 export function canonicalReactionKey(key: string): string {
-  const cps = [...key].map((c) => c.codePointAt(0) ?? 0).filter((n) => n !== 65038);
+  const cps = [...key]
+    .map((c) => c.codePointAt(0) ?? 0)
+    .filter((n) => n !== 65038)
+    .filter((n, i, all) => n !== 65039 || all[i - 1] !== 65039);
   const out: number[] = [];
   for (let i = 0; i < cps.length; i++) {
     const n = cps[i];

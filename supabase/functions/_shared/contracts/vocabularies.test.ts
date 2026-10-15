@@ -567,6 +567,8 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
       const key = hex ? String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16))) : "";
       expect(v.isReactionKey(key), `[${hex}]`).toBe(ok === "true");
       expect(v.parseReactionKey(key).success, `[${hex}]`).toBe(ok === "true");
+      const once = v.canonicalReactionKey(key);
+      expect(v.canonicalReactionKey(once), `[${hex}] spelled twice`).toBe(once);
     }
   });
 
@@ -585,6 +587,7 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
       String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16)));
     for (const [, hex, want] of rows) {
       expect(v.canonicalReactionKey(fromHex(hex)), `[${hex}]`).toBe(fromHex(want));
+      expect(v.canonicalReactionKey(fromHex(want)), `[${want}] again`).toBe(fromHex(want));
       expect(v.isReactionKey(fromHex(want)), `[${want}]`).toBe(true);
     }
   });

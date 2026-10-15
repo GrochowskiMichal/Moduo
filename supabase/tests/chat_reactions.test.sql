@@ -190,6 +190,8 @@ INSERT INTO test.canonical_corpus (hex, want) VALUES
   ('263A', '263A FE0F'),
   ('1F575', '1F575 FE0F'),
   ('261D FE0F 1F3FD', '261D 1F3FD'),
+  ('261D FE0F FE0F 1F3FD', '261D 1F3FD'),
+  ('2764 FE0F FE0F', '2764 FE0F'),
   ('1F3F3 200D 1F308', '1F3F3 FE0F 200D 1F308'),
   ('1F3F3 FE0F 200D 1F308', '1F3F3 FE0F 200D 1F308'),
   ('1F3C3 200D 27A1', '1F3C3 200D 27A1 FE0F'),
@@ -218,6 +220,12 @@ BEGIN
                 AND public.reactions__key_ok(test.from_hex(r.want)),
       format('key: [%s] is stored as [%s]', r.hex, r.want));
   END LOOP;
+  PERFORM test.ok(NOT EXISTS (
+      SELECT 1 FROM (SELECT test.from_hex(hex) AS k FROM test.key_corpus
+                     UNION ALL SELECT test.from_hex(hex) FROM test.canonical_corpus) c
+       WHERE public.reactions__key_canonical(public.reactions__key_canonical(c.k))
+             IS DISTINCT FROM public.reactions__key_canonical(c.k)),
+    'key: the one spelling of the one spelling is itself');
   PERFORM test.ok(NOT coalesce(public.reactions__key_ok(NULL), true), 'key: nothing is refused');
   PERFORM test.ok(NOT public.reactions__key_ok(repeat('👍', 400)), 'key: a long string is refused');
   PERFORM test.ok(NOT public.reactions__key_ok(E'👍\n'), 'key: a line break is refused');
