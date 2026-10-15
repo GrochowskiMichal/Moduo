@@ -105,12 +105,25 @@ export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
  * at 50 KB) or thousands of lines in one paragraph (4 s at 100 KB), which
  * would freeze the panel for everyone who opens the task. So a description
  * past CHUNK_LIMIT is read a chunk at a time, cut at a blank line where it
- * can; a line longer than LINE_LIMIT, and everything past TOTAL_LIMIT, comes
- * in as plain text (it saves back escaped, which only text that size meets).
+ * can; a line longer than LINE_LIMIT or dense with the costly delimiters
+ * (more than DELIMITER_LIMIT `[` and backticks: a real paragraph with dozens of
+ * links and code spans has under 200) comes in as plain text, and so does
+ * everything past TOTAL_LIMIT characters or TOTAL_LINES lines, as one paragraph. Plain text saves back
+ * escaped, which only text like that ever meets.
  */
 const CHUNK_LIMIT = 5_000;
+const CHUNK_LINES = 100;
+const TOTAL_LINES = 5_000;
 const LINE_LIMIT = 5_000;
+const DELIMITER_LIMIT = 300;
 const TOTAL_LIMIT = 100_000;
+
+/** How many of the delimiters that make Lexical's importer slow a line holds. */
+function costlyDelimiters(line: string): number {
+  let n = 0;
+  for (const ch of line) if (ch === "[" || ch === "`") n++;
+  return n;
+}
 
 /** Import a long description a chunk at a time (see CHUNK_LIMIT). */
 function $importInChunks(markdown: string): void {
@@ -125,17 +138,31 @@ function $importInChunks(markdown: string): void {
     chunk = [];
     chunkSize = 0;
   };
-  for (const line of markdown.split("\n")) {
+  const lines = markdown.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
     used += line.length + 1;
-    if (used > TOTAL_LIMIT || line.length > LINE_LIMIT) {
+    if (used > TOTAL_LIMIT || i >= TOTAL_LINES) {
+      // Everything from here is one paragraph of plain text, however many lines.
+      flush();
+      root.append($createParagraphNode().append($createTextNode(lines.slice(i).join("\n"))));
+      return;
+    }
+    if (line.length > LINE_LIMIT || costlyDelimiters(line) > DELIMITER_LIMIT) {
       flush();
       if (line) root.append($createParagraphNode().append($createTextNode(line)));
       continue;
     }
     // A blank line past half the chunk is a clean place to cut; past the
-    // whole chunk, cut anyway (a paragraph that long becomes two).
-    if ((line === "" && chunkSize > CHUNK_LIMIT / 2) || chunkSize + line.length > CHUNK_LIMIT)
+    // whole chunk (or CHUNK_LINES lines: one paragraph's cost grows with its
+    // lines too), cut anyway (a paragraph that long becomes two).
+    if (
+      (line === "" && (chunkSize > CHUNK_LIMIT / 2 || chunk.length > CHUNK_LINES / 2)) ||
+      chunkSize + line.length > CHUNK_LIMIT ||
+      chunk.length >= CHUNK_LINES
+    ) {
       flush();
+    }
     chunk.push(line);
     chunkSize += line.length + 1;
   }
@@ -148,9 +175,12 @@ export function $importDescription(value: string): void {
   root.clear();
   const markdown = descriptionToMarkdown(value);
   if (markdown.trim()) {
-    if (markdown.length <= CHUNK_LIMIT)
+    const lines = markdown.split("\n", CHUNK_LINES + 1).length;
+    if (markdown.length <= CHUNK_LIMIT && lines <= CHUNK_LINES) {
       $convertFromMarkdownString(markdown, DESCRIPTION_TRANSFORMERS);
-    else $importInChunks(markdown);
+    } else {
+      $importInChunks(markdown);
+    }
   }
   if (root.getChildrenSize() === 0) root.append($createParagraphNode());
 }

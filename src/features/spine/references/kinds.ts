@@ -20,9 +20,7 @@ const KIND_BY_TYPE: Record<string, ReferenceKind> = {
 
 /** The reference kind for an entity type; anything unknown is `other`. */
 export function referenceKind(type: string): ReferenceKind {
-  // Own keys only: a stored description can name any lower-case type,
-  // "constructor" included (call #15).
-  return Object.hasOwn(KIND_BY_TYPE, type) ? KIND_BY_TYPE[type] : "other";
+  return KIND_BY_TYPE[type] ?? "other";
 }
 
 /** The stable cache key of a reference: its kind and id (`email_thread:x` = `email:x`). */

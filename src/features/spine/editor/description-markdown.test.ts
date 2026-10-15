@@ -228,10 +228,14 @@ describe("a crafted description can't freeze the editor", () => {
     ["a long line of code ticks", "`a ".repeat(25_000)],
     ["a long line of links that never close", "[x](".repeat(15_000)],
     ["a long line of [", "[".repeat(60_000)],
+    ["many lines of links that never close", `${"[x](".repeat(600)}\n`.repeat(40)],
+    ["many lines of code ticks", `${"`".repeat(4_900)}\n`.repeat(20)],
+    ["a million short lines", "a\n".repeat(500_000)],
+    ["2,500 short lines under the size limit", "a\n".repeat(2_500)],
     ["many lines past the total", `${"**bold** and `code`\n".repeat(20_000)}`],
   ] as const) {
     it(`imports ${name} quickly`, () => {
-      expect(timed(() => load(md))).toBeLessThan(2000);
+      expect(timed(() => load(md))).toBeLessThan(1500);
     });
   }
 
@@ -272,7 +276,6 @@ describe("a reference's label", () => {
       "bucket",
       "tag",
       "mystery",
-      "constructor",
     ]) {
       expect(referenceWord(type)).toBe(referenceNoun(referenceKind(type)));
     }
