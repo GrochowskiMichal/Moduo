@@ -39,6 +39,7 @@ import {
 } from "../project-overview";
 import { bucketDotColor } from "../sidebar";
 import { reportRange } from "../time-report";
+import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import {
   ProjectClientValue,
@@ -198,13 +199,13 @@ function ProjectOverview({
     [tasks, completions, project.id],
   );
   // "Done this month · 14 · 22h" (AC6.6): the same month and zone as the
-  // time report, so the two always agree.
-  // Re-read when the panel draws on a new day (a new month follows then).
-  const today = new Date().toDateString();
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `today` is the re-read cue
+  // time report, so the two always agree: the month of your saved time zone
+  // (MOD-110), which turns over at that zone's midnight even while the
+  // overview stays open.
+  const today = useToday(region.timeZone);
   const month = useMemo(
-    () => reportRange("this_month", new Date(), region.weekStartsOn),
-    [region.weekStartsOn, today],
+    () => reportRange("this_month", nowOn(today), region.weekStartsOn, null, region.timeZone),
+    [region.weekStartsOn, region.timeZone, today],
   );
   const doneThisMonth = useMemo(
     () => doneInRange(tasks, completions, project.id, month, region.timeZone),
