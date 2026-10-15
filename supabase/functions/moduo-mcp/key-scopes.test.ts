@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
+import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
@@ -134,6 +135,12 @@ function tool(module: ConnectorModule, name: string): ToolDef {
   const found = module.tools.find((t) => t.name === name);
   if (!found) throw new Error(`${name} is not registered on ${module.module}`);
   return found;
+}
+/** A tool call as index.ts makes it: the arguments go through the parser first. */
+function callTool(module: ConnectorModule, name: string, args: Row, c: ToolContext): Promise<any> {
+  const parsed = parseToolArgs(name, args);
+  if (!parsed.success) return Promise.reject(new Error(parsed.message));
+  return tool(module, name).handler(parsed.data, c) as Promise<any>;
 }
 
 describe("which tools a key lists and may call", () => {
@@ -294,16 +301,16 @@ describe("reaching one item", () => {
       links_suggest: () => [],
     });
     const c = ctx({ tasks: "edit", notes: "edit", links: "edit" }, db);
-    await tool(linksConnectorModule, "links_create").handler(
+    const handle = { entity_type: "task", entity_id: "MOD-142" };
+    await callTool(
+      linksConnectorModule,
+      "links_create",
       { source_type: "task", source_id: "MOD-142", target_type: "note", target_id: NOTE },
       c,
     );
-    await tool(linksConnectorModule, "comments_add").handler(
-      { entity_type: "task", entity_id: "MOD-142", body: "Done?" },
-      c,
-    );
-    await tool(linksConnectorModule, "links_list").handler({ entity_type: "task", entity_id: "MOD-142" }, c);
-    await tool(linksConnectorModule, "links_suggest").handler({ entity_type: "task", entity_id: "MOD-142" }, c);
+    await callTool(linksConnectorModule, "comments_add", { ...handle, body: "Done?" }, c);
+    await callTool(linksConnectorModule, "links_list", handle, c);
+    await callTool(linksConnectorModule, "links_suggest", handle, c);
     const sent = (fn: string) => rpcCalls.find((call) => call.fn === fn)?.args;
     expect(sent("links_op_create")).toMatchObject({ p_source_id: TASK, p_target_id: NOTE });
     expect(sent("comments_op_add")).toMatchObject({ p_entity_type: "task", p_entity_id: TASK });
@@ -311,6 +318,75 @@ describe("reaching one item", () => {
     expect(ors).toEqual([
       `and(source_type.eq.task,source_id.eq.${TASK}),and(target_type.eq.task,target_id.eq.${TASK})`,
     ]);
+  });
+});
+
+describe("comments_list (MOD-94): Links reads an item's comments, behind the item's own gate", () => {
+  const NOTE = "66666666-6666-4666-8666-666666666666";
+  const comment = (id: string, at: string, extra: Row = {}): Row => ({
+    id,
+    workspace_id: WS,
+    entity_type: "task",
+    entity_id: TASK,
+    body: `body ${id}`,
+    created_by: ME,
+    author_kind: "user",
+    author_label: null,
+    created_at: at,
+    edited_at: null,
+    deleted_at: null,
+    ...extra,
+  });
+  const tables = () => ({
+    workspaces: [{ id: WS, task_key: "MOD" }],
+    tasks: [{ id: TASK, workspace_id: WS, deleted_at: null, number: 142 }],
+    notes: [{ id: NOTE, workspace_id: WS, deleted_at: null }],
+    workspace_members: [{ workspace_id: WS, user_id: ME, perms: [], profiles: { display_name: "Ada" } }],
+    comments: [
+      comment("c-2", "2030-01-02T10:00:00Z", { author_kind: "api_key", author_label: "Claude Code" }),
+      comment("c-1", "2030-01-01T10:00:00Z", { edited_at: "2030-01-01T11:00:00Z" }),
+      comment("c-gone", "2030-01-03T10:00:00Z", { deleted_at: "2030-01-04T00:00:00Z" }),
+      comment("c-other-ws", "2030-01-03T10:00:00Z", { workspace_id: OTHER_WS }),
+      comment("c-note", "2030-01-03T10:00:00Z", { entity_type: "note", entity_id: NOTE }),
+    ],
+  });
+  const seen = (answer: boolean) => ({ perm_can_see_entity: () => answer });
+
+  it("is a Links read: listed at Links: View, never for a key without Links", () => {
+    expect(names(key({ tasks: "view", links: "view" }))).toContain("comments_list");
+    expect(names(key({ tasks: "edit" }))).not.toContain("comments_list");
+    expect(tool(linksConnectorModule, "comments_list").access).toBe("view");
+  });
+
+  it("reads a task's comments by handle, the newest last, with who wrote each", async () => {
+    const { db } = fakeDb(tables(), seen(true));
+    const got = await callTool(linksConnectorModule, "comments_list", { entity_type: "task", entity_id: "MOD-142" },
+      ctx({ tasks: "view", links: "view" }, db));
+    expect(got).toEqual({
+      entity_type: "task",
+      entity_id: TASK,
+      total: 2,
+      comments: [
+        { id: "c-1", author: "Ada", at: "2030-01-01T10:00:00Z", edited: true, body: "body c-1" },
+        { id: "c-2", author: "Claude Code (app)", at: "2030-01-02T10:00:00Z", body: "body c-2" },
+      ],
+    });
+    const last = await callTool(linksConnectorModule, "comments_list",
+      { entity_type: "task", entity_id: TASK, limit: 1 }, ctx({ tasks: "view", links: "view" }, db));
+    expect(last.comments.map((x: Row) => x.id)).toEqual(["c-2"]);
+  });
+
+  it("needs View on the item's module, and an item the person can't open reads as missing", async () => {
+    const open = fakeDb(tables(), seen(true));
+    await expect(callTool(linksConnectorModule, "comments_list", { entity_type: "note", entity_id: NOTE },
+      ctx({ tasks: "view", links: "view" }, open.db))).rejects.toThrow("This API key has no access to Notes.");
+    const notes = await callTool(linksConnectorModule, "comments_list", { entity_type: "note", entity_id: NOTE },
+      ctx({ notes: "view", links: "view" }, open.db));
+    expect(notes.comments.map((x: Row) => x.id)).toEqual(["c-note"]);
+    const hidden = fakeDb(tables(), seen(false));
+    await expect(callTool(linksConnectorModule, "comments_list", { entity_type: "task", entity_id: "MOD-142" },
+      ctx({ tasks: "view", links: "view" }, hidden.db))).rejects.toThrow("No task with that id in this workspace.");
+    expect(hidden.queries.some((q) => q.table === "comments")).toBe(false);
   });
 });
 

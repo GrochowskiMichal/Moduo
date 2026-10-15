@@ -88,6 +88,15 @@ Tasks View. Writes that point at another entity (`links_create`,
 check that entity first (`assertReach` in
 [`share.ts`](../supabase/functions/moduo-mcp/share.ts)).
 
+**Comments are Links'.** `comments_list(entity_type, entity_id, limit)` (Links:
+View, MOD-94) reads an item's comments, newest last (the latest `limit`,
+default 50, ≤ 200, and the `total`): `author` (a person's name, an app as
+`"<key name> (app)"`), `at`, `edited`, `body`. It passes `assertReach` first,
+so it needs View on the item's module too and shows only what the key's
+person can open (the app's rule, `comments__item_seen`). `tasks_get` carries a
+task's latest 20 only for a key with Links: View. Writing is `comments_add` /
+`tasks_comment` at Links: Edit.
+
 The secret never changes when scopes do: the connector reads `scopes` per
 request, so a change applies to the key's next call (an MCP client that cached
 its tool list needs a reconnect to see new tools; `listChanged` is false).
@@ -143,8 +152,7 @@ through the same ops and gates as the app; the rule for all of them:
 | `areas_list`, `sections_list`, `statuses_list`, `teams_list` | structure (a team's default project only when visible) |
 | `templates_list` | own and shared task/project templates: name, kind, counts; never the body or its sources |
 | `tasks_list` | paged (`limit` ≤ 200 + `offset`); filters `category` (or a legacy `status` word: `todo` leaves Backlog out), `project_id`, `section_id`, `area_id`, `team_id`, `assignee`, `completed_from/to`, `top_level`, `include_archived`. **A short row by default** (MOD-113, `fields: "summary"`): handle, id, title, `status` (category) + `status_name` when the project calls it something else, priority, assignee's name, project (when the list spans projects), section, tags, `due`, and `blocked` / `drifted` / `queued_by_me` / `subtasks` / `parent` only when they apply; names only from projects the person can see. `fields: "full"` answers the full task shape, 25 to a page unless `limit` says otherwise (summary pages default to 100) |
-| `tasks_get` | one task in full: edges, subtasks, work sessions, **your** reminders, waiting on, the agent sessions you may see, its latest 20 comments (newest last, `earlier_comments` counts the rest), the trail |
-| `tasks_comments_list` | a task's comments, newest last (the latest `limit`, default 50, ≤ 200, and the `total`): author (a person's name, an app as `"<key name> (app)"`), `at`, `edited`, body; behind the task's own gate, the app's rule for them (MOD-94) |
+| `tasks_get` | one task in full: edges, subtasks, work sessions, **your** reminders, waiting on, the agent sessions you may see, with Links: View its latest 20 comments (newest last, `earlier_comments` counts the rest; none without Links), the trail |
 | `tasks_search` | words (`tasks_search` RPC, gated per match), a handle, or an import key (`ENG-123`) |
 | `tasks_history` | a repeat's past cycles (`tasks_op_history`) |
 | `tasks_time_report` | tracked time for a period by task or day (`tasks_time_report`: your own, plus sharers' for the owner) |

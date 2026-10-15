@@ -1,3 +1,4 @@
+import { commentsInOrder } from "../_shared/tasks-connector.ts";
 import {
   entityTypeKeyModule,
   keyCanSeeEntityType,
@@ -83,6 +84,25 @@ export async function assertReach(ctx: ToolContext, type: string, ref: string): 
   }
   if (!(await canReach(ctx, type, id))) throw new Error(notFound);
   return id;
+}
+
+/**
+ * MOD-94: an item's live comments, oldest first (the newest last). Call it
+ * only for an item the key reaches (assertReach, or fetchTask for a task):
+ * that is the app's rule for them (comments__item_seen: a comment shows to
+ * whoever can see its item). `*` as the app reads them: older databases lack
+ * some columns.
+ */
+export async function entityComments(
+  ctx: ToolContext,
+  type: string,
+  id: string,
+): Promise<Record<string, unknown>[]> {
+  const { data, error } = await ctx.db.from("comments").select("*")
+    .eq("workspace_id", ctx.key.workspaceId).eq("entity_type", type).eq("entity_id", id)
+    .is("deleted_at", null).order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return commentsInOrder((data ?? []) as Record<string, unknown>[]);
 }
 
 /** Throws unless the key can see both endpoints' modules (a link's two ends). */

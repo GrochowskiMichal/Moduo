@@ -249,7 +249,7 @@ describe("handles: every task argument takes MOD-142 or a uuid", () => {
   });
 });
 
-describe("comments: agents read what people answered (MOD-94)", () => {
+describe("comments in tasks_get (MOD-94): Links: View reads them", () => {
   const comment = (id: string, at: string, extra: Row = {}): Row => ({
     id,
     workspace_id: WS,
@@ -264,9 +264,10 @@ describe("comments: agents read what people answered (MOD-94)", () => {
     deleted_at: null,
     ...extra,
   });
+  const withLinks = { tasks: "edit", links: "view" };
 
-  function withComments() {
-    const s = setup();
+  function withComments(scopes: Record<string, string> = withLinks) {
+    const s = setup({ scopes });
     s.tables.comments = [
       comment("c-2", "2030-01-02T10:00:00Z", { edited_at: "2030-01-02T11:00:00Z" }),
       comment("c-1", "2030-01-01T10:00:00Z", { created_by: ME, author_kind: "api_key", author_label: "Claude Code" }),
@@ -278,7 +279,7 @@ describe("comments: agents read what people answered (MOD-94)", () => {
     return s;
   }
 
-  it("tasks_get carries the task's live comments, the newest last, with who wrote each", async () => {
+  it("carries the task's live comments, the newest last, with who wrote each", async () => {
     const { ctx } = withComments();
     const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
     expect(got.comments).toEqual([
@@ -289,8 +290,8 @@ describe("comments: agents read what people answered (MOD-94)", () => {
     expect(got).not.toHaveProperty("earlier_comments");
   });
 
-  it("tasks_get keeps the latest 20 and counts the earlier ones", async () => {
-    const { ctx, tables } = setup();
+  it("keeps the latest 20 and counts the earlier ones", async () => {
+    const { ctx, tables } = setup({ scopes: withLinks });
     tables.comments = Array.from({ length: 23 }, (_, i) =>
       comment(`c-${String(i).padStart(2, "0")}`, `2030-01-01T10:${String(i).padStart(2, "0")}:00Z`),
     );
@@ -301,27 +302,19 @@ describe("comments: agents read what people answered (MOD-94)", () => {
     expect(got.earlier_comments).toBe(3);
   });
 
-  it("tasks_comments_list reads the latest N, the newest last, with the total", async () => {
-    const { ctx } = withComments();
-    const all = await call("tasks_comments_list", { task_id: "MOD-1" }, ctx);
-    expect(all).toMatchObject({ task_id: "t-open", total: 3 });
-    expect(all.comments.map((c: Row) => c.id)).toEqual(["c-1", "c-2", "c-3"]);
-    const last = await call("tasks_comments_list", { task_id: "MOD-1", limit: 1 }, ctx);
-    expect(last.comments.map((c: Row) => c.id)).toEqual(["c-3"]);
+  it("a key without Links reads the task but none of its comments", async () => {
+    const { ctx } = withComments({ tasks: "edit" });
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.handle).toBe("MOD-1");
+    expect(got).not.toHaveProperty("comments");
+    expect(got).not.toHaveProperty("earlier_comments");
+    expect(JSON.stringify(got)).not.toContain("body c-");
   });
 
-  it("a task the key's person can't see has no comments to read: it reads as missing", async () => {
+  it("a task the key's person can't see reads as missing, comments and all", async () => {
     const { ctx, tables } = withComments();
     tables.comments!.push(comment("c-secret", "2030-01-01T00:00:00Z", { entity_id: "t-secret" }));
-    await expect(call("tasks_comments_list", { task_id: "MOD-9" }, ctx)).rejects.toThrow(
-      "Task not found in this workspace.",
-    );
     await expect(call("tasks_get", { task_id: "t-secret" }, ctx)).rejects.toThrow("Task not found in this workspace.");
-  });
-
-  it("reads at View", () => {
-    const listComments = tasksConnectorModule.tools.find((t) => t.name === "tasks_comments_list")!;
-    expect(listComments.access).toBe("view");
   });
 });
 
@@ -602,6 +595,7 @@ describe("writes go through the ops, checked before anything is written", () => 
     });
     const { ctx, tables, updates } = setup({
       rpcs: {
+        perm_can_tag: () => true,
         // As tasks_op_tag: a new name becomes a tag with no colour.
         tasks_op_create_with: (a) => {
           for (const name of (a.p_with as Row).tags as string[]) {
@@ -646,6 +640,49 @@ describe("writes go through the ops, checked before anything is written", () => 
     // A call that adds no tags colours nothing.
     await call("tasks_update", { task_id: "MOD-1", title: "y" }, ctx);
     expect(updates).toHaveLength(3);
+  });
+
+  it("colours a template's tags too, never over a hue a person just picked, and only for someone who may edit tags (MOD-93)", async () => {
+    const bare = (id: string, at: string): Row => ({
+      id, workspace_id: WS, name: id, color: null, created_at: at, deleted_at: null,
+    });
+    let mayTag = true;
+    const { ctx, tables, updates } = setup({
+      rpcs: {
+        perm_can_tag: () => mayTag,
+        task_templates_op_apply: () => {
+          tables.tags!.push(bare("tag-a", "2030-01-01T00:00:00Z"), bare("tag-b", "2030-01-02T00:00:00Z"));
+          return { tasks: [task("t-open", 1)] };
+        },
+      },
+    });
+    tables.tags = [];
+    // Someone picks teal for tag-a just as the connector colours it.
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      const q = from(t);
+      const update = q.update as (v: Row) => Row;
+      q.update = (v: Row) => {
+        const a = tables.tags!.find((x) => x.id === "tag-a");
+        if (a && !a.color) a.color = "teal";
+        return update(v);
+      };
+      return q;
+    };
+    await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
+    expect(tables.tags!.map((x) => [x.id, x.color])).toEqual([
+      ["tag-a", "teal"],
+      // blue went to nobody (tag-a was taken), so tag-b still gets blue.
+      ["tag-b", "blue"],
+    ]);
+    expect(updates.map((u) => u.ids)).toEqual([[], ["tag-b"]]);
+
+    // Someone who may not edit tags colours nothing.
+    mayTag = false;
+    tables.tags!.push(bare("tag-c", "2030-01-03T00:00:00Z"));
+    await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
+    expect(tables.tags!.find((x) => x.id === "tag-c")?.color).toBeNull();
   });
 
   it("tasks_session_status sends only the fields given", async () => {

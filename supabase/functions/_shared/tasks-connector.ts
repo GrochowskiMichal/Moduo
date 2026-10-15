@@ -319,7 +319,7 @@ export function shapeTaskSummary(t: Row, data: ShapeData, now: Date, names: Summ
   return out;
 }
 
-/** How many comments tasks_get carries (the latest; tasks_comments_list reads more). */
+/** How many comments tasks_get carries (the latest; comments_list reads more). */
 export const TASK_GET_COMMENTS = 20;
 
 /**

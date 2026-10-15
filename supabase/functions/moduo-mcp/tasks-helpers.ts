@@ -12,7 +12,6 @@
 
 import { isClosedTask, isOpenTask, pickTagColor } from "../_shared/contracts/vocabularies.ts";
 import {
-  commentsInOrder,
   queueTaskIds,
   readAllPages,
   rowTaskState,
@@ -248,21 +247,9 @@ export async function shapeOne(ctx: ToolContext, row: Row): Promise<Row> {
   return shapeTask(row, ws, new Date(), true);
 }
 
-/**
- * MOD-94: a task's live comments, oldest first (the newest last). The caller
- * has passed the task's own gate (fetchTask), which is the app's rule for
- * them: a comment on a task shows to whoever can see the task
- * (comments__item_seen). `*` because the app reads them so too: older
- * databases lack some columns.
- */
-export async function taskComments(ctx: ToolContext, taskId: string): Promise<Row[]> {
-  const found = await rows(
-    ctx.db.from("comments").select("*")
-      .eq("workspace_id", ctx.key.workspaceId).eq("entity_type", "task").eq("entity_id", taskId)
-      .is("deleted_at", null).order("created_at", { ascending: true }),
-  );
-  return commentsInOrder(found);
-}
+/** At most this many tags get a colour in one call (the first call after this
+ *  shipped may find many made before it). */
+export const COLOUR_TAGS_PER_CALL = 50;
 
 /**
  * MOD-93: give every live tag without a colour the hue the app would have
@@ -272,12 +259,17 @@ export async function taskComments(ctx: ToolContext, taskId: string): Promise<Ro
  * each counting the ones before it, so the hues spread as in the app; that
  * also colours the ones made before this fix. Nobody ever chooses "no colour"
  * (a recolour always names a hue), so a null is only ever a missing pick.
- * Best effort: the call that made the tag has already succeeded, and an
- * uncoloured tag still shows in the default hue.
+ * Colouring a tag is editing it, so it happens only for someone who may edit
+ * the workspace's tags (perm_can_tag, the check the tags policy makes for the
+ * app), at most COLOUR_TAGS_PER_CALL a call. Best effort: the call that made
+ * the tag has already succeeded, and an uncoloured tag still shows in the
+ * default hue.
  */
 export async function colourBareTags(ctx: ToolContext): Promise<void> {
   const ws = ctx.key.workspaceId;
   try {
+    const may = await ctx.db.rpc("perm_can_tag", { p_workspace_id: ws });
+    if (may.error || may.data !== true) return;
     const tags = await rows(
       ctx.db.from("tags").select("id, color, created_at").eq("workspace_id", ws).is("deleted_at", null),
     );
@@ -287,13 +279,14 @@ export async function colourBareTags(ctx: ToolContext): Promise<void> {
         String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")) || String(a.id).localeCompare(String(b.id)));
     if (!bare.length) return;
     const coloured: { color: string | null }[] = tags.filter((t) => t.color).map((t) => ({ color: t.color }));
-    for (const tag of bare) {
+    for (const tag of bare.slice(0, COLOUR_TAGS_PER_CALL)) {
       const color = pickTagColor(coloured);
       // Only while it's still bare: a person may have just picked one.
-      const { error } = await ctx.db.from("tags").update({ color })
-        .eq("workspace_id", ws).eq("id", tag.id).is("color", null);
+      const { data, error } = await ctx.db.from("tags").update({ color })
+        .eq("workspace_id", ws).eq("id", tag.id).is("color", null).select("id");
       if (error) return;
-      coloured.push({ color });
+      // A hue someone picked meanwhile isn't known here, so it isn't counted.
+      if (data?.length) coloured.push({ color });
     }
   } catch {
     // Reading the tags failed: they keep the default hue until the next call.

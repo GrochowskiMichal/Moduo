@@ -1,8 +1,9 @@
 /**
  * The two halves of each connector tool's arguments agree (MOD-92). A tool's
- * listing (`inputSchema` in modules/*.ts: names and descriptions) and its
- * parser (`TOOL_ARG_SCHEMAS` in contracts/mcp-tool-args.ts: what a call keeps)
- * are written apart. A field only the listing has is advertised and then
+ * `inputSchema` in modules/*.ts (field names and descriptions, what its prose
+ * promises) and its Zod schema (`TOOL_ARG_SCHEMAS` in
+ * contracts/mcp-tool-args.ts: what `tools/list` shows and what a call keeps)
+ * are written apart. A field only the `inputSchema` has is promised, then
  * dropped by the parser without a word, as `projects_update`'s description was.
  */
 

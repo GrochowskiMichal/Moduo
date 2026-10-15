@@ -36,6 +36,7 @@ import {
   isTaskStatus,
   normalizeTaskStatusCategory,
 } from "../../_shared/contracts/vocabularies.ts";
+import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
   LIST_PAGE,
@@ -55,7 +56,7 @@ import {
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { visibleIds } from "../share.ts";
+import { entityComments, visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -80,7 +81,6 @@ import {
   shapeOne,
   shapedQueue,
   str,
-  taskComments,
   unwrap,
   workspaceMembers,
   type Row,
@@ -403,7 +403,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list",
       description:
-        "Tasks, a short row each (fields: summary, the default): handle, id, title, status (its category; status_name when the project calls it something else), priority, assignee's name (none = Unassigned), project (when the list spans projects), section, tags, due (YYYY-MM-DD, with HH:MM when timed), and blocked, drifted, subtasks (a count) and parent only when they apply. fields: full gives each task's full shape instead (ids, people, description excerpt, dates, estimate, repeat, …); tasks_get reads one in full. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
+        "Tasks, a short row each (fields: summary, the default): handle, id, title, status (its category; status_name when the project calls it something else), priority, assignee's name (none = Unassigned), project (when the list spans projects), section, tags, due (YYYY-MM-DD, with HH:MM when timed), and blocked, drifted, queued_by_me, subtasks (a count) and parent only when they apply. fields: full gives each task's full shape instead (ids, people, description excerpt, dates, estimate, repeat, …); tasks_get reads one in full. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -638,7 +638,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_get",
       description:
-        "One task in full: properties, tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, its latest comments (up to 20, the newest last; earlier_comments counts the rest, which tasks_comments_list reads) and its recent attributed activity trail.",
+        "One task in full: properties, tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, with Links: View its latest comments (up to 20, the newest last; earlier_comments counts the rest, which comments_list reads), and its recent attributed activity trail.",
       access: "view",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
@@ -662,10 +662,11 @@ export const tasksConnectorModule: ConnectorModule = {
           rows(ctx.db.from("task_waiting").select("id, kind, ref, label, since")
             .eq("workspace_id", ws).eq("task_id", taskId).is("deleted_at", null)),
           unwrap<Row[] | null>(ctx.db.rpc("tasks_agent_sessions", { p_workspace_id: ws, p_task_id: taskId })),
-          taskComments(ctx, taskId),
+          // Comments are the Links module's (the key card says so): none without it.
+          keyScopeAllows(ctx.key.scopes, "links", "view") ? entityComments(ctx, "task", taskId) : null,
         ]);
         const now = new Date();
-        const latest = comments.slice(-TASK_GET_COMMENTS);
+        const latest = comments?.slice(-TASK_GET_COMMENTS) ?? [];
         const titled = (id: string) => {
           const t = data.byId.get(id);
           return t ? { id, title: t.title, status: t.status } : null;
@@ -693,8 +694,12 @@ export const tasksConnectorModule: ConnectorModule = {
           })),
           agent_sessions: agents ?? [],
           // MOD-94: what people answered here (the trail has no comments).
-          comments: latest.map((c) => shapeComment(c, data.names)),
-          ...(comments.length > latest.length ? { earlier_comments: comments.length - latest.length } : {}),
+          ...(comments
+            ? {
+                comments: latest.map((c) => shapeComment(c, data.names)),
+                ...(comments.length > latest.length ? { earlier_comments: comments.length - latest.length } : {}),
+              }
+            : {}),
           activity,
         };
       },
@@ -707,31 +712,6 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         return unwrap(ctx.db.rpc("tasks_op_history", { p_workspace_id: ctx.key.workspaceId, p_task_id: task.id }));
-      },
-    },
-    {
-      name: "tasks_comments_list",
-      description:
-        "A task's comments, the newest last: who wrote each (a person by name, an app as \"<key name> (app)\"), when, whether it was edited, and the text. Read the answers people left you here; tasks_comment writes one. Comments on a task show to whoever can see the task.",
-      access: "view",
-      inputSchema: {
-        type: "object",
-        properties: {
-          task_id: TASK_ID,
-          limit: { type: "number", description: "The latest N comments (default 50, max 200)." },
-        },
-        required: ["task_id"],
-      },
-      handler: async (args, ctx) => {
-        const task = await fetchTask(ctx, str(args, "task_id"));
-        const [comments, members] = await Promise.all([taskComments(ctx, task.id), workspaceMembers(ctx)]);
-        const names = new Map(members.map((m) => [m.user_id, m.name]));
-        const shown = comments.slice(-clampLimit(args, 50, 200));
-        return {
-          task_id: task.id,
-          total: comments.length,
-          comments: shown.map((c) => shapeComment(c, names)),
-        };
       },
     },
     {
@@ -829,7 +809,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_activity",
       description:
-        "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity. Comments aren't in it: read them with tasks_comments_list (or tasks_get).",
+        "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity. Comments aren't in it: read them with comments_list (or tasks_get).",
       access: "view",
       inputSchema: {
         type: "object",

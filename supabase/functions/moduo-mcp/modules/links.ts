@@ -19,7 +19,9 @@
 import { keyCanSeeEntityType, keyVisibleEntityTypes } from "../../_shared/contracts/mcp-key-scopes.ts";
 import { RELATION_KINDS } from "../../_shared/contracts/vocabularies.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { assertLiveLinkInScope, assertReach, linksInScope, visibleIds } from "../share.ts";
+import { shapeComment } from "../../_shared/tasks-connector.ts";
+import { assertLiveLinkInScope, assertReach, entityComments, linksInScope, visibleIds } from "../share.ts";
+import { workspaceMembers } from "../tasks-helpers.ts";
 
 type Row = Record<string, any>;
 
@@ -226,6 +228,33 @@ export const linksConnectorModule: ConnectorModule = {
           suggested.map((r) => ({ ...r, entity_type: r.other_type, entity_id: r.other_id })),
         );
         return visible.map(({ entity_type: _type, entity_id: _id, ...r }) => r);
+      },
+    },
+    {
+      name: "comments_list",
+      description:
+        "An item's comments (a task's, a note's, …), the newest last: who wrote each (a person by name, an app as \"<key name> (app)\"), when, whether it was edited, and the text. Read the answers people left you here. Needs View on the item's module too, and shows only what the key's person can open.",
+      access: "view",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity_type: { type: "string", description: "The item's type (task|note|contact|company|…)." },
+          entity_id: { type: "string", description: "The item's uuid (or a task's handle, e.g. MOD-142)." },
+          limit: { type: "number", description: "The latest N comments (default 50, max 200)." },
+        },
+        required: ["entity_type", "entity_id"],
+      },
+      handler: async (args, ctx) => {
+        const type = str(args, "entity_type");
+        const id = await assertReach(ctx, type, str(args, "entity_id"));
+        const [comments, members] = await Promise.all([entityComments(ctx, type, id), workspaceMembers(ctx)]);
+        const names = new Map(members.map((m) => [m.user_id, m.name]));
+        return {
+          entity_type: type,
+          entity_id: id,
+          total: comments.length,
+          comments: comments.slice(-clampLimit(args, 50, 200)).map((c) => shapeComment(c, names)),
+        };
       },
     },
     // ── writes (edit scope) ──────────────────────────────────────────────────
