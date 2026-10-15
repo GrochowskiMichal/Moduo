@@ -445,6 +445,21 @@ describe("a crafted description can't freeze the editor", () => {
     ],
     ["a quote of thousands of lines", "> [x](\n".repeat(3_000)],
     ["a fence of 100 KB", `\`\`\`\n${"[x]( `a ".repeat(12_000)}\n\`\`\``],
+    // Every delimiter the transformers react to, in long runs and spread over
+    // many blocks just under the per-line cap (the parser-differential review).
+    ["runs of *a", Array.from({ length: 40 }, () => "*a".repeat(2_400)).join("\n\n")],
+    ["runs of _a", Array.from({ length: 40 }, () => "_a ".repeat(1_600)).join("\n\n")],
+    ["runs of ~~a", Array.from({ length: 40 }, () => "~~a".repeat(1_600)).join("\n\n")],
+    [
+      "nested links",
+      Array.from({ length: 40 }, () => `${"[".repeat(299)}a${"](b)".repeat(299)}`).join("\n\n"),
+    ],
+    ["runs of [a](", Array.from({ length: 40 }, () => "[a](".repeat(1_200)).join("\n\n")],
+    ["runs of ](", Array.from({ length: 40 }, () => "](".repeat(2_400)).join("\n\n")],
+    ["escapes", Array.from({ length: 40 }, () => "\\*\\_".repeat(1_200)).join("\n\n")],
+    ["blocks of 299 *a", Array.from({ length: 60 }, () => "*a".repeat(149)).join("\n\n")],
+    ["blocks of 299 ~~", Array.from({ length: 60 }, () => "~~a".repeat(100)).join("\n\n")],
+    ["blocks of 299 _a_", Array.from({ length: 60 }, () => " _a_".repeat(149)).join("\n\n")],
   ] as const) {
     it(`reads and saves ${name} quickly`, () => {
       let editor = markdownEditor();
@@ -456,6 +471,19 @@ describe("a crafted description can't freeze the editor", () => {
       expect(timed(() => save(editor))).toBeLessThan(1500);
     });
   }
+
+  it("the guard counts every delimiter the transformers react to", () => {
+    for (const unit of ["*a ", " _a ", "~a ", "[a ", "]a ", "(a ", ")a ", "!a ", "`a ", "\\a "]) {
+      const line = unit.repeat(301).trim();
+      const editor = load(`Fine **words**.\n\n${line}`);
+      // The dense line reads raw (saved back exactly); the words before stay Markdown.
+      expect(all(editor).filter($isRawTextNode)).toHaveLength(1);
+      expect(save(editor)).toBe(`Fine **words**.\n\n${line}`);
+    }
+    // Identifiers cost nothing: inside a word `_` can't start emphasis.
+    const identifiers = Array.from({ length: 300 }, (_, i) => `file_name_${i}`).join(" ");
+    expect(all(load(identifiers)).filter($isRawTextNode)).toHaveLength(0);
+  });
 
   it("a line past the limit comes in as plain text; the lines before it stay Markdown", () => {
     const long = "x".repeat(6_000);

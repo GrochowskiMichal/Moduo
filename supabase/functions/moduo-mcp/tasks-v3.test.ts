@@ -633,15 +633,58 @@ describe("writes go through the ops, checked before anything is written", () => 
     });
   });
 
-  it("a description is taken as Markdown: words that start like HTML keep their < escaped (call #15)", async () => {
+  it("a description is taken as Markdown; HTML an agent sends is read as Markdown, not stored as tags (call #15)", async () => {
     const { ctx, rpcCalls } = setup({ rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] } });
-    await call("tasks_update", { task_id: "MOD-1", description: "<span> wraps **wrong**" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "<p>Hello <b>bold</b> &amp; more</p><ul><li>one</li></ul>" }, ctx);
     await call("tasks_update", { task_id: "MOD-1", description: "- [ ] **Check** it" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "<https://moduo.app> is a link" }, ctx);
     const patches = rpcCalls.filter((c) => c.fn === "tasks_op_update_with").map((c) => c.args.p_patch);
     expect(patches).toEqual([
-      { description: "\\<span> wraps **wrong**" },
+      { description: "Hello **bold** & more\n\n- one" },
       { description: "- [ ] **Check** it" },
+      { description: "<https://moduo.app> is a link" },
     ]);
+  });
+
+  it("a description's references resolve for the key: a handle to its uuid, an unreachable item to its words, and links are made (call #15)", async () => {
+    const SEEN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const SECRET = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const { ctx, rpcCalls, tables } = setup({
+      rpcs: {
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+        tasks_op_create_with: (a) => ({ action: "created", task: { ...(a.p_task as Row), id: "t-new", number: 99 } }),
+        perm_can_see_entity: (a) => a.p_id === SEEN,
+        links_op_create: () => [{ id: "link-1" }],
+      },
+    });
+    tables.tasks!.push(task(SEEN, 50), task(SECRET, 51));
+    const description =
+      "See [Fix login](moduo://task/MOD-50) and [Board secret](moduo://task/MOD-51), " +
+      "[x](moduo://note/not-a-uuid) and [Oct 17](moduo://date/2026-10-17).";
+    await call("tasks_update", { task_id: "MOD-1", description }, ctx);
+    const patch = rpcCalls.find((c) => c.fn === "tasks_op_update_with")?.args.p_patch as Row;
+    expect(patch.description).toBe(
+      `See [task](moduo://task/${SEEN}) and Board secret, x and [Oct 17](moduo://date/2026-10-17).`,
+    );
+    expect(patch.description).not.toContain("Fix login");
+    const links = rpcCalls.filter((c) => c.fn === "links_op_create").map((c) => c.args);
+    expect(links).toEqual([
+      expect.objectContaining({
+        p_source_type: "task",
+        p_source_id: "t-open",
+        p_target_type: "task",
+        p_target_id: SEEN,
+        p_relation_kind: "mentions",
+        p_origin: "mention",
+      }),
+    ]);
+    // tasks_create links from the new task the same way.
+    await call("tasks_create", { title: "New", description: `Re [it](moduo://task/MOD-50)` }, ctx);
+    const created = rpcCalls.find((c) => c.fn === "tasks_op_create_with")?.args.p_task as Row;
+    expect(created.description).toBe(`Re [task](moduo://task/${SEEN})`);
+    expect(rpcCalls.filter((c) => c.fn === "links_op_create").at(-1)?.args).toEqual(
+      expect.objectContaining({ p_source_id: "t-new", p_target_id: SEEN }),
+    );
   });
 
   it("a tag the op makes gets the colour the app would pick, oldest bare tag first (MOD-93)", async () => {

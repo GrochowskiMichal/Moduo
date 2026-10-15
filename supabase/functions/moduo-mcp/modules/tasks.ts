@@ -37,7 +37,14 @@ import {
   normalizeTaskStatusCategory,
 } from "../../_shared/contracts/vocabularies.ts";
 import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
-import { guardMarkdownStart } from "../../_shared/description-markdown.ts";
+import {
+  DESCRIPTION_LINK,
+  escapeMarkdownText,
+  guardMarkdownStart,
+  htmlToMarkdown,
+  isHtmlDescription,
+  referenceMarkdown,
+} from "../../_shared/description-markdown.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
   LIST_PAGE,
@@ -57,7 +64,7 @@ import {
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { entityComments, visibleIds } from "../share.ts";
+import { assertReach, entityComments, visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -97,13 +104,99 @@ const DEPRECATED = "Deprecated (kept until TV-D7):";
 const DESCRIPTION_MARKDOWN =
   'Markdown: **bold**, *italic*, `code`, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes. Reference an item as [task](moduo://task/<uuid>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it), a date as [Oct 17](moduo://date/2026-10-17).';
 
+/** How many different items one description written through the connector may reference. */
+const MAX_DESCRIPTION_REFERENCES = 50;
+const REF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A description reference's type as the reach check knows it (the app also says project and email). */
+function reachType(type: string): string {
+  return type === "project" ? "bucket" : type === "email" ? "email_thread" : type;
+}
+
+/**
+ * A description written through the connector, as the app stores it (call
+ * #15): HTML sent by an agent is read as Markdown (the converter the reads
+ * use); words that would read as HTML keep their first `<` escaped; and each
+ * `moduo://` reference is resolved for the key: a task's handle
+ * (`moduo://task/MOD-12`) becomes its uuid, an item the key can't reach goes
+ * back to its label as plain words, and no title is kept (RF-1). Answers the
+ * items to link once the task is written.
+ */
+async function describeForWrite(
+  ctx: ToolContext,
+  value: string,
+): Promise<{ markdown: string; refs: Array<{ type: string; id: string }> }> {
+  const markdown = isHtmlDescription(value) ? htmlToMarkdown(value) : guardMarkdownStart(value);
+  const pattern = new RegExp(DESCRIPTION_LINK.source, "g");
+  const resolved = new Map<string, string | null>();
+  for (const m of markdown.matchAll(pattern)) {
+    const [, , type = "", id = ""] = m;
+    const key = `${type}\u0000${id}`;
+    if (type === "date" || resolved.has(key)) continue;
+    if (type === "tag") {
+      // A tag is text in a description (never a link): kept when it's an id.
+      resolved.set(key, REF_UUID.test(id) ? id : null);
+      continue;
+    }
+    if (resolved.size >= MAX_DESCRIPTION_REFERENCES) {
+      resolved.set(key, null);
+      continue;
+    }
+    try {
+      resolved.set(key, await assertReach(ctx, reachType(type), id));
+    } catch {
+      resolved.set(key, null);
+    }
+  }
+  const refs: Array<{ type: string; id: string }> = [];
+  const linked = new Set<string>();
+  const out = markdown.replace(pattern, (whole, label: string, type: string, id: string, display?: string) => {
+    if (type === "date") return whole;
+    const uuid = resolved.get(`${type}\u0000${id}`) ?? null;
+    if (!uuid) return escapeMarkdownText(label);
+    if (type !== "tag" && !linked.has(`${type}:${uuid}`)) {
+      linked.add(`${type}:${uuid}`);
+      refs.push({ type, id: uuid });
+    }
+    return referenceMarkdown(type, uuid, display);
+  });
+  return { markdown: out, refs };
+}
+
+/**
+ * Link a task to what its description references, as quick capture does
+ * (`mentions`, origin `mention`). Quiet: the reference is in the text either
+ * way, and a key without Links access just makes no link.
+ */
+async function linkDescribed(
+  ctx: ToolContext,
+  taskId: string,
+  refs: ReadonlyArray<{ type: string; id: string }>,
+): Promise<void> {
+  for (const ref of refs) {
+    if (ref.type === "task" && ref.id === taskId) continue;
+    try {
+      // An error comes back in the answer (not thrown) and is let go.
+      await ctx.db.rpc("links_op_create", {
+        p_workspace_id: ctx.key.workspaceId,
+        p_source_type: "task",
+        p_source_id: taskId,
+        p_target_type: ref.type,
+        p_target_id: ref.id,
+        p_relation_kind: "mentions",
+        p_origin: "mention",
+      });
+    } catch {
+      // Quiet, as above.
+    }
+  }
+}
+
 /** The fields tasks_create / tasks_update take, as the ops want them. */
 function taskFieldsFromArgs(args: Row): Row {
   const fields: Row = {};
   if (typeof args.title === "string") fields.title = str(args, "title");
-  // Taken as Markdown (call #15): words that start like the old HTML ("<span>
-  // wraps…") keep their first `<` escaped, so no reader parses them as markup.
-  if (typeof args.description === "string") fields.description = guardMarkdownStart(args.description);
+  // The description is prepared apart (`describeForWrite`): it reads the database.
   if ("due_on" in args) fields.due_on = args.due_on === null ? null : dayOrThrow(str(args, "due_on"), "due_on");
   if ("due_time" in args) fields.due_time = args.due_time ?? null;
   for (const name of ["due_date", "scheduled_at"]) {
@@ -1039,6 +1132,9 @@ export const tasksConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         const task: Row = { ...taskFieldsFromArgs(args) };
+        const described =
+          typeof args.description === "string" ? await describeForWrite(ctx, args.description) : null;
+        if (described) task.description = described.markdown;
         const projectId = projectArg(args);
         if (projectId) task.bucket_id = (await fetchProject(ctx, projectId)).id;
         const parent = str(args, "parent_id", false);
@@ -1057,6 +1153,11 @@ export const tasksConnectorModule: ConnectorModule = {
         }));
         // A tag name new to the workspace became a tag with no colour (MOD-93).
         if (Array.isArray(extras.tags) && extras.tags.length) await colourBareTags(ctx);
+        // What the description references links from the task (call #15).
+        const createdId = (out.task as Row | undefined)?.id;
+        if (described?.refs.length && typeof createdId === "string") {
+          await linkDescribed(ctx, createdId, described.refs);
+        }
         return {
           action: out.action,
           ...(await shapeOne(ctx, out.task as Row)),
@@ -1099,6 +1200,9 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         const patch: Row = taskFieldsFromArgs(args);
+        const described =
+          typeof args.description === "string" ? await describeForWrite(ctx, args.description) : null;
+        if (described) patch.description = described.markdown;
         const projectId = projectArg(args);
         if (projectId) patch.bucket_id = (await fetchProject(ctx, projectId)).id;
         if ("parent_id" in args) {
@@ -1118,6 +1222,7 @@ export const tasksConnectorModule: ConnectorModule = {
         if (extras.tags_add) await colourBareTags(ctx); // MOD-93, as in tasks_create
         const row = Array.isArray(answered) ? answered[0] : answered;
         if (!row) throw new Error("The operation returned nothing.");
+        if (described?.refs.length) await linkDescribed(ctx, task.id as string, described.refs);
         // Finishing through an edit finishes its open subtasks too (call 87).
         const also =
           typeof patch.status === "string"

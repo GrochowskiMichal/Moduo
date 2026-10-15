@@ -266,22 +266,27 @@ const CHUNK_LINES = 100;
 const TOTAL_LINES = 5_000;
 const LINE_LIMIT = 5_000;
 const DELIMITER_LIMIT = 300;
-const DELIMITER_BUDGET = 2_000;
+const DELIMITER_BUDGET = 3_000;
 const TOTAL_LIMIT = 100_000;
 
 const WORD = /[\p{L}\p{N}]/u;
 
+/** Every character a description transformer scans for: emphasis, code, links, references, escapes. */
+const SCANNED = new Set(["[", "]", "(", ")", "!", "`", "*", "~", "\\"]);
+
 /**
- * How many delimiters that make Lexical's import and export slow a line
- * holds: `[`, backticks, `*`, `~`, and `_` unless inside a word (`file_name`
- * can't start emphasis, so identifiers cost nothing). A line of `*a*a*a…`
- * becomes thousands of formatted runs: seconds to read, minutes to save.
+ * How many delimiters a line holds, counted conservatively: every character
+ * any transformer here scans for (`[ ] ( ) !`, backticks, `*`, `~`, `\`), and
+ * `_` unless inside a word (`file_name` can't start emphasis, so identifiers
+ * cost nothing). A line of `*a*a*a…` becomes thousands of formatted runs:
+ * seconds to read, minutes to save; links and escapes are counted too, so no
+ * shape the guard lets through is slower to parse than one it counts.
  */
 function costlyDelimiters(line: string): number {
   let n = 0;
   for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === "[" || ch === "`" || ch === "*" || ch === "~") n++;
+    const ch = line[i] as string;
+    if (SCANNED.has(ch)) n++;
     else if (ch === "_" && !(WORD.test(line[i - 1] ?? "") && WORD.test(line[i + 1] ?? ""))) n++;
   }
   return n;
