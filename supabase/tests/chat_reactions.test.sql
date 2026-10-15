@@ -232,12 +232,17 @@ BEGIN
   PERFORM test.ok(test.notices() = v_before, 'chat: reacting writes no notice and no notifying activity');
 
   -- Only readers react, and only readers see who reacted.
+  -- A message you can't read gets the same answer as one that doesn't exist.
+  v := test.react('V', 'missing', '👍');
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: a missing message is not there', v);
   v := test.react('V', 'p1', '👍');
-  PERFORM test.ok(v LIKE '42501 %', 'chat: no reaction where you can''t read', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: one you can''t read answers the same as a missing one', v);
   v := test.react('X', 'q1', '👍');
-  PERFORM test.ok(v LIKE '42501 %', 'chat: an outsider is refused', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: an outsider gets the same answer', v);
+  v := test.as_user('X', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text)$q$, test.mid('q1')));
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: the toggle form answers the same', v);
   v := test.as_key('K', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('q1')));
-  PERFORM test.ok(v LIKE '42501 %', 'chat: a key is refused', v);
+  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: a key is refused the same way', v);
   PERFORM test.react('B', 'p1', '👀');
   PERFORM test.ok(test.value_as('V', format($q$SELECT count(*)::text FROM public.chat_messages WHERE id = %L$q$, test.mid('p1'))) = '0'
               AND test.value_as('X', format($q$SELECT count(*)::text FROM public.chat_messages WHERE id = %L$q$, test.mid('q1'))) = '0',

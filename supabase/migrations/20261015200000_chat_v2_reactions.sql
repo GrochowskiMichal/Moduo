@@ -221,8 +221,10 @@ BEGIN
   IF p_on IS NULL THEN
     RAISE EXCEPTION 'Say whether the reaction is on or off.' USING ERRCODE = '22023';
   END IF;
+  -- A message the caller can't read gets the same answer as a missing one.
   SELECT * INTO v_msg FROM public.chat_messages WHERE id = p_message_id FOR UPDATE;
-  IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL THEN
+  IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL
+     OR NOT public.chat_can_read_channel(v_msg.channel_id) THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   IF (public.chat_op__reader(v_msg.channel_id)).archived_at IS NOT NULL THEN
@@ -259,6 +261,28 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.chat_op_react(uuid, text, boolean) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.chat_op_react(uuid, text, boolean) TO authenticated, service_role;
+
+-- The toggle form (from its live body): it reads the message only after the
+-- reader check, and looks up the stored spelling of the key.
+CREATE OR REPLACE FUNCTION public.chat_op_react(p_message_id uuid, p_emoji text)
+ RETURNS chat_messages
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_on boolean;
+BEGIN
+  SELECT NOT coalesce((m.reactions -> public.reactions__key_canonical(p_emoji)) ? auth.uid()::text, false) INTO v_on
+    FROM public.chat_messages m
+   WHERE m.id = p_message_id
+     AND public.chat_can_read_channel(m.channel_id);
+  RETURN public.chat_op_react(p_message_id, p_emoji, coalesce(v_on, true));
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.chat_op_react(uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.chat_op_react(uuid, text) TO authenticated, service_role;
 
 -- ── 4. Your quick row ───────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.user_op_set_chat_prefs(p_patch jsonb)
