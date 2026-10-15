@@ -17,7 +17,6 @@ import {
 import {
   Bell,
   CalendarClock,
-  Flag,
   Hourglass,
   Inbox,
   type LucideIcon,
@@ -671,7 +670,10 @@ function LevelValue({
     ) : (
       <EnergyIcon level={level as EnergyLevel} className="size-icon-sm" />
     );
-  const emptyIcon = kind === "priority" ? <Flag /> : <Zap />;
+  // Unset priority is the three bars all faint, as capture's pill draws it
+  // (MOD-134), never a flag.
+  const emptyIcon =
+    kind === "priority" ? <PriorityIcon level={null} className="size-icon-sm" /> : <Zap />;
   return (
     <DropdownMenu defaultOpen={defaultOpen && canEdit}>
       <DropdownMenuTrigger asChild disabled={!canEdit}>
@@ -697,7 +699,14 @@ function LevelValue({
             </DropdownMenuRadioItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuRadioItem value="none">None</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="none">
+            {kind === "priority" ? (
+              <span className="flex size-icon-sm items-center text-muted-foreground">
+                <PriorityIcon level={null} className="size-icon-sm" />
+              </span>
+            ) : null}
+            None
+          </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
