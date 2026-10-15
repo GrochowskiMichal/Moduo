@@ -695,8 +695,12 @@ BEGIN
   END IF;
   -- One change of who manages it at a time (see chat__hand_over).
   PERFORM 1 FROM public.chat_channels WHERE id = p_channel_id FOR UPDATE;
+  -- Only an active row: a removal that landed meanwhile stays a removal.
   UPDATE public.chat_members SET left_at = now(), removed_by = NULL
-   WHERE channel_id = p_channel_id AND user_id = v_me;
+   WHERE channel_id = p_channel_id AND user_id = v_me AND left_at IS NULL;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
   DELETE FROM public.chat_channel_managers WHERE channel_id = p_channel_id AND user_id = v_me;
   IF FOUND THEN
     v_new := public.chat__hand_over(p_channel_id, v_me);
