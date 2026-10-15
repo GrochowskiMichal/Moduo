@@ -319,7 +319,9 @@ Established during the Tasks rebuild; **reusable across modules** (Notes adopts 
   12 px text (Detailed rows, Board cards), `md` 22 px / 13 px (panels;
   removable with a muted ×). Active filter chip = a 1 px inset ring in the hue
   (`.tag-chip-active`) and full-foreground name. `TagChipList` caps a row at
-  `max` chips + "+n". Standard rows and cards keep the `# N` count instead.
+  `max` chips (each at most `max-w-24`) + "+n". Standard rows and cards count
+  tags instead: a muted tag icon (lucide `Tag`) + the number, a `MetaCount`
+  like files and comments; never "#", which is only the typing grammar.
 
 ### Motion (Session 11; foundations re-set by SH-1, 2026-10-10)
 Quiet and quick, **no blur** (tasks-v3 call 81). Tokens are load-bearing — no raw

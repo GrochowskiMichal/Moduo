@@ -412,7 +412,7 @@ IDs are per block (block → ACs). Plain product language.
 **TV-U1 — Rows, board, completed**
 - **U1-1** — Rows follow the comp anatomy: quiet counts after the title; priority/date/assignee/queue in fixed columns that line up; columns empty across the view collapse.
 - **U1-2** — Tags show as `# N` on rows/cards, never as chips.
-  - *Since 2026-10-15 (MOD-97):* Detailed rows and cards show the tags as dot chips (two on a row, three on a card, then "+n"); Standard rows and cards keep the count. → [decisions/design-system.md](../docs/decisions/design-system.md)
+  - *Since 2026-10-15 (MOD-97, Maciej):* Standard rows and cards keep the count, but as a tag icon + number (no "#"; the names as words in the tooltip). Detailed rows and cards show the tags as dot chips (two on a row, three on a card, then "+n"). → [decisions/design-system.md](../docs/decisions/design-system.md)
 - **U1-3** — Done rows dim as a whole. Completed tasks are hidden by default with a "N completed · show" line. Display → Completed 7 days/All works. A just-checked task stays visible until scope change or reload.
 - **U1-4** — Board columns flex between 280 and 400 px. Cards have one meta line. Selection is a tint.
 - **U1-5** — Everything holds at all 3 densities, 3 radii, 6 shades and 8 accents.

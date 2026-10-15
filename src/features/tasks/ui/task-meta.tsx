@@ -4,7 +4,6 @@
 import {
   CircleDashed,
   Clock,
-  Hash,
   Hourglass,
   Inbox,
   ListChecks,
@@ -12,6 +11,7 @@ import {
   MessageSquare,
   Paperclip,
   Repeat,
+  Tag as TagIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { TagChipList } from "../../../components/tag-chip";
@@ -62,7 +62,8 @@ function Tip({ label, children }: { label: string; children: ReactNode }) {
  * The counts right after a title, in their fixed order (tasks-v3 §4): tags ·
  * files (📎, AT-3) · comments · subtasks done/total · blocked · waiting ·
  * repeats · waiting to sync. Muted, each hidden at zero. Standard rows and
- * cards show tags as a count with their names in the tooltip (U1-2); Detailed
+ * cards show tags as a tag icon and a count, with their names in the tooltip
+ * (U1-2; the icon since MOD-97); Detailed
  * rows show up to two dot chips in its place (`tagNames`, MOD-97). Rows and
  * cards never show thumbnails. The facts are the row's own (row-facts.ts,
  * TV-D11b).
@@ -117,11 +118,13 @@ export function TaskCounts({
           <TagChipList tags={tags} max={TAG_NAMES_SHOWN} />
         </span>
       ) : tags.length > 0 ? (
+        // A tag icon + the number, like files, comments and subtasks (MOD-97,
+        // Maciej 2026-10-15): no hue, since a dot alone means other things here.
         <Tip label={tagList}>
           <MetaCount
-            icon={Hash}
+            icon={TagIcon}
             count={tags.length}
-            label={(n) => (n === 1 ? `1 tag: ${tags[0]?.name}` : `${n} tags`)}
+            label={(n) => `${n} ${n === 1 ? "tag" : "tags"}: ${tagList}`}
           />
         </Tip>
       ) : null}

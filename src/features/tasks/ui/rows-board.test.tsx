@@ -150,7 +150,7 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     ]);
   });
 
-  it("tags show as a quiet `# N` count after the title, never as chips", () => {
+  it("tags show as a quiet tag icon + count after the title, never as chips or a #", async () => {
     const tags = [
       { id: "t1", name: "ui" },
       { id: "t2", name: "notes" },
@@ -158,9 +158,20 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     ];
     renderList([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
     const row = rowOf("Task a");
-    expect(screen.getByText("3 tags").className).toContain("sr-only");
-    expect(row.textContent).not.toContain("ui");
+    const spoken = screen.getByText("3 tags: ui, notes, bug");
+    expect(spoken.className).toContain("sr-only");
+    // The same icon size and colour as files, comments and subtasks (MetaCount).
+    // (Its tooltip trigger takes over the span's data-slot.)
+    const count = spoken.parentElement as HTMLElement;
+    expect(count.querySelector("svg")?.getAttribute("class")).toContain("lucide-tag");
+    expect(count.querySelector("svg")?.getAttribute("class")).toContain("size-icon-xs");
+    expect(count.className).toContain("text-muted-foreground");
+    expect(count.textContent).toBe("33 tags: ui, notes, bug");
     expect(row.querySelector('[data-slot="tag-chip"]')).toBeNull();
+    expect(row.textContent).not.toContain("#");
+    // Hovering names them as words, in the kit tooltip.
+    fireEvent.pointerMove(count, { pointerType: "mouse" });
+    expect((await screen.findByRole("tooltip")).textContent).toBe("ui, notes, bug");
     // The count sits in the title cell, right after the title.
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
     expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
@@ -501,6 +512,20 @@ describe("Board (U1-4)", () => {
     expect(meta).not.toBeNull();
     expect(meta.contains(screen.getByLabelText("High priority"))).toBe(true);
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);
+  });
+
+  it("Standard cards count tags with the tag icon, as rows do (MOD-97)", () => {
+    const tags = [
+      { id: "t1", name: "ui", color: "blue" },
+      { id: "t2", name: "notes", color: "green" },
+    ];
+    renderBoard([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
+    const spoken = within(card("Task a")).getByText("2 tags: ui, notes");
+    expect(spoken.parentElement?.querySelector("svg")?.getAttribute("class")).toContain(
+      "lucide-tag",
+    );
+    expect(card("Task a").querySelector('[data-slot="tag-chip"]')).toBeNull();
+    expect(card("Task a").textContent).not.toContain("#");
   });
 
   it("Detailed cards show three tags as dot chips on the second line, layout-neutral (MOD-97)", async () => {
