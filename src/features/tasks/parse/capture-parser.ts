@@ -190,11 +190,16 @@ function withMonthDay(text: string, match: RecurrenceMatch | null): RecurrenceMa
   };
 }
 
+/** chrono's "now" ("right now" too): a word in a sentence, never a date (MOD-133). */
+const NOW_WORD = /^now$/i;
+
 /**
  * A clear date phrase names a day, a weekday or a clock time. A month on its
- * own ("Send March report") or a year isn't one, so those words stay text.
+ * own ("Send March report") or a year isn't one, so those words stay text,
+ * and so does "now" ("Call back now"), which chrono reads as this minute.
  */
 function isClearDate(result: chrono.ParsedResult): boolean {
+  if (NOW_WORD.test(result.text.trim())) return false;
   const s = result.start;
   return s.isCertain("day") || s.isCertain("weekday") || s.isCertain("hour");
 }

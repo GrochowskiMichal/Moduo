@@ -478,6 +478,22 @@ describe("a group's + (TV-U10)", () => {
   });
 });
 
+describe("a date cleared by hand (MOD-133)", () => {
+  it("its × keeps the date words as words: the chip stays gone, the title keeps them", async () => {
+    renderBody({}, referenceStore({}), "Ring the framer tomorrow 3pm");
+    const clear = await screen.findByRole("button", { name: /^Clear Tomorrow/ });
+    fireEvent.click(clear);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /^Clear Tomorrow/ })).toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    const [task] = fake.saved;
+    expect(task.title).toBe("Ring the framer tomorrow 3pm");
+    expect(task.scheduledAt ?? null).toBeNull();
+  });
+});
+
 describe("Create (AC10.3, AC5.4)", () => {
   async function createWith(context: Partial<CaptureContext>, removeSource = false) {
     saveDraft(ME, WS, {

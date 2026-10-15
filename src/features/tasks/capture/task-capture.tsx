@@ -67,7 +67,9 @@ import { positionsAfter } from "../helpers";
 import type { Bucket, Task } from "../model";
 import {
   type CaptureToken,
+  type ClearedDateField,
   captureDates,
+  keepOnClear,
   resolveTitle,
   SINGLE_VALUE_KINDS,
   segmentsFromLine,
@@ -667,6 +669,16 @@ export function TaskCaptureBody({
   };
 
   // ── hand picks ────────────────────────────────────────────────────────────
+  /**
+   * A date cleared by hand stays cleared (MOD-133): the words that would set
+   * it again on the next read (its token's, the date words it came from) are
+   * kept as words, as Esc keeps a highlight.
+   */
+  const keepCleared = (field: ClearedDateField) => {
+    const phrases = keepOnClear(titleSegments, field, { keep, manualDates });
+    if (phrases.length === 0) return;
+    setKeep((k) => [...k, ...phrases.filter((p) => !k.includes(p))]);
+  };
   const onPillChange = (change: PillChange) => {
     const api = titleApi.current;
     const words = (kind: CaptureToken["kind"]) => api?.tokensToText((t) => t.kind === kind);
@@ -680,14 +692,17 @@ export function TaskCaptureBody({
         setFields((f) => ({ ...f, teamId: change.value }));
         return;
       case "due":
+        if (change.value === null) keepCleared("due");
         words("due");
         setFields((f) => ({ ...f, dueDay: change.value }));
         return;
       case "schedule":
+        if (change.value === null) keepCleared("schedule");
         words("schedule");
         setFields((f) => ({ ...f, scheduledAt: change.value }));
         return;
       case "repeat":
+        if (change.value === null) keepCleared("repeat");
         words("repeat");
         setFields((f) => ({ ...f, recurrence: change.value }));
         return;
@@ -700,6 +715,7 @@ export function TaskCaptureBody({
         setFields((f) => ({ ...f, estimateMinutes: change.value }));
         return;
       case "remind":
+        if (change.value === null) keepCleared("remind");
         words("remind");
         setFields((f) => ({ ...f, remindAt: change.value }));
         return;
