@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  backstopPick,
   extendSelection,
   inViewOrder,
   isMulti,
@@ -88,5 +89,43 @@ describe("the selection model (AC11.9)", () => {
   it("reads ⌘ or Ctrl as one more, ⇧ as a range", () => {
     expect(selectModsOf({ shiftKey: false, metaKey: false, ctrlKey: true }).toggle).toBe(true);
     expect(selectModsOf({ shiftKey: true, metaKey: false, ctrlKey: false }).range).toBe(true);
+  });
+});
+
+// The page's backstop (tasks-plan-view.tsx), pure so the List's own tests run
+// it as the page does (task-list-view.fold-all.test.tsx).
+describe("the cursor's backstop (MOD-122, MOD-124)", () => {
+  const scope = new Set(["a", "b", "c", "s1"]);
+  const base = {
+    selectedId: null,
+    selectedParentId: null,
+    inScope: (id: string) => scope.has(id),
+    listOrder: null,
+    firstInScope: "a",
+  };
+
+  it("keeps a selection in scope, or a subtask whose parent is", () => {
+    expect(backstopPick({ ...base, selectedId: "b" })).toBeUndefined();
+    expect(backstopPick({ ...base, selectedId: "sub", selectedParentId: "s1" })).toBeUndefined();
+  });
+
+  it("with nothing it can keep, picks the scope's first task outside the List", () => {
+    expect(backstopPick(base)).toBe("a");
+    expect(backstopPick({ ...base, selectedId: "gone" })).toBe("a");
+    expect(backstopPick({ ...base, firstInScope: null, selectedId: "gone" })).toBeNull();
+  });
+
+  it("while the List is in the centre, picks the first row it shows, never one it hides", () => {
+    // "a" sits in a closed Backlog line: the List shows c, then b.
+    expect(backstopPick({ ...base, listOrder: ["c", "b"] })).toBe("c");
+    // A row the List still shows that left the scope isn't a pick.
+    expect(backstopPick({ ...base, listOrder: ["gone", "b"] })).toBe("b");
+  });
+
+  it("with no row shown (every group folded) it picks nothing; the same pick is no change", () => {
+    expect(backstopPick({ ...base, listOrder: [], selectedId: "gone" })).toBeNull();
+    expect(backstopPick({ ...base, listOrder: [] })).toBeUndefined();
+    // A task still in scope stays, shown or not: the List decides what to do with it.
+    expect(backstopPick({ ...base, listOrder: [], selectedId: "a" })).toBeUndefined();
   });
 });

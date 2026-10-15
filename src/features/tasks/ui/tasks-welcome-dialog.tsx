@@ -6,8 +6,8 @@
 // always there, Esc closes. Quiet: no celebration, no forced steps. The state
 // and what opens it are use-tasks-welcome.ts.
 
+import { TASKS_ROLES, type TasksRole } from "@contracts/vocabularies";
 import { useEffect, useState } from "react";
-
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -22,7 +22,7 @@ import { Kbd } from "../../../components/ui/kbd";
 import { useReturnFocus } from "../../../hooks/use-return-focus";
 import { formatShortcut, SHORTCUTS } from "../../../lib/shortcuts";
 import { cn } from "../../../lib/utils";
-import { ROLE_DEFAULTS, TASKS_ROLES, type TasksRole } from "../onboarding";
+import { ROLE_DEFAULTS } from "../onboarding";
 import { FOCUS_WHAT_IT_IS, FocusKeyHints } from "./focus-empty-state";
 import type { TasksWelcome, WelcomeStep } from "./use-tasks-welcome";
 

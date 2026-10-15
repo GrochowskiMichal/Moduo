@@ -172,3 +172,53 @@ export const WithEnergy: Story = {
 export const ReadOnly: Story = {
   args: { canEdit: false },
 };
+
+/** An agent at work on a row (TV-D16), for the narrow story. */
+const agentAt = (taskId: string, state: "working" | "needs_you") => ({
+  id: `agent-${taskId}`,
+  workspaceId: "w1",
+  taskId,
+  userId: "u1",
+  agent: "Claude",
+  state,
+  note: null,
+  step: null,
+  steps: null,
+  links: [],
+  earlier: [],
+  summaryAt: null,
+  summaryPostedAt: null,
+  startedAt: "2026-10-15T09:00:00.000Z",
+  updatedAt: "2026-10-15T09:00:00.000Z",
+  stoppedAt: null,
+});
+
+/** MOD-138, MOD-125: the agent's mark and the counts sit at each row's end,
+ *  wherever the title stops; the title gives way first and never below about
+ *  ten characters; under 16rem of title cell the mark drops its state, under
+ *  12rem its agent too. Three centre widths: 340 px (a 1024 px window with
+ *  both side panels open), 440 px and 600 px. */
+export const NarrowRows: Story = {
+  args: {
+    api: stubApi(TASKS, {
+      agentSessions: [agentAt("review", "needs_you"), agentAt("settings", "working")],
+      commentCounts: new Map([
+        ["review", 3],
+        ["assignee", 12],
+      ]),
+      attachmentCounts: new Map([
+        ["review", 2],
+        ["settings", 1],
+      ]),
+    }),
+  },
+  render: (args) => (
+    <div className="flex flex-col gap-6">
+      {["w-85", "w-110", "w-150"].map((width) => (
+        <div key={width} className={`${width} h-44 rounded-md border border-hairline`}>
+          <Interactive {...args} />
+        </div>
+      ))}
+    </div>
+  ),
+};

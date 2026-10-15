@@ -1117,7 +1117,9 @@ function MindmapCanvas({ workspaceId, runtime }: { workspaceId: string; runtime:
     center = <MindmapLoadingState />;
   } else {
     center = (
-      <div className="relative -m-4 h-[calc(100%+2rem)] min-h-0 w-[calc(100%+2rem)]">
+      // The canvas fills the centre to its edges: out of the shell's padding,
+      // the derived top and the fixed sides and foot (MOD-121).
+      <div className="relative -mx-(--panel-inset) -mt-(--panel-title-top) -mb-(--panel-inset) h-[calc(100%_+_var(--panel-title-top)_+_var(--panel-inset))] min-h-0 w-[calc(100%_+_var(--panel-inset)*2)]">
         <ReactFlow
           nodes={renderedNodes}
           edges={renderedEdges}

@@ -11,6 +11,7 @@ import {
   agentLineParts,
   agentLineText,
   agentRowMark,
+  agentRowMarkParts,
   agentRowMarks,
   agentSentence,
   agentWho,
@@ -128,6 +129,22 @@ describe("the row's quiet mark", () => {
       (id) => (id === "t1" ? { status: "todo" } : null),
     );
     expect([...marks]).toEqual([["t1", "Claude · needs you"]]);
+  });
+
+  it("splits a mark into who and what, for a narrow row (MOD-125)", () => {
+    expect(agentRowMarkParts("Claude · needs you")).toEqual({
+      who: "Claude",
+      state: "needs you",
+      loud: true,
+    });
+    expect(agentRowMarkParts("Anna's Claude · working")).toEqual({
+      who: "Anna's Claude",
+      state: "working",
+      loud: false,
+    });
+    // An agent named with a " · " keeps it; a mark with no state is all who.
+    expect(agentRowMarkParts("A · B · working").who).toBe("A · B");
+    expect(agentRowMarkParts("Claude")).toEqual({ who: "Claude", state: null, loud: false });
   });
 });
 

@@ -12,6 +12,8 @@ import {
   FileText,
   FileVideo,
 } from "lucide-react";
+import type { AttachmentRecord } from "@/lib/runtime.types";
+import { originalIsItsOwnPreview } from "@/lib/uploads/pipeline";
 
 /** Is a drag carrying files (not text, not an in-app dnd-kit drag)? */
 export function dragHasFiles(dt: DataTransfer | null | undefined): boolean {
@@ -58,6 +60,23 @@ export function filesLabel(n: number): string {
 
 export function isPreviewableImage(mime: string): boolean {
   return mime.startsWith("image/");
+}
+
+/**
+ * The stored picture a tile (and the viewer, while the original loads) shows:
+ * the preview, or a small image's original, which is its own preview
+ * (MOD-132). Null: the file's type shows instead. An image whose preview is
+ * missing for another reason (HEIC kept as HEIC, a preview that never
+ * uploaded) stays a file tile, never a full-size original in a 64 px box.
+ */
+export function thumbnailPath(
+  rec: Pick<
+    AttachmentRecord,
+    "previewPath" | "objectPath" | "mime" | "width" | "height" | "sizeBytes"
+  >,
+): string | null {
+  if (rec.previewPath) return rec.previewPath;
+  return rec.objectPath && originalIsItsOwnPreview(rec) ? rec.objectPath : null;
 }
 
 export function fileIconFor(mime: string): LucideIcon {

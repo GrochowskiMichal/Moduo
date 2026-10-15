@@ -11,6 +11,7 @@ import { tasksViewDefaults } from "./display";
 import { sanitizeTaskFilters } from "./filters";
 import {
   freeViewName,
+  newViewPrefs,
   ROLE_SEED_VIEWS,
   samePrefs,
   seedViewsFor,
@@ -113,6 +114,12 @@ describe("Filter and Display", () => {
     expect(prefs.filters).toEqual([{ dimension: "due", operator: "is", values: ["week"] }]);
   });
 
+  it("a new view starts blank over All: All's defaults, no filter, the role's rows (MOD-142)", () => {
+    const blank = newViewPrefs();
+    expect(blank).toEqual({ ...tasksViewDefaults("all"), filters: [] });
+    expect(newViewPrefs("detailed").rows).toBe("detailed");
+  });
+
   it("a view that remembers no rows takes the role's", () => {
     expect(viewPrefsOf(view({ display: {} }), "detailed").rows).toBe("detailed");
     expect(viewPrefsOf(view({ display: { rows: "standard" } }), "detailed").rows).toBe("standard");
@@ -125,6 +132,24 @@ describe("Filter and Display", () => {
     expect(samePrefs(a, reordered)).toBe(true);
     expect(samePrefs(a, { ...a, layout: "list" })).toBe(false);
     expect(samePrefs(a, { ...a, filters: [] })).toBe(false);
+  });
+
+  it("a view saved before Columns opens with its place's columns, unchanged (MOD-128, MOD-136)", () => {
+    // Saved before the field: All's columns (Project on), a project's (off).
+    const all = viewPrefsOf(view({ display: { rows: "detailed" } }));
+    expect(all.detailedColumns).toEqual(["handle", "project", "status", "time", "waiting"]);
+    const project = viewPrefsOf(
+      view({ scope: "project", projectId: "p1", display: { rows: "detailed" } }),
+    );
+    expect(project.detailedColumns).toEqual(["handle", "status", "time", "waiting"]);
+    // Opening it is no change; switching a column is "Unsaved changes".
+    expect(samePrefs(all, viewPrefsOf(view({ display: { rows: "detailed" } })))).toBe(true);
+    expect(samePrefs(all, { ...all, detailedColumns: [...all.detailedColumns, "updated"] })).toBe(
+      false,
+    );
+    // A saved switch comes back.
+    const saved = viewPrefsOf(view({ display: { detailedColumns: ["updated", "project"] } }));
+    expect(saved.detailedColumns).toEqual(["project", "updated"]);
   });
 });
 

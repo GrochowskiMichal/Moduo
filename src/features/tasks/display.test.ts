@@ -48,6 +48,8 @@ describe("Tasks Display — stored value", () => {
       subtasks: "nested",
       rows: "standard",
       properties: ["priority", "date", "assignee"],
+      // MOD-128, MOD-136: Detailed's own columns, Updated off.
+      detailedColumns: ["handle", "project", "status", "time", "waiting"],
       // TV-TL1: the Timeline's own (REPLAN 67, 69, 71).
       timelineZoom: "month",
       timelineGroup: "project",
@@ -97,6 +99,7 @@ describe("Tasks Display — stored value", () => {
       subtasks: "flat",
       rows: "detailed",
       properties: ["energy", "priority"],
+      detailedColumns: ["updated", "handle"],
       timelineZoom: "year",
       timelineGroup: "none",
       colorBy: "project",
@@ -109,6 +112,7 @@ describe("Tasks Display — stored value", () => {
       ...stored,
       // Toggles come back in the menu's order.
       properties: ["priority", "energy"],
+      detailedColumns: ["handle", "updated"],
       timelineShow: ["undated", "repeats"],
     });
   });
@@ -128,6 +132,7 @@ describe("Tasks Display — stored value", () => {
       timelineGroup: "area",
       colorBy: "project",
       timelineShow: ["gantt"],
+      detailedColumns: "all",
       filters: [{ dimension: "mood", operator: "is", values: ["happy"] }, "junk"],
     };
     expect(sanitizeTasksView(stored, tasksViewDefaults("b1"), "b1")).toEqual({
@@ -135,6 +140,8 @@ describe("Tasks Display — stored value", () => {
       group: "section",
       timelineGroup: "section",
       properties: ["priority"],
+      // Inside a project its Project column starts off.
+      detailedColumns: ["handle", "status", "time", "waiting"],
       filters: [],
     });
     expect(sanitizeTasksView("junk", tasksViewDefaults("b1"), "b1")).toEqual(
@@ -190,6 +197,52 @@ describe("Tasks Display — controls per scope and layout", () => {
       "rows",
       "properties",
     ]);
+  });
+
+  it("Columns joins only the List's Detailed rows (MOD-128, MOD-136)", () => {
+    const ids = (
+      scope: string,
+      layout: "list" | "board" | "timeline",
+      rows: "standard" | "detailed",
+    ) => tasksDisplayControls(scope, layout, undefined, rows).map((c) => c.id);
+    for (const scope of ["b1", "all", "inbox", "upcoming", "today"]) {
+      expect(ids(scope, "list", "detailed").at(-1)).toBe("detailedColumns");
+      expect(ids(scope, "list", "standard")).not.toContain("detailedColumns");
+      expect(ids(scope, "board", "detailed")).not.toContain("detailedColumns");
+      expect(ids(scope, "timeline", "detailed")).not.toContain("detailedColumns");
+    }
+    const columns = tasksDisplayControls("b1", "list", undefined, "detailed").at(-1);
+    expect(columns?.label).toBe("Columns");
+    expect(columns?.options.map((o) => o.label)).toEqual([
+      "ID",
+      "Project",
+      "Status",
+      "Time",
+      "Waiting on",
+      "Updated",
+    ]);
+  });
+
+  it("Columns starts with Project only across projects and Updated off everywhere", () => {
+    const across = ["handle", "project", "status", "time", "waiting"];
+    const inside = ["handle", "status", "time", "waiting"];
+    for (const scope of ["all", "mine", "today", "upcoming", "wontdo"]) {
+      expect(tasksDisplayDefaults(scope).detailedColumns).toEqual(across);
+    }
+    // A project repeats its title on every row; so does the Inbox.
+    for (const scope of ["b-42", "inbox"]) {
+      expect(tasksDisplayDefaults(scope).detailedColumns).toEqual(inside);
+    }
+    // Prefs stored before Columns read as the scope's defaults.
+    const old = { layout: "list", rows: "detailed", properties: ["priority"] };
+    expect(sanitizeTasksView(old, tasksViewDefaults("b-42"), "b-42").detailedColumns).toEqual(
+      inside,
+    );
+    expect(sanitizeTasksView(old, tasksViewDefaults("all"), "all").detailedColumns).toEqual(across);
+    // Every column off stays off.
+    expect(
+      sanitizeTasksView({ detailedColumns: [] }, tasksViewDefaults("all"), "all").detailedColumns,
+    ).toEqual([]);
   });
 
   it("Rows is Standard · Detailed", () => {
@@ -379,6 +432,25 @@ describe("Order by", () => {
   it("descending turns a sort around, and a task without the value stays last", () => {
     expect(ids(orderTasks(list, "due", "desc"))).toEqual(["a", "c", "b"]);
     expect(ids(orderTasks(list, "priority", "desc"))).toEqual(["a", "b", "c"]);
+  });
+
+  it("IDs run in number order, MOD-2 before MOD-10, both ways; unsaved ones last (MOD-144)", () => {
+    const m10 = task("m10", { number: 10 });
+    const m2 = task("m2", { number: 2 });
+    const m999 = task("m999", { number: 999 });
+    const unsaved = task("unsaved", { number: null });
+    const mixed = [m10, unsaved, m999, m2];
+    expect(ids(orderTasks(mixed, "id"))).toEqual(["m2", "m10", "m999", "unsaved"]);
+    expect(ids(orderTasks(mixed, "id", "desc"))).toEqual(["m999", "m10", "m2", "unsaved"]);
+  });
+
+  it("Order by offers ID last, on the List and the Board (MOD-144)", () => {
+    for (const layout of ["list", "board"] as const) {
+      const order = tasksDisplayControls("all", layout).find((c) => c.id === "order");
+      expect(order?.options.at(-1)).toMatchObject({ value: "id", label: "ID" });
+    }
+    // A stored ID order is kept.
+    expect(sanitizeTasksView({ order: "id" }, tasksViewDefaults("b1"), "b1").order).toBe("id");
   });
 });
 

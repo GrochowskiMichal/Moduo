@@ -124,6 +124,22 @@ describe("the title row names the view and switches it", () => {
     const menu = openMenu("Panel view: Tasks");
     expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2);
   });
+
+  it("says the page's title when it gives one, and the ▾ still switches (MOD-109)", () => {
+    const { onChange } = renderPanel({ activeId: "detail", title: "4 tasks" });
+    const trigger = screen.getByRole("button", { name: "Panel view: Detail, 4 tasks" });
+    expect(trigger.textContent).toBe("4 tasks");
+    expect(screen.getByText("Detail body")).toBeTruthy();
+    const menu = openMenu("Panel view: Detail, 4 tasks");
+    // The open view stays checked under its own name.
+    expect(
+      within(menu)
+        .getByRole("menuitemradio", { name: /Detail/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Notes/ }));
+    expect(onChange).toHaveBeenCalledWith("notes");
+  });
 });
 
 describe("⌥1–9", () => {
@@ -361,5 +377,48 @@ describe("the title row's actions slot (MOD-118 follow-up)", () => {
     );
     const alone = screen.getByRole("region", { name: "Alone" });
     expect(within(alone).getByRole("button", { name: "Pin" })).toBeTruthy();
+  });
+});
+
+// MOD-121 (dogfood call #28): one panel frame. jsdom has no layout, so these pin
+// the classes that place the row; the measured insets (fill 9 / 9 from the outer
+// edge, text at 17, first lines on one centre) are in the live check.
+describe("the title row's frame (MOD-121)", () => {
+  const pulled = /(^|\s)-m[lxtrb]?-/;
+
+  it("is a row tall, and the ▾ chip is a row tall with no pull into the padding", () => {
+    renderPanel();
+    const trigger = screen.getByRole("button", { name: "Panel view: Tasks" });
+    expect(trigger.style.height).toBe("var(--row-h)");
+    expect(trigger.className).toMatch(/(^|\s)px-2(\s|$)/);
+    expect(trigger.className).not.toMatch(pulled);
+    const row = trigger.closest("div");
+    expect(row?.className).toMatch(/(^|\s)min-h-\(--row-h\)(\s|$)/);
+  });
+
+  it("a plain title's text sits 8 in, where the chip's text does", () => {
+    render(
+      <RightPanel
+        module="tasks"
+        views={{ details: () => <p>Task details</p> }}
+        activeId="details"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("heading", { name: "Details" }).className).toMatch(/(^|\s)px-2(\s|$)/);
+  });
+
+  it("the back arrow sits at the panel's padding, not pulled into it", () => {
+    renderPanel({
+      items: [{ key: "task:1", title: "Collect assets", render: () => <p>Task body</p> }],
+      onBack: () => {},
+    });
+    expect(screen.getByRole("button", { name: "Back to Tasks" }).className).not.toMatch(pulled);
+  });
+
+  it("the body steps in 4, so a view's text lines up with the title's", () => {
+    renderPanel();
+    const body = screen.getByText("Tasks body").parentElement;
+    expect(body?.className).toMatch(/(^|\s)px-1(\s|$)/);
   });
 });

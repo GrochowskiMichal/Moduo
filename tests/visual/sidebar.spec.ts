@@ -4,8 +4,9 @@ import { expect, type Page, test } from "@playwright/test";
  * The Tasks sidebar — "decided sidebar" (TV-U6; specs/tasks-v3.md AC11.1,
  * AC11.10; prototype round-1c frame 1): the order and the hairline, no labels
  * on the blocks and no glyphs on views, collapsible groups in one
- * sentence-case header style, Pinned only when used, and Archived projects and
- * Recently deleted in the hairline's ⋯, never as rows.
+ * sentence-case header style, Pinned only when used, Customize sidebar in the
+ * hairline's ⋯, and Archived and Recently deleted as the footer's two quiet
+ * items (MOD-140), never rows among the projects.
  *
  * The structure checks run on their own; the screenshots need baselines, which
  * a human captures, never an agent (DESIGN_SYSTEM §5):
@@ -98,11 +99,15 @@ test.describe("decided sidebar — structure (AC11.1, AC11.10)", () => {
     await expect(nav.getByRole("button", { name: /^Launch v1\s*,/ })).toHaveCount(1);
   });
 
-  test("Customize, Archived projects and Recently deleted live in the hairline's ⋯", async ({
+  test("Customize lives in the hairline's ⋯; Archived and Recently deleted in the footer", async ({
     page,
   }) => {
     const nav = await open(page, "busy-workspace");
     await expect(nav.getByRole("button", { name: /Archived|Recently deleted/ })).toHaveCount(0);
+    const footer = page.getByRole("navigation", { name: "Archive and trash" });
+    await expect(footer.getByRole("button")).toHaveCount(2);
+    await expect(footer.getByRole("button", { name: "Archived", exact: true })).toBeVisible();
+    await expect(footer.getByRole("button", { name: "Recently deleted" })).toBeVisible();
     await nav.locator('[data-slot="sidebar-hairline"]').hover();
     await page.getByRole("button", { name: "Sidebar options" }).click();
     const menu = page.getByRole("menu");
@@ -113,8 +118,7 @@ test.describe("decided sidebar — structure (AC11.1, AC11.10)", () => {
       "My tasks",
       "All",
     ]);
-    await expect(menu.getByRole("menuitem", { name: /^Archived projects/ })).toBeVisible();
-    await expect(menu.getByRole("menuitem", { name: /^Recently deleted/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /Archived|Recently deleted/ })).toHaveCount(0);
   });
 
   test("Customize sidebar hides rows; the Inbox always shows", async ({ page }) => {

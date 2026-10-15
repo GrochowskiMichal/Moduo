@@ -12,6 +12,7 @@
 //   adds its starter template.
 // - The sidebar's ⋯ and Help → "What's in Tasks" reopen it at the basics.
 
+import type { TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   currentPreferences,
@@ -27,7 +28,6 @@ import {
   firstViewFor,
   ROLE_DEFAULTS,
   shouldSeedWorkspace,
-  type TasksRole,
   teachingTaskTitles,
   welcomeDecision,
 } from "../onboarding";

@@ -10,7 +10,7 @@
  * see reads exactly like something that isn't there.
  */
 
-import { isClosedTask, isOpenTask } from "../_shared/contracts/vocabularies.ts";
+import { isClosedTask, isOpenTask, pickTagColor } from "../_shared/contracts/vocabularies.ts";
 import {
   queueTaskIds,
   readAllPages,
@@ -20,13 +20,16 @@ import {
 } from "../_shared/tasks-connector.ts";
 import type { ToolContext } from "./registry.ts";
 import { visibleIds } from "./share.ts";
+import { resolveTaskRef, TASK_NOT_FOUND, workspaceTaskKey } from "./task-ref.ts";
+
+// Handles live in task-ref.ts (share.ts resolves them too); the Tasks tools
+// keep importing them from here.
+export { HANDLE, resolveTaskRef, TASK_NOT_FOUND, workspaceTaskKey } from "./task-ref.ts";
 
 // deno-lint-ignore no-explicit-any
 export type Row = Record<string, any>;
 
-/** The answer for a task that's hidden from the key's person or not there. */
-export const TASK_NOT_FOUND = "Task not found in this workspace.";
-/** The same for a project. */
+/** The same as TASK_NOT_FOUND (task-ref.ts), for a project. */
 export const PROJECT_NOT_FOUND = "That project isn't in this workspace.";
 
 // The creator's "completed" notification (TV-D1). The trail already says so
@@ -35,8 +38,6 @@ export const PROJECT_NOT_FOUND = "That project isn't in this workspace.";
 export const NOTIFICATION_ONLY_OP = "tasks.completed";
 
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** A task's handle, `MOD-142` (TV-D8: the workspace's key + the task's number). */
-export const HANDLE = /^([A-Za-z]{2,5})-(\d{1,9})$/;
 
 export function str(args: Row, name: string, required = true): string {
   const v = args?.[name];
@@ -84,14 +85,6 @@ export async function unwrap<T = unknown>(
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return data as T;
-}
-
-/** The workspace's task key (TV-D8), or null before that migration. */
-export async function workspaceTaskKey(ctx: ToolContext): Promise<string | null> {
-  const { data, error } = await ctx.db.from("workspaces").select("task_key")
-    .eq("id", ctx.key.workspaceId).maybeSingle();
-  if (error) return null;
-  return typeof data?.task_key === "string" ? data.task_key : null;
 }
 
 /** The key creator's queue rows here (TV-D2). Before the migration: none. */
@@ -198,27 +191,6 @@ export async function shapedQueue(ctx: ToolContext): Promise<Row[]> {
   return data.queue.map((id) => shapeTask(data.byId.get(id)!, data, now));
 }
 
-/**
- * A task's id from what an agent sends: its uuid or its handle (`MOD-142`,
- * TV-D8; any case). Anything else, or a handle of a task that isn't there,
- * reads as not found.
- */
-export async function resolveTaskRef(ctx: ToolContext, ref: string): Promise<string> {
-  const value = ref.trim();
-  const handle = value.match(HANDLE);
-  // Not a handle: an id, checked by the lookup that follows.
-  if (!handle) return value;
-  const key = await workspaceTaskKey(ctx);
-  if (!key || key.toUpperCase() !== handle[1]!.toUpperCase()) throw new Error(TASK_NOT_FOUND);
-  const found = await rows(
-    ctx.db.from("tasks").select("id")
-      .eq("workspace_id", ctx.key.workspaceId).eq("number", Number(handle[2])).is("deleted_at", null)
-      .limit(1),
-  );
-  if (!found.length) throw new Error(TASK_NOT_FOUND);
-  return found[0]!.id as string;
-}
-
 /** One live task the key's person can see (by uuid or handle), or not found. */
 export async function fetchTask(ctx: ToolContext, ref: string): Promise<Row> {
   const id = await resolveTaskRef(ctx, ref);
@@ -273,6 +245,54 @@ export async function shapeOne(ctx: ToolContext, row: Row): Promise<Row> {
     };
   }
   return shapeTask(row, ws, new Date(), true);
+}
+
+/** At most this many tags get a colour in one call (the first call after this
+ *  shipped may find many made before it). */
+export const COLOUR_TAGS_PER_CALL = 50;
+
+/**
+ * MOD-93: give every live tag without a colour the hue the app would have
+ * given it. The ops make a tag from a name alone (tasks_op_tag, a template's
+ * tags), while the app picks a colour when it makes one (pickTagColor), so a
+ * tag an agent made used to stay colourless. Tags are coloured oldest first,
+ * each counting the ones before it, so the hues spread as in the app; that
+ * also colours the ones made before this fix. Nobody ever chooses "no colour"
+ * (a recolour always names a hue), so a null is only ever a missing pick.
+ * Colouring a tag is editing it, so it happens only for someone who may edit
+ * the workspace's tags (perm_can_tag, the check the tags policy makes for the
+ * app), at most COLOUR_TAGS_PER_CALL a call. Best effort: the call that made
+ * the tag has already succeeded, and an uncoloured tag still shows in the
+ * default hue.
+ */
+export async function colourBareTags(ctx: ToolContext): Promise<void> {
+  const ws = ctx.key.workspaceId;
+  try {
+    const may = await ctx.db.rpc("perm_can_tag", { p_workspace_id: ws });
+    if (may.error || may.data !== true) return;
+    // The work list: the oldest colourless tags, at most a call's worth.
+    const bare = await rows(
+      ctx.db.from("tags").select("id").eq("workspace_id", ws).is("deleted_at", null).is("color", null)
+        .order("created_at", { ascending: true }).order("id", { ascending: true })
+        .limit(COLOUR_TAGS_PER_CALL),
+    );
+    if (!bare.length) return;
+    // Only then the hues in use, which pickTagColor counts.
+    const coloured: { color: string | null }[] = (await rows(
+      ctx.db.from("tags").select("color").eq("workspace_id", ws).is("deleted_at", null).not("color", "is", null),
+    )).map((t) => ({ color: t.color }));
+    for (const tag of bare) {
+      const color = pickTagColor(coloured);
+      // Only while it's still bare: a person may have just picked one.
+      const { data, error } = await ctx.db.from("tags").update({ color })
+        .eq("workspace_id", ws).eq("id", tag.id).is("color", null).select("id");
+      if (error) return;
+      // A hue someone picked meanwhile isn't known here, so it isn't counted.
+      if (data?.length) coloured.push({ color });
+    }
+  } catch {
+    // Reading the tags failed: they keep the default hue until the next call.
+  }
 }
 
 /** Open, not closed: the one rule (TV-D9). */

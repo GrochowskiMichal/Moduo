@@ -8,6 +8,7 @@ import { Row, RowColumn, RowColumns as RowColumnsSlot } from "../../../component
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
+import { agentRowMarkParts } from "../../spine/agent-session";
 import { assigneeLabel } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { requestBreakDown } from "../break-down";
@@ -28,7 +29,7 @@ import { ROW_TITLE_ATTR } from "./list-keys";
 import { QueueToggle } from "./queue-toggle";
 import { sameTaskFacts, sameValues, type TaskFacts, type TaskRowActions } from "./row-facts";
 import { activateTask, type TaskCommand, TaskContextMenu } from "./task-context-menu";
-import { TaskCounts } from "./task-meta";
+import { hasTaskCounts, TaskCounts } from "./task-meta";
 import { DateCell, HandleCell, LateFixes, ProjectMenu, StatusGlyph } from "./task-row-cells";
 
 // The blocked marker moved to task-meta; the Timeline still imports it here.
@@ -114,14 +115,16 @@ type Props = {
 
 /**
  * One task in the List (tasks-v3 §4, TV-U10) on the kit Row: status icon ·
- * [handle] · title · quiet counts · [project], then the columns (Standard:
- * priority · date · avatar · Focus mark; Detailed adds Project › Section, the
+ * [handle] · title · [project] … the agent's mark and the quiet counts,
+ * pinned beside the columns in Standard (MOD-138), right after the title in
+ * Detailed; then the columns (Standard: priority · date · avatar · Focus
+ * mark; Detailed adds what Display → Columns has on: Project › Section, the
  * status name, Due and Next session, time, waiting, the assignee's name and
- * updated). The title takes the free width and gives way first; columns hold
- * the list's widths, so nothing in them truncates. Hover shows only the Focus
- * mark, an empty date cell's picker and a late row's fixes (default i). A
- * closed row fades as a whole except its status icon; selection is the tint
- * (DS-2), never a bar.
+ * updated). The title takes the free width and gives way first, never below
+ * about ten characters (MOD-125); columns hold the list's widths, so nothing
+ * in them truncates. Hover shows only the Focus mark, an empty date cell's
+ * picker and a late row's fixes (default i). A closed row fades as a whole
+ * except its status icon; selection is the tint (DS-2), never a bar.
  */
 export const TaskRow = memo(TaskRowView, sameRowProps);
 
@@ -185,7 +188,8 @@ function TaskRowView({
   const assigneeName = assigneeLabel(task.assigneeId, byId);
   // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
   const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
-  const detailed = columns.project || columns.status || columns.updated;
+  // The preset itself: any of Detailed's own columns can be off (MOD-128).
+  const detailed = columns.detailed;
   const dateCommand = command === "schedule" || command === "due" ? command : null;
   const handle = handleLabel(taskKey, task.number);
   const now = nowOn(today);
@@ -201,8 +205,12 @@ function TaskRowView({
       open={command === "bucket"}
       onOpenChange={(o) => (o ? onRequestCommand(task.id, "bucket") : onClearCommand())}
       actions={actions}
+      // Beside a title at its floor the project's name gives way, like the
+      // Inbox's source (MOD-125); a card's wraps instead.
+      className={variant === "inline" ? "min-w-0 shrink-3 overflow-hidden" : undefined}
     />
   );
+  const title = task.title || "Untitled";
   const fixes =
     late && canEdit ? (
       <LateFixes
@@ -218,6 +226,81 @@ function TaskRowView({
         }
       />
     ) : null;
+  // A late row's fixes, on hover or selection: they fade in and take no room
+  // from the title (R6: nothing reflows), on the row's own surface so the
+  // title doesn't show through. `side` places them: beside Standard's pinned
+  // details, or over the cell's end.
+  const fixesOver = (side: string) =>
+    fixes ? (
+      <span
+        className={cn(
+          "absolute inset-y-0 flex items-center bg-card",
+          side,
+          "invisible opacity-0 transition-[opacity,visibility] duration-(--motion-fade) ease-(--ease-out)",
+          "group-hover/row:visible group-hover/row:opacity-100",
+          "group-data-[selected]/row:visible group-data-[selected]/row:opacity-100",
+        )}
+      >
+        <span className="flex h-full items-center ps-2 group-hover/row:bg-state-hover group-data-[selected]/row:bg-state-selected">
+          {fixes}
+        </span>
+      </span>
+    ) : null;
+  // The details after a title, as one group (round-2b's `.ind`): the agent's
+  // mark, then tags · files · comments · subtasks · blocked · waiting ·
+  // repeats · waiting to sync. Once the title is at its floor they give way:
+  // the agent's words first, down to its dot (which always keeps its room,
+  // MOD-125), then the counts, so they never run under the columns.
+  const agent = facts.agent ?? null;
+  const hasCounts = hasTaskCounts(task, facts, { waitingColumn: columns.waiting });
+  const hasDetails = !!agent || hasCounts;
+  const agentMark = agent ? <RowAgentMark mark={agent} /> : null;
+  const details = detailed ? (
+    // Detailed: right after the title, as before; its own columns line up
+    // instead. The counts give way whole, from their start, as in Standard,
+    // but the ones left sit right after the title (`justify-end` packs a
+    // reversed line to its left), so any room a hidden one leaves falls at
+    // the end, before the columns, never between the title and the counts.
+    hasDetails ? (
+      <span
+        data-slot="row-details"
+        className={cn("flex items-center gap-2.5 overflow-x-clip", agent ? "min-w-3" : "min-w-0")}
+      >
+        {agentMark}
+        {hasCounts ? (
+          <span data-slot="row-details-counts" className={cn(COUNTS_FROM_END, "justify-end")}>
+            <TaskCounts task={task} facts={facts} tagNames waitingColumn={columns.waiting} bare />
+          </span>
+        ) : null}
+      </span>
+    ) : null
+  ) : hasDetails || fixes ? (
+    // Standard (MOD-138): pinned to the cell's end, beside the columns, so
+    // they never move with the title's length; a late row's fixes sit
+    // beside them, never over them. The counts give way whole, from their
+    // start; the box is clipped, so nothing ever runs over the columns.
+    <span
+      data-slot="row-details"
+      className={cn(
+        "relative ms-auto flex items-center self-stretch",
+        agent ? "min-w-3" : "min-w-0",
+      )}
+    >
+      {fixesOver(hasDetails ? "end-full me-2.5" : "end-0")}
+      {hasDetails ? (
+        <span className="flex min-w-0 grow items-center gap-2.5 overflow-x-clip">
+          {agentMark}
+          {hasCounts ? (
+            <span data-slot="row-details-counts" className={COUNTS_FROM_END}>
+              {/* Each count is an item of its own, so each gives way whole. */}
+              <TaskCounts task={task} facts={facts} waitingColumn={columns.waiting} bare />
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+    </span>
+  ) : null;
+  const fixesAtEnd = fixesOver("end-0");
 
   const row = (
     <Row
@@ -301,9 +384,10 @@ function TaskRowView({
       ) : (
         <div
           data-slot="row-title"
-          // The title is the one flexible track: it takes the free width (the
-          // checkpoint-1 fix) and gives way first (call 42).
-          className="relative flex min-w-0 flex-1 items-center gap-2.5 group-data-[done]/row:opacity-50"
+          // The title cell is the one flexible track: it takes the free width
+          // (the checkpoint-1 fix). A container, so its details can shorten
+          // when it's narrow (MOD-138).
+          className="@container/title relative flex min-w-0 flex-1 items-center gap-2.5 group-data-[done]/row:opacity-50"
         >
           <button
             type="button"
@@ -312,7 +396,18 @@ function TaskRowView({
             {...{ [ROW_TITLE_ATTR]: "" }}
             className={cn(
               // Body font (content, not chrome) at 15px — quiet, Linear/Todoist-ward.
-              "min-w-0 truncate text-left font-sans text-md",
+              "truncate text-left font-sans text-md",
+              // The title takes the room first and gives way first (call 42),
+              // but never below about ten characters (MOD-125), nor wider than
+              // its cell (less an agent's dot and its gap, which always
+              // show): from that floor it grows to its own width, so it never
+              // stretches past its words. A shorter title keeps its width.
+              title.length > TITLE_FLOOR_CHARS
+                ? cn(
+                    "max-w-max flex-1",
+                    agent ? "min-w-[min(10ch,calc(100%-1.375rem))]" : "min-w-[min(10ch,100%)]",
+                  )
+                : cn("shrink-0", agent ? "max-w-[calc(100%-1.375rem)]" : "max-w-full"),
               // A closed row dims through the cell's opacity; a muted colour on
               // top would dim it twice.
               closed
@@ -330,26 +425,14 @@ function TaskRowView({
               if (canEdit) onStartEdit(task.id);
             }}
           >
-            {task.title || "Untitled"}
+            {title}
           </button>
-          <TaskCounts
-            task={task}
-            facts={facts}
-            tagNames={detailed}
-            waitingColumn={columns.waiting}
-          />
-          {facts.agent ? (
-            // An agent working on it (TV-D16, call 52): status, not conversation.
-            <span
-              data-slot="row-agent"
-              className="shrink-0 font-sans text-xs whitespace-nowrap text-muted-foreground"
-            >
-              {facts.agent}
-            </span>
-          ) : null}
+          {/* Detailed keeps the details right after the title (its own
+              columns line up instead). */}
+          {detailed ? details : null}
           {facts.source ? (
             // Where an Inbox task came from (research §7): quiet, after the
-            // counts; it gives way before the title does ("via Claude Desktop"
+            // title; it gives way before the title does ("via Claude Desktop"
             // is long, TV-U13b).
             <span
               data-slot="row-source"
@@ -381,24 +464,9 @@ function TaskRowView({
               Take it
             </Button>
           ) : null}
-          {/* A late row's fixes, over the cell's end on hover or selection:
-              they fade in and take no room from the title (R6: nothing
-              reflows), on the row's own surface so the title doesn't show
-              through. */}
-          {fixes ? (
-            <span
-              className={cn(
-                "absolute inset-y-0 end-0 flex items-center bg-card",
-                "invisible opacity-0 transition-[opacity,visibility] duration-(--motion-fade) ease-(--ease-out)",
-                "group-hover/row:visible group-hover/row:opacity-100",
-                "group-data-[selected]/row:visible group-data-[selected]/row:opacity-100",
-              )}
-            >
-              <span className="flex h-full items-center ps-2 group-hover/row:bg-state-hover group-data-[selected]/row:bg-state-selected">
-                {fixes}
-              </span>
-            </span>
-          ) : null}
+          {/* Standard pins the details to the cell's end, beside the columns,
+              so they stay put whatever the title's length (MOD-138). */}
+          {detailed ? fixesAtEnd : details}
         </div>
       )}
 
@@ -610,6 +678,73 @@ export function TitleEditor({
       size="sm"
       className={className}
     />
+  );
+}
+
+/**
+ * A title longer than this many characters never shortens below about that
+ * many (MOD-125: "Hero banner" read "H" beside an agent's mark); a shorter
+ * one keeps its whole width.
+ */
+const TITLE_FLOOR_CHARS = 10;
+
+/**
+ * A row's counts give way whole, from their start (MOD-138): laid out from
+ * the end (`flex-row-reverse`, each one's `order` its place from the end, so
+ * they still read left to right in their own order) on one line, and what
+ * doesn't fit wraps onto a second line the box hides (the row gap puts it
+ * fully below). Tags go first; files and comments stay longest. Eight at
+ * most (TaskCounts'). A wrapping box keeps the width it was given, so a
+ * hidden count leaves its room: in Standard (icons and numbers) never more
+ * than one count's, beside the title; Detailed packs what's left after the
+ * title, so its tag chips' room falls at the end. 20 px tall, so a dense row
+ * keeps its height and a Detailed "+n" its focus ring.
+ */
+const COUNTS_FROM_END = cn(
+  "flex h-5 min-w-0 flex-row-reverse flex-wrap items-center gap-x-2.5 gap-y-4 overflow-hidden py-px",
+  "[&>:nth-last-child(1)]:order-1 [&>:nth-last-child(2)]:order-2 [&>:nth-last-child(3)]:order-3",
+  "[&>:nth-last-child(4)]:order-4 [&>:nth-last-child(5)]:order-5 [&>:nth-last-child(6)]:order-6",
+  "[&>:nth-last-child(7)]:order-7 [&>:nth-last-child(8)]:order-8",
+);
+
+/**
+ * The agent's mark on a row (TV-D16, call 52; round-1c `.agent`): a dot, its
+ * agent and what it's doing, "Claude · needs you" in the text colour, else
+ * muted. As the title cell narrows it says less (MOD-125, MOD-138): under
+ * 16rem its agent alone, under 12rem the dot; the tooltip and a screen reader
+ * still say it all. The cut points are where a mark and one count would push
+ * the title under its floor. In between it takes only the room the counts
+ * leave (it starts at nothing and grows to its words), so its words give way
+ * before any count, down to the dot.
+ */
+function RowAgentMark({ mark }: { mark: string }) {
+  const { who, state, loud } = agentRowMarkParts(mark);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          data-slot="row-agent"
+          data-tone={loud ? "loud" : "quiet"}
+          className={cn(
+            "flex min-w-3 max-w-max grow basis-0 items-center gap-1.5 font-sans text-xs whitespace-nowrap",
+            loud ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              loud ? "bg-foreground" : "bg-subtle-foreground",
+            )}
+          />
+          <span className="min-w-0 truncate @max-[12rem]/title:sr-only">
+            {who}
+            {state ? <span className="@max-3xs/title:sr-only"> · {state}</span> : null}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{mark}</TooltipContent>
+    </Tooltip>
   );
 }
 
