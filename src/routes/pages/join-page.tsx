@@ -16,14 +16,13 @@
 import { parseOrError } from "@contracts/errors";
 import { nonEmptyString } from "@contracts/primitives";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Check, LogIn, Users } from "lucide-react";
+import { Check, LogIn, LogOut, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "../../components/ui/button";
+import { InviteEmailMismatchError, setPendingJoin } from "../../features/workspaces/invite-join";
 import { storageKey } from "../../features/workspaces/workspace-mappers";
 import { useAuth } from "../../providers/auth-provider";
-
-const PENDING_JOIN_KEY = "moduo:pending_join";
 
 function JoinShell({ children }: { children: React.ReactNode }) {
   return (
@@ -39,7 +38,7 @@ function JoinShell({ children }: { children: React.ReactNode }) {
 }
 
 export function JoinPage() {
-  const { runtime, userId, isSignedIn, loading } = useAuth();
+  const { runtime, userId, isSignedIn, loading, signOut } = useAuth();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { invite?: string };
   const inviteParsed = parseOrError(nonEmptyString, search.invite ?? "");
@@ -47,6 +46,9 @@ export function JoinPage() {
 
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Signed in with another address than the invite's: the message to show.
+  const [mismatch, setMismatch] = useState<string | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   const handleAccept = async () => {
     if (!runtime || !inviteToken || joining) return;
@@ -62,6 +64,11 @@ export function JoinPage() {
       toast.success("You've joined the workspace.");
       void navigate({ to: "/", replace: true });
     } catch (err) {
+      if (err instanceof InviteEmailMismatchError) {
+        setMismatch(err.message);
+        setJoining(false);
+        return;
+      }
       const message = err instanceof Error ? err.message : "This invite is invalid or has expired.";
       setError(message);
       toast.error(message);
@@ -70,10 +77,25 @@ export function JoinPage() {
   };
 
   const handleSignIn = () => {
-    if (inviteToken && typeof window !== "undefined") {
-      // Bridge the token across the sign-in redirect (auth-page resumes here).
-      window.localStorage.setItem(PENDING_JOIN_KEY, inviteToken);
+    // Bridge the token across the sign-in redirect (the code sign-in and
+    // auth-page resume here).
+    if (inviteToken) setPendingJoin(inviteToken);
+    void navigate({ to: "/auth", replace: true });
+  };
+
+  // Wrong address: sign out and come back here after signing in with the right one.
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+    } catch {
+      // Still signed in: /auth would send them straight back here.
+      toast.error("We couldn't sign you out. Try again.");
+      setSigningOut(false);
+      return;
     }
+    if (inviteToken) setPendingJoin(inviteToken);
     void navigate({ to: "/auth", replace: true });
   };
 
@@ -113,6 +135,31 @@ export function JoinPage() {
           <LogIn className="size-4" aria-hidden />
           Sign in to accept
         </Button>
+      </JoinShell>
+    );
+  }
+
+  if (mismatch) {
+    return (
+      <JoinShell>
+        <span className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-muted text-muted-foreground">
+          <Users className="size-5" aria-hidden />
+        </span>
+        <h1 className="mt-4 font-display text-lg text-foreground">You've been invited</h1>
+        <p className="mt-2 text-sm text-muted-foreground" role="alert">
+          {mismatch}
+        </p>
+        <Button className="mt-5 w-full" onClick={() => void handleSignOut()} disabled={signingOut}>
+          <LogOut className="size-4" aria-hidden />
+          Sign out
+        </Button>
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/", replace: true })}
+          className="mt-3 w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:underline"
+        >
+          Skip for now
+        </button>
       </JoinShell>
     );
   }

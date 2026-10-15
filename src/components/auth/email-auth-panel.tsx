@@ -7,6 +7,7 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
+import { joinPath, takePendingJoin } from "@/features/workspaces/invite-join";
 import type { AuthMnemonic } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -201,6 +202,16 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
     if (verifyErr) {
       window.sessionStorage.removeItem("moduo:auth_resolving");
       setError(verifyErr.message);
+      return;
+    }
+
+    // A workspace invite opened while signed out comes first (TX-7): straight
+    // to /join, before onboarding, so a brand-new invitee lands in that
+    // workspace instead of being asked to create their own.
+    const pendingJoin = takePendingJoin();
+    if (pendingJoin) {
+      window.sessionStorage.removeItem("moduo:auth_resolving");
+      window.location.href = joinPath(pendingJoin);
       return;
     }
 

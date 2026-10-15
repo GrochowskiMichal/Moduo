@@ -108,9 +108,13 @@ const PLAIN_NAME = /^[\p{L}\p{M}]+(?:['\u2019-][\p{L}\p{M}]+)*\.?(?: [\p{L}\p{M}
  * becomes "Someone".
  */
 export function plainBookerName(value: string): string {
+  return isPlainName(value) ? name(value).replace(/\s+/g, " ").trim() : "Someone";
+}
+
+/** True for a plain name (see PLAIN_NAME), up to 50 characters. */
+export function isPlainName(value: string): boolean {
   const flat = name(value).replace(/\s+/g, " ").trim();
-  if (!flat || Array.from(flat).length > 50 || !PLAIN_NAME.test(flat)) return "Someone";
-  return flat;
+  return !!flat && Array.from(flat).length <= 50 && PLAIN_NAME.test(flat);
 }
 
 function firstName(value: string): string {

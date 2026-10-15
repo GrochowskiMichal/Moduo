@@ -391,10 +391,11 @@ const EMAILS = [
       ["ws", "N", "Northwind Studio"],
       ["h", "You own Northwind Studio now"],
       ["p", "Anna Carter made you the owner of Northwind Studio on 8 October. You can now manage its members, roles and settings, and only you can delete it."],
+      ["p", "Its seats now come from your plan."],
       ["btn", "Open workspace settings"],
     ],
     why: "You got this email because ownership of a Moduo workspace moved to you.",
-    notes: ["If a plan or seats move with ownership, the email says so. To check against the billing rules at build time."] },
+    notes: ["Checked at build time (TX-7): a workspace's seats come from its owner's plan, so they move with ownership; the email says so in one line. The plan itself doesn't move."] },
 
   { g: "access", id: "B5", name: "Removed from a workspace", status: "new",
     when: "An owner or admin removes someone from a workspace.",

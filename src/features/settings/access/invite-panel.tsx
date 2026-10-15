@@ -121,7 +121,7 @@ export function InvitePanel() {
       });
       setEmail("");
       if (invite?.token && runtime) setLastLink(runtime.workspace.inviteUrl(invite.token));
-      toast.success(`Invite ready for ${normalized}`);
+      toast.success(`Invite sent to ${normalized}`);
     } catch (err) {
       setError(inviteError(err));
     } finally {
