@@ -48,6 +48,11 @@ export function ChatPage() {
     },
     [navigate],
   );
+  // Browse channels keeps the open conversation (its Details stay in the panel).
+  const onBrowse = useCallback(() => {
+    const next: ChatSearch = { ...(search.c ? { c: search.c } : {}), view: "browse" };
+    void navigate({ to: "/chat", search: next as Record<string, string> });
+  }, [navigate, search.c]);
 
   return (
     <ChatScreen
@@ -63,7 +68,9 @@ export function ChatPage() {
       conversationId={search.c ?? null}
       // A chain's link lands on its first message (`t`) until CV-12.
       messageId={search.m ?? search.t ?? null}
+      browsing={search.view === "browse"}
       onOpen={onOpen}
+      onBrowse={onBrowse}
     />
   );
 }

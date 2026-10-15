@@ -24,6 +24,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import {
   mapChannel,
+  mapHistory,
   mapMember,
   mapMessage,
   mapPerson,
@@ -32,13 +33,14 @@ import {
   mapUnread,
   mapUserChatPrefs,
 } from "../features/chat/mappers";
-import type {
-  ChatChannel,
-  ChatError,
-  ChatMember,
-  ChatMessage,
-  ChatResult,
-  ChatRuntime,
+import {
+  CHAT_HISTORY_OPS,
+  type ChatChannel,
+  type ChatError,
+  type ChatMember,
+  type ChatMessage,
+  type ChatResult,
+  type ChatRuntime,
 } from "../features/chat/model";
 
 const MESSAGE_COLUMNS = CHAT_MESSAGE_COLUMNS;
@@ -364,6 +366,40 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       return mapRows(data, mapMessage);
     },
 
+    async history({ workspaceId, channelId, limit = 50 }) {
+      // The trail's read policy answers only conversations the caller reads.
+      const { data, error } = await db()
+        .from("module_activity")
+        .select("id, op, actor_type, actor_id, actor_label, payload, created_at")
+        .eq("workspace_id", workspaceId)
+        .eq("module", "chat")
+        .eq("entity_type", "chat_channel")
+        .eq("entity_id", channelId)
+        .in("op", [...CHAT_HISTORY_OPS])
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      fail(error);
+      return mapRows(data, mapHistory);
+    },
+
+    async memberCounts(channelIds) {
+      const out: Record<string, number> = {};
+      for (const id of channelIds) out[id] = 0;
+      for (let i = 0; i < channelIds.length; i += 100) {
+        const { data, error } = await db()
+          .from("chat_members")
+          .select("channel_id")
+          .in("channel_id", channelIds.slice(i, i + 100))
+          .is("left_at", null);
+        fail(error);
+        for (const row of (data ?? []) as Array<{ channel_id?: unknown }>) {
+          const id = row.channel_id;
+          if (typeof id === "string") out[id] = (out[id] ?? 0) + 1;
+        }
+      }
+      return out;
+    },
+
     async search({ workspaceId, query, limit = 40 }) {
       const term = query.trim();
       if (!term) return [];
@@ -380,13 +416,14 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       return mapRows(data, mapMessage);
     },
 
-    async createChannel({ workspaceId, name, topic, isPrivate, memberIds }) {
+    async createChannel({ workspaceId, name, topic, isPrivate, memberIds, announcement }) {
       const { data, error } = await db().rpc("chat_op_create_channel", {
         p_workspace_id: workspaceId,
         p_name: name,
         p_topic: topic ?? "",
         p_is_private: isPrivate ?? false,
         p_member_ids: memberIds ?? [],
+        p_announcement: announcement ?? false,
       });
       fail(error);
       return single<ChatChannel>(data, mapChannel, "create channel");

@@ -11,4 +11,9 @@ describe("validateChatSearch", () => {
     expect(validateChatSearch({ c: "x", t: ID })).toEqual({});
     expect(validateChatSearch({ t: ID, m: ID })).toEqual({});
   });
+  it("keeps Browse channels as a view, with or without a conversation (CV-8b)", () => {
+    expect(validateChatSearch({ view: "browse" })).toEqual({ view: "browse" });
+    expect(validateChatSearch({ c: ID, view: "browse" })).toEqual({ c: ID, view: "browse" });
+    expect(validateChatSearch({ view: "other" })).toEqual({});
+  });
 });

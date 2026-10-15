@@ -224,10 +224,28 @@ describe("chat rights by role", () => {
   it("reads the row the server reads", () => {
     expect(capsRoleKey("editor", false)).toBe("member");
     expect(capsRoleKey("editor", true)).toBe("viewer");
-    expect(rightsFrom(rows, "viewer", false)).toEqual({ canPost: false, manageAny: false });
-    expect(rightsFrom(rows, "admin", false)).toEqual({ canPost: true, manageAny: true });
-    expect(rightsFrom(rows, "owner", false)).toEqual({ canPost: true, manageAny: true });
+    expect(rightsFrom(rows, "viewer", false)).toMatchObject({ canPost: false, manageAny: false });
+    expect(rightsFrom(rows, "admin", false)).toMatchObject({ canPost: true, manageAny: true });
+    expect(rightsFrom(rows, "owner", false)).toMatchObject({ canPost: true, manageAny: true });
     expect(rightsFrom([{ role_key: "member", post: false }], "editor", false).canPost).toBe(false);
+  });
+  it("reads who may make a public or a private channel (CV-8b)", () => {
+    const caps = [
+      { role_key: "member", post: true, create_public: true, create_private: false },
+      { role_key: "viewer", post: false, create_public: false, create_private: false },
+    ];
+    expect(rightsFrom(caps, "editor", false)).toMatchObject({
+      createPublic: true,
+      createPrivate: false,
+    });
+    expect(rightsFrom(caps, "viewer", false)).toMatchObject({
+      createPublic: false,
+      createPrivate: false,
+    });
+    expect(rightsFrom(caps, "owner", false)).toMatchObject({
+      createPublic: true,
+      createPrivate: true,
+    });
   });
   it("falls back to the role's usual rights before the rows arrive", () => {
     expect(rightsFrom(null, "viewer", false).canPost).toBe(false);

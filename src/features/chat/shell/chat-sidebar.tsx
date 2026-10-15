@@ -110,6 +110,8 @@ export type ChatSidebarProps = {
   onOpen: (channelId: string) => void;
   onOpenCatchup: () => void;
   onNewConversation?: () => void;
+  /** Browse channels (CV-8b), from the hairline's ⋯. */
+  onBrowse?: () => void;
   /** §18: a live huddle's mark (who's in it) beside a row's count. Empty until calls exist. */
   huddleOf?: (channelId: string) => React.ReactNode;
 };
@@ -125,6 +127,7 @@ export function ChatSidebar({
   onOpen,
   onOpenCatchup,
   onNewConversation,
+  onBrowse,
   huddleOf,
 }: ChatSidebarProps) {
   const row = (r: ChatRow) => {
@@ -169,7 +172,12 @@ export function ChatSidebar({
             current={catchupCurrent}
             onSelect={onOpenCatchup}
           />
-          <PanelHairline archived={model.archived} personOf={personOf} onOpen={onOpen} />
+          <PanelHairline
+            archived={model.archived}
+            personOf={personOf}
+            onOpen={onOpen}
+            onBrowse={onBrowse}
+          />
           {model.pinned.length > 0 ? section("pinned", "Pinned", model.pinned) : null}
           {section("channels", "Channels", model.channels)}
           {section("dms", "Direct messages", model.dms)}
@@ -193,10 +201,12 @@ function PanelHairline({
   archived,
   personOf,
   onOpen,
+  onBrowse,
 }: {
   archived: ChatRow[];
   personOf: (id: string) => ChatPerson | undefined;
   onOpen: (channelId: string) => void;
+  onBrowse?: () => void;
 }) {
   return (
     <div
@@ -220,6 +230,9 @@ function PanelHairline({
           <TooltipContent>Conversations options</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end" className="min-w-52">
+          {onBrowse ? (
+            <DropdownMenuItem onSelect={onBrowse}>Browse channels</DropdownMenuItem>
+          ) : null}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger disabled={archived.length === 0}>
               Archived channels

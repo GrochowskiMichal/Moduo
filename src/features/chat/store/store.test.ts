@@ -503,6 +503,29 @@ describe("device copy, delta, echo, outbox", () => {
     expect(server.marks).toEqual([{ channelId: C, messageId: rows[3]!.id }]);
   });
 
+  it("returning to a loaded conversation moves the New pill to your read mark", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    server.addChannel(D);
+    const rows = Array.from({ length: 5 }, (_, i) => server.post(uuid(i + 1), C));
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    const first = store.getSnapshot().windows[C]!.newAfter;
+    store.markSeen(C, rows[4]!.id);
+    await settle();
+    // Staying in it: the pill never moves.
+    await store.open(C);
+    expect(store.getSnapshot().windows[C]!.newAfter).toEqual(first);
+    await store.open(D);
+    const fresh = server.post(uuid(6), C);
+    live.emit({ type: "message", row: fresh, insert: true });
+    await store.open(C);
+    const win = store.getSnapshot().windows[C]!;
+    expect(compareKeys(win.newAfter!, keyOf(rows[4]!))).toBe(0);
+    expect(ids(win.rows).at(-1)).toBe(fresh.id);
+  });
+
   it("lands on a message from last month: a window around it, its chain named", async () => {
     const { server, store } = setup();
     server.addChannel(C, { isDefault: true });

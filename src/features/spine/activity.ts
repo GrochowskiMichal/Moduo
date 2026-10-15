@@ -296,6 +296,17 @@ export function spineActivityLine(
     }
     case "chat.member_remove":
       return "removed someone";
+    // A conversation's message changes (CV-8b, Details' history): ids only.
+    case "chat.pin":
+      return p.pinned === false ? "unpinned a message" : "pinned a message";
+    case "chat.message_edit":
+      return "edited a message";
+    case "chat.message_delete":
+      return "deleted a message";
+    case "chat.message_restore":
+      return "brought back a message";
+    case "chat.react":
+      return p.on === false ? "took back a reaction" : "reacted to a message";
     default:
       return entry.op;
   }

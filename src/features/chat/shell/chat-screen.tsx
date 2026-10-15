@@ -1,27 +1,36 @@
-// Chat's screen (specs/chat-v2.md §2–§3, prototype frames 1, 5–7), on the v2
-// store (CV-3). Three panels, nothing else (Tasks 48b): left = conversations,
-// centre = the open conversation, right = context (CV-8b registers its views).
-// The page (`routes/pages/chat-page.tsx`) is a thin adapter for
-// `/chat?c=&m=`: it hands over which conversation and message the link names.
+// Chat's screen (specs/chat-v2.md §2–§3, §12, prototype frames 1, 3–7), on
+// the v2 store (CV-3). Three panels, nothing else (Tasks 48b): left =
+// conversations, centre = the open conversation (or Browse channels), right =
+// the panel's views (Details now; Reply chains and Files with CV-12 / CV-9)
+// with its "← item" stack (a person, a message in context). The page
+// (`routes/pages/chat-page.tsx`) is a thin adapter for `/chat?c=&m=&view=`.
 //
 // Page-level keys: ⌥↑ / ⌥↓ previous / next conversation, ⌥⇧↑ / ⌥⇧↓ previous /
 // next unread one.
 
 import type { WorkspaceRole } from "@contracts/vocabularies";
-import { Loader2, MessagesSquare } from "lucide-react";
+import { Loader2, MessageSquareText, MessagesSquare, User } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { onCreateNew } from "@/components/app/create-events";
 import { FeaturePanelsShell } from "@/components/app/feature-panels-shell";
 import { dispatchOpenPalette } from "@/components/app/global-command-palette";
+import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/right-panel";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layout/panel-events";
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
+import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import { DetailsView } from "../panel/details-view";
+import { MessageInContext } from "../panel/message-in-context";
+import { PersonCard } from "../panel/person-card";
+import { useConversationDetails } from "../panel/use-conversation-details";
 import {
   chatTypingStore,
   useChatPresence,
@@ -31,6 +40,7 @@ import {
 } from "../store/react";
 import type { ChatWindow, ChatWriteResult } from "../store/store";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
+import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
 import { composerLine } from "./composer-state";
 import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
@@ -53,6 +63,23 @@ const EMPTY_WINDOW: ChatWindow = {
 
 /** Someone in the workspace, as the composer's @ and the names read them. */
 export type ChatScreenPerson = ChatPerson;
+
+/** What the right panel's "← item" stack holds (spec #10): items, not views. */
+type ChatPanelEntry =
+  | { key: string; type: "person"; id: string }
+  | { key: string; type: "message"; id: string; channelId: string; authorId: string | null };
+
+/** A conversation's pins, edits and deletes in the window: Details reads again when they change. */
+function detailsStamp(rows: readonly ChatMessage[] | undefined): string {
+  if (!rows) return "";
+  let out = "";
+  for (const r of rows) {
+    if (r.pinnedAt || r.editedAt || r.deletedAt) {
+      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""};`;
+    }
+  }
+  return out;
+}
 
 function typingLine(names: string[]): string | null {
   if (names.length === 0) return null;
@@ -91,6 +118,10 @@ export type ChatScreenProps = {
   conversationId: string | null;
   /** A message the link names (`m`): the stream lands on it. */
   messageId: string | null;
+  /** The centre shows Browse channels (`view=browse`). */
+  browsing?: boolean;
+  /** Open Browse channels. */
+  onBrowse?: () => void;
   /** Open a conversation (null: none named, so Chat lands on General). */
   onOpen: (
     conversationId: string | null,
@@ -110,7 +141,9 @@ export function ChatScreen({
   ownerName,
   conversationId,
   messageId,
+  browsing = false,
   onOpen,
+  onBrowse,
 }: ChatScreenProps) {
   const selfId = userId ?? "";
   const store = useChatStore(runtime, userId, workspaceId);
@@ -167,11 +200,11 @@ export function ChatScreen({
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
   useEffect(() => {
-    if (!ready || conversationId) return;
+    if (!ready || conversationId || browsing) return;
     const general = Object.values(snap.channels).find((c) => c.isDefault && !c.archivedAt);
     const first = general ?? ordered[0]?.channel;
     if (first) onOpen(first.id, { replace: true });
-  }, [ready, conversationId, snap.channels, ordered, onOpen]);
+  }, [ready, conversationId, browsing, snap.channels, ordered, onOpen]);
 
   // Open once per conversation (re-opening would drop a window around a linked message).
   const known = !!conversationId && !!snap.channels[conversationId];
@@ -196,6 +229,55 @@ export function ChatScreen({
     if (!typingStore || !ready || !conversationId || !member) return;
     return typingStore.watch(conversationId);
   }, [typingStore, ready, conversationId, member]);
+
+  // ── the right panel (CV-8b) ───────────────────────────────────────────────
+  const [panelView, setPanelView] = useState("details");
+  const panelStack = usePanelStack<ChatPanelEntry>();
+  const clearPanelItems = panelStack.clear;
+  // Another conversation: its own panel, from its view (items belong to the last one).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  useEffect(() => clearPanelItems(), [conversationId]);
+  const pushPanelItem = panelStack.push;
+  const openInPanel = useCallback(
+    (entry: ChatPanelEntry) => {
+      pushPanelItem(entry);
+      const state = readFeaturePanelState("chat");
+      if (!state.right) dispatchLayoutPanelsSet({ feature: "chat", left: state.left, right: true });
+    },
+    [pushPanelItem],
+  );
+  const openPerson = useCallback(
+    (id: string) => openInPanel({ key: `person:${id}`, type: "person", id }),
+    [openInPanel],
+  );
+  const openMessageInPanel = useCallback(
+    (m: ChatMessage) =>
+      openInPanel({
+        key: `message:${m.id}`,
+        type: "message",
+        id: m.id,
+        channelId: m.channelId,
+        authorId: m.authorId,
+      }),
+    [openInPanel],
+  );
+  const details = useConversationDetails(
+    runtime?.chat ?? null,
+    workspaceId,
+    channel?.id ?? null,
+    `${channel?.updatedAt ?? ""}|${member ? `${member.joinedAt}` : "-"}|${detailsStamp(streamWin?.rows)}`,
+  );
+
+  // ── New conversation (⌘N, the bottom bar's +, the left panel's row) ───────
+  const [newOpen, setNewOpen] = useState(false);
+  const canStart = rights.canPost && !snap.paused;
+  useEffect(
+    () =>
+      onCreateNew(() => {
+        if (canStart) setNewOpen(true);
+      }),
+    [canStart],
+  );
 
   // ── keyboard ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -409,12 +491,14 @@ export function ChatScreen({
   const left = (
     <ChatSidebar
       model={model}
-      activeId={conversationId}
+      activeId={browsing ? null : conversationId}
       personOf={personOf}
       online={online}
       collapsed={collapsed}
       onToggleSection={toggleSection}
       onOpen={(id) => onOpen(id)}
+      onNewConversation={canStart ? () => setNewOpen(true) : undefined}
+      onBrowse={onBrowse}
       onOpenCatchup={() => {
         // Catch up's own view is CV-11's: until then, the first conversation waiting for you.
         const all = [...model.pinned, ...model.channels, ...model.dms];
@@ -425,7 +509,30 @@ export function ChatScreen({
   );
 
   let center: React.ReactNode;
-  if (!channel && conversationId && snap.fromDevice) {
+  if (browsing) {
+    center = (
+      <BrowseChannels
+        chat={runtime?.chat ?? null}
+        channels={snap.channels}
+        mine={snap.mine}
+        canJoin={!snap.paused}
+        onNewChannel={
+          canStart && (rights.createPublic || rights.createPrivate)
+            ? () => setNewOpen(true)
+            : undefined
+        }
+        onOpen={(id) => onOpen(id)}
+        onJoin={async (id) => {
+          try {
+            await store?.join(id);
+            onOpen(id);
+          } catch (err) {
+            toast(errorText(err, "Couldn't join the channel."));
+          }
+        }}
+      />
+    );
+  } else if (!channel && conversationId && snap.fromDevice) {
     // The device copy may not hold a newer conversation yet: wait for the server.
     center = (
       <div className="grid h-full place-items-center text-muted-foreground">
@@ -467,7 +574,9 @@ export function ChatScreen({
       .filter((t) => t.channelId === channel.id && t.parentId === null && t.userId !== selfId)
       .map((t) => personOf(t.userId)?.name ?? "Someone");
     const peopleCount =
-      channel.kind === "dm" ? others.length + 1 : channel.isDefault ? members.length || null : null;
+      channel.kind === "dm"
+        ? others.length + 1
+        : (details.members?.length ?? (channel.isDefault ? members.length || null : null));
     center = (
       <div className="flex h-full min-h-0 flex-col" data-conversation={channel.id}>
         <ConversationToolbar
@@ -583,9 +692,18 @@ export function ChatScreen({
           onOpenChain={(m) => onOpen(m.channelId, { chainId: m.parentId ?? m.id })}
           onRetry={(m) => store?.retry(m.id)}
           onDiscard={(m) => store?.discard(m.id)}
-          onPersonClick={(id) => {
-            if (id !== selfId && rights.canPost) openDmWith([id]);
-          }}
+          onPersonClick={openPerson}
+          personPreview={(id) => (
+            <PersonCard
+              compact
+              userId={id}
+              person={personOf(id)}
+              self={id === selfId}
+              online={id === selfId || online(id)}
+              canMessage={canStart}
+              onMessage={(uid) => openDmWith([uid])}
+            />
+          )}
           onReturnToComposer={returnToComposer}
         />
         <div data-chat-composer className="shrink-0 px-3 pb-3">
@@ -660,5 +778,131 @@ export function ChatScreen({
     );
   }
 
-  return <FeaturePanelsShell feature="chat" hideRight left={left} flushCenter center={center} />;
+  // ── the right panel ───────────────────────────────────────────────────────
+  const items: PanelItem[] = panelStack.stack.map((entry) => {
+    if (entry.type === "person") {
+      const person = personOf(entry.id);
+      return {
+        key: entry.key,
+        title: person?.name ?? "Former member",
+        icon: User,
+        render: () => (
+          <PersonCard
+            userId={entry.id}
+            person={person}
+            self={entry.id === selfId}
+            online={entry.id === selfId || online(entry.id)}
+            canMessage={canStart}
+            onMessage={(uid) => openDmWith([uid])}
+          />
+        ),
+      };
+    }
+    const author = entry.authorId ? personOf(entry.authorId) : undefined;
+    return {
+      key: entry.key,
+      title: `Message from ${author?.name ?? "Former member"}`,
+      icon: MessageSquareText,
+      open: {
+        label: "Open in conversation",
+        onOpen: () => {
+          panelStack.clear();
+          onOpen(entry.channelId, { messageId: entry.id });
+        },
+      },
+      render: () => (
+        <MessageInContext
+          chat={runtime?.chat ?? null}
+          messageId={entry.id}
+          selfId={selfId}
+          personOf={personOf}
+          onPersonClick={openPerson}
+        />
+      ),
+    };
+  });
+  const right = channel ? (
+    <RightPanel
+      module="chat"
+      views={{
+        details: () => (
+          <DetailsView
+            channel={channel}
+            member={member ?? null}
+            selfId={selfId}
+            personOf={personOf}
+            online={online}
+            members={details.members}
+            pinned={details.pinned}
+            history={details.history}
+            canArchive={channel.kind === "channel" && canManage && !snap.paused}
+            onNotify={(notifyLevel) =>
+              guarded(
+                () => store?.setPrefs(channel.id, { notifyLevel }) ?? Promise.resolve(),
+                "Couldn't save that setting.",
+              )
+            }
+            onPinToSidebar={(starred) =>
+              guarded(
+                () => store?.setPrefs(channel.id, { starred }) ?? Promise.resolve(),
+                "Couldn't pin it.",
+              )
+            }
+            onArchive={(archived) =>
+              guarded(
+                () => store?.archiveChannel(channel.id, archived) ?? Promise.resolve(),
+                "Couldn't archive the channel.",
+              )
+            }
+            onLeave={() =>
+              guarded(async () => {
+                await store?.leave(channel.id);
+                onOpen(null, { replace: true });
+              }, "Couldn't leave the channel.")
+            }
+            onOpenPerson={openPerson}
+            onOpenMessage={openMessageInPanel}
+          />
+        ),
+      }}
+      activeId={panelView}
+      onChange={setPanelView}
+      items={items}
+      onBack={panelStack.back}
+      onClearItems={panelStack.clear}
+    />
+  ) : undefined;
+
+  return (
+    <>
+      <FeaturePanelsShell
+        feature="chat"
+        hideRight={!right}
+        left={left}
+        flushCenter
+        center={center}
+        right={right}
+      />
+      <NewConversationDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        selfId={selfId}
+        people={people}
+        canCreatePublic={rights.createPublic}
+        canCreatePrivate={rights.createPrivate}
+        onCreateChannel={async (input) => {
+          if (!store) return;
+          const created = await store.createChannel(input);
+          onOpen(created.id);
+        }}
+        onOpenDm={async (userIds) => {
+          if (!store) return;
+          const dm = await store.openDm(userIds);
+          onOpen(dm.id);
+        }}
+        onCaptureNote={() => dispatchOpenCapture({ type: "note" })}
+        onBrowse={() => onBrowse?.()}
+      />
+    </>
+  );
 }

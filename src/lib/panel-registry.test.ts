@@ -26,13 +26,13 @@ describe("the registered views", () => {
     expect(ids("email")).toEqual(["contact", "detail", "reader", "task"]);
     expect(ids("notes")).toEqual(["comments", "detail", "outline"]);
     expect(ids("contacts")).toEqual(["notes"]);
-    // Chat is registered (CV-8a); its views arrive with CV-8b.
-    expect(ids("chat")).toEqual([]);
+    // Chat (CV-8b): Details now; Reply chains and Files render with CV-12 and CV-9.
+    expect(ids("chat")).toEqual(["chains", "details", "files"]);
   });
 
   it("keeps each module's list short, unique and labelled", () => {
     for (const [module, views] of Object.entries(PANEL_VIEWS)) {
-      if (module !== "chat") expect(views.length, module).toBeGreaterThan(0);
+      expect(views.length, module).toBeGreaterThan(0);
       expect(views.length, module).toBeLessThanOrEqual(MAX_PANEL_VIEWS);
       expect(new Set(views.map((v) => v.id)).size, module).toBe(views.length);
       for (const view of views) {
@@ -44,6 +44,12 @@ describe("the registered views", () => {
 
   it("calls Tasks' first view Details", () => {
     expect(panelViewsFor("tasks")[0]).toMatchObject({ id: "details", label: "Details" });
+  });
+
+  it("gives Chat Details · Reply chains · Files on ⌥1–3, Details alone until the others render", () => {
+    expect(panelViewsFor("chat").map((v) => v.label)).toEqual(["Details", "Reply chains", "Files"]);
+    expect(panelViewsFor("chat").every((v) => v.group === "about")).toBe(true);
+    expect(panelViewsFor("chat", (id) => id === "details").map((v) => v.id)).toEqual(["details"]);
   });
 
   it("keeps the keymap's ⌥3 In flight · ⌥4 No date in Tasks (TV-F8)", () => {
