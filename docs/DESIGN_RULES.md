@@ -16,7 +16,7 @@ A control "rung" (sm / md / lg) is a **fixed bundle**, so any two controls on th
 Put control rows in `Toolbar`; keep every child on one rung. Bind a control's SVG default to the rung — don't hardcode `size-4`.
 
 ## R2 — Radius scales with size/role  [lint+review]
-Radius grows with element size: `--radius-sm` < `--radius`/`--radius-md` < `--radius-lg` < `--radius-xl` (the `sharp`/`soft`/`round` variant sets all of them; `soft` = 4 / 8 / 12 / 16). **Role map:** buttons & inputs → `rounded-md`; cards & panels → `rounded-lg`; dialogs → `rounded-xl`; avatars, pills, status dots → `rounded-full`. Never `rounded-[Npx]`. *(lint catches arbitrary radius; the role map is review.)*
+Radius grows with element size: `--radius-sm` < `--radius`/`--radius-md` < `--radius-lg` < `--radius-xl` (the `sharp`/`soft`/`round` variant sets all of them; `soft` = 4 / 8 / 12 / 16). **Role map:** buttons, inputs and rows → `rounded-md`; cards and panels inside a shell panel → `rounded-lg`; the shell's three panels and dialogs → `rounded-xl`; avatars, pills, status dots → `rounded-full`. Never `rounded-[Npx]`. The shell panels stay `rounded-xl` (16 on `soft`) rather than the prototypes' `--radius-lg`, because with the 8 px frame (R7) a `rounded-md` row sits concentric in them (16 − 8 = 8, R3) on every radius setting (Maciej, 2026-10-15, MOD-121). *(lint catches arbitrary radius; the role map is review.)*
 
 ## R3 — Concentric inner radius  [review]
 A rounded child nested in a rounded parent uses `inner = max(outer − padding, 0)`, snapped to the nearest scale step, so the curves read as concentric, not parallel. Applies to widget cards in panels, notification cards in sheets, chip rows in cards, graph nodes in rail cards.
@@ -48,6 +48,12 @@ Quiet and quick, **no blur** (tasks-v3 call 81, SH-1, 2026-10-10; blur may retur
 
 ## R7 — Density is per-instance dimensions, not the spacing scale  [review]
 `data-density` (comfortable / compact / dense) swaps `--row-h`, `--ctrl-h`, `--pad-*`, and the icon ladder — three steps; the dense end ≈ Linear/Notion chrome. Primitives consume these via `height: var(--ctrl-h)` etc., **not** a literal `h-9` (which bypasses density). Density is also the **type-size axis** (`data-text-size` retired). Spacing utilities (`p-4`, `gap-2`) do **not** change with density.
+
+**Density never moves the panel frame** (Maciej, 2026-10-15, MOD-121): it changes row and control heights, icons and the vertical rhythm, never a panel's padding, insets or radii. The frame is three tokens in tokens.css §10, used by `FeaturePanelsShell` and anything that lines up with it:
+- `--panel-pad` (8): a panel's edge → any fill that touches it (a nav row, the right panel's "Details ▾" chip, a back arrow). 8 = `rounded-xl` − `rounded-md`, so the fill is concentric with the corner (R3). The side panels are padded by it.
+- `--panel-inset` (16): a panel's edge → its text column, `--panel-pad` plus a row's own 8. The centre's sides and foot are padded by it; the right panel's body steps in 4 and a view's scroll box another 4, so its text sits on the same column.
+- `--panel-title-top` (derived, 12 / 10 / 8): the centre's top, so its 28 px title line centres on the side panels' first `--row-h` row. The right panel's title row is a row tall (`--row-h`) for the same line.
+- A full-bleed child of a panel (the Timeline's canvas, the mindmap) cancels exactly these tokens (`-mx-(--panel-inset)`), never `--pad-x` or a literal `-m-4`. `--pad-*` stay for cards and controls inside panels. The bottom bar's side padding is 16, the panels' edge line; the top bar keeps 20.
 
 ## R8 — Casing  [review]
 **Sentence case** everywhere ("New task", "Mark done", "Add description"). Standalone status words and proper nouns stay capitalized (Done, Today, Inbox, Skip, CRM). Counts read like "2 / 2 Done".

@@ -2,6 +2,21 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-15 · Tasks in the one panel frame (dogfood call #28, MOD-121)
+
+Screen-only, no migration. The frame itself is a shell decision: [design-system.md](design-system.md) (2026-10-15, one panel frame). Frames matched: [structure.html](../../.design/tasks-v3/prototypes/structure.html) `.rail` (8 px padding), [round-2a](../../.design/tasks-v3/prototypes/round-2a.html) / [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) `.bbar` (16) and `.topbar` (20); the 16 px corner is the call's, not the prototypes' 12.
+
+- **Call 28 (MOD-121) · What it means in Tasks** → `right-panel.tsx`, `task-timeline-view.tsx`, `task-list-view.tsx`; spec §9, §19
+  - Who: Maciej, 2026-10-15, dogfood call #28.
+  - Decision: "Details ▾" (and "Project ▾", "4 tasks ▾") is a row tall with its fill where the selected Inbox row's is, its text on the same 16 px column as the details below it. The centre's title line centres on the rail's first row at every density. The Timeline's canvas still reaches the centre's edges (it now cancels `--panel-inset`).
+  - Why: the chip was pulled 10 px into a padding that shrank with density, so it touched the border at Compact and was clipped at Dense.
+  - Rejected: a control-height chip (32 / 30 / 26: its fill wouldn't match the Inbox row's, and the first lines wouldn't share a centre).
+- **The List's focus on load (agent's fix, seen in passing in MOD-121's audit)** → `task-list-view.tsx`
+  - Who: the agent, 2026-10-15 (the brief: "the ring only shows for keyboard focus").
+  - Decision: the List still takes focus on load so j/k work at once, but quietly: no ring until a key on the list (⌘/⌃/⌥ shortcuts aside) or until focus leaves and comes back.
+  - Why: a browser counts a script's focus on a fresh load as keyboard focus (`:focus-visible`), so a 2 px ring circled the whole list.
+  - Rejected: not focusing on load (j/k would need a click first, or a second page-level key path).
+
 ## 2026-10-15 · The task's details and activity (dogfood calls 9–13: MOD-129, MOD-36, MOD-139, MOD-123, MOD-124, MOD-109)
 
 Screen-only, no migration. Frames matched: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) frame 5 (the panel's feed and its comment box) and frame 1 (Bulk's title row), [round-1c](../../.design/tasks-v3/prototypes/round-1c.html) frame 3 (the description's fold) and its docked chat composer (`.composer2`) for the pinned box.

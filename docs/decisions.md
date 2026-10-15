@@ -227,6 +227,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-15 · Tasks in the one panel frame (Maciej, 2026-10-15, dogfood call #28, MOD-121) · "Details ▾" is a row tall, its fill where the Inbox row's is, its text on the details' column; the List's focus on load no longer rings the list (agent's fix) · the chip crossed the panel's border at Dense · rejected: a control-height chip, not focusing on load → decisions/tasks.md call 28
 - 2026-10-15 · The activity reads like a thread (Maciej, 2026-10-15, dogfood call #9, MOD-129) · no "Created by · Updated" line, oldest first, the panel's comment box pinned under its body (ending the activity on the full page), the latest five changes shown after the last comment · the footer repeated the log and the box drifted out of reach · rejected: newest first with the box on top → decisions/tasks.md call 9
 - 2026-10-15 · A long description folds at about eight lines (Maciej, 2026-10-15, dogfood call #10, MOD-36) · in the panel `8.5lh` then "Show more" / "Show less", the full page always whole, never for short or empty text · it pushed the properties and activity far down · rejected: a fixed 192 px → decisions/tasks.md call 10
 - 2026-10-15 · "Recently", not "Lately", in the project overview (Maciej, 2026-10-15, dogfood call #11, MOD-139) · the plainer word · rejected: "Lately" → decisions/tasks.md call 11
@@ -315,6 +316,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-15 · One panel frame, fixed across densities (Maciej, 2026-10-15, dogfood call #28, MOD-121) · `--panel-pad` 8 to a fill at a panel's edge, `--panel-inset` 16 to the text column, the centre's top derived so every panel's first line shares a centre; the right panel's title row and chip are a row tall; bottom bar 16, top bar 20; panels stay `rounded-xl` (R2 amended) · the inset scaled with density while the radii didn't, so fills drifted off the corner and the chip crossed the border · rejected: a 12 px corner, density-scaled padding → decisions/design-system.md
 - 2026-10-15 · Tags are dot chips (MOD-97, option C): a neutral pill, a 6 px dot in the tag's hue, the name, no "#"; Standard rows and cards count tags with a tag icon + number, Detailed rows and cards show the chips.
 - 2026-10-10 · The running Focus timer (now with pause) and a Help menu sit in the top bar; the bottom bar's centre is Search · Quick capture · New.
 - 2026-10-08 · DS-3 landed: NavRow (count ⇄ ⋯ in one slot, one menu for ⋯ and right-click) and MetaCount; the Tasks rail runs on NavRow and hands focus back to itself when a row dialog closes.
