@@ -1155,16 +1155,16 @@ export class ChatStore {
 
   // ── Opening conversations ─────────────────────────────────────────────────
 
-  /**
-   * Open a conversation: the device's newest page paints at once, then the
-   * server's newest page lands. Already open this session: nothing to read
-   * (Realtime and the gap fill keep it current).
-   */
   /** The screen went away: the next open of any conversation is a return. */
   close(): void {
     this.openId = null;
   }
 
+  /**
+   * Open a conversation: the device's newest page paints at once, then the
+   * server's newest page lands. Already open this session: nothing to read
+   * (Realtime and the gap fill keep it current).
+   */
   async open(channelId: string): Promise<void> {
     const returning = this.openId !== channelId;
     this.openId = channelId;

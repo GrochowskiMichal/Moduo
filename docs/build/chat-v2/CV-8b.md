@@ -90,3 +90,5 @@ Screens compared with round 5 (1440 × 900): Details vs frame 4 (member), the di
 ## Review (validator, round 1)
 
 One MAJOR fixed (Details re-read on every message: the refresh key used the channel's `updated_at`). MINORs fixed: Archive on General, `memberCounts` truncation at the API's row cap, the pill on returning from another module, "Message from Former member" for app messages, the viewer test's empty Archive check. MINORs left: the author name in the stream isn't a keyboard stop (`tabIndex -1`, like the row's other mouse affordances; the card is reachable from Details' People) and the New conversation people picker has no combobox semantics or arrow keys (↵ adds the first match; Tab reaches the suggestions) — a kit people-picker is the better fix, for CV-15's add-people. NITs left: History reads the newest 50 ("Show all 50" can hide older lines); a failed read shows the empty line rather than an error; sections carry `aria-label` beside their heading.
+
+Round 2 (delta): no BLOCKER or MAJOR; the re-read storm is resolved. Its one NIT (a doc comment out of place in `store.ts`) is fixed.
