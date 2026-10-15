@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   DEV,
   devWorkspace,
+  removeRun,
   rest,
   rpc,
   runTag,
@@ -36,6 +37,15 @@ test.beforeAll(async () => {
   tag = runTag();
 });
 
+/** The projects this run made, soft-deleted at the end (with their tasks and the
+ *  Inbox ones tagged with this run) so the shared dev workspace stays under
+ *  the app's 500-project first-load read. */
+const created: string[] = [];
+
+test.afterAll(async () => {
+  await removeRun(ws.id, tag, created);
+});
+
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -59,6 +69,7 @@ test("the overview orients a newcomer, edits the description, and asks before Do
       description: "Build something with the API.\nJudging on Sunday.",
     },
   });
+  created.push(project.id);
   const done = await createTask(project.id, `Read the docs ${tag}`);
   await createTask(project.id, `Pick a problem ${tag}`);
   await rpc(dev, "tasks_op_set_status", {

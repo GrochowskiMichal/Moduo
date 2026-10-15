@@ -4,6 +4,7 @@ import {
   DEV,
   devWorkspace,
   endFocusRuns,
+  removeRun,
   rest,
   rpc,
   runTag,
@@ -39,7 +40,22 @@ test.beforeAll(async () => {
 // No session left over from another test, and none left for the next one:
 // the card starts from Up next.
 test.beforeEach(() => endFocusRuns(dev.user.id));
-test.afterAll(() => endFocusRuns(dev.user.id));
+
+/** The workspaces `freshPlace` made, soft-deleted at the end with the Inbox
+ *  tasks tagged with this run, so the dev's workspace switcher and Inbox don't
+ *  grow with every run. */
+const places: string[] = [];
+
+test.afterAll(async () => {
+  await endFocusRuns(dev.user.id);
+  if (places.length > 0) {
+    await rest("service", `workspaces?id=in.(${places.join(",")})&deleted_at=is.null`, {
+      method: "PATCH",
+      body: { deleted_at: new Date().toISOString() },
+    });
+  }
+  await removeRun(ws.id, tag, []);
+});
 
 async function createTask(fields: {
   title: string;
@@ -159,6 +175,7 @@ async function freshPlace(name: string): Promise<Place> {
     method: "POST",
     body: { owner_id: dev.user.id, name },
   });
+  places.push(w.id);
   const bucket = async (bucketName: string, isSystem: boolean) => {
     const [b] = await rest<Array<{ id: string }>>("service", "buckets", {
       method: "POST",

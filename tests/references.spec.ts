@@ -4,6 +4,7 @@ import {
   DEV,
   devWorkspace,
   ensureTeammate,
+  removeRun,
   rest,
   runTag,
   type Session,
@@ -45,6 +46,15 @@ test.beforeAll(async () => {
   taskKey = row.task_key;
 });
 
+/** Projects this run made; soft-deleted at the end (with their tasks and the
+ *  Inbox ones tagged with this run) so the shared dev workspace stays under
+ *  the app's 500-project first-load read. */
+const created: string[] = [];
+
+test.afterAll(async () => {
+  await removeRun(ws.id, tag, created);
+});
+
 async function createTask(
   as: Session,
   fields: { title: string; bucketId: string; description?: string },
@@ -72,6 +82,7 @@ async function createProject(as: Session, name: string): Promise<{ id: string }>
     method: "POST",
     body: { workspace_id: ws.id, owner_id: as.user.id, name, position: `z${tag}` },
   });
+  created.push(row.id);
   return row;
 }
 
