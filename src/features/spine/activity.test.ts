@@ -131,6 +131,23 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("comments.restore"))).toBe("brought back a comment");
   });
 
+  it("renders a conversation's own changes, naming no one (CV-2b)", () => {
+    expect(spineActivityLine(entry("chat.channel_create", { is_private: false }))).toBe(
+      "created a channel",
+    );
+    expect(spineActivityLine(entry("chat.channel_rename"))).toBe("renamed this channel");
+    expect(spineActivityLine(entry("chat.channel_topic"))).toBe("changed the topic");
+    expect(spineActivityLine(entry("chat.join"))).toBe("joined this channel");
+    expect(spineActivityLine(entry("chat.leave", { manager_id: "u1" }))).toBe("left this channel");
+    expect(spineActivityLine(entry("chat.member_add", { user_ids: ["u1"] }))).toBe("added someone");
+    expect(spineActivityLine(entry("chat.member_add", { user_ids: ["u1", "u2"] }))).toBe(
+      "added 2 people",
+    );
+    expect(spineActivityLine(entry("chat.member_remove", { user_id: "u1" }))).toBe(
+      "removed someone",
+    );
+  });
+
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(spineActivityLine(entry("links.future_op"))).toBe("links.future_op");
   });

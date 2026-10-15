@@ -248,9 +248,10 @@ AS $function$
                           AND 'chat.view' = ANY (wm.perms))))
 $function$;
 
--- Every conversation of a workspace a person can read now (chat_can_read_channel,
--- set-based): live, and public or theirs (not left).
-CREATE OR REPLACE FUNCTION public.chat__readable(p_workspace_id uuid, p_user uuid)
+-- Every conversation of a workspace a person can read now: chat_can_read_channel
+-- set-based (the foundation's rule, word for word), for chat_sync_ids,
+-- chat_people and CV-19's search.
+CREATE OR REPLACE FUNCTION public.chat__readable_channel_ids(p_workspace_id uuid, p_user uuid)
  RETURNS SETOF uuid
  LANGUAGE sql
  STABLE
@@ -308,6 +309,16 @@ DECLARE
   v_bypass text;
 BEGIN
   PERFORM public.chat_op__guard(p_workspace_id);
+  -- Nothing to do (the usual open): General is there and nobody lacks a row.
+  SELECT * INTO v_general FROM public.chat_channels
+   WHERE workspace_id = p_workspace_id AND is_default;
+  IF v_general.id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.workspace_members wm
+                      WHERE wm.workspace_id = p_workspace_id
+                        AND NOT EXISTS (SELECT 1 FROM public.chat_members mb
+                                         WHERE mb.channel_id = v_general.id AND mb.user_id = wm.user_id)) THEN
+    RETURN v_general;
+  END IF;
   -- One bootstrap per workspace at a time.
   PERFORM pg_advisory_xact_lock(hashtextextended('chat_op_bootstrap:' || p_workspace_id::text, 0));
 
@@ -447,8 +458,10 @@ END;
 $function$;
 
 -- chat_op_open_dm(ws, user_ids): the one live direct message of 2–9 people
--- (the opener included); the opener can post; the opener is back in it if
--- they had left. Registered without a label.
+-- (the opener included). One that exists is the opener's to open, and they are
+-- back in it if they had left (a viewer too, and when someone in it has since
+-- left the workspace); starting one needs a role that posts and everyone in
+-- the workspace. Registered without a label.
 CREATE OR REPLACE FUNCTION public.chat_op_open_dm(p_workspace_id uuid, p_user_ids uuid[])
  RETURNS chat_channels
  LANGUAGE plpgsql
@@ -463,9 +476,6 @@ DECLARE
   v_uid uuid;
 BEGIN
   PERFORM public.chat_op__guard(p_workspace_id);
-  IF NOT public.chat_has_cap(p_workspace_id, v_me, 'post') THEN
-    RAISE EXCEPTION 'Your role can''t start direct messages.' USING ERRCODE = '42501';
-  END IF;
   SELECT array_agg(DISTINCT u ORDER BY u) INTO v_ids
     FROM unnest(coalesce(p_user_ids, '{}'::uuid[]) || v_me) u
    WHERE u IS NOT NULL;
@@ -475,26 +485,35 @@ BEGIN
   IF cardinality(v_ids) > 9 THEN
     RAISE EXCEPTION 'A direct message can include up to 9 people.' USING ERRCODE = '22023';
   END IF;
+  v_key := array_to_string(v_ids, ',');
+
+  -- One already there (its set includes the opener).
+  SELECT * INTO v_channel FROM public.chat_channels
+   WHERE workspace_id = p_workspace_id AND kind = 'dm' AND dm_key = v_key AND deleted_at IS NULL;
+  IF v_channel.id IS NOT NULL THEN
+    PERFORM public.chat__enter(v_channel.id, p_workspace_id, v_me, 'all');
+    RETURN v_channel;
+  END IF;
+
+  -- Starting one.
+  IF NOT public.chat_has_cap(p_workspace_id, v_me, 'post') THEN
+    RAISE EXCEPTION 'Your role can''t start direct messages.' USING ERRCODE = '42501';
+  END IF;
   FOREACH v_uid IN ARRAY v_ids LOOP
     IF NOT public.chat_is_workspace_member(p_workspace_id, v_uid) THEN
       RAISE EXCEPTION 'Everyone in a direct message must be in this workspace.' USING ERRCODE = '22023';
     END IF;
   END LOOP;
-  v_key := array_to_string(v_ids, ',');
-
-  SELECT * INTO v_channel FROM public.chat_channels
-   WHERE workspace_id = p_workspace_id AND kind = 'dm' AND dm_key = v_key AND deleted_at IS NULL;
+  INSERT INTO public.chat_channels (workspace_id, kind, is_private, dm_key, created_by)
+  VALUES (p_workspace_id, 'dm', true, v_key, v_me)
+  ON CONFLICT DO NOTHING
+  RETURNING * INTO v_channel;
   IF v_channel.id IS NULL THEN
-    INSERT INTO public.chat_channels (workspace_id, kind, is_private, dm_key, created_by)
-    VALUES (p_workspace_id, 'dm', true, v_key, v_me)
-    ON CONFLICT DO NOTHING
-    RETURNING * INTO v_channel;
-    IF v_channel.id IS NULL THEN
-      SELECT * INTO v_channel FROM public.chat_channels
-       WHERE workspace_id = p_workspace_id AND kind = 'dm' AND dm_key = v_key AND deleted_at IS NULL;
-    END IF;
-    PERFORM public.entities_op_upsert(p_workspace_id, 'chat_channel', v_channel.id, '', NULL);
+    -- Opened at the same moment by someone else in it.
+    SELECT * INTO v_channel FROM public.chat_channels
+     WHERE workspace_id = p_workspace_id AND kind = 'dm' AND dm_key = v_key AND deleted_at IS NULL;
   END IF;
+  PERFORM public.entities_op_upsert(p_workspace_id, 'chat_channel', v_channel.id, '', NULL);
 
   -- Everyone is in it; someone who left stays out unless they open it again.
   FOREACH v_uid IN ARRAY v_ids LOOP
@@ -1012,7 +1031,7 @@ AS $function$
   WITH t AS (
     SELECT clock_timestamp() AS at, auth.uid() AS me
   ), readable AS (
-    SELECT r.id FROM t, public.chat__readable(p_workspace_id, t.me) AS r(id)
+    SELECT r.id FROM t, public.chat__readable_channel_ids(p_workspace_id, t.me) AS r(id)
   ), moved AS (
     SELECT DISTINCT x.mid, e.channel_id AS source
       FROM public.chat_messages e
@@ -1053,7 +1072,7 @@ AS $function$
   WITH me AS (
     SELECT auth.uid() AS id
   ), readable AS (
-    SELECT r.id FROM me, public.chat__readable(p_workspace_id, me.id) AS r(id)
+    SELECT r.id FROM me, public.chat__readable_channel_ids(p_workspace_id, me.id) AS r(id)
   ), people AS (
     SELECT mb.user_id FROM public.chat_members mb JOIN readable r ON r.id = mb.channel_id
      WHERE mb.left_at IS NULL
@@ -1086,7 +1105,7 @@ BEGIN
     'chat__enter(uuid, uuid, uuid, text)',
     'chat__hand_over(uuid, uuid)',
     'chat__reads_workspace(uuid, uuid)',
-    'chat__readable(uuid, uuid)'
+    'chat__readable_channel_ids(uuid, uuid)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);

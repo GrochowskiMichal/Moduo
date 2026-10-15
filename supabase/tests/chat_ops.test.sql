@@ -1282,6 +1282,11 @@ BEGIN
                     WHERE c.workspace_id = %L AND c.kind = 'dm' AND position(%L IN c.dm_key) > 0 AND position(%L IN c.dm_key) > 0$q$,
                     test.id('W'), test.id('V'), test.id('A'))) = '1',
     'DM: a viewer receives one and reads it', v);
+  PERFORM test.ok(test.value_as('V', format($q$SELECT (public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])).id::text$q$,
+                    test.id('W'), test.id('A')))
+                  = (SELECT id::text FROM public.chat_channels WHERE workspace_id = test.id('W') AND kind = 'dm' AND deleted_at IS NULL
+                       AND dm_key = (SELECT string_agg(u::text, ',' ORDER BY u) FROM unnest(ARRAY[test.id('A'), test.id('V')]) u)),
+    'DM: the viewer opens the one they received (only starting one needs a role that posts)');
   PERFORM test.ok(test.as_user('X', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])$q$, test.id('W'), test.id('A')))
                     = '42501 You don''t have access to this workspace.'
                   AND test.as_key('K', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])$q$, test.id('W'), test.id('B')))
@@ -1372,6 +1377,13 @@ BEGIN
                   AND test.value_as('A', format($q$SELECT count(*)::text FROM public.chat_sync_ids(%L)
                                                   WHERE kind IN ('conversation', 'member') AND id = %L$q$, test.id('W'), v_de)) = '2',
     'former member: the direct message with E stays readable and in A''s sidebar (AC6.5)');
+  PERFORM test.conv_op('A', 'chat_op_leave', v_de);
+  PERFORM test.ok(test.value_as('A', format($q$SELECT (public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])).id::text$q$,
+                    test.id('W'), test.id('E'))) = v_de::text
+                  AND (test.member(v_de, 'A')).left_at IS NULL
+                  AND test.as_user('A', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L, %L]::uuid[])$q$,
+                    test.id('W'), test.id('E'), test.id('B'))) = '22023 Everyone in a direct message must be in this workspace.',
+    'former member: A, who left the DM with E, opens it again; a new one with E can''t be started');
   PERFORM test.ok(test.value_as('E', format('SELECT count(*)::text FROM public.chat_people(%L)', test.id('W'))) = '0'
                   AND test.value_as('E', format($q$SELECT string_agg(kind, ',') FROM public.chat_sync_ids(%L)$q$, test.id('W'))) = 'checked',
     'former member: E, out of the workspace, gets no people and no conversations');
@@ -1402,6 +1414,23 @@ BEGIN
   PERFORM test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_sync_ids(%L)$q$, test.id('W'))) LIKE '42501 %'
                   AND test.as_key('K', format($q$SELECT * FROM public.chat_people(%L)$q$, test.id('W'))) LIKE '42501 %',
     'reads: a key gets neither the access check nor the people');
+END;
+$$;
+
+-- ── The set-based read rule says what the per-row one says ─────────────────
+DO $$
+DECLARE
+  v_bad text;
+BEGIN
+  SELECT string_agg(p.n || ':' || c.name, ', ') INTO v_bad
+    FROM public.chat_channels c
+   CROSS JOIN unnest(ARRAY['O', 'D', 'A', 'B', 'C', 'V', 'E', 'F', 'X']) AS p(n)
+   WHERE c.workspace_id = test.id('W')
+     AND public.chat__can_read_channel_as(c.id, test.id(p.n))
+         IS DISTINCT FROM (c.id IN (SELECT r FROM public.chat__readable_channel_ids(test.id('W'), test.id(p.n)) r));
+  PERFORM test.ok(v_bad IS NULL AND (SELECT count(*) FROM public.chat_channels WHERE workspace_id = test.id('W')) > 20,
+    'read rule: chat__readable_channel_ids agrees with chat__can_read_channel_as for every conversation and person (deleted, private, left, removed, former)',
+    v_bad);
 END;
 $$;
 
@@ -1443,7 +1472,7 @@ BEGIN
                       'chat__is_manager(public.chat_channels, uuid)',
                       'chat__can_manage(public.chat_channels, uuid)', 'chat__can_post(public.chat_channels, uuid)',
                       'chat__enter(uuid, uuid, uuid, text)', 'chat__hand_over(uuid, uuid)',
-                      'chat__reads_workspace(uuid, uuid)', 'chat__readable(uuid, uuid)',
+                      'chat__reads_workspace(uuid, uuid)', 'chat__readable_channel_ids(uuid, uuid)',
                       'chat__join_general()', 'share_chat_channel_guard()']) AS f
    WHERE has_function_privilege('authenticated', 'public.' || f, 'EXECUTE')
       OR has_function_privilege('anon', 'public.' || f, 'EXECUTE');

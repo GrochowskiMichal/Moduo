@@ -267,6 +267,21 @@ export function spineActivityLine(
       return "archived this channel";
     case "chat.channel_unarchive":
       return "unarchived this channel";
+    // Chat v2 conversation ops (CV-2b): ids only, so the lines name no one.
+    case "chat.channel_rename":
+      return "renamed this channel";
+    case "chat.channel_topic":
+      return "changed the topic";
+    case "chat.join":
+      return "joined this channel";
+    case "chat.leave":
+      return "left this channel";
+    case "chat.member_add": {
+      const n = Array.isArray(p.user_ids) ? p.user_ids.length : 0;
+      return n === 1 ? "added someone" : n > 1 ? `added ${n} people` : "added people";
+    }
+    case "chat.member_remove":
+      return "removed someone";
     default:
       return entry.op;
   }
