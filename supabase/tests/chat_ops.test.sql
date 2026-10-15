@@ -319,6 +319,8 @@ BEGIN
     'delete: the chain counts what''s left');
   v := test.as_user('B', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('r1')));
   PERFORM test.ok(v = 'ok 1' AND test.acts('r1', 'chat.message_delete') = 1, 'delete: twice is once', v);
+  -- Other people's deleted messages on a shared stack are blanked first, so the counts below are this test's.
+  PERFORM public.chat__blank_deleted();
   PERFORM test.ok(public.chat__blank_deleted() = 0 AND (test.msg('r1')).body = 'Friday',
     'blank job: nothing is blanked inside the window');
 
