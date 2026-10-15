@@ -12,6 +12,7 @@ import { describe, expect, it, rs } from "@rstest/core";
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
+import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import { toolAllowed, type KeyContext, type ToolContext } from "./registry.ts";
 
@@ -28,16 +29,32 @@ const A_BEAS = "88888888-8888-4888-8888-888888888888";
 const A_SHARED = "99999999-9999-4999-8999-999999999999";
 const TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-type Filter = { op: "eq" | "neq"; column: string; value: unknown };
+type Filter = { op: "eq" | "neq" | "in" | "notnull"; column: string; value: unknown };
 
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown>) {
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  const updates: Array<{ table: string; values: Row; ids: unknown[] }> = [];
   function from(table: string) {
     const filters: Filter[] = [];
     let window: [number, number] | null = null;
     let cap: number | null = null;
+    let patch: Row | null = null;
+    let counted = false;
+    const orders: Array<{ column: string; ascending: boolean }> = [];
     const query = {
-      select: () => query,
+      select: (_cols?: string, opts?: { count?: string }) => {
+        if (opts?.count) counted = true;
+        return query;
+      },
+      not: (column: string, op: string, value: unknown) => {
+        if (op !== "is" || value !== null) throw new Error(`fake: not(${column}, ${op})`);
+        filters.push({ op: "notnull", column, value });
+        return query;
+      },
+      update: (values: Row) => {
+        patch = values;
+        return query;
+      },
       eq: (column: string, value: unknown) => {
         filters.push({ op: "eq", column, value });
         return query;
@@ -50,8 +67,15 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         filters.push({ op: "neq", column, value });
         return query;
       },
+      in: (column: string, value: unknown[]) => {
+        filters.push({ op: "in", column, value });
+        return query;
+      },
       or: () => query,
-      order: () => query,
+      order: (column: string, opts?: { ascending?: boolean }) => {
+        orders.push({ column, ascending: opts?.ascending !== false });
+        return query;
+      },
       limit: (n: number) => {
         cap = n;
         return query;
@@ -62,18 +86,39 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       },
       maybeSingle: () =>
         query.then((r: { data: Row[] }) => ({ data: r.data[0] ?? null, error: null })),
-      then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
+      then<T>(resolve: (result: { data: Row[]; error: null; count?: number }) => T) {
         const value = (row: Row, column: string): unknown => {
           const json = column.match(/^(\w+)->>(\w+)$/);
           if (json) return ((row[json[1]!] as Row | null) ?? {})[json[2]!] ?? null;
           return row[column] ?? null;
         };
-        let all = (tables[table] ?? []).filter((row) =>
-          filters.every((f) => (f.op === "eq" ? value(row, f.column) === f.value : value(row, f.column) !== f.value)),
-        );
+        const holds = (row: Row, f: Filter) =>
+          f.op === "eq"
+            ? value(row, f.column) === f.value
+            : f.op === "in"
+              ? (f.value as unknown[]).includes(value(row, f.column))
+              : f.op === "notnull"
+                ? value(row, f.column) !== null
+                : value(row, f.column) !== f.value;
+        let all = (tables[table] ?? []).filter((row) => filters.every((f) => holds(row, f)));
+        const total = all.length;
+        if (orders.length) {
+          all = [...all].sort((a, b) => {
+            for (const o of orders) {
+              const x = String(value(a, o.column) ?? "");
+              const y = String(value(b, o.column) ?? "");
+              if (x !== y) return (x < y ? -1 : 1) * (o.ascending ? 1 : -1);
+            }
+            return 0;
+          });
+        }
         if (window) all = all.slice(window[0], window[1] + 1);
         if (cap !== null) all = all.slice(0, cap);
-        return Promise.resolve({ data: all, error: null }).then(resolve);
+        if (patch) {
+          for (const row of all) Object.assign(row, patch);
+          updates.push({ table, values: patch, ids: all.map((r) => r.id) });
+        }
+        return Promise.resolve({ data: all, error: null, ...(counted ? { count: total } : {}) }).then(resolve);
       },
     };
     return query;
@@ -88,7 +133,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       return { data: null, error: { message: (e as Error).message } };
     }
   }
-  return { db: { from, rpc }, rpcCalls };
+  return { db: { from, rpc }, rpcCalls, updates };
 }
 
 const task = (id: string, n: number, extra: Row = {}): Row => ({
@@ -193,10 +238,14 @@ function setup(opts: { rpcs?: Record<string, (args: Row) => unknown>; scopes?: R
   return { ctx, tables, ...fake };
 }
 
+/** A tool call as index.ts makes it: the arguments go through the tool's
+ *  parser first, so a field the parser drops never reaches the handler. */
 function call(name: string, args: Row, ctx: ToolContext): Promise<any> {
   const t = tasksConnectorModule.tools.find((x) => x.name === name);
   if (!t) throw new Error(`${name} is not registered`);
-  return t.handler(args, ctx) as Promise<any>;
+  const parsed = parseToolArgs(name, args);
+  if (!parsed.success) return Promise.reject(new Error(parsed.message));
+  return t.handler(parsed.data, ctx) as Promise<any>;
 }
 
 describe("handles: every task argument takes MOD-142 or a uuid", () => {
@@ -223,6 +272,93 @@ describe("handles: every task argument takes MOD-142 or a uuid", () => {
     expect(got.agent_sessions).toEqual([{ id: "s1", agent: "Claude", state: "working", mine: true }]);
     expect(rpcCalls.find((c) => c.fn === "tasks_agent_sessions")?.args).toEqual({ p_workspace_id: WS, p_task_id: "t-open" });
     expect(got.subtasks).toEqual([]);
+  });
+});
+
+describe("comments in tasks_get (MOD-94): Links: View reads them", () => {
+  const comment = (id: string, at: string, extra: Row = {}): Row => ({
+    id,
+    workspace_id: WS,
+    entity_type: "task",
+    entity_id: "t-open",
+    body: `body ${id}`,
+    created_by: BEA,
+    author_kind: "user",
+    author_label: null,
+    created_at: at,
+    edited_at: null,
+    deleted_at: null,
+    ...extra,
+  });
+  const withLinks = { tasks: "edit", links: "view" };
+
+  function withComments(scopes: Record<string, string> = withLinks) {
+    const s = setup({ scopes });
+    s.tables.comments = [
+      comment("c-2", "2030-01-02T10:00:00Z", { edited_at: "2030-01-02T11:00:00Z" }),
+      comment("c-1", "2030-01-01T10:00:00Z", { created_by: ME, author_kind: "api_key", author_label: "Claude Code" }),
+      comment("c-3", "2030-01-03T10:00:00Z", { created_by: "gone-user" }),
+      comment("c-deleted", "2030-01-04T10:00:00Z", { deleted_at: "2030-01-05T00:00:00Z" }),
+      comment("c-other", "2030-01-04T10:00:00Z", { entity_id: "t-done" }),
+      comment("c-note", "2030-01-04T10:00:00Z", { entity_type: "note" }),
+    ];
+    return s;
+  }
+
+  it("carries the task's live comments, the newest last, with who wrote each", async () => {
+    const { ctx } = withComments();
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.comments).toEqual([
+      { id: "c-1", author: "Claude Code (app)", at: "2030-01-01T10:00:00Z", body: "body c-1" },
+      { id: "c-2", author: "Bea", at: "2030-01-02T10:00:00Z", edited: true, body: "body c-2" },
+      { id: "c-3", author: "Former member", at: "2030-01-03T10:00:00Z", body: "body c-3" },
+    ]);
+    expect(got).not.toHaveProperty("earlier_comments");
+  });
+
+  it("keeps the latest 20 and counts the earlier ones", async () => {
+    const { ctx, tables } = setup({ scopes: withLinks });
+    tables.comments = Array.from({ length: 23 }, (_, i) =>
+      comment(`c-${String(i).padStart(2, "0")}`, `2030-01-01T10:${String(i).padStart(2, "0")}:00Z`),
+    );
+    const got = await call("tasks_get", { task_id: "t-open" }, ctx);
+    expect(got.comments).toHaveLength(20);
+    expect(got.comments[0].id).toBe("c-03");
+    expect(got.comments.at(-1).id).toBe("c-22");
+    expect(got.earlier_comments).toBe(3);
+  });
+
+  it("a key without Links reads the task but none of its comments", async () => {
+    const { ctx } = withComments({ tasks: "edit" });
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.handle).toBe("MOD-1");
+    expect(got).not.toHaveProperty("comments");
+    expect(got).not.toHaveProperty("earlier_comments");
+    expect(JSON.stringify(got)).not.toContain("body c-");
+  });
+
+  it("a comment read that fails leaves the comments out, never the task", async () => {
+    const { ctx } = withComments();
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      if (t !== "comments") return from(t);
+      const failing: Row = {};
+      for (const m of ["select", "eq", "is", "order", "limit"]) failing[m] = () => failing;
+      failing.then = (resolve: (r: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { message: "column comments.x does not exist" } }).then(resolve);
+      return failing;
+    };
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.handle).toBe("MOD-1");
+    expect(got).not.toHaveProperty("comments");
+    expect(got).not.toHaveProperty("earlier_comments");
+  });
+
+  it("a task the key's person can't see reads as missing, comments and all", async () => {
+    const { ctx, tables } = withComments();
+    tables.comments!.push(comment("c-secret", "2030-01-01T00:00:00Z", { entity_id: "t-secret" }));
+    await expect(call("tasks_get", { task_id: "t-secret" }, ctx)).rejects.toThrow("Task not found in this workspace.");
   });
 });
 
@@ -301,6 +437,52 @@ describe("reads never show or count what the key's person can't see", () => {
     expect(await ids({ section_id: "s-1" })).toEqual(["t-team"]);
     expect(await ids({ area_id: A_BEAS })).toEqual([]);
     expect((await ids({ category: "open" })).includes("t-secret")).toBe(false);
+  });
+
+  it("tasks_list answers short rows by default, the full shape on asking (MOD-113)", async () => {
+    const { ctx, tables } = setup();
+    tables.sections = [
+      { id: "s-1", workspace_id: WS, project_id: P_SHARED, name: "Design" },
+      { id: "s-h", workspace_id: WS, project_id: P_HIDDEN, name: "Bea's plans" },
+    ];
+    tables.project_statuses = [{ id: "st-1", workspace_id: WS, project_id: P_SHARED, name: "In review" }];
+    tables.tasks!.find((t) => t.id === "t-team")!.status_id = "st-1";
+    // Shared with me on its own, in a project I can't see: no project or section name.
+    tables.tasks!.push(task("t-alone", 14, { bucket_id: P_HIDDEN, section_id: "s-h" }));
+    const short: Row[] = await call("tasks_list", {}, ctx);
+    const row = (id: string) => short.find((t) => t.id === id)!;
+    expect(row("t-team")).toEqual({
+      handle: "MOD-10",
+      id: "t-team",
+      title: "t-team",
+      status: "todo",
+      status_name: "In review",
+      assignee: "Ada",
+      project: "Launch",
+      section: "Design",
+    });
+    expect(row("t-open")).toMatchObject({ handle: "MOD-1", project: "Launch", tags: ["board"] });
+    expect(row("t-alone")).toEqual({ handle: "MOD-14", id: "t-alone", title: "t-alone", status: "todo", assignee: "Ada" });
+    expect(JSON.stringify(short)).not.toContain("Bea's plans");
+    // One project asked for: its name isn't repeated on every row.
+    const one: Row[] = await call("tasks_list", { project_id: P_SHARED }, ctx);
+    expect(one.some((t) => "project" in t)).toBe(false);
+    // fields: full is the shape tasks_list used to answer.
+    const full: Row[] = await call("tasks_list", { fields: "full" }, ctx);
+    expect(full.find((t) => t.id === "t-team")).toMatchObject({
+      bucket_id: P_SHARED,
+      section_id: "s-1",
+      assignee: { id: ME, name: "Ada" },
+    });
+    await expect(call("tasks_list", { fields: "everything" }, ctx)).rejects.toThrow("fields");
+  });
+
+  it("tasks_list's full rows page by 25 unless asked, the short ones by 100", async () => {
+    const { ctx, tables } = setup();
+    for (let n = 100; n < 160; n += 1) tables.tasks!.push(task(`t-${n}`, n));
+    expect((await call("tasks_list", {}, ctx)).length).toBeGreaterThan(25);
+    expect(await call("tasks_list", { fields: "full" }, ctx)).toHaveLength(25);
+    expect(await call("tasks_list", { fields: "full", limit: 40 }, ctx)).toHaveLength(40);
   });
 
   it("projects_list: the person's Inbox and shared projects, never a hidden one", async () => {
@@ -449,6 +631,127 @@ describe("writes go through the ops, checked before anything is written", () => 
       p_patch: { recurrence: null },
       p_with: { tags_add: ["x"], tags_remove: ["y"] },
     });
+  });
+
+  it("a tag the op makes gets the colour the app would pick, oldest bare tag first (MOD-93)", async () => {
+    const tagRow = (id: string, name: string, color: string | null, at: string): Row => ({
+      id, workspace_id: WS, name, color, created_at: at, deleted_at: null,
+    });
+    const { ctx, tables, updates } = setup({
+      rpcs: {
+        perm_can_tag: () => true,
+        // As tasks_op_tag: a new name becomes a tag with no colour.
+        tasks_op_create_with: (a) => {
+          for (const name of (a.p_with as Row).tags as string[]) {
+            if (!tables.tags!.some((t) => t.name === name)) {
+              tables.tags!.push(tagRow(`tag-${name}`, name, null, "2030-02-01T00:00:00Z"));
+            }
+          }
+          return { action: "created", task: task("t-new", 20, a.p_task as Row) };
+        },
+        tasks_op_update_with: (a) => {
+          for (const name of ((a.p_with as Row).tags_add as string[] | undefined) ?? []) {
+            tables.tags!.push(tagRow(`tag-${name}`, name, null, "2030-03-01T00:00:00Z"));
+          }
+          return [task(a.p_task_id as string, 1)];
+        },
+      },
+    });
+    tables.tags = [
+      tagRow("tag-1", "board", null, "2030-01-01T00:00:00Z"),
+      tagRow("tag-blue", "work", "blue", "2029-01-01T00:00:00Z"),
+      tagRow("tag-gone", "old", null, "2029-01-01T00:00:00Z"),
+    ];
+    tables.tags[2]!.deleted_at = "2029-06-01T00:00:00Z";
+    const colour = (id: string) => tables.tags!.find((t) => t.id === id)?.color;
+
+    await call("tasks_create", { title: "x", tags: ["board", "mcp"] }, ctx);
+    // blue is taken, so the bare tags get green, then amber, in the order they were made.
+    expect(colour("tag-1")).toBe("green");
+    expect(colour("tag-mcp")).toBe("amber");
+    expect(colour("tag-blue")).toBe("blue");
+    expect(colour("tag-gone")).toBeNull();
+
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["idea"] }, ctx);
+    expect(colour("tag-idea")).toBe("red");
+    // Only bare tags are written, one at a time, and never a coloured one.
+    expect(updates.map((u) => [u.ids, u.values])).toEqual([
+      [["tag-1"], { color: "green" }],
+      [["tag-mcp"], { color: "amber" }],
+      [["tag-idea"], { color: "red" }],
+    ]);
+
+    // A call that adds no tags colours nothing.
+    await call("tasks_update", { task_id: "MOD-1", title: "y" }, ctx);
+    expect(updates).toHaveLength(3);
+  });
+
+  it("colours a template's tags too, never over a hue a person just picked, and only for someone who may edit tags (MOD-93)", async () => {
+    const bare = (id: string, at: string): Row => ({
+      id, workspace_id: WS, name: id, color: null, created_at: at, deleted_at: null,
+    });
+    let mayTag = true;
+    const { ctx, tables, updates } = setup({
+      rpcs: {
+        perm_can_tag: () => mayTag,
+        task_templates_op_apply: () => {
+          tables.tags!.push(bare("tag-a", "2030-01-01T00:00:00Z"), bare("tag-b", "2030-01-02T00:00:00Z"));
+          return { tasks: [task("t-open", 1)] };
+        },
+      },
+    });
+    tables.tags = [];
+    // Someone picks teal for tag-a just as the connector colours it.
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      const q = from(t);
+      const update = q.update as (v: Row) => Row;
+      q.update = (v: Row) => {
+        const a = tables.tags!.find((x) => x.id === "tag-a");
+        if (a && !a.color) a.color = "teal";
+        return update(v);
+      };
+      return q;
+    };
+    await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
+    expect(tables.tags!.map((x) => [x.id, x.color])).toEqual([
+      ["tag-a", "teal"],
+      // blue went to nobody (tag-a was taken), so tag-b still gets blue.
+      ["tag-b", "blue"],
+    ]);
+    expect(updates.map((u) => u.ids)).toEqual([[], ["tag-b"]]);
+
+    // Someone who may not edit tags colours nothing.
+    mayTag = false;
+    tables.tags!.push(bare("tag-c", "2030-01-03T00:00:00Z"));
+    await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
+    expect(tables.tags!.find((x) => x.id === "tag-c")?.color).toBeNull();
+  });
+
+  it("with no colourless tag, reads just the (empty) work list, never every tag's hue (MOD-93)", async () => {
+    const { ctx, tables } = setup({
+      rpcs: {
+        perm_can_tag: () => true,
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+      },
+    });
+    tables.tags = [{ id: "tag-1", workspace_id: WS, name: "board", color: "blue", created_at: "2030", deleted_at: null }];
+    let tagReads = 0;
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      if (t === "tags") tagReads += 1;
+      return from(t);
+    };
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["board"] }, ctx);
+    // loadWorkspace's own read (shaping the answer) plus the work list: no second hue read.
+    const shaped = tagReads;
+    tables.tags.push({ id: "tag-2", workspace_id: WS, name: "new", color: null, created_at: "2031", deleted_at: null });
+    tagReads = 0;
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["new"] }, ctx);
+    expect(tagReads).toBe(shaped + 2); // + the hues in use, + the guarded update
+    expect(tables.tags.find((x) => x.id === "tag-2")?.color).toBe("green");
   });
 
   it("tasks_session_status sends only the fields given", async () => {
