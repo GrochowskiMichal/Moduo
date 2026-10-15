@@ -28,8 +28,8 @@ Marked rules are enforced in code; the rest you hold yourself.
 The user is a **product designer, not an engineer**: authoritative on product, UX, edge cases, scope and priorities; not on infrastructure, data models or testing.
 
 - **Plan (`/s1`, read-only):** grill exhaustively on product behavior (50–100 questions up front, each with a recommended answer). **Never ask implementation, infra, data-model or library questions**: research and decide them, and record decision + assumption in the spec. Surface a technical choice only when the user would feel it, in product terms, with a recommendation. End at the Definition-of-Ready gate in [specs/_template.md](./specs/_template.md).
-- **Execute (`/s2`, autonomous):** stay silent between tool calls; report once, opening with a **Status** line, then **Changed · Test this · To finish this block** (+ **❓ Needs you / ⚠ Broke / 🔎 Found, not needed for this block** when they apply) and a **Session** line saying whether it's safe to archive. One block per session; never leave unlanded work only in the worktree. A block is done when `bun run verify` passes **and** the `validator` subagent reports no BLOCKER/MAJOR. The only acceptable mid-run interruption is a hard blocker research can't resolve.
-- **Wrap (`/s3`):** manual test checklist in `docs/testing/<branch-or-sprint>.md` ([template](./docs/testing/TEMPLATE.md)), live-verified first; decisions + gotchas appended; commit, PR, merge; review gates by risk.
+- **Execute (`/s2`, autonomous):** stay silent between tool calls; report once and short: a **Status** line, then **Changed · Test this**, plus **❓ Needs you / ⚠ Broke** only when they apply. One block per session; never leave unlanded work only in the worktree. A block is done when `bun run verify` passes and its acceptance criteria are shown met (the `validator` subagent runs only on Tier 2 paths). The only acceptable mid-run interruption is a hard blocker research can't resolve.
+- **Wrap (`/s3`):** a short "Test this" in the PR body (no separate checklist file); non-obvious decisions + gotchas appended; commit, PR, merge into the personal branch; sync to `develop` in batches, not per block.
 
 ## Models (Anthropic only, Claude Max plan, October 2026)
 
@@ -46,14 +46,13 @@ No other model providers. Pick by role, not "strongest everywhere"; raise effort
 
 On Max, Fable counts against at most half the weekly limit. On Pro it bills usage credits, so Pro users skip the advisor. `xhigh`/`max` only for long infra or migration work where you saw it help. Fast typed decision models (e.g. Jev) are not adopted: the product brief keeps AI MCP-only.
 
-## Review gates
+## Review gates (lean mode: pre-alpha, no external users)
 
-Pick the tier by what the diff touches; details and commands are in the `/s3` skill.
+Pick the tier by what the diff touches; details are in the `/s3` skill. **Re-tighten everything in the "paused" line before the first external alpha/beta.**
 
-- **Tier 0, every block:** `bun run verify` + hooks + Rust LSP diagnostics, then the `validator` subagent and `/code-review high`.
-- **Tier 1, every PR into `develop`:** `/code-review high <PR>` on the PR plus the review checklist in [REVIEW.md](./REVIEW.md).
-- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add a `/claude-security` diff scan before merging. `/code-review ultra` is **paused until the live beta** (designer's call, 2026-10-15): don't ask for it or block on it; re-enable it when beta ships.
-- **Tier 3, promotion to `prod-app`:** the designer's manual checklist pass.
+- **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review`. CI runs once, on PRs into `develop`.
+- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add the `validator` subagent on the diff before merging.
+- **Paused until beta:** `/code-review ultra`, the `/claude-security` diff scan, `/code-review high` on every PR, per-block manual-test checklist files, hand-written next-session prompts, and Tier 3's designer pass. The floor that stays: gitleaks (hook + CI), `guard-git.sh`, `guard-prod-db.sh`, `static-checks` required on `develop`.
 
 ## Product north star (read before designing any module)
 
