@@ -195,14 +195,20 @@ BEGIN
   v := test.as_user('N', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_message', %L, 'spawned-from', 'manual')$q$,
     test.id('W'), test.id('T'), test.mid('p1')));
   PERFORM test.ok(v LIKE '42501 %', 'N can''t link a task to a message it can''t read', v);
+  v := test.as_user('N', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_message', %L, 'spawned-from', 'manual', NULL, NULL, 'Fake title')$q$,
+    test.id('W'), test.id('T'), test.mid('q2')));
+  PERFORM test.ok(v LIKE 'ok %', 'N links T to q2 (it reads Q)', v);
+  PERFORM test.ok((SELECT label FROM public.entities WHERE entity_id = test.mid('q2')) = '',
+    'linking drops the label the caller passed for a message');
   v := test.as_user('N', format($q$SELECT public.entities_op_ensure(%L, 'chat_message', %L, 'Fake title')$q$,
     test.id('W'), test.mid('q2')));
-  PERFORM test.ok(v LIKE 'ok %', 'N registers q2 (it reads Q) through the ensure', v);
-  PERFORM test.ok((SELECT label FROM public.entities WHERE entity_id = test.mid('q2')) = '',
-    'the ensure drops the label the caller passed for a message');
-  v := test.as_user('X', format($q$SELECT public.entities_op_ensure(%L, 'chat_channel', %L, 'Fake')$q$,
-    test.id('W'), test.ref('P')));
-  PERFORM test.ok(v LIKE '42501 %', 'an outsider can''t register a conversation', v);
+  PERFORM test.ok(v LIKE '42501 %', 'the app can''t call the registry''s ensure itself', v);
+  v := test.as_user('X', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_channel', %L, 'references', 'manual', NULL, NULL, 'Fake')$q$,
+    test.id('W'), test.id('T'), test.ref('P')));
+  PERFORM test.ok(v NOT LIKE 'ok %', 'an outsider can''t link a conversation', v);
+  v := test.as_key('K', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_message', %L, 'spawned-from', 'manual')$q$,
+    test.id('W'), test.id('T'), test.mid('q2')));
+  PERFORM test.ok(v NOT LIKE 'ok %', 'an API key can''t link a message', v);
   v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_message', %L, 'spawned-from', 'manual', NULL, NULL, 'Fake')$q$,
     test.id('W'), test.id('T'), test.mid('p1')));
   PERFORM test.ok(v LIKE 'ok %', 'A links T to p1 ("Became a task")', v);
@@ -222,9 +228,61 @@ SELECT test.ok(NOT EXISTS (
      AND p.proname IN ('chat_op_register_message', 'chat_message_refs', 'chat_conversations_for_item')
      AND (pg_get_function_identity_arguments(p.oid) ~ 'user' )),
   'the new reads and op take no user id');
-SELECT test.ok(NOT has_function_privilege('anon', 'public.chat_message_refs(uuid[])', 'execute')
-  AND NOT has_function_privilege('authenticated', 'public.chat__link_mentions(public.chat_messages, uuid)', 'execute')
-  AND NOT has_function_privilege('authenticated', 'public.chat__body_refs(text)', 'execute'),
-  'the helpers are not callable from the app; nothing is open to anon');
+-- Grants: nothing for anon; the app calls only its ops and reads; the helpers
+-- and the registry's ensure are the server's alone.
+CREATE TABLE test.fn_grants (fn text PRIMARY KEY, app boolean NOT NULL);
+INSERT INTO test.fn_grants VALUES
+  ('public.chat_op_send(uuid, uuid, text, uuid)', true),
+  ('public.chat_op_edit(uuid, text)', true),
+  ('public.chat_op_register_message(uuid)', true),
+  ('public.chat_message_refs(uuid[])', true),
+  ('public.chat_conversations_for_item(text, uuid)', true),
+  ('public.chat__body_refs(text)', false),
+  ('public.chat__link_mentions(public.chat_messages, uuid)', false),
+  ('public.entities_op_ensure(uuid, text, uuid, text, text)', false);
+SELECT test.ok(NOT has_function_privilege('anon', g.fn, 'execute'), 'anon can''t run ' || g.fn)
+  FROM test.fn_grants g;
+SELECT test.ok(has_function_privilege('authenticated', g.fn, 'execute') = g.app,
+  CASE WHEN g.app THEN 'the app runs ' ELSE 'the app can''t run ' END || g.fn)
+  FROM test.fn_grants g;
+SELECT test.ok(has_function_privilege('service_role', g.fn, 'execute'), 'the server runs ' || g.fn)
+  FROM test.fn_grants g;
+SELECT test.ok(NOT EXISTS (SELECT 1 FROM test.fn_grants g, aclexplode((SELECT proacl FROM pg_proc WHERE oid = g.fn::regprocedure)) a
+                            WHERE a.grantee = 0),
+  'no function here is open to PUBLIC');
+
+-- ── Ids the caller can't read answer nothing ────────────────────────────────
+-- Another workspace W2 (O2 alone) with a channel and a
+-- message mentioning its own task.
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.person('O2');
+  UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O2');
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W2'), test.id('O2'), 'Elsewhere');
+  INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position)
+  VALUES (test.id('SB2'), test.id('W2'), test.id('O2'), 'Theirs', false, '0001');
+  v := test.as_user('O2', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W2')));
+  INSERT INTO test.ids SELECT 'G2', id FROM public.chat_channels WHERE workspace_id = test.id('W2') AND kind = 'channel' LIMIT 1;
+  PERFORM test.as_user('O2', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W2'),
+    jsonb_build_object('id', test.id('T9'), 'title', 'Their task', 'bucket_id', test.id('SB2'))));
+  v := test.send('O2', 'w2', 'G2', 'ours ' || test.uri('task', 'T9'));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: O2 mentions T9 in W2', v);
+END;
+$$;
+SELECT test.ok(test.value_as('A', format($q$SELECT count(*) FROM public.chat_message_refs(ARRAY[%L]::uuid[])$q$,
+  test.mid('w2'))) = '0', 'a message in another workspace answers nothing');
+SELECT test.ok(test.value_as('A', format($q$SELECT count(*) FROM public.chat_conversations_for_item('task', %L::uuid)$q$,
+  test.id('T9'))) = '0', 'another workspace''s "Mentioned in" answers nothing');
+SELECT test.ok(test.value_as('N', format($q$SELECT count(*) FROM public.chat_message_refs(ARRAY[%L]::uuid[])$q$,
+  test.mid('p1'))) = '0', 'a message in a private conversation you''re not in answers nothing');
+SELECT test.ok(test.value_as('N', format($q$SELECT count(*) FROM public.chat_message_refs(ARRAY[%L]::uuid[])
+  WHERE excerpt IS NOT NULL OR author_id IS NOT NULL$q$, test.mid('q1'))) = '0',
+  'a deleted message answers with no words and no author');
+SELECT test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_message_refs(ARRAY[%L, %L, %L]::uuid[])$q$,
+  test.mid('q1'), test.mid('q2'), test.mid('p1'))) = 'ok 0', 'an API key gets no message, deleted or not');
+SELECT test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_conversations_for_item('task', %L::uuid)$q$,
+  test.id('T2'))) = 'ok 0', 'an API key gets no "Mentioned in" line');
 
 -- ── CV-13: the channel link half goes below ────────────────────────────────

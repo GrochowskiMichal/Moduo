@@ -263,7 +263,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) TO authenticated, service_role;
 
 -- chat_op_edit, from its live body (CV-2a, CV-5): + "Mentioned in" for the
@@ -346,7 +346,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.chat_op_edit(uuid, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_edit(uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_edit(uuid, text) TO authenticated, service_role;
 
 -- ── 1. Registering a message ────────────────────────────────────────────────
@@ -380,7 +380,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.chat_op_register_message(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_register_message(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_register_message(uuid) TO authenticated, service_role;
 
 -- ── 2. A message's chip and card ────────────────────────────────────────────
@@ -427,7 +427,7 @@ AS $function$
      AND public.chat_can_read_channel(m.channel_id)
 $function$;
 
-REVOKE ALL ON FUNCTION public.chat_message_refs(uuid[]) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_message_refs(uuid[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_message_refs(uuid[]) TO authenticated, service_role;
 
 -- ── 4. The conversations an item is mentioned in ────────────────────────────
@@ -473,7 +473,7 @@ AS $function$
    LIMIT 50
 $function$;
 
-REVOKE ALL ON FUNCTION public.chat_conversations_for_item(text, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_conversations_for_item(text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_conversations_for_item(text, uuid) TO authenticated, service_role;
 
 -- ── 5. The registry's ensure, from its live body ────────────────────────────
@@ -508,5 +508,7 @@ BEGIN
 END;
 $function$;
 
--- Grants as they were (the function keeps its name and arguments).
-GRANT EXECUTE ON FUNCTION public.entities_op_ensure(uuid, text, uuid, text, text) TO authenticated, service_role;
+-- Server code only, as on prod: the ops that register (links_op_create, the
+-- chat ops) call it as its owner.
+REVOKE ALL ON FUNCTION public.entities_op_ensure(uuid, text, uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.entities_op_ensure(uuid, text, uuid, text, text) TO service_role;
