@@ -59,6 +59,25 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
   booking_host_new: { ...BOOKING_FIXTURE, zone: "Europe/Warsaw" },
   booking_host_guest_cancelled: BOOKING_FIXTURE,
   booking_guest_cancelled: BOOKING_ZOOM_FIXTURE,
+  workspace_invite: {
+    email: "tom@becker.studio",
+    workspaceName: "Northwind Studio",
+    inviter: { name: "Anna Carter", email: "anna@northwind.studio" },
+    roleName: "Member",
+    roleKey: "member",
+    expiresAt: "2026-10-15T09:12:00Z",
+    token: "Qm9va2luZ3M+L3dvcmtzcGFjZT0=",
+  },
+  workspace_owner: {
+    workspaceName: "Northwind Studio",
+    previousOwner: { name: "Anna Carter", email: "anna@northwind.studio" },
+    at: "2026-10-08T09:12:00Z",
+  },
+  workspace_removed: {
+    workspaceName: "Northwind Studio",
+    removedBy: { name: "Anna Carter", email: "anna@northwind.studio" },
+    at: "2026-10-08T09:12:00Z",
+  },
 };
 
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
@@ -71,4 +90,7 @@ export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   booking_host_new: "C3 · New booking (host)",
   booking_host_guest_cancelled: "C4 · Guest canceled (host)",
   booking_guest_cancelled: "C5 · You canceled (guest)",
+  workspace_invite: "B3 · Workspace invite",
+  workspace_owner: "B4 · You're the owner now",
+  workspace_removed: "B5 · Removed from a workspace",
 };
