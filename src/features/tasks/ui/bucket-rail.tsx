@@ -308,8 +308,16 @@ export function BucketRail({
     return bucket ? [{ kind: "project", bucket }] : [];
   });
   const ownViews = views.filter((v) => v.ownerId === viewActions?.currentUserId);
-  // A new view that isn't saved yet (MOD-142) shows at the Views group's end.
+  // A new view that isn't saved yet (MOD-142) shows at the Views group's end;
+  // like an area's +, starting one opens a folded group to show it.
   const draftingView = selection === NEW_VIEW_SELECTION;
+  const onNewView = viewActions?.onNew;
+  const startNewView = onNewView
+    ? () => {
+        if (collapsed.has(VIEWS_GROUP)) onToggleCollapsed(VIEWS_GROUP);
+        onNewView();
+      }
+    : undefined;
   const viewRow = (view: TaskView, opts?: { pinnedCopy?: boolean }) => {
     const selectionKey = viewSelection(view.id);
     const mine = view.ownerId === viewActions?.currentUserId;
@@ -488,7 +496,7 @@ export function BucketRail({
             onToggleHidden={onToggleHidden}
             onNewProject={() => setAdding({ kind: "project", areaId: null })}
             onNewArea={() => setAdding({ kind: "area" })}
-            onNewView={viewActions?.onNew}
+            onNewView={startNewView}
             wontDoCount={wontDoCount}
             onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
             wontDoCurrent={selection === WONTDO_SELECTION}
@@ -540,15 +548,7 @@ export function BucketRail({
                 label="Views"
                 collapsed={collapsed.has(VIEWS_GROUP)}
                 onToggle={() => onToggleCollapsed(VIEWS_GROUP)}
-                onAdd={
-                  viewActions?.onNew
-                    ? () => {
-                        // Like an area's +: the group opens to show it.
-                        if (collapsed.has(VIEWS_GROUP)) onToggleCollapsed(VIEWS_GROUP);
-                        viewActions.onNew?.();
-                      }
-                    : undefined
-                }
+                onAdd={startNewView}
                 addLabel="New view"
               />
               {collapsed.has(VIEWS_GROUP) ? null : views.map((v) => viewRow(v))}
@@ -976,6 +976,7 @@ function SortableProject({
       }}
       // dnd-kit's own transform while sorting (no design property).
       style={{ transform: CSS.Transform.toString(transform), transition }}
+      data-slot="sortable-project"
       className={isDragging ? "relative z-10" : undefined}
       {...listeners}
     >

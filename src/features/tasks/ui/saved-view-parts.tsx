@@ -120,6 +120,9 @@ export function ViewSaveControl({
   more?: readonly ViewSaveAction[];
 }) {
   const split = more.length > 0;
+  // "Save as new view…" opens a dialog: run it once the menu has closed, so
+  // the closing menu doesn't take focus back from it (gotchas/ui.md).
+  const afterClose = useRef<(() => void) | null>(null);
   return (
     <div role="group" aria-label="Saved view" data-testid="view-changes" className="flex gap-px">
       <Button
@@ -141,9 +144,24 @@ export function ViewSaveControl({
               className="rounded-l-none"
             />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuContent
+            align="end"
+            className="min-w-44"
+            onCloseAutoFocus={(event) => {
+              const run = afterClose.current;
+              if (!run) return;
+              afterClose.current = null;
+              event.preventDefault();
+              run();
+            }}
+          >
             {more.map((item) => (
-              <DropdownMenuItem key={item.label} onSelect={item.onSelect}>
+              <DropdownMenuItem
+                key={item.label}
+                onSelect={() => {
+                  afterClose.current = item.onSelect;
+                }}
+              >
                 {item.label}
               </DropdownMenuItem>
             ))}

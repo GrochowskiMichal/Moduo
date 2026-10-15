@@ -356,7 +356,7 @@ describe("Customize sidebar in the ⋯; Archived and Recently deleted in the foo
     // Not rows among the projects…
     expect(within(nav).queryByRole("button", { name: /Archived|Recently deleted/ })).toBeNull();
     // …but the footer's two items, in this order.
-    const footer = screen.getByRole("list", { name: "Archive and trash" });
+    const footer = screen.getByRole("navigation", { name: "Archive and trash" });
     expect(
       within(footer)
         .getAllByRole("button")
@@ -375,7 +375,7 @@ describe("Customize sidebar in the ⋯; Archived and Recently deleted in the foo
 
   it("marks the footer item you're on as the current page", () => {
     renderRail({ selection: TRASH_SELECTION });
-    const footer = screen.getByRole("list", { name: "Archive and trash" });
+    const footer = screen.getByRole("navigation", { name: "Archive and trash" });
     expect(
       within(footer).getByRole("button", { name: "Recently deleted" }).getAttribute("aria-current"),
     ).toBe("page");
@@ -496,6 +496,13 @@ describe("Views (TV-U8, AC11.1; REPLAN 29b–29e)", () => {
     await openSidebarMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "New view" }));
     expect(calls.onNewView).toHaveBeenCalledTimes(1);
+    cleanup();
+    // With views, it opens a folded group like the header's +.
+    const again = renderRail({ views: VIEWS, collapsed: new Set(["views"]) });
+    await openSidebarMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: "New view" }));
+    expect(again.onNewView).toHaveBeenCalledTimes(1);
+    expect(again.onToggleCollapsed).toHaveBeenCalledWith("views");
   });
 
   it("your view's ⋯: Rename · Pin · Share · Move · Copy link · Delete", async () => {
@@ -756,6 +763,16 @@ describe("drift and drag", () => {
       "Northwind",
       "Acme rebrand",
     ]);
+  });
+
+  it("someone who can't edit still drags projects into their own order (MOD-38)", () => {
+    renderRail({ dnd: true, canEdit: false });
+    const sortable = document.querySelectorAll('[data-slot="sortable-project"]');
+    expect(sortable.length).toBe(PROJECTS.length);
+    cleanup();
+    // Outside the page's DndContext (stories, tests) rows stay plain.
+    renderRail({ canEdit: false });
+    expect(document.querySelectorAll('[data-slot="sortable-project"]').length).toBe(0);
   });
 
   it("renders sortable project rows inside the page's DndContext", () => {

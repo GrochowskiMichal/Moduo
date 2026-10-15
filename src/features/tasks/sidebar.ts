@@ -97,6 +97,17 @@ export function sidebarGroups(
   };
 }
 
+/** The projects top to bottom as the reader's sidebar lists them (MOD-38):
+ *  area-less first, then each area's; Filter → Project offers them so (MOD-141). */
+export function sidebarProjects(
+  projects: ReadonlyArray<Bucket>,
+  areas: ReadonlyArray<Area>,
+  order: readonly string[] = [],
+): Bucket[] {
+  const groups = sidebarGroups(projects, areas, order);
+  return [...groups.loose, ...groups.areas.flatMap((g) => g.projects)];
+}
+
 /**
  * A project dropped on another one in the sidebar (MOD-38): the reader's new
  * order of every project, as the sidebar shows them, with the dragged one

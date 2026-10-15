@@ -145,6 +145,8 @@ describe("a new view (MOD-142)", () => {
     const { revert } = renderSavedViews({ drafting: true, dirty: true });
     const menu = await openMore();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Revert changes" }));
+    // It runs once the menu has closed (a ▾ item may open a dialog).
+    await settle();
     expect(revert).toHaveBeenCalledTimes(1);
   });
 });

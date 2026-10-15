@@ -135,7 +135,7 @@ async function projectMenu(page: Page, name: string, item: string) {
 /** The footer's Archived or Recently deleted (MOD-140): an icon and its name. */
 async function sidebarFooter(page: Page, item: "Archived" | "Recently deleted") {
   await page
-    .getByRole("list", { name: "Archive and trash" })
+    .getByRole("navigation", { name: "Archive and trash" })
     .getByRole("button", { name: item, exact: true })
     .click();
 }

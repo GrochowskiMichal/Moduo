@@ -9,7 +9,8 @@ import { TeamWorkspace } from "./tasks-stories-fixtures";
 // TV-U6 — the Tasks sidebar (specs/tasks-v3.md §3; prototype round-1c frame
 // 1): Inbox · Focus · Upcoming · My tasks, the hairline (its ⋯ is Customize
 // sidebar), All · Pinned · projects by area, and the footer's Archived ·
-// Recently deleted (MOD-140; icons alone at this 15rem sidebar). Baselines are
+// Recently deleted (MOD-140; this 15rem sidebar leaves the footer 14rem, just
+// enough for the words). Baselines are
 // a human capture (tests/visual/sidebar.spec.ts).
 
 const NOW = "2026-10-01T00:00:00.000Z";

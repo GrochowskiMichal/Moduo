@@ -16,6 +16,7 @@ import {
   projectOpenWork,
   projectOrderDrop,
   sidebarGroups,
+  sidebarProjects,
   storedBucketColor,
 } from "./sidebar";
 import { parseCollapsedSections } from "./ui/bucket-rail";
@@ -156,6 +157,11 @@ describe("each person's own project order (MOD-38)", () => {
     expect(ids(orderProjects([a, b, c], ["c", "a"]))).toEqual(["c", "a", "b"]);
     // A project made since you last dragged lands at the end of its area.
     expect(shown(["c", "b", "y", "x"])).toEqual({ loose: ["c", "b", "a"], clients: ["y", "x"] });
+  });
+
+  it("top to bottom as the sidebar lists them, for Filter → Project (MOD-141)", () => {
+    // Your order ranks y before a, yet the area-less projects still lead.
+    expect(ids(sidebarProjects(list, areas, ["y", "a"]))).toEqual(["a", "b", "c", "y", "x"]);
   });
 
   it("moving down places it after the target, in your order only", () => {

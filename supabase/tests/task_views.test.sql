@@ -363,6 +363,26 @@ BEGIN
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
       'values', jsonb_build_array('season'))))));
   PERFORM test.ok(r LIKE '22023%', 'a word other than "inbox" is refused', r);
+  -- Another workspace's project, and anyone's Inbox by its id ("inbox" says it).
+  r := test.as_user('X', format($q$SELECT public.projects_op_create(%L, %L::jsonb)$q$, test.id('W2'),
+    jsonb_build_object('id', test.id('PX'), 'name', 'Their project')));
+  PERFORM test.ok(r = 'ok 1', 'X makes a project in W2', r);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
+      'values', jsonb_build_array(test.id('PX')))))));
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing,
+    'another workspace''s project is refused the same way', r);
+  INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position)
+  SELECT test.id('IE'), test.id('W'), test.id('E'), 'Inbox', true, '0000'
+  WHERE NOT EXISTS (SELECT 1 FROM public.buckets b
+                    WHERE b.workspace_id = test.id('W') AND b.owner_id = test.id('E') AND b.is_system);
+  r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
+    'filters', jsonb_build_array(jsonb_build_object('dimension', 'project', 'operator', 'is',
+      'values', jsonb_build_array((SELECT b.id FROM public.buckets b
+                                   WHERE b.workspace_id = test.id('W') AND b.owner_id = test.id('E')
+                                     AND b.is_system LIMIT 1)))))));
+  PERFORM test.ok(r LIKE '22023%' AND r = v_missing,
+    'your own Inbox''s id is refused too: a view keeps "inbox"', r);
   r := test.try('E', test.create_sql(jsonb_build_object('name', 'Leak',
     'filters', jsonb_build_array(jsonb_build_object('dimension', 'status', 'operator', 'is',
       'values', jsonb_build_array(test.id('PB')))))));

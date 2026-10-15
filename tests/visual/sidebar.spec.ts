@@ -104,7 +104,7 @@ test.describe("decided sidebar — structure (AC11.1, AC11.10)", () => {
   }) => {
     const nav = await open(page, "busy-workspace");
     await expect(nav.getByRole("button", { name: /Archived|Recently deleted/ })).toHaveCount(0);
-    const footer = page.getByRole("list", { name: "Archive and trash" });
+    const footer = page.getByRole("navigation", { name: "Archive and trash" });
     await expect(footer.getByRole("button")).toHaveCount(2);
     await expect(footer.getByRole("button", { name: "Archived", exact: true })).toBeVisible();
     await expect(footer.getByRole("button", { name: "Recently deleted" })).toBeVisible();

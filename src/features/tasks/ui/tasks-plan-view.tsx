@@ -133,7 +133,12 @@ import {
 import { handleLabel } from "../row-layout";
 import { resolveTasksDeepLink, type TasksPlace, taskIdForHandle } from "../search";
 import { inViewOrder } from "../selection";
-import { orderProjects, projectDeleteSummary, projectOpenWork, projectOrderDrop } from "../sidebar";
+import {
+  projectDeleteSummary,
+  projectOpenWork,
+  projectOrderDrop,
+  sidebarProjects,
+} from "../sidebar";
 import { useTemplateActions } from "../templates/ui/use-template-actions";
 import { undatedTasks } from "../timeline-rows";
 import { dayNumOfKey } from "../timeline-scale";
@@ -906,14 +911,15 @@ export function TasksPlanView({
   );
 
   // Filter → Project, where more than one project shows (MOD-141): the
-  // projects in your sidebar's order, and your Inbox where the place lists it
-  // (All never does).
+  // projects as your sidebar lists them (area-less first, then each area,
+  // each in your own order), and your Inbox where the place lists it (All
+  // never does).
   const projectFilter = useMemo(
     () =>
       offersProjectFilter(place)
-        ? { projects: orderProjects(buckets, projectOrder), inbox: place !== "all" }
+        ? { projects: sidebarProjects(buckets, api.areas, projectOrder), inbox: place !== "all" }
         : null,
-    [place, buckets, projectOrder],
+    [place, buckets, api.areas, projectOrder],
   );
 
   // Filters and search narrow the center list/board/timeline (rail counts

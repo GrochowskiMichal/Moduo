@@ -34,8 +34,13 @@ export function SidebarFooter({
 }) {
   if (items.length === 0) return null;
   return (
-    <div data-slot="sidebar-footer" className={cn("@container shrink-0", className)}>
-      <ul aria-label={label} className="flex min-w-0 items-center gap-1">
+    // Its own navigation landmark: the items are destinations, like the rows.
+    <nav
+      aria-label={label}
+      data-slot="sidebar-footer"
+      className={cn("@container shrink-0", className)}
+    >
+      <ul className="flex min-w-0 items-center gap-1">
         {items.map((item) => (
           <li key={item.label} className="flex min-w-0">
             <Tooltip>
@@ -46,7 +51,8 @@ export function SidebarFooter({
                   aria-current={item.active ? "page" : undefined}
                   onClick={item.onSelect}
                   className={cn(
-                    "flex h-(--ctrl-h-sm) min-w-(--ctrl-h-sm) max-w-full items-center justify-center gap-1.5 rounded-md px-1.5",
+                    // hit-min: 24 px to point at even on the dense rung (22 px, R13).
+                    "hit-min flex h-(--ctrl-h-sm) min-w-(--ctrl-h-sm) max-w-full items-center justify-center gap-1.5 rounded-md px-1.5",
                     "font-display text-sm text-muted-foreground outline-none",
                     "transition-colors duration-(--motion-fade) ease-(--ease-out)",
                     "hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
@@ -67,6 +73,6 @@ export function SidebarFooter({
           </li>
         ))}
       </ul>
-    </div>
+    </nav>
   );
 }

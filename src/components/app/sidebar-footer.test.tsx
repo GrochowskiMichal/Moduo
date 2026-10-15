@@ -38,7 +38,11 @@ function renderFooter(active: "archived" | "trash" | null = null) {
       />
     </TooltipProvider>,
   );
-  return { onArchived, onTrash, list: screen.getByRole("list", { name: "Archive and trash" }) };
+  return {
+    onArchived,
+    onTrash,
+    list: screen.getByRole("navigation", { name: "Archive and trash" }),
+  };
 }
 
 describe("SidebarFooter (MOD-140)", () => {
@@ -49,7 +53,8 @@ describe("SidebarFooter (MOD-140)", () => {
       "Archived",
       "Recently deleted",
     ]);
-    expect(list.className).toContain("flex");
+    // Side by side: one row, in its own navigation landmark.
+    expect(list.querySelector("ul")?.className).toContain("flex");
     fireEvent.click(buttons[0] as HTMLElement);
     expect(onArchived).toHaveBeenCalledTimes(1);
     fireEvent.click(buttons[1] as HTMLElement);
@@ -85,6 +90,6 @@ describe("SidebarFooter (MOD-140)", () => {
 
   it("renders nothing without items", () => {
     render(<SidebarFooter label="Nothing" items={[]} />);
-    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.queryByRole("navigation")).toBeNull();
   });
 });
