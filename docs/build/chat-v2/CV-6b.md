@@ -23,6 +23,8 @@
 | AC7.8 | `tests/chat-notify.spec.ts` · "browser permission and sound" (no sound by default, one switch turns it on); `ring.test.ts` · "sounds only for a direct message or @you" |
 | Counts (§11) | `ring.test.ts` · "counts outside Chat" |
 
+Run: `PUBLIC_VAPID_PUBLIC_KEY=<any P-256 public key, base64url> scripts/agent/e2e.sh tests/chat-notify.spec.ts` (2 passed). `bun run verify`: green.
+
 The desktop app is simulated in e2e by a browser context with a stub `__TAURI_INTERNALS__` whose `window.Notification` (what the notification plugin calls) records each OS notification; each context's focus is set by the test (`document.hasFocus`, `visibilityState`). A real Web Push is not delivered in Playwright: the browser's ring is proven as the unacknowledged, due row the push claim takes (CV-6a's SQL proves the claim).
 
 ## Agent's choices (deferred to by Maciej: confirmed for building, may be reconsidered)
@@ -47,6 +49,8 @@ The desktop app is simulated in e2e by a browser context with a stub `__TAURI_IN
 
 - `@tauri-apps/plugin-notification`'s `sendNotification` calls `window.Notification` (Tauri injects its own); a test can record OS notifications by replacing it.
 - The push worker used to drop every push while any Moduo window was focused: a chat notice must ring there (the tab may be on Tasks).
+- A web build aliases `@tauri-apps/plugin-notification` to `src/lib/tauri-plugin-notification-stub.ts`; the stub now does what the plugin's JS does (`window.Notification`), so the desktop simulation can record notifications. Only code behind `isTauriRuntime()` reaches it.
+- Headless Chromium answers `Notification.permission === "denied"` before anyone asks: the ask's e2e plays a browser that hasn't asked yet (stubbed permission) and needs a VAPID public key in the build (`PUBLIC_VAPID_PUBLIC_KEY`, any valid P-256 key; the spec skips the ask without one).
 
 ## For later blocks
 
