@@ -61,7 +61,9 @@ export type UseMentionSearchResult = {
   loading: boolean;
 };
 
-function memberToPerson(member: unknown, query: string): SearchedPerson | null {
+/** A `listMembers` row (`*, profiles(*)`) as a pickable person, or null when
+ *  it isn't one or doesn't match the query. Exported for its tests. */
+export function memberToPerson(member: unknown, query: string): SearchedPerson | null {
   const row = member as { user_id?: unknown; profiles?: Record<string, unknown> } | null;
   const id = row?.user_id;
   if (typeof id !== "string") return null;
