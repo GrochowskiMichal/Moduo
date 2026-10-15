@@ -519,6 +519,10 @@ describe("Board (U1-4)", () => {
     const list = chips[0]?.closest('[data-slot="tag-chip-list"]') as HTMLElement;
     expect(list.className).toContain("-my-px");
     expect(list.closest('[data-slot="item-card-meta"]')).not.toBeNull();
+    // One line, never wrapping: long names shorten instead (full name on hover).
+    expect(list.className).not.toContain("flex-wrap");
+    for (const chip of chips) expect(chip.className).toContain("max-w-24");
+    expect(screen.getByTitle("Tag: ui")).toBe(chips[0] as HTMLElement);
     expect(card("Task a").textContent).not.toContain("#");
   });
 
