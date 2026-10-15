@@ -541,6 +541,51 @@ describe("content author kinds (chat messages and comments)", () => {
   });
 });
 
+describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", () => {
+  it("default to Moduo's six, in order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.DEFAULT_QUICK_REACTIONS.join("")).toBe("👍✅👀🙏❤️😄");
+    expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.isReactionKey(k))).toBe(true);
+    expect(v.MAX_REACTION_KINDS).toBe(20);
+    expect(v.MAX_QUICK_REACTIONS).toBe(6);
+  });
+
+  it("are any emoji and nothing else (the server's rule)", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const k of ["🎉", "👍🏽", "👨‍👩‍👧", "🇵🇱", "#️⃣", "👍".repeat(32)]) {
+      expect(v.isReactionKey(k), k).toBe(true);
+    }
+    for (const k of [
+      "thumbs_up",
+      ":party:",
+      "a",
+      "1",
+      "!!",
+      " ",
+      "👍 👍",
+      "👍\n",
+      "👍".repeat(33),
+      "\uFE0F",
+      "\u200D",
+      "",
+      null,
+      42,
+    ]) {
+      expect(v.isReactionKey(k), String(k)).toBe(false);
+    }
+    expect(v.parseReactionKey("🎉").success).toBe(true);
+    expect(v.parseReactionKey("party").success).toBe(false);
+  });
+
+  it("read laxly: whatever the server stored shows", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeReactionKey("²")).toBe("²");
+    expect(v.normalizeReactionKey("")).toBeNull();
+    expect(v.normalizeReactionKey(7)).toBeNull();
+    expect(v.normalizeReactionKey("x".repeat(33))).toBeNull();
+  });
+});
+
 describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
   it("are the five fixed categories, in order", async () => {
     const v = await import("./vocabularies.ts");

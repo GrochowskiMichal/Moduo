@@ -25,8 +25,8 @@ import {
   CHAT_MESSAGE_KINDS,
   CLIENT_SURFACES,
   CHAT_PLAN_TIERS,
-  COMMENT_REACTIONS,
   CONTENT_AUTHOR_KINDS,
+  DEFAULT_QUICK_REACTIONS,
   DATE_ORDERS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
@@ -319,15 +319,27 @@ describe("cross-runtime drift guards", () => {
     }
   });
 
-  it("the six comment reactions match TV-U13's CHECK and op", () => {
-    const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261013100000_comment_reactions_edits.sql"),
-      "utf8",
-    );
-    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    expect(sql).toContain(`CHECK (reaction IN (${inList(COMMENT_REACTIONS)}))`);
-    expect(sql).toContain(`p_reaction NOT IN (${opList(COMMENT_REACTIONS)})`);
+  it("one reaction key: CV-7c's check, used by comments, chat and the quick row", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261015200000_chat_v2_reactions.sql"), "utf8");
+    // The same rule as isReactionKey: length, the refused classes, one non-ASCII
+    // character, not only joiners or variation selectors.
+    expect(sql).toContain("char_length(p_key) BETWEEN 1 AND 32");
+    expect(sql).toContain("p_key !~ '[[:alnum:][:space:][:cntrl:]]'");
+    expect(sql).toContain("p_key ~ '[^\\x01-\\x7f]'");
+    expect(sql).toContain("chr(65038) || chr(65039) || chr(8205) || chr(8419)");
+    expect(sql).toContain("CHECK (public.reactions__key_ok(reaction))");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(p_reaction) THEN");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(p_key) THEN");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(v_item) THEN");
+    // The six TV-U13 words became the six defaults, in order.
+    const words = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"];
+    const mapping = words.map((w, i) => `('${w}', '${DEFAULT_QUICK_REACTIONS[i]}')`);
+    let at = 0;
+    for (const pair of mapping) {
+      const next = sql.indexOf(pair, at);
+      expect(next, pair).toBeGreaterThan(-1);
+      at = next;
+    }
   });
 
   it("template kinds and link types match TV-D15's op guards", () => {

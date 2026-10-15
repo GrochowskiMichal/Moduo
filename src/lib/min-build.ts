@@ -114,6 +114,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "tasks_time_report",
   "tasks_time_totals",
   "user_agent_work",
+  // CV-7c: your quick reactions (CV-6b reads the other chat prefs too).
+  "user_chat_prefs",
   "user_time_region",
 ]);
 

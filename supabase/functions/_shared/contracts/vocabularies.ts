@@ -1187,24 +1187,45 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 }
 
 // ---------------------------------------------------------------------------
-// Comment reactions (TV-U13, REPLAN 88) — mirrors comment_reactions.reaction's
-// CHECK and comments_op_react in 20261013100000_comment_reactions_edits. Six,
-// fixed, in this order: 👍 ✅ 👀 🙏 ❤️ 😄. Nobody adds their own, and a
-// reaction never notifies anyone.
+// Reactions (CV-7c; round-3 §2.8, Assumptions #18, #29) — one key for chat
+// messages, task and note comments and your quick row. Mirrors
+// public.reactions__key_ok(text) in 20261015200000_chat_v2_reactions: a
+// standard emoji as Emojibase writes it, 1–32 characters, no letters, digits,
+// spaces or control characters, at least one character outside ASCII, and not
+// only joiners or variation selectors. The `:name:` form of a live custom
+// emoji arrives with CV-20, which widens both halves. A reaction never
+// notifies anyone.
 // ---------------------------------------------------------------------------
 
-export const COMMENT_REACTIONS = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"] as const;
-export type CommentReaction = (typeof COMMENT_REACTIONS)[number];
-export const commentReactionSchema = z.enum(COMMENT_REACTIONS);
-export function isCommentReaction(value: unknown): value is CommentReaction {
-  return typeof value === "string" && (COMMENT_REACTIONS as readonly string[]).includes(value);
+/** Moduo's six quick reactions, in order (CH16a): your row when you set none. */
+export const DEFAULT_QUICK_REACTIONS = ["👍", "✅", "👀", "🙏", "❤️", "😄"] as const;
+/** At most this many kinds on one message or comment. */
+export const MAX_REACTION_KINDS = 20;
+/** At most this many in your quick row. */
+export const MAX_QUICK_REACTIONS = 6;
+const REACTION_KEY_MAX = 32;
+
+export type ReactionKey = string;
+
+/** The key check for writes; the server runs the same rule (it decides). */
+export function isReactionKey(value: unknown): value is ReactionKey {
+  if (typeof value !== "string") return false;
+  const length = [...value].length; // code points, as Postgres counts them
+  if (length < 1 || length > REACTION_KEY_MAX) return false;
+  if (/[\p{L}\p{N}\p{White_Space}\p{Cc}]/u.test(value)) return false;
+  if (!/[^\u0001-\u007f]/.test(value)) return false;
+  return !/^[\uFE0E\uFE0F\u200D\u20E3]+$/.test(value);
 }
-export function parseCommentReaction(input: unknown): SafeParseResult<CommentReaction> {
-  return parseOrError(commentReactionSchema, input);
+export const REACTION_KEY = z.string().refine(isReactionKey, { message: "A reaction is an emoji." });
+export function parseReactionKey(input: unknown): SafeParseResult<ReactionKey> {
+  return parseOrError(REACTION_KEY, input);
 }
-/** Lax read: a reaction this build doesn't know is left out (null), never shown wrong. */
-export function normalizeCommentReaction(input: unknown): CommentReaction | null {
-  return isCommentReaction(input) ? input : null;
+/** Lax read: any short key the server stored is shown (null otherwise). The
+ *  server is the authority, so a key it accepted is never hidden here. */
+export function normalizeReactionKey(input: unknown): ReactionKey | null {
+  return typeof input === "string" && input.length > 0 && [...input].length <= REACTION_KEY_MAX
+    ? input
+    : null;
 }
 
 // ---------------------------------------------------------------------------

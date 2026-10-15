@@ -216,4 +216,19 @@ export type ChatRuntime = {
     notifyLevel?: ChatNotifyLevel;
     starred?: boolean;
   }): Promise<ChatMember>;
+
+  // ── Your chat settings, one row per person for every workspace (CV-6a's
+  //    user_chat_prefs / user_op_set_chat_prefs; throw on failure) ──
+  myPrefs(): Promise<UserChatPrefs>;
+  /** Changes only what the patch names; answers the whole set. */
+  setMyPrefs(patch: Partial<UserChatPrefs>): Promise<UserChatPrefs>;
+};
+
+/** Your chat settings. `reactionRow` null = Moduo's six (CH16a). */
+export type UserChatPrefs = {
+  reactionRow: string[] | null;
+  showOnline: boolean;
+  showFocusTask: boolean;
+  noticeShowText: boolean;
+  emailWhenAway: boolean;
 };

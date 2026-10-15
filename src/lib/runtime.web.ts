@@ -39,8 +39,8 @@ import {
   isOpenTask,
   normalizeAccessChangeResource,
   normalizeAttachmentStatus,
-  normalizeCommentReaction,
   normalizeContentAuthorKind,
+  normalizeReactionKey,
   normalizeTaskStatusCategory,
 } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -5027,7 +5027,7 @@ function reactionMarks(rows: readonly unknown[]): CommentReactionMark[] {
   for (const raw of rows) {
     if (!raw || typeof raw !== "object") continue;
     const row = raw as { user_id?: unknown; reaction?: unknown };
-    const reaction = normalizeCommentReaction(row.reaction);
+    const reaction = normalizeReactionKey(row.reaction);
     if (typeof row.user_id === "string" && reaction) out.push({ userId: row.user_id, reaction });
   }
   return out;

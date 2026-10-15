@@ -37,7 +37,8 @@ AS $function$
      AND char_length(p_key) BETWEEN 1 AND 32
      AND p_key !~ '[[:alnum:][:space:][:cntrl:]]'
      AND p_key ~ '[^\x01-\x7f]'
-     AND p_key !~ '^[️︎‍⃣]+$'
+     -- not only variation selectors (U+FE0E, U+FE0F), joiners (U+200D) or keycaps (U+20E3)
+     AND p_key !~ ('^[' || chr(65038) || chr(65039) || chr(8205) || chr(8419) || ']+$')
 $function$;
 
 COMMENT ON FUNCTION public.reactions__key_ok(text) IS

@@ -6,8 +6,8 @@
 import type {
   AttachmentPreviewMime,
   AttachmentStatus,
-  CommentReaction,
   ContentAuthorKind,
+  ReactionKey,
 } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
@@ -134,12 +134,12 @@ export type SpineComment = {
   deletedAt: string | null;
   /** When its author last edited it (TV-U13); null when never: it reads "edited". */
   editedAt: string | null;
-  /** Who reacted with which of the six (TV-U13, REPLAN 88), oldest first. */
+  /** Who reacted with which emoji (TV-U13; any emoji since CV-7c), oldest first. */
   reactions: CommentReactionMark[];
 };
 
 /** One person's reaction on a comment. */
-export type CommentReactionMark = { userId: string; reaction: CommentReaction };
+export type CommentReactionMark = { userId: string; reaction: ReactionKey };
 
 export type RuntimeSession = {
   access_token: string;
@@ -1483,11 +1483,11 @@ export type ModuoRuntime = {
      * anyone the comment already reached). Call it after posting or editing.
      */
     mentionTeams(input: { commentId: string; teamIds: string[] }): Promise<void>;
-    /** Add (`on`) or take back one of the six reactions; answers the comment's
+    /** Add (`on`) or take back one reaction (any emoji, CV-7c); answers the comment's
      *  reactions after the change. Never notifies (REPLAN 88). */
     reactToComment(input: {
       commentId: string;
-      reaction: CommentReaction;
+      reaction: ReactionKey;
       on: boolean;
     }): Promise<CommentReactionMark[]>;
     /**

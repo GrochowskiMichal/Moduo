@@ -30,6 +30,7 @@ import {
   mapRows,
   mapSyncRow,
   mapUnread,
+  mapUserChatPrefs,
 } from "../features/chat/mappers";
 import type {
   ChatChannel,
@@ -455,6 +456,25 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       });
       fail(error);
       return single<ChatMember>(data, mapMember, "update preferences");
+    },
+
+    async myPrefs() {
+      const { data, error } = await db().rpc("user_chat_prefs");
+      fail(error);
+      return mapUserChatPrefs(data);
+    },
+
+    async setMyPrefs(patch) {
+      // Only what the patch names; the op takes no person (it's auth.uid()).
+      const body: Record<string, unknown> = {};
+      if ("reactionRow" in patch) body.reaction_row = patch.reactionRow ?? null;
+      if (patch.showOnline !== undefined) body.show_online = patch.showOnline;
+      if (patch.showFocusTask !== undefined) body.show_focus_task = patch.showFocusTask;
+      if (patch.noticeShowText !== undefined) body.notice_show_text = patch.noticeShowText;
+      if (patch.emailWhenAway !== undefined) body.email_when_away = patch.emailWhenAway;
+      const { data, error } = await db().rpc("user_op_set_chat_prefs", { p_patch: body });
+      fail(error);
+      return mapUserChatPrefs(data);
     },
   };
 }
