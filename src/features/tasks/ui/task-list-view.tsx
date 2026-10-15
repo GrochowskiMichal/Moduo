@@ -172,6 +172,9 @@ type Props = {
   properties?: readonly string[];
   /** Display → Rows: Standard · Detailed. */
   rows?: RowPreset;
+  /** Display → Columns: Detailed's own columns that are on (MOD-128,
+   *  MOD-136). Every one when absent. */
+  detailedColumns?: readonly string[];
   /**
    * Display → Order by, inside each group. The Queue keeps its line-up. Only
    * Manual takes a drag reorder; a sorted list shows a quiet note instead of
@@ -332,6 +335,7 @@ export function TaskListView({
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
   rows: rowPreset = "standard",
+  detailedColumns,
   order = "manual",
   orderDir = "asc",
   onSort,
@@ -598,8 +602,9 @@ export function TaskListView({
     [api.sections],
   );
   // Ages ("5m", "3h") move on by the minute where they show: Detailed's
-  // Updated and the waiting lines.
-  const ageTick = useMinuteTick(detailed || (api.waiting?.length ?? 0) > 0);
+  // Updated (while Display → Columns has it on, MOD-136) and the waiting lines.
+  const showsUpdated = detailed && (detailedColumns?.includes("updated") ?? true);
+  const ageTick = useMinuteTick(showsUpdated || (api.waiting?.length ?? 0) > 0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: ageTick re-reads the ages each minute.
   const waitingLabels = useMemo(
     () =>
@@ -701,6 +706,7 @@ export function TaskListView({
       rowColumns(listedRows, {
         properties,
         rows: rowPreset,
+        detailedColumns,
         showAssignee: showAssignee && assignees.length > 1,
         canEdit,
         isQueued: (id) => api.queuedTaskIds.has(id),
@@ -714,6 +720,7 @@ export function TaskListView({
       listedRows,
       properties,
       rowPreset,
+      detailedColumns,
       showAssignee,
       assignees.length,
       canEdit,
