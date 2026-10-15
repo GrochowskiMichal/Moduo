@@ -138,6 +138,8 @@ export function notificationTypeForOp(
     const named = payload.mentioned_user_ids;
     if (Array.isArray(named) && named.includes(userId)) return "mention";
   }
+  // A chat row that reached you through a team (CV-5) follows "Your teams".
+  if (op === "chat.mention" && payload?.reason === "team") return "teams";
   return OP_TO_NOTIFICATION_TYPE[op] ?? null;
 }
 

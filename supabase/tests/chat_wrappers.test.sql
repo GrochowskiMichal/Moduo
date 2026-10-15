@@ -67,7 +67,7 @@ BEGIN
   PERFORM test.ok(m.mentioned_user_ids = ARRAY[test.id('C')] AND m.mentions_everyone,
     'send v1: who it mentions is read from the text, not from the list or the switch the client passed');
   PERFORM test.ok((SELECT payload ->> 'excerpt' FROM public.module_activity
-                    WHERE payload ->> 'message_id' = m.id::text AND op = 'chat.mention')
+                    WHERE payload ->> 'message_id' = m.id::text AND op = 'chat.mention' AND payload ->> 'reason' = 'person')
                   = public.chat__excerpt(m.body),
     'send v1: the bell''s excerpt is built on the server, not taken from the client');
   v := test.send_v1('B', 'hi again, resent', 'one');

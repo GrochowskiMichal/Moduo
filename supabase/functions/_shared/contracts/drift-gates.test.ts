@@ -21,6 +21,7 @@ import {
   CHAT_CATCHUP_DONE_HOW,
   CHAT_CATCHUP_REASONS,
   CHAT_EVENT_TYPES,
+  CHAT_MENTION_REASONS,
   CHAT_MESSAGE_KINDS,
   CHAT_PLAN_TIERS,
   COMMENT_REACTIONS,
@@ -137,6 +138,17 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`(event ->> 'type') IN (${inList(CHAT_EVENT_TYPES)})`);
     expect(sql).toContain(`CHECK (reason IN (${inList(CHAT_CATCHUP_REASONS)}))`);
     expect(sql).toContain(`done_how IN (${inList(CHAT_CATCHUP_DONE_HOW)})`);
+  });
+
+  it("CHAT_MENTION_REASONS are the reasons the fan-out writes on chat.mention rows (CV-5)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_catchup.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    // chat__fan_out maps each Catch up reason to the bell row's reason.
+    expect(sql).toContain(
+      `CASE v_reason WHEN 'mention' THEN '${CHAT_MENTION_REASONS[0]}' WHEN 'team_mention' THEN '${CHAT_MENTION_REASONS[1]}'`,
+    );
+    expect(sql).toContain(`WHEN 'everyone' THEN '${CHAT_MENTION_REASONS[2]}' END`);
   });
 
   it("CHAT_PLAN_TIERS are plan_tier_rank's tiers at Duo or above; the plan source reads TX-9b's grant (CV-4)", () => {

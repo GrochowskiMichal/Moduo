@@ -68,7 +68,7 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
       return { to: "/notes", search: { id }, intentId: id };
     case "event":
       return { to: "/calendar", search: { event: id }, intentId: id };
-    // Chat notifications target the conversation (chat.mention / chat.reply).
+    // Chat notifications target the conversation (chat.mention / chat.reply / chat.announcement).
     case "chat_channel":
       return { to: "/chat", search: { c: id }, intentId: id };
     default:
