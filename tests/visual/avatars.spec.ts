@@ -61,4 +61,43 @@ test.describe("avatars", () => {
     const nobody = page.locator("[data-slot=avatar][data-unassigned]");
     expect(await nobody.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe("dashed");
   });
+
+  // MOD-96: a person's photo when set, round and filling the circle at every
+  // size; the initials on their colour when it can't load or there is none.
+  // The story's photos are inline data URLs, so this needs no network.
+  test("a photo when set, initials when it fails or is missing", async ({ page }) => {
+    await page.goto("/iframe.html?id=components-ui-avatar--person-with-photo&viewMode=story");
+    await page.locator("#storybook-root, #root").first().waitFor({ state: "visible" });
+
+    const photos = page.locator("[data-row=photo] [data-slot=avatar]");
+    await expect(photos).toHaveCount(4);
+    await expect(page.locator("[data-row=photo] img[data-slot=avatar-image]")).toHaveCount(4);
+    for (const avatar of await photos.all()) {
+      const shape = await avatar.evaluate((el) => {
+        const img = el.querySelector("img") as HTMLImageElement;
+        const box = el.getBoundingClientRect();
+        const pic = img.getBoundingClientRect();
+        return {
+          loaded: img.complete && img.naturalWidth > 0,
+          fit: getComputedStyle(img).objectFit,
+          radius: Number.parseFloat(getComputedStyle(el).borderTopLeftRadius),
+          half: box.width / 2,
+          fills: Math.round(pic.width) === Math.round(box.width),
+          text: el.textContent,
+        };
+      });
+      expect(shape.loaded).toBe(true);
+      expect(shape.fit).toBe("cover");
+      expect(shape.radius).toBeGreaterThanOrEqual(shape.half);
+      expect(shape.fills).toBe(true);
+      expect(shape.text).toBe("");
+    }
+
+    for (const row of ["broken", "none"]) {
+      const avatars = page.locator(`[data-row=${row}] [data-slot=avatar]`);
+      await expect(avatars).toHaveCount(4);
+      await expect(page.locator(`[data-row=${row}] img`)).toHaveCount(0);
+      expect(await avatars.allTextContents()).toEqual(["MG", "MG", "MG", "MG"]);
+    }
+  });
 });
