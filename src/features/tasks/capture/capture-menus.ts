@@ -46,6 +46,8 @@ export type CapturePerson = {
   userId: string;
   name: string;
   isMe: boolean;
+  /** Their own name, for the avatar's initials; empty when unset ("?"). */
+  fullName?: string;
   /** Their profile photo, for the menu's avatar (MOD-96). */
   avatarUrl?: string | null;
 };
@@ -92,7 +94,7 @@ export function mentionEntries(
       memberId: p.userId,
       label: personLabel(p),
       icon: null,
-      name: p.name || "?",
+      name: (p.fullName ?? p.name) || "?",
       avatarUrl: p.avatarUrl ?? null,
     });
   }

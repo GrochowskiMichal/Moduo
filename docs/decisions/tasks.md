@@ -4,11 +4,11 @@ Full entries for this area, newest first. The one-line index of every area is [d
 
 ## 2026-10-14 · People show their profile photo, initials as the fallback (dogfood MOD-96)
 
-Screen-only, no migration: photos already live on `profiles.avatar_url` (a public URL in the public `avatars` bucket, set in Settings → Account) and reach Tasks through the member list (`listMembers` → `mapMember` → `toAssignees`). The kit's `PersonAvatar` draws them; this change gives the surfaces that dropped them (the capture's pills, its title tokens, the `@` menus) the photo, and re-reads the members when a profile changes.
+Screen-only, no migration: photos already live on `profiles.avatar_url` (a public URL in the public `avatars` bucket, set in Settings → Account) and reach Tasks through the member list (`listMembers` → `mapMember` → `toAssignees`). The kit's `PersonAvatar` draws them; this change gives the surfaces that dropped them (the capture's pills, its title tokens, the `@` menus, Settings → Teams' people) the photo, fills a non-square photo into the circle (`object-cover`), and re-reads the members when your own profile changes, so your new photo shows at once; a teammate's shows on the next members read (switching workspace or reopening the app).
 
-- **MOD-96 · A person's avatar is their photo when they have one** → `components/ui/avatar.tsx` `PersonAvatar`, `capture-pills.tsx`, `token-node.tsx` `TokenPhotoContext`, `capture-menus.ts`, `spine/editor/mention-menu-plugin.tsx` `CandidateIcon`, `spine/hooks/use-mention-search.ts`, `providers/workspace-provider.tsx`; §19 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
+- **MOD-96 · A person's avatar is their photo when they have one** → `components/ui/avatar.tsx` `PersonAvatar`, `capture-pills.tsx`, `token-node.tsx` `TokenPhotoContext`, `capture-menus.ts`, `spine/editor/mention-menu-plugin.tsx` `CandidateIcon`, `spine/hooks/use-mention-search.ts`, `settings/access/teams-panel.tsx`, `providers/workspace-provider.tsx`; §19 in [specs/tasks-v3.md](../../specs/tasks-v3.md)
   - Who: Maciej, 2026-10-14 (dogfood MOD-96: "show profile photos").
-  - Decision: every place Tasks shows a person draws their profile photo, round, when they have one; the two initials on their stable colour stay as the fallback when there is none, while it loads and when it fails to load. The colour stays keyed on the id.
+  - Decision: every place Tasks shows a person draws their profile photo, round, when they have one; the two initials on their stable colour stay as the fallback when there is none, while it loads and when it fails to load. The colour stays keyed on the id, and the initials still come from the person's own name ("?" when they haven't set one).
   - Why: people recognise a face faster than two letters, and the photos people set in Settings showed nowhere in Tasks' capture or menus.
   - Rejected: call 43's initials only, for everyone, everywhere.
 

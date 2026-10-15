@@ -145,6 +145,44 @@ export const Identity: Story = {
   ),
 };
 
+/**
+ * A person with a profile photo shows it, round, at every size (MOD-96). The
+ * initials on their colour stand in while it loads, and stay when it fails
+ * (second row: a photo that can't load) or when there is none (third row).
+ */
+export const PersonWithPhoto: Story = {
+  render: () => {
+    const photo =
+      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=128&h=128&fit=crop";
+    const sizes = ["icon", "sm", "default", "lg"] as const;
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex items-end gap-3">
+          {sizes.map((size) => (
+            <PersonAvatar key={size} name="Mike Grochowski" id="u-mike" src={photo} size={size} />
+          ))}
+        </div>
+        <div className="flex items-end gap-3">
+          {sizes.map((size) => (
+            <PersonAvatar
+              key={size}
+              name="Mike Grochowski"
+              id="u-mike"
+              src="https://images.unsplash.com/not-a-photo"
+              size={size}
+            />
+          ))}
+        </div>
+        <div className="flex items-end gap-3">
+          {sizes.map((size) => (
+            <PersonAvatar key={size} name="Mike Grochowski" id="u-mike" size={size} />
+          ))}
+        </div>
+      </div>
+    );
+  },
+};
+
 /** The icon rung scales with density: 16 / 15 / 14 px, two letters still fit. */
 export const Densities: Story = {
   render: () => (

@@ -29,16 +29,19 @@ const FALLBACK: Partial<Record<CaptureToken["kind"], string>> = {
 
 export type SerializedCaptureTokenNode = Spread<{ token: CaptureToken }, SerializedLexicalNode>;
 
+/** How a person token's avatar draws: their photo and their own name. */
+export type TokenPerson = { avatarUrl: string | null; name: string };
+
 /**
- * A person's profile photo by id, for their tokens (MOD-96). The Task body
- * provides it from the member list, so a photo URL never rides in the token or
- * the device's draft, and a new photo shows at once. Without a provider every
- * token shows initials.
+ * A person's avatar facts by id, for their tokens (MOD-96). The Task body
+ * provides them from the member list, so a photo URL never rides in the token
+ * or the device's draft, and a changed photo follows the list. Without a
+ * provider a token shows the initials of its label.
  */
-export const TokenPhotoContext = createContext<(userId: string) => string | null>(() => null);
+export const TokenPersonContext = createContext<(userId: string) => TokenPerson | null>(() => null);
 
 function TokenChip({ token }: { token: CaptureToken }) {
-  const photoOf = useContext(TokenPhotoContext);
+  const personOf = useContext(TokenPersonContext);
   if (token.kind === "thing") {
     // In the capture a click never opens it (that would leave the capture);
     // the hover card still shows what it is.
@@ -56,7 +59,11 @@ function TokenChip({ token }: { token: CaptureToken }) {
   }
   const icon: ReactNode | undefined =
     token.kind === "person" ? (
-      <PersonAvatar name={token.label} id={token.userId} src={photoOf(token.userId)} />
+      <PersonAvatar
+        name={personOf(token.userId)?.name ?? token.label}
+        id={token.userId}
+        src={personOf(token.userId)?.avatarUrl}
+      />
     ) : token.kind === "team" ? (
       <TeamMark
         name={token.label}

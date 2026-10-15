@@ -108,7 +108,7 @@ import {
 } from "./capture-menus";
 import { CapturePills, type OpenPill, type PillChange, type PillValues } from "./capture-pills";
 import { $tokensToText, type MenuPick, TitleEditor, type TitleEditorApi } from "./title-editor";
-import { $createCaptureTokenNode, TokenPhotoContext } from "./token-node";
+import { $createCaptureTokenNode, type TokenPerson, TokenPersonContext } from "./token-node";
 
 const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
   email: Mail,
@@ -358,16 +358,19 @@ export function TaskCaptureBody({
       assignees.map((a) => ({
         userId: a.userId,
         name: a.isMe ? a.fullName || "You" : a.name,
+        fullName: a.fullName,
         avatarUrl: a.avatarUrl,
         isMe: a.isMe,
         canTakeTasks: a.canTakeTasks,
       })),
     [assignees],
   );
-  // The title's person tokens look their photo up here (MOD-96).
-  const photoOf = useMemo(() => {
-    const photos = new Map(assignees.map((a) => [a.userId, a.avatarUrl]));
-    return (id: string) => photos.get(id) ?? null;
+  // The title's person tokens look their photo and own name up here (MOD-96).
+  const tokenPerson = useMemo(() => {
+    const byId = new Map<string, TokenPerson>(
+      assignees.map((a) => [a.userId, { avatarUrl: a.avatarUrl, name: a.fullName || "?" }]),
+    );
+    return (id: string) => byId.get(id) ?? null;
   }, [assignees]);
   const menuPeople = useMemo<CapturePerson[]>(() => people.filter((p) => p.canTakeTasks), [people]);
 
@@ -1441,7 +1444,7 @@ export function TaskCaptureBody({
       </div>
 
       <div className="flex flex-col gap-1 px-4 pt-1">
-        <TokenPhotoContext value={photoOf}>
+        <TokenPersonContext value={tokenPerson}>
           <TitleEditor
             apiRef={titleApi}
             initial={initial.draft.segments}
@@ -1464,7 +1467,7 @@ export function TaskCaptureBody({
             highlights={highlights}
             segmentKeys={segmentKeys}
           />
-        </TokenPhotoContext>
+        </TokenPersonContext>
 
         {pickingTemplate && templateProvider ? (
           <TemplatePickPanel

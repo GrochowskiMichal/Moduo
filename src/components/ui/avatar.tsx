@@ -31,7 +31,7 @@ function AvatarImage({ className, ...props }: React.ComponentProps<typeof Avatar
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
-      className={cn("aspect-square size-full", className)}
+      className={cn("aspect-square size-full object-cover", className)}
       {...props}
     />
   );
@@ -166,8 +166,8 @@ type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>,
 /**
  * A person, round: their profile photo when they have one (MOD-96), else two
  * initials on a stable colour (call 43), which also stand in while the photo
- * loads or when it can't. Every surface that shows a person passes `src`; the
- * colour is keyed on the id either way. Decorative by default (`aria-hidden`),
+ * loads or when it can't. Pass `src` wherever the person's photo is known;
+ * the colour is keyed on the id either way. Decorative by default (`aria-hidden`),
  * since a name almost always sits beside it and the initials would otherwise
  * join that row's accessible name (gotchas §UI). Pass `aria-hidden={false}`
  * with an `aria-label` when it stands alone.

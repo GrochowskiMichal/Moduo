@@ -3,7 +3,7 @@
 // `workspace_id`), NOT `mapWorkspace(inviteRow)` — the invite shape would yield a
 // garbage id/name and select a non-existent workspace.
 
-import { beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
 
 const runtime = rs.hoisted(() => ({
@@ -23,7 +23,7 @@ const runtime = rs.hoisted(() => ({
       status: "accepted",
       token: "TOK",
     })),
-    listMembers: rs.fn(async () => []),
+    listMembers: rs.fn(async (): Promise<unknown[]> => []),
     listInvites: rs.fn(async () => []),
     listRoles: rs.fn(async () => []),
     listNotifications: rs.fn(async () => []),
@@ -37,6 +37,7 @@ rs.mock("./auth-provider", () => ({
   useAuth: () => ({ runtime, userId: "user-1" }),
 }));
 
+import { PROFILE_UPDATED_EVENT } from "../features/profile/profile-storage";
 import { useWorkspace, WorkspaceProvider } from "./workspace-provider";
 
 describe("WorkspaceProvider.joinWorkspace", () => {
@@ -85,5 +86,57 @@ describe("WorkspaceProvider.joinWorkspace", () => {
     });
 
     expect(joined).toBeNull();
+  });
+});
+
+describe("WorkspaceProvider members after a profile change (MOD-96)", () => {
+  const PHOTO =
+    "https://example.supabase.co/storage/v1/object/public/avatars/profiles/user-1/a.png";
+  const row = (avatarUrl: string | null) => ({
+    id: "m1",
+    workspace_id: "ws-1",
+    user_id: "user-1",
+    role: "owner",
+    is_active: true,
+    profiles: { id: "user-1", display_name: "Ada Lovelace", avatar_url: avatarUrl },
+  });
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    rs.clearAllMocks();
+  });
+  afterEach(() => {
+    runtime.workspace.listMembers.mockImplementation(async () => []);
+  });
+
+  it("re-reads the members when a profile changes, so a new photo shows at once", async () => {
+    runtime.workspace.listMembers.mockImplementation(async () => [row(null)]);
+    const { result } = renderHook(() => useWorkspace(), { wrapper: WorkspaceProvider });
+    await waitFor(() => expect(result.current.members[0]?.displayName).toBe("Ada Lovelace"));
+    expect(result.current.members[0]?.avatarUrl).toBeNull();
+
+    runtime.workspace.listMembers.mockImplementation(async () => [row(PHOTO)]);
+    act(() => {
+      window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT));
+    });
+    await waitFor(() => expect(result.current.members[0]?.avatarUrl).toBe(PHOTO));
+  });
+
+  it("keeps the roster it has when that read fails", async () => {
+    runtime.workspace.listMembers.mockImplementation(async () => [row(PHOTO)]);
+    const { result } = renderHook(() => useWorkspace(), { wrapper: WorkspaceProvider });
+    await waitFor(() => expect(result.current.members[0]?.avatarUrl).toBe(PHOTO));
+    const calls = runtime.workspace.listMembers.mock.calls.length;
+
+    runtime.workspace.listMembers.mockImplementation(async () => {
+      throw new Error("offline");
+    });
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(PROFILE_UPDATED_EVENT));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(runtime.workspace.listMembers.mock.calls.length).toBe(calls + 1);
+    expect(result.current.members).toHaveLength(1);
+    expect(result.current.members[0]?.avatarUrl).toBe(PHOTO);
   });
 });

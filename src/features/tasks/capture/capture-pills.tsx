@@ -40,6 +40,9 @@ import { estimateLabel } from "./capture-menus";
 export type PillPerson = {
   userId: string;
   name: string;
+  /** Their own name, for the avatar's initials; empty when unset ("?", never
+   *  the "ME" of a "Member" placeholder, call 43). */
+  fullName: string;
   /** Their profile photo; the avatar shows initials without it (MOD-96). */
   avatarUrl: string | null;
   isMe: boolean;
@@ -114,8 +117,15 @@ const dayDate = (day: string) => new Date(`${day}T00:00:00`);
 
 function personOf(people: readonly PillPerson[], id: string | null | undefined) {
   const p = people.find((x) => x.userId === id);
-  return { name: p?.name ?? "Someone", avatarUrl: p?.avatarUrl ?? null };
+  return {
+    name: p?.name ?? "Someone",
+    avatar: p ? avatarName(p) : "?",
+    avatarUrl: p?.avatarUrl ?? null,
+  };
 }
+
+/** The name an avatar's initials come from (call 43). */
+const avatarName = (p: PillPerson) => p.fullName || "?";
 
 export function CapturePills({
   values,
@@ -142,7 +152,7 @@ export function CapturePills({
     someoneElse || team ? (
       <span className="flex min-w-0 items-center gap-1.5">
         {someoneElse ? (
-          <PersonAvatar name={other.name} id={someoneElse} src={other.avatarUrl} />
+          <PersonAvatar name={other.avatar} id={someoneElse} src={other.avatarUrl} />
         ) : null}
         {team ? (
           <TeamMark name={team.name} id={team.id} letters={team.mark || null} color={team.color} />
@@ -188,7 +198,7 @@ export function CapturePills({
                   onChange({ field: "assignee", value: p.isMe ? undefined : p.userId })
                 }
               >
-                <PersonAvatar name={p.name} id={p.userId} src={p.avatarUrl} />
+                <PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />
                 <span className="truncate">{p.isMe ? `${p.name} (you)` : p.name}</span>
                 {assigneeId === p.userId ? <Check className="ms-auto" aria-hidden /> : null}
               </DropdownMenuItem>
@@ -504,7 +514,7 @@ function MorePill({
                     key={p.userId}
                     size="xs"
                     active={on}
-                    icon={<PersonAvatar name={p.name} id={p.userId} src={p.avatarUrl} />}
+                    icon={<PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />}
                     onClick={() => onChange({ field: "waiting", userId: p.userId, on: !on })}
                   >
                     {p.name}
