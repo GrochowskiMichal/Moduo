@@ -148,7 +148,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.chat_op_wrap_up(uuid, uuid, boolean) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_wrap_up(uuid, uuid, boolean) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_wrap_up(uuid, uuid, boolean) TO authenticated, service_role;
 
 -- Opens a wrapped chain again (no-op on an open one). p_stamp false: the
@@ -207,7 +207,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.chat_op_reopen(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_reopen(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_reopen(uuid) TO authenticated, service_role;
 
 -- ── 3. Reply to… ────────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.chat_op_attach_to_chain(uuid, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_attach_to_chain(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_attach_to_chain(uuid, uuid) TO authenticated, service_role;
 
 -- ── 4. A reply reopens a wrapped chain (chat_op_send, from its live body) ────
@@ -414,7 +414,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) TO authenticated, service_role;
 
 -- ── 5. Hidden replies stay in Catch up until their chain is read ────────────
@@ -466,5 +466,5 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.chat_op_chain_read(uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.chat_op_chain_read(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_op_chain_read(uuid) TO authenticated, service_role;

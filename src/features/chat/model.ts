@@ -79,6 +79,14 @@ export type ChatMessage = {
   replyCount: number;
   lastReplyAt: string | null;
   replyUserIds: string[];
+  /** A chain's root, wrapped up (CV-12): its replies leave the stream (a drawing rule). */
+  wrappedAt: string | null;
+  wrappedBy: string | null;
+  /** The reply that settled it (always a reply of this chain). */
+  settledId: string | null;
+  /** The last reopen ("Reopened by Mike"); cleared by the next Wrap up. */
+  reopenedAt: string | null;
+  reopenedBy: string | null;
   pinnedAt: string | null;
   pinnedBy: string | null;
   editedAt: string | null;

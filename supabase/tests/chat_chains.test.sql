@@ -269,3 +269,29 @@ BEGIN
   PERFORM test.ok(v = 'ok 0', 'a key reads no chat row through the spine, a wrapped chain''s root included', v);
 END;
 $$;
+
+-- ── Grants: each function exactly as intended ───────────────────────────────
+DO $$
+DECLARE
+  f record;
+BEGIN
+  FOR f IN SELECT * FROM (VALUES
+    ('public.chat_op_wrap_up(uuid, uuid, boolean)', true),
+    ('public.chat_op_reopen(uuid)', true),
+    ('public.chat_op_attach_to_chain(uuid, uuid)', true),
+    ('public.chat_op_chain_read(uuid)', true),
+    ('public.chat_op_send(uuid, uuid, text, uuid)', true),
+    ('public.chat__may_wrap(public.chat_channels, public.chat_messages, uuid)', false),
+    ('public.chat__chain_root(uuid)', false),
+    ('public.chat__reopen_chain(public.chat_messages, uuid, timestamptz)', false),
+    ('public.chat__close_read(uuid, uuid, public.chat_messages)', false)) AS t(fn, signed_in)
+  LOOP
+    PERFORM test.ok(NOT has_function_privilege('anon', f.fn, 'EXECUTE')
+                AND has_function_privilege('authenticated', f.fn, 'EXECUTE') = f.signed_in
+                AND has_function_privilege('service_role', f.fn, 'EXECUTE')
+                AND NOT EXISTS (SELECT 1 FROM aclexplode((SELECT proacl FROM pg_proc WHERE oid = f.fn::regprocedure)) a
+                                 WHERE a.grantee = 0),
+      format('grants: %s is %s', f.fn, CASE WHEN f.signed_in THEN 'for signed-in people, never anon or PUBLIC' ELSE 'server only' END));
+  END LOOP;
+END;
+$$;
