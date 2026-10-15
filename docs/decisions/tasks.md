@@ -22,6 +22,40 @@ No migration. No drawn layout changes: Copy link sits where round-1c frame 3 and
   - Decision: every image still gets a small preview (1280 px WebP, else PNG or JPEG) except one already that small: a JPEG, PNG or WebP whose final original (after EXIF stripping and scaling) is at most 1280 px on its long edge **and** at most 100 KB. Then nothing else is stored, and the tiles, the uploading tile and the viewer show the original, signed for the preview's hour (it shows no more than a preview would). A GIF, an animated PNG (an `acTL` chunk) and an animated WebP (`ANIM`, or VP8X's animation flag) keep their still preview, so no tile plays (`isAnimatedImage`); any other image without a preview (HEIC kept as HEIC, a preview that never uploaded) stays a file tile.
   - Why: previews keep tiles, lists and the viewer fast, and a small image's preview is nearly a second copy of it.
   - Rejected: dropping previews (tiles would load multi-MB originals), either condition alone (a 100 KB 4000 px image would decode 12 MP into a 64 px tile; a 1280 px 2 MB PNG would load 2 MB per tile), and a server-side flag for "its own preview" (a migration; the record's type, size and pixels already say it).
+## 2026-10-15 · The task's details and activity (dogfood calls 9–13: MOD-129, MOD-36, MOD-139, MOD-123, MOD-124, MOD-109)
+
+Screen-only, no migration. Frames matched: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) frame 5 (the panel's feed and its comment box) and frame 1 (Bulk's title row), [round-1c](../../.design/tasks-v3/prototypes/round-1c.html) frame 3 (the description's fold) and its docked chat composer (`.composer2`) for the pinned box.
+
+- **Call 9 (MOD-129) · The activity reads like a thread, and the panel's comment box is pinned** → `task-feed.tsx` (`composerSlot`), `task-detail-panel.tsx`, `feed.ts` `TAIL_VISIBLE`; spec §9
+  - Who: Maciej, 2026-10-15, dogfood call #9.
+  - Decision: no "Created by · date · Updated …" line under the activity: the trail's first line says who created the task and when, its last the latest change. Oldest first, like a thread. In the panel the comment box is pinned under the scrolling body, always in reach; on the full page it ends the activity. Older changes fold into "Show n earlier changes": after the last comment the latest five show (`TAIL_VISIBLE`, N = 5, kept as it was, the agent's pick), a run of more than two changes between comments folds whole, and comments never fold.
+  - Why: the footer repeated the log, and a long feed pushed the box out of reach.
+  - Rejected: newest first with the box on top (MOD-129's question: a thread reads top-down, and the box would sit between the properties and the talk); round-2b frame 5's metaline (drawn there, dropped by this call); a new fold that hides comments too (not asked).
+- **Call 10 (MOD-36) · A long description folds at about eight lines in the panel** → `task-description.tsx`
+  - Who: Maciej, 2026-10-15, dogfood call #10.
+  - Decision: the panel shows about eight of the description's lines (`8.5lh` of its own text, so half a line peeks under the fade, as round-1c frame 3's 8.6 does), then "Show more" with what's below the fold ("· 2 tasks · 1 email", as the frames draw it), "Show less" when open. The full page always shows all of it, and a short or empty description never offers either. The fold already existed (call 56); it now counts lines rather than 192 px, so it holds whatever the type size and leading.
+  - Why: a long description pushed the properties and the activity far down the panel.
+  - Rejected: a fixed pixel height (about nine lines at today's 14 px × 1.5, more or fewer as the type changes); folding on the full page.
+- **Call 11 (MOD-139) · "Recently", not "Lately"** → `project-panel.tsx`
+  - Who: Maciej, 2026-10-15, dogfood call #11.
+  - Decision: the project overview's list of what happened is headed "Recently".
+  - Why: the plainer word.
+  - Rejected: "Lately".
+- **Call 12 (MOD-123, MOD-124) · With every List group folded the panel shows the project, and a closed Backlog line stays closed** → `task-list-view.tsx` (`onShowsNothing`, `toggleBacklog`, the selection effect), `selection.ts` `backstopPick`, `panel-views.ts` `panelTaskOf`, `tasks-plan-view.tsx`; spec §9
+  - Who: Maciej, 2026-10-15, dogfood call #12.
+  - Decision: when no List row shows (every group that holds tasks folded), the panel shows what it shows with nothing selected: the project's overview inside a project, "Select a task" elsewhere. The selection itself isn't cleared, so the List and the page can't flip it between them (MOD-122). The page's backstop picks only a row the List shows (nothing when none shows), never a task the List hides. A closed "Backlog · n" line still opens for a selected task inside it (a search, a link, its status set to Backlog), except the line you just closed on it, until the selection moves; closing a line that holds the selection moves it to the row above the line, else to the first row still shown, else leaves it.
+  - Why (MOD-124's cause, confirmed by a test against the old rule): the backstop picked the scope's first task, which could sit in a closed Backlog line, and the List opens a line for a selected task inside it. That reopened the line you had just closed, and opened one by itself on a project whose first task is a Backlog one.
+  - Rejected: clearing the selection when nothing shows (the List clearing it is what looped in MOD-122); keeping the hidden task in the panel (MOD-123's "keep it as it is").
+- **Call 13 (MOD-109) · A multi-selection's panel title reads "4 tasks ▾"** → `right-panel.tsx` `title`, `panel-views.ts` `panelTitleOf`, `bulk-panel.tsx`; spec §4
+  - Who: Maciej, 2026-10-15, dogfood call #13.
+  - Decision: while several tasks are selected the title row reads the count ("4 tasks ▾"), and its ▾ still lists the panel's views with Details checked. The bulk panel's own "4 tasks" heading goes: round-2b frame 1 has the count only in the title row (it draws no ▾; the call keeps it). The override is a `RightPanel` prop any module's page can set.
+  - Why: "Details ▾" over "4 tasks" said the same thing twice, the wrong one first.
+  - Rejected: a title field in the panel registry (it holds metadata; the count is page state); dropping the ▾ as the frame draws it (the other views would be a step further).
+- **MOD-134 follow-up · An unset priority in the details draws the faint bars** → `task-detail-properties.tsx` `LevelValue`
+  - Who: the orchestrator's follow-up to Maciej's MOD-134 call (batch A), 2026-10-15.
+  - Decision: an unset Priority reads "Set priority" with the three bars all faint, as capture's pill draws it, and the menu's None shows them too. Energy keeps its own icon.
+  - Why: capture and the details drew the same unset priority two ways.
+  - Rejected: the flag.
 
 ## 2026-10-14 · People show their profile photo, initials as the fallback (dogfood MOD-96)
 

@@ -1,10 +1,10 @@
-// Who a task can be assigned to, and how an assignee or creator reads. Pure,
-// so the pickers' rules are tested without the runtime (assignees.ts holds the
-// hook and the RPC).
+// Who a task can be assigned to, and how an assignee reads. Pure, so the
+// pickers' rules are tested without the runtime (assignees.ts holds the hook
+// and the RPC). The creator reads in the feed's first line since the "Created
+// by" line went (MOD-129).
 
 import { canBeAssignee } from "../sharing/rules";
 import type { WorkspaceMember } from "../workspaces/types";
-import type { Task } from "./model";
 
 export type Assignee = {
   userId: string;
@@ -80,18 +80,4 @@ export function assigneeLabel(
 ): string {
   if (!assigneeId) return "Unassigned";
   return byId(assigneeId)?.name ?? "Former member";
-}
-
-/**
- * Who goes after "Created by", or null when the creator isn't known (tasks
- * reassigned before the creator was kept, TV-D1) and the line leaves it out.
- */
-export function createdByLabel(
-  task: Pick<Task, "creatorId" | "creatorUnknown">,
-  byId: (id: string | null | undefined) => Assignee | null,
-): string | null {
-  if (task.creatorUnknown || !task.creatorId) return null;
-  const creator = byId(task.creatorId);
-  if (!creator) return "a former member";
-  return creator.isMe ? "you" : creator.name;
 }

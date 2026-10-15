@@ -270,7 +270,8 @@ export type Task = {
   creatorId: string;
   /**
    * The creator was overwritten by a reassignment before TV-D1 and couldn't
-   * be recovered, so the app doesn't claim one ("Created by" stays hidden).
+   * be recovered, so the app doesn't claim one (the feed's first line reads
+   * "Created", with no name).
    */
   creatorUnknown: boolean;
   /**

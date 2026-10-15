@@ -4,7 +4,7 @@
 // REPLAN 16), ordered for someone opening a prepared project cold: what it is
 // (state, dates, lead, client, description), how far it is ("Done this month
 // · 14 · 22h"), what's next, its sections, who's on it, what waits, its files,
-// what happened lately, and the ways out (time report, copy, duplicate,
+// what happened recently, and the ways out (time report, copy, duplicate,
 // archive). Everything comes from the reader's own copy, so it shows only what
 // they can see.
 
@@ -530,7 +530,8 @@ function ProjectOverview({
 
       {activity.length > 0 ? (
         <section className="flex flex-col">
-          <CollectionHeader as="h4" label="Lately" />
+          {/* "Recently", not "Lately" (MOD-139). */}
+          <CollectionHeader as="h4" label="Recently" />
           <ul className="flex flex-col">
             {activity.map((a) => (
               <li key={`${a.kind}:${a.task.id}:${a.at}`}>

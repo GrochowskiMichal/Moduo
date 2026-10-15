@@ -143,3 +143,34 @@ function lastInOrder(ids: ReadonlySet<string>, order: readonly string[]): string
   for (let i = order.length - 1; i >= 0; i -= 1) if (ids.has(order[i])) return order[i];
   return [...ids][ids.size - 1] ?? null;
 }
+
+// ── the cursor's backstop (the page's "keep the selection valid") ────────────
+
+/**
+ * The task the page selects when the one it has left the scope (archived,
+ * moved, deleted, a new place) or nothing is selected; `undefined` leaves the
+ * selection as it is. A subtask whose parent is in scope stays (it opens from
+ * under the parent). While the List is in the centre the pick is the first
+ * row it shows (`listOrder`), never a task it hides: the scope's first task
+ * could sit in a closed "Backlog · n" line, and the List opened the line for
+ * it (MOD-124). With no row shown (every group folded) that's nothing, and
+ * the List leaves "nothing" alone too (MOD-122), so the two settle on one
+ * choice and the selection can't flip between them (React #185); the panel
+ * then shows the project, as with nothing selected (MOD-123).
+ */
+export function backstopPick(input: {
+  selectedId: string | null;
+  /** The selected task's parent, when it has one. */
+  selectedParentId: string | null;
+  inScope: (id: string) => boolean;
+  /** While the List is in the centre: the task ids of its rows, in order. */
+  listOrder: readonly string[] | null;
+  /** The scope's first task Display doesn't hide. */
+  firstInScope: string | null;
+}): string | null | undefined {
+  const { selectedId, selectedParentId, inScope, listOrder, firstInScope } = input;
+  if (selectedId && inScope(selectedId)) return undefined;
+  if (selectedParentId && inScope(selectedParentId)) return undefined;
+  const pick = listOrder ? (listOrder.find(inScope) ?? null) : firstInScope;
+  return pick === selectedId ? undefined : pick;
+}
