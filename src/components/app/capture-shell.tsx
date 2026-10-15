@@ -58,6 +58,16 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const [typeId, setTypeId] = useState(types[0]?.type ?? "");
   const [draft, setDraft] = useState("");
   const [context, setContext] = useState<CaptureContext>({ source: null, openId: 0 });
+  // A prefilled open's line is its own: once it closes, the line Esc kept
+  // before it comes back (the kept draft's words, untouched).
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const lineBeforePrefill = useRef<string | null>(null);
+  useEffect(() => {
+    if (open || lineBeforePrefill.current === null) return;
+    setDraft(lineBeforePrefill.current);
+    lineBeforePrefill.current = null;
+  }, [open]);
   // Esc goes to the body first when it asks for it (its menu, a recognition).
   const escapeRef = useRef<(() => boolean) | null>(null);
   const registerEscape = useCallback((handler: (() => boolean) | null) => {
@@ -68,6 +78,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: the person and workspace are the trigger
   useEffect(() => {
     setDraft("");
+    lineBeforePrefill.current = null;
     setOpen(false);
   }, [userId, selectedWorkspaceId]);
   // Where focus was when the capture opened. Opened by a key or an event, the
@@ -98,11 +109,16 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
       // opener prefills the line.
       const asked = request?.type ? types.find((t) => t.type === request.type) : undefined;
       setTypeId((asked && asked.canWrite(permsRef.current) ? asked : types[0])?.type ?? "");
-      if (request?.draft !== undefined) setDraft(request.draft);
+      if (request?.draft !== undefined) {
+        lineBeforePrefill.current = draftRef.current;
+        setDraft(request.draft);
+      }
       setContext((prev) => ({
         ...(request ?? {}),
         source: getCaptureSource(),
         openId: prev.openId + 1,
+        // A prefilled open keeps its own draft for as long as it's open.
+        ...(request?.draft !== undefined ? { held: { current: null } } : {}),
       }));
       setOpen(true);
     },

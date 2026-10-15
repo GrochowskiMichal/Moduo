@@ -710,36 +710,125 @@ describe("taskForFiles (the file seam's task, AT3-2)", () => {
 });
 
 describe("a prefilled open (chat's T and /task, CV-7b)", () => {
-  it("starts fresh: an earlier draft's words and fields don't ride in", async () => {
+  const KEPT = { text: "Kept with Esc" };
+  const keepDraft = () =>
     saveDraft(ME, WS, {
-      segments: [{ text: "Old abandoned task" }],
+      segments: [KEPT],
       keep: [],
-      description: "old description",
-      subtasks: ["old subtask"],
+      description: "kept description",
+      subtasks: ["kept subtask"],
       fields: EMPTY_FIELDS,
     });
-    renderBody({ draft: "Order frames" }, referenceStore({}), "Order frames");
+  const keptIsThere = () => {
+    const kept = loadDraft(ME, WS);
+    expect(kept?.segments).toEqual([KEPT]);
+    expect(kept?.description).toBe("kept description");
+    expect(kept?.subtasks).toEqual(["kept subtask"]);
+  };
+  /** The shell's context for one prefilled open: `held` lives as long as it. */
+  const prefilledOpen = (words: string, openId = 1): Partial<CaptureContext> => ({
+    draft: words,
+    openId,
+    held: { current: null },
+  });
+  const createButton = (name: RegExp) =>
+    screen.getAllByRole("button").find((b) => name.test(b.textContent ?? "")) as HTMLButtonElement;
+
+  it("starts fresh: an earlier draft's words and fields don't ride in", async () => {
+    keepDraft();
+    renderBody(prefilledOpen("Order frames"), referenceStore({}), "Order frames");
     await waitFor(() => expect(document.body.textContent).toContain("Order frames"));
-    expect(document.body.textContent).not.toContain("Old abandoned task");
-    expect(document.body.textContent).not.toContain("old subtask");
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    expect(document.body.textContent).not.toContain("kept subtask");
     expect(screen.queryByText(/Draft restored/)).toBeNull();
   });
 
-  it("closed without a change, the kept draft is still there", async () => {
-    saveDraft(ME, WS, {
-      segments: [{ text: "Kept with Esc" }],
-      keep: [],
-      description: "",
-      subtasks: [],
-      fields: EMPTY_FIELDS,
-    });
-    const { unmount } = renderBody(
-      { draft: "From chat", openId: 7 },
-      referenceStore({}),
-      "From chat",
-    );
+  it("T then Esc: the kept draft is still there", async () => {
+    keepDraft();
+    const { unmount } = renderBody(prefilledOpen("From chat", 7), referenceStore({}), "From chat");
     await waitFor(() => expect(document.body.textContent).toContain("From chat"));
     unmount();
-    expect(loadDraft(ME, WS)?.segments).toEqual([{ text: "Kept with Esc" }]);
+    keptIsThere();
+  });
+
+  it("T then ⏎: the task is the message's, and the kept draft is still there", async () => {
+    keepDraft();
+    const { onDone } = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    expect(fake.saved[0]?.title).toBe("From chat");
+    expect(onDone).toHaveBeenCalled();
+    cleanup();
+    keptIsThere();
+  });
+
+  it("T then Create more: the emptied capture never overwrites the kept draft", async () => {
+    keepDraft();
+    renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create more/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    await waitFor(() => expect(document.body.textContent).not.toContain("From chat"));
+    keptIsThere();
+    cleanup();
+    keptIsThere();
+  });
+
+  it("T, a type switch and back with nothing changed: the prefill stays, the kept draft doesn't show", async () => {
+    keepDraft();
+    const open = prefilledOpen("From chat");
+    const first = renderBody(open, referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    first.unmount(); // ⌘2: the body goes, the shell's open (and `held`) stays
+    renderBody(open, referenceStore({}), "From chat"); // ⌘3: back
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    expect(document.body.textContent).not.toContain("kept subtask");
+    expect(screen.queryByText(/Draft restored/)).toBeNull();
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    expect(fake.saved[0]?.title).toBe("From chat");
+    cleanup();
+    keptIsThere();
+  });
+
+  it("T, a change under another type, then back: the new words come along", async () => {
+    const open = prefilledOpen("From chat");
+    const first = renderBody(open, referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    first.unmount();
+    renderBody(open, referenceStore({}), "From chat, edited as a note");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat, edited as a note"));
+  });
+
+  it("T, an edit, Esc, then a normal open: the kept draft comes back as it was", async () => {
+    keepDraft();
+    const first = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
+      target: { value: "typed in the prefilled capture" },
+    });
+    first.unmount();
+    keptIsThere();
+    // The shell gives the line back as it was before the prefill.
+    renderBody({ openId: 2 }, referenceStore({}), "Kept with Esc");
+    expect(await screen.findByText(/Draft restored/)).toBeTruthy();
+    expect(document.body.textContent).toContain("Kept with Esc");
+    expect(document.body.textContent).not.toContain("From chat");
+    expect(
+      (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
+    ).toBe("kept description");
+  });
+
+  it("a normal open keeps today's draft: what's typed is kept, Create clears it", async () => {
+    const first = renderBody({}, referenceStore({}), "");
+    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
+      target: { value: "normal words" },
+    });
+    await waitFor(() => expect(loadDraft(ME, WS)?.description).toBe("normal words"));
+    first.unmount();
+    expect(loadDraft(ME, WS)?.description).toBe("normal words");
   });
 });

@@ -118,14 +118,13 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
 };
 
 /**
- * The title's words as the Task body last told the shell. When the shell's
+ * The title's words as the Task body last told the shell (a prefilled open's
+ * words never land here: they're its own, in `held`). When the shell's
  * draft still matches, the stored draft (with its tokens) is the one to
  * restore; when it doesn't, the words were changed under another type (⌘2,
  * then back) and come along as words.
  */
 let lastTitleWords = "";
-/** The capture open a prefill already seeded (a type switch and back restores as usual). */
-let prefilledOpenId: number | null = null;
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
 let openBody: ((draft: CaptureDraft, files: File[]) => void) | null = null;
@@ -221,21 +220,30 @@ export function TaskCaptureBody({
   const [owner] = useState(() => ({ userId, workspaceId }));
 
   // ── the draft (restored on open, research §1.8) ──────────────────────────
+  const held = context?.held;
+  /** Forget the draft this capture writes to (a prefilled open's own, or the kept one). */
+  const forgetDraft = () => {
+    if (held) held.current = null;
+    else {
+      clearDraft(owner.userId, owner.workspaceId);
+      lastTitleWords = "";
+    }
+  };
   const [initial] = useState(() => {
     // An opener that prefills the line (chat's T, `/task`) starts a fresh
-    // task: nothing kept from an earlier capture rides into it.
-    const prefilled = context?.draft !== undefined && context.openId !== prefilledOpenId;
-    if (prefilled) {
-      prefilledOpenId = context.openId;
-      return {
-        draft: {
-          ...EMPTY_DRAFT,
-          segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
-        },
-        restored: false,
-        prefilled: true,
-        files: [] as File[],
+    // task in its own draft (`held`, this open's only): the person's kept
+    // draft is never read, written or cleared by it.
+    if (held) {
+      const mine = held.current as CaptureDraft | null;
+      let start: CaptureDraft = mine ?? {
+        ...EMPTY_DRAFT,
+        segments: shellDraft ? [{ text: shellDraft }] : EMPTY_DRAFT.segments,
       };
+      // Typed under another type (⌘2, then back): those words come along.
+      if (mine && shellDraft.trim() && shellDraft !== plainText(mine.segments)) {
+        start = { ...start, segments: [{ text: shellDraft }] };
+      }
+      return { draft: start, restored: false, files: [] as File[] };
     }
     const stored = loadDraft(owner.userId, owner.workspaceId);
     // A capture the server refused comes back when nothing else is waiting.
@@ -277,7 +285,6 @@ export function TaskCaptureBody({
     return {
       draft: start,
       restored: Boolean(restored),
-      prefilled: false,
       // A refused capture opened again (or by its Restore) brings its files
       // back too (AT-3).
       files: refusedNow
@@ -329,30 +336,12 @@ export function TaskCaptureBody({
   const justInserted = useRef<{ key: NodeKey; baseline: string | null } | null>(null);
   const effects = useRef<Record<string, Map<string, EntryEffect>>>({});
 
-  // Keep the draft on the device as it changes. A prefilled open leaves the
-  // kept draft alone until something here changes (Esc right away keeps it).
-  const untouched = useRef(initial.prefilled);
+  // Keep the draft on the device as it changes (a prefilled open: in its own).
   useEffect(() => {
-    if (untouched.current) {
-      const same =
-        plainText(segments) === plainText(initial.draft.segments) &&
-        keep.length === 0 &&
-        description === "" &&
-        subtasks.length === 0 &&
-        !pasted &&
-        JSON.stringify(fields) === JSON.stringify(initial.draft.fields);
-      if (same) return;
-      untouched.current = false;
-    }
-    saveDraft(owner.userId, owner.workspaceId, {
-      segments,
-      keep,
-      description,
-      subtasks,
-      fields,
-      pasted,
-    });
-  }, [owner, segments, keep, description, subtasks, fields, pasted]);
+    const now = { segments, keep, description, subtasks, fields, pasted };
+    if (held) held.current = now;
+    else saveDraft(owner.userId, owner.workspaceId, now);
+  }, [owner, held, segments, keep, description, subtasks, fields, pasted]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -678,8 +667,10 @@ export function TaskCaptureBody({
   const onTitleChange = (next: TitleSegment[], keys: Array<NodeKey | null>) => {
     setSegments(next);
     setSegmentKeys(keys);
-    lastTitleWords = plainText(next);
-    onDraftChange(lastTitleWords);
+    const words = plainText(next);
+    // The kept draft's words (a prefilled open's are its own, in `held`).
+    if (!held) lastTitleWords = words;
+    onDraftChange(words);
     const just = justInserted.current;
     if (just) {
       const now = JSON.stringify(next);
@@ -1141,8 +1132,7 @@ export function TaskCaptureBody({
     // The capture closes (or clears) at once; the task saves behind it.
     if (more) resetForMore();
     else {
-      clearDraft(owner.userId, owner.workspaceId);
-      lastTitleWords = "";
+      forgetDraft();
       onDraftChange("");
       onDone();
     }
@@ -1236,8 +1226,7 @@ export function TaskCaptureBody({
         setTemplate(null);
         resetForMore();
       } else {
-        clearDraft(owner.userId, owner.workspaceId);
-        lastTitleWords = "";
+        forgetDraft();
         onDraftChange("");
         onDone();
       }
@@ -1362,7 +1351,7 @@ export function TaskCaptureBody({
   }, [pasted]);
 
   const discardDraft = () => {
-    clearDraft(owner.userId, owner.workspaceId);
+    forgetDraft();
     titleApi.current?.setSegments([]);
     setKeep([]);
     setDescription("");

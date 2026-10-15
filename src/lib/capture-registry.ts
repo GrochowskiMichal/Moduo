@@ -75,6 +75,12 @@ export type CaptureContext = CaptureRequest & {
   source: CaptureSource | null;
   /** Bumped on every open, so a body can tell a fresh open from a re-render. */
   openId: number;
+  /**
+   * A prefilled open's own draft (set only when the opener passed `draft`):
+   * it lives for this open, type switches included, and is never stored, so
+   * the person's kept draft is never read, written or cleared by it.
+   */
+  held?: { current: unknown };
 };
 
 /** What the capture hands the type's body. */
