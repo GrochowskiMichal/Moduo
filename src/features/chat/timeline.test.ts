@@ -158,6 +158,8 @@ describe("channels", () => {
   it("normalizes names like the SQL op", () => {
     expect(normalizeChannelName("  Design Crit Ñandú! ")).toBe("design-crit-ñandú");
     expect(normalizeChannelName("--a  b--")).toBe("a-b");
+    expect(normalizeChannelName(`${"-".repeat(50_000)}a${"-".repeat(50_000)}`)).toBe("a");
+    expect(normalizeChannelName(`${"a".repeat(79)}-b`)).toBe(`${"a".repeat(79)}-`);
     expect(normalizeChannelName("!!!")).toBe("");
   });
 

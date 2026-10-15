@@ -128,13 +128,16 @@ export function toggleReaction(
 
 /** Same normalization as public.chat_normalize_channel_name — keep in lockstep. */
 export function normalizeChannelName(input: string): string {
-  return input
+  const kept = input
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^\p{L}\p{N}_-]/gu, "")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .replace(/^-+/, "");
+  // Trailing dashes go before the cut, as in SQL; a loop keeps it linear.
+  let end = kept.length;
+  while (end > 0 && kept[end - 1] === "-") end--;
+  return kept.slice(0, end).slice(0, 80);
 }
 
 /** Everyone in a DM except me (a DM with only me is "notes to self"). */
