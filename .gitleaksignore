@@ -7,3 +7,7 @@
 
 # A provider key in a since-removed backup file (removed 2026-10-07 in b7645011), rotated at the provider.
 795f4c3c944630afba9e2f5824dd2a69003716f0:opencode.json.openchamber.backup:generic-api-key:10
+# NR-6: minified Lexical/Yjs bundle; identifiers flagged as generic-api-key (false positives, confirmed by the owner 2026-10-15)
+95da36e2e47d8f28925918bb562b62bbc347194f:supabase/functions/_shared/notes-doc/notes-doc.bundle.js:generic-api-key:14
+13a209a519eedbcfb281bb85d036949cb112587f:supabase/functions/_shared/notes-doc/notes-doc.bundle.js:generic-api-key:16
+2ef20c3ea453c68147b4139a1b36ffb443ed134e:supabase/functions/_shared/notes-doc/notes-doc.bundle.js:generic-api-key:14
