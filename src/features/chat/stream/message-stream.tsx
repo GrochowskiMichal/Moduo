@@ -524,7 +524,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onTask: () => p.onTask(m),
         onEdit: canWrite && own(m) ? () => p.onStartEdit(m) : undefined,
         onDelete: canWrite && own(m) ? () => p.onDelete(m) : undefined,
-        onPin: () => p.onPin(m),
+        onPin: canWrite ? () => p.onPin(m) : undefined,
         onCopyLink: () => p.onCopyLink(m),
         onMarkUnread: () => p.onMarkUnread(m),
         onCustomize: () => dispatchOpenSettings({ section: "chat" }),
@@ -601,7 +601,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "p":
         case "P":
           e.preventDefault();
-          verbs.onPin();
+          verbs.onPin?.();
           return;
         case "t":
         case "T":
