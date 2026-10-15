@@ -243,7 +243,9 @@ export function TaskCaptureBody({
       if (mine && shellDraft.trim() && shellDraft !== plainText(mine.segments)) {
         start = { ...start, segments: [{ text: shellDraft }] };
       }
-      return { draft: start, restored: false, files: [] as File[] };
+      // A refused capture opened by its Restore brings its files back too.
+      const files = mine ? takeRefusedFiles(owner.userId, owner.workspaceId, true) : [];
+      return { draft: start, restored: false, files };
     }
     const stored = loadDraft(owner.userId, owner.workspaceId);
     // A capture the server refused comes back when nothing else is waiting.
@@ -946,7 +948,16 @@ export function TaskCaptureBody({
           if (!waiting) return;
           clearDraft(who, where, "refused");
           if (openBody) openBody(waiting, takeRefusedFiles(who, where));
-          else {
+          else if (draftHasContent(loadDraft(who, where) ?? EMPTY_DRAFT)) {
+            // The person keeps another draft: it stays where it is, and the
+            // refused capture opens in its own (files and all).
+            if (refusedFiles) refusedFiles.restoring = true;
+            dispatchOpenCapture({
+              type: "task",
+              draft: plainText(waiting.segments),
+              heldDraft: waiting,
+            });
+          } else {
             // The capture that opens takes the files with the draft.
             if (refusedFiles) refusedFiles.restoring = true;
             saveDraft(who, where, waiting);

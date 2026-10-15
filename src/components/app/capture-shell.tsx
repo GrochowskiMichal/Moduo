@@ -58,16 +58,12 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const [typeId, setTypeId] = useState(types[0]?.type ?? "");
   const [draft, setDraft] = useState("");
   const [context, setContext] = useState<CaptureContext>({ source: null, openId: 0 });
-  // A prefilled open's line is its own: once it closes, the line Esc kept
-  // before it comes back (the kept draft's words, untouched).
+  // A prefilled open's line is its own: the next open gets back the line Esc
+  // kept before it (the kept draft's words, untouched). Given back on the
+  // next open, not on close, so a closing one-line body never flashes it.
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const lineBeforePrefill = useRef<string | null>(null);
-  useEffect(() => {
-    if (open || lineBeforePrefill.current === null) return;
-    setDraft(lineBeforePrefill.current);
-    lineBeforePrefill.current = null;
-  }, [open]);
   // Esc goes to the body first when it asks for it (its menu, a recognition).
   const escapeRef = useRef<(() => boolean) | null>(null);
   const registerEscape = useCallback((handler: (() => boolean) | null) => {
@@ -109,16 +105,19 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
       // opener prefills the line.
       const asked = request?.type ? types.find((t) => t.type === request.type) : undefined;
       setTypeId((asked && asked.canWrite(permsRef.current) ? asked : types[0])?.type ?? "");
+      const before = lineBeforePrefill.current;
+      lineBeforePrefill.current = null;
       if (request?.draft !== undefined) {
-        lineBeforePrefill.current = draftRef.current;
+        lineBeforePrefill.current = before ?? draftRef.current;
         setDraft(request.draft);
-      }
+      } else if (before !== null) setDraft(before);
+      const { heldDraft, ...rest } = request ?? {};
       setContext((prev) => ({
-        ...(request ?? {}),
+        ...rest,
         source: getCaptureSource(),
         openId: prev.openId + 1,
         // A prefilled open keeps its own draft for as long as it's open.
-        ...(request?.draft !== undefined ? { held: { current: null } } : {}),
+        ...(request?.draft !== undefined ? { held: { current: heldDraft ?? null } } : {}),
       }));
       setOpen(true);
     },

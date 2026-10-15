@@ -67,6 +67,11 @@ export type CaptureRequest = {
    * opener can put a chip where it asked (chat's `/task`).
    */
   onCreated?: (ref: EntityRef, title: string) => void;
+  /**
+   * With `draft`: the body's whole draft to start from (a refused capture's
+   * Restore while the person keeps another draft). Only its body reads it.
+   */
+  heldDraft?: unknown;
 };
 
 /** A request as the body gets it: plus what was open when it was opened (93). */
@@ -78,7 +83,8 @@ export type CaptureContext = CaptureRequest & {
   /**
    * A prefilled open's own draft (set only when the opener passed `draft`):
    * it lives for this open, type switches included, and is never stored, so
-   * the person's kept draft is never read, written or cleared by it.
+   * the person's kept draft is never read, written or cleared by it. Only the
+   * Task body writes it (its `CaptureDraft`).
    */
   held?: { current: unknown };
 };
