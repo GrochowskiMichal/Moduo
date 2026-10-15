@@ -7,9 +7,11 @@ import {
   isHeic,
   isImageCandidate,
   jpegHasExif,
+  originalIsItsOwnPreview,
   planOriginal,
   prepareUpload,
   renameForMime,
+  SELF_PREVIEW_MAX_BYTES,
 } from "./pipeline";
 
 // A JPEG header: SOI, an APP0 (JFIF) segment, optionally an APP1 Exif segment,
@@ -225,9 +227,86 @@ describe("prepareUpload", () => {
   });
 
   it("drops the preview, not the file, when the preview can't be encoded", async () => {
-    const f = file("png", "x.png", "image/png");
+    // Over 100 KB, so it isn't its own preview (MOD-132) and one is tried.
+    const f = file(new Uint8Array(200_000), "x.png", "image/png");
     const env = fakeEnv({ "x.png": { width: 100, height: 100 } }, { refuse: ["image/jpeg"] });
     const out = await prepareUpload(f, { env });
     expect(out).toMatchObject({ original: f, preview: null, previewMime: null });
+  });
+});
+
+describe("a small image is its own preview (MOD-132)", () => {
+  it("is a JPEG, PNG or WebP within the preview's 1280 px and 100 KB", () => {
+    const at = (over: Partial<Parameters<typeof originalIsItsOwnPreview>[0]> = {}) =>
+      originalIsItsOwnPreview({
+        mime: "image/png",
+        width: 1280,
+        height: 720,
+        sizeBytes: SELF_PREVIEW_MAX_BYTES,
+        ...over,
+      });
+    expect(at()).toBe(true);
+    expect(at({ mime: "image/jpeg" })).toBe(true);
+    expect(at({ mime: "image/webp" })).toBe(true);
+    expect(at({ width: 1281 })).toBe(false);
+    expect(at({ height: 1281, width: 400 })).toBe(false);
+    expect(at({ sizeBytes: SELF_PREVIEW_MAX_BYTES + 1 })).toBe(false);
+    // An animated GIF keeps its still preview; HEIC can't show in most browsers.
+    expect(at({ mime: "image/gif" })).toBe(false);
+    expect(at({ mime: "image/heic" })).toBe(false);
+    expect(at({ mime: "application/pdf" })).toBe(false);
+    // Unknown pixels (never decoded) or an empty file: not an image we know.
+    expect(at({ width: null })).toBe(false);
+    expect(at({ sizeBytes: 0 })).toBe(false);
+  });
+
+  it("makes no preview for one: the file is stored once", async () => {
+    const f = file(jpegBytes({ exif: false }), "plain.jpg", "image/jpeg");
+    const env = fakeEnv({ "plain.jpg": { width: 800, height: 600 } }, { webp: true });
+    const out = await prepareUpload(f, { env });
+    expect(out).toMatchObject({
+      original: f,
+      mime: "image/jpeg",
+      preview: null,
+      previewMime: null,
+      width: 800,
+      height: 600,
+    });
+    expect(env.renders).toEqual([]);
+  });
+
+  it("still makes one for small pixels in a big file, or a small file with big pixels", async () => {
+    const heavy = file(new Uint8Array(400_000), "heavy.png", "image/png");
+    const env1 = fakeEnv({ "heavy.png": { width: 1200, height: 800 } });
+    expect((await prepareUpload(heavy, { env: env1 })).preview).not.toBeNull();
+
+    const wide = file(new Uint8Array(90_000), "wide.png", "image/png");
+    const env2 = fakeEnv({ "wide.png": { width: 3000, height: 2000 } });
+    const out = await prepareUpload(wide, { env: env2 });
+    expect(out.preview).not.toBeNull();
+    expect(env2.renders).toEqual([{ width: 1280, height: 853, mime: "image/jpeg", quality: 0.8 }]);
+  });
+
+  it("keeps a small GIF's still preview", async () => {
+    const f = file("gif", "wave.gif", "image/gif");
+    const env = fakeEnv({ "wave.gif": { width: 200, height: 200 } });
+    const out = await prepareUpload(f, { env });
+    expect(out.original).toBe(f);
+    expect(out.preview).not.toBeNull();
+  });
+
+  it("decides on the stored original, after EXIF is stripped", async () => {
+    // Re-encoded at 0.1 byte a pixel: 80 KB, its own preview.
+    const light = file(jpegBytes({ exif: true }), "a.jpg", "image/jpeg");
+    const env1 = fakeEnv({ "a.jpg": { width: 1000, height: 800 } });
+    const out1 = await prepareUpload(light, { env: env1 });
+    expect(out1.original).not.toBe(light);
+    expect(out1.original.size).toBe(80_000);
+    expect(out1.preview).toBeNull();
+    // At a byte a pixel, 800 KB: it gets a preview.
+    const dense = file(jpegBytes({ exif: true }), "b.jpg", "image/jpeg");
+    const env2 = fakeEnv({ "b.jpg": { width: 1000, height: 800 } }, { bytesPerPixel: 1 });
+    const out2 = await prepareUpload(dense, { env: env2 });
+    expect(out2.preview).not.toBeNull();
   });
 });
