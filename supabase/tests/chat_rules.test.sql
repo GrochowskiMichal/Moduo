@@ -81,7 +81,7 @@ BEGIN
   PERFORM test.ok(v = 'ok 1', 'setup: A makes the public channel N with B, L and V', v);
   v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('N')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: N is an announcement channel A manages', v);
-  -- L managed N and left it (a manager row left behind, as v1 left them);
+  -- L has a manager row but isn't in N;
   -- V, a viewer, has a manager row while in it.
   INSERT INTO public.chat_channel_managers (channel_id, user_id) VALUES
     (test.ref('N'), test.id('L')), (test.ref('N'), test.id('V'));
