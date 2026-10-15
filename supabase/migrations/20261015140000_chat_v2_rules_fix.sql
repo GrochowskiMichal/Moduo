@@ -9,12 +9,14 @@
 --      in an announcement channel, pinning there and switching announcement-only
 --      read that rule, never a bare manager row. A send checks it before it
 --      brings the sender back into the channel. The account erasure counts the
---      managers that remain the way the hand-over does.
+--      managers that remain the way the hand-over does, and hands a channel
+--      only to someone whose role posts.
 --   2. A removal is its own stamp. chat_members.removed_at marks "a manager
 --      removed this person"; removed_by only says who, and goes when that
---      person's account goes. Every check of "was removed" reads removed_at.
---      A removal is a way of leaving (left_at is set with it), and only a
---      manager or admin adding the person back clears it.
+--      person's account goes. Every check of "was removed" reads removed_at,
+--      the message row trigger too (so a removed person posts nothing there,
+--      through an app either). A removal is a way of leaving (left_at is set
+--      with it), and only a manager or admin adding the person back clears it.
 --   3. A channel's name clashes only with channels its creator can see. Public
 --      channels are unique among themselves, ignoring case (the index); a name
 --      is also refused when a private channel the creator (or renamer) is in
@@ -242,7 +244,7 @@ BEGIN
   INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
   VALUES (p_channel_id, v_me, v_channel.workspace_id)
   ON CONFLICT (channel_id, user_id) DO UPDATE SET left_at = NULL
-   WHERE public.chat_members.left_at IS NOT NULL;
+   WHERE public.chat_members.left_at IS NOT NULL AND public.chat_members.removed_at IS NULL;
 
   -- client_id = id while the v1 wrappers live: v1 screens and old builds match
   -- their optimistic row by it (CV-23 stops writing it).
@@ -321,7 +323,9 @@ BEGIN
 END;
 $function$;
 
--- The backstop on every message row (an app posts as its key's creator).
+-- The backstop on every message row (an app posts as its key's creator): a
+-- role that posts, not removed from the conversation, a manager in effect in an
+-- announcement channel.
 CREATE OR REPLACE FUNCTION public.share_chat_message_guard()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -336,6 +340,9 @@ BEGIN
   SELECT * INTO v_channel FROM public.chat_channels WHERE id = NEW.channel_id;
   IF NOT public.chat_has_cap(NEW.workspace_id, v_author, 'post') THEN
     RAISE EXCEPTION 'Your role can''t post in chat.' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.kind <> 'event' AND public.chat__was_removed(NEW.channel_id, v_author) THEN
+    RAISE EXCEPTION 'You were removed from this conversation.' USING ERRCODE = '42501';
   END IF;
   IF v_channel.managers_only AND NOT public.chat__is_manager(v_channel, v_author) THEN
     RAISE EXCEPTION 'Only managers can post in this channel.' USING ERRCODE = '42501';
@@ -426,11 +433,14 @@ $function$;
 
 -- The account erasure: a channel the person managed is handed on unless
 -- someone else still manages it, counted the way chat__hand_over counts them
--- (chat__can_manage). Anchored replace on the live body, like 20261014155205.
+-- (chat__can_manage), and only to someone whose role posts (a manager in
+-- effect once in the channel). Anchored replaces on the live body, like
+-- 20261014155205; each pair is applied once.
 DO $erase$
 DECLARE
   v_def text := pg_get_functiondef('public.account_erase_workspace_data(uuid, boolean)'::regprocedure);
-  v_old text := $old$      AND NOT EXISTS (
+  v_old text[] := ARRAY[
+$old1$      AND NOT EXISTS (
         SELECT 1 FROM public.chat_channel_managers m2
         WHERE m2.channel_id = c.id AND m2.user_id <> p_user
           AND NOT EXISTS (SELECT 1 FROM public.chat_members lm WHERE lm.channel_id = c.id
@@ -438,21 +448,37 @@ DECLARE
           AND (EXISTS (SELECT 1 FROM public.workspace_members wm
                        WHERE wm.workspace_id = c.workspace_id AND wm.user_id = m2.user_id)
                OR EXISTS (SELECT 1 FROM public.workspaces w
-                          WHERE w.id = c.workspace_id AND w.owner_id = m2.user_id)))$old$;
-  v_new text := $new$      AND NOT EXISTS (
+                          WHERE w.id = c.workspace_id AND w.owner_id = m2.user_id)))$old1$,
+$old2$      WHERE cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL
+$old2$,
+$old3$        WHERE m.workspace_id = r.workspace_id AND m.user_id <> p_user
+$old3$];
+  v_new text[] := ARRAY[
+$new1$      AND NOT EXISTS (
         SELECT 1 FROM public.chat_channel_managers m2
         WHERE m2.channel_id = c.id AND m2.user_id <> p_user
           -- One manager rule (chat__can_manage): in the channel, in a role that
           -- posts, or an admin.
-          AND public.chat__can_manage(c, m2.user_id))$new$;
+          AND public.chat__can_manage(c, m2.user_id))$new1$,
+$new2$      WHERE cm.channel_id = r.id AND cm.user_id <> p_user AND cm.left_at IS NULL
+        AND public.chat_has_cap(r.workspace_id, cm.user_id, 'post')
+$new2$,
+$new3$        WHERE m.workspace_id = r.workspace_id AND m.user_id <> p_user
+          AND public.chat_has_cap(r.workspace_id, m.user_id, 'post')
+$new3$];
+  v_changed boolean := false;
 BEGIN
-  IF position(v_new IN v_def) > 0 THEN
-    RETURN; -- re-run
+  FOR i IN 1..array_length(v_old, 1) LOOP
+    CONTINUE WHEN position(v_new[i] IN v_def) > 0; -- re-run
+    IF (length(v_def) - length(replace(v_def, v_old[i], ''))) / length(v_old[i]) <> 1 THEN
+      RAISE EXCEPTION 'account_erase_workspace_data isn''t the body this migration expects (part %); redefine it by hand.', i;
+    END IF;
+    v_def := replace(v_def, v_old[i], v_new[i]);
+    v_changed := true;
+  END LOOP;
+  IF v_changed THEN
+    EXECUTE v_def;
   END IF;
-  IF (length(v_def) - length(replace(v_def, v_old, ''))) / length(v_old) <> 1 THEN
-    RAISE EXCEPTION 'account_erase_workspace_data isn''t the body this migration expects; redefine it by hand.';
-  END IF;
-  EXECUTE replace(v_def, v_old, v_new);
 END;
 $erase$;
 
@@ -767,6 +793,8 @@ BEGIN
     RAISE EXCEPTION 'These still read manager rows directly: %', v_bad;
   END IF;
   IF position('chat__can_manage(c, m2.user_id)' IN
+              pg_get_functiondef('public.account_erase_workspace_data(uuid, boolean)'::regprocedure)) = 0
+     OR position('chat_has_cap(r.workspace_id, cm.user_id, ''post'')' IN
               pg_get_functiondef('public.account_erase_workspace_data(uuid, boolean)'::regprocedure)) = 0 THEN
     RAISE EXCEPTION 'account_erase_workspace_data does not count managers through chat__can_manage.';
   END IF;
@@ -774,8 +802,9 @@ BEGIN
   IF pg_get_functiondef('public.chat__was_removed(uuid, uuid)'::regprocedure) ~ 'removed_by' THEN
     RAISE EXCEPTION 'chat__was_removed must read removed_at, not removed_by.';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.chat_members WHERE removed_by IS NOT NULL AND removed_at IS NULL) THEN
-    RAISE EXCEPTION 'A removal without its stamp is left.';
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.chat_members'::regclass
+                  AND conname = 'chat_members_removal_check' AND convalidated) THEN
+    RAISE EXCEPTION 'chat_members_removal_check must hold.';
   END IF;
   -- Names: one index, public channels only; the old ones are gone.
   IF to_regclass('public.chat_channels_name_uq') IS NOT NULL

@@ -91,7 +91,8 @@ BEGIN
 
   INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
     (test.id('K:A'), test.id('W'), 'A''s app', 'mdo_ta', md5('db-test-key-rules-a'), '{"chat": "edit"}'::jsonb, test.id('A')),
-    (test.id('K:L'), test.id('W'), 'L''s app', 'mdo_tl', md5('db-test-key-rules-l'), '{"chat": "edit"}'::jsonb, test.id('L'));
+    (test.id('K:L'), test.id('W'), 'L''s app', 'mdo_tl', md5('db-test-key-rules-l'), '{"chat": "edit"}'::jsonb, test.id('L')),
+    (test.id('K:Z'), test.id('W'), 'Z''s app', 'mdo_tz', md5('db-test-key-rules-z'), '{"chat": "edit"}'::jsonb, test.id('Z'));
 END;
 $$;
 
@@ -152,8 +153,8 @@ BEGIN
 END;
 $$;
 
--- The erasure hands a channel on unless someone still manages it: a viewer's
--- manager row doesn't count.
+-- The erasure hands a channel on unless someone still manages it (a viewer's
+-- manager row doesn't count), and only to someone whose role posts.
 DO $$
 DECLARE
   v text;
@@ -162,13 +163,18 @@ BEGIN
   v := test.make('E', 'H', 'W', 'handoff', false, ARRAY['V']);
   PERFORM test.ok(v = 'ok 1', 'erasure setup: E makes the public channel H with V', v);
   INSERT INTO public.chat_channel_managers (channel_id, user_id) VALUES (test.ref('H'), test.id('V'));
+  v := test.make('E', 'QE', 'W', 'quiet-room', true, ARRAY['V']);
+  PERFORM test.ok(v = 'ok 1', 'erasure setup: E makes the private channel QE with only V, a viewer', v);
   r := public.account_erase_workspace_data(test.id('E'), true);
   PERFORM test.ok((r ->> 'chat_managers_handed_over')::int = 1,
-    'erasure preview: H is handed on (its other manager row is a viewer''s)', r::text);
+    'erasure preview: H is handed on (its other manager row is a viewer''s); QE has nobody whose role posts', r::text);
   PERFORM public.account_erase_workspace_data(test.id('E'), false);
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_channel_managers
                            WHERE channel_id = test.ref('H') AND user_id = test.id('O')),
     'erasure: H gets the workspace owner as its manager');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_channel_managers WHERE channel_id = test.ref('QE'))
+                  AND EXISTS (SELECT 1 FROM public.chat_channels WHERE id = test.ref('QE')),
+    'erasure: QE stays, and a viewer isn''t made its manager');
 END;
 $$;
 
@@ -204,6 +210,11 @@ BEGIN
     'erased remover: Z still can''t join the public channel again', v);
   v := test.send('Z', 'QR', 'qr-z', 'back?');
   PERFORM test.ok(v = '42501 You were removed from this conversation.', 'erased remover: nor post in it', v);
+  v := test.as_key('K:Z', format($q$SELECT public.chat_op_agent_post(%L, %L, 'from Z''s app')$q$, test.id('W'), test.ref('QR')));
+  PERFORM test.ok(v = '42501 You were removed from this conversation.', 'erased remover: nor through Z''s app', v);
+  v := test.err(format($q$INSERT INTO public.chat_messages (workspace_id, channel_id, author_id, body, format_version)
+                          VALUES (%L, %L, %L, 'direct', 2)$q$, test.id('W'), test.ref('QR'), test.id('Z')));
+  PERFORM test.ok(v = '42501 You were removed from this conversation.', 'trigger: a removed person''s row is refused', v);
   v := test.as_user('Z', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('PR')));
   PERFORM test.ok(v NOT LIKE 'ok %', 'erased remover: Z can''t join the private one', v);
   PERFORM test.ok(test.value_as('Z', format($q$SELECT public.chat_can_read_channel(%L)::text$q$, test.ref('PR'))) = 'false'
@@ -223,6 +234,8 @@ BEGIN
                                  test.ref('QR'), test.id('Z')));
   PERFORM test.ok(v = '1' AND (test.row('QR', 'Z')).left_at IS NULL AND (test.row('QR', 'Z')).removed_at IS NULL,
     'a manager (the owner, who got QR) adds Z back; the removal ends', v);
+  v := test.as_key('K:Z', format($q$SELECT public.chat_op_agent_post(%L, %L, 'back, from Z''s app')$q$, test.id('W'), test.ref('QR')));
+  PERFORM test.ok(v = 'ok 1', 'and Z''s app posts there again', v);
   v := test.value_as('B', format($q$SELECT public.chat_op_add_members(%L, ARRAY[%L]::uuid[])::text$q$,
                                  test.ref('PR'), test.id('Z')));
   PERFORM test.ok(v = '1' AND (test.row('PR', 'Z')).removed_at IS NULL,
@@ -235,8 +248,9 @@ BEGIN
   v := test.as_user('B', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('QR')));
   PERFORM test.ok(v = 'ok 1', 'and someone who left joins again', v);
 
-  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_members WHERE removed_by IS NOT NULL AND removed_at IS NULL),
-    'every removal on the stack carries its stamp');
+  PERFORM test.ok(test.err(format($q$UPDATE public.chat_members SET removed_by = %L WHERE channel_id = %L AND user_id = %L$q$,
+                                  test.id('A'), test.ref('QR'), test.id('B'))) LIKE '23514 %',
+    'a remover is recorded only on a removal');
 END;
 $$;
 
