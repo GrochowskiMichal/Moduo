@@ -207,6 +207,34 @@ describe("a saved view's Save in the toolbar (MOD-142)", () => {
     expect(document.activeElement).toBe(screen.getByTestId("display"));
   });
 
+  it("doesn't pull focus back if the person moved on before the hand-off ran", async () => {
+    render(
+      <>
+        <input aria-label="Search tasks" />
+        <SavingHeader />
+      </>,
+    );
+    const save = screen.getByRole("button", { name: "Save" });
+    save.focus();
+    fireEvent.click(save);
+    // The control is gone; before the hand-off fires, they click into search.
+    expect(screen.queryByTestId("view-changes")).toBeNull();
+    const search = screen.getByRole("textbox", { name: "Search tasks" });
+    search.focus();
+    await settle();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("drops the hand-off when the page goes with it", async () => {
+    const { unmount } = render(<SavingHeader />);
+    const save = screen.getByRole("button", { name: "Save" });
+    save.focus();
+    fireEvent.click(save);
+    unmount();
+    await settle();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it("leaves focus alone when it had moved elsewhere", async () => {
     function Elsewhere() {
       const [dirty, setDirty] = useState(true);

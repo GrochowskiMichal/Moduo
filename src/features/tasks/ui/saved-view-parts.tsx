@@ -111,6 +111,13 @@ export type ViewSaveAction = { label: string; onSelect: () => void };
  * else's view leads with "Save as new view…"; a new view with "Save view…").
  * A secondary button: New stays the toolbar's one primary (R5).
  */
+// The one focus hand-off a gone Save control may have waiting (MOD-142).
+let pendingFocus: ReturnType<typeof setTimeout> | null = null;
+function cancelFocusHandOff(): void {
+  if (pendingFocus) clearTimeout(pendingFocus);
+  pendingFocus = null;
+}
+
 export function ViewSaveControl({
   primary,
   more = [],
@@ -129,16 +136,21 @@ export function ViewSaveControl({
   // (else the toolbar's first control), never the page body. A layout
   // cleanup runs while the control is still in the page, so it can tell.
   useLayoutEffect(() => {
+    // A new control (the next unsaved change) owns focus now: a hand-off
+    // still waiting from the last one is dropped.
+    cancelFocusHandOff();
     const root = rootRef.current;
     return () => {
       if (!root) return;
-      const active = document.activeElement;
-      if (active && active !== document.body && !root.contains(active)) return;
+      const lost = (el: Element | null) => !el || el === document.body || root.contains(el);
+      if (!lost(document.activeElement)) return;
       const toolbar = root.closest<HTMLElement>('[role="toolbar"]');
-      setTimeout(() => {
-        const now = document.activeElement;
-        if (now && now !== document.body && now.isConnected) return;
-        if (!toolbar?.isConnected) return;
+      pendingFocus = setTimeout(() => {
+        pendingFocus = null;
+        // Only while focus is still lost (the body, or the gone control):
+        // someone who moved on (into search, a row) keeps where they are,
+        // and a toolbar that's gone too (another page) gets nothing.
+        if (!lost(document.activeElement) || !toolbar?.isConnected) return;
         const target =
           toolbar.querySelector<HTMLElement>('[data-slot="plan-display"] button') ??
           toolbar.querySelector<HTMLElement>("button");
