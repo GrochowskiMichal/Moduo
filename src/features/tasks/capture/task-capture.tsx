@@ -1121,6 +1121,13 @@ export function TaskCaptureBody({
     if (handler && userId) {
       handler({ workspaceId, userId, task: taskForFiles(sending, main.id), files: filesNow });
     }
+    // The opener asked to hear about it (chat's `/task` puts a chip there).
+    const onCreated = context?.onCreated;
+    if (onCreated) {
+      void taskForFiles(sending, main.id).then((made) => {
+        if (made) onCreated({ type: "task", id: main.id }, main.title);
+      });
+    }
   };
 
   /**

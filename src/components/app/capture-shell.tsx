@@ -82,6 +82,8 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const openRef = useRef(false);
   openRef.current = open;
+  const permsRef = useRef(modulePermissions);
+  permsRef.current = modulePermissions;
 
   const active = types.find((t) => t.type === typeId) ?? types[0];
 
@@ -91,8 +93,12 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
       if (openRef.current) return;
       const focused = document.activeElement;
       returnFocusRef.current = focused instanceof HTMLElement ? focused : null;
-      // Always opens as the first type, Task (90b). The draft stays: Esc kept it.
-      setTypeId(types[0]?.type ?? "");
+      // Opens as the first type, Task (90b), unless the opener names a type
+      // this person may create. The draft stays (Esc kept it) unless the
+      // opener prefills the line.
+      const asked = request?.type ? types.find((t) => t.type === request.type) : undefined;
+      setTypeId((asked && asked.canWrite(permsRef.current) ? asked : types[0])?.type ?? "");
+      if (request?.draft !== undefined) setDraft(request.draft);
       setContext((prev) => ({
         ...(request ?? {}),
         source: getCaptureSource(),
