@@ -53,7 +53,26 @@
 
 Three MAJORs fixed: moved-away and hard-deleted ids leave the device even when their conversation isn't in memory (the server names a moved id once); meta merges another tab's conversations and drafts instead of overwriting them; a jump window reopened or "Jump to latest" goes back to the newest page (the window starts again there, never drawing the gap). MINORs fixed: delete while sending, the access check judges what was held when it began, a sign-out stops a multi-chunk write, conversations that aren't open leave memory after a delta, the late-commit test now proves the lookback. Left as noted: the open conversation's window grows with `loadOlder` (no cap; CV-7a's virtual list decides the in-memory budget); `countArrival` approximates `chat_unread_counts` (team mentions, archived, v1 thread replies) until the next gap fill; v1's screens still draw a refused presence as nobody online (the error state is in the store; CV-7a/CV-17 show it).
 
+## Code review (`/code-review high`, `origin/t/maciej/chat-v2-build...HEAD`)
+
+Ten findings; nine changed code, one is left as noted. Each fix has a unit test (`store.test.ts`, `realtime.test.ts`), checked against the code without the fix where it could fail.
+- The memberships binding counts only your own row: Realtime doesn't filter deletes, so another person's removed membership arrived as yours; a left stamp from another workspace is ignored too.
+- "Jump to latest" reads the newest page only from a window that doesn't reach it (the "N new messages" chip just scrolls).
+- Row writes and "mark unread" are refused as offline only when the browser says so: one failed background read no longer refuses every write until the retry timer.
+- The gap to the newest page is judged from the held run's newest message (`edge`, kept per conversation in meta), not the newest row held: a live or delta row that landed while the conversation wasn't open no longer hides a gap. Too many delta pages clear the edge.
+- A waiting send this tab read from the device and another tab has since sent or discarded leaves this tab's outbox (checked before sending and before writing meta back).
+- Delete while sending marks the entry `deleted` (kept with the outbox, out of sight): it's deleted on the server when its answer or its echo lands, even if the answer was lost; refused, it just goes.
+- Realtime channels: the four Postgres Changes sources get a fresh topic per start, and typing and presence join a named topic again only once its previous channel has left (realtime-js hands back a leaving channel for the same topic).
+- The delta reads only the conversations the store holds (up to 100; more: the workspace).
+- `stampMinus` lives once in `features/tasks/live.ts` (re-exported by `lib/sync/store.ts`); the owner key is the sync copy's `cacheKey` / `isKeyOf`.
+- `markRead` reads the snapshot at call time (the actions no longer rebuild on every notify). Left: the snapshot's sidebar records are rebuilt on every notify (cheap at chat's sizes); CV-6b caches them if the badge shows up in profiles.
+
+After the review: `bun run test` for chat, sync and tasks live green; e2e: CV-3 owns no committed spec (`tests/chat-stream.spec.ts` is CV-7a's); the throwaway v1 smoke was re-run through `scripts/agent/e2e.sh` and stopped in setup: the reset local stack has the seed person but no workspace for them (stack state, not this change). `bun run verify`: typecheck, Biome, lint:tw, lint:css green; tests green but one, `chat_privacy.test.sql`'s three "activity" checks: the shared stack runs CV-5's catch-up migration (a direct message rings no bell), which this branch doesn't have; the build head's copy of that test (CV-5) adds the edit that writes the row, so it passes after the merge into the build branch.
+
 ## Gotchas (area: supabase · store · tooling)
+
+- **(supabase)** Postgres Changes doesn't filter DELETE events by the binding's `filter`: every subscriber gets every deleted row's key. Check the key's person before acting on a delete.
+- **(store)** realtime-js `channel(topic)` returns the channel that is still leaving when the same topic is asked for again, and `subscribe()` on it does nothing: wait for `removeChannel` before joining a named topic again (`whenTopicFree` in `realtime.ts`).
 
 - **(store)** An `async` IIFE assigned to a "running" field (`this.x = (async () => { … finally { this.x = null } })()`) that settles without awaiting runs its `finally` before the assignment: the field stays set forever and every later call waits on a finished promise. Chain `.finally` on the promise instead (`drain`, `sync`, `checkAccess` do).
 - **(supabase)** The local stack's send limit counts directly inserted rows by author too: a probe or spec that seeds messages "now" as a person, then sends as that person, gets `PT429`. Seed with an older `created_at`, or insert the later rows directly.
@@ -87,4 +106,4 @@ Three MAJORs fixed: moved-away and hard-deleted ids leave the device even when t
 
 - Delivery p95 of Postgres Changes on the real project (spike 3's local miss is the WAL poll): if it misses 500 ms, swap `postgresChangesSource` for Broadcast from the database behind the same `ChatLiveSource`.
 - The cold-open budget (≤ 100 ms for the newest 50 of 10,000) and the 500-rows-in-8-ms put were measured by spike 2's harness, not on this code; re-measure in the real webviews with CV-7a's stream.
-- Two tabs of one person: each tab drains only its own outbox entries (another tab's waiting sends stay in meta until that tab or a reload sends them; a resend under the same id never doubles a message).
+- Two tabs of one person: a tab sends the waiting sends it read from the device unless another tab sent or discarded them first (a resend under the same id never doubles a message: the op returns the stored row).
