@@ -3,6 +3,7 @@
 // scope only; unknown → none, so the page degrades without a crash).
 
 import { describe, expect, it } from "@rstest/core";
+import { taskLinkId } from "../../lib/task-handle";
 import {
   resolveTasksDeepLink,
   takeSearchTokens,
@@ -190,6 +191,33 @@ describe("taskIdForHandle — `?id=MOD-142` (RF-1)", () => {
     expect(taskIdForHandle("ML-142", tasks, "MOD")).toBeNull();
     expect(taskIdForHandle("MOD-9", tasks, "MOD")).toBeNull();
     expect(taskIdForHandle("MOD-142", tasks, null)).toBeNull();
+  });
+});
+
+describe("a task link, either form (MOD-28)", () => {
+  const tasks = [
+    { id: "f2968388-7a0f-4cd7-9d01-7b9242ebc1ce", number: 142, bucketId: "p1" },
+    { id: "b", number: 7, bucketId: "inbox" },
+  ];
+  const ctx = { tasks, buckets: [{ id: "p1" }], inboxId: "inbox" };
+  it("what the app writes (the handle) and an old link (the id) open the same task", () => {
+    const written = taskLinkId("MOD", tasks[0]);
+    expect(written).toBe("MOD-142");
+    const fromHandle = taskIdForHandle(written, tasks, "MOD");
+    expect(fromHandle).toBe(tasks[0].id);
+    const viaHandle = resolveTasksDeepLink(fromHandle as string, ctx);
+    const viaId = resolveTasksDeepLink(tasks[0].id, ctx);
+    expect(viaHandle).toEqual({ kind: "task", taskId: tasks[0].id, scope: "p1" });
+    expect(viaId).toEqual(viaHandle);
+  });
+  it("a task without a number yet is linked, and opened, by its id", () => {
+    const fresh = { id: "tmp-1", number: null, bucketId: "inbox" };
+    expect(taskLinkId("MOD", fresh)).toBe("tmp-1");
+    expect(resolveTasksDeepLink("tmp-1", { ...ctx, tasks: [...tasks, fresh] })).toEqual({
+      kind: "task",
+      taskId: "tmp-1",
+      scope: "inbox",
+    });
   });
 });
 

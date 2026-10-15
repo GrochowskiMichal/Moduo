@@ -53,6 +53,7 @@ import {
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
+import { taskLinkId } from "../../../lib/task-handle";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
@@ -1484,17 +1485,24 @@ export function TasksPlanView({
   // history.replaceState (~100 calls/30s) — an undebounced j/k key-repeat
   // cursor would trip a SecurityError in the desktop webview. Suspended while
   // an inbound id awaits apply — never overwrite a target before honoring it
-  // (a handle being looked up included).
+  // (a handle being looked up included). The URL names the task by its
+  // handle when it has one (`?id=MOD-142`, MOD-28), else by its id; a link
+  // that arrived by id (an old link, a notification, a chip) is rewritten to
+  // the handle once it's selected, and the apply above reads the handle back
+  // as the mirror's own write (`selfWroteUrlIdRef`), never as a new link.
+  const selectedLinkId = selectedTaskId
+    ? taskLinkId(taskKey, { id: selectedTaskId, number: selectedTask?.number })
+    : null;
   useEffect(() => {
     if (api.loading || inboundPending || handlePendingRef.current) return;
-    if ((selectedTaskId ?? null) === (urlTaskId ?? null)) return;
+    if (selectedLinkId === (urlTaskId ?? null)) return;
     const handle = window.setTimeout(() => {
       if (handlePendingRef.current) return;
-      selfWroteUrlIdRef.current = selectedTaskId;
-      onUrlTaskIdChange(selectedTaskId);
+      selfWroteUrlIdRef.current = selectedLinkId;
+      onUrlTaskIdChange(selectedLinkId);
     }, URL_MIRROR_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [api.loading, inboundPending, selectedTaskId, urlTaskId, onUrlTaskIdChange]);
+  }, [api.loading, inboundPending, selectedLinkId, urlTaskId, onUrlTaskIdChange]);
 
   // Reveal the deep-linked row/card/bar once it exists in the DOM — the scope
   // snap, a collapsed group's reveal, and a nested subtask's parent

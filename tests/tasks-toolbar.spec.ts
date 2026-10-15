@@ -191,7 +191,16 @@ test("a link into a filtered project lands on its task and keeps both projects' 
   await expect(page.getByRole("group", { name: "Status is Done" })).toBeVisible();
   // It stays selected (the URL keeps it), and the first project's filter is untouched.
   await page.waitForTimeout(600);
-  expect(new URL(page.url()).searchParams.get("id")).toBe(target.id);
+  // …by its handle (MOD-28).
+  const [{ number }] = await rest<Array<{ number: number }>>(
+    "service",
+    `tasks?id=eq.${target.id}&select=number`,
+  );
+  const [{ task_key }] = await rest<Array<{ task_key: string }>>(
+    "service",
+    `workspaces?id=eq.${ws.id}&select=task_key`,
+  );
+  expect(new URL(page.url()).searchParams.get("id")).toBe(`${task_key}-${number}`);
   await page.getByRole("button", { name: `Here ${tag} , 1 open`, exact: true }).click();
   await expect(page.getByRole("group", { name: "Status is To do" })).toBeVisible();
 });
