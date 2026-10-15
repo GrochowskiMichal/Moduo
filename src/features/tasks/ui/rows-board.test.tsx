@@ -488,6 +488,19 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     );
   });
 
+  it("an agent's dot always keeps its room beside the title's floor (MOD-125)", () => {
+    renderList(
+      [task("a", { title: "Hero banner for the homepage" })],
+      {},
+      { agentSessions: [working] },
+    );
+    const row = rowOf("Hero banner for the homepage");
+    const title = row.querySelector("[data-row-title]") as HTMLElement;
+    // The floor leaves the dot and its gap (12 + 10 px) when the cell is tiny.
+    expect(title.className).toContain("min-w-[min(10ch,calc(100%-1.375rem))]");
+    expect((detailsOf(row) as HTMLElement).className).toContain("min-w-3");
+  });
+
   it("Detailed keeps them right after the title", () => {
     renderList(
       [task("a", { title: "Hero banner" })],
@@ -499,6 +512,10 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     expect(details.className).not.toContain("ms-auto");
     const title = row.querySelector("[data-row-title]") as HTMLElement;
     expect(title.nextElementSibling).toBe(details);
+    // Whole counts here too, but what's left sits right after the title.
+    const counts = details.querySelector('[data-slot="row-details-counts"]') as HTMLElement;
+    expect(counts.className).toContain("flex-row-reverse");
+    expect(counts.className).toContain("justify-end");
   });
 
   it("a late row's fixes sit beside the details, never over them", () => {

@@ -249,45 +249,55 @@ function TaskRowView({
   // The details after a title, as one group (round-2b's `.ind`): the agent's
   // mark, then tags · files · comments · subtasks · blocked · waiting ·
   // repeats · waiting to sync. Once the title is at its floor they give way:
-  // the agent's words first, down to its dot, then the counts, whole and from
-  // the start, so they never run under the columns.
+  // the agent's words first, down to its dot (which always keeps its room,
+  // MOD-125), then the counts, so they never run under the columns.
+  const agent = facts.agent ?? null;
   const hasCounts = hasTaskCounts(task, facts, { waitingColumn: columns.waiting });
-  const hasDetails = !!facts.agent || hasCounts;
-  // Clipped sideways: with no room at all (a cell under the title's floor)
-  // even the agent's dot stays inside it, never over the columns.
-  const detailsBody = hasDetails ? (
-    <span className="flex min-w-0 items-center gap-2.5 overflow-x-clip">
-      {facts.agent ? <RowAgentMark mark={facts.agent} /> : null}
-      {hasCounts ? (
-        <span data-slot="row-details-counts" className={COUNTS_FROM_END}>
-          {/* Each count is an item of its own, so each gives way whole. */}
-          <TaskCounts
-            task={task}
-            facts={facts}
-            tagNames={detailed}
-            waitingColumn={columns.waiting}
-            bare
-          />
-        </span>
-      ) : null}
-    </span>
-  ) : null;
+  const hasDetails = !!agent || hasCounts;
+  const agentMark = agent ? <RowAgentMark mark={agent} /> : null;
   const details = detailed ? (
-    detailsBody ? (
-      <span data-slot="row-details" className="flex min-w-0 items-center">
-        {detailsBody}
+    // Detailed: right after the title, as before; its own columns line up
+    // instead. The counts give way whole, from their start, as in Standard,
+    // but the ones left sit right after the title (`justify-end` packs a
+    // reversed line to its left), so any room a hidden one leaves falls at
+    // the end, before the columns, never between the title and the counts.
+    hasDetails ? (
+      <span
+        data-slot="row-details"
+        className={cn("flex items-center gap-2.5 overflow-x-clip", agent ? "min-w-3" : "min-w-0")}
+      >
+        {agentMark}
+        {hasCounts ? (
+          <span data-slot="row-details-counts" className={cn(COUNTS_FROM_END, "justify-end")}>
+            <TaskCounts task={task} facts={facts} tagNames waitingColumn={columns.waiting} bare />
+          </span>
+        ) : null}
       </span>
     ) : null
   ) : hasDetails || fixes ? (
     // Standard (MOD-138): pinned to the cell's end, beside the columns, so
     // they never move with the title's length; a late row's fixes sit
-    // beside them, never over them.
+    // beside them, never over them. The counts give way whole, from their
+    // start; the box is clipped, so nothing ever runs over the columns.
     <span
       data-slot="row-details"
-      className="relative ms-auto flex min-w-0 items-center self-stretch"
+      className={cn(
+        "relative ms-auto flex items-center self-stretch",
+        agent ? "min-w-3" : "min-w-0",
+      )}
     >
       {fixesOver(hasDetails ? "end-full me-2.5" : "end-0")}
-      {detailsBody}
+      {hasDetails ? (
+        <span className="flex min-w-0 grow items-center gap-2.5 overflow-x-clip">
+          {agentMark}
+          {hasCounts ? (
+            <span data-slot="row-details-counts" className={COUNTS_FROM_END}>
+              {/* Each count is an item of its own, so each gives way whole. */}
+              <TaskCounts task={task} facts={facts} waitingColumn={columns.waiting} bare />
+            </span>
+          ) : null}
+        </span>
+      ) : null}
     </span>
   ) : null;
   const fixesAtEnd = fixesOver("end-0");
@@ -389,12 +399,15 @@ function TaskRowView({
               "truncate text-left font-sans text-md",
               // The title takes the room first and gives way first (call 42),
               // but never below about ten characters (MOD-125), nor wider than
-              // its cell: from that floor it grows to its own width, so it
-              // never stretches past its words. A shorter title just keeps
-              // its width.
+              // its cell (less an agent's dot and its gap, which always
+              // show): from that floor it grows to its own width, so it never
+              // stretches past its words. A shorter title keeps its width.
               title.length > TITLE_FLOOR_CHARS
-                ? "min-w-[min(10ch,100%)] max-w-max flex-1"
-                : "max-w-full shrink-0",
+                ? cn(
+                    "max-w-max flex-1",
+                    agent ? "min-w-[min(10ch,calc(100%-1.375rem))]" : "min-w-[min(10ch,100%)]",
+                  )
+                : cn("shrink-0", agent ? "max-w-[calc(100%-1.375rem)]" : "max-w-full"),
               // A closed row dims through the cell's opacity; a muted colour on
               // top would dim it twice.
               closed
@@ -681,8 +694,11 @@ const TITLE_FLOOR_CHARS = 10;
  * they still read left to right in their own order) on one line, and what
  * doesn't fit wraps onto a second line the box hides (the row gap puts it
  * fully below). Tags go first; files and comments stay longest. Eight at
- * most (TaskCounts'). 20 px tall, so a dense row keeps its height and a
- * Detailed "+n" its focus ring.
+ * most (TaskCounts'). A wrapping box keeps the width it was given, so a
+ * hidden count leaves its room: in Standard (icons and numbers) never more
+ * than one count's, beside the title; Detailed packs what's left after the
+ * title, so its tag chips' room falls at the end. 20 px tall, so a dense row
+ * keeps its height and a Detailed "+n" its focus ring.
  */
 const COUNTS_FROM_END = cn(
   "flex h-5 min-w-0 flex-row-reverse flex-wrap items-center gap-x-2.5 gap-y-4 overflow-hidden py-px",
