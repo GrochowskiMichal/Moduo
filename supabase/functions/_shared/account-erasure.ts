@@ -230,8 +230,10 @@ export async function findBlockingWorkspaces(
  */
 export async function deleteAccount(
   deps: ErasureDeps,
-  user: AccountUser,
+  account: AccountUser,
 ): Promise<DeleteAccountResult> {
+  // Addresses are stored trimmed and lower-cased (waitlist and email CHECKs).
+  const user: AccountUser = { id: account.id, email: account.email?.trim().toLowerCase() || null };
   const blocking = await step("check", () => findBlockingWorkspaces(deps, user.id));
   if (blocking.length > 0) return { status: "blocked", workspaces: blocking };
   // The SQL side runs after Stripe, which can't be undone: a dry run of both functions
@@ -611,8 +613,7 @@ async function deleteBookingData(deps: ErasureDeps, userId: string): Promise<voi
 
 // ── Waitlist ─────────────────────────────────────────────────────────────────
 
-async function deleteWaitlistEntries(deps: ErasureDeps, rawEmail: string | null): Promise<void> {
-  const email = rawEmail?.trim().toLowerCase();
+async function deleteWaitlistEntries(deps: ErasureDeps, email: string | null): Promise<void> {
   if (!email) return;
   // waitlist_join stores the address trimmed + lowercased (a CHECK enforces it).
   await deleteRows(deps.db, "waitlist", (q) => q.eq("email", email));
@@ -642,7 +643,7 @@ async function farewellFacts(
   hadBilling: boolean,
   warnings: string[],
 ): Promise<FarewellEmail | null> {
-  const email = user.email?.trim().toLowerCase();
+  const email = user.email;
   if (!email) return null;
   const suppressed = await deps.db.from("email_suppressions").select("email").eq("email", email);
   if (suppressed.error) throw new Error(`email_suppressions: ${suppressed.error.message}`);
@@ -666,15 +667,16 @@ async function farewellFacts(
 
 /** Every email record of the account and its address. Outbox rows to the account's id
  *  would go in the daily purge an hour later; rows to the address with no account id
- *  (a waitlist invite) would stay 30 days, so both go now. */
+ *  (a waitlist invite) would stay 30 days, so both go now. The do-not-email entry goes
+ *  last: if anything before it fails, a retry still sees it and still sends no A2. */
 async function deleteEmailRecords(db: ErasureDb, user: AccountUser): Promise<void> {
+  const email = user.email;
   await deleteRows(db, "email_outbox", (q) => q.eq("to_user_id", user.id));
   await deleteRows(db, "email_subscriptions", (q) => q.eq("user_id", user.id));
-  const email = user.email?.trim().toLowerCase();
   if (!email) return;
   await deleteRows(db, "email_outbox", (q) => q.eq("to_email", email));
-  await deleteRows(db, "email_suppressions", (q) => q.eq("email", email));
   await deleteRows(db, "email_subscriptions", (q) => q.eq("email", email));
+  await deleteRows(db, "email_suppressions", (q) => q.eq("email", email));
 }
 
 /** After the auth delete: never throws, the account is already gone. */

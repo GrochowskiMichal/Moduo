@@ -1120,6 +1120,19 @@ describe("deleteAccount — email records and the A2 email (TX-8)", () => {
     expect(failing.farewell.sent).toHaveLength(1);
   });
 
+  it("a retry after a failed email step still sees the do-not-email entry and sends no A2", async () => {
+    const { db, farewell, deps } = world();
+    db.tables.email_suppressions.push({ email: MY_EMAIL, reason: "complaint" });
+    db.fail = { table: "email_subscriptions", op: "delete" };
+    expect(await failedStep(deleteAccount(deps, me))).toBe("email");
+
+    db.fail = null;
+    const result = await deleteAccount(deps, me);
+
+    expect(result).toEqual({ status: "deleted", warnings: ["farewell_skipped_suppressed"] });
+    expect(farewell.sent).toEqual([]);
+  });
+
   it("still finishes the deletion when the send fails, with a warning", async () => {
     const { db, farewell, deps } = world();
     farewell.failWith = new Error("resend_http_500");

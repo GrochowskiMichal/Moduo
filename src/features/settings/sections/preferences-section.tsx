@@ -297,7 +297,7 @@ export function EmailGroup() {
     };
   }, [read]);
 
-  if (!runtime || state === "missing") return null;
+  if (!runtime || !read || state === "missing") return null;
   const shown = prefs ?? EMAIL_DEFAULTS;
 
   const toggle = async (key: EmailSwitch, value: boolean) => {
