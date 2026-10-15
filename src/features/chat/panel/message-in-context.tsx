@@ -4,7 +4,7 @@
 // conversation" to land on it there. Pinned opens it now; Catch up and Search
 // reuse it (CV-11).
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { PersonAvatar } from "@/components/ui/avatar";
 import { formatPastDay, formatTime } from "@/lib/time-format";
@@ -52,6 +52,14 @@ export function MessageInContext({
   onPersonClick?: (userId: string) => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
+  // The message sits in the middle of the list; only the list scrolls (never the stream).
+  const listRef = useRef<HTMLOListElement>(null);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const here = list?.querySelector<HTMLElement>("[data-current]");
+    if (!list || !here || loaded.state !== "ready") return;
+    list.scrollTop = Math.max(0, here.offsetTop - (list.clientHeight - here.offsetHeight) / 2);
+  }, [loaded]);
   useEffect(() => {
     if (!chat) return;
     let live = true;
@@ -75,8 +83,9 @@ export function MessageInContext({
   const ctx: BodyContext = { selfId, personOf, onPersonClick };
   return (
     <ol
+      ref={listRef}
       data-slot="message-in-context"
-      className="pane-scroll flex h-full flex-col gap-1 overflow-auto"
+      className="pane-scroll relative flex h-full flex-col gap-1 overflow-auto"
     >
       {loaded.rows.map((m, i) => {
         const prev = loaded.rows[i - 1];
@@ -94,7 +103,6 @@ export function MessageInContext({
             <div
               data-message-id={m.id}
               data-current={here ? "" : undefined}
-              ref={here ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}
               className={cn("flex min-w-0 gap-2 rounded-md px-2 py-1.5", here && "bg-state-active")}
             >
               <PersonAvatar

@@ -392,7 +392,7 @@ function PeoplePicker({
       />
       {offers.length > 0 ? (
         <ul
-          aria-label="People"
+          aria-label="Suggestions"
           className="flex max-h-48 flex-col gap-px overflow-auto rounded-md border border-hairline p-1"
         >
           {offers.map((p) => (

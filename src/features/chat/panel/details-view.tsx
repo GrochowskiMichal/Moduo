@@ -6,7 +6,7 @@
 // of every change (AC15.5) and the conversation's own actions (Archive for
 // managers, Leave). A viewer gets the same view without what they can't do.
 
-import { ChevronDown, Pin } from "lucide-react";
+import { Pin } from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
 
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FeedItem } from "@/components/ui/feed";
 import { GroupHeader } from "@/components/ui/group-header";
-import { PropertyRow } from "@/components/ui/property-row";
+import { PropertyRow, PropertyValue } from "@/components/ui/property-row";
 import { Switch } from "@/components/ui/switch";
 import { formatAge, formatDate, formatStamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
@@ -142,15 +142,9 @@ export function DetailsView({
             <PropertyRow label="Notify me">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Notify me: ${NOTIFY_LEVEL_COPY[member.notifyLevel]}`}
-                    className="-ml-2.5 gap-1 font-normal"
-                  >
+                  <PropertyValue aria-label={`Notify me: ${NOTIFY_LEVEL_COPY[member.notifyLevel]}`}>
                     {NOTIFY_LEVEL_COPY[member.notifyLevel]}
-                    <ChevronDown className="text-muted-foreground" aria-hidden />
-                  </Button>
+                  </PropertyValue>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="min-w-52">
                   <DropdownMenuRadioGroup
