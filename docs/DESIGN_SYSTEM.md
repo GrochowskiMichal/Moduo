@@ -359,7 +359,7 @@ story; `tests/visual/kit.spec.ts` opens each one and reads its tokens.
 | Chips and pickers | `Chip` / `ChipButton` / `PickerPill` (chip): one chip; rest = hairline ring, set = `state-active` fill |
 | Feedback and history | `EmptyState` (`size="page" \| "inline"`) · `FeedItem` / `FeedCard` / `FeedComposer` / `FeedComposerInput` (feed) |
 | Inputs and progress | `DateField` + `TimeInput` (date-field) · `NumberInput` (input) · `Progress` (neutral fill, `md` 6 px / `sm` 2 px) |
-| Identity | `PersonAvatar` (round, two initials, stable hue keyed on the id; `name={null}` = dashed "unassigned") · `TeamMark` (rounded square, two letters) · `initialsOf` / `teamLettersOf` / `avatarHue` (avatar) |
+| Identity | `PersonAvatar` (round; their profile photo via `src` when set, else two initials on a stable hue keyed on the id, which also stand in while the photo loads or when it fails, MOD-96; `name={null}` = dashed "unassigned") · `TeamMark` (rounded square, two letters) · `initialsOf` / `teamLettersOf` / `avatarHue` (avatar) |
 | Shared recipes | `SELECTED_ROW` / `SELECTED_OPTION` (selection.ts) · `FLOATING_SURFACE` (surface.ts) · `DROP_TARGET` / `DRAG_SOURCE` (drag-visuals) · `.hit-min` (global.css) |
 
 Tokens DS-6 added: `--subtle-foreground` (`text-subtle-foreground`, the

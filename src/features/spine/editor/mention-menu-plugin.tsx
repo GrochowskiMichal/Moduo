@@ -40,11 +40,11 @@ import {
   type NodeKey,
   type RangeSelection,
 } from "lexical";
-import { CalendarDays, Plus, User } from "lucide-react";
+import { CalendarDays, Plus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { TeamMark } from "@/components/ui/avatar";
+import { PersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -726,6 +726,17 @@ export function MentionMenuPlugin({
 }
 
 function CandidateIcon({ candidate }: { candidate: MentionCandidate }) {
+  if (candidate.kind === "person") {
+    // Round, with their photo when set (MOD-96), else two initials on their
+    // colour (call 43): the same avatar as everywhere else they appear.
+    return (
+      <PersonAvatar
+        name={candidate.name ?? candidate.label}
+        id={candidate.memberId}
+        src={candidate.avatarUrl}
+      />
+    );
+  }
   if (candidate.kind === "team") {
     return (
       <TeamMark
@@ -754,8 +765,6 @@ function CandidateIcon({ candidate }: { candidate: MentionCandidate }) {
       ? resolveEntityIcon(candidate.ref.type, candidate.icon)
       : candidate.kind === "command"
         ? CalendarDays
-        : candidate.kind === "create"
-          ? Plus
-          : User;
+        : Plus;
   return <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />;
 }

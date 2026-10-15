@@ -36,6 +36,11 @@ export type MentionPersonCandidate = {
   memberId: string;
   label: string;
   icon: string | null;
+  /** Their own name, for the avatar's initials when the label isn't just the
+   *  name ("Alex Rivera (you)"); defaults to the label. */
+  name?: string;
+  /** Their profile photo; the avatar shows initials without it (MOD-96). */
+  avatarUrl?: string | null;
 };
 
 /** A "no match — create it" candidate, offered for a typed `/ref` + query. */
@@ -218,6 +223,9 @@ export type SearchedPerson = {
   memberId: string;
   label: string;
   icon?: string | null;
+  /** See `MentionPersonCandidate`. */
+  name?: string;
+  avatarUrl?: string | null;
 };
 
 /** A tag as the `#` picker consumes it. */
@@ -300,6 +308,8 @@ export function buildMentionCandidates(input: {
         memberId: p.memberId,
         label: p.label,
         icon: p.icon ?? null,
+        ...(p.name !== undefined ? { name: p.name } : {}),
+        ...(p.avatarUrl !== undefined ? { avatarUrl: p.avatarUrl } : {}),
       });
     }
   }
