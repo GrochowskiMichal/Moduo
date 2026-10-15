@@ -135,6 +135,15 @@ describe("cross-runtime drift guards", () => {
     );
   });
 
+  it("CONTENT_AUTHOR_KINDS matches note_updates_origin_check (NR-6)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261014120000_notes_agent_writes.sql"),
+      "utf8",
+    );
+    const inList = CONTENT_AUTHOR_KINDS.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (origin IN (${inList}))`);
+  });
+
   it("time entry kinds, actions and answers match the TV-D14 re-cut of the TV-D3 migration", () => {
     const base = readFileSync(
       resolve(MIGRATIONS_DIR, "20261008225500_tasks_time_entries.sql"),

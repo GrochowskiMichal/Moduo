@@ -123,6 +123,7 @@ describe("spineActivityLine", () => {
       "commented: “ping me when ready”",
     );
     expect(spineActivityLine(entry("comments.add"))).toBe("left a comment");
+    expect(spineActivityLine(entry("notes.agent_edit"))).toBe("edited this note");
     // TV-U13: edits, deletes and their Undo read as words, never the op name.
     expect(spineActivityLine(entry("comments.edit", { excerpt: "now with @Mike" }))).toBe(
       "edited a comment: “now with @Mike”",
