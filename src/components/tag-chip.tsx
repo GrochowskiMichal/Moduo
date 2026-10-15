@@ -130,8 +130,11 @@ export function TagChipList({
   if (tags.length === 0) return null;
   const shown = tags.slice(0, max);
   const rest = tags.slice(max);
+  const restNames = rest.map((t) => t.name).join(", ");
   return (
     <span data-slot="tag-chip-list" className={cn("flex min-w-0 items-center gap-1", className)}>
+      {/* A screen reader hears "Tags: ui notes", not two bare words. */}
+      <span className="sr-only">Tags:</span>
       {shown.map((t) => (
         <TagChip
           key={t.id}
@@ -148,11 +151,12 @@ export function TagChipList({
           <TooltipTrigger
             type="button"
             data-slot="tag-chip-more"
+            aria-label={`${rest.length} more ${rest.length === 1 ? "tag" : "tags"}: ${restNames}`}
             className="shrink-0 rounded-sm font-sans text-xs tabular-nums text-subtle-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             +{rest.length}
           </TooltipTrigger>
-          <TooltipContent>{rest.map((t) => t.name).join(", ")}</TooltipContent>
+          <TooltipContent>{restNames}</TooltipContent>
         </Tooltip>
       ) : null}
     </span>

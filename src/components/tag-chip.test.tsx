@@ -133,6 +133,27 @@ describe("TagChipList", () => {
     expect((await screen.findByRole("tooltip")).textContent).toBe("errand, someday");
   });
 
+  it("says they're tags to a screen reader, and names what +n hides", () => {
+    render(
+      <TooltipProvider>
+        <TagChipList tags={tags} max={3} />
+      </TooltipProvider>,
+    );
+    const label = screen.getByText("Tags:");
+    expect(label.className).toContain("sr-only");
+    // Before the chips, so it's read first.
+    const list = label.closest('[data-slot="tag-chip-list"]') as HTMLElement;
+    expect(list.firstElementChild).toBe(label);
+    expect(screen.getByRole("button", { name: "1 more tag: someday" }).textContent).toBe("+1");
+    cleanup();
+    render(
+      <TooltipProvider>
+        <TagChipList tags={tags} max={2} />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: "2 more tags: errand, someday" })).toBeTruthy();
+  });
+
   it("caps each chip's width so a long name cuts, with the full name on hover", () => {
     const long = "a-very-long-tag-name-that-would-push-the-title-out";
     render(
