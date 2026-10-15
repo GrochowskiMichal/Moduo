@@ -17,6 +17,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import type { WorkspaceApiKey } from "../../../lib/runtime";
+import { formatFullDate } from "../../../lib/time-format";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 
@@ -44,7 +45,6 @@ import {
   scopeDependencyNotes,
   scopeSummary,
   scopesPayload,
-  shortDate,
   toKeyScopes,
 } from "../api-keys";
 import { SettingsSectionShell } from "./section-shell";
@@ -255,7 +255,7 @@ function ApiKeyRow({
           <p className="truncate font-mono text-xs text-muted-foreground">
             {apiKey.keyPrefix}…
             <span className="ml-2 font-sans">
-              {apiKey.lastUsedAt ? `Last used ${shortDate(apiKey.lastUsedAt)}` : "Never used"}
+              {apiKey.lastUsedAt ? `Last used ${formatFullDate(apiKey.lastUsedAt)}` : "Never used"}
             </span>
           </p>
           {life.expiryLine ? (

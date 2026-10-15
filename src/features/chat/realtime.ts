@@ -6,8 +6,14 @@
 //   • `chat-db:<ws>`  postgres_changes on chat_messages / chat_channels (per
 //     workspace) and chat_members (mine). Realtime applies the subscriber's RLS,
 //     so private channels and DMs never leak; deletes are soft for that reason.
-//   • `chat:<ws>`     PRIVATE broadcast + presence (typing, who's online),
-//     authorized by the realtime.messages policies in the chat migration.
+//   • `chat:<ws>`     PRIVATE presence (who's online), authorized by the
+//     realtime.messages policies in the chat migrations.
+//   • `chat:typing:<channel>`  PRIVATE broadcast, one per conversation, joined
+//     for the open conversation only (`watchTyping`). Only the people who can
+//     read the conversation may join it, and only the server writes to it:
+//     "I'm typing" goes through the `chat_op_typing` op, which stamps the
+//     sender from the session, so a typing line never shows a name the
+//     sender chose.
 //
 // Realtime is a latency layer, not the source of truth: after a reconnect (or
 // a long sleep) listeners get a `resync` and refetch what they show — a missed
@@ -37,8 +43,8 @@ export type TypingEntry = {
 
 type Listener = (event: ChatDbEvent) => void;
 
-const TYPING_TTL_MS = 4_000;
-const TYPING_THROTTLE_MS = 2_500;
+const TYPING_TTL_MS = 6_000;
+const TYPING_THROTTLE_MS = 3_000;
 /** Coming back after this long hidden refetches, even if the socket says it's fine. */
 const STALE_AFTER_HIDDEN_MS = 60_000;
 
@@ -51,7 +57,8 @@ class WorkspaceLink {
   private typingSubs = new Set<() => void>();
   private online: ReadonlySet<string> = new Set();
   private typing: TypingEntry[] = [];
-  private livePushable = false;
+  /** One private topic per conversation being followed, ref-counted. */
+  private typingTopics = new Map<string, { channel: RealtimeChannel; refs: number }>();
   private dbJoinedOnce = false;
   private lastTypingSent = new Map<string, number>();
   private typingSweep: ReturnType<typeof setInterval> | null = null;
@@ -125,42 +132,15 @@ class WorkspaceLink {
     this.db = db;
 
     const live = supabaseClient.channel(`chat:${ws}`, {
-      config: { private: true, broadcast: { self: false }, presence: { key: this.selfId } },
+      config: { private: true, presence: { key: this.selfId } },
     });
     live
       .on("presence", { event: "sync" }, () => {
         this.online = new Set(Object.keys(live.presenceState()));
         for (const fn of this.presenceSubs) fn();
       })
-      .on("broadcast", { event: "typing" }, (msg) => {
-        const p = msg.payload as Partial<TypingEntry> & { stop?: boolean };
-        if (typeof p?.userId !== "string" || typeof p.channelId !== "string") return;
-        if (p.userId === this.selfId) return;
-        this.typing = this.typing.filter(
-          (t) =>
-            !(
-              t.userId === p.userId &&
-              t.channelId === p.channelId &&
-              t.parentId === (p.parentId ?? null)
-            ),
-        );
-        if (!p.stop) {
-          this.typing.push({
-            userId: p.userId,
-            channelId: p.channelId,
-            parentId: p.parentId ?? null,
-            until: Date.now() + TYPING_TTL_MS,
-          });
-        }
-        for (const fn of this.typingSubs) fn();
-      })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          this.livePushable = true;
-          void live.track({ at: new Date().toISOString() });
-        } else {
-          this.livePushable = false;
-        }
+        if (status === "SUBSCRIBED") void live.track({ at: new Date().toISOString() });
       });
     this.live = live;
 
@@ -180,9 +160,11 @@ class WorkspaceLink {
   private close(): void {
     if (this.db) void supabaseClient.removeChannel(this.db);
     if (this.live) void supabaseClient.removeChannel(this.live);
+    for (const topic of this.typingTopics.values())
+      void supabaseClient.removeChannel(topic.channel);
+    this.typingTopics.clear();
     this.db = null;
     this.live = null;
-    this.livePushable = false;
     this.dbJoinedOnce = false;
     this.online = new Set();
     this.typing = [];
@@ -230,23 +212,84 @@ class WorkspaceLink {
   };
   getTyping = (): TypingEntry[] => this.typing;
 
-  /** Throttled "I'm typing" — `stop` clears it immediately on send/blur. */
+  /**
+   * Follow who's typing in one conversation (the open one): joins its private
+   * topic, shared between holders. Release on switch or unmount; the last
+   * release leaves the topic and forgets its entries.
+   */
+  watchTyping(channelId: string): () => void {
+    let entry = this.typingTopics.get(channelId);
+    if (!entry) {
+      const channel = supabaseClient.channel(`chat:typing:${channelId}`, {
+        config: { private: true },
+      });
+      channel.on("broadcast", { event: "typing" }, (msg) => this.onTyping(msg.payload)).subscribe();
+      entry = { channel, refs: 0 };
+      this.typingTopics.set(channelId, entry);
+    }
+    const held = entry;
+    held.refs += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      held.refs -= 1;
+      if (held.refs > 0 || this.typingTopics.get(channelId) !== held) return;
+      this.typingTopics.delete(channelId);
+      void supabaseClient.removeChannel(held.channel);
+      const before = this.typing.length;
+      this.typing = this.typing.filter((t) => t.channelId !== channelId);
+      if (this.typing.length !== before) for (const fn of this.typingSubs) fn();
+    };
+  }
+
+  /** A typing event the server wrote: its `userId` is the sender's session. */
+  private onTyping(payload: unknown): void {
+    const p = payload as Partial<TypingEntry> & { stop?: boolean };
+    if (typeof p?.userId !== "string" || typeof p.channelId !== "string") return;
+    if (p.userId === this.selfId) return;
+    this.typing = this.typing.filter(
+      (t) =>
+        !(
+          t.userId === p.userId &&
+          t.channelId === p.channelId &&
+          t.parentId === (p.parentId ?? null)
+        ),
+    );
+    if (!p.stop) {
+      this.typing.push({
+        userId: p.userId,
+        channelId: p.channelId,
+        parentId: p.parentId ?? null,
+        until: Date.now() + TYPING_TTL_MS,
+      });
+    }
+    for (const fn of this.typingSubs) fn();
+  }
+
+  /**
+   * Throttled "I'm typing" — `stop` clears it immediately on send/blur. Told to
+   * the server (`chat_op_typing`), which checks that I can read the
+   * conversation and broadcasts it to its members under my session's id;
+   * nothing is broadcast from here.
+   */
   sendTyping(channelId: string, parentId: string | null, stop = false): void {
-    // `send()` on an un-joined channel REST-falls-back (gotchas §Realtime) — drop instead.
-    if (!this.live || !this.livePushable) return;
     const key = `${channelId}:${parentId ?? ""}`;
     const now = Date.now();
     if (!stop && now - (this.lastTypingSent.get(key) ?? 0) < TYPING_THROTTLE_MS) return;
     if (stop && !this.lastTypingSent.has(key)) return;
     if (stop) this.lastTypingSent.delete(key);
     else this.lastTypingSent.set(key, now);
-    void this.live.send({
-      type: "broadcast",
-      event: "typing",
-      payload: { userId: this.selfId, channelId, parentId, stop },
-    });
+    // A PostgREST builder only sends when awaited or then-ed: the `.then` is
+    // what fires the request. Best effort either way: a refused or lost
+    // typing event changes nothing, so both outcomes are ignored.
+    void supabaseClient
+      .rpc("chat_op_typing", { p_channel_id: channelId, p_parent_id: parentId, p_stop: stop })
+      .then(noop, noop);
   }
 }
+
+const noop = () => {};
 
 const links = new Map<string, WorkspaceLink>();
 

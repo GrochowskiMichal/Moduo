@@ -254,7 +254,9 @@ export async function insertGoogleEvent(input: {
   return json;
 }
 
-export async function deleteGoogleEvent(accessToken: string, eventId: string): Promise<void> {
+/** Deletes the event and has Google tell its guests. True when the event is gone (404/410: already gone). */
+export async function deleteGoogleEvent(accessToken: string, eventId: string): Promise<boolean> {
   const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`;
-  await fetch(url, { method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } });
+  const res = await fetch(url, { method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } });
+  return res.ok || res.status === 404 || res.status === 410;
 }

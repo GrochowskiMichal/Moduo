@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import {
@@ -14,6 +15,12 @@ import {
   setAnalyticsConsent,
   useAnalyticsConsent,
 } from "../../../lib/analytics";
+import {
+  type BrowserPushState,
+  browserPushState,
+  disableBrowserPush,
+  enableBrowserPush,
+} from "../../../lib/notices/browser-push";
 import {
   type LandingView,
   type MotionPref,
@@ -41,18 +48,47 @@ const MOTION_OPTIONS: ReadonlyArray<{ value: MotionPref; label: string }> = [
   { value: "full", label: "Full" },
 ];
 
-/** The quiet-set notification toggles, in bell-priority order. Each governs one
- *  `NotificationType`; muting is a read-side filter over the feed (DF-19f-notif). */
+/** The quiet-set notification toggles, in bell-priority order (the switches of
+ *  the notification table, spec §13). Each governs one `NotificationType`;
+ *  muting is a read-side filter over the feed (DF-19f-notif). */
 const NOTIFICATION_ROWS: ReadonlyArray<{
   type: NotificationType;
   title: string;
   description: string;
 }> = [
-  { type: "mention", title: "Mentions", description: "When someone @mentions you in a comment." },
   {
     type: "assigned",
-    title: "Assigned to you",
-    description: "When someone else assigns a task to you.",
+    title: "Assigned to me",
+    description:
+      "When someone assigns you tasks or hands them into your Inbox. Several from one person within an hour arrive as one.",
+  },
+  {
+    type: "mention",
+    title: "Mentions",
+    description: "When someone @mentions you in a comment or a task's description.",
+  },
+  {
+    type: "comments",
+    title: "Comments",
+    description: "New comments on tasks you created, are assigned or commented on.",
+  },
+  {
+    type: "waiting",
+    title: "Waiting",
+    description:
+      "When something you were waiting on comes in, or the last thing blocking a task is finished.",
+  },
+  {
+    type: "teams",
+    title: "Your teams",
+    description:
+      "When a task is routed to a team you're in, or someone @mentions your team. Also the check-back when nobody took a team task you created.",
+  },
+  {
+    type: "agents",
+    title: "Your agents",
+    description:
+      "When an agent working through one of your API keys needs you, is ready for review, or failed. Also on your devices.",
   },
   {
     type: "completed",
@@ -65,9 +101,14 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
     description: "Snoozed and follow-up items that come due.",
   },
   {
-    type: "unblocked",
-    title: "Task unblocked",
-    description: "When the last thing blocking a task is finished.",
+    type: "storage",
+    title: "Storage almost full",
+    description: "When files take your workspaces past 80% and 95% of your storage. Owners only.",
+  },
+  {
+    type: "bookings",
+    title: "Bookings",
+    description: "When someone books or cancels on your links.",
   },
 ];
 
@@ -114,6 +155,10 @@ export function PreferencesSection() {
           />
         </PrefRow>
       </PrefGroup>
+
+      <RemindersGroup />
+
+      <AgentWorkGroup />
 
       <PrefGroup label="Default landing view">
         <PrefRow
@@ -224,10 +269,150 @@ function AnalyticsConsentGroup() {
   );
 }
 
+const BROWSER_PUSH_COPY: Record<BrowserPushState, string> = {
+  on: "On in this browser. Reminders arrive even when Moduo's tab is closed.",
+  off: "Get reminders from this browser even when Moduo's tab is closed.",
+  denied: "Not allowed by the browser. Allow notifications for Moduo in the browser's settings.",
+  unsupported: "This browser can't show notifications from Moduo.",
+  unavailable: "Browser notifications aren't set up for this copy of Moduo yet.",
+};
+
+/** Where reminders reach you (REPLAN 73): your bell always, plus the desktop
+ *  app in the menu bar, or this browser when you allow it. A reminder has no
+ *  switch of its own here: removing the reminder turns it off. */
+function RemindersGroup() {
+  const { runtime, userId } = useAuth();
+  const { preferences, setPreferences } = usePreferences();
+  const desktop = isTauriRuntime();
+  const [push, setPush] = useState<BrowserPushState | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (desktop) return;
+    let cancelled = false;
+    void browserPushState().then((state) => {
+      if (!cancelled) setPush(state);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [desktop]);
+
+  const togglePush = async (on: boolean) => {
+    if (!runtime || !userId) return;
+    setBusy(true);
+    try {
+      setPush(on ? await enableBrowserPush(runtime, userId) : await disableBrowserPush(runtime));
+    } catch {
+      toast("Couldn't change browser notifications — try again.");
+      setPush(await browserPushState());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PrefGroup
+      label="Reminders"
+      description="Reminders reach you in any workspace: in your bell, and as a notification where you allow it."
+    >
+      {desktop ? (
+        <PrefRow
+          title="Keep running in the menu bar"
+          description="Closing the window keeps Moduo in the menu bar, so reminders still arrive. Quit Moduo to stop them."
+        >
+          <Switch
+            checked={preferences.keepInMenuBar}
+            onCheckedChange={(v) => setPreferences({ keepInMenuBar: v })}
+            aria-label="Keep running in the menu bar"
+          />
+        </PrefRow>
+      ) : (
+        <PrefRow
+          title="Browser notifications"
+          description={push ? BROWSER_PUSH_COPY[push] : "Checking this browser…"}
+        >
+          {push === "on" || push === "off" ? (
+            <Switch
+              checked={push === "on"}
+              disabled={busy}
+              onCheckedChange={(v) => void togglePush(v)}
+              aria-label="Browser notifications"
+            />
+          ) : null}
+        </PrefRow>
+      )}
+    </PrefGroup>
+  );
+}
+
+/**
+ * "Show my agent work to teammates" (TV-D16, spec §12): an agent's session
+ * line on a task is yours until you turn this on; then anyone who can see the
+ * task sees it (never its hand-back summary). Off by default; it follows you
+ * across workspaces and devices.
+ */
+function AgentWorkGroup() {
+  const { runtime } = useAuth();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const read = runtime?.tasks.getAgentWork;
+  const write = runtime?.tasks.setAgentWork;
+
+  useEffect(() => {
+    if (!read) return;
+    let cancelled = false;
+    read()
+      .then((value) => {
+        if (!cancelled) setOn(value);
+      })
+      .catch(() => {
+        if (!cancelled) setOn(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [read]);
+
+  if (!read || !write) return null;
+  const toggle = async (value: boolean) => {
+    setBusy(true);
+    const before = on;
+    setOn(value);
+    try {
+      setOn(await write(value));
+    } catch {
+      setOn(before);
+      toast("Couldn't change who sees your agent work — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PrefGroup
+      label="Agents"
+      description="What your AI agents (connected through your API keys) are doing shows as one line on the task."
+    >
+      <PrefRow
+        title="Show my agent work to teammates"
+        description="Off: only you see your agents' session lines. On: anyone who can see the task sees them too. Hand-back summaries stay yours until you post them."
+      >
+        <Switch
+          checked={on === true}
+          disabled={on === null || busy}
+          onCheckedChange={(v) => void toggle(v)}
+          aria-label="Show my agent work to teammates"
+        />
+      </PrefRow>
+    </PrefGroup>
+  );
+}
+
 /** A labelled cluster (eyebrow above a card), mirroring the Appearance section.
  *  An optional description sits under the eyebrow for groups that need a one-line
  *  explainer (e.g. Notifications). */
-function PrefGroup({
+export function PrefGroup({
   label,
   description,
   children,
@@ -249,7 +434,7 @@ function PrefGroup({
   );
 }
 
-function PrefRow({
+export function PrefRow({
   title,
   description,
   children,

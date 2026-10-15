@@ -18,15 +18,19 @@ import {
   calendarAccountStatusSchema,
   calendarProviderSchema,
   contactFieldTypeSchema,
+  dateOrderSchema,
   emailAccountStatusSchema,
   energyLevelSchema,
+  hourCycleSchema,
   linkOriginSchema,
   mailboxProviderSchema,
   normalizeEmailProvider,
   normalizeRelationKind,
   priorityLevelSchema,
   relationKindSchema,
-  taskStatusSchema,
+  taskTimeAdjustmentReasonSchema,
+  taskTimeEntryKindSchema,
+  taskTimeStatusSchema,
 } from "./vocabularies.ts";
 
 const id = z.string().min(1);
@@ -54,7 +58,27 @@ export const taskRowSchema = z.object({
   recurrence: z.unknown().optional(),
   energy_level: z.union([energyLevelSchema, z.null()]).optional(),
   priority: z.union([priorityLevelSchema, z.null()]).optional(),
-  status: taskStatusSchema.optional(),
+  /** Lax (TV-D8): a status this build doesn't know is read through
+   *  normalizeTaskStatus, so the row still shows instead of being dropped. */
+  status: z.string().optional(),
+  /** The handle number (TV-D8); absent on a database before that migration. */
+  number: optNum,
+  /** TV-D9: the project status, its category (lax, like status), when and by
+   *  whom it was finished, and the due date as a date plus an optional time.
+   *  All absent on a database before that migration. */
+  status_id: optStr,
+  status_category: z.string().nullable().optional(),
+  completed_at: optStr,
+  completed_by: optStr,
+  due_on: optStr,
+  due_time: optStr,
+  /** TV-D10: the section, the team, the estimate (duration_minutes mirrors
+   *  the next work session from then on) and where it was imported from.
+   *  All absent on a database before that migration. */
+  section_id: optStr,
+  team_id: optStr,
+  estimate_minutes: optNum,
+  imported_from: z.unknown().optional(),
   committed_for: optStr,
   commit_order: optNum,
   reschedule_count: optNum,
@@ -62,8 +86,168 @@ export const taskRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  /** Set while the task is in the trash as part of a batch (TV-U6). */
+  deleted_batch_id: optStr,
 });
 export type TaskRow = z.infer<typeof taskRowSchema>;
+
+/** A task_completions row (TV-D8). */
+export const taskCompletionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: optStr,
+  completed_at: z.string(),
+  cycle_key: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskCompletionRow = z.infer<typeof taskCompletionRowSchema>;
+
+/** A project_statuses row (TV-D9): one status of a project, or of the
+ *  workspace default set (project_id null). The category is lax on read. */
+export const projectStatusRowSchema = z.object({
+  id,
+  workspace_id: id,
+  project_id: optStr,
+  category: z.string(),
+  name: z.string(),
+  position: optNum,
+  hidden: z.boolean().optional(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type ProjectStatusRow = z.infer<typeof projectStatusRowSchema>;
+
+// ── TV-D10: areas, sections, teams, sessions, reminders, Waiting on… ───────
+// Kinds and states are lax on read (open strings), like status_category: a
+// value this build doesn't know never drops the row.
+
+/** An areas row: an optional group of projects in the sidebar. */
+export const areaRowSchema = z.object({
+  id,
+  workspace_id: id,
+  name: z.string(),
+  color: optStr,
+  position: optNum,
+  shared: z.boolean().optional(),
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type AreaRow = z.infer<typeof areaRowSchema>;
+
+/** A sections row: an ordered part of a project, with a range or an end date. */
+export const sectionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  project_id: id,
+  name: z.string(),
+  position: optNum,
+  starts_on: optStr,
+  ends_on: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type SectionRow = z.infer<typeof sectionRowSchema>;
+
+/** A teams row: a named group that tasks are routed to. */
+export const teamRowSchema = z.object({
+  id,
+  workspace_id: id,
+  name: z.string(),
+  mark: z.string(),
+  color: optStr,
+  default_project_id: optStr,
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TeamRow = z.infer<typeof teamRowSchema>;
+
+/** A team_members row. */
+export const teamMemberRowSchema = z.object({
+  id,
+  workspace_id: id,
+  team_id: id,
+  user_id: id,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TeamMemberRow = z.infer<typeof teamMemberRowSchema>;
+
+/** A task_sessions row: one scheduled block of work on a task. */
+export const taskSessionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: optStr,
+  starts_at: z.string(),
+  ends_at: z.string(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskSessionRow = z.infer<typeof taskSessionRowSchema>;
+
+/** A task_reminders row: one of the reader's own reminders. */
+export const taskReminderRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: id,
+  kind: z.string(),
+  at: optStr,
+  fired_at: optStr,
+  suspended_at: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskReminderRow = z.infer<typeof taskReminderRowSchema>;
+
+/** A task_waiting row: one Waiting on… entry. */
+export const taskWaitingRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  kind: z.string(),
+  ref: optStr,
+  label: optStr,
+  since: z.string(),
+  created_by: optStr,
+  created_at: z.string(),
+  updated_at: z.string(),
+  deleted_at: optStr,
+});
+export type TaskWaitingRow = z.infer<typeof taskWaitingRowSchema>;
+
+/** An agent session on a task (TV-D16; RLS: its person, or teammates while they share). */
+export const agentSessionRowSchema = z.object({
+  id,
+  workspace_id: id,
+  task_id: id,
+  user_id: id,
+  agent: z.string(),
+  state: z.string(),
+  note: optStr,
+  step: optNum,
+  steps: optNum,
+  links: z.unknown().optional(),
+  earlier: z.unknown().optional(),
+  summary_at: optStr,
+  summary_posted_at: optStr,
+  started_at: z.string(),
+  updated_at: z.string(),
+  stopped_at: optStr,
+  deleted_at: optStr,
+});
+export type AgentSessionRow = z.infer<typeof agentSessionRowSchema>;
 
 /** Notes meta row — v2 columns optional so pre-migration (legacy) reads still parse. */
 export const noteRowSchema = z.object({
@@ -121,9 +305,25 @@ export const bucketRowSchema = z.object({
   is_system: z.boolean().optional(),
   group_label: optStr,
   position: z.string().optional(),
+  /** TV-D10: the project's fields (status lax on read). Absent on a database
+   *  before that migration. */
+  status: z.string().optional(),
+  starts_on: optStr,
+  target_on: optStr,
+  lead_id: optStr,
+  client_contact_id: optStr,
+  area_id: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  /** TV-U6. Absent before its migration. A label hue name (an open string, like tags.color). */
+  color: optStr,
+  archived_at: optStr,
+  deleted_batch_id: optStr,
+  /** The open tasks a project's delete sent to Inboxes (REPLAN 78; Restore takes back the untouched ones). */
+  trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
+  /** TV-U16: the project's description (plain text, '' for none). Absent before its migration. */
+  description: optStr,
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 
@@ -153,6 +353,81 @@ export const taskRelationRowSchema = z.object({
   blocker_task_id: id,
   blocked_task_id: id,
   created_at: z.string(),
+});
+
+/** A person's queue row (TV-D2, `public.task_queue`). */
+export const taskQueueRowSchema = z.object({
+  id,
+  workspace_id: id,
+  user_id: id,
+  task_id: id,
+  position: z.string().min(1),
+  queued_at: z.string(),
+  updated_at: z.string(),
+});
+
+/** What `tasks_op_track_time` answers (TV-D3). A `gone` answer carries only the
+ *  status and the task id. */
+export const taskTimeAnswerSchema = z.object({
+  status: taskTimeStatusSchema,
+  task_id: id,
+  entry_id: optStr,
+  total_seconds: optNum,
+  my_seconds: optNum,
+  my_waiting_seconds: optNum,
+});
+
+/** One row of `tasks_time_totals` (TV-D3). */
+export const taskTimeTotalsRowSchema = z.object({
+  task_id: id,
+  total_seconds: z.number(),
+  my_seconds: z.number(),
+  my_waiting_seconds: z.number(),
+  my_seconds_since: optNum,
+});
+
+/** One of your own `task_time_entries` rows (TV-D3, TV-D14's columns). */
+export const taskTimeEntryRowSchema = z.object({
+  id,
+  task_id: id,
+  kind: taskTimeEntryKindSchema,
+  seconds: z.number(),
+  started_at: optStr,
+  ended_at: optStr,
+  /** The day a logged entry is for; absent before TV-D14. */
+  entry_on: optStr,
+  note: optStr,
+  reason: z.union([taskTimeAdjustmentReasonSchema, z.null()]).optional(),
+  run_id: optStr,
+  created_at: z.string(),
+});
+
+/** One row of `tasks_time_report` (TV-D14). */
+export const timeReportRowSchema = z.object({
+  entry_id: id,
+  task_id: id,
+  task_title: z.string(),
+  project_id: optStr,
+  /** NULL when the reader can't see the project. */
+  project_name: optStr,
+  project_is_inbox: z.union([z.boolean(), z.null()]).optional(),
+  user_id: id,
+  is_mine: z.boolean(),
+  entry_day: z.string(),
+  seconds: z.number(),
+  kind: taskTimeEntryKindSchema,
+  reason: z.union([taskTimeAdjustmentReasonSchema, z.null()]).optional(),
+  note: optStr,
+});
+
+/** What `user_time_region` answers (TV-D14). NULL = the device's. */
+export const timeRegionRowSchema = z.object({
+  time_zone: optStr,
+  time_zone_manual: z.boolean().optional(),
+  week_start: z.union([z.number().int().min(0).max(6), z.null()]).optional(),
+  hour_cycle: z.union([hourCycleSchema, z.null()]).optional(),
+  date_order: z.union([dateOrderSchema, z.null()]).optional(),
+  share_time_with_owner: z.boolean().optional(),
 });
 
 export const activityRowSchema = z.object({
@@ -215,6 +490,12 @@ export const commentRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  // TV-U13: absent before 20261013100000.
+  edited_at: optStr,
+  comment_reactions: z
+    .array(z.object({ user_id: z.string(), reaction: z.string() }))
+    .nullable()
+    .optional(),
 });
 
 export const notificationRowSchema = z.object({
@@ -277,6 +558,26 @@ export const habitRowSchema = z.object({
   checks: z.unknown().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
+});
+
+/** public.attachments (AT-1). size_bytes is a bigint: PostgREST sends it as a
+ *  JSON number while it fits, a string past 2^53. */
+export const attachmentRowSchema = z.object({
+  id,
+  entity_type: z.string(),
+  entity_id: z.string(),
+  uploader_id: z.string().nullable().optional(),
+  file_name: z.string(),
+  mime: z.string(),
+  size_bytes: z.union([z.number(), z.string()]),
+  width: z.number().nullable().optional(),
+  height: z.number().nullable().optional(),
+  status: z.unknown(),
+  deleted_at: z.string().nullable().optional(),
+  created_at: z.string(),
+  object_path: z.string().nullable().optional(),
+  preview_path: z.string().nullable().optional(),
+  preview_mime: z.string().nullable().optional(),
 });
 
 export const contactChannelSchema = z.object({

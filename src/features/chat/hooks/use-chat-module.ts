@@ -414,6 +414,13 @@ export function useChatModule({
     if (!stateRef.current.threads[activeThreadId]?.loaded) void loadThread(activeThreadId);
   }, [state.status, activeThreadId, loadThread]);
 
+  // Who's typing is followed per conversation: join the open one's topic and
+  // leave it on switch (a thread's typing rides its conversation's topic).
+  useEffect(() => {
+    if (!link || !activeChannelId) return;
+    return link.watchTyping(activeChannelId);
+  }, [link, activeChannelId]);
+
   // ── realtime ──────────────────────────────────────────────────────────────
   const resync = useCallback(async () => {
     try {

@@ -1,3 +1,4 @@
+import { GUEST_REMINDER_MINUTES, type GuestReminderMinute } from "@contracts/vocabularies";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SELECTED_OPTION } from "@/components/ui/selection";
@@ -23,7 +24,7 @@ import {
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
-import { type GuestQuestion, newQuestionId } from "../booking/model";
+import { type GuestQuestion, newQuestionId, TASKS_BUSY_ID } from "../booking/model";
 import { WEEKDAYS, type Weekday, type WeeklyHours } from "../booking/slots";
 import type { VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
@@ -47,6 +48,8 @@ export type LinkDraft = {
   questions: GuestQuestion[];
   paused: boolean;
   video: VideoSetting;
+  /** "Remind guests" (TX-6): minutes before the meeting, or null for off. */
+  guestReminderMinutes: GuestReminderMinutes;
   /** Other workspace members who host this link with you. */
   cohostIds: string[];
   /** The co-hosts as last saved (null until loaded for an existing link). */
@@ -59,6 +62,30 @@ export type LinkDraft = {
  * (PERM-8 follow-up). The database side is live and unused.
  */
 export const COLLECTIVE_LINKS_ENABLED = false;
+
+export type GuestReminderMinutes = GuestReminderMinute | null;
+
+/** New and existing links start at 24 hours (specs/transactional-email.md Q36). */
+export const DEFAULT_GUEST_REMINDER_MINUTES: GuestReminderMinutes = 1440;
+
+const REMINDER_LABEL: Record<GuestReminderMinute, string> = {
+  60: "1 hour before",
+  1440: "24 hours before",
+};
+
+const REMINDER_OPTIONS: { value: string; minutes: GuestReminderMinutes; label: string }[] = [
+  { value: "off", minutes: null, label: "Off" },
+  ...GUEST_REMINDER_MINUTES.map((minutes) => ({
+    value: String(minutes),
+    minutes,
+    label: REMINDER_LABEL[minutes],
+  })),
+];
+
+/** The select's value ("off", "60", "1440") as the minutes the link saves; anything unknown is off. */
+export function reminderFromOption(value: string): GuestReminderMinutes {
+  return REMINDER_OPTIONS.find((option) => option.value === value)?.minutes ?? null;
+}
 
 const NOTICE_OPTIONS = [
   { minutes: 0, label: "No minimum" },
@@ -641,6 +668,33 @@ export function BookingLinkDialog({
                       </SelectContent>
                     </Select>
                   </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="font-display text-sm text-foreground">Remind guests</span>
+                    <Select
+                      value={
+                        draft.guestReminderMinutes === null
+                          ? "off"
+                          : String(draft.guestReminderMinutes)
+                      }
+                      onValueChange={(value) =>
+                        onChange({
+                          ...draft,
+                          guestReminderMinutes: reminderFromOption(value),
+                        })
+                      }
+                    >
+                      <SelectTrigger aria-label="Remind guests">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {REMINDER_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
                 </section>
                 <section className="flex flex-col gap-2">
                   <Eyebrow as="h2">Busy calendars</Eyebrow>
@@ -660,6 +714,19 @@ export function BookingLinkDialog({
                       }}
                     />
                     Moduo
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <Checkbox
+                      checked={draft.busyCalendarIds.includes(TASKS_BUSY_ID)}
+                      onCheckedChange={(checked) => {
+                        const rest = draft.busyCalendarIds.filter((id) => id !== TASKS_BUSY_ID);
+                        onChange({
+                          ...draft,
+                          busyCalendarIds: checked ? [...rest, TASKS_BUSY_ID] : rest,
+                        });
+                      }}
+                    />
+                    Work sessions from Tasks
                   </label>
                   {accounts.map((account) => (
                     <label

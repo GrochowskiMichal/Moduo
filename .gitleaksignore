@@ -11,3 +11,12 @@
 95da36e2e47d8f28925918bb562b62bbc347194f:supabase/functions/_shared/notes-doc/notes-doc.bundle.js:generic-api-key:14
 13a209a519eedbcfb281bb85d036949cb112587f:supabase/functions/_shared/notes-doc/notes-doc.bundle.js:generic-api-key:16
 2ef20c3ea453c68147b4139a1b36ffb443ed134e:supabase/functions/_shared/notes-doc/notes-doc.bundle.js:generic-api-key:14
+
+# A test fixture uses the Push API's published example subscription key (a public sample value, not a credential).
+d10c10b76c14e0369549d63c575d912e3840f24b:supabase/tests/notifications.test.sql:generic-api-key:287
+
+# A sign-in email test uses a made-up token hash (a fixture value, not a credential).
+d6447e9e326d7f8a3fc1fd2980b92efe61498c61:supabase/functions/auth-email-hook/handler.test.ts:generic-api-key:10
+
+# The workspace invite email fixture uses a made-up invite token (base64 of plain words, not a credential).
+746423d9c08bd3f7e6b9940583461c7385aaff68:supabase/functions/_shared/email/templates/fixtures.ts:generic-api-key:69

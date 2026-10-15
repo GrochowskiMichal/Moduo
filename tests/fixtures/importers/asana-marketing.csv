@@ -1,0 +1,7 @@
+Task ID,Created At,Completed At,Last Modified,Name,Section/Column,Assignee,Assignee Email,Start Date,Due Date,Tags,Notes,Projects,Parent task,Blocked By (Dependencies),Blocking (Dependencies),Priority
+1208123400000001,2026-10-01,,2026-10-09,Launch email,Planning,Maya Chen,maya@example.com,2026-10-12,2026-10-21,"email,launch","Subject line options in the doc.
+Send at 9am local.",Q4 Marketing,,,,High
+1208123400000002,2026-10-01,,2026-10-02,Write the copy,Planning,Maya Chen,maya@example.com,,2026-10-16,,,Q4 Marketing,Launch email,,,
+1208123400000003,2026-10-02,2026-10-08,2026-10-08,Book the photographer,In progress,Sam Lee,sam.lee@example.org,,2026-10-08,events,,Q4 Marketing,,,,Low
+1208123400000004,2026-10-03,,2026-10-03,Webinar landing page,In progress,,,,10/30/2026,,,Q4 Marketing,,,,
+1208123400000005,2026-10-04,,2026-10-04,,Done,,,,,,,Q4 Marketing,,,,

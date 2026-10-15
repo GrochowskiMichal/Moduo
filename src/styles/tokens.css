@@ -422,7 +422,8 @@
  *     bg-state-active-hover · bg-state-selected · ring-state-selected (the 32%
  *     ring) · ring-state-selected-edge (the row hairline switch) ·
  *     border-hairline (also bg-/ring-/divide-hairline) · bg-control-raised
- *     with shadow-control-raised. --scroll-thumb / --scroll-thumb-hover are
+ *     with shadow-control-raised · bg-tag-chip-surface (a tag's dot chip,
+ *     MOD-97). --scroll-thumb / --scroll-thumb-hover are
  *     var()-only (global.css scrollbars, the ScrollArea thumb).
  * ==========================================================================*/
 
@@ -431,6 +432,9 @@
   --state-active:        color-mix(in oklab, var(--foreground) 9%, transparent);
   --state-active-hover:  color-mix(in oklab, var(--foreground) 14%, transparent);
   --state-selected:      color-mix(in oklab, var(--primary) 13%, transparent);
+  /* Hovering a selected item steps one up (DS-6, the kit Row and Card), so a
+     selected row still answers the pointer. */
+  --state-selected-hover: color-mix(in oklab, var(--primary) 18%, transparent);
   --state-selected-ring: color-mix(in oklab, var(--primary) 32%, transparent);
   /* The 1px inset hairline a selected LIST ROW draws with its tint. The
      designer's switch between the two selection looks: keep it for
@@ -438,12 +442,41 @@
      accent the tint alone sits close to --state-active, so it ships on. */
   --state-selected-edge: var(--state-selected-ring);
   --hairline:            color-mix(in oklab, var(--foreground) 10%, transparent);
+  /* A tag's dot chip (dogfood MOD-97, option C): a quiet neutral pill that
+     never changes with the tag's hue; the 6 px dot carries the colour. A rest
+     surface, not a state, so it sits between hover (5%) and active (9%) and
+     never answers the pointer. 7% on dark; the light block below sets 6%.
+     Utility: bg-tag-chip-surface. */
+  --tag-chip-surface:    color-mix(in oklab, var(--foreground) 7%, transparent);
+  /* The third readable text level (tasks-v3 call 38, DS-6): timestamps, hints,
+     counts. Three readable levels for every module — foreground (primary),
+     --muted-foreground (secondary, ~8.5:1) and this one (tertiary, ~6:1, never
+     under 4.5:1) — plus one decorative level below it that carries no
+     information (ghost priority bars, placeholders, disabled). Translucent, so
+     it reads the same on card, background and popover. Utility:
+     text-subtle-foreground. New one-off fades (/40 /50 /60) are not levels. */
+  --subtle-foreground:   color-mix(in oklab, var(--muted-foreground) 86%, transparent);
   /* The current segment of a segmented control / tab list sits on a --muted
      track and must read LIGHTER than it on dark (the old bg-card plate
      rendered darker, so an icon-only switcher lost its current view). */
   --control-raised:      color-mix(in oklab, var(--foreground) 14%, var(--muted));
   --scroll-thumb:        color-mix(in oklab, var(--foreground) 16%, transparent);
   --scroll-thumb-hover:  color-mix(in oklab, var(--foreground) 32%, transparent);
+  /* The Timeline's quiet structure (TV-TL1, REPLAN 69): hairlines per unit,
+     stronger where a month starts, a faint weekend tint, a dated section's
+     band, the project bar (a neutral fill; the outline when its dates are
+     worked out), a section's segment on it, the 2 px progress line, and a
+     late point's muted tone (never red, 23). Accent stays for the selection,
+     today's line and the done check. */
+  --timeline-grid:        color-mix(in oklab, var(--foreground) 5.5%, transparent);
+  --timeline-grid-strong: color-mix(in oklab, var(--foreground) 13%, transparent);
+  --timeline-weekend:     color-mix(in oklab, var(--foreground) 2.4%, transparent);
+  --timeline-band:        color-mix(in oklab, var(--foreground) 3.2%, transparent);
+  --timeline-bar:         color-mix(in oklab, var(--foreground) 9%, var(--card));
+  --timeline-segment:     color-mix(in oklab, var(--foreground) 16%, var(--card));
+  --timeline-outline:     color-mix(in oklab, var(--foreground) 24%, transparent);
+  --timeline-progress:    color-mix(in oklab, var(--foreground) 52%, transparent);
+  --timeline-late:        color-mix(in oklab, var(--muted-foreground) 46%, var(--card));
 
   /* DEPRECATED legacy selection recipe (an opaque accent tint + an accent
      bar/border). DS-2 moved every consumer to the state layer and
@@ -456,11 +489,14 @@
 /* Light: the raised plate is the white card lifted by --shadow-control-raised
    (§11) — foreground-over-muted would paint it darker than its track. The
    descendant forms cover a scoped wrapper inside a light document, which the
-   block above would otherwise reset to the dark formula. */
+   block above would otherwise reset to the dark formula. The tag chip's
+   surface steps down a point: near-black at 7% reads heavier on white than
+   near-white does on black. */
 [data-theme="light"],
 [data-theme="light"] [data-shade],
 [data-theme="light"] [data-accent] {
   --control-raised: var(--card);
+  --tag-chip-surface: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
 /* ============================================================================
@@ -468,6 +504,17 @@
  *    The former --space-* mirror tokens were removed 2026-06-25 (0 refs, never
  *    in @theme). Re-add a scale here only if a density-driven spacing axis ships.
  * ==========================================================================*/
+
+/* The smallest pointer target (WCAG 2.2 AA "Target size", 24 x 24 CSS px;
+   DS-6, visual audit B14). Not density-scaled: a dense row keeps a 24 px hit
+   area. `.hit-min` (global.css) pads a small control's hit area out to this
+   size with an invisible ::before, so its glyph never grows. */
+:root {
+  --hit-min: 1.5rem; /* 24 */
+  /* How tall the fade is at the foot of a menu that scrolls, while more items
+     wait below (`[data-more-below]`, global.css; TV-U10). */
+  --menu-fade: 1.75rem; /* 28 */
+}
 
 /* ============================================================================
  * 7. Density variants — drive row heights, control heights, paddings.
@@ -482,6 +529,7 @@
   --row-h-sm: 1.75rem; /* 28 — nested rows                    */
   --ctrl-h:  2rem;     /* 32 — buttons, inputs                */
   --ctrl-h-sm: 1.625rem; /* 26 — small buttons                */
+  --ctrl-h-xs: 1.5rem;   /* 24 — chips and pills inline with text (DS-6) */
   --ctrl-h-lg: 2.5rem;   /* 40 — large buttons                */
   --pad-x:   1rem;     /* 16 — primary horizontal padding     */
   --pad-y:   0.625rem; /* 10 — primary vertical padding       */
@@ -496,6 +544,10 @@
   /* Calendar grid: height of one hour row. Density-scaled so the grid's
      rhythm follows the density axis like rows/controls do. */
   --cal-hour-h: 3.5rem;  /* 56 */
+  /* Board card width (tasks-v3 default o): fixed per density so the board
+     never reflows as you scroll; the column adds its drop-tint inset. */
+  --board-card-w: 18.5rem;  /* 296 */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 [data-density="compact"] {
@@ -503,6 +555,7 @@
   --row-h-sm: 1.625rem; /* 26 */
   --ctrl-h:  1.875rem;  /* 30 */
   --ctrl-h-sm: 1.5rem;  /* 24 */
+  --ctrl-h-xs: 1.375rem;/* 22 */
   --ctrl-h-lg: 2.25rem; /* 36 */
   --pad-x:   0.875rem;  /* 14 */
   --pad-y:   0.5rem;    /* 8  */
@@ -513,6 +566,8 @@
   --icon:     0.9375rem;   /* 15   */
   --icon-lg:  1.125rem;    /* 18   */
   --cal-hour-h: 3rem;      /* 48   */
+  --board-card-w: 17.5rem; /* 280  */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 [data-density="dense"] {
@@ -520,6 +575,7 @@
   --row-h-sm: 1.5rem;   /* 24 */
   --ctrl-h:  1.625rem;  /* 26 */
   --ctrl-h-sm: 1.375rem;/* 22 */
+  --ctrl-h-xs: 1.25rem; /* 20 */
   --ctrl-h-lg: 2rem;    /* 32 */
   --pad-x:   0.75rem;   /* 12 */
   --pad-y:   0.375rem;  /* 6  */
@@ -530,6 +586,8 @@
   --icon:     0.875rem;    /* 14      */
   --icon-lg:  1rem;        /* 16      */
   --cal-hour-h: 2.75rem;   /* 44      */
+  --board-card-w: 16.5rem; /* 264     */
+  --board-col-w: calc(var(--board-card-w) + 0.5rem);
 }
 
 /* ============================================================================
@@ -601,6 +659,7 @@
      Sizes use rem so the user's OS text-size pref still applies.
      The body-tier ladder across text-size settings is 13 / 14 / 16 base —
      small ≈ Linear UI text, normal ≈ Notion chrome, large stays generous. */
+  --text-3xs:  0.5625rem; /* 9 — two-letter initials on an icon-rung avatar only */
   --text-2xs:  0.6875rem; /* 11 — eyebrow / section labels */
   --text-xs:   0.75rem;   /* 12 — labels, captions   */
   --text-sm:   0.8125rem; /* 13 — secondary UI       */
@@ -709,15 +768,18 @@
   --motion-instant: 0ms;
   --motion-fast:    100ms;
   --motion-base:    180ms;
-  --motion-slow:    320ms;
+  --motion-slow:    280ms;
   --motion-slower:  500ms;
 
-  /* Fade duration — used for opacity & color (and the blur-in motif). Kept
-     non-zero under reduced-motion so state changes still register softly. */
+  /* Fade duration — used for opacity & color. Kept non-zero under
+     reduced-motion so state changes still register softly. */
   --motion-fade:    100ms;
-  /* Blur amount for the overlay/popover/mode-shift fade+blur-in motif.
-     Animate from blur(var(--blur-veil)) → blur(0) alongside the opacity fade. */
-  --blur-veil:      0.25rem; /* 4px */
+
+  /* How far the four motion patterns travel (global.css, "Motion patterns";
+     tasks-v3 call 81). Neutral under reduced-motion, so every pattern falls
+     back to opacity alone. No blur anywhere (81: left out for performance). */
+  --motion-shift:   0.5rem; /* a panel slides in from this far */
+  --motion-grow:    0.96;   /* a popover grows from this scale at its origin */
 
   --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);    /* drift-in */
   --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
@@ -726,8 +788,8 @@
 }
 
 /* Reduced motion = kill movement, keep tiny fades. Transforms/springs collapse
-   to 0ms (no travel); opacity/color fades stay ~80ms so feedback still reads;
-   the blur-in motif is disabled (veil → 0). The `data-motion` app override
+   to 0ms (no travel) and the pattern amounts go neutral; opacity/color fades
+   stay ~80ms so feedback still reads. The `data-motion` app override
    (Settings → Preferences, DF-19f) layers on top of the OS setting:
      • data-motion="reduced" forces reduced regardless of the OS.
      • data-motion="full" opts out of the OS reduce (the media query below
@@ -740,7 +802,8 @@
   --motion-slow:    0ms;
   --motion-slower:  0ms;
   --motion-fade:    80ms;
-  --blur-veil:      0;
+  --motion-shift:   0;
+  --motion-grow:    1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -751,7 +814,8 @@
     --motion-slow:    0ms;
     --motion-slower:  0ms;
     --motion-fade:    80ms;
-    --blur-veil:      0;
+    --motion-shift:   0;
+    --motion-grow:    1;
   }
 }
 
@@ -779,9 +843,11 @@
 /* ============================================================================
  * 13b. Label colors — tag chips (cross-module).
  *      Eight named hues reusing the raw accent palette bases. Each
- *      [data-label="…"] sets two vars consumed by .tag-chip / .tag-dot
- *      (global.css): `--label` (solid hue → the dot + ring) and
- *      `--label-surface` (a faint tint → the chip background). Surfaces are
+ *      [data-label="…"] sets two vars: `--label` (solid hue → the tag chip's
+ *      dot and its active ring, .tag-dot / .tag-chip-active in global.css,
+ *      plus project, account and team dots) and `--label-surface` (a faint
+ *      tint → external calendar chips, .cal-chip-external). A tag chip's own
+ *      pill is neutral, --tag-chip-surface (§5b, MOD-97). Surfaces are
  *      precomputed oklch-with-alpha (kept here, the sanctioned color file, so
  *      component code stays hex/arbitrary-free per the design-system rules).
  *      `gray` is the default / fallback when a tag has no stored color.
@@ -801,6 +867,17 @@
 [data-label="violet"] { --label: var(--violet-base);  --label-surface: oklch(0.66 0.20 295 / 0.18); }
 [data-label="teal"]   { --label: var(--teal-base);    --label-surface: oklch(0.72 0.13 200 / 0.18); }
 [data-label="pink"]   { --label: var(--pink-base);    --label-surface: oklch(0.71 0.20 350 / 0.18); }
+
+/* The avatar strength of a hue (DS-6, calls 43 + 95): a person's two initials
+   and a team's two letters sit on the hue mixed about half into the card, with
+   --foreground text on top. --label-surface (18 % alpha) is too faint to tell
+   two people apart at 16 px. Re-declared on every [data-label] element so it
+   resolves against that element's own --label and --card. Utility:
+   bg-label-fill. */
+:root,
+[data-label] {
+  --label-fill: color-mix(in oklab, var(--label) 48%, var(--card));
+}
 
 /* ============================================================================
  * 14. Tailwind v4 @theme mapping
@@ -846,10 +923,25 @@
   --color-state-active:         var(--state-active);
   --color-state-active-hover:   var(--state-active-hover);
   --color-state-selected:       var(--state-selected);
+  --color-state-selected-hover: var(--state-selected-hover);
   --ring-color-state-selected:  var(--state-selected-ring);
   --ring-color-state-selected-edge: var(--state-selected-edge);
   --color-hairline:             var(--hairline);
   --color-control-raised:       var(--control-raised);
+  --color-tag-chip-surface:     var(--tag-chip-surface);
+  /* The Timeline (TV-TL1): bg-timeline-band, border-timeline-outline, … */
+  --color-timeline-grid:        var(--timeline-grid);
+  --color-timeline-grid-strong: var(--timeline-grid-strong);
+  --color-timeline-band:        var(--timeline-band);
+  --color-timeline-bar:         var(--timeline-bar);
+  --color-timeline-segment:     var(--timeline-segment);
+  --color-timeline-outline:     var(--timeline-outline);
+  --color-timeline-progress:    var(--timeline-progress);
+  --color-timeline-late:        var(--timeline-late);
+  /* Text levels (call 38): text-foreground · text-muted-foreground ·
+     text-subtle-foreground. Avatar / team-mark hue fill: bg-label-fill. */
+  --color-subtle-foreground:    var(--subtle-foreground);
+  --color-label-fill:           var(--label-fill);
 
   --radius-sm: var(--radius-sm);
   --radius:    var(--radius);
@@ -870,6 +962,7 @@
   --spacing-icon:    var(--icon);
   --spacing-icon-lg: var(--icon-lg);
 
+  --text-3xs:  var(--text-3xs);
   --text-2xs:  var(--text-2xs);
   --text-xs:   var(--text-xs);
   --text-sm:   var(--text-sm);

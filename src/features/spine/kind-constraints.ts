@@ -13,7 +13,8 @@
 
 import { DEFAULT_RELATION_KIND, RELATION_KINDS, type RelationKind } from "../../lib/entity-links";
 
-const WORK_TYPES = new Set(["task", "project"]);
+// A project is linked as its `bucket` (RF-1: the registry checks it per item).
+const WORK_TYPES = new Set(["task", "project", "bucket"]);
 const MONEY_TYPES = new Set(["payment", "invoice"]);
 const PARTY_TYPES = new Set(["contact", "company"]);
 /** Types that can be "attached" to something (a file/email/receipt), never people. */

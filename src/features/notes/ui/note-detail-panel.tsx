@@ -7,10 +7,10 @@
 
 import { useEffect, useState } from "react";
 import { ActivityTrail } from "@/features/contacts/ui/activity-trail";
-import { EntityTagRow } from "@/features/contacts/ui/entity-tag-row";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
 import { EntityLinkSuggestions } from "@/features/spine/ui/link-suggestion-strip";
+import { EntityTagRow } from "@/features/tags/ui/entity-tag-row";
 import type { ActivityEntry } from "@/features/tasks/model";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";

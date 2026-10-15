@@ -92,9 +92,18 @@ const entityRefProps = {
  */
 const PRIVATE_TABLES: Record<string, string> = { event: "calendar_events", email_thread: "email_refs" };
 const SHARED_TYPES = ["note", "task", "bucket", "contact", "company"] as const;
+/** Apps read conversations through the chat tools alone, never the registry. */
+const CHAT_TYPES = new Set(["chat_channel", "chat_message"]);
+
+/** The registry types a key may search: its modules' types, minus chat's. */
+export function registryTypesForKey(scopes: Readonly<Record<string, unknown>> | null | undefined): string[] {
+  return keyVisibleEntityTypes(scopes).filter((type) => !CHAT_TYPES.has(type));
+}
 
 async function visibleToKey(ctx: ToolContext, rows_: Row[]): Promise<Row[]> {
-  const data = rows_.filter((e) => keyCanSeeEntityType(ctx.key.scopes, e.entity_type));
+  const data = rows_.filter(
+    (e) => !CHAT_TYPES.has(String(e.entity_type)) && keyCanSeeEntityType(ctx.key.scopes, e.entity_type),
+  );
   const hidden = new Set<string>();
   for (const [type, table] of Object.entries(PRIVATE_TABLES)) {
     const ids = data.filter((e) => e.entity_type === type).map((e) => e.entity_id as string);
@@ -142,7 +151,7 @@ export const linksConnectorModule: ConnectorModule = {
         if (query) q = q.ilike("label", `%${query}%`);
         // Only types whose module the key can see, filtered in the query: the
         // page would otherwise fill with rows visibleToKey then drops.
-        const allowed = keyVisibleEntityTypes(ctx.key.scopes);
+        const allowed = registryTypesForKey(ctx.key.scopes);
         const asked = Array.isArray(args.types) ? args.types.filter((t) => typeof t === "string") : [];
         const types = asked.length ? allowed.filter((t) => asked.includes(t)) : allowed;
         if (!types.length) return [];

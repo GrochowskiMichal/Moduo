@@ -1,10 +1,12 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  attachmentsManifest,
   buildExportBundle,
   type ExportMeta,
   exportZipName,
   type ModuleReadResult,
+  readTasksExport,
 } from "./advanced";
 
 const META: ExportMeta = {
@@ -24,6 +26,7 @@ describe("buildExportBundle — bundle shape + error manifest (AC11)", () => {
       { module: "contacts", ok: true, data: { contacts: [] } },
       { module: "calendar", ok: true, data: { events: [] } },
       { module: "habits", ok: true, data: [] },
+      { module: "attachments", ok: true, data: attachmentsManifest([], null) },
     ];
 
     const bundle = buildExportBundle(results, META);
@@ -31,6 +34,7 @@ describe("buildExportBundle — bundle shape + error manifest (AC11)", () => {
     expect(Object.keys(bundle.entries).sort()).toEqual(
       [
         "_manifest.json",
+        "attachments.json",
         "calendar.json",
         "contacts.json",
         "habits.json",
@@ -51,6 +55,7 @@ describe("buildExportBundle — bundle shape + error manifest (AC11)", () => {
       contacts: "ok",
       calendar: "ok",
       habits: "ok",
+      attachments: "ok",
     });
   });
 
@@ -98,5 +103,271 @@ describe("exportZipName", () => {
   it("falls back to 'workspace' when the name is empty and strips unsafe chars", () => {
     expect(exportZipName({ ...META, workspaceName: null })).toBe("moduo-workspace-2026-07-11.zip");
     expect(exportZipName({ ...META, workspaceName: "a/b:c*?" })).toBe("moduo-a-b-c-2026-07-11.zip");
+  });
+});
+
+describe("attachmentsManifest — the export lists files, not their bytes (AT1-8)", () => {
+  const record = (
+    id: string,
+    extra: Partial<Parameters<typeof attachmentsManifest>[0][number]> = {},
+  ) => ({
+    id,
+    entityType: "task",
+    entityId: "task-1",
+    uploaderId: "user-1",
+    fileName: `${id}.png`,
+    mime: "image/png",
+    sizeBytes: 1000,
+    width: 800,
+    height: 600,
+    status: "ready",
+    deletedAt: null,
+    createdAt: "2026-10-08T10:00:00Z",
+    ...extra,
+  });
+
+  it("lists every finished file with its task, size and whether it's in the trash", () => {
+    const manifest = attachmentsManifest(
+      [
+        record("a"),
+        record("b", { deletedAt: "2026-10-08T11:00:00Z", sizeBytes: 500, uploaderId: null }),
+        record("c", { status: "pending" }),
+        record("d", { status: "failed" }),
+      ],
+      null,
+    );
+
+    expect(manifest.count).toBe(2);
+    expect(manifest.total_bytes).toBe(1500);
+    expect(manifest.truncated).toBeNull();
+    expect(manifest.about).toContain("aren't in this export");
+    expect(manifest.files).toEqual([
+      {
+        id: "a",
+        attached_to: { type: "task", id: "task-1" },
+        name: "a.png",
+        type: "image/png",
+        size_bytes: 1000,
+        width: 800,
+        height: 600,
+        added_at: "2026-10-08T10:00:00Z",
+        uploaded_by: "user-1",
+        in_trash: false,
+      },
+      {
+        id: "b",
+        attached_to: { type: "task", id: "task-1" },
+        name: "b.png",
+        type: "image/png",
+        size_bytes: 500,
+        width: 800,
+        height: 600,
+        added_at: "2026-10-08T10:00:00Z",
+        uploaded_by: null,
+        in_trash: true,
+      },
+    ]);
+  });
+
+  it("says when the read was cut, instead of looking complete", () => {
+    const manifest = attachmentsManifest([record("a")], { shown: 10000, total: 12000 });
+
+    expect(manifest.truncated).toEqual({ shown: 10000, total: 12000 });
+  });
+});
+
+/** TV-D10's reads, empty: for the tests about other tables. */
+const noD10Reads = {
+  listSessions: async () => ({ sessions: [], truncated: [] }),
+  listReminders: async () => ({ reminders: [], truncated: [] }),
+  listWaiting: async () => ({ waiting: [], truncated: [] }),
+};
+
+describe("the tasks export carries every new tasks table (TV-D8, §Assumptions #26)", () => {
+  it("adds the completions to the tasks bundle", async () => {
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [{ id: "t1", number: 7 }], buckets: [], truncated: [] }),
+        listCompletions: async () => ({
+          completions: [{ id: "c1", taskId: "t1", cycleKey: "once" }],
+          truncated: [],
+        }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.tasks).toEqual([{ id: "t1", number: 7 }]);
+    expect(data.completions).toEqual([{ id: "c1", taskId: "t1", cycleKey: "once" }]);
+    expect(data.truncated).toEqual([]);
+  });
+
+  it("says when the completions were cut, next to the tasks' own cuts", async () => {
+    const tasksCut = { scope: "tasks", shown: 10000, total: 10400 };
+    const completionsCut = { scope: "completions", shown: 20000, total: 25000 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [tasksCut] }),
+        listCompletions: async () => ({ completions: [], truncated: [completionsCut] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.truncated).toEqual([tasksCut, completionsCut]);
+  });
+
+  it("carries the statuses and each task's status, completion and due date (TV-D9)", async () => {
+    const status = { id: "s1", projectId: "p1", category: "in_progress", name: "In review" };
+    const task = {
+      id: "t1",
+      statusId: "s1",
+      statusCategory: "in_progress",
+      completedAt: null,
+      completedBy: null,
+      dueOn: "2026-11-08",
+      dueTime: "15:00:00",
+    };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [task], buckets: [], statuses: [status], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.statuses).toEqual([status]);
+    expect(data.tasks).toEqual([task]);
+  });
+
+  it("carries areas, sections, teams, sessions, your reminders and Waiting on (TV-D10)", async () => {
+    const project = {
+      id: "p1",
+      status: "on_hold",
+      areaId: "a1",
+      leadId: "u1",
+      targetOn: "2026-12-18",
+    };
+    const bundle = {
+      tasks: [{ id: "t1", sectionId: "s1", teamId: "tm1", estimateMinutes: 90 }],
+      buckets: [project],
+      areas: [{ id: "a1", name: "Clients" }],
+      sections: [{ id: "s1", projectId: "p1", name: "Week 1", endsOn: "2026-09-13" }],
+      teams: [{ id: "tm1", name: "Design", mark: "DS" }],
+      teamMembers: [{ id: "m1", teamId: "tm1", userId: "u1" }],
+      truncated: [],
+    };
+    const session = { id: "x1", taskId: "t1", startsAt: "2030-03-04T09:00:00Z" };
+    const sessionsCut = { scope: "work sessions", shown: 20000, total: 20500 };
+    const data = await readTasksExport(
+      {
+        list: async () => bundle,
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        listSessions: async () => ({ sessions: [session], truncated: [sessionsCut] }),
+        listReminders: async () => ({
+          reminders: [{ id: "r1", kind: "day_before" }],
+          truncated: [],
+        }),
+        listWaiting: async () => ({
+          waiting: [{ id: "w1", kind: "text", label: "Feedback" }],
+          truncated: [],
+        }),
+      },
+      "ws-1",
+    );
+    expect(data.buckets).toEqual([project]);
+    expect(data.areas).toEqual(bundle.areas);
+    expect(data.sections).toEqual(bundle.sections);
+    expect(data.teams).toEqual(bundle.teams);
+    expect(data.teamMembers).toEqual(bundle.teamMembers);
+    expect(data.tasks).toEqual(bundle.tasks);
+    expect(data.sessions).toEqual([session]);
+    expect(data.reminders).toEqual([{ id: "r1", kind: "day_before" }]);
+    expect(data.waiting).toEqual([{ id: "w1", kind: "text", label: "Feedback" }]);
+    expect(data.truncated).toEqual([sessionsCut]);
+  });
+
+  it("carries your templates and the shared ones, with their bodies (TV-D15)", async () => {
+    const template = { id: "tp1", kind: "project", name: "Season kit", body: { v: 1 } };
+    const cut = { scope: "task templates", shown: 500, total: null };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTemplates: async () => ({ templates: [template], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.templates).toEqual([template]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
+  it("carries your own time entries with their days and notes (TV-D14)", async () => {
+    const entry = { id: "e1", kind: "manual", seconds: 7200, entryOn: "2026-10-12", note: "Call" };
+    const cut = { scope: "time entries", shown: 20000, total: 20001 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+        exportTimeEntries: async () => ({ entries: [entry], truncated: [cut] }),
+      },
+      "ws-1",
+    );
+    expect(data.timeEntries).toEqual([entry]);
+    expect(data.truncated).toEqual([cut]);
+  });
+
+  it("reads as no templates on a runtime without them", async () => {
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+    );
+    expect(data.templates).toEqual([]);
+  });
+
+  it("carries your own Focus runs (TV-F6), and says when they were cut", async () => {
+    const run = { id: "run-1", mode: "per_task", focusedSeconds: 1200 };
+    const runsCut = { scope: "Focus runs", shown: 10000, total: 10002 };
+    const data = await readTasksExport(
+      {
+        list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+        listCompletions: async () => ({ completions: [], truncated: [] }),
+        ...noD10Reads,
+      },
+      "ws-1",
+      { listMyRuns: async () => ({ runs: [run], truncated: [runsCut] }) },
+    );
+    expect(data.focusRuns).toEqual([run]);
+    expect(data.truncated).toEqual([runsCut]);
+  });
+
+  it("carries your own agent sessions and import runs (TV-D16), and none without them", async () => {
+    const session = { id: "s1", agent: "Claude", state: "ready" };
+    const run = { id: "imp-1", source: "todoist", label: "Syllabus" };
+    const base = {
+      list: async () => ({ tasks: [], buckets: [], truncated: [] }),
+      listCompletions: async () => ({ completions: [], truncated: [] }),
+      ...noD10Reads,
+    };
+    const rowsCut = { scope: "imported rows", shown: 100000, total: 100400 };
+    const data = await readTasksExport(
+      {
+        ...base,
+        listMyAgentSessions: async () => ({ sessions: [session], truncated: [] }),
+        listImports: async () => ({ imports: [run], truncated: [rowsCut] }),
+      },
+      "ws-1",
+    );
+    expect(data.agentSessions).toEqual([session]);
+    expect(data.imports).toEqual([run]);
+    // A cut read is named, never silent.
+    expect(data.truncated).toEqual([rowsCut]);
+    const none = await readTasksExport(base, "ws-1");
+    expect(none.agentSessions).toEqual([]);
+    expect(none.imports).toEqual([]);
   });
 });

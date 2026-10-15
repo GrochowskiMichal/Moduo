@@ -26,12 +26,30 @@ export const PGRST_MAX_ROWS = 1000;
  * they exist so a runaway workspace degrades *visibly* (a notice + a number),
  * not silently. Real pagination/virtualization is the follow-up.
  */
+/** The truncation scope of a tag-links read. The tag store reads it to tell a capped read from a full one (TV-T1). */
+export const TAG_LINKS_SCOPE = "tag assignments";
+
 export const READ_CAPS = {
   tasks: 5000,
   buckets: 500,
   tags: 1000,
   tagLinks: 10000,
   taskRelations: 10000,
+  taskCompletions: 20000,
+  projectStatuses: 10000,
+  // TV-D10
+  areas: 500,
+  sections: 10000,
+  teams: 500,
+  teamMembers: 5000,
+  taskSessions: 20000,
+  taskReminders: 10000,
+  taskWaiting: 10000,
+  /** TV-U8: your saved views and the ones shared with you (200 each at most). */
+  taskViews: 2000,
+  // TV-D16: agent sessions you can see (yours, and teammates' they share).
+  agentSessions: 10000,
+  taskQueue: 5000,
   notes: 5000,
   contacts: 10000,
   companies: 5000,
@@ -40,6 +58,17 @@ export const READ_CAPS = {
   calendarAccounts: 200,
   emailAccounts: 200,
   emailRefs: 5000,
+  attachments: 10000,
+  /** The shared store (TV-D11a): done, Won't do and Backlog tasks, read after the open ones. */
+  closedTasks: 20000,
+  /** Comments on tasks, read for their counts only (id + task). */
+  taskComments: 20000,
+  /** Finished files on tasks, read for the 📎 counts only (id + task; AT-3). */
+  attachmentMarks: 20000,
+  /** One delta read; past it the store reads again from where it stopped. */
+  syncDelta: 5000,
+  /** The store's access check: every live id of a table. */
+  syncIds: 50000,
 } as const;
 
 /** One collection that hit its cap. `null` everywhere else = nothing was cut. */

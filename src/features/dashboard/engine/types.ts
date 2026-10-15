@@ -52,6 +52,9 @@ export const WIDGET_TYPES = [
   "habits",
   "pinned",
   "chat",
+  // TV-H1: Tasks' Team (with Chat's "now" line, CH70) and Upcoming widgets.
+  "team",
+  "upcoming",
 ] as const;
 
 export type WidgetType = (typeof WIDGET_TYPES)[number];

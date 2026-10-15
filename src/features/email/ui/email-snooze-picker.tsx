@@ -11,6 +11,7 @@ import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { formatTime } from "../../../lib/time-format";
 import { normalizeSnoozeAt, snoozePresets } from "../snooze";
 
 type Props = {
@@ -25,13 +26,12 @@ type Props = {
   children: React.ReactNode;
 };
 
-/** "Wed, 5:30 PM" — a compact day+time hint for a preset. */
+const WEEKDAY = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+
+/** "Wed, 5:30 PM" — a compact day+time hint for a preset (the clock from
+ *  Time & region, TV-D14). */
 function presetHint(at: Date): string {
-  return at.toLocaleString(undefined, {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return `${WEEKDAY.format(at)}, ${formatTime(at)}`;
 }
 
 export function EmailSnoozePicker({

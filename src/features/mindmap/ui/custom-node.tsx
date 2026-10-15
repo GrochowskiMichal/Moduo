@@ -221,7 +221,7 @@ export const MindmapCustomNode = memo(function MindmapCustomNode({ data, selecte
 
   return (
     <div
-      className={`group relative ${rootScale} rounded-2xl shadow-[0_10px_24px_rgba(0,0,0,0.38),0_2px_6px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-sm transition-all duration-250 hover:shadow-[0_16px_34px_rgba(0,0,0,0.5),0_4px_10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)] ${selected ? "ring-1 ring-[#f1f1f1]/45" : ""}`}
+      className={`group relative ${rootScale} rounded-2xl shadow-[0_10px_24px_rgba(0,0,0,0.38),0_2px_6px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-250 hover:shadow-[0_16px_34px_rgba(0,0,0,0.5),0_4px_10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.05)] ${selected ? "ring-1 ring-[#f1f1f1]/45" : ""}`}
       style={{
         background: bgColor,
         borderWidth: hasBorder ? (isRoot ? 2 : 1.5) : 0,

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { Constants } from "@/types/supabase";
@@ -25,6 +27,7 @@ import {
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
   TASK_STATUSES,
+  WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
   WAITLIST_STATUSES,
   WORKSPACE_ROLES,
@@ -36,6 +39,9 @@ import {
   isPlanTier,
   isRelationKind,
   isTaskStatus,
+  isOpenTaskStatus,
+  normalizeTaskStatus,
+  TASK_OPEN_STATUSES,
   isWaitlistSource,
   isWorkspaceRole,
   normalizeCalendarProvider,
@@ -48,6 +54,9 @@ import {
   planTierSchema,
   relationKindSchema,
   taskStatusSchema,
+  GUEST_REMINDER_MINUTES,
+  normalizeGuestReminderMinutes,
+  parseGuestReminderMinutes,
 } from "./index.ts";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +68,21 @@ describe("vocabulary value sets", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "done", "archived"]);
     expect(ENERGY_LEVELS).toEqual(["low", "medium", "high"]);
     expect(PRIORITY_LEVELS).toEqual(["low", "medium", "high"]);
+  });
+
+  it("guest reminder minutes mirror the exposed_slot_links CHECK (TX-6)", () => {
+    expect(GUEST_REMINDER_MINUTES).toEqual([60, 1440]);
+    const sql = readFileSync(
+      new URL("../../../migrations/20261014170000_tx6_booking_reminders.sql", import.meta.url),
+      "utf8",
+    );
+    expect(sql).toContain(
+      `CHECK (guest_reminder_minutes IS NULL OR guest_reminder_minutes IN (${GUEST_REMINDER_MINUTES.join(", ")}))`,
+    );
+    expect(normalizeGuestReminderMinutes(null)).toBeNull();
+    expect(normalizeGuestReminderMinutes(30)).toBe(1440);
+    expect(parseGuestReminderMinutes(60)).toBe(60);
+    expect(() => parseGuestReminderMinutes(30)).toThrow();
   });
 
   it("actor types mirror the module_activity CHECK", () => {
@@ -112,8 +136,11 @@ describe("vocabulary value sets", () => {
 
   it("waitlist vocabularies pin the landing CTA sources and row statuses", () => {
     expect(WAITLIST_SOURCES).toEqual(["nav", "hero", "close", "footer"]);
-    expect(WAITLIST_STATUSES).toEqual(["pending", "confirmed", "cancelled"]);
+    expect(WAITLIST_ROW_SOURCES).toEqual(["nav", "hero", "close", "footer", "manual"]);
+    expect(WAITLIST_STATUSES).toEqual(["pending", "confirmed", "cancelled", "invited"]);
     expect(isWaitlistSource("hero")).toBe(true);
+    // A manual invite is a row source only; the landing can't claim it.
+    expect(isWaitlistSource("manual")).toBe(false);
     expect(isWaitlistSource("sidebar")).toBe(false);
     expect(isWaitlistSource(undefined)).toBe(false);
   });
@@ -310,6 +337,38 @@ describe("type guards narrow without casts", () => {
   });
 });
 
+describe("normalizeTaskStatus / isOpenTaskStatus (TV-D8: old builds tolerate new values)", () => {
+  it("keeps the known values", () => {
+    for (const s of TASK_STATUSES) expect(normalizeTaskStatus(s)).toBe(s);
+  });
+
+  it("reads the Tasks v3 categories as their nearest known status, never dropping the row", () => {
+    expect(normalizeTaskStatus("backlog")).toBe("todo");
+    expect(normalizeTaskStatus("wont_do")).toBe("archived");
+    expect(normalizeTaskStatus("Won't do")).toBe("archived");
+    expect(normalizeTaskStatus("completed")).toBe("done");
+    expect(normalizeTaskStatus("in_review")).toBe("in_progress");
+  });
+
+  it("reads anything else as To do, so it stays in view", () => {
+    expect(normalizeTaskStatus("shipped")).toBe("todo");
+    expect(normalizeTaskStatus("")).toBe("todo");
+    expect(normalizeTaskStatus(null)).toBe("todo");
+    expect(normalizeTaskStatus(42)).toBe("todo");
+  });
+
+  it("has one open rule for the legacy values", () => {
+    expect([...TASK_OPEN_STATUSES]).toEqual(["todo", "in_progress"]);
+    expect(isOpenTaskStatus("todo")).toBe(true);
+    expect(isOpenTaskStatus("in_progress")).toBe(true);
+    expect(isOpenTaskStatus("done")).toBe(false);
+    expect(isOpenTaskStatus("archived")).toBe(false);
+    expect(isOpenTaskStatus("backlog")).toBe(true);
+    expect(isOpenTaskStatus("wont_do")).toBe(false);
+    expect(isOpenTaskStatus("something new")).toBe(true);
+  });
+});
+
 describe("normalizeMcpKeyScope (matches registry.moduleScope semantics)", () => {
   it("view/edit pass case-insensitively; everything else is none", () => {
     expect(normalizeMcpKeyScope("view")).toBe("view");
@@ -422,5 +481,71 @@ describe("content author kinds (chat messages and comments)", () => {
     expect(v.normalizeContentAuthorKind(undefined)).toBe("user");
     expect(v.normalizeContentAuthorKind("bot")).toBe("user");
     expect(v.isContentAuthorKind("bot")).toBe(false);
+  });
+});
+
+describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
+  it("are the five fixed categories, in order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.TASK_STATUS_CATEGORIES]).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
+      "wont_do",
+    ]);
+    expect(v.isTaskStatusCategory("backlog")).toBe(true);
+    expect(v.isTaskStatusCategory("archived")).toBe(false);
+  });
+
+  it("parse is strict, normalize reads legacy values and people's words", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.parseTaskStatusCategory("wont_do").success).toBe(true);
+    expect(v.parseTaskStatusCategory("archived").success).toBe(false);
+    expect(v.parseTaskStatusCategory("To do").success).toBe(false);
+    expect(v.normalizeTaskStatusCategory("archived")).toBe("wont_do");
+    expect(v.normalizeTaskStatusCategory("Won't do")).toBe("wont_do");
+    expect(v.normalizeTaskStatusCategory("To do")).toBe("todo");
+    expect(v.normalizeTaskStatusCategory("In progress")).toBe("in_progress");
+    expect(v.normalizeTaskStatusCategory("Backlog")).toBe("backlog");
+    expect(v.normalizeTaskStatusCategory("in_review")).toBe("in_progress");
+    expect(v.normalizeTaskStatusCategory("shipped")).toBe("todo");
+    expect(v.normalizeTaskStatusCategory(null)).toBe("todo");
+  });
+
+  it("mirror the legacy column like the server does", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.TASK_STATUS_CATEGORIES.map(v.legacyTaskStatus)).toEqual([
+      "todo",
+      "todo",
+      "in_progress",
+      "done",
+      "archived",
+    ]);
+  });
+
+  it("status words: the legacy value, Backlog as itself", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.TASK_STATUS_CATEGORIES.map(v.taskStatusWord)).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
+      "archived",
+    ]);
+  });
+
+  it("one open rule: Backlog is neither open nor closed", async () => {
+    const v = await import("./vocabularies.ts");
+    const backlog = { status: "todo", statusCategory: "backlog" as const };
+    expect(v.isOpenTask(backlog)).toBe(false);
+    expect(v.isClosedTask(backlog)).toBe(false);
+    expect(v.isBacklogTask(backlog)).toBe(true);
+    expect(v.isOpenTask({ status: "in_progress" })).toBe(true);
+    expect(v.isClosedTask({ status: "archived" })).toBe(true);
+    expect(v.isClosedTask({ status: "todo", statusCategory: "wont_do" as const })).toBe(true);
+    // A row from before TV-D9 has no category: its legacy status decides.
+    expect(v.taskCategoryOf({ status: "archived" })).toBe("wont_do");
+    expect(v.taskCategoryOf({ status: "todo", statusCategory: null })).toBe("todo");
   });
 });

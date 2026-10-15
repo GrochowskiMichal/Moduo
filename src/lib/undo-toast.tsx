@@ -29,6 +29,12 @@ type UndoToastOptions = {
    * slot, where a destructive verb reads as the dismiss button.
    */
   danger?: { label: string; onClick: () => void };
+  /**
+   * An optional way to where the item went ("Recently deleted", REPLAN 98),
+   * rendered as a quiet text link in the toast BODY; clicking it closes the
+   * toast without undoing (a deferred commit then commits).
+   */
+  link?: { label: string; onClick: () => void };
 };
 
 /** Neutral toast + 8s Undo — returns the toast id. */
@@ -44,9 +50,10 @@ export function undoToast(label: string, opts: UndoToastOptions): string | numbe
   // `toastId` is referenced only inside the danger onClick (which runs at click
   // time, after toast() has returned) — so the const is always initialized by
   // the time the closure reads it.
+  const extra = opts.danger ?? opts.link;
   const toastId: string | number = toast(label, {
     duration: UNDO_TOAST_MS,
-    description: opts.danger ? (
+    description: extra ? (
       <span className="flex flex-col items-start gap-1">
         {opts.description ? <span>{opts.description}</span> : null}
         {/* A quiet destructive text link — the design system's `link` button
@@ -55,13 +62,17 @@ export function undoToast(label: string, opts: UndoToastOptions): string | numbe
             the `@/` component value-import chain vitest can't resolve. */}
         <button
           type="button"
-          className="rounded-md font-display text-sm text-destructive underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={
+            opts.danger
+              ? "rounded-md font-display text-sm text-destructive underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+              : "rounded-md font-display text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+          }
           onClick={() => {
             toast.dismiss(toastId);
-            opts.danger?.onClick();
+            extra.onClick();
           }}
         >
-          {opts.danger.label}
+          {extra.label}
         </button>
       </span>
     ) : (

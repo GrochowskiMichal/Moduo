@@ -116,20 +116,27 @@ export function clearViewPrefs(key: string | null | undefined): void {
  * handlers or effects, not from a child's layout effect on the render that
  * changes the scope: that runs before this hook syncs, so it would still
  * write to the old scope.
+ *
+ * `defaultsVersion` names what the defaults depend on (TV-U17: the person's
+ * role sets the row preset). When it changes the prefs are read again, so a
+ * view that remembers nothing takes the new defaults; one that remembers its
+ * own keeps them.
  */
 export function useViewPrefs<T>(
   key: string | null | undefined,
   defaults: Defaults<T>,
   sanitize?: (raw: unknown, defaults: T) => T,
+  defaultsVersion?: string,
 ): [T, (next: T | ((prev: T) => T)) => void] {
   const [state, setState] = useState(() => ({
     key,
+    version: defaultsVersion,
     value: readViewPrefs(key, defaults, sanitize),
   }));
   let current = state;
-  if (state.key !== key) {
+  if (state.key !== key || state.version !== defaultsVersion) {
     // Derive-on-render: the new scope's prefs replace the old in this render.
-    current = { key, value: readViewPrefs(key, defaults, sanitize) };
+    current = { key, version: defaultsVersion, value: readViewPrefs(key, defaults, sanitize) };
     setState(current);
   }
   // Synced after commit, so a scope change rendered and then thrown away
@@ -140,11 +147,11 @@ export function useViewPrefs<T>(
   });
 
   const set = useCallback((next: T | ((prev: T) => T)) => {
-    const { key: k, value: prev } = latest.current;
+    const { key: k, version, value: prev } = latest.current;
     const value = typeof next === "function" ? (next as (prev: T) => T)(prev) : next;
     writeViewPrefs(k, value);
-    latest.current = { key: k, value };
-    setState({ key: k, value });
+    latest.current = { key: k, version, value };
+    setState({ key: k, version, value });
   }, []);
 
   return [current.value, set];

@@ -16,12 +16,9 @@ import {
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../../components/app/right-panel-switcher";
+import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { Button } from "../../../components/ui/button";
 import {
@@ -32,14 +29,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import { asDragPayload } from "../../../lib/drag-payload";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
+import { useFocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
+import { stopFocusWithUndo } from "../../focus/stop-with-undo";
+import { focusOn, toggleFocusPause, useFocusTaskState } from "../../focus/timer";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
 import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
-import { CaptureModal } from "../../tasks/ui/capture-modal";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
@@ -47,11 +47,10 @@ import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from ".
 import { isElapsedBlock } from "../elapsed";
 import type { CalendarAccountModel } from "../events";
 import { type EventChip, eventChipsInRange } from "../events";
-import { canFocusBlock, loggedMessage } from "../focus";
+import { canFocusBlock } from "../focus";
 import { type BusyInterval, findNextGap } from "../gap-finder";
 import { ensureGoogleCalendarAccounts, pushGoogleWebEvent } from "../google-web";
 import { dayGeometry } from "../grid-layout";
-import { useBlockFocus } from "../hooks/use-block-focus";
 import { type CalendarModuleApi, useCalendarModule } from "../hooks/use-calendar-module";
 import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
 import { useCalendarSync } from "../hooks/use-calendar-sync";
@@ -59,6 +58,7 @@ import {
   blocksByDay,
   type CalendarView,
   DEFAULT_BLOCK_MINUTES,
+  dueChipsByDay,
   localDayKey,
   parseDayKey,
   rangeLabel,
@@ -301,7 +301,16 @@ export function CalendarPageView({
     ensureRange(new Date(range.startMs), new Date(range.endMs));
   }, [ensureRange, range.startMs, range.endMs]);
 
-  const blocks = useMemo(() => taskBlocks(api.tasks, range), [api.tasks, range]);
+  // My work sessions are the blocks (TV-F6, AC2.3/AC7.3); due-only tasks sit in
+  // the all-day lane.
+  const blocks = useMemo(
+    () => taskBlocks(api.tasks, range, { list: api.sessions, me: userId }),
+    [api.tasks, api.sessions, range, userId],
+  );
+  const dueByDay = useMemo(
+    () => dueChipsByDay(api.tasks, range, { list: api.sessions, me: userId }),
+    [api.tasks, api.sessions, range, userId],
+  );
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
   const eventChips = useMemo(() => eventChipsInRange(shownEvents, range), [shownEvents, range]);
   const eventsById = useMemo(
@@ -366,7 +375,6 @@ export function CalendarPageView({
     [userId, workspaceId],
   );
   const [detailTarget, setDetailTarget] = useState<DetailTarget>(null);
-  const [captureOpen, setCaptureOpen] = useState(false);
 
   const openDetail = useCallback(
     (target: NonNullable<DetailTarget>) => {
@@ -531,7 +539,16 @@ export function CalendarPageView({
   // Task-block drag/resize writes the schedule — the same patch path the
   // Tasks detail panel uses, so Calendar and Tasks stay one truth (AC6).
   const onMoveTask = useCallback(
-    (taskId: string, result: MoveTaskResult) => {
+    (taskId: string, result: MoveTaskResult, sessionId: string | null) => {
+      // A block of a work session moves that session (TV-F6); one read from
+      // the task row writes its schedule, as before.
+      if (sessionId) {
+        api.updateSession(sessionId, {
+          startsAt: new Date(result.startMs).toISOString(),
+          endsAt: new Date(result.startMs + result.durationMinutes * 60_000).toISOString(),
+        });
+        return;
+      }
       api.patchTask(taskId, {
         scheduledAt: new Date(result.startMs).toISOString(),
         durationMinutes: result.durationMinutes,
@@ -716,9 +733,46 @@ export function CalendarPageView({
 
   const [reviewMode, setReviewMode] = useState(false);
 
-  // The focus session (CAL-5) — one at a time; accrues to the task's tracked
-  // total via the shipped time path.
-  const focus = useBlockFocus(api.addTimeSpent);
+  // Focus on a block (CAL-5) runs on the one time engine (TV-F6): ▶ is "Focus
+  // on this" (call 66), the same clock as Focus and the top-bar timer, saved
+  // through the app shell from any page.
+  const focus = useFocusTaskState();
+  // The block the session's clock shows on: the focused task's block that
+  // holds now, else its nearest one (a task can have several blocks).
+  const focusBlockId = useMemo(() => {
+    if (!focus.taskId) return null;
+    const mine = blocks.filter((b) => b.taskId === focus.taskId);
+    if (mine.length === 0) return null;
+    const inside = mine.find((b) => b.startMs <= nowTick && nowTick < b.endMs);
+    const nearest = mine.reduce((a, b) =>
+      Math.abs(b.startMs - nowTick) < Math.abs(a.startMs - nowTick) ? b : a,
+    );
+    return (inside ?? nearest).blockId;
+  }, [blocks, focus.taskId, nowTick]);
+  const { prefs: focusPrefs } = useFocusPrefs();
+  const focusTaskRef = useCallback(
+    (taskId: string) => {
+      const task = api.tasks.find((t) => t.id === taskId);
+      if (!task) return null;
+      return {
+        id: task.id,
+        title: task.title || "Untitled",
+        bucketName: api.buckets.find((b) => b.id === task.bucketId)?.name ?? null,
+        workspaceId,
+      };
+    },
+    [api.tasks, api.buckets, workspaceId],
+  );
+  const onStartFocus = useCallback(
+    (taskId: string) => {
+      const ref = focusTaskRef(taskId);
+      if (!ref) return;
+      // On top of Up next, then the clock (a session on moves to it).
+      api.addToQueue(taskId, "top");
+      focusOn(ref, { timer: focusPrefs.timer, resolveTask: focusTaskRef });
+    },
+    [api, focusTaskRef, focusPrefs.timer],
+  );
 
   const strip = useMemo(
     () => stripItems(api.tasks, nowTick, workedTaskIds),
@@ -732,7 +786,7 @@ export function CalendarPageView({
     const todayStart = startOfLocalDay(new Date(now));
     const todayRange = visibleRange("day", todayStart, prefs);
     const todayKey = localDayKey(todayStart);
-    const todayBlocks = taskBlocks(api.tasks, todayRange);
+    const todayBlocks = taskBlocks(api.tasks, todayRange, { list: api.sessions, me: userId });
     const todayEvents = eventChipsInRange(calendar.events, todayRange).timed.get(todayKey) ?? [];
     const busy: BusyInterval[] = [
       ...todayBlocks.map((b) => ({ startMs: b.startMs, endMs: b.endMs })),
@@ -745,10 +799,39 @@ export function CalendarPageView({
       workEndMinute: prefs.workEndMinute,
       busy,
     };
-  }, [api.tasks, calendar.events, prefs]);
+  }, [api.tasks, api.sessions, userId, calendar.events, prefs]);
 
   const onTriageLater = useCallback(
-    (taskId: string) => {
+    (taskId: string, sessionId?: string | null) => {
+      // A block of a work session moves that session (TV-F6), not the one the
+      // task row mirrors.
+      const session = sessionId ? api.sessions.find((s) => s.id === sessionId) : undefined;
+      if (session) {
+        const fromStart = session.startsAt;
+        const fromEnd = session.endsAt;
+        const durMs = Math.max(60_000, Date.parse(fromEnd) - Date.parse(fromStart));
+        const gap = findNextGap({
+          ...buildTodayContext(),
+          durationMinutes: Math.round(durMs / 60_000),
+        });
+        if (gap == null) {
+          toast("No open slot left today — it's waiting in the strip below.");
+          return;
+        }
+        const moved = api.updateSession(session.id, {
+          startsAt: new Date(gap).toISOString(),
+          endsAt: new Date(gap + durMs).toISOString(),
+        });
+        if (!moved) return; // refused up front, and said why
+        toast(`Moved to ${formatTimeOfDay(gap)}`, {
+          duration: UNDO_TOAST_MS,
+          action: {
+            label: "Undo",
+            onClick: () => api.updateSession(session.id, { startsAt: fromStart, endsAt: fromEnd }),
+          },
+        });
+        return;
+      }
       const task = api.tasks.find((t) => t.id === taskId);
       if (!task?.scheduledAt) return;
       const fromIso = task.scheduledAt;
@@ -776,16 +859,18 @@ export function CalendarPageView({
       const task = api.tasks.find((t) => t.id === taskId);
       if (!task) return;
       const delta = tookLongerDeltaSeconds({ durationMinutes: task.durationMinutes });
-      api.addTimeSpent(taskId, delta);
+      // One adjustment (TV-D3); its Undo removes exactly that one, so time
+      // tracked on the task meanwhile stays.
+      const logged = api.logTimeAdjustment(taskId, delta);
       markWorked(taskId, true);
       toast(`+${Math.round(delta / 60)}m logged · kept open`, {
         duration: UNDO_TOAST_MS,
         action: {
-          // Subtract exactly what we added (reads the live total, floors at 0)
-          // so an interleaved focus flush on this task isn't clobbered.
           label: "Undo",
           onClick: () => {
-            api.addTimeSpent(taskId, -delta);
+            void logged.then((adjustment) => {
+              if (adjustment) api.undoTimeAdjustment(taskId, adjustment);
+            });
             markWorked(taskId, false);
           },
         },
@@ -795,7 +880,27 @@ export function CalendarPageView({
   );
 
   const onTriageRemove = useCallback(
-    (taskId: string) => {
+    (taskId: string, sessionId?: string | null) => {
+      // A block of a work session removes that session (TV-F6); Undo puts one
+      // back at the same times.
+      const session = sessionId ? api.sessions.find((s) => s.id === sessionId) : undefined;
+      if (session) {
+        if (!api.removeSession(session.id)) return; // refused up front, and said why
+        markWorked(taskId, false);
+        toast("Removed from the calendar", {
+          duration: UNDO_TOAST_MS,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              api.addSession(session.taskId, {
+                startsAt: session.startsAt,
+                endsAt: session.endsAt,
+                userId: session.userId,
+              }),
+          },
+        });
+        return;
+      }
       const task = api.tasks.find((t) => t.id === taskId);
       if (!task?.scheduledAt) return;
       const fromIso = task.scheduledAt;
@@ -803,8 +908,9 @@ export function CalendarPageView({
       markWorked(taskId, false);
       toast("Removed from the calendar", {
         duration: UNDO_TOAST_MS,
-        // Re-schedule from cleared state uses patchTask (the op needs an
-        // existing schedule to move) — an undo restore, not a fresh intent.
+        // Undo puts the time back through patchTask, which since TV-P0 sends
+        // a scheduled time through the reschedule op: the trail shows the
+        // unschedule and the restore, both true.
         action: { label: "Undo", onClick: () => api.patchTask(taskId, { scheduledAt: fromIso }) },
       });
     },
@@ -855,12 +961,7 @@ export function CalendarPageView({
   }, [setPanelVariant]);
 
   // Focus controls threaded to the popover.
-  const onStopFocus = useCallback(() => {
-    const result = focus.stop();
-    if (!result) return;
-    const task = api.tasks.find((t) => t.id === result.taskId);
-    toast(loggedMessage(result.seconds, task?.title ?? ""));
-  }, [focus, api.tasks]);
+  const onStopFocus = useCallback(() => stopFocusWithUndo(), []);
 
   const popoverEvent = eventPopover ? (eventsById.get(eventPopover.chip.eventId) ?? null) : null;
   const sourceLabelFor = useCallback(
@@ -878,99 +979,98 @@ export function CalendarPageView({
       : null;
   const detailEvent =
     detailTarget?.type === "event" ? (eventsById.get(detailTarget.id) ?? null) : null;
+  // An open event rides along on a capture as "From: …" (tasks-v3 call 93).
+  const detailEventId = detailEvent?.id ?? null;
+  const detailEventTitle = detailEvent ? detailEvent.title || "Event" : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      detailEventId && detailEventTitle
+        ? { kind: "event", label: detailEventTitle, ref: { type: "event", id: detailEventId } }
+        : null,
+    [detailEventId, detailEventTitle],
+  );
+  useCaptureSource(captureSource);
 
-  const panelVariants = useMemo<RightPanelVariant[]>(
-    () => [
-      {
-        id: "tasks",
-        label: "Tasks",
-        render: () => (
-          <CalendarTasksPanel
-            api={api}
-            onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
-            onRequestCapture={() => setCaptureOpen(true)}
-            review={
-              reviewMode
-                ? {
-                    items: strip,
-                    onMove: (taskIds) => {
-                      const byId = new Map(strip.map((i) => [i.taskId, i]));
-                      rollForward(
-                        taskIds.map((id) => byId.get(id)).filter((i): i is StripItem => Boolean(i)),
-                      );
-                    },
-                    onRemove: onTriageRemove,
-                    onClose: () => setReviewMode(false),
-                  }
-                : null
-            }
-          />
-        ),
-      },
-      {
-        id: "detail",
-        label: "Detail",
-        render: () =>
-          detailEvent ? (
-            <EventDetailPanel
-              runtime={runtime}
-              workspaceId={workspaceId}
-              currentUserId={userId}
-              event={detailEvent}
-              accounts={calendar.accounts}
-              canEdit={calendar.canEdit}
-              onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
-              onDeleteRequest={setDeleteEventId}
-              onClose={() => setPanelVariant("tasks")}
-            />
-          ) : detailTask ? (
-            <TaskDetailPanel
-              task={detailTask}
-              buckets={api.buckets}
-              inbox={api.inbox}
-              canEdit={api.canEdit}
-              onRequestCapture={() => setCaptureOpen(true)}
-              onSelectTask={(id) => setDetailTarget({ type: "task", id })}
-              api={api}
-              runtime={runtime}
-              workspaceId={workspaceId}
-            />
-          ) : (
-            <div className="grid h-full place-content-center px-3 text-center">
-              <span className="text-sm text-muted-foreground">
-                Select something on the calendar.
-              </span>
-            </div>
-          ),
-      },
-      {
-        // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
-        // plus New-linked-note. Focus follows the same detail selection.
-        id: "notes",
-        label: "Notes",
-        render: () => (
-          <LinkedNotesPanel
+  // The registered views (features/calendar/panel-views.ts), unchanged from the
+  // old tabs: the menu lists Detail and Notes, then Tasks below the hairline.
+  const panelViews = useMemo(
+    () => ({
+      tasks: () => (
+        <CalendarTasksPanel
+          api={api}
+          onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
+          onRequestCapture={() => dispatchOpenCapture()}
+          review={
+            reviewMode
+              ? {
+                  items: strip,
+                  onMove: (taskIds) => {
+                    const byId = new Map(strip.map((i) => [i.taskId, i]));
+                    rollForward(
+                      taskIds.map((id) => byId.get(id)).filter((i): i is StripItem => Boolean(i)),
+                    );
+                  },
+                  onRemove: onTriageRemove,
+                  onClose: () => setReviewMode(false),
+                }
+              : null
+          }
+        />
+      ),
+      detail: () =>
+        detailEvent ? (
+          <EventDetailPanel
             runtime={runtime}
             workspaceId={workspaceId}
-            focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
-            focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
-            focusIcon={
-              detailTarget?.type === "event"
-                ? "calendar"
-                : detailTarget?.type === "task"
-                  ? "check-square"
-                  : null
-            }
+            currentUserId={userId}
+            event={detailEvent}
+            accounts={calendar.accounts}
             canEdit={calendar.canEdit}
-            onOpenNote={(id) =>
-              window.dispatchEvent(
-                new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
-              )
-            }
+            onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
+            onDeleteRequest={setDeleteEventId}
+            onClose={() => setPanelVariant("tasks")}
           />
+        ) : detailTask ? (
+          <TaskDetailPanel
+            task={detailTask}
+            buckets={api.buckets}
+            inbox={api.inbox}
+            canEdit={api.canEdit}
+            onRequestCapture={() => dispatchOpenCapture()}
+            onSelectTask={(id) => setDetailTarget({ type: "task", id })}
+            api={api}
+            runtime={runtime}
+            workspaceId={workspaceId}
+          />
+        ) : (
+          <div className="grid h-full place-content-center px-3 text-center">
+            <span className="text-sm text-muted-foreground">Select something on the calendar.</span>
+          </div>
         ),
-      },
-    ],
+      // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
+      // plus New-linked-note. Focus follows the same detail selection.
+      notes: () => (
+        <LinkedNotesPanel
+          runtime={runtime}
+          workspaceId={workspaceId}
+          focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
+          focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
+          focusIcon={
+            detailTarget?.type === "event"
+              ? "calendar"
+              : detailTarget?.type === "task"
+                ? "check-square"
+                : null
+          }
+          canEdit={calendar.canEdit}
+          onOpenNote={(id) =>
+            window.dispatchEvent(
+              new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
+            )
+          }
+        />
+      ),
+    }),
     [
       api,
       calendar,
@@ -1045,8 +1145,9 @@ export function CalendarPageView({
           />
         }
         right={
-          <RightPanelSwitcher
-            variants={panelVariants}
+          <RightPanel
+            module="calendar"
+            views={panelViews}
             activeId={panelVariant}
             onChange={(id) => setPanelVariant(id as PanelVariantId)}
           />
@@ -1077,6 +1178,9 @@ export function CalendarPageView({
               blocksByDay={grouped}
               eventsByDay={eventChips.timed}
               allDayByDay={eventChips.allDay}
+              dueByDay={dueByDay}
+              onDueClick={(id) => openDetail({ type: "task", id })}
+              fileCounts={api.attachmentCounts}
               prefs={prefs}
               loading={api.loading}
               error={api.error}
@@ -1099,9 +1203,7 @@ export function CalendarPageView({
               onTriageLater={onTriageLater}
               onTriageLonger={onTriageLonger}
               onTriageRemove={onTriageRemove}
-              focusTaskId={focus.taskId}
-              focusRunningSinceMs={focus.runningSinceMs}
-              focusBaseSeconds={focus.baseSeconds}
+              focusBlockId={focusBlockId}
             />
           </div>
         }
@@ -1145,17 +1247,13 @@ export function CalendarPageView({
           canFocus={canFocusBlock(taskPopover.block, nowTick)}
           focusing={focus.taskId === taskPopover.block.taskId}
           focusRunning={focus.running && focus.taskId === taskPopover.block.taskId}
-          focusReadout={
-            focus.taskId === taskPopover.block.taskId ? (
-              <FocusReadout runningSinceMs={focus.runningSinceMs} baseSeconds={focus.baseSeconds} />
-            ) : null
-          }
+          focusReadout={focus.taskId === taskPopover.block.taskId ? <FocusReadout /> : null}
           onToggleDone={() => {
             onToggleDone(taskPopover.block.taskId);
             setTaskPopover(null);
           }}
           onLater={() => {
-            onTriageLater(taskPopover.block.taskId);
+            onTriageLater(taskPopover.block.taskId, taskPopover.block.sessionId);
             setTaskPopover(null);
           }}
           onLonger={() => {
@@ -1163,12 +1261,12 @@ export function CalendarPageView({
             setTaskPopover(null);
           }}
           onRemove={() => {
-            onTriageRemove(taskPopover.block.taskId);
+            onTriageRemove(taskPopover.block.taskId, taskPopover.block.sessionId);
             setTaskPopover(null);
           }}
-          onStartFocus={() => focus.start(taskPopover.block.taskId)}
-          onPauseFocus={() => focus.pause()}
-          onResumeFocus={() => focus.resume()}
+          onStartFocus={() => onStartFocus(taskPopover.block.taskId)}
+          onPauseFocus={() => toggleFocusPause(focusTaskRef)}
+          onResumeFocus={() => toggleFocusPause(focusTaskRef)}
           onStopFocus={onStopFocus}
           onOpenDetail={() => {
             const id = taskPopover.block.taskId;
@@ -1178,15 +1276,6 @@ export function CalendarPageView({
           onClose={() => setTaskPopover(null)}
         />
       ) : null}
-
-      <CaptureModal
-        open={captureOpen}
-        onOpenChange={setCaptureOpen}
-        buckets={api.buckets}
-        inbox={api.inbox}
-        defaultBucketId={api.inbox?.id ?? null}
-        onCreate={api.createTask}
-      />
 
       <Dialog open={deleteEvent !== null} onOpenChange={(open) => !open && setDeleteEventId(null)}>
         <DialogContent className="max-w-sm">

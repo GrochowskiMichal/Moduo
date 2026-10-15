@@ -60,6 +60,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
     const filters: Filter[] = [];
     let orderBy: string | null = null;
     let max = Number.POSITIVE_INFINITY;
+    let skip = 0;
     const add = (op: Filter["op"]) => (column: string, value: unknown) => {
       filters.push({ op, column, value });
       return query;
@@ -80,12 +81,19 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         max = n;
         return query;
       },
+      range: (from: number, to: number) => {
+        skip = from;
+        max = to - from + 1;
+        return query;
+      },
+      maybeSingle: () =>
+        query.then((r: { data: Row[]; error: null }) => ({ data: r.data[0] ?? null, error: r.error })),
       then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
         queries.push({ table, filters });
         let data = (tables[table] ?? []).filter((row) => filters.every((f) => matches(row, f)));
         const by = orderBy;
         if (by) data = [...data].sort((a, b) => String(a[by]).localeCompare(String(b[by])));
-        return Promise.resolve({ data: data.slice(0, max), error: null }).then(resolve);
+        return Promise.resolve({ data: data.slice(skip, skip + max), error: null }).then(resolve);
       },
     };
     return query;
@@ -126,8 +134,11 @@ describe("which tools a key lists and may call", () => {
   it("lists only its modules' tools at its level, and nothing for none or an unknown level", () => {
     const viewTasks = toolsForKey(key({ tasks: "view" }));
     expect(viewTasks.length).toBeGreaterThan(0);
+    // The Tasks module's tools (TV-D16: projects, sections, areas, statuses,
+    // teams, templates and imports are Tasks' too).
+    const tasksPrefix = /^(tasks|projects|sections|areas|statuses|teams|templates|imports)_/;
     for (const t of viewTasks) {
-      expect(t.name.startsWith("tasks_"), t.name).toBe(true);
+      expect(tasksPrefix.test(t.name), t.name).toBe(true);
       expect(t.access, t.name).toBe("view");
     }
     expect(toolsForKey(key({}))).toEqual([]);
@@ -324,6 +335,26 @@ describe("links_search_entities", () => {
   it("still drops items the key's creator can't open", async () => {
     const { db } = fakeDb({ entities: [...notes, task] }, shared({}));
     expect(await search.handler({}, ctx({ tasks: "view", links: "view" }, db))).toEqual([]);
+  });
+
+  it("never returns a conversation, even with Chat on the key: apps read chat through the chat tools", async () => {
+    const channel = {
+      workspace_id: WS,
+      deleted_at: null,
+      entity_type: "chat_channel",
+      entity_id: "channel-1",
+      label: "secret-plans",
+      icon: null,
+    };
+    const { db, queries } = fakeDb({ entities: [channel, task] }, shared({ task: [TASK] }));
+    const found = await search.handler({}, ctx({ chat: "view", tasks: "view", links: "view" }, db));
+    expect(found).toEqual([{ type: "task", id: TASK, label: "zz the task", icon: null }]);
+    const typesAsked = queries[0]?.filters.find((f) => f.column === "entity_type")?.value;
+    expect(typesAsked).not.toContain("chat_channel");
+    expect(typesAsked).not.toContain("chat_message");
+    const chatOnly = fakeDb({ entities: [channel] }, shared({}));
+    expect(await search.handler({ types: ["chat_channel"] }, ctx({ chat: "edit", links: "view" }, chatOnly.db))).toEqual([]);
+    expect(chatOnly.queries).toEqual([]);
   });
 });
 

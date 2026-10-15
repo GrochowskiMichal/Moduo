@@ -1,5 +1,7 @@
 # Tasks — dogfood review & working list
 
+> **2026-10-09 — research round:** who Tasks is for, what rows should show, handles, waiting states, agents. Proposals and open calls in [`RESEARCH-2026-10.md`](./RESEARCH-2026-10.md); nothing there is decided yet.
+>
 > **2026-10-07 — now planned.** The build specs are [`specs/tasks-v2.md`](../../specs/tasks-v2.md), [`specs/design-state-layer.md`](../../specs/design-state-layer.md) and [`specs/attachments.md`](../../specs/attachments.md), with blocks in [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md). If this review and a spec disagree, the spec wins.
 
 _2026-10-06 · reviewed on `develop` @ `7716e31` (code-level read of `src/features/tasks/**`, the

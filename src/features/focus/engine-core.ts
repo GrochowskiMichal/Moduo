@@ -18,6 +18,7 @@
 //    the gap are caught up from timestamps, and a work block never starts by
 //    itself while away (F1-4).
 
+import { FOCUS_TIMER_MODES, type FocusTimerMode } from "@contracts/vocabularies";
 import { z } from "zod";
 import type { FocusPrefs } from "../../lib/focus-prefs";
 
@@ -72,10 +73,18 @@ export interface FocusCredit {
   workspaceId: string | null;
   /** Work time not saved yet. */
   ms: number;
-  /** The part handed to the sink and not confirmed yet. */
+  /** The part handed to the sink and not confirmed yet: one save, sent under
+   *  `flightKey`. Until it's confirmed it is only ever sent again as it is
+   *  (same seconds, same key), so the server can tell a resend from new time. */
   inFlightMs: number;
-  /** When that hand-off started. */
+  /** When that hand-off started; null = waiting to be sent again (its answer
+   *  never came, or it failed). */
   inFlightAt: number | null;
+  /** The save's idempotency key (TV-D3). Missing on records written before. */
+  flightKey?: string | null;
+  /** When the seconds in that save were last earned: the stretch's end, kept
+   *  for every resend. */
+  flightEarnedAt?: number | null;
   /** When saving this task's time last failed; cleared once it's saved. */
   failedAt: number | null;
   /** When time was last added. A complete task list loaded after this that
@@ -87,6 +96,11 @@ export interface FocusCredit {
  *  "not saved yet" and retries); or gone (the task can never take the time —
  *  the seconds are dropped). */
 export type FlushOutcome = "saved" | "later" | "failed" | "gone";
+
+/** Seconds held for a save that has to be sent again. */
+function parkedMs(c: FocusCredit): number {
+  return c.inFlightAt === null ? c.inFlightMs : 0;
+}
 
 /** A hand-off still unconfirmed after this long died with its page. */
 export const FLIGHT_STALE_MS = 120_000;
@@ -115,6 +129,26 @@ export interface FocusRecord {
   sitMs: number;
   credits: Record<string, FocusCredit>;
   away: FocusAwayBlock[];
+  /** The timer (TV-F6, call 62a): per_task, pomodoro or off. Missing on
+   *  records written before, where `pomodoro` decides (see timerOf). */
+  timer?: FocusTimerMode;
+  /** Work time on the bound task this sitting: the Per task clock. Starts
+   *  over when another task is bound. Missing on records written before. */
+  taskMs?: number;
+  /** The end of the last stretch credited to the task as live work: a device
+   *  that took the run over at T gets back what was credited here after T
+   *  (#323, TV-F6). Missing on records written before. */
+  creditedTo?: number;
+  /** When this device began crediting this sitting (a start, a takeover, an
+   *  Undo of Stop): a give-back after a takeover never reaches back past it,
+   *  so time another device counted before is never given back from here.
+   *  Missing on records written before. */
+  heldSince?: number;
+}
+
+/** The record's timer. Records from before TV-F6 carry only `pomodoro`. */
+export function timerOf(r: Pick<FocusRecord, "timer" | "pomodoro">): FocusTimerMode {
+  return r.timer ?? (r.pomodoro ? "pomodoro" : "per_task");
 }
 
 export interface FocusAwaySummary {
@@ -128,6 +162,8 @@ export interface FocusAwaySummary {
  *  the chrome chip read it unchanged. */
 export interface FocusSession {
   taskId: string | null;
+  /** The workspace of the bound task (its time is saved there). */
+  workspaceId: string | null;
   taskTitle: string;
   bucketName: string | null;
   tracking: boolean;
@@ -149,10 +185,17 @@ export interface FocusSession {
   away: FocusAwaySummary | null;
   /** Saving some tracked time failed and is being retried: "not saved yet" (F1-7). */
   unsaved: boolean;
+  /** The timer (62a). `pomodoro` above is `timer === "pomodoro"`. */
+  timer: FocusTimerMode;
+  /** The Per task clock: work seconds on the bound task this sitting. */
+  taskSeconds: number;
+  /** Length of the current pomodoro phase, seconds. */
+  phaseSeconds: number;
 }
 
 export const REST_SESSION: FocusSession = {
   taskId: null,
+  workspaceId: null,
   taskTitle: "",
   bucketName: null,
   tracking: false,
@@ -168,6 +211,9 @@ export const REST_SESSION: FocusSession = {
   bigClock: 0,
   away: null,
   unsaved: false,
+  timer: "per_task",
+  taskSeconds: 0,
+  phaseSeconds: 0,
 };
 
 export function blankRecord(now: number): FocusRecord {
@@ -222,6 +268,8 @@ function addCredit(
       ms: (prev?.ms ?? 0) + ms,
       inFlightMs: prev?.inFlightMs ?? 0,
       inFlightAt: prev?.inFlightAt ?? null,
+      flightKey: prev?.flightKey ?? null,
+      flightEarnedAt: prev?.flightEarnedAt ?? null,
       failedAt: prev?.failedAt ?? null,
       earnedAt: Math.max(prev?.earnedAt ?? 0, at),
     },
@@ -287,15 +335,18 @@ function runUntil(rec: FocusRecord, until: number, p: FocusRhythm, away: boolean
   return { rec: r, workMs, ends };
 }
 
+/** Credit a stretch's work time to the bound task. Off records nothing (63):
+ *  no credit and no session clock. */
 function creditRun(base: FocusRecord, run: Run, at: number): Run {
   const task = base.task;
-  if (!task || run.workMs <= 0) return run;
+  if (!task || run.workMs <= 0 || timerOf(base) === "off") return run;
   return {
     ...run,
     rec: {
       ...run.rec,
       credits: addCredit(run.rec.credits, task.id, task.workspaceId, run.workMs, at),
       sitMs: run.rec.sitMs + run.workMs,
+      taskMs: (run.rec.taskMs ?? 0) + run.workMs,
     },
   };
 }
@@ -318,17 +369,18 @@ export function observe(rec: FocusRecord, now: number, p: FocusRhythm): Observed
     // The wall clock moved backwards: keep what was seen, restart the stretch here.
     const seen = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
     const restarted = seen.rec.since === null ? seen.rec : { ...seen.rec, since: now };
-    return { rec: { ...restarted, seenAt: now }, liveEnds: seen.ends };
+    return { rec: { ...restarted, seenAt: now, creditedTo: rec.seenAt }, liveEnds: seen.ends };
   }
   if (now - rec.seenAt <= AWAY_GAP_MS) {
     const live = creditRun(rec, runUntil(rec, now, p, false), now);
-    return { rec: { ...live.rec, seenAt: now }, liveEnds: live.ends };
+    return { rec: { ...live.rec, seenAt: now, creditedTo: now }, liveEnds: live.ends };
   }
   // Away. Credit up to the last look, then replay the gap with its work held.
   const before = creditRun(rec, runUntil(rec, rec.seenAt, p, false), rec.seenAt);
   const gap = runUntil(before.rec, now, p, true);
-  let next: FocusRecord = { ...gap.rec, seenAt: now };
-  const held = rec.task ? gap.workMs : 0;
+  let next: FocusRecord = { ...gap.rec, seenAt: now, creditedTo: rec.seenAt };
+  // Off holds nothing: there's no time to keep or discard (63).
+  const held = rec.task && timerOf(rec) !== "off" ? gap.workMs : 0;
   if (held > 0 || gap.ends.length > 0) {
     next = {
       ...next,
@@ -365,6 +417,9 @@ export function startSession(r: FocusRecord, now: number, p: FocusRhythm): Focus
     phaseMs: workLength(p),
     phaseDoneMs: 0,
     sitMs: 0,
+    taskMs: 0,
+    creditedTo: now,
+    heldSince: now,
     away: [],
   };
 }
@@ -391,7 +446,42 @@ export function stopSession(r: FocusRecord, now: number, p: FocusRhythm): FocusR
     phaseMs: workLength(p),
     phaseDoneMs: 0,
     sitMs: 0,
+    taskMs: 0,
+    heldSince: undefined,
     away: [],
+  };
+}
+
+/**
+ * Undo a Stop (62a: "Stopped · Undo" for 10 s): the session as it was at
+ * `stoppedAt`, as if Stop never happened (a running clock counts the seconds
+ * in between). The time Stop saved stays saved; nothing is credited twice.
+ * A session started since wins: Undo then changes nothing.
+ */
+export function undoStopSession(
+  current: FocusRecord,
+  before: FocusRecord,
+  stoppedAt: number,
+  now: number,
+): FocusRecord {
+  if (current.tracking || !before.tracking || !before.task) return current;
+  return {
+    ...current,
+    task: before.task,
+    tracking: true,
+    timer: timerOf(before),
+    pomodoro: before.pomodoro,
+    phase: before.phase,
+    longBreak: before.longBreak,
+    blocks: before.blocks,
+    phaseMs: before.phaseMs,
+    phaseDoneMs: before.phaseDoneMs,
+    sitMs: before.sitMs,
+    taskMs: before.taskMs ?? 0,
+    since: before.since === null ? null : Math.min(stoppedAt, now),
+    seenAt: now,
+    creditedTo: now,
+    heldSince: before.heldSince ?? now,
   };
 }
 
@@ -409,7 +499,9 @@ export function bindTask(
 ): FocusRecord {
   if (task === null) return { ...stopSession(r, now, p), task: null };
   if (r.task && sameTaskRef(r.task, task)) return r;
-  return { ...r, task };
+  // A new task starts its own Per task clock; a rename keeps it.
+  if (r.task?.id === task.id) return { ...r, task };
+  return { ...r, task, taskMs: 0 };
 }
 
 /** Same task, same label: binding it again changes nothing. */
@@ -422,11 +514,47 @@ export function sameTaskRef(a: FocusTaskRef, b: FocusTaskRef): boolean {
   );
 }
 
-/** Switch stopwatch ↔ pomodoro; the rhythm starts over with a work block. */
-export function togglePomodoro(r: FocusRecord, now: number, p: FocusRhythm): FocusRecord {
+/**
+ * Skip Pomodoro's break (Focus's between-tasks "Take a break · Skip", TV-F8,
+ * 62a): a fresh work block starts now, running. The break's time was never
+ * work, so nothing is credited. No-op outside a Pomodoro break.
+ */
+export function skipBreak(r: FocusRecord, now: number, p: FocusRhythm): FocusRecord {
+  if (!r.tracking || !r.pomodoro || r.phase !== "break") return r;
   return {
     ...r,
-    pomodoro: !r.pomodoro,
+    phase: "work",
+    longBreak: false,
+    phaseMs: workLength(p),
+    phaseDoneMs: 0,
+    since: now,
+    seenAt: now,
+  };
+}
+
+/** Switch Per task ↔ Pomodoro; the rhythm starts over with a work block. */
+export function togglePomodoro(r: FocusRecord, now: number, p: FocusRhythm): FocusRecord {
+  return setTimer(r, r.pomodoro ? "per_task" : "pomodoro", now, p);
+}
+
+/**
+ * Set the timer (62a: Per task · Pomodoro · Off), mid-session too. Into or out
+ * of Pomodoro the rhythm starts over with a work block; Per task ↔ Off only
+ * changes whether time is recorded from now on.
+ */
+export function setTimer(
+  r: FocusRecord,
+  timer: FocusTimerMode,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  if (timerOf(r) === timer && r.timer === timer) return r;
+  const pomodoro = timer === "pomodoro";
+  if (pomodoro === r.pomodoro) return { ...r, timer };
+  return {
+    ...r,
+    timer,
+    pomodoro,
     phase: "work",
     longBreak: false,
     blocks: 0,
@@ -434,6 +562,114 @@ export function togglePomodoro(r: FocusRecord, now: number, p: FocusRhythm): Foc
     phaseDoneMs: 0,
     since: isRunning(r) ? now : r.since,
   };
+}
+
+/** A run as its shared record has it (focus_runs), read at `now`. */
+export interface FocusRunClock {
+  task: FocusTaskRef | null;
+  timer: FocusTimerMode;
+  running: boolean;
+  phase: FocusPhase;
+  longBreak: boolean;
+  blocks: number;
+  /** The current phase's length (Pomodoro). */
+  phaseMs: number;
+  /** How much of the current phase has run (Pomodoro). */
+  phaseDoneMs: number;
+  /** The Per task clock: work time on the Now task this sitting. */
+  taskMs: number;
+  /** Focused time in the run so far. */
+  sitMs: number;
+}
+
+/**
+ * Take over a run another device was running (#323: "takes control when you
+ * act on it"): this device's session becomes the run as its record says it is
+ * now, rhythm and all, and its clock runs from here. Unsaved credits stay; an
+ * away block from before is dropped (that time was the other device's).
+ */
+export function adoptSession(
+  r: FocusRecord,
+  run: FocusRunClock,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  const pomodoro = run.timer === "pomodoro";
+  const phaseMs = pomodoro ? Math.max(MINUTE_MS, run.phaseMs) : workLength(p);
+  return {
+    ...r,
+    task: run.task,
+    tracking: true,
+    timer: run.timer,
+    pomodoro,
+    phase: pomodoro ? run.phase : "work",
+    longBreak: pomodoro && run.phase === "break" && run.longBreak,
+    blocks: Math.max(0, Math.floor(run.blocks)),
+    phaseMs,
+    phaseDoneMs: pomodoro ? Math.min(phaseMs, Math.max(0, run.phaseDoneMs)) : 0,
+    since: run.running ? now : null,
+    seenAt: now,
+    creditedTo: now,
+    heldSince: now,
+    sitMs: Math.max(0, run.sitMs),
+    taskMs: Math.max(0, run.taskMs),
+    away: [],
+  };
+}
+
+/**
+ * Another device took control of the run at `at` (#323): stop here without
+ * counting twice. Work credited to the bound task after `at` is taken back
+ * from what isn't saved yet (that time was counted on the other device), held
+ * away time is dropped, and the session ends. Earlier time stays to be saved.
+ */
+/** The most a takeover gives back that was already saved (a guard against a
+ *  wrong device clock: the take-over moment is the server's). */
+export const MAX_GIVE_BACK_MS = 5 * MINUTE_MS;
+
+/**
+ * The work this device counted on the bound task after another device took
+ * the run at `at`: the part still unsaved (taken back from the credit) and the
+ * part already saved or on its way (given back with a negative adjustment, so
+ * a save that went out before the takeover was heard isn't counted twice).
+ */
+export function overlapAfter(
+  r: FocusRecord,
+  at: number,
+): { taskId: string; workspaceId: string | null; unsavedMs: number; savedMs: number } | null {
+  const task = r.task;
+  if (!task || timerOf(r) === "off") return null;
+  const creditedTo = r.creditedTo ?? r.seenAt;
+  // Only what this device counted itself: never before it took the sitting
+  // up (time adopted from another device was that device's to count).
+  const from = Math.max(at, r.heldSince ?? at);
+  const overlap = Math.min(Math.max(0, creditedTo - from), r.taskMs ?? Number.POSITIVE_INFINITY);
+  if (overlap <= 0) return null;
+  const unsavedMs = Math.min(r.credits[task.id]?.ms ?? 0, overlap);
+  const savedMs = Math.min(MAX_GIVE_BACK_MS, Math.max(0, overlap - unsavedMs));
+  return { taskId: task.id, workspaceId: task.workspaceId, unsavedMs, savedMs };
+}
+
+export function relinquishSession(
+  r: FocusRecord,
+  at: number,
+  now: number,
+  p: FocusRhythm,
+): FocusRecord {
+  const task = r.task;
+  let credits = r.credits;
+  const credit = task ? r.credits[task.id] : undefined;
+  if (task && credit) {
+    const overlap = overlapAfter(r, at)?.unsavedMs ?? 0;
+    if (overlap > 0) {
+      const next = { ...credit, ms: credit.ms - overlap };
+      credits = { ...credits, [task.id]: next };
+      if (next.ms <= 0 && next.inFlightMs <= 0) {
+        credits = Object.fromEntries(Object.entries(credits).filter(([id]) => id !== task.id));
+      }
+    }
+  }
+  return { ...stopSession({ ...r, credits }, now, p), task: null };
 }
 
 /** While paused, show edited intervals right away (Settings → Focus, the ⋯ menu). */
@@ -467,6 +703,8 @@ export function resolveAway(
         ...next,
         credits: addCredit(next.credits, block.taskId, block.workspaceId, block.workMs, now),
         sitMs: next.sitMs + block.workMs,
+        taskMs: block.taskId === next.task?.id ? (next.taskMs ?? 0) + block.workMs : next.taskMs,
+        creditedTo: Math.max(next.creditedTo ?? next.seenAt, block.to),
       };
     }
   } else if (choice === "break" && r.tracking && r.pomodoro) {
@@ -492,34 +730,67 @@ export interface FlushItem {
   seconds: number;
   /** When time was last added to this task's credit. */
   earnedAt: number;
+  /** The save's idempotency key: the same on every resend of these seconds. */
+  key: string;
+  /** A save sent again (time earned since waits for the next flush). */
+  resend: boolean;
 }
 
-/** Take whole seconds of every unsaved credit in `workspaceId`, marked in flight. */
+/**
+ * Take every save due in `workspaceId`, marked in flight: a save waiting to be
+ * sent again goes as it was (same seconds, same key); otherwise the whole
+ * seconds not saved yet go as a new save under a fresh key. One per task.
+ */
 export function takeFlushBatch(
   r: FocusRecord,
   workspaceId: string | null,
   now: number,
+  newKey: () => string,
 ): { rec: FocusRecord; items: FlushItem[] } {
   const items: FlushItem[] = [];
   let credits = r.credits;
   for (const [taskId, c] of Object.entries(r.credits)) {
-    if (c.workspaceId !== workspaceId || c.inFlightMs > 0) continue;
+    if (c.workspaceId !== workspaceId) continue;
+    if (c.inFlightMs > 0) {
+      if (c.inFlightAt !== null) continue; // still waiting for its answer
+      const key = c.flightKey ?? newKey();
+      credits = { ...credits, [taskId]: { ...c, inFlightAt: now, flightKey: key } };
+      items.push({
+        taskId,
+        seconds: Math.round(c.inFlightMs / 1000),
+        earnedAt: c.flightEarnedAt ?? c.earnedAt,
+        key,
+        resend: true,
+      });
+      continue;
+    }
     const seconds = Math.floor(c.ms / 1000);
     if (seconds < 1) continue;
+    const key = newKey();
     credits = {
       ...credits,
-      [taskId]: { ...c, ms: c.ms - seconds * 1000, inFlightMs: seconds * 1000, inFlightAt: now },
+      [taskId]: {
+        ...c,
+        ms: c.ms - seconds * 1000,
+        inFlightMs: seconds * 1000,
+        inFlightAt: now,
+        flightKey: key,
+        flightEarnedAt: c.earnedAt,
+      },
     };
-    items.push({ taskId, seconds, earnedAt: c.earnedAt });
+    items.push({ taskId, seconds, earnedAt: c.earnedAt, key, resend: false });
   }
   return items.length ? { rec: { ...r, credits }, items } : { rec: r, items };
 }
 
 /**
  * Settle one flushed item. Saved → gone, and the task's failure mark clears.
- * Not now → back to unsaved, mark unchanged. Failed → back to unsaved, marked
- * (that's what shows "not saved yet"). Gone → the task can never take its
- * time, so the whole credit is dropped.
+ * Not now, or failed → the save waits to be sent again as it is, with its key:
+ * a failed request may still have reached the server, and a resend under the
+ * same key is recorded once. Failed also marks it (that's what shows "not saved
+ * yet"). Gone → the task can never take its time, so the whole credit is
+ * dropped. An answer for a save that isn't this credit's any more changes
+ * nothing.
  */
 export function settleFlush(
   r: FocusRecord,
@@ -535,15 +806,23 @@ export function settleFlush(
       credits: Object.fromEntries(Object.entries(r.credits).filter(([id]) => id !== item.taskId)),
     };
   }
-  const flight = Math.min(c.inFlightMs, item.seconds * 1000);
-  const inFlightMs = c.inFlightMs - flight;
-  const next: FocusCredit = {
-    ...c,
-    ms: outcome === "saved" ? c.ms : c.ms + flight,
-    inFlightMs,
-    inFlightAt: inFlightMs > 0 ? c.inFlightAt : null,
-    failedAt: outcome === "saved" ? null : outcome === "failed" ? now : c.failedAt,
-  };
+  if (c.inFlightMs <= 0 || (c.flightKey != null && c.flightKey !== item.key)) return r;
+  const next: FocusCredit =
+    outcome === "saved"
+      ? {
+          ...c,
+          inFlightMs: 0,
+          inFlightAt: null,
+          flightKey: null,
+          flightEarnedAt: null,
+          failedAt: null,
+        }
+      : {
+          ...c,
+          inFlightAt: null,
+          flightKey: c.flightKey ?? item.key,
+          failedAt: outcome === "failed" ? now : c.failedAt,
+        };
   const credits = Object.fromEntries(
     Object.entries(r.credits).filter(([id]) => id !== item.taskId),
   );
@@ -551,8 +830,9 @@ export function settleFlush(
   return { ...r, credits };
 }
 
-/** A hand-off that died with an earlier page (a reload or crash mid-save) can't
- *  be confirmed any more: once it's stale, count it as unsaved again. Only
+/** A hand-off that died with an earlier page (a reload or crash mid-save) will
+ *  never be answered: once it's stale, it waits to be sent again, under its
+ *  key. (One from before keys existed counts as unsaved again.) Only
  *  `workspaceId`'s credits (the ones about to be saved) are touched, and never
  *  hand-offs this page is still waiting on (`liveTaskIds`). */
 export function reviveDeadFlights(
@@ -567,10 +847,20 @@ export function reviveDeadFlights(
     const dead =
       c.workspaceId === workspaceId &&
       c.inFlightMs > 0 &&
+      c.inFlightAt !== null &&
       !liveTaskIds.has(taskId) &&
-      now - (c.inFlightAt ?? 0) > FLIGHT_STALE_MS;
+      now - c.inFlightAt > FLIGHT_STALE_MS;
     if (dead) {
-      credits[taskId] = { ...c, ms: c.ms + c.inFlightMs, inFlightMs: 0, inFlightAt: null };
+      credits[taskId] = c.flightKey
+        ? { ...c, inFlightAt: null }
+        : {
+            ...c,
+            ms: c.ms + c.inFlightMs,
+            inFlightMs: 0,
+            inFlightAt: null,
+            flightKey: null,
+            flightEarnedAt: null,
+          };
       changed = true;
     } else {
       credits[taskId] = c;
@@ -621,8 +911,11 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
   const credit = r.task ? r.credits[r.task.id] : undefined;
   const pomoLeft = Math.round(Math.max(0, r.phaseMs - r.phaseDoneMs) / 1000);
   const sitElapsed = Math.round(r.sitMs / 1000);
+  const timer = timerOf(r);
+  const taskSeconds = Math.round((r.taskMs ?? 0) / 1000);
   return {
     taskId: r.task?.id ?? null,
+    workspaceId: r.task?.workspaceId ?? null,
     taskTitle: r.task?.title ?? "",
     bucketName: r.task?.bucketName ?? null,
     tracking: r.tracking,
@@ -633,11 +926,17 @@ export function snapshotOf(rec: FocusRecord, now: number, p: FocusRhythm): Focus
     completedWork: r.blocks,
     pomoLeft,
     sitElapsed,
-    accrued: Math.floor((credit?.ms ?? 0) / 1000),
+    // A save waiting to be sent again isn't in the task's saved total yet.
+    accrued: Math.floor(((credit?.ms ?? 0) + (credit ? parkedMs(credit) : 0)) / 1000),
     phaseLabel: phaseLabelOf(r.phase, r.longBreak),
-    bigClock: r.pomodoro ? pomoLeft : sitElapsed,
+    // One number per job (62): the rhythm's countdown, the task's own clock,
+    // or nothing at all (Off).
+    bigClock: timer === "pomodoro" ? pomoLeft : timer === "per_task" ? taskSeconds : 0,
     away: awaySummary(r.away),
     unsaved: hasFailedSaves(r),
+    timer,
+    taskSeconds,
+    phaseSeconds: Math.round(r.phaseMs / 1000),
   };
 }
 
@@ -658,6 +957,7 @@ function sameAway(a: FocusAwaySummary | null, b: FocusAwaySummary | null): boole
 export function sameSession(a: FocusSession, b: FocusSession): boolean {
   return (
     a.taskId === b.taskId &&
+    a.workspaceId === b.workspaceId &&
     a.taskTitle === b.taskTitle &&
     a.bucketName === b.bucketName &&
     a.tracking === b.tracking &&
@@ -670,6 +970,9 @@ export function sameSession(a: FocusSession, b: FocusSession): boolean {
     a.sitElapsed === b.sitElapsed &&
     a.accrued === b.accrued &&
     a.unsaved === b.unsaved &&
+    a.timer === b.timer &&
+    a.taskSeconds === b.taskSeconds &&
+    a.phaseSeconds === b.phaseSeconds &&
     sameAway(a.away, b.away)
   );
 }
@@ -711,6 +1014,8 @@ const recordSchema = z.object({
       ms: z.number().nonnegative(),
       inFlightMs: z.number().nonnegative(),
       inFlightAt: z.number().nullable(),
+      flightKey: z.string().nullable().optional(),
+      flightEarnedAt: z.number().nullable().optional(),
       failedAt: z.number().nullable(),
       earnedAt: z.number(),
     }),
@@ -726,6 +1031,12 @@ const recordSchema = z.object({
       parked: z.boolean(),
     }),
   ),
+  // TV-F6. Optional, so a record written before still parses (a live session
+  // survives the upgrade); an unknown timer reads as missing.
+  timer: z.enum(FOCUS_TIMER_MODES).optional().catch(undefined),
+  taskMs: z.number().nonnegative().optional().catch(undefined),
+  creditedTo: z.number().optional().catch(undefined),
+  heldSince: z.number().optional().catch(undefined),
 });
 
 /** Parse a stored record; anything malformed or from another version is null. */

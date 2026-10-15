@@ -20,6 +20,8 @@ import {
   type WorkspaceRole,
 } from "@contracts/vocabularies";
 
+import { formatFullDate } from "../../lib/time-format";
+
 export { MCP_KEY_MODULES, MCP_KEY_SCOPES, type McpKeyModule, type McpKeyScope, type McpKeyScopes };
 
 /** Control labels. Kept plain: the landing's key card shows these exact words. */
@@ -65,6 +67,7 @@ export const DEFAULT_KEY_SCOPES: Readonly<McpKeyScopes> = {
 const NEED_NOTES: Readonly<Record<string, string>> = {
   "calendar>tasks": "Moving scheduled tasks also needs Tasks: Edit.",
   "notes>links": "Linking notes also needs Links: Edit.",
+  "tasks>links": "Commenting on tasks also needs Links: Edit.",
 };
 
 /**
@@ -251,12 +254,9 @@ export type KeyLifecycle = {
   staleNote: string | null;
 };
 
+/** A key's date in the app's one date grammar (Settings → Time & region), with its year. */
 export function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatFullDate(iso);
 }
 
 export function keyLifecycle(

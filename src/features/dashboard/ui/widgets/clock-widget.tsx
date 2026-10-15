@@ -3,6 +3,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useTimeRegion } from "@/lib/time-region";
+
 import type { WidgetComponentProps } from "../../registry/types";
 import { WidgetBodyRoot } from "./widget-primitives";
 
@@ -28,15 +30,17 @@ export function ClockWidget({ widget, size }: WidgetComponentProps) {
   const localZone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const extraZones = readTimezones(widget.config);
 
+  // The person's clock, 12- or 24-hour (Time & region, TV-D14).
+  const { hour12 } = useTimeRegion();
   const timeFmt = useMemo(
     () => (zone: string) =>
       new Intl.DateTimeFormat(undefined, {
         timeZone: zone,
-        hour: "2-digit",
+        hour: hour12 ? "numeric" : "2-digit",
         minute: "2-digit",
-        hour12: false,
+        hourCycle: hour12 ? "h12" : "h23",
       }).format(now),
-    [now],
+    [now, hour12],
   );
   const dateFmt = useMemo(
     () => (zone: string) =>

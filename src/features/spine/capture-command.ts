@@ -1,13 +1,17 @@
-// DF-20 — Global capture command bar routing.
+// DF-20 — capture write paths, used by the capture shell's one-line types
+// (components/app/capture-line.tsx, SH-1) and Chat's "make a task" action.
 //
-// The pure + runtime halves of capture-anywhere (critique CC-11): parse one line
-// into a target module + body, then write it through that module's create op. A
-// plain line is a Task in the Inbox — reusing the quick-capture write path
-// (`seedInbox` + `upsertTask`, same as the Home quick-capture widget) — while the
-// `/note` `/event` `/contact` prefixes route to the sibling modules. Kept out of
-// the UI so both halves are unit-testable with a mock runtime.
+// Writes one captured line through its module's create op. A Task lands in
+// the Inbox, reusing the quick-capture write path (`seedInbox` + `upsertTask`,
+// same as the Home quick-capture widget); notes, events and contacts go through
+// their own ops. The type is picked by the capture shell (⌘ + a module's
+// number, tasks-v3 call 90b), never by a "/note" prefix any more. Kept out of
+// the UI so it stays unit-testable with a mock runtime.
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
+import { captureTaskToStore } from "../../lib/sync/capture";
+import { findWorkspaceStore } from "../../lib/sync/store";
+import { formatTime, formatWeekdayDate } from "../../lib/time-format";
 import { endPosition, makeTask } from "../tasks/helpers";
 import { parseCapture } from "../tasks/parse/capture-parser";
 
@@ -15,8 +19,6 @@ export type CaptureTarget = "task" | "note" | "event" | "contact";
 
 export type CaptureRoute = {
   target: CaptureTarget;
-  /** The slash prefix that selects this route ("" for the default Task). */
-  prefix: string;
   label: string;
   /** Module page the created entity lives on (the toast's "Open" jump). */
   openTo: string;
@@ -29,27 +31,15 @@ export type CaptureRoute = {
   lane: "tasks" | "notes" | null;
 };
 
-/**
- * Ordered routes. Task is the default (no prefix); the three sibling prefixes
- * route elsewhere. Order drives the hint legend + chip row in the capture bar.
- */
+/** One route per capture target, Task first. */
 export const CAPTURE_ROUTES: readonly CaptureRoute[] = [
-  { target: "task", prefix: "", label: "Task", openTo: "/tasks", lane: "tasks" },
-  { target: "note", prefix: "/note", label: "Note", openTo: "/notes", lane: "notes" },
-  { target: "event", prefix: "/event", label: "Event", openTo: "/calendar", lane: "tasks" },
-  { target: "contact", prefix: "/contact", label: "Contact", openTo: "/contacts", lane: null },
+  { target: "task", label: "Task", openTo: "/tasks", lane: "tasks" },
+  { target: "note", label: "Note", openTo: "/notes", lane: "notes" },
+  { target: "event", label: "Event", openTo: "/calendar", lane: "tasks" },
+  { target: "contact", label: "Contact", openTo: "/contacts", lane: null },
 ];
 
-const TASK_ROUTE = CAPTURE_ROUTES[0];
-
-/** Prefix → route, incl. an explicit `/task` alias for the default. Longest
- *  prefixes first so a future `/note…` can't be shadowed by a shorter match. */
-const PREFIX_ALIASES: ReadonlyArray<{ prefix: string; route: CaptureRoute }> = [
-  ...CAPTURE_ROUTES.filter((r) => r.prefix).map((route) => ({ prefix: route.prefix, route })),
-  { prefix: "/task", route: TASK_ROUTE },
-].sort((a, b) => b.prefix.length - a.prefix.length);
-
-/** The two lane permissions the capture bar can read from the workspace
+/** The two lane permissions the capture shell reads from the workspace
  *  (Contacts + Calendar have no client lane at alpha — see CaptureRoute.lane). */
 export type CaptureModulePermissions = { notes: string; tasks: string };
 
@@ -80,26 +70,6 @@ export function isPermissionError(message: string | null | undefined): boolean {
   return (
     m.includes("edit access") || m.includes("row-level security") || m.includes("permission denied")
   );
-}
-
-export type ParsedCaptureCommand = { route: CaptureRoute; body: string };
-
-/**
- * Split a capture line into its target route + body. A leading `/note`
- * `/event` `/contact` `/task` prefix (case-insensitive, terminated by
- * whitespace or end-of-input) selects that route; anything else — including a
- * `/` that isn't a known prefix ("/groceries") — is a Task carrying the whole
- * line. Never throws; an empty input is an empty-body Task.
- */
-export function parseCaptureCommand(input: string): ParsedCaptureCommand {
-  const text = input.replace(/^\s+/, "");
-  const lower = text.toLowerCase();
-  for (const { prefix, route } of PREFIX_ALIASES) {
-    if (lower === prefix || lower.startsWith(`${prefix} `) || lower.startsWith(`${prefix}\t`)) {
-      return { route, body: text.slice(prefix.length).trimStart() };
-    }
-  }
-  return { route: TASK_ROUTE, body: text };
 }
 
 export type CaptureCreated = {
@@ -139,22 +109,11 @@ function eventTimes(
   return { startsAt: start.toISOString(), endsAt: end.toISOString(), allDay: false };
 }
 
-const EVENT_WHEN_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-const EVENT_DAY_FMT = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-
+/** "Thu, Oct 16, 3:00 PM" / "All day · Thu, Oct 16": Time & region's clock and
+ *  date order (TV-D14). */
 function eventDescription(startsAt: string, allDay: boolean): string {
   const d = new Date(startsAt);
-  return allDay ? `All day · ${EVENT_DAY_FMT.format(d)}` : EVENT_WHEN_FMT.format(d);
+  return allDay ? `All day · ${formatWeekdayDate(d)}` : `${formatWeekdayDate(d)}, ${formatTime(d)}`;
 }
 
 /**
@@ -211,29 +170,34 @@ export async function createCapturedEntity(input: {
     default: {
       const parsed = parseCapture(trimmed, now);
       const title = parsed.title.trim() || trimmed;
-      const inbox = await runtime.tasks.seedInbox(workspaceId);
-      // Append to the end of the Inbox — a fresh read for the position is cheap
-      // (capture is infrequent) and keeps ordering sane (quick-capture parity).
-      const bundle = await runtime.tasks.list(workspaceId);
-      const inboxTasks = bundle.tasks.filter((t) => t.bucketId === inbox.id && !t.deletedAt);
-      const task = makeTask({
-        workspaceId,
-        bucketId: inbox.id,
-        title,
-        position: endPosition(inboxTasks),
-        // parseCapture already sets scheduledAt to a recurrence's first
-        // occurrence (single-row model, CaptureModal parity).
+      // parseCapture already sets scheduledAt to a recurrence's first
+      // occurrence (single-row model, CaptureModal parity).
+      const dates = {
         scheduledAt: parsed.scheduledAt,
         dueDate: parsed.dueDate,
         recurrence: parsed.recurrence,
-      });
-      await runtime.tasks.upsertTask(task);
-      return {
-        target: "task",
-        title,
-        description: parsed.summary ? `${parsed.summary} · Inbox` : "Added to Inbox",
-        openTo: "/tasks",
       };
+      const where = parsed.summary ? `${parsed.summary} · Inbox` : "Added to Inbox";
+      // Through the workspace's shared store (TV-D11a): it shows at once on
+      // every surface, lands at the end of the Inbox it already holds, and
+      // offline it waits on this device under its own id (default g).
+      const store = findWorkspaceStore(runtime, workspaceId);
+      if (store) {
+        const { queued } = await captureTaskToStore(store, { title, ...dates });
+        return {
+          target: "task",
+          title,
+          description: queued ? "Waiting to sync · Inbox" : where,
+          openTo: "/tasks",
+        };
+      }
+      // No store (no Tasks access to read, or a runtime outside the app
+      // shell): straight to the server.
+      const inbox = await runtime.tasks.seedInbox(workspaceId);
+      await runtime.tasks.upsertTask(
+        makeTask({ workspaceId, bucketId: inbox.id, title, position: endPosition([]), ...dates }),
+      );
+      return { target: "task", title, description: where, openTo: "/tasks" };
     }
   }
 }

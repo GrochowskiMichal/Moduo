@@ -4,10 +4,10 @@ import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 import { eyebrowVariants } from "./eyebrow";
+import { useMoreBelowRef } from "./menu-scroll";
+import { DROPDOWN_MENU_SCROLL, FLOATING_SURFACE } from "./surface";
 
-const contentBase = cn(
-  "fx-overlay min-w-[8rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground",
-);
+const contentBase = cn(FLOATING_SURFACE, DROPDOWN_MENU_SCROLL, "min-w-[8rem] p-1");
 
 const itemBase = cn(
   "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-popover-foreground",
@@ -40,11 +40,15 @@ function DropdownMenuContent({
   className,
   sideOffset = 4,
   style,
+  ref,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  // A long menu scrolls (DS-6), and fades at its foot while more waits below.
+  const moreBelowRef = useMoreBelowRef(ref);
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
+        ref={moreBelowRef}
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         className={cn(contentBase, className)}
@@ -206,10 +210,13 @@ function DropdownMenuSubTrigger({
 function DropdownMenuSubContent({
   className,
   style,
+  ref,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
+  const moreBelowRef = useMoreBelowRef(ref);
   return (
     <DropdownMenuPrimitive.SubContent
+      ref={moreBelowRef}
       data-slot="dropdown-menu-sub-content"
       className={cn(contentBase, className)}
       style={{

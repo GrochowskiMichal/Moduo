@@ -9,10 +9,16 @@
 // slash `/ref` plugin funnel their selection through `resolveMention`; the
 // UI/runtime halves only *execute* the returned plan. Mirrors entity-links.ts.
 
-import type { EntityRef, LinkOrigin, RelationKind } from "@/lib/entity-links";
+import type { ComponentType } from "react";
 
-/** Which text gesture opened the picker. `@` → a mention; `/ref` → a typed ref. */
-export type MentionTrigger = "mention" | "ref";
+import type { EntityRef, LinkOrigin, RelationKind } from "@/lib/entity-links";
+import type { DateCommand, DateCommandId } from "./grammar";
+
+/**
+ * Which text gesture opened the picker (the grammar, spine/grammar.ts): `@` →
+ * a mention; `/` → a command or a typed ref; `#` → a tag.
+ */
+export type MentionTrigger = "mention" | "ref" | "tag";
 
 /** A pickable entity already in the registry (the common case). */
 export type MentionEntityCandidate = {
@@ -30,6 +36,11 @@ export type MentionPersonCandidate = {
   memberId: string;
   label: string;
   icon: string | null;
+  /** Their own name, for the avatar's initials when the label isn't just the
+   *  name ("Alex Rivera (you)"); defaults to the label. */
+  name?: string;
+  /** Their profile photo; the avatar shows initials without it (MOD-96). */
+  avatarUrl?: string | null;
 };
 
 /** A "no match — create it" candidate, offered for a typed `/ref` + query. */
@@ -41,10 +52,57 @@ export type MentionCreateCandidate = {
   label: string;
 };
 
+/** A `/` date command (`/today`, `/tomorrow`, `/next week`, `/date`). */
+export type MentionCommandCandidate = {
+  kind: "command";
+  command: DateCommandId;
+  label: string;
+};
+
+/** A workspace tag, for `#` in prose (a link to the tag, never applying it). */
+export type MentionTagCandidate = {
+  kind: "tag";
+  tagId: string;
+  label: string;
+  color: string | null;
+};
+
+/**
+ * A team (capture's `@`, TV-U14: a team routes the task). Teams aren't registry
+ * entities, so only a host that lists them (`candidatesFor`) offers them.
+ */
+export type MentionTeamCandidate = {
+  kind: "team";
+  teamId: string;
+  label: string;
+  /** The team's own two letters, when edited. */
+  letters: string | null;
+  /** The colour picked for the team (TV-D13), else its stable one. */
+  color?: string | null;
+};
+
+/**
+ * A host's own entry, which the host carries out (`onPick`): capture's
+ * `/priority high`, "Create #name", a project's section.
+ */
+export type MentionActionCandidate = {
+  kind: "action";
+  /** Stable within the menu: "priority:high", "tag-new:design". */
+  id: string;
+  label: string;
+  /** Quiet words after the label ("Due", "Project"). */
+  hint?: string;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+};
+
 export type MentionCandidate =
   | MentionEntityCandidate
   | MentionPersonCandidate
-  | MentionCreateCandidate;
+  | MentionCreateCandidate
+  | MentionCommandCandidate
+  | MentionTagCandidate
+  | MentionTeamCandidate
+  | MentionActionCandidate;
 
 /** Link an existing entity (entity `@mention` or `/ref`). */
 export type LinkMentionResolution = {
@@ -73,10 +131,25 @@ export type CreateAndLinkResolution = {
   origin: LinkOrigin;
 };
 
+/** A `/` date command: insert a date chip (or open the picker for `/date`). */
+export type InsertDateResolution = { action: "insert-date"; command: DateCommandId };
+
+/** `#tag` in prose: insert a link to the tag (its tags field is never changed). */
+export type InsertTagResolution = { action: "insert-tag"; tagId: string; label: string };
+
+/** A team or a host's own entry: the host that listed it carries it out. */
+export type HostResolution = {
+  action: "host";
+  candidate: MentionTeamCandidate | MentionActionCandidate;
+};
+
 export type MentionResolution =
   | LinkMentionResolution
   | NotifyPersonResolution
-  | CreateAndLinkResolution;
+  | CreateAndLinkResolution
+  | InsertDateResolution
+  | InsertTagResolution
+  | HostResolution;
 
 /** The relation kind a trigger implies: `@` → `mentions`, `/ref` → `references`. */
 export function relationKindForTrigger(trigger: MentionTrigger): RelationKind {
@@ -127,6 +200,13 @@ export function resolveMention(input: {
         relationKind: relationKindForTrigger(trigger),
         origin: originForTrigger(trigger),
       };
+    case "command":
+      return { action: "insert-date", command: candidate.command };
+    case "tag":
+      return { action: "insert-tag", tagId: candidate.tagId, label: candidate.label };
+    case "team":
+    case "action":
+      return { action: "host", candidate };
   }
 }
 
@@ -143,17 +223,36 @@ export type SearchedPerson = {
   memberId: string;
   label: string;
   icon?: string | null;
+  /** See `MentionPersonCandidate`. */
+  name?: string;
+  avatarUrl?: string | null;
 };
+
+/** A tag as the `#` picker consumes it. */
+export type SearchedTag = { id: string; name: string; color: string | null };
+
+/**
+ * A project as a pickable thing. Its registry type is `bucket` (the table it
+ * lives in): the registry's read policy checks `bucket` per item, while an
+ * unknown type such as `project` falls back to module-level access and would
+ * show a private project's name to every member once a link registered it.
+ */
+export function projectAsEntity(row: { id: string; name: string }): SearchedEntity {
+  return { type: "bucket", id: row.id, label: row.name, icon: "project" };
+}
 
 /**
  * Assemble the ordered candidate list a picker shows, from a registry search +
  * (for `@`) workspace members + an optional "create" affordance. Pure so the
- * picker's branching is unit-testable without a runtime:
+ * picker's branching is unit-testable without a runtime. The order follows the
+ * grammar (call 33): people first, then projects, then other things.
  *
- * - entities come first (the common case);
+ * - **`/` date commands come first** when offered (33a);
  * - **people are only offered for the `@` trigger** (a `/ref` is entity-scoped);
+ * - **projects** come before the other things;
  * - a **"Create …"** item is appended only for a `/ref` with a non-empty query,
- *   a wired creator (`canCreate`), and **no exact-label match** already present.
+ *   a wired creator (`canCreate`), and **no exact-label match** already present;
+ * - **`#`** lists tags only.
  */
 export function buildMentionCandidates(input: {
   trigger: MentionTrigger;
@@ -161,21 +260,45 @@ export function buildMentionCandidates(input: {
   entities: SearchedEntity[];
   /** People are only offered for the `@` (mention) trigger. */
   people?: SearchedPerson[];
+  /** Projects, listed before other things. */
+  projects?: SearchedEntity[];
+  /** The `/` date commands matching the query (`matchDateCommands`). */
+  commands?: readonly DateCommand[];
+  /** Tags, for the `#` trigger. */
+  tags?: SearchedTag[];
   /** The entity type a typed `/ref` creates on no-match (e.g. "task"). */
   createType?: string | null;
   /** Whether a creator is wired for `createType` (gates the "Create…" item). */
   canCreate?: boolean;
+  /**
+   * Prose: create only behind the type's word (`/task Order frames`), so `/`
+   * in a sentence ("copy it to /tmp then") can never make something on Enter.
+   */
+  createNoun?: boolean;
 }): MentionCandidate[] {
-  const { trigger, query, entities, people, createType, canCreate } = input;
+  const {
+    trigger,
+    query,
+    entities,
+    people,
+    projects,
+    commands,
+    tags,
+    createType,
+    canCreate,
+    createNoun,
+  } = input;
   const candidates: MentionCandidate[] = [];
 
-  for (const e of entities) {
-    candidates.push({
-      kind: "entity",
-      ref: { type: e.type, id: e.id },
-      label: e.label,
-      icon: e.icon,
-    });
+  if (trigger === "tag") {
+    for (const t of tags ?? []) {
+      candidates.push({ kind: "tag", tagId: t.id, label: t.name, color: t.color });
+    }
+    return candidates;
+  }
+
+  if (trigger === "ref" && commands) {
+    for (const c of commands) candidates.push({ kind: "command", command: c.id, label: c.label });
   }
 
   if (trigger === "mention" && people) {
@@ -185,14 +308,38 @@ export function buildMentionCandidates(input: {
         memberId: p.memberId,
         label: p.label,
         icon: p.icon ?? null,
+        ...(p.name !== undefined ? { name: p.name } : {}),
+        ...(p.avatarUrl !== undefined ? { avatarUrl: p.avatarUrl } : {}),
       });
     }
   }
 
+  const seen = new Set<string>();
+  const things = [...(projects ?? []), ...entities].filter((e) => {
+    const key = `${e.type}:${e.id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  for (const e of things) {
+    candidates.push({
+      kind: "entity",
+      ref: { type: e.type, id: e.id },
+      label: e.label,
+      icon: e.icon,
+    });
+  }
+
   const trimmed = query.trim();
-  const hasExact = entities.some((e) => e.label.trim().toLowerCase() === trimmed.toLowerCase());
-  if (trigger === "ref" && canCreate && createType && trimmed.length > 0 && !hasExact) {
-    candidates.push({ kind: "create", entityType: createType, label: trimmed });
+  let createLabel = trimmed;
+  if (createNoun && createType) {
+    const lower = trimmed.toLowerCase();
+    const noun = `${createType.toLowerCase()} `;
+    createLabel = lower.startsWith(noun) ? trimmed.slice(noun.length).trim() : "";
+  }
+  const hasExact = things.some((e) => e.label.trim().toLowerCase() === createLabel.toLowerCase());
+  if (trigger === "ref" && canCreate && createType && createLabel.length > 0 && !hasExact) {
+    candidates.push({ kind: "create", entityType: createType, label: createLabel });
   }
 
   return candidates;

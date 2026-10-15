@@ -5,10 +5,17 @@
 // Scope (spec §7): dates/times + a small recurrence vocabulary only. It does NOT
 // infer buckets, subtasks, duration, energy, or priority. On a recurrence phrase
 // it can't understand, it does not guess — it flags it so the UI can say so.
+//
+// It keeps the words people typed (TV-P0, tasks-v3 AC1.3): only a clear date
+// phrase is read as a date (a day, a weekday or a clock time — never a bare
+// month, so "Send March report" stays whole); a bare hour reads as daytime
+// ("at 5" is 5 PM); and a date typed with a repeat starts the repeat there.
 
 import * as chrono from "chrono-node";
 import { RRule, type Weekday } from "rrule";
 
+import { formatDay, formatDayTime } from "../../../lib/time-format";
+import { findSlashDates, takeSlashDates } from "../../spine/grammar";
 import type { RecurrenceRule } from "../model";
 
 export type ParsedCapture = {
@@ -28,7 +35,47 @@ export type ParsedCapture = {
    * vocabulary could not parse. The UI surfaces a polite note rather than a guess.
    */
   unparsedRecurrence: boolean;
+  /**
+   * Where the recognised words are, as `[start, end)` offsets into the trimmed
+   * input: what capture highlights while you type (TV-U14, 33a). Empty when
+   * nothing was recognised.
+   */
+  spans: Array<[number, number]>;
 };
+
+/** What to leave alone while reading dates (TV-U14). */
+export type CaptureParseOptions = {
+  /**
+   * Phrases the person kept as words (Esc on a highlight, 33a): never read as a
+   * date, wherever they appear (any case).
+   */
+  keep?: readonly string[];
+  /**
+   * `[start, end)` ranges of the trimmed input that are never read as dates (a
+   * linked thing's name in a capture title: "Prepare @Monday notes").
+   */
+  ignore?: ReadonlyArray<readonly [number, number]>;
+};
+
+/** A clock time ("at 3pm", "15:30", "at 5", "noon"), for a `/` command's title. */
+const CLOCK_TIME =
+  /(?:\bat\s+)?(?:\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b\d{1,2}:\d{2}\b|\bnoon\b|\bmidnight\b)|\bat\s+\d{1,2}\b/i;
+
+/** English month names, for handing a `/` command's day to chrono. */
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
 const WEEKDAYS: Record<string, Weekday> = {
   monday: RRule.MO,
@@ -52,7 +99,14 @@ const WEEKDAYS: Record<string, Weekday> = {
 
 type RecurrenceMatch = {
   span: [number, number];
-  options: Partial<{ freq: number; interval: number; byweekday: Weekday[] }>;
+  /** A second phrase that belongs to the repeat ("on the 1st"), stripped on its own. */
+  extraSpan?: [number, number];
+  options: Partial<{
+    freq: number;
+    interval: number;
+    byweekday: Weekday[];
+    bymonthday: number[];
+  }>;
 };
 
 const DEFAULT_RECUR_HOUR = 9; // 9:00 AM local default when a recurrence has no time
@@ -116,6 +170,62 @@ function detectRecurrence(text: string): RecurrenceMatch | null {
   return null;
 }
 
+/**
+ * A monthly repeat can name its day: "every month on the 1st" repeats on the
+ * 1st, and the phrase leaves the title with the repeat.
+ */
+function withMonthDay(text: string, match: RecurrenceMatch | null): RecurrenceMatch | null {
+  if (!match || match.options.freq !== RRule.MONTHLY) return match;
+  // The ordinal must end the phrase (end of line, punctuation, a time):
+  // "on the 3rd floor" is a place, not a day.
+  const m = /\bon the (\d{1,2})(?:st|nd|rd|th)(?=\s*(?:$|[,.;!?]|at\b|\d))/i.exec(text);
+  if (!m) return match;
+  const day = Number.parseInt(m[1], 10);
+  if (day < 1 || day > 31) return match;
+  // Its own span: the words between "every month" and "on the 1st" stay.
+  return {
+    ...match,
+    extraSpan: [m.index, m.index + m[0].length],
+    options: { ...match.options, bymonthday: [day] },
+  };
+}
+
+/**
+ * A clear date phrase names a day, a weekday or a clock time. A month on its
+ * own ("Send March report") or a year isn't one, so those words stay text.
+ */
+function isClearDate(result: chrono.ParsedResult): boolean {
+  const s = result.start;
+  return s.isCertain("day") || s.isCertain("weekday") || s.isCertain("hour");
+}
+
+/** A bare hour with no AM/PM reads as daytime: 1–6 is the afternoon ("at 5" = 5 PM). */
+const DAYTIME_PM_UNTIL = 6;
+
+/** Clock time of a chrono result, with a bare 1–6 o'clock moved to the afternoon. */
+function daytimeClock(result: chrono.ParsedResult): { hour: number; minute: number } | null {
+  const s = result.start;
+  if (!s.isCertain("hour")) return null;
+  let hour = s.get("hour") ?? 0;
+  const minute = s.get("minute") ?? 0;
+  // "05:30" is a 24-hour time someone meant; "5" or "5:30" is ambiguous. Only
+  // a zero-padded clock counts ("Oct 05 at 3" is still 3 PM).
+  const zeroPadded = /(?:^|[^\d])0\d:\d{2}/.test(result.text);
+  if (!s.isCertain("meridiem") && !zeroPadded && hour >= 1 && hour <= DAYTIME_PM_UNTIL) {
+    hour += 12;
+  }
+  return { hour, minute };
+}
+
+/** Does the chrono result name the day (so its date is meant), not just a time? */
+function namesDay(result: chrono.ParsedResult): boolean {
+  return result.start.isCertain("day") || result.start.isCertain("weekday");
+}
+
+function overlaps(a: [number, number], b: [number, number]): boolean {
+  return a[0] < b[1] && b[0] < a[1];
+}
+
 /** Just the RRULE body (no "RRULE:"/"DTSTART:" lines), e.g. "FREQ=DAILY;INTERVAL=1". */
 function rruleBody(rule: RRule): string {
   const line = rule
@@ -126,25 +236,112 @@ function rruleBody(rule: RRule): string {
   return line ? line.slice("RRULE:".length) : rule.toString().replace(/^RRULE:/, "");
 }
 
-function stripSpans(text: string, spans: Array<[number, number]>): string {
-  // Remove from right to left so indices stay valid.
-  const ordered = [...spans].sort((a, b) => b[0] - a[0]);
-  let out = text;
-  for (const [start, end] of ordered) {
-    out = out.slice(0, start) + " " + out.slice(end);
+/** Words that only introduce a date ("by Dec 15", "on Monday") and go with it. */
+const CONNECTIVE_BEFORE = /\b(?:at|on|by|due|starting|from)\s+$/i;
+
+/** Overlapping spans ("every weekday" + "weekday at 9") merged into one. */
+function mergeSpans(spans: Array<[number, number]>): Array<[number, number]> {
+  const sorted = [...spans].sort((a, b) => a[0] - b[0]);
+  const out: Array<[number, number]> = [];
+  for (const span of sorted) {
+    const last = out[out.length - 1];
+    if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]);
+    else out.push([span[0], span[1]]);
   }
-  return (
-    out
-      .replace(/\s+/g, " ")
-      .replace(/\s+([,.])/g, "$1")
-      // drop dangling connective words left behind ("at", "on", "by", "every")
-      .replace(/\b(at|on|by|every|each|due|starting)\s*$/i, "")
-      .replace(/^\s*(at|on|by)\b/i, "")
-      .trim()
-  );
+  return out;
 }
 
-export function parseCapture(input: string, refDate: Date = new Date()): ParsedCapture {
+function stripSpans(
+  text: string,
+  spans: Array<[number, number]>,
+  /** Where the date phrase starts: only it takes the connective before it. */
+  dateStart: number | null,
+): string {
+  // Remove from right to left so indices stay valid.
+  const ordered = mergeSpans(spans).sort((a, b) => b[0] - a[0]);
+  let out = text;
+  for (const [start, end] of ordered) {
+    // The connective right before a date goes with it ("Essay by Dec 15 …");
+    // never before a repeat ("Log on every day" keeps "on").
+    const head = out.slice(0, start);
+    const before = start === dateStart ? head.replace(CONNECTIVE_BEFORE, "") : head;
+    out = `${before} ${out.slice(end)}`;
+  }
+  // No blanket strip of leading/trailing "at"/"on"/"by": the date's own
+  // connective went with it above, and anything else is the person's words
+  // ("On-call handover", "Log on every day").
+  return out
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.])/g, "$1")
+    .trim();
+}
+
+/** A character no date word contains: what a kept or ignored range reads as. */
+const MASK = "\uE000";
+
+/** `[start, end)` ranges sorted and merged where they touch or overlap. */
+function mergeRanges(ranges: ReadonlyArray<readonly [number, number]>): Array<[number, number]> {
+  const sorted = ranges
+    .map(([a, b]): [number, number] => [Math.min(a, b), Math.max(a, b)])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  const out: Array<[number, number]> = [];
+  for (const [a, b] of sorted) {
+    const last = out[out.length - 1];
+    if (last && a <= last[1]) last[1] = Math.max(last[1], b);
+    else out.push([a, b]);
+  }
+  return out;
+}
+
+/** Every occurrence of the kept phrases in `text` (any case, whole words). */
+function keptRanges(text: string, keep: readonly string[]): Array<[number, number]> {
+  const out: Array<[number, number]> = [];
+  const lower = text.toLowerCase();
+  for (const phrase of keep) {
+    const needle = phrase.trim().toLowerCase();
+    if (!needle) continue;
+    for (let i = lower.indexOf(needle); i !== -1; i = lower.indexOf(needle, i + 1)) {
+      out.push([i, i + needle.length]);
+    }
+  }
+  return out;
+}
+
+/**
+ * Read a captured line: its date or time, its repeat, and the title without
+ * them. With `opts`, kept phrases and ignored ranges stay words: they're
+ * hidden from the date reader and put back, unchanged, in the title.
+ */
+export function parseCapture(
+  input: string,
+  refDate: Date = new Date(),
+  opts: CaptureParseOptions = {},
+): ParsedCapture {
+  const raw = input.trim();
+  const ranges = mergeRanges([
+    ...(opts.ignore ?? []).map(([a, b]): [number, number] => [
+      Math.max(0, a),
+      Math.min(raw.length, b),
+    ]),
+    ...keptRanges(raw, opts.keep ?? []),
+  ]);
+  if (ranges.length === 0) return parseRaw(raw, refDate);
+  // Same length and offsets, so the spans still point into `raw`.
+  let masked = raw;
+  for (const [a, b] of ranges) masked = masked.slice(0, a) + MASK.repeat(b - a) + masked.slice(b);
+  const parsed = parseRaw(masked, refDate);
+  // Each masked run is one merged range, in order: put the words back.
+  let n = 0;
+  const unmask = (text: string) =>
+    text.replace(new RegExp(`${MASK}+`, "g"), () => {
+      const range = ranges[n++];
+      return range ? raw.slice(range[0], range[1]) : "";
+    });
+  return { ...parsed, title: unmask(parsed.title) };
+}
+
+function parseRaw(input: string, refDate: Date): ParsedCapture {
   const raw = input.trim();
   const empty: ParsedCapture = {
     title: raw,
@@ -154,8 +351,75 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
     summary: "",
     matched: false,
     unparsedRecurrence: false,
+    spans: [],
   };
   if (!raw) return empty;
+
+  // `/today`, `/tomorrow`, `/next week` (the grammar's date commands, 33a):
+  // an explicit command sets the day and leaves the title. It wins over date
+  // words, which then stay the person's words; a clock time still schedules
+  // on that day; a repeat keeps its own start.
+  const slash = takeSlashDates(raw, refDate);
+  const slashSpans = slash.day ? findSlashDates(raw) : [];
+  if (slash.day && !slash.text) {
+    // Only a command: nothing to call the task but its words.
+    const due = new Date(`${slash.day}T12:00:00`);
+    return {
+      ...empty,
+      dueDate: due.toISOString(),
+      summary: `due ${chronoLabel(due, false)}`,
+      matched: true,
+      spans: slashSpans,
+    };
+  }
+  if (slash.day && slash.text) {
+    const rest = parseRaw(slash.text, refDate);
+    if (rest.recurrence) {
+      // The command's day starts the repeat, like a typed date does.
+      const day = new Date(`${slash.day}T12:00:00`);
+      const named = `${slash.text} on ${MONTHS[day.getMonth()]} ${day.getDate()} ${day.getFullYear()}`;
+      const started = parseRaw(named, refDate);
+      return started.recurrence
+        ? { ...started, title: rest.title, spans: slashSpans }
+        : { ...rest, spans: slashSpans };
+    }
+    if (rest.scheduledAt) {
+      const at = new Date(rest.scheduledAt);
+      const day = new Date(`${slash.day}T00:00:00`);
+      day.setHours(at.getHours(), at.getMinutes(), 0, 0);
+      // Only the clock time leaves the title; a date word stays the person's
+      // ("Call Anna Friday at 3pm /tomorrow" → "Call Anna Friday").
+      // Kept only when it reads exactly like the parser's own title once its
+      // date words go ("3 p.m." or "3PM-4PM" leaving bits behind falls back).
+      const withoutClock = slash.text.replace(CLOCK_TIME, " ").replace(/\s+/g, " ").trim();
+      const cleanCut =
+        withoutClock !== "" &&
+        withoutClock !== slash.text &&
+        parseRaw(withoutClock, refDate).title === rest.title;
+      const clock = CLOCK_TIME.exec(raw);
+      return {
+        ...rest,
+        title: cleanCut ? withoutClock : rest.title,
+        scheduledAt: day.toISOString(),
+        summary: `scheduled ${chronoLabel(day, true)}`,
+        spans:
+          clock && cleanCut
+            ? mergeSpans([...slashSpans, [clock.index, clock.index + clock[0].length]])
+            : slashSpans,
+      };
+    }
+    // A date alone is due on that day, at noon like a typed date word, so
+    // every time zone reads the same calendar day.
+    const due = new Date(`${slash.day}T12:00:00`);
+    return {
+      ...empty,
+      title: rest.dueDate ? slash.text : rest.title,
+      dueDate: due.toISOString(),
+      summary: `due ${chronoLabel(due, false)}`,
+      matched: true,
+      spans: slashSpans,
+    };
+  }
 
   const spans: Array<[number, number]> = [];
   let scheduledAt: string | null = null;
@@ -163,30 +427,48 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
   let recurrence: RecurrenceRule | null = null;
   const parts: string[] = [];
 
-  // ── chrono: time / date ────────────────────────────────────────────────────
-  const results = chrono.parse(raw, refDate, { forwardDate: true });
-  const dateResult = results[0];
-  let timeOfDay: { hour: number; minute: number } | null = null;
-  if (dateResult) {
-    spans.push([dateResult.index, dateResult.index + dateResult.text.length]);
-    const start = dateResult.start;
-    const date = start.date();
-    const hasTime = start.isCertain("hour");
-    if (hasTime) {
-      timeOfDay = { hour: date.getHours(), minute: date.getMinutes() };
-    }
-  }
-
   // ── recurrence vocabulary ──────────────────────────────────────────────────
-  const recur = detectRecurrence(raw);
+  const recur = withMonthDay(raw, detectRecurrence(raw));
+
+  // ── chrono: time / date ────────────────────────────────────────────────────
+  // The first clear date phrase. One inside the repeat ("every monday at 9")
+  // only lends its clock time; the repeat already says which days.
+  const results = chrono.parse(raw, refDate, { forwardDate: true }).filter(isClearDate);
+  const dateResult = results[0];
+  const insideRepeat =
+    !!dateResult &&
+    !!recur &&
+    overlaps(recur.span, [dateResult.index, dateResult.index + dateResult.text.length]);
+  const timeOfDay = dateResult ? daytimeClock(dateResult) : null;
+  if (dateResult) spans.push([dateResult.index, dateResult.index + dateResult.text.length]);
+
+  /** The parsed moment: chrono's day (or today) at the daytime clock time. */
+  const resolveDate = (result: chrono.ParsedResult): Date => {
+    const date = result.start.date();
+    if (!timeOfDay) return date;
+    if (namesDay(result)) {
+      date.setHours(timeOfDay.hour, timeOfDay.minute, 0, 0);
+      return date;
+    }
+    // Only a time ("at 5"): today if it's still ahead, else tomorrow — worked
+    // out again here, since chrono forwarded the unadjusted hour.
+    const at = new Date(refDate);
+    at.setHours(timeOfDay.hour, timeOfDay.minute, 0, 0);
+    if (at.getTime() <= refDate.getTime()) at.setDate(at.getDate() + 1);
+    return at;
+  };
+
   let unparsedRecurrence = false;
   if (recur) {
     spans.push(recur.span);
-    // DTSTART anchored to the parsed time-of-day (or a 9am default), today.
-    const dtstart = new Date(refDate);
+    if (recur.extraSpan) spans.push(recur.extraSpan);
+    // DTSTART: the date typed with the repeat ("tomorrow 3pm every week"), or
+    // today; at the parsed time of day, or a 9am default.
+    const dtstart = dateResult && !insideRepeat ? resolveDate(dateResult) : new Date(refDate);
     dtstart.setHours(timeOfDay?.hour ?? DEFAULT_RECUR_HOUR, timeOfDay?.minute ?? 0, 0, 0);
     const rule = new RRule({ ...recur.options, dtstart });
-    const next = rule.after(new Date(refDate.getTime() - 1000), true) ?? dtstart;
+    const from = Math.max(refDate.getTime(), dtstart.getTime()) - 1000;
+    const next = rule.after(new Date(from), true) ?? dtstart;
     recurrence = {
       rrule: rruleBody(rule),
       dtstart: dtstart.toISOString(),
@@ -202,7 +484,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
 
   // ── resolve a one-off date/time when there's no recurrence ──────────────────
   if (!recurrence && dateResult) {
-    const date = dateResult.start.date();
+    const date = resolveDate(dateResult);
     if (timeOfDay) {
       scheduledAt = date.toISOString();
       parts.push(`scheduled ${chronoLabel(date, true)}`);
@@ -213,7 +495,7 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
   }
 
   const matched = !!recurrence || !!dateResult;
-  const title = stripSpans(raw, spans) || raw;
+  const title = stripSpans(raw, spans, dateResult ? dateResult.index : null) || raw;
   return {
     title,
     scheduledAt,
@@ -222,30 +504,11 @@ export function parseCapture(input: string, refDate: Date = new Date()): ParsedC
     summary: parts.join(" · "),
     matched,
     unparsedRecurrence,
+    spans: matched ? mergeSpans(spans) : [],
   };
 }
 
-const LABEL_TIME = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-const LABEL_DATE = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-const LABEL_DATETIME = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
-
+/** The confirmation's "scheduled Tomorrow, 3:00 PM" / "due Oct 16" (one grammar). */
 function chronoLabel(date: Date, withTime: boolean): string {
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-  if (withTime)
-    return isToday ? `today at ${LABEL_TIME.format(date)}` : LABEL_DATETIME.format(date);
-  return isToday ? "today" : LABEL_DATE.format(date);
+  return withTime ? formatDayTime(date) : formatDay(date);
 }

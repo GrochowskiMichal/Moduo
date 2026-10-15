@@ -8,6 +8,7 @@ import {
   DragOverlaySurface,
   InsertionLine,
   NestPreview,
+  SortedNote,
 } from "./drag-visuals";
 import { Eyebrow } from "./eyebrow";
 
@@ -61,6 +62,13 @@ export const AllPieces: Story = {
       <Row>
         <InsertionLine edge="top" indent={INDENT} />
         Make the GitHub Actions Windows build faster
+      </Row>
+
+      <Label>Sorted: a note where the line would be</Label>
+      <Row>Write the onboarding email</Row>
+      <Row>
+        <SortedNote edge="top">Sorted by due date</SortedNote>
+        Review the pricing page copy
       </Row>
 
       <Label>Nest: target tints, indented preview</Label>

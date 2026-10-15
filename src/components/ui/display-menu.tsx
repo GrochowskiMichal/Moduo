@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { SegmentedControl, type SegmentedItem } from "./segmented-control";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
 import { Separator } from "./separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 /*
  * DisplayMenu (DS-4) — one popover for "how this view looks", generic over a
@@ -59,6 +60,8 @@ type DisplayMenuProps<V extends DisplayValues> = {
   open?: boolean;
   defaultOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Where the panel mounts (default: the body); see PopoverContent. */
+  portalContainer?: HTMLElement | null;
 };
 
 function sameValue(a: DisplayValues, b: DisplayValues): boolean {
@@ -124,25 +127,34 @@ function DisplayMenu<V extends DisplayValues>({
   open,
   defaultOpen,
   onOpenChange,
+  portalContainer,
 }: DisplayMenuProps<V>) {
   const idPrefix = React.useId();
   const set = (id: string, next: string | readonly string[]) =>
     onValueChange({ ...value, [id]: next });
 
-  return (
+  // The default trigger: in a narrow toolbar (an `@container` under 36rem) it
+  // drops its word and stays an icon, named and with its tooltip.
+  const trigger = children ?? (
+    <TooltipTrigger asChild>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="px-2 data-[state=open]:bg-state-active @max-xl:min-w-(--ctrl-h-sm) @max-xl:justify-center @max-xl:px-1.5"
+      >
+        <SlidersHorizontal aria-hidden />
+        <span className="@max-xl:sr-only">Display</span>
+      </Button>
+    </TooltipTrigger>
+  );
+  const popover = (
     <Popover open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        {children ?? (
-          <Button variant="ghost" size="sm" className="px-2 data-[state=open]:bg-state-active">
-            <SlidersHorizontal aria-hidden />
-            Display
-          </Button>
-        )}
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align={align}
+        container={portalContainer}
         aria-label="Display options"
-        className="flex w-80 flex-col rounded-lg border-hairline p-1.5"
+        className="flex w-80 flex-col p-1.5"
         // Focus the panel, not its first control: that's an icon-only
         // segment, whose tooltip would pop up on every open. Tab still
         // reaches the controls in order.
@@ -253,6 +265,15 @@ function DisplayMenu<V extends DisplayValues>({
         ) : null}
       </PopoverContent>
     </Popover>
+  );
+  // A caller's own trigger brings its own tooltip, if any.
+  return children ? (
+    popover
+  ) : (
+    <Tooltip>
+      {popover}
+      <TooltipContent>Display</TooltipContent>
+    </Tooltip>
   );
 }
 

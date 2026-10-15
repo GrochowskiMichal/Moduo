@@ -31,7 +31,9 @@ import {
   replaceCondition,
   toggleFilterValue,
 } from "./filter-model";
+import { Kbd } from "./kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 /*
  * FilterBar (DS-4) — generic filtering over a dimension registry the module
@@ -99,7 +101,7 @@ function ValueItems({ dimension, selected, onToggle }: ValueListProps) {
   );
 }
 
-const POPOVER_CLASS = "w-64 rounded-lg border-hairline p-0";
+const POPOVER_CLASS = "w-64 p-0";
 
 /** Scores an item by its keywords (labels and the option's own keywords)
  *  only. cmdk's default also scores the item's `value`, which here is an
@@ -469,32 +471,52 @@ function FilterBar({
 
 type FilterButtonProps = Omit<FilterMenuProps, "children"> & {
   className?: string;
+  /** The key that opens it, shown in the tooltip ("F" in Tasks). */
+  shortcut?: string;
 };
 
 /** The toolbar's "Filter" control: opens FilterMenu, with a badge counting
- *  the active conditions. */
-function FilterButton({ className, ...menuProps }: FilterButtonProps) {
+ *  the active conditions. In a narrow toolbar (an `@container` under 36rem)
+ *  it drops its word and stays an icon, named and with its tooltip. */
+function FilterButton({ className, shortcut, ...menuProps }: FilterButtonProps) {
   const active = menuProps.value.length;
   return (
-    <FilterMenu align="start" {...menuProps}>
-      <Button
-        variant="ghost"
-        size="sm"
-        className={cn("px-2 data-[state=open]:bg-state-active", className)}
-        aria-label={active ? `Filter, ${active} active` : "Filter"}
-      >
-        <ListFilter aria-hidden />
-        Filter
-        {active ? (
-          <span
-            aria-hidden
-            className="inline-grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 font-sans text-2xs font-semibold tabular-nums text-background"
+    <Tooltip>
+      <FilterMenu align="start" {...menuProps}>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "px-2 data-[state=open]:bg-state-active",
+              "@max-xl:min-w-(--ctrl-h-sm) @max-xl:justify-center @max-xl:px-1.5",
+              className,
+            )}
+            aria-label={active ? `Filter, ${active} active` : "Filter"}
           >
-            {active}
-          </span>
+            <ListFilter aria-hidden />
+            <span className="@max-xl:sr-only">Filter</span>
+            {active ? (
+              <span
+                aria-hidden
+                className="inline-grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 font-sans text-2xs font-semibold tabular-nums text-background"
+              >
+                {active}
+              </span>
+            ) : null}
+          </Button>
+        </TooltipTrigger>
+      </FilterMenu>
+      <TooltipContent>
+        Filter
+        {shortcut ? (
+          <>
+            {" "}
+            <Kbd>{shortcut}</Kbd>
+          </>
         ) : null}
-      </Button>
-    </FilterMenu>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

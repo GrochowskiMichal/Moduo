@@ -1,5 +1,13 @@
 import { parseOrError } from "@contracts/errors";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { z } from "zod";
 
 import {
@@ -9,6 +17,7 @@ import {
   type LayoutPanelsApplyDetail,
   readFeaturePanelState,
 } from "../../features/layout/panel-events";
+import { cn } from "../../lib/utils";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "../ui/resizable";
 import { Sheet, SheetContent } from "../ui/sheet";
 
@@ -42,6 +51,10 @@ type Layout = Record<string, number>;
 
 const BP_NARROW = 900;
 const LAYOUT_STORAGE_PREFIX = "moduo:panels-layout:v2";
+// The left rail's floor, and the right panel's: never narrower than 280 px, so
+// property values wrap instead of truncating (tasks-v3 call 89, SH-1).
+const LEFT_MIN = "240px";
+const RIGHT_MIN = "280px";
 
 function useViewportWidth(): number {
   const [width, setWidth] = useState(() =>
@@ -234,6 +247,18 @@ export function FeaturePanelsShell({
   const showLeftFull = viewportMode === "full" && panelState.left;
   const showRightFull = viewportMode === "full" && showRight;
 
+  // A side panel that just opened slides and fades in (motion pattern 1); the
+  // panels a page mounts with, and the side that didn't change, stay still.
+  // Measured before paint, so the panel never shows a frame before it moves.
+  const [entering, setEntering] = useState({ left: false, right: false });
+  const shownRef = useRef<{ left: boolean; right: boolean } | null>(null);
+  useLayoutEffect(() => {
+    const prev = shownRef.current;
+    shownRef.current = { left: showLeftFull, right: showRightFull };
+    if (!prev) return;
+    setEntering({ left: !prev.left && showLeftFull, right: !prev.right && showRightFull });
+  }, [showLeftFull, showRightFull]);
+
   const leftSlot = left ?? <div className="text-sm text-muted-foreground">Feature tools panel</div>;
   const rightSlot = right ?? <div className="text-sm text-muted-foreground">Details panel</div>;
 
@@ -264,10 +289,15 @@ export function FeaturePanelsShell({
         <ResizablePanel
           id={`${feature}-left`}
           defaultSize="20%"
-          minSize={resizable ? "240px" : "20%"}
+          minSize={resizable ? LEFT_MIN : "20%"}
           maxSize={resizable ? "40%" : "20%"}
         >
-          <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
+          <aside
+            className={cn(RAIL_WRAPPER, entering.left && "motion-panel")}
+            data-side="left"
+            data-rail-mode="full"
+            style={RAIL_PAD}
+          >
             {leftSlot}
           </aside>
         </ResizablePanel>
@@ -289,11 +319,18 @@ export function FeaturePanelsShell({
       {showRightFull ? (
         <ResizablePanel
           id={`${feature}-right`}
-          defaultSize="20%"
-          minSize={resizable ? "240px" : "20%"}
-          maxSize={resizable ? "40%" : "20%"}
+          // A fixed (not resizable) right panel sits exactly at the floor: a
+          // share of the window could fall under 280 px on a small one.
+          defaultSize={resizable ? "20%" : RIGHT_MIN}
+          minSize={RIGHT_MIN}
+          maxSize={resizable ? "40%" : RIGHT_MIN}
         >
-          <aside className={RAIL_WRAPPER} data-rail-mode="full" style={RAIL_PAD}>
+          <aside
+            className={cn(RAIL_WRAPPER, entering.right && "motion-panel")}
+            data-side="right"
+            data-rail-mode="full"
+            style={RAIL_PAD}
+          >
             {rightSlot}
           </aside>
         </ResizablePanel>

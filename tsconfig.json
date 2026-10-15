@@ -19,6 +19,7 @@
   },
   "include": [
     "src",
+    ".storybook/preview.tsx",
     "rsbuild.config.ts",
     "playwright.config.ts",
     "scripts/brand",
@@ -39,8 +40,16 @@
     "supabase/functions/_shared/oauth-connect.test.ts",
     "supabase/functions/_shared/posthog-erasure.ts",
     "supabase/functions/_shared/posthog-erasure.test.ts",
-    "supabase/functions/send-workspace-invite/email.ts",
-    "supabase/functions/send-workspace-invite/email.test.ts"
+    "supabase/functions/_shared/purge-deleted.ts",
+    "supabase/functions/_shared/purge-deleted.test.ts",
+    "supabase/functions/auth-email-hook/handler.ts",
+    "supabase/functions/auth-email-hook/handler.test.ts",
+    "supabase/functions/_shared/standard-webhooks.ts",
+    "supabase/functions/_shared/standard-webhooks.test.ts",
+    "supabase/functions/_shared/service-rpc.ts",
+    "supabase/functions/_shared/service-rpc.test.ts",
+    "supabase/functions/email-worker/handler.ts",
+    "supabase/functions/email-worker/handler.test.ts"
   ],
   "exclude": ["node_modules", "dist", "src-tauri"]
 }

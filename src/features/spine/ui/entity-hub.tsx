@@ -191,6 +191,7 @@ export function EntityHubRow({
   // contact (R5: accent reserved; color is never the only signal).
   const Icon = resolveEntityIcon(row.other.type, row.icon);
 
+  const fit = variant === "rail" ? "break-words" : "truncate";
   return (
     <div
       className={cn(
@@ -202,16 +203,21 @@ export function EntityHubRow({
       <button
         type="button"
         onClick={() => onOpen?.(row.other)}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          variant === "rail" && "flex-wrap gap-y-0.5",
+        )}
       >
         <Icon className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
-        <span className="min-w-0 truncate text-foreground">{row.title}</span>
+        {/* In a side panel the row wraps rather than cut a name (Tasks v3
+            AC1.16, call 89); the page card keeps one line. */}
+        <span className={cn("min-w-0 text-foreground", fit)}>{row.title}</span>
         {row.snippet ? (
-          <span className="min-w-0 truncate text-xs text-muted-foreground">· {row.snippet}</span>
+          <span className={cn("min-w-0 text-xs text-muted-foreground", fit)}>· {row.snippet}</span>
         ) : null}
         {/* Provenance caption on a company's union rows (FX-7): "· via Jane Cooper". */}
         {row.via ? (
-          <span className="shrink-0 truncate text-xs text-muted-foreground/70">
+          <span className={cn("min-w-0 text-xs text-muted-foreground/70", fit)}>
             · via {row.via}
           </span>
         ) : null}

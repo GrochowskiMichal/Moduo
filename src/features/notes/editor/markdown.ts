@@ -43,6 +43,7 @@ import {
 } from "@lexical/table";
 import { $createParagraphNode, $isTextNode } from "lexical";
 import { $createEntityRefNode, EntityRefNode } from "../../spine/editor/entity-ref-schema";
+import { referenceKind, referenceNoun } from "../../spine/references/kinds";
 import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./schema/embed-node";
 import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./schema/page-row-node";
 import { $createTaskLineNode, $isTaskLineNode, TaskLineNode } from "./schema/task-line-node";
@@ -241,7 +242,9 @@ export const ENTITY_REF_TRANSFORMER: TextMatchTransformer = {
   export: (node) => {
     if (!(node instanceof EntityRefNode)) return null;
     const json = node.exportJSON();
-    const label = (json.label || "Untitled").replace(/\]/g, "");
+    // A reference stored without a title (RF-1 privacy surfaces) exports its
+    // kind's word ("task"), never a made-up title.
+    const label = (json.label || referenceNoun(referenceKind(json.entityType))).replace(/\]/g, "");
     return `[${label}](moduo://${json.entityType}/${json.entityId})`;
   },
   importRegExp: new RegExp(`\\[([^\\]]+)\\]\\(${MODUO_URI.source}\\)`),

@@ -8,14 +8,11 @@
 
 import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CloudOff, Sparkles } from "lucide-react";
+import { CheckSquare, CloudOff, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import {
-  RightPanelSwitcher,
-  type RightPanelVariant,
-} from "../../components/app/right-panel-switcher";
+import { type PanelItem, RightPanel } from "../../components/app/right-panel";
 import { truncationNotice } from "../../components/app/truncation-notice";
 import { Button } from "../../components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip";
@@ -71,6 +68,7 @@ import { ShareMenu } from "../../features/sharing/share-menu";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
+import { type CaptureSource, useCaptureSource } from "../../lib/capture-source";
 import type { EntityRef } from "../../lib/entity-links";
 import { supabaseClient } from "../../lib/runtime.web";
 import { useAuth } from "../../providers/auth-provider";
@@ -106,6 +104,16 @@ export function NotesClassicPage() {
     () => (selectedId ? (notes.find((n) => n.id === selectedId) ?? null) : null),
     [notes, selectedId],
   );
+  // An open note rides along on a capture as "From: …" (tasks-v3 call 93).
+  const selectedNoteTitle = selectedNote ? displayTitle(selectedNote.title) : null;
+  const captureSource = useMemo<CaptureSource | null>(
+    () =>
+      selectedId && selectedNoteTitle !== null
+        ? { kind: "note", label: selectedNoteTitle, ref: { type: "note", id: selectedId } }
+        : null,
+    [selectedId, selectedNoteTitle],
+  );
+  useCaptureSource(captureSource);
 
   const select = useCallback(
     (id: string | null, replace = false) => {
@@ -168,7 +176,8 @@ export function NotesClassicPage() {
     modulePermission: modulePermissions.tasks,
   });
 
-  // Task-detail rail variant — meta click opens it; note switch closes it.
+  // A task opened from the note shows in the right panel as an item ("← title")
+  // on top of the current view — meta click opens it; note switch closes it.
   const [taskDetailId, setTaskDetailId] = useState<string | null>(null);
   useEffect(() => {
     setTaskDetailId(null);
@@ -536,72 +545,59 @@ export function NotesClassicPage() {
     </div>
   );
 
-  // The right panel is now the switchable surface (NO-7): Detail · Comments ·
-  // Outline for the open note, plus a transient Task-detail variant that a
-  // focused task line (NO-5) prepends and activates.
+  // The right panel (NO-7, SH-1): Detail · Comments · Outline for the open
+  // note are its views; a task opened from a focused task line (NO-5) shows on
+  // top of them as an item ("← title").
   // Bridge lookup (bundle + just-minted overlay) so it works the instant a mint
   // lands, before the bundle reload catches up.
   const detailTask = taskDetailId ? taskBridge.getTask(taskDetailId) : null;
   const noteForPanel = selectedNote && !selectedNote.deletedAt ? selectedNote : null;
   const panelSession = noteForPanel && engine ? engine.getOrCreateSession(noteForPanel.id) : null;
 
-  const noteVariants: RightPanelVariant[] =
+  // The registered views (features/notes/panel-views.ts).
+  const noteViews =
     noteForPanel && selectedWorkspaceId
-      ? [
-          {
-            id: "detail",
-            label: "Detail",
-            render: () => (
-              // The hub is a drop target (NO-7b): dropping a note here links it
-              // to the open note (drag-onto-hub = link only).
-              <HubDropZone
-                target={{ type: "note", id: noteForPanel.id }}
-                disabled={!canEdit || degraded}
-              >
-                <NoteDetailPanel
-                  runtime={runtime}
-                  workspaceId={selectedWorkspaceId}
-                  noteId={noteForPanel.id}
-                  canEdit={canEdit && !degraded}
-                  currentUserId={userId}
-                  onOpenEntity={handleOpenEntity}
-                />
-              </HubDropZone>
-            ),
-          },
-          {
-            id: "comments",
-            label: "Comments",
-            render: () => (
-              <NoteCommentsPanel
+      ? {
+          detail: () => (
+            // The hub is a drop target (NO-7b): dropping a note here links it
+            // to the open note (drag-onto-hub = link only).
+            <HubDropZone
+              target={{ type: "note", id: noteForPanel.id }}
+              disabled={!canEdit || degraded}
+            >
+              <NoteDetailPanel
                 runtime={runtime}
                 workspaceId={selectedWorkspaceId}
                 noteId={noteForPanel.id}
-                noteLabel={displayTitle(noteForPanel.title)}
-                canComment={modulePermissions.notes !== "none"}
+                canEdit={canEdit && !degraded}
                 currentUserId={userId}
-                getSelectionQuote={getEditorSelectionQuote}
-                onScrollToQuote={scrollEditorToQuote}
+                onOpenEntity={handleOpenEntity}
               />
-            ),
-          },
-          {
-            id: "outline",
-            label: "Outline",
-            render: () => (
-              <NoteOutlinePanel
-                doc={panelSession?.doc ?? null}
-                onNavigate={scrollEditorToHeading}
-              />
-            ),
-          },
-        ]
-      : [];
+            </HubDropZone>
+          ),
+          comments: () => (
+            <NoteCommentsPanel
+              runtime={runtime}
+              workspaceId={selectedWorkspaceId}
+              noteId={noteForPanel.id}
+              noteLabel={displayTitle(noteForPanel.title)}
+              canComment={modulePermissions.notes !== "none"}
+              currentUserId={userId}
+              getSelectionQuote={getEditorSelectionQuote}
+              onScrollToQuote={scrollEditorToQuote}
+            />
+          ),
+          outline: () => (
+            <NoteOutlinePanel doc={panelSession?.doc ?? null} onNavigate={scrollEditorToHeading} />
+          ),
+        }
+      : null;
 
-  const taskVariant: RightPanelVariant | null = detailTask
+  const taskItem: PanelItem | null = detailTask
     ? {
-        id: "task",
-        label: "Task",
+        key: `task:${detailTask.id}`,
+        title: detailTask.title,
+        icon: CheckSquare,
         render: () => (
           // The embedded task hub is a drop target too (DF-8): dragging a note
           // onto it links the note to the task, using the page's DndContext.
@@ -625,28 +621,22 @@ export function NotesClassicPage() {
       }
     : null;
 
-  const panelVariants = taskVariant ? [taskVariant, ...noteVariants] : noteVariants;
-  const activePanel = taskVariant ? "task" : panelVariant;
-  const onPanelChange = (id: string) => {
-    if (id === "task") return;
-    setTaskDetailId(null); // leaving the Task tab closes the focused task
-    changePanelVariant(id as NotesPanelVariantId);
-  };
-
   // Always give the shell a right slot (DF-13): with no note open the panel
   // shows a quiet empty state instead of vanishing — the surface stays real.
-  const right =
-    noteForPanel && panelVariants.length > 0 ? (
-      <RightPanelSwitcher
-        variants={panelVariants}
-        activeId={activePanel}
-        onChange={onPanelChange}
-      />
-    ) : (
-      <div className="grid h-full place-content-center px-4 text-center text-sm text-muted-foreground">
-        Select a note to see its links, comments, and outline.
-      </div>
-    );
+  const right = noteViews ? (
+    <RightPanel
+      module="notes"
+      views={noteViews}
+      activeId={panelVariant}
+      onChange={(id) => changePanelVariant(id as NotesPanelVariantId)}
+      items={taskItem ? [taskItem] : []}
+      onBack={() => setTaskDetailId(null)}
+    />
+  ) : (
+    <div className="grid h-full place-content-center px-4 text-center text-sm text-muted-foreground">
+      Select a note to see its links, comments, and outline.
+    </div>
+  );
 
   const editorNoteId = noteForPanel?.id ?? null;
 

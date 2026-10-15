@@ -324,6 +324,9 @@ export const tauriRuntime: ModuoRuntime = {
   // Cloud-first: Chat is Supabase-direct on both surfaces. Same code path as web.
   chat: webRuntime.chat,
 
+  // Cloud-first: Focus runs (TV-F6) are Supabase-direct on both surfaces.
+  focus: webRuntime.focus,
+
   // Cloud-first: Contacts is Supabase-direct on both surfaces (contacts_op_* /
   // companies_op_* RPCs + the entities registry). Same code path as web.
   contacts: webRuntime.contacts,
@@ -339,4 +342,7 @@ export const tauriRuntime: ModuoRuntime = {
   // Habits — Supabase-direct (preference-class), identical on both platforms,
   // so the desktop delegates wholesale (DB-7).
   habits: webRuntime.habits,
+
+  // Attachments — Supabase-direct on both platforms (AT-1).
+  attachments: webRuntime.attachments,
 };

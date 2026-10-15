@@ -62,6 +62,7 @@ export function entityOpenTarget(type: string, id: string): EntityOpenTarget | n
       return { to: "/contacts", search: { type: "company", id }, intentId: id };
     case "task":
     case "project":
+    case "bucket":
       return { to: "/tasks", search: { id }, intentId: id };
     case "note":
       return { to: "/notes", search: { id }, intentId: id };
