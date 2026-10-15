@@ -174,7 +174,7 @@ export function useTasksDisplay(
     revert,
     displayControl: (
       <DisplayMenu
-        controls={tasksDisplayControls(scope, display.layout, groupChoices)}
+        controls={tasksDisplayControls(scope, display.layout, groupChoices, display.rows)}
         value={display}
         // A new Order by starts in its own direction (a header may have
         // turned the last one around).

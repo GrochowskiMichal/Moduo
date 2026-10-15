@@ -185,7 +185,8 @@ function TaskRowView({
   const assigneeName = assigneeLabel(task.assigneeId, byId);
   // Solo workspaces have nobody to tell apart — the avatar only appears with teammates.
   const withAssignee = columns.assignee && showAssignee && assignees.length > 1;
-  const detailed = columns.project || columns.status || columns.updated;
+  // The preset itself: any of Detailed's own columns can be off (MOD-128).
+  const detailed = columns.detailed;
   const dateCommand = command === "schedule" || command === "due" ? command : null;
   const handle = handleLabel(taskKey, task.number);
   const now = nowOn(today);

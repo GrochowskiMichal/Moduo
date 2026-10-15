@@ -299,6 +299,27 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(projectShown(a)).toBe(true);
   });
 
+  it("Display → Columns turns Detailed's own columns off, header and rows (MOD-128, MOD-136)", () => {
+    // A project's defaults: no Project (the page's title), no Updated.
+    renderList(rows, {
+      rows: "detailed",
+      detailedColumns: ["handle", "status", "time", "waiting"],
+    });
+    const a = rowOf("Task a");
+    expect(cols(a)).toEqual(["status", "due", "time", "assignee", "queue"]);
+    expect(projectShown(a)).toBe(false);
+    const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
+    expect(within(header).queryByText("Project")).toBeNull();
+    expect(within(header).queryByRole("button", { name: /updated/i })).toBeNull();
+  });
+
+  it("Detailed with every own column off is still Detailed, not Standard's date (MOD-128)", () => {
+    renderList(rows, { rows: "detailed", detailedColumns: [] });
+    // Due stays Detailed's own cell; Standard's one date never comes back.
+    expect(cols(rowOf("Task a"))).toEqual(["due", "assignee", "queue"]);
+    expect(document.querySelector('[data-slot="task-list-header"]')).not.toBeNull();
+  });
+
   it("Detailed names the section after the project, and the handle before the title", () => {
     const withSection = [task("a", { sectionId: "s1", number: 142 })];
     renderList(
