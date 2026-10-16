@@ -23,6 +23,13 @@ import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import {
+  composerHoldLine,
+  nowLine,
+  type PresenceState,
+  presenceStateOf,
+} from "@/lib/statuses/model";
+import { usePeopleNow } from "@/lib/statuses/store";
+import {
   type ChainRights,
   chainGroups,
   chainsStamp,
@@ -53,13 +60,6 @@ import {
   useChatTypingSnapshot,
 } from "../store/react";
 import type { ChatWindow, ChatWriteResult } from "../store/store";
-import { usePeopleNow } from "@/lib/statuses/store";
-import {
-  composerHoldLine,
-  nowLine,
-  type PresenceState,
-  presenceStateOf,
-} from "@/lib/statuses/model";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
 import { authorName } from "../stream/rows";
 import { readThroughHidden, wrappedReplyIds } from "../timeline";

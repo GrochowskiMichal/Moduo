@@ -133,7 +133,12 @@ export class ChatPresenceStore {
             this.syncSelf();
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
             this.joined = false;
-            this.set({ status: "error", online: new Set(), away: new Set(), error: PRESENCE_ERROR });
+            this.set({
+              status: "error",
+              online: new Set(),
+              away: new Set(),
+              error: PRESENCE_ERROR,
+            });
           }
         });
       this.channel = channel;
@@ -181,7 +186,7 @@ export function chatPresence(
   const key = `${selfId}:${workspaceId}`;
   let store = stores.get(key);
   // A store made for an earlier "me" (signed out, then back) is never reused.
-  if (!store || !store.hasSelf(self)) {
+  if (!store?.hasSelf(self)) {
     store?.dispose();
     store = new ChatPresenceStore(socket, workspaceId, selfId, self);
     stores.set(key, store);

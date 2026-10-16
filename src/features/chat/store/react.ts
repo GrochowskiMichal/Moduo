@@ -8,16 +8,16 @@
 // snapshot itself (docs/gotchas/ui.md, RF-1).
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import type { ModuoRuntime } from "@/lib/runtime.types";
-import { supabaseClient } from "@/lib/runtime.web";
-import { postgresChangesSource } from "../realtime";
 import {
   currentChatServerPrefs,
   forgetChatServerPrefs,
   readChatServerPrefs,
   subscribeChatServerPrefs,
 } from "@/lib/notices/chat-prefs";
+import type { ModuoRuntime } from "@/lib/runtime.types";
+import { supabaseClient } from "@/lib/runtime.web";
 import { forgetPeopleNow } from "@/lib/statuses/store";
+import { postgresChangesSource } from "../realtime";
 import { type ChatPresenceSnapshot, chatPresence, forgetChatPresenceStores } from "./presence";
 import { PresenceSelfRegistry, windowInput } from "./presence-self";
 import "@/lib/statuses/live";

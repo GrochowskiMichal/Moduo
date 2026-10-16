@@ -30,8 +30,8 @@ import {
 import {
   clearAfterHint,
   clearAtFor,
-  PRESET_ORDER,
   type PersonStatus,
+  PRESET_ORDER,
   type SavedStatus,
   statusLine,
 } from "@/lib/statuses/model";
@@ -247,7 +247,9 @@ export function StatusMenu({
                   variant="ghost"
                   disabled={busy}
                   onClick={() =>
-                    void run(clearMyStatus, "Couldn't clear your status.").then(() => setOpen(false))
+                    void run(clearMyStatus, "Couldn't clear your status.").then(() =>
+                      setOpen(false),
+                    )
                   }
                 >
                   Clear
@@ -260,7 +262,9 @@ export function StatusMenu({
               disabled={busy}
               onClick={() =>
                 dnd
-                  ? void run(clearMyStatus, "Couldn't clear your status.").then(() => setOpen(false))
+                  ? void run(clearMyStatus, "Couldn't clear your status.").then(() =>
+                      setOpen(false),
+                    )
                   : setOpen(false)
               }
             >
@@ -462,8 +466,12 @@ function StatusEditor({
           variant="outline"
         />
       ) : null}
-      <label className="flex items-center gap-2 text-sm text-foreground">
-        <Checkbox checked={editor.dnd} onCheckedChange={(v) => set({ dnd: v === true })} />
+      <label htmlFor="status-dnd" className="flex items-center gap-2 text-sm text-foreground">
+        <Checkbox
+          id="status-dnd"
+          checked={editor.dnd}
+          onCheckedChange={(v) => set({ dnd: v === true })}
+        />
         Do not disturb while it's on
       </label>
       <div className="flex justify-end gap-2 pt-1">

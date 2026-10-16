@@ -22,6 +22,7 @@ import { FeedItem } from "@/components/ui/feed";
 import { GroupHeader } from "@/components/ui/group-header";
 import { PropertyRow, PropertyValue } from "@/components/ui/property-row";
 import { Switch } from "@/components/ui/switch";
+import type { PresenceState } from "@/lib/statuses/model";
 import { formatAge, formatDate, formatStamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
@@ -37,7 +38,6 @@ import type {
 } from "../model";
 import { NOTIFY_LEVEL_COPY } from "../shell/conversation-toolbar";
 import { detailsPeople } from "./details-model";
-import type { PresenceState } from "@/lib/statuses/model";
 import { PresenceAvatar } from "./person-card";
 import { DetailsChainRows } from "./reply-chains-view";
 
@@ -128,22 +128,13 @@ export function DetailsView({
                   data-person={p.userId}
                   className={ROW_BUTTON}
                 >
-                  <PresenceAvatar
-                    name={p.name}
-                    id={p.userId}
-                    src={p.avatarUrl}
-                    state={p.state}
-                  />
+                  <PresenceAvatar name={p.name} id={p.userId} src={p.avatarUrl} state={p.state} />
                   <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
                   <span
                     data-slot="person-status"
                     className="min-w-0 max-w-1/2 shrink truncate text-xs text-subtle-foreground"
                   >
-                    {p.self
-                      ? "you"
-                      : p.former
-                        ? "former member"
-                        : statusOf?.(p.userId) || null}
+                    {p.self ? "you" : p.former ? "former member" : statusOf?.(p.userId) || null}
                   </span>
                 </button>
               </li>

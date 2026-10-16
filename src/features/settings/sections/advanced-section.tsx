@@ -1,8 +1,8 @@
 import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
-import { listSavedStatuses, readMyStatus } from "@/lib/statuses/api";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { listSavedStatuses, readMyStatus } from "@/lib/statuses/api";
 import {
   closeUploadsDb,
   countPendingUploads,
@@ -203,7 +203,7 @@ export function AdvancedSection() {
     } finally {
       setExporting(false);
     }
-  }, [runtime, workspaceId, exporting, selectedWorkspace, platform]);
+  }, [runtime, workspaceId, userId, exporting, selectedWorkspace, platform]);
 
   const openReset = useCallback(async () => {
     if (checking) return;

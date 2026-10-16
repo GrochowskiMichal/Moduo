@@ -117,7 +117,10 @@ describe('"Show me as online"', () => {
     time.advance(AWAY_AFTER_MS - 1);
     expect(ch.calls).toHaveLength(1);
     time.advance(1);
-    expect(ch.calls.at(-1)).toEqual({ op: "track", state: expect.objectContaining({ away: true }) });
+    expect(ch.calls.at(-1)).toEqual({
+      op: "track",
+      state: expect.objectContaining({ away: true }),
+    });
 
     self.input();
     expect(ch.calls.at(-1)).toEqual({
@@ -137,7 +140,10 @@ describe('"Show me as online"', () => {
     self.setShowOnline(false);
     expect(ch.calls.at(-1)).toEqual({ op: "untrack" });
     self.setShowOnline(true);
-    expect(ch.calls.at(-1)).toEqual({ op: "track", state: expect.objectContaining({ away: false }) });
+    expect(ch.calls.at(-1)).toEqual({
+      op: "track",
+      state: expect.objectContaining({ away: false }),
+    });
   });
 
   it("a person is away only when every tab of theirs is", () => {
@@ -203,7 +209,12 @@ describe('"Show me as online"', () => {
 
   it("a refused join is an error, never everyone offline (AC1.9)", () => {
     const { socket, channels } = fakeSocket();
-    const presence = new ChatPresenceStore(socket, WS, ME, new PresenceSelfWatcher(true, fakeTime()));
+    const presence = new ChatPresenceStore(
+      socket,
+      WS,
+      ME,
+      new PresenceSelfWatcher(true, fakeTime()),
+    );
     presence.acquire();
     channels[0]!.status?.("CHANNEL_ERROR");
     expect(presence.getSnapshot()).toMatchObject({

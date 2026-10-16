@@ -58,9 +58,7 @@ describe("statuses (AC11.4)", () => {
   it("reads a row; a cleared or past one is none", () => {
     expect(statusFromRow(vacation, NOW.getTime())).toMatchObject({ preset: "vacation", dnd: true });
     expect(statusFromRow({ ...vacation, set_at: null }, NOW.getTime())).toBeNull();
-    expect(
-      statusFromRow({ ...vacation, clear_at: later(-1) }, NOW.getTime()),
-    ).toBeNull();
+    expect(statusFromRow({ ...vacation, clear_at: later(-1) }, NOW.getTime())).toBeNull();
     expect(statusFromRow({ ...vacation, preset: "lunch" }, NOW.getTime())?.preset).toBeNull();
   });
 
@@ -85,7 +83,12 @@ describe("statuses (AC11.4)", () => {
       "Jana is on vacation until Oct 20. They won't be notified; your message waits in their Catch up.",
     );
     const meeting = peopleNowFromRows(
-      [{ user_id: "mo", status: { text: "In a meeting", preset: "meeting", set_at: NOW.toISOString() } }],
+      [
+        {
+          user_id: "mo",
+          status: { text: "In a meeting", preset: "meeting", set_at: NOW.toISOString() },
+        },
+      ],
       NOW.getTime(),
     );
     expect(composerHoldLine("Mo", meeting.get("mo"), NOW)).toBeNull();
