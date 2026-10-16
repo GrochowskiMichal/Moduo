@@ -328,7 +328,8 @@ function cleanPart(text: string): string {
   return (
     text
       // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes
-      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "")
+      // (and the direction overrides that could disguise a name's ending)
+      .replace(/[\\/:*?"<>|\u0000-\u001f\u007f‪-‮⁦-⁩]/g, "")
       .replace(/^[\s.]+|[\s.]+$/g, "")
       .slice(0, PART_MAX)
       // Cut again after the cut, so cleaning a clean part changes nothing.

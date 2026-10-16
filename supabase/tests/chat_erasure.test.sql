@@ -199,5 +199,10 @@ BEGIN
     AND NOT has_table_privilege('authenticated', 'public.user_statuses', 'INSERT, UPDATE, DELETE')
     AND NOT has_table_privilege('anon', 'public.user_statuses', 'SELECT, INSERT, UPDATE, DELETE'),
     'grants: people read both tables through their rules; only the server writes');
+  PERFORM test.ok(
+    NOT EXISTS (SELECT 1 FROM pg_publication_tables t
+                  JOIN pg_class c ON c.oid = format('%I.%I', t.schemaname, t.tablename)::regclass
+                 WHERE t.pubname = 'supabase_realtime' AND c.relreplident <> 'd'),
+    'realtime: a removed row sends only its key (no published table has a full replica identity)');
 END;
 $$;

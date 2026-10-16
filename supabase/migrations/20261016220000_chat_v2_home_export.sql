@@ -27,6 +27,17 @@
 
 SET LOCAL lock_timeout = '5s';
 
+-- Erasure below names CV-18's tables; plpgsql wouldn't notice them missing
+-- until an account is erased, so stop here instead.
+DO $$
+BEGIN
+  IF to_regclass('public.user_notice_pauses') IS NULL
+     OR to_regclass('public.user_status_changes') IS NULL THEN
+    RAISE EXCEPTION 'CV-22 needs CV-18 (20261016210000) applied first';
+  END IF;
+END;
+$$;
+
 -- ── 1. Row ids as the keys ──────────────────────────────────────────────────
 
 ALTER TABLE public.user_statuses ADD COLUMN IF NOT EXISTS id uuid NOT NULL DEFAULT gen_random_uuid();
@@ -153,6 +164,23 @@ BEGIN
       WHERE pubname = 'supabase_realtime' AND schemaname = 'public'
         AND tablename IN ('user_statuses', 'chat_members')) <> 2 THEN
     RAISE EXCEPTION 'CV-22: user_statuses and chat_members must stay published';
+  END IF;
+END;
+$$;
+
+-- A removed row's old record is its replica identity: with FULL it would
+-- carry every column, whatever the key. Every published table keeps the
+-- default (its key).
+DO $$
+DECLARE
+  v_bad text;
+BEGIN
+  SELECT string_agg(format('%I.%I', t.schemaname, t.tablename), ', ') INTO v_bad
+  FROM pg_publication_tables t
+  JOIN pg_class c ON c.oid = format('%I.%I', t.schemaname, t.tablename)::regclass
+  WHERE t.pubname = 'supabase_realtime' AND c.relreplident <> 'd';
+  IF v_bad IS NOT NULL THEN
+    RAISE EXCEPTION 'CV-22: a published table sends more than its key on removal: %', v_bad;
   END IF;
 END;
 $$;
