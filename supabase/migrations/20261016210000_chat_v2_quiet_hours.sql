@@ -465,8 +465,11 @@ CREATE INDEX IF NOT EXISTS notice_deliveries_held_open
 
 -- Releasing: that person's held notices are acknowledged and, when asked, one
 -- summary goes through the gate (the trigger on notice_deliveries): "3
--- messages while you focused", in the given workspace; the items are in
--- Catch up. Returns how many messages it counted.
+-- messages while you focused"; the items are in Catch up. The summary goes in
+-- the workspace of the latest released message whose workspace isn't paused
+-- (so the click lands on the Catch up that holds them, and a paused agency
+-- never silences a client's messages), else the given workspace (where the
+-- gate drops it if that one is paused too). Returns how many messages it counted.
 CREATE OR REPLACE FUNCTION public.focus__release_held(p_user uuid, p_workspace_id uuid,
                                                       p_tag text, p_summary boolean)
 RETURNS integer
@@ -476,21 +479,30 @@ SET search_path TO ''
 AS $$
 DECLARE
   v_n integer;
+  v_ws uuid;
 BEGIN
   WITH closed AS (
     UPDATE public.notice_deliveries d SET acked_at = now()
      WHERE d.user_id = p_user AND d.held_for_focus AND d.acked_at IS NULL
-    RETURNING d.id, d.channel_id, d.message_id)
+    RETURNING d.id, d.channel_id, d.message_id, d.workspace_id, d.created_at),
   -- Messages still there and still theirs to read.
-  SELECT count(DISTINCT coalesce(c.message_id, c.id)) INTO v_n
-    FROM closed c
-   WHERE (c.channel_id IS NULL OR public.chat__can_read_channel_as(c.channel_id, p_user))
-     AND (c.message_id IS NULL OR EXISTS (SELECT 1 FROM public.chat_messages m
-                                           WHERE m.id = c.message_id AND m.deleted_at IS NULL));
+  live AS (
+    SELECT c.* FROM closed c
+     WHERE (c.channel_id IS NULL OR public.chat__can_read_channel_as(c.channel_id, p_user))
+       AND (c.message_id IS NULL OR EXISTS (SELECT 1 FROM public.chat_messages m
+                                             WHERE m.id = c.message_id AND m.deleted_at IS NULL)))
+  SELECT (SELECT count(DISTINCT coalesce(l.message_id, l.id)) FROM live l),
+         (SELECT l.workspace_id FROM live l
+           WHERE l.workspace_id IS NOT NULL
+             AND NOT EXISTS (SELECT 1 FROM public.user_notice_pauses p
+                              WHERE p.user_id = p_user AND p.workspace_id = l.workspace_id)
+           ORDER BY l.created_at DESC, l.id DESC LIMIT 1)
+    INTO v_n, v_ws;
   v_n := coalesce(v_n, 0);
-  IF p_summary AND v_n > 0 AND p_workspace_id IS NOT NULL THEN
+  v_ws := coalesce(v_ws, p_workspace_id);
+  IF p_summary AND v_n > 0 AND v_ws IS NOT NULL THEN
     INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title, url, tag, push_after)
-    VALUES (p_user, p_workspace_id, 'chat_focus_summary',
+    VALUES (p_user, v_ws, 'chat_focus_summary',
             v_n || CASE WHEN v_n = 1 THEN ' message' ELSE ' messages' END || ' while you focused',
             '/chat?view=catchup', p_tag, now());
   END IF;
@@ -500,7 +512,7 @@ $$;
 
 -- A run leaving running (ended or paused), a Pomodoro work phase ending (the
 -- break rings again, so what the work phase held is released with it), or a
--- running run deleted. Nothing
+-- running run deleted (an erasure cascade: closed without a summary). Nothing
 -- here ever stops Focus from ending: any failure is a warning, the held rows
 -- stay held, and the stale sweep below releases them.
 CREATE OR REPLACE FUNCTION public.focus_runs__release_held()

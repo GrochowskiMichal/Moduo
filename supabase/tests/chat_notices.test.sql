@@ -627,9 +627,9 @@ BEGIN
                                 AND d.held_for_focus AND d.acked_at IS NULL)
                   AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary') = 1
                   AND (SELECT d.title = '2 messages while you focused' AND d.url = '/chat?view=catchup' AND NOT d.held_for_focus
-                         AND d.workspace_id = test.id('W2')
+                         AND d.workspace_id = test.id('W')
                          FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary'),
-    'focus: ending closes the held notices and writes one summary, "2 messages while you focused"');
+    'focus: ending closes the held notices and writes one summary, "2 messages while you focused", in the messages'' workspace (Focus ran in W2)');
   INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id)
   VALUES (test.id('run:B2'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device');
   UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B2');
@@ -691,7 +691,8 @@ BEGIN
                   AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
                                     AND d.held_for_focus AND d.acked_at IS NULL)
                   AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
-                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')) = v_b4 + 1
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')) = 1
+                  AND v_b4 = 0
                   AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
                          AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')
                        ORDER BY d.created_at DESC, d.id LIMIT 1) = '1 message while you focused',
@@ -704,6 +705,7 @@ BEGIN
   INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
   VALUES (test.id('run:B6'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '4 minutes');
   PERFORM test.ok(test.send('A', 'D', 'f6', 'held, then paused') = 'ok 1', 'sent: ' || 'f6');
+  PERFORM test.ok(test.notice('B', 'f6') LIKE 'chat_message|%|t', 'focus: f6 is held before the pause', test.notice('B', 'f6'));
   INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (test.id('B'), test.id('W'));
   UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B6');
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
@@ -714,6 +716,20 @@ BEGIN
                                 AND k.message_id = test.mid('f6') AND k.done_at IS NULL),
     'focus: a summary the gate drops writes nothing; the holds close and the item waits in Catch up');
   DELETE FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W');
+
+  -- Focus started in one workspace, paused by the end, holding messages from
+  -- another: those still ring, in their own workspace (AC6.4).
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B6b'), test.id('W2'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '4 minutes 30 seconds');
+  PERFORM test.ok(test.send('A', 'D', 'f6b', 'from the client') = 'ok 1', 'sent: ' || 'f6b');
+  PERFORM test.ok(test.notice('B', 'f6b') LIKE 'chat_message|%|t', 'focus: f6b is held', test.notice('B', 'f6b'));
+  INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (test.id('B'), test.id('W2'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B6b');
+  PERFORM test.ok((SELECT d.workspace_id = test.id('W') AND d.title = '1 message while you focused'
+                     FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                      AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B6b')),
+    'focus: the run''s workspace paused, the summary rings in the held messages'' unpaused workspace');
+  DELETE FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W2');
 
   -- A Pomodoro break rings again, so the work phase's holds close at the break.
   INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, phase, phase_seconds, device_id, started_at)
