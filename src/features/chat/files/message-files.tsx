@@ -6,8 +6,9 @@
 // policy (only readers of the conversation get them) and shown through
 // short-lived signed links.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
+import { FileText } from "lucide-react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Progress } from "@/components/ui/progress";
 import { fileIconFor } from "@/features/attachments/files";
 import { signPaths } from "@/features/attachments/signed-urls";
@@ -88,7 +89,9 @@ export function useSignedLinks(
   ttlSeconds: number,
 ): ReadonlyMap<string, string> | null {
   const key = paths.join("\n");
-  const [links, setLinks] = useState<{ key: string; map: ReadonlyMap<string, string> } | null>(null);
+  const [links, setLinks] = useState<{ key: string; map: ReadonlyMap<string, string> } | null>(
+    null,
+  );
   useEffect(() => {
     if (!runtime || !key) return;
     let live = true;
@@ -120,17 +123,22 @@ export function asAttachmentRecord(f: ChatFile): AttachmentRecord {
     deletedAt: null,
     createdAt: f.sentAt,
     objectPath: f.objectPath,
-    previewPath: f.previewPath,
-    previewMime: (f.previewMime as AttachmentRecord["previewMime"]) ?? null,
+    // Only a picture the stream draws is drawn by the viewer; anything else is
+    // a file card there too (downloaded, never shown from its bytes).
+    previewPath: fileShape(f) === "image" ? f.previewPath : null,
+    previewMime:
+      fileShape(f) === "image"
+        ? ((f.previewMime as AttachmentRecord["previewMime"]) ?? null)
+        : null,
   };
 }
 
-/** The path a file's inline preview reads: its preview, else (a picture or a PDF) itself. */
+/**
+ * The path a picture's inline <img> reads: its preview, else the picture
+ * itself. Nothing else is ever drawn from its bytes (a PDF is a card).
+ */
 export function inlinePath(f: ChatFile): string | null {
-  const shape = fileShape(f);
-  if (shape === "image") return f.previewPath ?? f.objectPath;
-  if (shape === "pdf") return f.objectPath;
-  return null;
+  return fileShape(f) === "image" ? (f.previewPath ?? f.objectPath) : null;
 }
 
 // ── Drawing ─────────────────────────────────────────────────────────────────
@@ -156,7 +164,12 @@ function SentFiles({ message, runtime }: { message: ChatMessage; runtime: ModuoR
   const links = useSignedLinks(runtime, paths, CHAT_FILE_LINK_TTL_SECONDS.preview);
   if (!files) {
     // The row keeps its place while the files load: one media box.
-    return <div aria-hidden className="my-2 h-feed-media-h w-feed-media max-w-full rounded-md bg-muted" />;
+    return (
+      <div
+        aria-hidden
+        className="my-2 h-feed-media-h w-feed-media max-w-full rounded-md bg-muted"
+      />
+    );
   }
   if (files.length === 0) return null;
   const media = files.filter((f) => fileShape(f) !== "chip");
@@ -174,7 +187,7 @@ function SentFiles({ message, runtime }: { message: ChatMessage; runtime: ModuoR
         const path = inlinePath(f);
         const url = path ? (links?.get(path) ?? null) : null;
         return fileShape(f) === "pdf" ? (
-          <PdfPreview key={f.id} file={f} url={url} onOpen={() => setOpen(indexOf(f))} />
+          <PdfCard key={f.id} file={f} onOpen={() => setOpen(indexOf(f))} />
         ) : (
           <ImagePreview key={f.id} file={f} url={url} onOpen={() => setOpen(indexOf(f))} />
         );
@@ -236,15 +249,12 @@ function ImagePreview({
   );
 }
 
-function PdfPreview({
-  file,
-  url,
-  onOpen,
-}: {
-  file: ChatFile;
-  url: string | null;
-  onOpen: () => void;
-}) {
+/**
+ * A PDF in the stream: a document card the size of the media box (its name,
+ * type and size). Its pages are never drawn from its bytes inside the app; a
+ * click opens the viewer, which downloads it.
+ */
+function PdfCard({ file, onOpen }: { file: ChatFile; onOpen: () => void }) {
   return (
     <button
       type="button"
@@ -252,25 +262,19 @@ function PdfPreview({
       aria-label={`Open ${file.fileName}`}
       title={file.fileName}
       onClick={onOpen}
-      className="relative flex h-feed-media-h w-feed-media max-w-full flex-col overflow-hidden rounded-md bg-muted text-left ring-1 ring-hairline outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      className="flex h-feed-media-h w-feed-media max-w-full flex-col overflow-hidden rounded-md bg-muted text-left ring-1 ring-hairline outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
     >
-      {url ? (
-        <iframe
-          src={`${url}#toolbar=0&navpanes=0&view=FitH`}
-          title={file.fileName}
-          loading="lazy"
-          tabIndex={-1}
-          className="pointer-events-none min-h-0 w-full flex-1 bg-card"
-        />
-      ) : (
-        <span className="min-h-0 flex-1" />
-      )}
+      <span className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
+        <FileText aria-hidden className="size-icon-lg" />
+      </span>
       <span className="flex h-9 shrink-0 items-center gap-2 border-t border-hairline bg-card px-2.5">
         <FileTypeIcon mime={file.mime} />
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
           {file.fileName}
         </span>
-        <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.sizeBytes)}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          PDF · {formatBytes(file.sizeBytes)}
+        </span>
       </span>
     </button>
   );
@@ -295,7 +299,9 @@ function FileChip({ file, onOpen }: { file: ChatFile; onOpen: () => void }) {
       <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-state-active text-muted-foreground">
         <Icon className="size-icon-sm" aria-hidden />
       </span>
-      <span className="min-w-0 flex-1 truncate text-md font-medium text-foreground">{file.fileName}</span>
+      <span className="min-w-0 flex-1 truncate text-md font-medium text-foreground">
+        {file.fileName}
+      </span>
       <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.sizeBytes)}</span>
     </button>
   );
@@ -330,7 +336,11 @@ function UnsentFiles({ messageId }: { messageId: string }) {
               {stopped ? (
                 <span className="text-xs text-muted-foreground">Not uploaded</span>
               ) : (
-                <Progress value={i.loaded} max={i.total || i.sizeBytes} label={`Uploading ${i.fileName}`} />
+                <Progress
+                  value={i.loaded}
+                  max={i.total || i.sizeBytes}
+                  label={`Uploading ${i.fileName}`}
+                />
               )}
             </span>
           </div>

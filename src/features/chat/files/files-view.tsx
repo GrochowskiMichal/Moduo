@@ -3,8 +3,8 @@
 // here, newest first, with who sent it and when. A click opens the file in the
 // app's viewer; "Show more" reads the next page.
 
-import { useCallback, useEffect, useState } from "react";
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
+import { useCallback, useEffect, useState } from "react";
 import { fileIconFor } from "@/features/attachments/files";
 import { AttachmentViewer } from "@/features/attachments/ui/attachment-viewer";
 import type { ModuoRuntime } from "@/lib/runtime.types";
@@ -67,11 +67,17 @@ export function FilesView({
   }, [read, refreshKey]);
 
   const previewPaths = (files ?? []).flatMap((f) => (f.previewPath ? [f.previewPath] : []));
-  const links = useSignedLinks(open !== null ? runtime : null, previewPaths, CHAT_FILE_LINK_TTL_SECONDS.preview);
+  const links = useSignedLinks(
+    open !== null ? runtime : null,
+    previewPaths,
+    CHAT_FILE_LINK_TTL_SECONDS.preview,
+  );
 
   if (!files) {
     return (
-      <p className="px-3 text-sm text-subtle-foreground">{failed ? "Couldn't load the files." : "Loading…"}</p>
+      <p className="px-3 text-sm text-subtle-foreground">
+        {failed ? "Couldn't load the files." : "Loading…"}
+      </p>
     );
   }
   if (files.length === 0) {

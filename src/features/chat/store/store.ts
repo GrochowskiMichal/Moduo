@@ -39,6 +39,7 @@
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { browserOffline } from "../../../lib/sync/network";
 import { timestampMicros } from "../../tasks/live";
+import type { ChatFileGate } from "../files/gate";
 import type {
   ChatBodyFormat,
   ChatChannel,
@@ -67,7 +68,6 @@ import {
   ownerKey,
 } from "./device-copy";
 import { compareKeys, compareRows, isNewerRow, keyOf, laterStamp, stampMinus } from "./keys";
-import type { ChatFileGate } from "../files/gate";
 import { classifyChatError, newMessageId } from "./outbox";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────

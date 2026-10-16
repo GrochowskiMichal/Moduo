@@ -56,6 +56,9 @@ import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { CAPTURE_TYPES } from "@/lib/capture-registry";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+import { ComposerFileChips } from "../files/composer-chips";
+import type { ComposerFilesApi } from "../files/composer-files";
+import { FilePastePlugin } from "../files/paste-plugin";
 import {
   $exportStored,
   $importStored,
@@ -87,9 +90,6 @@ import {
   focusAtEnd,
   SelectionFormatPlugin,
 } from "./plugins";
-import { ComposerFileChips } from "../files/composer-chips";
-import type { ComposerFilesApi } from "../files/composer-files";
-import { FilePastePlugin } from "../files/paste-plugin";
 import { PlusMenu, type PlusPick } from "./plus-menu";
 
 /** Tokens-only theme for the editor's nodes (what a sent row draws, roughly). */

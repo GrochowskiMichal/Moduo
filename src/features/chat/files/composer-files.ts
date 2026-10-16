@@ -11,7 +11,7 @@ import { getUploadQueue } from "@/lib/uploads";
 import { describeProblem } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
 import { newMessageId } from "../store/outbox";
-import { capNotice, takeFiles } from "./model";
+import { capNotice, fileShape, takeFiles } from "./model";
 
 export type ComposerFileState = "uploading" | "ready" | "failed";
 
@@ -45,7 +45,8 @@ type Draft = { messageId: string; entries: Entry[]; notice: string | null; addin
 type QueueApi = Pick<
   ReturnType<typeof getUploadQueue>,
   "add" | "dismiss" | "getSnapshot" | "subscribe"
->;
+> &
+  Partial<Pick<ReturnType<typeof getUploadQueue>, "onUploaded">>;
 
 /** The per-conversation drafts' files. One per app (the composer remounts per conversation). */
 export class ComposerFilesStore {
@@ -57,6 +58,39 @@ export class ComposerFilesStore {
     private readonly queue: () => QueueApi,
     private readonly mint: () => string = newMessageId,
   ) {}
+
+  private watching = false;
+
+  /**
+   * Keep each file's server id as soon as the queue knows it, even with no
+   * composer on screen: a finished upload leaves the queue, and the composer's
+   * remove (and only it) needs the id to take a finished file back out.
+   */
+  private watch() {
+    if (this.watching) return;
+    this.watching = true;
+    const q = this.queue();
+    q.subscribe(() => this.capture());
+    q.onUploaded?.((rec, target) => {
+      if (!rec || target.entityType !== "chat_message") return;
+      for (const d of this.drafts.values()) {
+        if (d.messageId !== target.entityId) continue;
+        const e = d.entries.find((x) => !x.attachmentId && x.fileName === rec.fileName);
+        if (e) e.attachmentId = rec.id;
+      }
+    });
+  }
+
+  private capture() {
+    const items = this.queue().getSnapshot().items;
+    for (const d of this.drafts.values()) {
+      for (const e of d.entries) {
+        if (e.attachmentId) continue;
+        const item = items.find((i) => i.id === e.key);
+        if (item?.attachmentId) e.attachmentId = item.attachmentId;
+      }
+    }
+  }
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -110,12 +144,17 @@ export class ComposerFilesStore {
   files(channelId: string): ComposerFile[] {
     const d = this.drafts.get(channelId);
     if (!d) return [];
-    const items = new Map(this.queue().getSnapshot().items.map((i) => [i.id, i]));
+    const items = new Map(
+      this.queue()
+        .getSnapshot()
+        .items.map((i) => [i.id, i]),
+    );
     const out: ComposerFile[] = [];
     for (const e of d.entries) {
       const item = items.get(e.key);
       if (item?.attachmentId) e.attachmentId = item.attachmentId;
-      if (!item && !e.attachmentId) continue; // let go elsewhere (another window)
+      // Gone from the queue without a known server id: it finished (a removed
+      // file leaves `entries` with it), so it shows as up.
       out.push(view(e, item));
     }
     return out;
@@ -131,6 +170,7 @@ export class ComposerFilesStore {
     userId: string;
     files: File[];
   }): Promise<void> {
+    this.watch();
     const d = this.draft(args.channelId);
     const current = this.files(args.channelId).length + d.adding;
     const { take, refused } = takeFiles(current, args.files.length);
@@ -162,7 +202,9 @@ export class ComposerFilesStore {
           mime: file.type || "application/octet-stream",
           sizeBytes: file.size,
           thumb:
-            file.type.startsWith("image/") && typeof URL !== "undefined" && URL.createObjectURL
+            fileShape({ mime: file.type, fileName: file.name }) === "image" &&
+            typeof URL !== "undefined" &&
+            URL.createObjectURL
               ? URL.createObjectURL(file)
               : null,
           attachmentId: null,
@@ -185,7 +227,8 @@ export class ComposerFilesStore {
       .getSnapshot()
       .items.some((item) => item.id === key);
     if (inQueue) this.queue().dismiss(key);
-    else if (entry.attachmentId) void runtime?.attachments.remove(entry.attachmentId).catch(() => {});
+    else if (entry.attachmentId)
+      void runtime?.attachments.remove(entry.attachmentId).catch(() => {});
     release(entry);
     d.notice = null;
     this.emit();

@@ -18,6 +18,7 @@ import { dispatchOpenPalette } from "@/components/app/global-command-palette";
 import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/right-panel";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { dragHasFiles, filesFromDataTransfer } from "@/features/attachments/files";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layout/panel-events";
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
@@ -42,6 +43,9 @@ import {
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
+import { useComposerFiles } from "../files/composer-files";
+import { FilesView } from "../files/files-view";
+import { MessageFiles } from "../files/message-files";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import { ChainItem } from "../panel/chain-item";
@@ -50,10 +54,6 @@ import { DetailsView } from "../panel/details-view";
 import { MessageInContext } from "../panel/message-in-context";
 import { PersonCard } from "../panel/person-card";
 import { ReplyChainsView } from "../panel/reply-chains-view";
-import { useComposerFiles } from "../files/composer-files";
-import { FilesView } from "../files/files-view";
-import { MessageFiles } from "../files/message-files";
-import { dragHasFiles, filesFromDataTransfer } from "@/features/attachments/files";
 import { useConversationDetails } from "../panel/use-conversation-details";
 import { useReplyChains } from "../panel/use-reply-chains";
 import {

@@ -10,14 +10,30 @@ export const FEED_MEDIA = { w: 360, h: 240 } as const;
 
 export { CHAT_FILES_PER_MESSAGE };
 
-/** How a file shows in a message: a picture or a PDF previews inline, the rest is a chip. */
+/** How a file shows in a message: a picture draws inline, a PDF is a document card, the rest is a chip. */
 export type FileShape = "image" | "pdf" | "chip";
 
-export function fileShape(file: Pick<ChatFile, "mime" | "previewPath">): FileShape {
-  if (file.mime === "application/pdf") return "pdf";
-  // A picture with a preview, or a format the browser draws itself.
-  if (file.previewPath) return "image";
-  if (/^image\/(png|jpe?g|gif|webp|avif)$/.test(file.mime)) return "image";
+/**
+ * The only pictures drawn inline, by their stored type and the name's ending
+ * together (a type the name contradicts is a chip). Never SVG, HTML, XML or
+ * scripts: they are only ever downloaded. Pictures are drawn with <img> only.
+ */
+const INLINE_IMAGES: Readonly<Record<string, readonly string[]>> = {
+  "image/png": ["png"],
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/gif": ["gif"],
+  "image/webp": ["webp"],
+};
+
+function extensionOf(name: string): string {
+  return /\.([A-Za-z0-9]{1,10})$/.exec(name)?.[1]?.toLowerCase() ?? "";
+}
+
+export function fileShape(file: Pick<ChatFile, "mime" | "fileName">): FileShape {
+  const mime = file.mime.trim().toLowerCase();
+  const ext = extensionOf(file.fileName);
+  if (INLINE_IMAGES[mime]?.includes(ext)) return "image";
+  if (mime === "application/pdf" && ext === "pdf") return "pdf";
   return "chip";
 }
 

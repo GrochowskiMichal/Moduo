@@ -2,9 +2,9 @@
 // the gate between the outbox and the upload queue, the composer's files, and
 // a send that waits for its files.
 
-import { afterEach, describe, expect, it } from "@rstest/core";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { afterEach, describe, expect, it } from "@rstest/core";
 import type { UploadView } from "@/lib/uploads/queue";
 import { memoryChatCopy } from "../store/device-copy";
 import { ChatStore } from "../store/store";
@@ -27,12 +27,31 @@ describe("files in a message (CV-9, §7)", () => {
     expect(css).toContain(`--feed-media-max-h: 15rem;   /* ${FEED_MEDIA.h} */`);
   });
 
-  it("previews pictures and PDFs inline; everything else is a chip", () => {
-    expect(fileShape({ mime: "image/png", previewPath: "w/a/preview.webp" })).toBe("image");
-    expect(fileShape({ mime: "image/gif", previewPath: null })).toBe("image");
-    expect(fileShape({ mime: "application/pdf", previewPath: null })).toBe("pdf");
-    expect(fileShape({ mime: "application/zip", previewPath: null })).toBe("chip");
-    expect(fileShape({ mime: "image/x-photoshop", previewPath: null })).toBe("chip");
+  it("draws only safe pictures inline, by stored type and name together; a PDF is a card", () => {
+    const shape = (mime: string, fileName: string) => fileShape({ mime, fileName });
+    expect(shape("image/png", "shot.png")).toBe("image");
+    expect(shape("image/jpeg", "photo.JPG")).toBe("image");
+    expect(shape("image/gif", "a.gif")).toBe("image");
+    expect(shape("image/webp", "a.webp")).toBe("image");
+    expect(shape("application/pdf", "deck.pdf")).toBe("pdf");
+    // Never inline: SVG, HTML, XML, scripts, anything unknown.
+    expect(shape("image/svg+xml", "logo.svg")).toBe("chip");
+    expect(shape("text/html", "page.html")).toBe("chip");
+    expect(shape("application/xml", "feed.xml")).toBe("chip");
+    expect(shape("text/javascript", "app.js")).toBe("chip");
+    expect(shape("application/zip", "assets.zip")).toBe("chip");
+    expect(shape("application/octet-stream", "file")).toBe("chip");
+    // A type the name contradicts falls back to a download.
+    expect(shape("image/png", "page.html")).toBe("chip");
+    expect(shape("image/png", "logo.svg")).toBe("chip");
+    expect(shape("application/pdf", "page.html")).toBe("chip");
+  });
+
+  it("never draws a file's bytes in a frame, an object or raw HTML", () => {
+    for (const name of ["message-files.tsx", "files-view.tsx", "composer-chips.tsx"]) {
+      const src = readFileSync(resolve(process.cwd(), "src/features/chat/files", name), "utf8");
+      expect(src).not.toMatch(/<iframe|<object|<embed|dangerouslySetInnerHTML|srcDoc/);
+    }
   });
 
   it("takes up to 10 files a message; the eleventh is refused before upload, with a line", () => {
@@ -45,10 +64,10 @@ describe("files in a message (CV-9, §7)", () => {
 });
 
 const view = (entityId: string, state: UploadView["state"]) =>
-  ({ target: { workspaceId: WS, entityType: "chat_message", entityId, channelId: "c" }, state }) as Pick<
-    UploadView,
-    "target" | "state"
-  >;
+  ({
+    target: { workspaceId: WS, entityType: "chat_message", entityId, channelId: "c" },
+    state,
+  }) as Pick<UploadView, "target" | "state">;
 
 describe("the outbox's gate on a message's uploads", () => {
   it("waits while any upload of that message is moving, fails when one stopped, else goes", () => {
@@ -127,8 +146,18 @@ describe("the composer's files", () => {
       () => `msg-${++minted}`,
     );
     const C = "chan";
-    await store.add({ channelId: C, workspaceId: WS, userId: ME, files: [file("a.png"), file("b.pdf", "application/pdf")] });
-    expect(q.added[0]!.target).toEqual({ workspaceId: WS, entityType: "chat_message", entityId: "msg-1", channelId: C });
+    await store.add({
+      channelId: C,
+      workspaceId: WS,
+      userId: ME,
+      files: [file("a.png"), file("b.pdf", "application/pdf")],
+    });
+    expect(q.added[0]!.target).toEqual({
+      workspaceId: WS,
+      entityType: "chat_message",
+      entityId: "msg-1",
+      channelId: C,
+    });
     expect(store.files(C).map((f) => [f.fileName, f.state])).toEqual([
       ["a.png", "uploading"],
       ["b.pdf", "uploading"],
@@ -147,7 +176,12 @@ describe("the composer's files", () => {
     // A finished upload stays a chip (ready); a stopped one is left out of the send.
     q.finish("q1");
     q.fail("q2");
-    expect(store.files(C).slice(0, 2).map((f) => f.state)).toEqual(["ready", "failed"]);
+    expect(
+      store
+        .files(C)
+        .slice(0, 2)
+        .map((f) => f.state),
+    ).toEqual(["ready", "failed"]);
     expect(store.take(C)).toEqual({ id: "msg-1", files: 9 });
     expect(q.dismissed).toContain("q2");
     // The next message starts over under a new id.
@@ -157,7 +191,10 @@ describe("the composer's files", () => {
 
   it("takes a file back out: an upload in progress stops", async () => {
     const q = fakeQueue();
-    const store = new ComposerFilesStore(() => q as never, () => "m");
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
     await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
     store.remove("c", "q1", null);
     expect(q.dismissed).toEqual(["q1"]);
