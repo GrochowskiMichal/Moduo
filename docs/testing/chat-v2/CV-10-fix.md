@@ -1,6 +1,6 @@
 # Manual test checklist — CV-10-fix "Mentioned in" rows are Chat's
 
-> Generated 2026-10-16 · branch `t/maciej/cv-checkpoint-4`, folded from the record [`CV-10-fix`](../../build/chat-v2/CV-10-fix.md) (block branch `t/maciej/cv-10-fix-mention-rows`, landed `0c5e26ac`) · **Live-verified:** `chat_links.test.sql` § CV-10-fix, `key-scopes.test.ts`, the app tests, and `db:test` for chat, `tasks_ops`, `ops_parity`, `mcp_tools`; the steps below are the human pass. Tier 2 (migration `20261016145000_chat_v2_mention_rows.sql`).
+> Generated 2026-10-16 · branch `t/maciej/cv-checkpoint-4`, folded from the record [`CV-10-fix`](../../build/chat-v2/CV-10-fix.md) (block branch `t/maciej/cv-10-fix-mention-rows`, landed `0c5e26ac`) · **Live-verified:** `chat_links.test.sql` § CV-10-fix, `key-scopes.test.ts`, the app tests, and `db:test` for chat, `tasks_ops`, `ops_parity`, `mcp_tools`; the steps below are the human pass. Tier 2 (migration `20261017112000_chat_v2_mention_rows.sql`).
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## In the app

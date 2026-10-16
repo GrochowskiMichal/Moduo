@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with `20261015140000_chat_v2_rules_fix.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_rules` _(terminal)_
+- [ ] **Do:** with `20261017105000_chat_v2_rules_fix.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_rules` _(terminal)_
 
 ## In v1's Chat
 

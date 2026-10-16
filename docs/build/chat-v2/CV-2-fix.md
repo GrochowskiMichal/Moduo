@@ -1,7 +1,7 @@
 # CV-2-fix — Rules CV-2a and CV-2b share (server)
 
 > Branch `t/maciej/cv-2-fix-rules` · head: the commit carrying this line · status: built, not landed
-> Migration: `supabase/migrations/20261015140000_chat_v2_rules_fix.sql` · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-2b's `20261014160000`). Before that every `supabase/tests/` file (48) passed with it inside one rolled-back transaction; it runs again cleanly over itself. Stamp provisional: it must stay after `20261014160000`.
+> Migration: `supabase/migrations/20261015140000_chat_v2_rules_fix.sql` (released as `20261017105000`) · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-2b's `20261014160000` (released as `20261017104000`)). Before that every `supabase/tests/` file (48) passed with it inside one rolled-back transaction; it runs again cleanly over itself. Stamp provisional: it must stay after `20261014160000`.
 
 ## Delivered against the row
 

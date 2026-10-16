@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with the migration `20261014100400_chat_v2_plan_source.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_plan` (27 checks) _(terminal)_
+- [ ] **Do:** with the migration `20261017102000_chat_v2_plan_source.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_plan` (27 checks) _(terminal)_
 - [ ] **Do:** run `scripts/agent/e2e.sh tests/chat-plan.spec.ts` → **Expect:** 2 passed (a lapsed plan keeps reading and search and refuses sends; a stubbed grant turns chat on in a Free owner's workspace and its end pauses it) _(terminal)_
 
 ## In v1's Chat

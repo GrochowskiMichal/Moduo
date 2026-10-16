@@ -1,7 +1,7 @@
 # CV-6a — Device notices (server)
 
 > Branch `t/maciej/cv-6a-device-notices-server` · head: see the branch · status: built, not landed
-> Migration: `supabase/migrations/20261015190000_chat_v2_device_notices.sql` · applied to the local stack: yes (re-runs cleanly)
+> Migration: `supabase/migrations/20261015190000_chat_v2_device_notices.sql` (released as `20261017107000`) · applied to the local stack: yes (re-runs cleanly)
 
 ## Delivered against the row
 

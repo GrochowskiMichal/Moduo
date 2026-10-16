@@ -4,7 +4,7 @@ Full entries for this area, newest first. The one-line index of every area is [d
 
 ## 2026-10-16 · CV-21 (agents and MCP tools) — the agent's choices; five are open calls for Maciej
 
-Migration `20261017000000_chat_v2_agents.sql`; see [the record](../build/chat-v2/CV-21.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. CV21-1…CV21-5 are open calls for Maciej. The record holds the rest.
+Migration `20261017123000_chat_v2_agents.sql`; see [the record](../build/chat-v2/CV-21.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. CV21-1…CV21-5 are open calls for Maciej. The record holds the rest.
 
 - **CV21-1 · ❓ A key's reply switch lives in the person's preferences (Settings → Preferences → Chat), on by default** → ❓ Maciej
   - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
@@ -49,7 +49,7 @@ Migration `20261017000000_chat_v2_agents.sql`; see [the record](../build/chat-v2
 
 ## 2026-10-16 · CV-20 (custom emoji) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016235000_chat_v2_custom_emoji.sql`; see [the record](../build/chat-v2/CV-20.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+Migration `20261017122000_chat_v2_custom_emoji.sql`; see [the record](../build/chat-v2/CV-20.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
 
 - **CV20-1 · A name is 2–32 characters of a–z 0–9 - _ with a letter, no `+`; never a standard shortcode** → CV-20
   - Who: agent's choice, deferred — confirmed for building, revisitable.
@@ -89,7 +89,7 @@ Migration `20261016235000_chat_v2_custom_emoji.sql`; see [the record](../build/c
 
 ## 2026-10-16 · CV-14 (decisions) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016230000_chat_v2_decisions.sql`; see [the record](../build/chat-v2/CV-14.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+Migration `20261017121000_chat_v2_decisions.sql`; see [the record](../build/chat-v2/CV-14.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
 
 - **CV14-1 · Marking a decision needs post rights in the conversation, nothing more; any poster may unmark anyone's** → CV-14
   - Who: agent's choice, deferred — confirmed for building, revisitable.
@@ -129,7 +129,7 @@ Migration `20261016230000_chat_v2_decisions.sql`; see [the record](../build/chat
 
 ## 2026-10-16 · CV-22 (Home widgets, export and the shortcut sheet) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016220000_chat_v2_home_export.sql`; see [the record](../build/chat-v2/CV-22.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+Migration `20261017120000_chat_v2_home_export.sql`; see [the record](../build/chat-v2/CV-22.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
 
 - **CV22-1 · `user_statuses` and `chat_members` are keyed by their own id** → CV-22
   - Who: agent's choice, accepted by the orchestrator; deferred to by Maciej, 2026-10-16.
@@ -174,7 +174,7 @@ Migration `20261016220000_chat_v2_home_export.sql`; see [the record](../build/ch
 
 ## 2026-10-16 · CV-18 (quiet hours, pausing and holds) — the agent's choices beyond the pause table (deferred to by Maciej)
 
-Migration `20261016210000_chat_v2_quiet_hours.sql`; see [the record](../build/chat-v2/CV-18.md). The pause table is CV18-0 below. Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+Migration `20261017119000_chat_v2_quiet_hours.sql`; see [the record](../build/chat-v2/CV-18.md). The pause table is CV18-0 below. Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
 
 - **CV18-1 · Do not disturb drops pings instead of holding them** → CV-18
   - Who: agent's choice (the brief binds drop), deferred — confirmed for building, revisitable.
@@ -219,7 +219,7 @@ Migration `20261016210000_chat_v2_quiet_hours.sql`; see [the record](../build/ch
 
 ## 2026-10-16 · CV-16 (moving messages and multi-select) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016200000_chat_v2_move_messages.sql`; see [the record](../build/chat-v2/CV-16.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+Migration `20261017118000_chat_v2_move_messages.sql`; see [the record](../build/chat-v2/CV-16.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
 
 - **CV16-1 · "Mentioned in" follows the moved message, written as its author** → CV-10-fix
   - Who: orchestrator (brief §4.4), deferred to by Maciej — confirmed for building, revisitable.
@@ -277,7 +277,7 @@ Migration `20261016200000_chat_v2_move_messages.sql`; see [the record](../build/
 
 ## 2026-10-16 · CV-19 (search in ⌘K and Chat's Search) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016190000_chat_v2_search.sql`; see [the record](../build/chat-v2/CV-19.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+Migration `20261017117000_chat_v2_search.sql`; see [the record](../build/chat-v2/CV-19.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
 
 - **CV19-1 · The toolbar's Search opens the find bar; the bar's "See all" opens Chat's Search** → ❓ Maciej
   - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
@@ -312,7 +312,7 @@ Migration `20261016190000_chat_v2_search.sql`; see [the record](../build/chat-v2
 
 ## 2026-10-16 · CV-13 (linked channels) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016180000_chat_v2_linked_channels.sql`; see [the record](../build/chat-v2/CV-13.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16, unless marked.
+Migration `20261017116000_chat_v2_linked_channels.sql`; see [the record](../build/chat-v2/CV-13.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16, unless marked.
 
 - **CV13-1 · Linking needs being in the conversation, able to post in it and edit rights on the item; unlinking needs only being a poster** → CV-14
   - Who: orchestrator's rule over the brief's "see", deferred to by Maciej, 2026-10-16.
@@ -347,7 +347,7 @@ Migration `20261016180000_chat_v2_linked_channels.sql`; see [the record](../buil
 
 ## 2026-10-16 · CV-9 (files) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016170000_chat_v2_files.sql`; see [the record](../build/chat-v2/CV-9.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16, unless marked.
+Migration `20261017115000_chat_v2_files.sql`; see [the record](../build/chat-v2/CV-9.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16, unless marked.
 
 - **CV9-1 · A PDF is a document card, not a rendered page** → ❓ Maciej (deviates from the drawn frame)
   - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
@@ -382,7 +382,7 @@ Migration `20261016170000_chat_v2_files.sql`; see [the record](../build/chat-v2/
 
 ## 2026-10-16 · CV-17 (statuses, presence and Focus) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016160000_chat_v2_statuses.sql`; see [the record](../build/chat-v2/CV-17.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. Two designer calls stay open: Focusing and do not disturb still show while "Show me as online" is off, and "until" from a counted estimate (AC11.3) isn't built.
+Migration `20261017114000_chat_v2_statuses.sql`; see [the record](../build/chat-v2/CV-17.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. Two designer calls stay open: Focusing and do not disturb still show while "Show me as online" is off, and "until" from a counted estimate (AC11.3) isn't built.
 
 - **CV17-1 · One status for every workspace; "no status" is an empty row** → CV-18
   - Who: agent's choice, deferred to by Maciej, 2026-10-16.
@@ -412,7 +412,7 @@ Migration `20261016160000_chat_v2_statuses.sql`; see [the record](../build/chat-
 
 ## 2026-10-16 · CV-11 (Catch up, Later and Remind me) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016150000_chat_v2_later.sql`; see [the record](../build/chat-v2/CV-11.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+Migration `20261017113000_chat_v2_later.sql`; see [the record](../build/chat-v2/CV-11.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
 
 - **CV11-1 · Catch up's list is a server read (`chat_catchup_open`), and Nothing still lists** → CV-23
   - Who: agent's choice, deferred to by Maciej, 2026-10-16.
@@ -442,7 +442,7 @@ Migration `20261016150000_chat_v2_later.sql`; see [the record](../build/chat-v2/
 
 ## 2026-10-16 · CV-10-fix ("Mentioned in" rows are Chat's) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016145000_chat_v2_mention_rows.sql`; see [the record](../build/chat-v2/CV-10-fix.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. One call is open.
+Migration `20261017112000_chat_v2_mention_rows.sql`; see [the record](../build/chat-v2/CV-10-fix.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. One call is open.
 
 - **CV10fix-1 · Only Chat's send and edit write a "Mentioned in" row; the rows are history** → CV-13
   - Who: agent's choice, deferred to by Maciej, 2026-10-16.
@@ -462,7 +462,7 @@ Migration `20261016145000_chat_v2_mention_rows.sql`; see [the record](../build/c
 
 ## 2026-10-16 · CV-15 (channel lifecycle and permissions) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016140000_chat_v2_channel_lifecycle.sql`, Tier 2; see [the record](../build/chat-v2/CV-15.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+Migration `20261017111000_chat_v2_channel_lifecycle.sql`, Tier 2; see [the record](../build/chat-v2/CV-15.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
 
 - **CV15-1 · A removal from a public channel sticks** → CV-23
   - Who: agent's choice, deferred to by Maciej, 2026-10-16.
@@ -497,7 +497,7 @@ Migration `20261016140000_chat_v2_channel_lifecycle.sql`, Tier 2; see [the recor
 
 ## 2026-10-16 · CV-10 (links in messages and "make a task") — the agent's choices (deferred to by Maciej)
 
-Migration `20261016130000_chat_v2_references.sql`; see [the record](../build/chat-v2/CV-10.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+Migration `20261017110000_chat_v2_references.sql`; see [the record](../build/chat-v2/CV-10.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
 
 - **CV10-1 · "Mentioned in" counts only items in the registry the sender can open** → CV-13
   - Who: agent's choice, deferred to by Maciej, 2026-10-16.
@@ -527,7 +527,7 @@ Migration `20261016130000_chat_v2_references.sql`; see [the record](../build/cha
 
 ## 2026-10-16 · CV-12 (replies and Wrap up) — the agent's choices (deferred to by Maciej)
 
-Migration `20261016120000_chat_v2_chains.sql`; see [the record](../build/chat-v2/CV-12.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+Migration `20261017109000_chat_v2_chains.sql`; see [the record](../build/chat-v2/CV-12.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
 
 - **CV12-1 · Reply shows "Replying to Name · excerpt" above the main box until sent or Esc; "N replies ›" opens the chain** → none
   - Who: agent's choice, deferred to by Maciej, 2026-10-16.
@@ -657,7 +657,7 @@ Client-only; see [the record](../build/chat-v2/CV-7b.md). Each choice is the bui
 
 ## 2026-10-15 · CV-7c (reactions widened) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261015200000_chat_v2_reactions.sql`), Tier 2; see [the record](../build/chat-v2/CV-7c.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15, unless marked.
+One migration (`20261017108000_chat_v2_reactions.sql`), Tier 2; see [the record](../build/chat-v2/CV-7c.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15, unless marked.
 
 - **CV7c-1 · A reaction key is a closed set of emoji code points, one spelling each, as Emojibase writes it** → CV-20
   - Who: agent's choice, deferred to by Maciej, 2026-10-15.
@@ -747,7 +747,7 @@ Client-only; see [the record](../build/chat-v2/CV-7a.md). Each choice is the bui
 
 ## 2026-10-15 · CV-6a (device notices, server) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261015190000_chat_v2_device_notices.sql`); see [the record](../build/chat-v2/CV-6a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
+One migration (`20261017107000_chat_v2_device_notices.sql`); see [the record](../build/chat-v2/CV-6a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
 
 - **CV6a-1 · The title is "Sender · #channel · Workspace" (a DM: "Sender · Workspace"); a burst reads "N messages: <newest text>"** → CV-6b
   - Who: agent's choice, deferred to by Maciej, 2026-10-15.
@@ -812,7 +812,7 @@ Client-only, no migration; see [the record](../build/chat-v2/CV-3.md). Each choi
 
 ## 2026-10-15 · CV-5 (Catch up rows and the bell) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261015170000_chat_v2_catchup.sql`), Tier 2 (`/code-review high` ran, the security scan found nothing at its threshold); see [the record](../build/chat-v2/CV-5.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
+One migration (`20261017106000_chat_v2_catchup.sql`), Tier 2 (`/code-review high` ran, the security scan found nothing at its threshold); see [the record](../build/chat-v2/CV-5.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
 
 - **CV5-1 · One reason per person per message, by precedence** → CV-6a, CV-11
   - Who: agent's choice, deferred to by Maciej, 2026-10-15.
@@ -847,7 +847,7 @@ One migration (`20261015170000_chat_v2_catchup.sql`), Tier 2 (`/code-review high
 
 ## 2026-10-15 · CV-2-fix (rules CV-2a and CV-2b share) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261015140000_chat_v2_rules_fix.sql`), `chat_rules.test.sql` (69 checks); see [the record](../build/chat-v2/CV-2-fix.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
+One migration (`20261017105000_chat_v2_rules_fix.sql`), `chat_rules.test.sql` (69 checks); see [the record](../build/chat-v2/CV-2-fix.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
 
 - **CV2fix-1 · A channel's name clashes with every live channel its creator or renamer can see** → CV-15
   - Who: agent's choice (refines CH3a), deferred to by Maciej, 2026-10-15.
@@ -867,7 +867,7 @@ One migration (`20261015140000_chat_v2_rules_fix.sql`), `chat_rules.test.sql` (6
 
 ## 2026-10-15 · CV-2b (conversation ops v2) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261014160000_chat_v2_conversation_ops.sql`), `chat_ops.test.sql` (262 checks) and `chat_counts.test.sql` (45); see [the record](../build/chat-v2/CV-2b.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15, unless marked. The record lists the rest (about 25).
+One migration (`20261017104000_chat_v2_conversation_ops.sql`), `chat_ops.test.sql` (262 checks) and `chat_counts.test.sql` (45); see [the record](../build/chat-v2/CV-2b.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15, unless marked. The record lists the rest (about 25).
 
 - **CV2b-1 · General is named "General" in new workspaces; bootstrap puts everyone without a row into it, chat access or not** → CV-4, CV-15
   - Who: agent's choice (the second part the orchestrator's), deferred to by Maciej, 2026-10-15.
@@ -922,7 +922,7 @@ Written into the briefs and the runbook after checkpoint 1 (BR-1…BR-4 are furt
 
 ## 2026-10-14 · CV-4 (chat in handed-out Team workspaces) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261014100400_chat_v2_plan_source.sql`), a drift gate and an API-level spec; see [the record](../build/chat-v2/CV-4.md). Proven in rolled-back transactions, then applied to the local stack. Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable. BR-2 above fixed the lookup's name; these are the rest.
+One migration (`20261017102000_chat_v2_plan_source.sql`), a drift gate and an API-level spec; see [the record](../build/chat-v2/CV-4.md). Proven in rolled-back transactions, then applied to the local stack. Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable. BR-2 above fixed the lookup's name; these are the rest.
 
 - **CV4-1 · The owner's plan is asked first, and the grant only when the plan doesn't include chat** → CV-4, TX-9b
   - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
@@ -952,7 +952,7 @@ One migration (`20261014100400_chat_v2_plan_source.sql`), a drift gate and an AP
 
 ## 2026-10-14 · CV-2a (message ops v2) — the agent's choices (deferred to by Maciej)
 
-One migration (`20261014150000_chat_v2_core_ops.sql`), proven by `chat_ops.test.sql` (143 checks) and `chat_wrappers.test.sql` (23), and by a parity run of the mentions reader against the client's parser on 23,367 bodies (0 differences); see [the record](../build/chat-v2/CV-2a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, unless marked.
+One migration (`20261017103000_chat_v2_core_ops.sql`), proven by `chat_ops.test.sql` (143 checks) and `chat_wrappers.test.sql` (23), and by a parity run of the mentions reader against the client's parser on 23,367 bodies (0 differences); see [the record](../build/chat-v2/CV-2a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, unless marked.
 
 - **CV2a-1 · Mentions are read on the server by a SQL twin of the client's parser** → CV-5, CV-7a, CV-10
   - Who: agent's choice, deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.
@@ -1012,7 +1012,7 @@ One migration (`20261014150000_chat_v2_core_ops.sql`), proven by `chat_ops.test.
 
 ## 2026-10-14 · CV-1 (foundation and conversion) — the agent's choices (deferred to by Maciej)
 
-Two migrations (`20261014100000_chat_v2_foundation.sql`, `20261014100100_chat_v2_convert_v1.sql`) and the contracts; see [the record](../build/chat-v2/CV-1.md). The conversion was proven in a rolled-back round trip: 3,111 bodies in 0.49 s, a second pass that changed no row, and the research workspace's 3,032 messages drawn as v1 drew them (BR-7 says it was then applied). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, unless marked.
+Two migrations (`20261017100000_chat_v2_foundation.sql`, `20261017101000_chat_v2_convert_v1.sql`) and the contracts; see [the record](../build/chat-v2/CV-1.md). The conversion was proven in a rolled-back round trip: 3,111 bodies in 0.49 s, a second pass that changed no row, and the research workspace's 3,032 messages drawn as v1 drew them (BR-7 says it was then applied). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, unless marked.
 
 - **CV1-1 · The conversion runs once, before the v2 ops, and refuses rather than truncates** → CV-2a, the release train
   - Who: agent's choice (validator round 1), deferred to by Maciej: confirmed for building, revisitable, 2026-10-14.

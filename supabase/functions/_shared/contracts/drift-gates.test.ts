@@ -305,7 +305,7 @@ describe("cross-runtime drift guards", () => {
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`status IN (${inList(ATTACHMENT_STATUSES)})`);
     // CV-9 re-cut the deleted-reason CHECK (chat_message).
-    const recut = readFileSync(resolve(MIGRATIONS_DIR, "20261016170000_chat_v2_files.sql"), "utf8");
+    const recut = readFileSync(resolve(MIGRATIONS_DIR, "20261017115000_chat_v2_files.sql"), "utf8");
     expect(recut).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
     expect(sql).toContain(`preview_mime IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`p_preview_mime NOT IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
@@ -366,7 +366,7 @@ describe("cross-runtime drift guards", () => {
   });
 
   it("one reaction key: CV-7c's check, used by comments, chat and the quick row", () => {
-    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261015200000_chat_v2_reactions.sql"), "utf8");
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261017108000_chat_v2_reactions.sql"), "utf8");
     // The same rule as isReactionKey: the length, and the pattern spelled with
     // the same code points as REACTION_KEY_SET, in the same order.
     expect(sql).toContain("char_length(p_key) BETWEEN 1 AND 32");
@@ -417,7 +417,7 @@ describe("cross-runtime drift guards", () => {
 
   it("custom emoji: CV-20's names, key, types, sizes, the switch and the reserved names", async () => {
     const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261016235000_chat_v2_custom_emoji.sql"),
+      resolve(MIGRATIONS_DIR, "20261017122000_chat_v2_custom_emoji.sql"),
       "utf8",
     );
     // One name rule: the table's CHECK, the op and the reaction key.

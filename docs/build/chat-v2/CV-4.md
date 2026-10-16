@@ -1,7 +1,7 @@
 # CV-4 — Chat in handed-out Team workspaces
 
 > Branch `t/maciej/cv-4-plan-source` · head: the commit carrying this line · status: built, not landed
-> Migration: `supabase/migrations/20261014100400_chat_v2_plan_source.sql` · applied to the local stack: **no** (waiting for its turn, after CV-2a's). Proven in rolled-back transactions only (below). Apply it with `psql "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261014100400_chat_v2_plan_source.sql`, then `bun run db:test chat` and `scripts/agent/e2e.sh tests/chat-plan.spec.ts`. The stamp is provisional (re-cut on apply day, after CV-2a's and CV-2b's files).
+> Migration: `supabase/migrations/20261014100400_chat_v2_plan_source.sql` (released as `20261017102000`) · applied to the local stack: **no** (waiting for its turn, after CV-2a's). Proven in rolled-back transactions only (below). Apply it with `psql "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres" -1 -v ON_ERROR_STOP=1 -f supabase/migrations/20261014100400_chat_v2_plan_source.sql`, then `bun run db:test chat` and `scripts/agent/e2e.sh tests/chat-plan.spec.ts`. The stamp is provisional (re-cut on apply day, after CV-2a's and CV-2b's files).
 
 ## Delivered against the row
 

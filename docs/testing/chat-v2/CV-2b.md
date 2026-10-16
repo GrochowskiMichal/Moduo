@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with `20261014160000_chat_v2_conversation_ops.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_ops` and `chat_counts` _(terminal)_
+- [ ] **Do:** with `20261017104000_chat_v2_conversation_ops.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_ops` and `chat_counts` _(terminal)_
 
 ## In v1's Chat
 

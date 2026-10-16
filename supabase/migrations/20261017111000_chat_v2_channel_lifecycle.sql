@@ -714,7 +714,7 @@ BEGIN
 END;
 $function$;
 
--- An app's post (live body, 20261015170000): a deleted channel refuses it too.
+-- An app's post (live body, 20261017106000): a deleted channel refuses it too.
 CREATE OR REPLACE FUNCTION public.chat_op_agent_post(p_workspace_id uuid, p_channel_id uuid, p_body text, p_parent_id uuid DEFAULT NULL::uuid)
  RETURNS chat_messages
  LANGUAGE plpgsql

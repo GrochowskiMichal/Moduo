@@ -306,7 +306,7 @@ $function$;
 
 -- ── 4b. Undo brings back "X removed you from Q" too ─────────────────────────
 -- Catch up lists that line though the conversation can't be read (section 5),
--- so Done on it can be undone (live body: 20261015170000_chat_v2_catchup).
+-- so Done on it can be undone (live body: 20261017106000_chat_v2_catchup).
 
 CREATE OR REPLACE FUNCTION public.chat__reopen(p_user uuid, p_ids uuid[])
  RETURNS integer
@@ -456,7 +456,7 @@ BEGIN
   -- The list answers people only, like chat_unread_counts.
   REVOKE ALL ON FUNCTION public.chat_catchup_open(uuid) FROM PUBLIC, anon, authenticated, service_role;
   GRANT EXECUTE ON FUNCTION public.chat_catchup_open(uuid) TO authenticated;
-  -- Server-only: the job, the trigger's function and Undo's helper (as 20261015170000).
+  -- Server-only: the job, the trigger's function and Undo's helper (as 20261017106000).
   REVOKE ALL ON FUNCTION public.chat__reopen(uuid, uuid[]) FROM PUBLIC, anon, authenticated;
   GRANT EXECUTE ON FUNCTION public.chat__reopen(uuid, uuid[]) TO service_role;
   REVOKE ALL ON FUNCTION public.chat__fire_later(timestamptz, integer) FROM PUBLIC, anon, authenticated;

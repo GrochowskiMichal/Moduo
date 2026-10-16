@@ -1,7 +1,7 @@
 # CV-7c — Reactions widened (server + client, Tier 2)
 
 > Branch `t/maciej/cv-7c-reactions` · head: see the branch · status: built, not landed
-> Migration: `supabase/migrations/20261015200000_chat_v2_reactions.sql` · applied to the local stack: yes (by this builder, on its migration turn)
+> Migration: `supabase/migrations/20261015200000_chat_v2_reactions.sql` (released as `20261017108000`) · applied to the local stack: yes (by this builder, on its migration turn)
 
 ## Delivered against the row
 

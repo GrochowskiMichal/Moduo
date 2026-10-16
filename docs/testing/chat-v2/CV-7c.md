@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with `20261015200000_chat_v2_reactions.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_reactions` _(terminal)_
+- [ ] **Do:** with `20261017108000_chat_v2_reactions.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_reactions` _(terminal)_
 - [ ] **Do:** `bunx playwright test --project=visual tests/visual/kit.spec.ts` → **Expect:** the Reactions story passes at three densities _(terminal)_
 
 ## In the app

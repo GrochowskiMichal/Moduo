@@ -511,8 +511,8 @@ END;
 $function$;
 
 -- ── 4. Send, attach-to-chain and the access check, from their live bodies ──
--- chat_op_send (live: 20261016170000_chat_v2_files) and
--- chat_op_attach_to_chain (live: 20261016120000_chat_v2_chains): once the
+-- chat_op_send (live: 20261017115000_chat_v2_files) and
+-- chat_op_attach_to_chain (live: 20261017109000_chat_v2_chains): once the
 -- rows are locked (the quoted message too, so a move of it waits or is
 -- waited on), the quoted message, the message and the chain's root must
 -- still be in this conversation.
@@ -763,7 +763,7 @@ BEGIN
 END;
 $function$;
 
--- chat_sync_ids (live: 20261014160000_chat_v2_conversation_ops): moved_away
+-- chat_sync_ids (live: 20261017104000_chat_v2_conversation_ops): moved_away
 -- also comes from moved_in lines, live or undone. An Undo soft-deletes the
 -- moved_in line (its updated_at moves, so p_since finds it) and the ids go
 -- back where you may not read them; a live moved_in or an undone moved_out

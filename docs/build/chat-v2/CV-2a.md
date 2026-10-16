@@ -1,7 +1,7 @@
 # CV-2a — Message ops v2 (server)
 
 > Branch `t/maciej/cv-2a-message-ops` · head: the commit carrying this line · status: built, not landed
-> Migration: `supabase/migrations/20261014150000_chat_v2_core_ops.sql` · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-1's two migrations and `20261014155205_chat_send_limits.sql`). Before that it was proven in rolled-back transactions (every `supabase/tests/` file as `BEGIN; \i <migration>; _setup; <test>; _finish`, 45 green). Stamp provisional: it must stay after `20261014155205`.
+> Migration: `supabase/migrations/20261014150000_chat_v2_core_ops.sql` (released as `20261017103000`) · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-1's two migrations and `20261014155205_chat_send_limits.sql`). Before that it was proven in rolled-back transactions (every `supabase/tests/` file as `BEGIN; \i <migration>; _setup; <test>; _finish`, 45 green). Stamp provisional: it must stay after `20261014155205`.
 
 ## Delivered against the row
 

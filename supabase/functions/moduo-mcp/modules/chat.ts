@@ -139,6 +139,7 @@ export const chatConnectorModule: ConnectorModule = {
         properties: {
           channel: { type: "string", description: "Conversation name as shown (e.g. Release Train) or id." },
           chain_id: { type: "string", description: "Optional: the first message of a reply chain." },
+          thread_id: { type: "string", description: "Deprecated: use chain_id." },
           before: { type: "string", description: "Optional: read the messages before this message id." },
           limit: { type: "number", description: "Max messages (default 30, max 100)." },
         },

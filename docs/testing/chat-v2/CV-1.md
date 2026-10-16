@@ -38,7 +38,7 @@
 
 ## Migrations / data
 
-- [ ] **Do:** in psql check what `20261014100000_chat_v2_foundation.sql` added (`\d chat_catchup`, `\d chat_chain_mutes`, and the new columns on `chat_messages`, `chat_channels` and `chat_members`) → **Expect:** both new tables exist and are empty, with the columns the record lists; the file stamps are provisional and get re-cut at the release _(psql)_
+- [ ] **Do:** in psql check what `20261017100000_chat_v2_foundation.sql` added (`\d chat_catchup`, `\d chat_chain_mutes`, and the new columns on `chat_messages`, `chat_channels` and `chat_members`) → **Expect:** both new tables exist and are empty, with the columns the record lists; the file stamps are provisional and get re-cut at the release _(psql)_
 
 ## Known gaps / not-yet-testable
 

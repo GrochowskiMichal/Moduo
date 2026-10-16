@@ -5,7 +5,7 @@ import { rpc, runTag, signInPage } from "./support/local-stack";
 
 /**
  * Chat v2 CV-19 · "⌘K and Chat's Search" (AC4.4, AC4.5, AC1.10) on the real
- * app, against the local stack (needs 20261016190000_chat_v2_search applied):
+ * app, against the local stack (needs 20261017117000_chat_v2_search applied):
  *   scripts/agent/e2e.sh tests/chat-search.spec.ts
  * A Duo room of its own (search-owner@ and search-member@moduo.local). The
  * owner says "żółw" in General; the member says it in a private channel the

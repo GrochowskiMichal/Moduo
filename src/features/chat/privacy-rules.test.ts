@@ -13,7 +13,7 @@ const DB_URL =
 // The newest migration whose behaviour chat_privacy.test.sql expects (typing for
 // members only, the ops' error codes: CV-2a; conversations registered when made,
 // leaving logged, General as is_default: CV-2b), found by a function it adds.
-const MIGRATION = "20261014160000_chat_v2_conversation_ops.sql";
+const MIGRATION = "20261017104000_chat_v2_conversation_ops.sql";
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const TESTS = `${ROOT}supabase/tests/`;
 

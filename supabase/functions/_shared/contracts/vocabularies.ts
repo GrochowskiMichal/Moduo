@@ -1243,7 +1243,7 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 // ---------------------------------------------------------------------------
 // Reactions (CV-7c; round-3 §2.8, Assumptions #18, #29) — one key for chat
 // messages, task and note comments and your quick row. Mirrors
-// public.reactions__key_ok(text) in 20261015200000_chat_v2_reactions: exactly
+// public.reactions__key_ok(text) in 20261017108000_chat_v2_reactions: exactly
 // one standard emoji, 1–32 code points (≤ 128 bytes): a flag (two regional
 // indicators), a #/*/digit keycap, or one pictograph with an optional
 // variation selector, skin tone and tag sequence, joined to more of the same
@@ -1373,7 +1373,7 @@ export type ReactionKey = string;
 // ---------------------------------------------------------------------------
 // Custom emoji (CV-20; spec §6, CH16b) — mirrors chat_custom_emoji's CHECKs,
 // the chat-emoji bucket and chat_op_custom_emoji_add in
-// 20261016235000_chat_v2_custom_emoji.sql. A name is 2–32 of a–z, 0–9, - and
+// 20261017122000_chat_v2_custom_emoji.sql. A name is 2–32 of a–z, 0–9, - and
 // _ with at least one letter (so every name also reads as `:name:` in text,
 // markup-v2's EMOJI_NAME_RE), unique per workspace among live emoji, never a
 // standard emoji's shortcode (the server's chat__emoji_name_reserved).
@@ -1584,7 +1584,7 @@ export type TaskViewFilterDimension =
 // the person (`user`), its task (`task`), a bucket deleted with its tasks
 // (`bucket`, reserved for TV-U6), or its chat message (`chat_message`, CV-9:
 // deleted with the message, or taken out of an unsent one; CHECK re-cut in
-// 20261016170000_chat_v2_files). Previews are only ever these three formats.
+// 20261017115000_chat_v2_files). Previews are only ever these three formats.
 // ---------------------------------------------------------------------------
 
 export const ATTACHMENT_STATUSES = ["pending", "ready", "failed"] as const;

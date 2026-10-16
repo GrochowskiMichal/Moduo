@@ -1017,7 +1017,7 @@ export const webRuntime: ModuoRuntime = {
           .order("created_at", { ascending: false });
       let { data, error } = await list(`${columns}, expires_at, include_private_chat`);
       // 42703 = a newer column isn't on this backend yet (expires_at:
-      // 20261009210000; include_private_chat: CV-21's 20261017000000): list the
+      // 20261009210000; include_private_chat: CV-21's 20261017123000): list the
       // keys without them rather than lose the whole list.
       // 42501: the column is there but not yet readable by clients.
       if (error?.code === "42703" || error?.code === "42501")

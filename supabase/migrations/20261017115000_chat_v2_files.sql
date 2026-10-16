@@ -749,7 +749,7 @@ GRANT EXECUTE ON FUNCTION public.chat_files(uuid, timestamptz, integer, uuid) TO
 -- ── 11. Notices for a message of files only ────────────────────────────────
 -- The bell, Catch up and device notices read the payload's excerpt: a message
 -- with no words but files says "Sent a file" / "Sent N files". From the live
--- body (CV-5's, 20261015170000); grants as there.
+-- body (CV-5's, 20261017106000); grants as there.
 
 CREATE OR REPLACE FUNCTION public.chat__activity(p_channel chat_channels, p_msg chat_messages, p_actor uuid, p_op text, p_reason text, p_users uuid[], p_team_ids uuid[] DEFAULT NULL::uuid[])
  RETURNS uuid

@@ -1,5 +1,5 @@
 -- Chat v2 · CV-9 "files follow the message" (AC2.3;
--- supabase/migrations/20261016170000_chat_v2_files.sql). A pending upload is
+-- supabase/migrations/20261017115000_chat_v2_files.sql). A pending upload is
 -- seen by its uploader only; send takes it; readers of the conversation read
 -- it (row and bytes), nobody else; deleting the message sends its files to the
 -- trash on the message's clock and its Undo brings them back; a removed

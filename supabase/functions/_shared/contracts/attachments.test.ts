@@ -30,7 +30,7 @@ describe("attachment limits mirror the AT-1 SQL", () => {
   });
 
   it("matches attachments__chat_file_cap() (CV-9)", () => {
-    const files = readFileSync(resolve(MIGRATIONS_DIR, "20261016170000_chat_v2_files.sql"), "utf8");
+    const files = readFileSync(resolve(MIGRATIONS_DIR, "20261017115000_chat_v2_files.sql"), "utf8");
     const m = /attachments__chat_file_cap\(\)[\s\S]*?SELECT (\d+) \$\$/.exec(files);
     expect(Number(m?.[1])).toBe(CHAT_FILES_PER_MESSAGE);
   });

@@ -1,5 +1,5 @@
 -- Chat v2 · CV-21 Agents and MCP tools ("tools, scopes, rate limit"; AC4.2,
--- AC15.1, AC15.4): supabase/migrations/20261017000000_chat_v2_agents.sql.
+-- AC15.1, AC15.4): supabase/migrations/20261017123000_chat_v2_agents.sql.
 --
 -- Cast: O owns W (Duo, so chat is on); A, B and C are members; O2 owns W2.
 -- A makes the public channel Q and the private channel P with B; B makes the

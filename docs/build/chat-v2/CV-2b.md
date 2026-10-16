@@ -1,7 +1,7 @@
 # CV-2b — Conversation ops v2 (server)
 
 > Branch `t/maciej/cv-2b-conversation-ops` · head: the commit carrying this line · status: built, not landed
-> Migration: `supabase/migrations/20261014160000_chat_v2_conversation_ops.sql` · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-1's two files, `20261014155205_chat_send_limits.sql`, CV-2a and CV-4). Before that every `supabase/tests/` file (chat and the 37 others) passed with it inside one rolled-back transaction. It runs again cleanly over itself. Stamp provisional: it must stay after `20261014150000` (CV-2a) and `20261014155205`.
+> Migration: `supabase/migrations/20261014160000_chat_v2_conversation_ops.sql` (released as `20261017104000`) · applied to the local stack: **yes** (as `supabase_admin`, `-1`, on its turn, after CV-1's two files, `20261014155205_chat_send_limits.sql`, CV-2a and CV-4). Before that every `supabase/tests/` file (chat and the 37 others) passed with it inside one rolled-back transaction. It runs again cleanly over itself. Stamp provisional: it must stay after `20261014150000` (released as `20261017103000`) (CV-2a) and `20261014155205`.
 
 ## Delivered against the row
 

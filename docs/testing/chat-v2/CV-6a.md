@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with `20261015190000_chat_v2_device_notices.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_notices` _(terminal)_
+- [ ] **Do:** with `20261017107000_chat_v2_device_notices.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_notices` _(terminal)_
 
 ## Browser and email
 

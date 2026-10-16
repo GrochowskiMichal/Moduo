@@ -1,6 +1,6 @@
 # Manual test checklist — CV-9 Files
 
-> Generated 2026-10-16 · branch `t/maciej/cv-checkpoint-4`, folded from the record [`CV-9`](../../build/chat-v2/CV-9.md) (block branch `t/maciej/cv-9-files-2`, landed `3fbe6404`) · **Live-verified:** `chat_files.test.sql` (64 checks), `files.test.ts`, `tests/chat-files.spec.ts` and `moduo-mcp/chat-files.test.ts`; the steps below are the human pass. Migration `20261016170000_chat_v2_files.sql`.
+> Generated 2026-10-16 · branch `t/maciej/cv-checkpoint-4`, folded from the record [`CV-9`](../../build/chat-v2/CV-9.md) (block branch `t/maciej/cv-9-files-2`, landed `3fbe6404`) · **Live-verified:** `chat_files.test.sql` (64 checks), `files.test.ts`, `tests/chat-files.spec.ts` and `moduo-mcp/chat-files.test.ts`; the steps below are the human pass. Migration `20261017115000_chat_v2_files.sql`.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 
 ## In the app

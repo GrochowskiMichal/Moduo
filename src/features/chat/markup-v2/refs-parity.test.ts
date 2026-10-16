@@ -14,7 +14,7 @@ import { mentionsOf } from "./text";
 
 const DB_URL =
   process.env.MODUO_DB_URL ?? "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
-const MIGRATION = "20261016180000_chat_v2_linked_channels.sql";
+const MIGRATION = "20261017116000_chat_v2_linked_channels.sql";
 const TAG = "$moduo_refs_parity$";
 
 const task = `moduo://task/${ID.task}`;

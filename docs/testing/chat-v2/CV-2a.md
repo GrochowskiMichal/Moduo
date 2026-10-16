@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with the migration `20261014150000_chat_v2_core_ops.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_ops` (messages half, 143 checks), `chat_wrappers` (23) and `chat_send_limits` (54, against the redefined ops) _(terminal)_
+- [ ] **Do:** with the migration `20261017103000_chat_v2_core_ops.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_ops` (messages half, 143 checks), `chat_wrappers` (23) and `chat_send_limits` (54, against the redefined ops) _(terminal)_
 
 ## In v1's Chat (through the wrappers, until CV-8a)
 

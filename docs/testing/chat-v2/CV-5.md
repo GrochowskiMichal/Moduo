@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** with `20261015170000_chat_v2_catchup.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_catchup` _(terminal)_
+- [ ] **Do:** with `20261017106000_chat_v2_catchup.sql` applied, run `bun run db:test chat` → **Expect:** every chat file passes, among them `chat_catchup` _(terminal)_
 
 ## In v1's Chat and the bell
 

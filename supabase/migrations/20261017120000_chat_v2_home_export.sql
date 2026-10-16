@@ -23,7 +23,7 @@
 --   4. Asserts: no table in supabase_realtime has a key column that refers to
 --      a person.
 --
--- Needs CV-18 (20261016210000) applied first.
+-- Needs CV-18 (20261017119000) applied first.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -33,7 +33,7 @@ DO $$
 BEGIN
   IF to_regclass('public.user_notice_pauses') IS NULL
      OR to_regclass('public.user_status_changes') IS NULL THEN
-    RAISE EXCEPTION 'CV-22 needs CV-18 (20261016210000) applied first';
+    RAISE EXCEPTION 'CV-22 needs CV-18 (20261017119000) applied first';
   END IF;
 END;
 $$;
@@ -73,7 +73,7 @@ BEGIN
 END;
 $$;
 
--- ── 2. Grants (as last set: 20261016160000 for user_statuses, the foundation for chat_members) ──
+-- ── 2. Grants (as last set: 20261017114000 for user_statuses, the foundation for chat_members) ──
 
 REVOKE ALL ON public.user_statuses FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.user_statuses TO authenticated;
@@ -86,7 +86,7 @@ GRANT ALL ON public.chat_members TO service_role;
 -- ── 3. Account erasure: CV-18's per-person tables ──────────────────────────
 -- Changed in place from its live body (pg_temp.recut, as CV-6a, CV-17 and
 -- CV-18): a body that has moved on stops the migration. Grants as last set
--- (20261015140000).
+-- (20261017105000).
 
 CREATE OR REPLACE FUNCTION pg_temp.recut(p_fn regprocedure, p_old text, p_new text)
 RETURNS void

@@ -1,7 +1,7 @@
 # CV-9 — Files
 
 > Branch `t/maciej/cv-9-files-2` (from `t/maciej/cv-9-files`, build head merged after CV-10-fix) · status: built, ready to land
-> Migration: `supabase/migrations/20261016170000_chat_v2_files.sql` · applied to the local stack 2026-10-16, after CV-11 (`20261016150000`) and CV-17 (`20261016160000`); every redefined function re-based on its live body first (none of them changed since)
+> Migration: `supabase/migrations/20261016170000_chat_v2_files.sql` (released as `20261017115000`) · applied to the local stack 2026-10-16, after CV-11 (`20261016150000` (released as `20261017113000`)) and CV-17 (`20261016160000` (released as `20261017114000`)); every redefined function re-based on its live body first (none of them changed since)
 
 ## Delivered against the row
 
@@ -72,6 +72,6 @@
 
 ## Verify before release
 
-- `chat__activity` was redefined from its live body (CV-5's) on 2026-10-16; CV-13's migration (`20261016180000_chat_v2_linked_channels.sql`) doesn't touch it. Only that statement was re-applied to the local stack.
+- `chat__activity` was redefined from its live body (CV-5's) on 2026-10-16; CV-13's migration (`20261016180000_chat_v2_linked_channels.sql` (released as `20261017116000`)) doesn't touch it. Only that statement was re-applied to the local stack.
 - The migration applies after CV-10/15/11/17 in order; `chat_op_send`, `chat_op_delete`, `chat_op_restore` and the attachments ops were re-checked against the live bodies on 2026-10-16 (CV-10 and CV-15 included).
 - The stored type of a file is what the uploader's device said; the app's safety rests on never drawing anything but the four picture types (with `<img>`) and downloading the rest.

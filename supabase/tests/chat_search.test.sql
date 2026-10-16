@@ -1,4 +1,4 @@
--- Chat search (CV-19, supabase/migrations/20261016190000_chat_v2_search.sql):
+-- Chat search (CV-19, supabase/migrations/20261017117000_chat_v2_search.sql):
 -- "simple + unaccent, readers only".
 --
 -- Cast: O owns workspace W on the Duo plan. A, B and C are members; X is in no

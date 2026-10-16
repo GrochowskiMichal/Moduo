@@ -1,7 +1,7 @@
 # CV-10-fix — "Mentioned in" rows are Chat's
 
 > Branch `t/maciej/cv-10-fix-mention-rows` (from `t/maciej/chat-v2-build` at `ae50c2d6`) · status: **done**: verify green, validator rounds 1–2 (no BLOCKER/MAJOR), `/code-review high` and a security review run
-> Migration: `supabase/migrations/20261016145000_chat_v2_mention_rows.sql`, **applied to the local stack** (as `supabase_admin`, one transaction; applied twice to confirm it reruns cleanly). `bun run db:test chat`, `tasks_ops`, `ops_parity` and `mcp_tools` pass.
+> Migration: `supabase/migrations/20261016145000_chat_v2_mention_rows.sql` (released as `20261017112000`), **applied to the local stack** (as `supabase_admin`, one transaction; applied twice to confirm it reruns cleanly). `bun run db:test chat`, `tasks_ops`, `ops_parity` and `mcp_tools` pass.
 
 ## Delivered
 
