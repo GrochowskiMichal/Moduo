@@ -80,6 +80,21 @@ function connectorModuleSources(): ConnectorFile[] {
 
 const RPC_CALL = /(?:callOp\(ctx,\s*|\.rpc\(\s*)"(\w+)"/g;
 
+/** The source of the top-level function a position sits in, up to that position. */
+function enclosingFunction(source: string, at: number): string {
+  const start = Math.max(
+    source.lastIndexOf("\nfunction ", at),
+    source.lastIndexOf("\nasync function ", at),
+  );
+  return start < 0 ? source.slice(0, at) : source.slice(start, at);
+}
+
+/** Does this helper check the key's scope for `lane` itself (before the call)? */
+function helperChecksLane(helper: string, lane: string): boolean {
+  const [module, level = "edit"] = lane.split("@");
+  return helper.includes(`keyScopeAllows(ctx.key.scopes, "${module}", "${level}")`);
+}
+
 /**
  * The newest body of every public SQL function: migrations replayed in
  * filename order, `--` comments stripped first (so a commented-out definition
@@ -246,18 +261,39 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
         expect(needs, `${file}: ${tool.name}`).toEqual([...mcpToolNeeds(tool.name)].sort());
       }
       // Helpers above the tools (chat's plan check) must not hit a key lane,
-      // unless the helper checks that lane itself and skips the call without
-      // it: a best-effort extra, like the op-side BEST_EFFORT above (tasks'
-      // linkDescribed links a description's references only with Links at
-      // Edit, call #15). Without that lane the key just gets less.
+      // unless that same helper checks the lane itself before the call and
+      // skips it without: a best-effort extra, like the op-side BEST_EFFORT
+      // above (tasks' linkDescribed links a description's references only
+      // with Links at Edit, call #15). Without that lane the key just gets less.
       for (const m of preamble.matchAll(RPC_CALL)) {
-        const ungated = [...keyLanes(m[1], bodies)].filter((lane) => {
-          const [module, level = "edit"] = lane.split("@");
-          return !preamble.includes(`keyScopeAllows(ctx.key.scopes, "${module}", "${level}")`);
-        });
+        const helper = enclosingFunction(preamble, m.index ?? 0);
+        const ungated = [...keyLanes(m[1], bodies)].filter(
+          (lane) => !helperChecksLane(helper, lane),
+        );
         expect(ungated, `${file}: helper call to ${m[1]}`).toEqual([]);
       }
     }
+  });
+
+  it("a helper's own scope check covers that helper's calls only", () => {
+    const preamble = [
+      "",
+      "async function gated(ctx) {",
+      '  if (!keyScopeAllows(ctx.key.scopes, "links", "edit")) return;',
+      '  await ctx.db.rpc("links_op_create", {});',
+      "}",
+      "async function ungated(ctx) {",
+      '  await ctx.db.rpc("links_op_create", {});',
+      "}",
+      "function viewOnly(ctx) {",
+      '  if (!keyScopeAllows(ctx.key.scopes, "links", "view")) return;',
+      '  return ctx.db.rpc("links_op_create", {});',
+      "}",
+    ].join("\n");
+    const covered = [...preamble.matchAll(RPC_CALL)].map((m) =>
+      helperChecksLane(enclosingFunction(preamble, m.index ?? 0), "links"),
+    );
+    expect(covered).toEqual([true, false, false]);
   });
 
   it("never stamps auth.uid() where a key calls: rows a key makes belong to its creator", () => {
