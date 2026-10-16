@@ -2,6 +2,36 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-16 · The Project view's ⋯, "+" line, rows and actions (dogfood MOD-150, MOD-151, MOD-153, MOD-154)
+
+No migration. No approved frame draws the Project view as built. The nearest is [structure](../../.design/tasks-v3/prototypes/structure.html) frame 2 (the right panel's "Overview": a ⋯ in its header, one-line `.mini` rows, centred); round-2b draws the `.pmore` this batch removes. Each item is built as Maciej wrote it; the layout calls below are marked.
+
+- **MOD-150 · No ⋯ beside the project's title; Statuses… is in the Project view's own ⋯** → `plan-view-header.tsx` (`ProjectMenu` removed), `project-panel.tsx` (`TitleActions`), `tasks-plan-view.tsx`
+  - Who: Maciej, 2026-10-16, MOD-150 (approved: "remove the ⋯. The title keeps opening Project details in one click (MOD-131), and 'Statuses…' moves into the ⋯ of the right panel's Project view").
+  - Decision: the centre's project title is its only control and opens Project in one click. The Project view puts a ⋯ ("Project actions") at the right of its title row, as the task's ⋯ sits beside "Details ▾"; it holds Statuses…, for someone who may edit the project (not an archived one). A Board column's header keeps "Edit statuses…" and the sidebar row's ⋯ keeps Statuses….
+  - Agent's choice, revisitable: the ⋯ holds Statuses… alone. Time report, Copy as text, Duplicate… and Archive… stay in the list at the foot (MOD-154) and aren't repeated there.
+  - Why: the ⋯ beside the title repeated the title's own way in ("Project details") and sat between the name and its count.
+  - Rejected: keeping a ⋯ in the centre with only Statuses… in it; moving the foot's actions into the panel's ⋯.
+  - Supersedes: MOD-95's ⋯ beside the title (2026-10-14) and round-2b's `.pmore`.
+- **MOD-151 · One "+" line for optional fields, the task details' line and its menu** → `add-property-line.tsx` (moved out of `task-detail-properties.tsx`), `project-panel.tsx`
+  - Who: Maciej, 2026-10-16, MOD-151 ("I prefer the one in task details, which opens a list. We should use the same solutions across different panels, especially in one module").
+  - Decision: the Project view's Start, Lead and Client come from the details' `AddPropertyLine`: one quiet control, "+ Start · Lead · Client" ("+n" when they don't fit), that opens a menu with each field's icon (the calendar, person and contact icons their values show). A pick shows its row, empty, with its editor open, and a picked row stays while the project is open when another is picked (it used to swap out). Target still always shows to editors.
+  - Agent's choice, revisitable: the line stays in `features/tasks/ui` (both users are Tasks); it moves to `components/ui` with a story when another module needs it.
+  - Why: two panels in one module answered the same question two ways.
+  - Rejected: keeping the project's separate buttons, and revealing one field at a time.
+- **MOD-153 · Next up, Waiting and Recently put their icon, picture and time on the title's first line** → `project-panel.tsx` (`FIRST_LINE_ROW`, `FirstLine`), `--row-first-line-pad` (tokens.css, [design-system](design-system.md))
+  - Who: Maciej, 2026-10-16, MOD-153 (the status icon and the picture "are centred on the row, so their position moves with the number of title lines. Hard to scan where an item starts and ends. In Recently, the 'Today' label should sit at the top").
+  - Decision: these rows lay out from the top. The status icon, the due day, the picture and Recently's day each sit in a box one line of the row's 14 px text tall, so each centres on the title's first line wherever the title ends (`ItemCardTitle`'s way; round-2b's `.card .ct` and `.dtitle`). The row's padding, `--row-first-line-pad`, centres that first line in the rung, so a one-line row stays 26 / 24 / 22 px. Measured live at 1440 × 900 and 1024 × 700: 0 px between each mark's centre and the first line's, at all three densities.
+  - Agent's choice, revisitable: Waiting's rows follow, since they are the same task row. Files (the name over its task, MOD-127), Sections and People keep their centred marks; their text rarely wraps.
+  - Why: where an item started moved with its length, so a list of long titles was hard to scan.
+  - Rejected: `py-0.5` with the box centred on its first line (a one-line dense row would grow from 22 to 25 px); cutting titles to one line as structure frame 2 does (values wrap, calls 41 and 89).
+- **MOD-154 · The actions at the foot stack** → `project-panel.tsx`
+  - Who: Maciej, 2026-10-16, MOD-154 ("We'll need to scroll down there anyway, so maybe stacking them all vertically instead of using a grid would be better").
+  - Decision: Time report, Copy as text, Duplicate… and Archive…, one per row at full width, icon and label from the left, the icons on the rows' status column (4 px in). Same order, same behaviour.
+  - Agent's layout, revisitable: all four are quiet (ghost) rows. Time report was the one raised button, which reads as a primary action in a list.
+  - Why: four buttons wrapping into a grid looked slapped on.
+  - Rejected: a ⋯ menu instead of the list, and keeping Time report raised.
+
 ## 2026-10-16 · The details' feed, tags and app avatars (dogfood MOD-157, MOD-158, MOD-149)
 
 No migration. Frames: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) `.shead .fseg` (the feed header's switch, frames 5 and 6) for MOD-157. No frame draws the "+" after a tag chip ([structure](../../.design/tasks-v3/prototypes/structure.html) draws only the empty "Add tag", round-2b "None") or an app's avatar, so MOD-158 and the mark's look are the agent's layout, revisitable.
@@ -245,6 +275,7 @@ The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([rou
   - Decision: the title opens Project in the right panel (over an item stacked there, and during a multi-selection, until the cursor or the place moves); the ⋯ holds Project details and Statuses… (round-2b names nothing else). The title group starts at 10rem with its ⋯ and count; under 36rem Filter and Display are icons; narrower still, the controls wrap under the title.
   - Why: the project's details had no way in from the centre; at a 1024 px window with both side panels open the title collapsed to nothing.
   - Rejected: a new route or a separate "About" button, and squeezing the title before the controls give way.
+  - Superseded in part (2026-10-16, MOD-150): the ⋯ beside the title is gone; Statuses… is in the Project view's ⋯.
 
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 

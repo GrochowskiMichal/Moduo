@@ -744,6 +744,18 @@
   --panel-title-top: calc(var(--panel-pad) + (var(--row-h) - 1.75rem) / 2);
 }
 
+/* A small-rung row whose title wraps (MOD-153): this padding centres the
+   title's first line in a --ctrl-h-sm row, so a one-line row is exactly the
+   rung tall, and the row's icon, picture and time sit on that first line in
+   `h-lh` boxes (ItemCardTitle's way), wherever the title ends. 1lh stays a
+   unit here and resolves on the row, against its own line height; the var()
+   is computed where it's declared, so it's re-declared on every density
+   scope. */
+:root,
+[data-density] {
+  --row-first-line-pad: calc((var(--ctrl-h-sm) - 1lh) / 2);
+}
+
 /* ============================================================================
  * 11. Shadows / elevation
  *     Dark mode shadows are subtle; light mode shadows are stronger.
