@@ -1,5 +1,5 @@
 -- MOD-155 · A project's client is a contact or a company, never both
--- (supabase/migrations/20261016135941_project_client_company.sql; decision in
+-- (supabase/migrations/20261016172230_project_client_company.sql; decision in
 -- docs/decisions/tasks.md "MOD-155").
 --
 -- Cast: O owns workspace W. E is a member, V a viewer, X belongs to another
