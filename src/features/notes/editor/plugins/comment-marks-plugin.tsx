@@ -186,6 +186,8 @@ export function CommentMarksPlugin({
       offAdd();
       offClick();
       anchorStore.setDocOrder(noteId, null);
+      // The next mount reads the threads again (a peer may have started one).
+      anchorStore.setOpenThreads(noteId, null);
     };
   }, [editor, noteId, editable, bridge, runtime, workspaceId]);
 

@@ -9,6 +9,7 @@
  * `moveBlockInDoc` on the Yjs doc (see block-move.ts for why not Lexical).
  */
 
+import { $isCodeNode } from "@lexical/code";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $createRangeSelection,
@@ -389,7 +390,8 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
 
 /** Select every text run of a block, for anchoring a comment to it. */
 function $selectBlockText(node: LexicalNode): boolean {
-  if (!$isElementNode(node)) return false;
+  // The code highlighter rebuilds a code block's runs and would drop the mark.
+  if (!$isElementNode(node) || $isCodeNode(node)) return false;
   const texts = node.getAllTextNodes();
   const first = texts[0];
   const last = texts[texts.length - 1];
