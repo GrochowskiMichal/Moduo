@@ -147,9 +147,11 @@ export const Identity: Story = {
 };
 
 /**
- * A connected app (MOD-149): what an API key or an agent wrote shows the gray
- * circle with a small plug, at every rung and density; a former member keeps
- * "?". No colour and no AI badge: the name beside it says which app.
+ * Apps, not people (MOD-149): what an API key wrote shows the gray circle with
+ * a small plug; Moduo's own work (a repeat's catch-up, a reminder) the same
+ * circle with the Moduo mark (the follow-up), at every rung and density; a
+ * former member keeps "?". No colour and no AI badge: the name beside it says
+ * who.
  */
 export const ConnectedApp: Story = {
   render: () => (
@@ -163,19 +165,26 @@ export const ConnectedApp: Story = {
           <AppAvatar />
           Maciej · via Claude Code
         </span>
+        <span className="flex items-center gap-1.5">
+          <AppAvatar kind="moduo" />
+          Moduo caught this up to Tue (recurrence)
+        </span>
         <span className="flex items-center gap-1.5 text-muted-foreground">
           <PersonAvatar name="?" />
           Former member
         </span>
       </div>
-      <div className="flex items-end gap-3">
-        {(["icon", "sm", "default", "lg"] as const).map((size) => (
-          <AppAvatar key={size} size={size} />
-        ))}
-      </div>
+      {(["app", "moduo"] as const).map((kind) => (
+        <div key={kind} className="flex items-end gap-3">
+          {(["icon", "sm", "default", "lg"] as const).map((size) => (
+            <AppAvatar key={size} kind={kind} size={size} />
+          ))}
+        </div>
+      ))}
       <AtThreeDensities>
         <div className="flex items-center gap-2">
           <AppAvatar />
+          <AppAvatar kind="moduo" />
           <PersonAvatar name="?" />
           <PersonAvatar name="Maciej" id="u-maciej" />
         </div>

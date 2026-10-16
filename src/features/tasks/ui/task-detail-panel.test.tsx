@@ -1175,7 +1175,7 @@ describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", 
     return el?.querySelector("[data-slot=avatar]") as HTMLElement;
   };
 
-  it("in the trail: a key's change and an agent's show the plug; someone gone shows ?", async () => {
+  it("in the trail: a key's change shows the plug, Moduo's the Moduo mark, someone gone ?", async () => {
     pickAll();
     const activity = [
       // The key's id, never a member's: no person to find for it.
@@ -1198,12 +1198,18 @@ describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", 
     const { runtime } = fakeRuntime();
     renderPanel(task(), api(task(), { loadActivity: async () => activity }), runtime);
     await waitFor(() => expect(within(feed()).getByText("Ola")).toBeTruthy());
-    for (const who of ["Mike · via Claude Code", "Moduo"]) {
-      const mark = avatarBy(who);
-      expect(mark.getAttribute("data-kind")).toBe("app");
-      expect(mark.querySelector("svg.lucide-plug")).toBeTruthy();
-      expect(mark.textContent).toBe("");
-    }
+    const key = avatarBy("Mike · via Claude Code");
+    expect(key.getAttribute("data-kind")).toBe("app");
+    expect(key.querySelector("svg.lucide-plug")).toBeTruthy();
+    expect(key.textContent).toBe("");
+    // Moduo's own line (a catch-up, a reminder: actor "agent", no id) shows
+    // the Moduo mark on the same gray circle (MOD-149 follow-up).
+    const moduo = avatarBy("Moduo");
+    expect(moduo.getAttribute("data-kind")).toBe("moduo");
+    expect(moduo.getAttribute("data-label")).toBe("gray");
+    expect(moduo.querySelector("svg.lucide-plug")).toBeNull();
+    expect(moduo.querySelector('svg[viewBox="0 0 1000 1000"]')).toBeTruthy();
+    expect(moduo.textContent).toBe("");
     const gone = avatarBy("Ola");
     expect(gone.hasAttribute("data-kind")).toBe(false);
     expect(gone.getAttribute("data-label")).toBe("gray");

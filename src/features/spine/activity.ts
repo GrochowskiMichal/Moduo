@@ -35,13 +35,20 @@ export function spineActorName(
 }
 
 /**
- * A change an app made, not a person (MOD-149): written over an API key, or
- * by an agent (Moduo's own catch-up and reminders too). Its `actorId` is the
- * key's id or nothing, never a member, so it shows the app mark
- * (`AppAvatar`), not the former member's "?".
+ * Whether an app made a change rather than a person, and which (MOD-149): its
+ * `actorId` is a key's id or nothing, never a member's, so it shows
+ * `AppAvatar`, never the former member's "?". "app" is a connected app over
+ * an API key, the plug. "moduo" is Moduo's own work, the Moduo mark (the
+ * MOD-149 follow-up): every writer of `actor_type` "agent" is the server's,
+ * labelled "Moduo" with no id (a repeat's `tasks.catch_up`, and
+ * `tasks__notice`'s reminder, waiting, team check-back and hand-back lines);
+ * an outside agent writes as its key. A new "agent" writer that isn't Moduo
+ * needs its own check here. `null` is a person's.
  */
-export function isAppActor(entry: Pick<SpineActorFields, "actorType">): boolean {
-  return entry.actorType === "api_key" || entry.actorType === "agent";
+export function appActorKind(entry: Pick<SpineActorFields, "actorType">): "app" | "moduo" | null {
+  if (entry.actorType === "api_key") return "app";
+  if (entry.actorType === "agent") return "moduo";
+  return null;
 }
 
 function str(v: unknown): string | null {

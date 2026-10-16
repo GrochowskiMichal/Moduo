@@ -5,7 +5,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { dayShort, time24 } from "../calendar/booking/sentence";
-import { isAppActor, spineActivityLine, spineActorName } from "./activity";
+import { appActorKind, spineActivityLine, spineActorName } from "./activity";
 
 function entry(op: string, payload: Record<string, unknown> = {}) {
   return { op, payload };
@@ -74,13 +74,20 @@ describe("spineActorName", () => {
   });
 });
 
-describe("isAppActor (MOD-149)", () => {
-  it("an API key's or an agent's change is an app's; a person's, even unknown, isn't", () => {
-    expect(isAppActor({ actorType: "api_key" })).toBe(true);
-    expect(isAppActor({ actorType: "agent" })).toBe(true);
-    expect(isAppActor({ actorType: "user" })).toBe(false);
+describe("appActorKind (MOD-149)", () => {
+  it("an API key's change is a connected app's, the plug", () => {
+    expect(appActorKind({ actorType: "api_key" })).toBe("app");
+  });
+
+  it("an agent's change is Moduo's own (catch-ups, reminders), the Moduo mark", () => {
+    expect(appActorKind({ actorType: "agent" })).toBe("moduo");
+  });
+
+  it("a person's, even unknown, is no app's", () => {
+    expect(appActorKind({ actorType: "user" })).toBeNull();
     // A row with no type predates attribution: a person's, like `normalizeContentAuthorKind`.
-    expect(isAppActor({ actorType: null })).toBe(false);
+    expect(appActorKind({ actorType: null })).toBeNull();
+    expect(appActorKind({})).toBeNull();
   });
 });
 
