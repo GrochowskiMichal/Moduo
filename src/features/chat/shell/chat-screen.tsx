@@ -34,6 +34,13 @@ import {
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
+import {
+  AddPeopleDialog,
+  ConfirmDialog,
+  EditChannelDialog,
+  makePrivateCopy,
+  RecentlyDeletedDialog,
+} from "../dialogs/channel-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { captureDestination, useLinkFilesHere } from "../linking";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
@@ -61,11 +68,18 @@ import { authorName } from "../stream/rows";
 import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
-import { composerLine } from "./composer-state";
+import { composerLine, newestPost } from "./composer-state";
 import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
 import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
-import { useChannelManagers, useChatRights } from "./use-chat-rights";
+import {
+  managesChannel,
+  mergePeople,
+  personPosts,
+  rightsFrom,
+  useChannelManagers,
+  useChatCapsRows,
+} from "./use-chat-rights";
 
 /** "Deleted · Undo" stays this long; then the server deletes (§6 #10). */
 const DELETE_UNDO_MS = 8000;
@@ -168,16 +182,20 @@ export function ChatScreen({
     [runtime, userId],
   );
   const typing = useChatTypingSnapshot(typingStore);
-  const rights = useChatRights(workspaceId, role, readOnly);
+  const capsRows = useChatCapsRows(workspaceId);
+  const rights = rightsFrom(capsRows, role, readOnly);
 
   // ── people ────────────────────────────────────────────────────────────────
-  const peopleById = useMemo(() => {
-    const out: Record<string, ChatPerson> = {};
-    for (const p of members) out[p.userId] = p;
-    for (const p of Object.values(snap.people)) out[p.userId] = { ...out[p.userId], ...p };
-    return out;
-  }, [members, snap.people]);
+  const peopleById = useMemo(
+    () => mergePeople(members, Object.values(snap.people)),
+    [members, snap.people],
+  );
   const personOf = useCallback((id: string) => peopleById[id], [peopleById]);
+  // Only someone whose role posts can be made a manager (the server's rule).
+  const canBeManager = useCallback(
+    (id: string) => personPosts(capsRows, peopleById[id]),
+    [capsRows, peopleById],
+  );
   const people = useMemo(
     () =>
       Object.values(peopleById)
@@ -205,10 +223,21 @@ export function ChatScreen({
   const channel = conversationId ? snap.channels[conversationId] : undefined;
   const member = conversationId ? snap.mine[conversationId] : undefined;
   const streamWin = conversationId ? snap.windows[conversationId] : undefined;
-  const managers = useChannelManagers(channel?.id ?? null, channel?.kind ?? null);
-  const canManage = !!channel && (rights.manageAny || (managers ?? []).includes(selfId));
+  const managers = useChannelManagers(
+    channel?.id ?? null,
+    channel?.kind ?? null,
+    channel?.rosterAt ?? null,
+  );
+  // A manager in effect (in it, a role that posts) or an admin; someone demoted loses it at once.
+  const { canManage: managesIt, isManager } = managesChannel({
+    selfId,
+    managers,
+    inChannel: !!member,
+    rights,
+  });
+  const canManage = !!channel && managesIt;
   // An announcement channel's line waits for its managers (a manager never sees "Only managers post").
-  const managersPending = managers === null && !!channel?.managersOnly && !rights.manageAny;
+  const managersPending = managers === null && !!channel?.managersOnly;
 
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
@@ -326,6 +355,7 @@ export function ChatScreen({
       channel?.archivedAt,
       channel?.isPrivate,
       channel?.managersOnly,
+      channel?.rosterAt,
       member ? member.joinedAt : "-",
       detailsStamp(streamWin?.rows),
     ].join("|"),
@@ -333,6 +363,13 @@ export function ChatScreen({
 
   // ── New conversation (⌘N, the bottom bar's +, the left panel's row) ───────
   const [newOpen, setNewOpen] = useState(false);
+  // ── A manager's dialogs (CV-15) ─────────────────────────────────────────────
+  const [lifecycleDialog, setLifecycleDialog] = useState<
+    "add" | "edit" | "private" | "delete" | "deleted" | null
+  >(null);
+  const closeLifecycle = (open: boolean) => {
+    if (!open) setLifecycleDialog(null);
+  };
   const canStart = rights.canPost && !snap.paused;
   useEffect(
     () =>
@@ -591,6 +628,24 @@ export function ChatScreen({
     [store, selfId, onOpen],
   );
 
+  // Reply privately (CH50): a direct message to the author with the post in
+  // the draft, as its link (CV-10 draws it as a card), ready to add your words.
+  const replyPrivately = useCallback(
+    (m: ChatMessage) => {
+      if (!store || !m.authorId || m.authorId === selfId) return;
+      void store
+        .openDm([m.authorId])
+        .then((dm) => {
+          const quote = `moduo://chat_message/${m.id} `;
+          const draft = store.draft(dm.id);
+          if (!draft.includes(quote.trim())) store.setDraft(dm.id, null, `${quote}${draft}`);
+          onOpen(dm.id);
+        })
+        .catch((err: unknown) => toast(errorText(err, "Couldn't open the conversation.")));
+    },
+    [store, selfId, onOpen],
+  );
+
   const markRead = useCallback(() => {
     if (!store || !conversationId) return;
     const rows = store.getSnapshot().windows[conversationId]?.rows ?? [];
@@ -654,6 +709,9 @@ export function ChatScreen({
       onOpen={(id) => onOpen(id)}
       onNewConversation={canStart ? () => setNewOpen(true) : undefined}
       onBrowse={onBrowse}
+      onRecentlyDeleted={
+        rights.canPost && !snap.paused ? () => setLifecycleDialog("deleted") : undefined
+      }
       onOpenCatchup={() => {
         // Catch up's own view is CV-11's: until then, the first conversation waiting for you.
         const all = [...model.pinned, ...model.channels, ...model.dms];
@@ -687,6 +745,7 @@ export function ChatScreen({
         ownerName,
         canPost: rights.canPost,
         canManage,
+        isManager,
       })
     : null;
   const canWriteHere = !!channel && composerRefusal === null && !managersPending;
@@ -863,6 +922,11 @@ export function ChatScreen({
               });
             }}
             onTask={makeTaskFrom}
+            onReplyPrivately={
+              channel.kind === "channel" && channel.managersOnly && !isManager && rights.canPost
+                ? replyPrivately
+                : undefined
+            }
             onCopyLink={copyLink}
             onMarkUnread={(m) => {
               void store
@@ -926,9 +990,13 @@ export function ChatScreen({
                 )
               }
               onChoosePlan={() => dispatchOpenSettings({ section: "billing" })}
-              onReplyPrivately={
-                managers?.some((id) => id !== selfId) ? () => openDmWith(managers) : undefined
-              }
+              onReplyPrivately={(() => {
+                // The newest post in view: Reply privately goes to its author with it in the draft (CH50).
+                const post = newestPost(streamWin?.rows, selfId);
+                if (post) return () => replyPrivately(post);
+                const manager = managers?.find((id) => id !== selfId);
+                return manager ? () => openDmWith([manager]) : undefined;
+              })()}
               onJoin={() =>
                 guarded(
                   () => store?.join(channel.id) ?? Promise.resolve(),
@@ -1122,12 +1190,14 @@ export function ChatScreen({
       ),
     };
   });
+  const channelTitle = channel ? conversationTitle(channel, selfId, personOf) : "";
   const right = channel ? (
     <RightPanel
       module="chat"
       views={{
         details: () => (
           <DetailsView
+            canBeManager={canBeManager}
             channel={channel}
             member={member ?? null}
             selfId={selfId}
@@ -1142,6 +1212,34 @@ export function ChatScreen({
               !snap.paused &&
               (!channel.isDefault || !!channel.archivedAt)
             }
+            managers={managers}
+            canManage={canManage && !snap.paused}
+            canAddPeople={
+              !snap.paused &&
+              (channel.isPrivate ? canManage : rights.canPost && (canManage || !!member))
+            }
+            onAddPeople={() => setLifecycleDialog("add")}
+            onRemovePerson={(userId) =>
+              guarded(async () => {
+                await store?.removeMember(channel.id, userId);
+                toast(`Removed ${personOf(userId)?.name ?? "them"} from ${channelTitle}`);
+              }, "Couldn't remove them.")
+            }
+            onSetManager={(userId, on) =>
+              guarded(
+                () => store?.setManager(channel.id, userId, on) ?? Promise.resolve(),
+                "Couldn't change the managers.",
+              )
+            }
+            onSetAnnouncement={(on) =>
+              guarded(
+                () => store?.setAnnouncement(channel.id, on) ?? Promise.resolve(),
+                "Couldn't change who posts.",
+              )
+            }
+            onMakePrivate={() => setLifecycleDialog("private")}
+            onEditChannel={() => setLifecycleDialog("edit")}
+            onDelete={channel.isDefault ? undefined : () => setLifecycleDialog("delete")}
             onNotify={(notifyLevel) =>
               guarded(
                 () => store?.setPrefs(channel.id, { notifyLevel }) ?? Promise.resolve(),
@@ -1280,6 +1378,85 @@ export function ChatScreen({
         onBrowse={() => onBrowse?.()}
         runtime={runtime}
         workspaceId={workspaceId}
+      />
+      {channel && channel.kind === "channel" ? (
+        <>
+          <AddPeopleDialog
+            open={lifecycleDialog === "add"}
+            onOpenChange={closeLifecycle}
+            channelName={channelTitle}
+            people={people.filter(
+              (p) => !(details.members ?? []).some((m) => m.userId === p.userId),
+            )}
+            onAdd={async (ids) => {
+              const added = (await store?.addMembers(channel.id, ids)) ?? 0;
+              // The server skips anyone already in it or no longer in the workspace,
+              // and (for someone who isn't a manager) anyone a manager removed.
+              if (added < ids.length) {
+                const why = canManage
+                  ? "the rest are already in it or have left the workspace."
+                  : "only a manager can add back someone who was removed.";
+                toast(
+                  added === 0
+                    ? `Nobody was added: ${why}`
+                    : `Added ${added} of ${ids.length}: ${why}`,
+                );
+              }
+            }}
+          />
+          <EditChannelDialog
+            open={lifecycleDialog === "edit"}
+            onOpenChange={closeLifecycle}
+            channel={channel}
+            canRename={canManage}
+            onSave={async (patch) => {
+              if (patch.name === undefined && patch.topic === undefined) return;
+              await store?.updateChannel(channel.id, patch);
+            }}
+          />
+          <ConfirmDialog
+            slot="make-private"
+            open={lifecycleDialog === "private"}
+            onOpenChange={closeLifecycle}
+            {...(() => {
+              const copy = makePrivateCopy(channelTitle, details.members?.length ?? 0);
+              return { title: copy.title, body: copy.body };
+            })()}
+            action="Make private"
+            onConfirm={() =>
+              guarded(
+                () => store?.makePrivate(channel.id) ?? Promise.resolve(),
+                "Couldn't make it private.",
+              )
+            }
+          />
+          <ConfirmDialog
+            slot="delete-channel"
+            open={lifecycleDialog === "delete"}
+            onOpenChange={closeLifecycle}
+            title={`Delete ${channelTitle}?`}
+            body="It goes to Recently deleted for 30 days, where its managers and admins can restore it. After that it's gone for good."
+            action="Delete"
+            destructive
+            onConfirm={() =>
+              guarded(async () => {
+                await store?.deleteChannel(channel.id);
+                onOpen(null, { replace: true });
+                toast(`Deleted ${channelTitle}`);
+              }, "Couldn't delete the channel.")
+            }
+          />
+        </>
+      ) : null}
+      <RecentlyDeletedDialog
+        open={lifecycleDialog === "deleted"}
+        onOpenChange={closeLifecycle}
+        load={() => store?.recentlyDeleted() ?? Promise.resolve([])}
+        onRestore={async (id) => {
+          if (!store) return;
+          const restored = await store.restoreChannel(id);
+          toast(`Restored ${restored.name ?? "the channel"}`);
+        }}
       />
     </>
   );

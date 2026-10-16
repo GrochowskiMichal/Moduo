@@ -303,6 +303,19 @@ export function spineActivityLine(
       const what = t === "bucket" ? "a project" : t === "team" ? "a team" : "a client";
       return `linked this channel to ${what}`;
     }
+    // Lifecycle (CV-15): ids only.
+    case "chat.manager_add":
+      return "made someone a manager";
+    case "chat.manager_remove":
+      return "removed a manager";
+    case "chat.announcement_switch":
+      return p.on === false ? "let everyone post again" : "made this an announcement channel";
+    case "chat.channel_private":
+      return "made this channel private";
+    case "chat.channel_delete":
+      return "deleted this channel";
+    case "chat.channel_restore":
+      return "restored this channel";
     // A conversation's message changes (CV-8b, Details' history): ids only.
     case "chat.pin":
       return p.pinned === false ? "unpinned a message" : "pinned a message";

@@ -71,7 +71,7 @@ test("Details: history, decisions, chains, people", async ({ page }) => {
   // With Reply chains beside it (CV-12) the title is the view switcher, "Details ▾".
   await expect(panel(page).getByRole("button", { name: "Panel view: Details" })).toBeVisible();
   await expect(details(page).getByText("Homepage and brand guidelines")).toBeVisible();
-  const people = details(page).locator('[data-slot="details-people"] button');
+  const people = details(page).locator('[data-slot="details-people"] button[data-person]');
   await expect(people).toHaveCount(2, { timeout: 15_000 });
   await expect(people.first()).toContainText(OWNER.name);
   await expect(people.first()).toContainText("you");
@@ -188,7 +188,7 @@ test("a direct message with only yourself offers a note; a viewer can't start on
     await expect(details(page)).toBeVisible({ timeout: 20_000 });
     await expect(nav(page).getByRole("button", { name: "New conversation" })).toHaveCount(0);
     await details(page)
-      .locator('[data-slot="details-people"] button')
+      .locator('[data-slot="details-people"] button[data-person]')
       .filter({ hasText: OWNER.name })
       .click();
     await expect(panel(page).locator('[data-slot="person-card"]')).toContainText(OWNER.name);

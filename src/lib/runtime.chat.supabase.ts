@@ -24,6 +24,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import {
   mapChannel,
+  mapDeletedChannel,
   mapHistory,
   mapMember,
   mapMessage,
@@ -591,6 +592,51 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         p_user_id: userId,
       });
       fail(error);
+    },
+
+    async setManager({ channelId, userId, on }) {
+      const { error } = await db().rpc("chat_op_set_manager", {
+        p_channel_id: channelId,
+        p_user_id: userId,
+        p_on: on,
+      });
+      fail(error);
+    },
+
+    async setAnnouncement({ channelId, on }) {
+      const { data, error } = await db().rpc("chat_op_set_announcement", {
+        p_channel_id: channelId,
+        p_on: on,
+      });
+      fail(error);
+      return single<ChatChannel>(data, mapChannel, "announcement switch");
+    },
+
+    async makePrivate(channelId) {
+      const { data, error } = await db().rpc("chat_op_make_private", { p_channel_id: channelId });
+      fail(error);
+      return single<ChatChannel>(data, mapChannel, "make private");
+    },
+
+    async deleteChannel(channelId) {
+      const { error } = await db().rpc("chat_op_delete_channel", { p_channel_id: channelId });
+      fail(error);
+    },
+
+    async restoreChannel(channelId) {
+      const { data, error } = await db().rpc("chat_op_restore_channel", {
+        p_channel_id: channelId,
+      });
+      fail(error);
+      return single<ChatChannel>(data, mapChannel, "restore channel");
+    },
+
+    async recentlyDeleted(workspaceId) {
+      const { data, error } = await db().rpc("chat_recently_deleted", {
+        p_workspace_id: workspaceId,
+      });
+      fail(error);
+      return mapRows(data, mapDeletedChannel);
     },
 
     async setPrefs({ channelId, notifyLevel, starred }) {
