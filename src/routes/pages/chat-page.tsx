@@ -57,6 +57,16 @@ export function ChatPage() {
     void navigate({ to: "/chat", search: next as Record<string, string> });
   }, [navigate, search.c]);
 
+  // Catch up (CV-11) keeps the open conversation too: Esc goes back to it.
+  const onOpenCatchup = useCallback(() => {
+    const next: ChatSearch = { ...(search.c ? { c: search.c } : {}), view: "catchup" };
+    void navigate({ to: "/chat", search: next as Record<string, string> });
+  }, [navigate, search.c]);
+  const onLeaveCatchup = useCallback(() => {
+    const next: ChatSearch = search.c ? { c: search.c } : {};
+    void navigate({ to: "/chat", search: next as Record<string, string> });
+  }, [navigate, search.c]);
+
   return (
     <ChatScreen
       key={selectedWorkspaceId ?? "none"}
@@ -73,6 +83,9 @@ export function ChatPage() {
       messageId={search.m ?? search.t ?? null}
       chainId={search.t ?? null}
       browsing={search.view === "browse"}
+      catchup={search.view === "catchup"}
+      onOpenCatchup={onOpenCatchup}
+      onLeaveCatchup={onLeaveCatchup}
       onOpen={onOpen}
       onBrowse={onBrowse}
     />

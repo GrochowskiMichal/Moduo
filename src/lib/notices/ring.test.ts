@@ -244,10 +244,25 @@ describe("the browser's one ask (AC7.7) and chat settings", () => {
   });
 
   it("reads the server's chat settings, defaulting on", () => {
-    expect(chatServerPrefsFromRow(null)).toEqual({ noticeShowText: true, emailWhenAway: true });
-    expect(chatServerPrefsFromRow({ notice_show_text: false, email_when_away: false })).toEqual({
+    // CV-17 adds "Show me as online" (on) and "Show what I'm focusing on" (off).
+    expect(chatServerPrefsFromRow(null)).toEqual({
+      noticeShowText: true,
+      emailWhenAway: true,
+      showOnline: true,
+      showFocusTask: false,
+    });
+    expect(
+      chatServerPrefsFromRow({
+        notice_show_text: false,
+        email_when_away: false,
+        show_online: false,
+        show_focus_task: true,
+      }),
+    ).toEqual({
       noticeShowText: false,
       emailWhenAway: false,
+      showOnline: false,
+      showFocusTask: true,
     });
   });
 });

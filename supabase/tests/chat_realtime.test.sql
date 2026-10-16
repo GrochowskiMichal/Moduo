@@ -102,7 +102,7 @@ BEGIN
   v := test.realtime_writes('B', v_p, 'presence');
   PERFORM test.ok(v LIKE '42501%', 'typing: nobody tracks presence on a typing topic', v);
 
-  -- Presence: the workspace topic, for members of a workspace with chat; display only.
+  -- Presence: the workspace topic, for the workspace's members; display only.
   PERFORM test.ok(test.realtime_writes('C', v_ws, 'presence') = 'ok 1' AND test.realtime_reads('C', v_ws) = 1,
     'presence: C, a member, tracks and reads presence on the workspace topic');
   PERFORM test.ok(test.realtime_writes('X', v_ws, 'presence') LIKE '42501%' AND test.realtime_reads('X', v_ws) = 0,
@@ -110,8 +110,11 @@ BEGIN
   PERFORM test.ok(test.realtime_writes('C', v_ws, 'broadcast') LIKE '42501%',
     'presence: nobody broadcasts on the workspace topic');
   UPDATE public.profiles SET plan_tier = 'free' WHERE id = test.id('O');
-  PERFORM test.ok(test.realtime_reads('C', v_ws) = 0 AND test.realtime_writes('C', v_ws, 'presence') LIKE '42501%',
-    'presence: a workspace without chat (plan off) has no presence');
+  -- CV-17: presence keeps working while chat is paused (spec §1); membership is enough.
+  PERFORM test.ok(test.realtime_reads('C', v_ws) = 1 AND test.realtime_writes('C', v_ws, 'presence') = 'ok 1',
+    'presence: a paused workspace (plan off) keeps presence for its members');
+  PERFORM test.ok(test.realtime_writes('X', v_ws, 'presence') LIKE '42501%' AND test.realtime_reads('X', v_ws) = 0,
+    'presence: a paused workspace still refuses X, who isn''t a member');
   PERFORM test.ok(test.realtime_reads('A', v_p) = 1,
     'typing: reading a conversation''s typing doesn''t need the plan (reading never does)');
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');

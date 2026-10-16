@@ -4,7 +4,7 @@
 // conversation" opens the app's capture, like `/task` `/note` `/event`.
 // "Upload a file" joins with CV-9.
 
-import { Calendar, FileText, ListTodo, User } from "lucide-react";
+import { Calendar, FileText, ListTodo, Paperclip, User } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { SegmentedControl } from "@/components/ui/segmented-control";
@@ -40,7 +40,9 @@ const META: Record<string, string> = {
 
 export type PlusPick =
   | { kind: "ref"; type: string; id: string; label: string }
-  | { kind: "create"; command: CreateCommand };
+  | { kind: "create"; command: CreateCommand }
+  /** CV-9: pick files from the device. */
+  | { kind: "upload" };
 
 function Row({
   icon,
@@ -72,6 +74,7 @@ export function PlusMenu({
   selfId,
   people,
   canCreate,
+  canUpload = false,
   onPick,
 }: {
   runtime: ModuoRuntime | null;
@@ -80,6 +83,8 @@ export function PlusMenu({
   people: readonly ChatPerson[];
   /** Which create entries this person may use (their module's Edit). */
   canCreate: (command: CreateCommand) => boolean;
+  /** CV-9: "Upload a file" at the top (the composer takes files). */
+  canUpload?: boolean;
   onPick: (pick: PlusPick) => void;
 }) {
   const [tab, setTab] = useState<Tab>("all");
@@ -107,6 +112,17 @@ export function PlusMenu({
 
   return (
     <div className="w-75 p-1">
+      {canUpload ? (
+        <>
+          <Row
+            icon={<Paperclip className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />}
+            label="Upload a file"
+            meta="Up to 10"
+            onPick={() => onPick({ kind: "upload" })}
+          />
+          <Separator className="my-1" />
+        </>
+      ) : null}
       <p className="px-2 pt-1 pb-1 text-xs font-medium text-muted-foreground">Link something</p>
       <div className="px-1 pb-1">
         <SegmentedControl

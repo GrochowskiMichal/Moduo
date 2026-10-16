@@ -73,6 +73,20 @@ describe("Unassigned option + former member", () => {
   });
 });
 
+describe("statuses in the picker (chat v2 CV-17, AC11.4)", () => {
+  it("reads “Mike · on vacation until Oct 20”; nobody else changes", () => {
+    const withNotes = toAssignees(MEMBERS, "me", (id) =>
+      id === "mike" ? "on vacation until Oct 20" : "",
+    );
+    expect(assigneeOptions(withNotes).map((o) => o.label)).toEqual([
+      "Unassigned",
+      "Me",
+      "Mike · on vacation until Oct 20",
+      "Vera (view only)",
+    ]);
+  });
+});
+
 describe("Created by", () => {
   it("names the creator, says you for yourself, and stays quiet when unknown", () => {
     expect(createdByLabel({ creatorId: "mike", creatorUnknown: false }, byId)).toBe("Mike");

@@ -92,6 +92,8 @@ function estimate(row: Row | undefined): number {
       if (Object.keys(m.reactions).length > 0) h += 30;
       if (m.replyCount > 0) h += 32;
       if (m.replyToId) h += 20;
+      // CV-9: a picture's box is at most 240 tall (--feed-media-max-h), plus its space.
+      if ((m.fileCount ?? 0) > 0) h += 256;
       if (m.sendState === "failed" || m.sendState === "waiting") h += 30;
       return Math.round(h);
     }
@@ -143,6 +145,8 @@ export type MessageStreamProps = {
   onReact: (m: ChatMessage, key: string, on: boolean) => void;
   onPin: (m: ChatMessage) => void;
   onTask: (m: ChatMessage) => void;
+  /** ⋯ → Remind me… and H (CV-11): absent, no item. */
+  onRemind?: (m: ChatMessage) => void;
   /** Announcement channels you can't post in: Reply privately to the author (CV-15). */
   onReplyPrivately?: (m: ChatMessage) => void;
   onCopyLink: (m: ChatMessage) => void;
@@ -161,6 +165,8 @@ export type MessageStreamProps = {
   onPersonClick?: (userId: string) => void;
   /** A person's card for the hover preview on an author's name (CV-8b). */
   personPreview?: (userId: string) => ReactNode;
+  /** CV-9: a message's files, drawn under its words. */
+  renderFiles?: (m: ChatMessage) => ReactNode;
   /**
    * ⏎ on a message without replies, Esc, ↓ past the newest: back to typing.
    * A letter that isn't a message key comes along (`typed`): it goes into the
@@ -668,6 +674,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
             ? () => p.onReplyPrivately?.(m)
             : undefined,
         onTask: () => p.onTask(m),
+        onRemind: p.onRemind && !m.sendState ? () => p.onRemind?.(m) : undefined,
         onEdit: canWrite && own(m) ? () => p.onStartEdit(m) : undefined,
         onDelete: canWrite && own(m) ? () => p.onDelete(m) : undefined,
         onPin: canWrite ? () => p.onPin(m) : undefined,
@@ -807,6 +814,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           e.preventDefault();
           verbs.onTask();
           return;
+        case "h":
+        case "H":
+          if (verbs.onRemind) {
+            e.preventDefault();
+            verbs.onRemind();
+          } else if (canWrite) typeIntoComposer(e);
+          return;
         default:
           if (canWrite) typeIntoComposer(e);
           return;
@@ -831,6 +845,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       onDiscard: (m: ChatMessage) => live.current.onDiscard(m),
       onPersonClick: props.onPersonClick,
       personPreview: props.personPreview,
+      renderFiles: props.renderFiles,
     };
 
     const draw = (row: Row): ReactNode => {

@@ -2,6 +2,7 @@
 // in a conversation and in what order, what Browse channels lists, and what
 // New conversation may send. The screens draw these; the server decides.
 
+import type { PresenceState } from "@/lib/statuses/model";
 import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../model";
 
 /** A person in Details' People list. */
@@ -11,6 +12,8 @@ export type DetailsPerson = {
   avatarUrl: string | null;
   self: boolean;
   online: boolean;
+  /** The presence shape (CV-17). */
+  state: PresenceState;
   /** Left the workspace: their name stays, quietly labelled. */
   former: boolean;
 };
@@ -21,6 +24,7 @@ export function detailsPeople(
   selfId: string,
   personOf: (id: string) => ChatPerson | undefined,
   online: (id: string) => boolean,
+  stateOf?: (id: string) => PresenceState,
 ): DetailsPerson[] {
   const seen = new Set<string>();
   const out: DetailsPerson[] = [];
@@ -28,13 +32,16 @@ export function detailsPeople(
     if (seen.has(m.userId)) continue;
     seen.add(m.userId);
     const p = personOf(m.userId);
+    const on = m.userId === selfId || online(m.userId);
+    const former = !p || p.former === true;
     out.push({
       userId: m.userId,
       name: p?.name ?? "Former member",
       avatarUrl: p?.avatarUrl ?? null,
       self: m.userId === selfId,
-      online: m.userId === selfId || online(m.userId),
-      former: !p || p.former === true,
+      online: on,
+      state: former ? "offline" : stateOf ? stateOf(m.userId) : on ? "reachable" : "offline",
+      former,
     });
   }
   return out.sort((a, b) => (a.self !== b.self ? (a.self ? -1 : 1) : a.name.localeCompare(b.name)));

@@ -24,6 +24,7 @@ import {
   PRIORITY_LEVELS,
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
+  USER_RELATION_KINDS,
   TASK_STATUSES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
@@ -79,7 +80,9 @@ describe("vocabulary value sets", () => {
       "works-at",
       "follow-up",
       "paid-by",
+      "conversation-of",
     ]);
+    expect(USER_RELATION_KINDS).toEqual(RELATION_KINDS.filter((k) => k !== "conversation-of"));
     expect(LINK_ORIGINS).toEqual(["manual", "drag", "mention", "ref", "suggest"]);
   });
 
@@ -400,6 +403,26 @@ describe("chat vocabularies", () => {
     expect(v.planHasChat("team")).toBe(true);
     expect(v.planHasChat("founders")).toBe(true);
     expect(v.planHasChat("garbage")).toBe(false);
+  });
+});
+
+describe("statuses (CV-17)", () => {
+  it("mirror the …_chat_v2_statuses CHECKs; parse, normalize and is agree", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.STATUS_PRESETS]).toEqual(["meeting", "sick", "vacation", "commuting"]);
+    expect([...v.STATUS_CLEAR_AFTER]).toEqual(["30m", "1h", "today", "this_week", "date", "never"]);
+    expect(v.parseStatusPreset("sick").success).toBe(true);
+    expect(v.parseStatusPreset("lunch").success).toBe(false);
+    expect(v.normalizeStatusPreset("lunch")).toBeNull();
+    expect(v.isStatusPreset("vacation")).toBe(true);
+    expect(v.parseStatusClearAfter("this_week").success).toBe(true);
+    expect(v.parseStatusClearAfter("fortnight").success).toBe(false);
+    expect(v.normalizeStatusClearAfter("fortnight")).toBe("never");
+    // Out sick and On vacation hold pings (AC6.6); every preset has its words.
+    expect(v.STATUS_PRESET_DEFAULTS.sick.dnd && v.STATUS_PRESET_DEFAULTS.vacation.dnd).toBe(true);
+    for (const p of v.STATUS_PRESETS) {
+      expect(v.STATUS_PRESET_DEFAULTS[p].text.length).toBeLessThanOrEqual(v.STATUS_TEXT_MAX);
+    }
   });
 });
 

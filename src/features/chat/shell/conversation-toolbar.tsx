@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Toolbar } from "@/components/ui/toolbar";
+import type { PresenceState } from "@/lib/statuses/model";
 import type { ChatMember, ChatNotifyLevel, ChatPerson } from "../model";
 import { ConversationGlyph } from "./chat-sidebar";
 import type { ChatRow } from "./sidebar-model";
@@ -32,7 +33,9 @@ export type ConversationToolbarProps = {
   row: Pick<ChatRow, "channel" | "people" | "title">;
   member: ChatMember | undefined;
   personOf: (id: string) => ChatPerson | undefined;
-  online?: (id: string) => boolean;
+  online?: (id: string) => PresenceState;
+  /** A direct message's person now (CV-17): their status or "Focusing · until …". */
+  statusText?: string;
   /** People in the conversation (null while it loads). */
   peopleCount: number | null;
   /** The linked item's chip with its live state (CV-13). */
@@ -56,6 +59,7 @@ export function ConversationToolbar({
   member,
   personOf,
   online,
+  statusText,
   peopleCount,
   linked,
   huddle,
@@ -87,6 +91,10 @@ export function ConversationToolbar({
           {isChannel && channel.managersOnly ? (
             <p className="truncate text-xs text-muted-foreground">
               Announcements · only managers post
+            </p>
+          ) : statusText ? (
+            <p data-slot="person-status" className="truncate text-xs text-muted-foreground">
+              {statusText}
             </p>
           ) : null}
         </div>

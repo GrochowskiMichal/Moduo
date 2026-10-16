@@ -383,7 +383,7 @@ function SidebarDemo({ children }: { children?: React.ReactNode }) {
         model={model}
         activeId="acme"
         personOf={personOf}
-        online={(id) => id === "so"}
+        online={(id) => (id === "so" ? "focusing" : "offline")}
         collapsed={collapsed}
         onToggleSection={(s) =>
           setCollapsed((prev) => {

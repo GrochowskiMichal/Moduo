@@ -1,18 +1,24 @@
 import { canonicalReactionKey, isReactionKey } from "@contracts/vocabularies";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { Switch } from "../../../components/ui/switch";
+import {
+  type ChatServerPrefs,
+  readChatServerPrefs,
+  setChatServerPrefs,
+} from "../../../lib/notices/chat-prefs";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { saveQuickRow, useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import { reactionName } from "../../spine/reactions";
 
-import { PrefGroup } from "./preferences-section";
+import { PrefGroup, PrefRow } from "./preferences-section";
 import { SettingsSectionShell } from "./section-shell";
 
 /**
@@ -84,7 +90,72 @@ export function ChatSection() {
           </div>
         </div>
       </PrefGroup>
+      <PresenceGroup />
     </SettingsSectionShell>
+  );
+}
+
+/** Presence and Focus (CV-17, spec §10, §15; CH47): two switches kept on the
+ *  server, for every workspace. */
+function PresenceGroup() {
+  const { userId } = useAuth();
+  const [prefs, setPrefs] = useState<ChatServerPrefs | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    readChatServerPrefs().then(
+      (p) => {
+        if (!cancelled) setPrefs(p);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const save = async (patch: Partial<ChatServerPrefs>) => {
+    if (!prefs) return;
+    const before = prefs;
+    setPrefs({ ...prefs, ...patch });
+    setBusy(true);
+    try {
+      setPrefs(await setChatServerPrefs(patch));
+    } catch {
+      setPrefs(before);
+      toast("Couldn't change that — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PrefGroup label="Presence" description="What teammates see about you, in every workspace.">
+      <PrefRow
+        title="Show me as online"
+        description="Off: you show as offline to everyone, even while Moduo is open."
+      >
+        <Switch
+          checked={prefs?.showOnline ?? true}
+          disabled={!prefs || busy}
+          onCheckedChange={(v) => void save({ showOnline: v })}
+          aria-label="Show me as online"
+        />
+      </PrefRow>
+      <PrefRow
+        title="Show what I'm focusing on"
+        description="Teammates who can see the task see its name next to “Focusing”."
+      >
+        <Switch
+          checked={prefs?.showFocusTask ?? false}
+          disabled={!prefs || busy}
+          onCheckedChange={(v) => void save({ showFocusTask: v })}
+          aria-label="Show what I'm focusing on"
+        />
+      </PrefRow>
+    </PrefGroup>
   );
 }
 

@@ -39,12 +39,14 @@
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { browserOffline } from "../../../lib/sync/network";
 import { timestampMicros } from "../../tasks/live";
+import type { ChatFileGate } from "../files/gate";
 import type {
   ChatBodyFormat,
   ChatChannel,
   ChatDeletedChannel,
   ChatError,
   ChatKey,
+  ChatLink,
   ChatMember,
   ChatMessage,
   ChatMoveAnswer,
@@ -186,6 +188,9 @@ export const DEFAULT_CHAT_TIMING: ChatStoreTiming = {
   joinDebounceMs: 250,
 };
 
+/** CV-9: why a message of files only whose files all stopped isn't sent. */
+export const FILES_ALL_STOPPED = "its files didn't upload";
+
 /** The stream's page: it draws 50 and needs one past the edge. */
 export const PAGE = 51;
 /** A jump loads this many on each side of its target (+1 to know there's more). */
@@ -207,6 +212,8 @@ export type ChatStoreOptions = {
   timing?: Partial<ChatStoreTiming>;
   /** Rows per delta page (tests page with fewer). */
   deltaLimit?: number;
+  /** CV-9: whether a message's files are up (a send with files waits for them). */
+  files?: ChatFileGate;
 };
 
 let nextOp = 1;
@@ -246,6 +253,8 @@ export class ChatStore {
   private readonly live: ChatLiveSource | null;
   private readonly timing: ChatStoreTiming;
   private readonly deltaLimit: number;
+  private readonly files: ChatFileGate | null;
+  private stopFiles: (() => void) | null = null;
 
   private status: ChatStatus = "idle";
   private error: string | null = null;
@@ -316,6 +325,7 @@ export class ChatStore {
   private lastFocusSync = 0;
 
   private listeners = new Set<() => void>();
+  private catchupListeners = new Set<() => void>();
   private snap: ChatSnapshot | null = null;
   private windowCache = new Map<string, ChatWindow>();
   private chainCache = new Map<string, ChatChain>();
@@ -334,9 +344,18 @@ export class ChatStore {
     this.live = opts.live ?? null;
     this.timing = { ...DEFAULT_CHAT_TIMING, ...opts.timing };
     this.deltaLimit = opts.deltaLimit ?? DELTA_LIMIT;
+    this.files = opts.files ?? null;
   }
 
   // ── Readers ───────────────────────────────────────────────────────────────
+
+  /** Your Catch up rows changed on the server (Realtime): Catch up's list re-reads (CV-11). */
+  onCatchupChange(fn: () => void): () => void {
+    this.catchupListeners.add(fn);
+    return () => {
+      this.catchupListeners.delete(fn);
+    };
+  }
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -504,8 +523,10 @@ export class ChatStore {
       clientId: null,
       createdAt: entry.createdAt,
       updatedAt: entry.createdAt,
+      fileCount: entry.files ?? 0,
       sendState,
       ...(entry.failed ? { sendError: entry.failed } : {}),
+      ...(entry.dead ? { sendRetry: false as const } : {}),
     };
   }
 
@@ -569,6 +590,14 @@ export class ChatStore {
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.onVisibility);
     }
+    // CV-9: a send waiting on its files goes once they're up.
+    // Only while such a send waits, and never past the offline backoff: the
+    // queue repaints many times a second while anything uploads.
+    this.stopFiles =
+      this.files?.subscribe(() => {
+        if (this.offline || !this.outbox.some((e) => e.files && !e.failed)) return;
+        void this.drain();
+      }) ?? null;
     this.booting = this.boot();
   }
 
@@ -577,6 +606,8 @@ export class ChatStore {
     this.running = false;
     this.stopLive?.();
     this.stopLive = null;
+    this.stopFiles?.();
+    this.stopFiles = null;
     for (const t of [this.joinTimer, this.retryTimer, this.countsTimer]) if (t) clearTimeout(t);
     for (const t of [this.accessTimer, this.gapTimer]) if (t) clearInterval(t);
     this.joinTimer = this.retryTimer = this.countsTimer = null;
@@ -609,6 +640,7 @@ export class ChatStore {
     if (this.persistTimer) clearTimeout(this.persistTimer);
     if (this.markTimer) clearTimeout(this.markTimer);
     this.listeners.clear();
+    this.catchupListeners.clear();
   }
 
   private async boot(): Promise<void> {
@@ -1497,9 +1529,11 @@ export class ChatStore {
         void this.checkAccess();
         return;
       case "catchup":
-        // Catch up's items are CV-11's. Your rows moved (a message wrote one,
-        // Done closed one): the counts are re-read once a burst settles (CV-6b).
+        // Your rows moved (a message wrote one, Done closed one): the counts
+        // are re-read once a burst settles (CV-6b), and Catch up's list
+        // (`catchup/catchup-store.ts`, CV-11) hears it.
         this.countsSoon();
+        for (const fn of this.catchupListeners) fn();
         return;
       case "joined":
         if (this.joinTimer) clearTimeout(this.joinTimer);
@@ -1623,8 +1657,12 @@ export class ChatStore {
     body: string;
     replyToId?: string | null;
     format?: ChatBodyFormat;
+    /** CV-9: the id its files were uploaded under (minted by the composer). */
+    id?: string;
+    /** CV-9: how many files go with it: it waits until they're up. */
+    files?: number;
   }): string {
-    const id = newMessageId();
+    const id = args.id ?? newMessageId();
     this.outbox.push({
       id,
       channelId: args.channelId,
@@ -1632,6 +1670,7 @@ export class ChatStore {
       replyToId: args.replyToId ?? null,
       format: args.format ?? "v2",
       createdAt: new Date().toISOString(),
+      ...(args.files ? { files: args.files } : {}),
     });
     const conv = this.ensureConv(args.channelId);
     if (conv.hi) void this.jumpToLatest(args.channelId);
@@ -1646,8 +1685,13 @@ export class ChatStore {
   /** "Not sent · Retry": send it again under the same id. */
   retry(id: string): void {
     const entry = this.outbox.find((e) => e.id === id);
-    if (!entry?.failed) return;
+    if (!entry?.failed || entry.dead) return;
     delete entry.failed;
+    if (entry.files && this.files?.state(entry.id) === "failed") {
+      // A file stopped: it goes with the files that made it (and waits for
+      // any still on their way).
+      this.files.release(entry.id, "stopped");
+    }
     this.touch(entry.channelId);
     this.metaDirty = true;
     this.notify();
@@ -1658,6 +1702,7 @@ export class ChatStore {
   /** Throw away an unsent message. */
   discard(id: string): void {
     if (!this.dropEntry(id)) return;
+    this.files?.release(id);
     this.notify();
     void this.persistNow();
   }
@@ -1686,6 +1731,34 @@ export class ChatStore {
     return true;
   }
 
+  /**
+   * CV-9: are a waiting send's files up? One still uploading holds only its
+   * own message (later ones go); one that stopped turns it into "Not sent"
+   * (Retry sends it with the files that made it).
+   */
+  private filesUp(entry: ChatOutboxEntry): boolean {
+    if (!entry.files || !this.files) return true;
+    const state = this.files.state(entry.id);
+    if (state === "failed") {
+      // A message of files only whose files all stopped has nothing to send:
+      // Retry would fail "empty" forever, so it says why and offers Delete only.
+      const c = this.files.counts?.(entry.id);
+      const none = !!c && c.moving === 0 && c.stopped >= (entry.files ?? 0);
+      if (!entry.body.trim() && none) {
+        entry.failed = FILES_ALL_STOPPED;
+        entry.dead = true;
+      } else {
+        entry.failed = "A file didn't upload";
+      }
+      this.touch(entry.channelId);
+      this.metaDirty = true;
+      this.notify();
+      void this.persistNow();
+      return false;
+    }
+    return state === "ready";
+  }
+
   /** Send what waits, in order, each under its own id. */
   drain(): Promise<void> {
     if (this.draining) {
@@ -1705,7 +1778,7 @@ export class ChatStore {
   private async runDrain(): Promise<void> {
     for (;;) {
       if (!this.running || this.disposed) return;
-      const entry = this.outbox.find((e) => !e.failed);
+      const entry = this.outbox.find((e) => !e.failed && this.filesUp(e));
       if (!entry) return;
       if (browserOffline()) {
         this.goOffline();
@@ -1930,6 +2003,7 @@ export class ChatStore {
     isPrivate?: boolean;
     memberIds?: string[];
     announcement?: boolean;
+    link?: ChatLink | null;
   }): Promise<ChatChannel> {
     const channel = await this.transport.createChannel({ workspaceId: this.workspaceId, ...args });
     this.channels.set(channel.id, channel);
@@ -1967,6 +2041,14 @@ export class ChatStore {
     const channel = await this.transport.updateChannel({ channelId, ...patch });
     this.channels.set(channel.id, channel);
     this.notify();
+  }
+
+  /** Links the channel to one item, or unlinks it (CV-13). */
+  async linkChannel(channelId: string, link: ChatLink | null): Promise<ChatChannel> {
+    const channel = await this.transport.linkChannel({ channelId, link });
+    this.channels.set(channel.id, channel);
+    this.notify();
+    return channel;
   }
 
   async archiveChannel(channelId: string, archived: boolean): Promise<void> {
@@ -2150,6 +2232,13 @@ export function setDefaultChatLive(make: () => ChatLiveSource): void {
   defaultLive = make;
 }
 
+let defaultFiles: (() => ChatFileGate) | null = null;
+
+/** The app's upload queue answers whether a message's files are up (CV-9). */
+export function setDefaultChatFiles(make: () => ChatFileGate): void {
+  defaultFiles = make;
+}
+
 /**
  * The chat store for a workspace, made on first use. Keyed by the runtime
  * (each test's fake gets its own) and the workspace; one made for another
@@ -2171,6 +2260,7 @@ export function chatStore(runtime: ModuoRuntime, userId: string, workspaceId: st
     store = new ChatStore(runtime.chat, userId, workspaceId, {
       ...storeOptions,
       live: storeOptions.live ?? defaultLive?.() ?? undefined,
+      files: storeOptions.files ?? defaultFiles?.() ?? undefined,
     });
     byWorkspace.set(workspaceId, store);
     everyStore.add(store);
