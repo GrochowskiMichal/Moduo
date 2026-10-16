@@ -1452,7 +1452,15 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
-    async saveSnapshot({ workspaceId, noteId, snapshotB64, uptoUpdateId, bodyText, bodyMd }) {
+    async saveSnapshot({
+      workspaceId,
+      noteId,
+      snapshotB64,
+      uptoUpdateId,
+      bodyText,
+      bodyMd,
+      expectedDocVersion,
+    }) {
       const { data, error } = await supabaseClient.rpc("notes_op_save_snapshot", {
         p_workspace_id: workspaceId,
         p_note_id: noteId,
@@ -1460,11 +1468,13 @@ export const webRuntime: ModuoRuntime = {
         p_upto_update_id: uptoUpdateId,
         p_body_text: bodyText ?? null,
         p_body_md: bodyMd ?? null,
+        p_expected_doc_version: expectedDocVersion ?? undefined,
       });
       if (error) throw new Error(error.message);
       return {
         folded: Number(data?.folded ?? 0),
         docVersion: Number(data?.doc_version ?? 0),
+        refused: data?.refused === true,
       };
     },
 

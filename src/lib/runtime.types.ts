@@ -610,7 +610,10 @@ export type ModuoRuntime = {
       bodyText?: string | null;
       bodyMd?: string | null;
     }): Promise<{ inserted: number; duplicates: number; maxUpdateId: number | null }>;
-    /** Client-driven compaction: fold the update log into the snapshot. */
+    /** Client-driven compaction: fold the update log into the snapshot.
+     * With `expectedDocVersion`, the server refuses (`refused: true`, nothing
+     * changed, `docVersion` = the current one) when another client folded
+     * since — overwriting its snapshot would lose the rows it folded. */
     saveSnapshot(input: {
       workspaceId: string;
       noteId: string;
@@ -618,7 +621,8 @@ export type ModuoRuntime = {
       uptoUpdateId: number;
       bodyText?: string | null;
       bodyMd?: string | null;
-    }): Promise<{ folded: number; docVersion: number }>;
+      expectedDocVersion?: number | null;
+    }): Promise<{ folded: number; docVersion: number; refused: boolean }>;
     /** ONCE-ONLY materialization of a never-materialized note's CRDT doc
      * (NOTE-FIX-1). Safe to call optimistically: the server refuses (without
      * erroring) the moment the doc exists in any form, so two devices opening

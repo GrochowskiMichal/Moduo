@@ -101,7 +101,7 @@ function fakeRuntime(noteId: string, withLinks: boolean): ModuoRuntime {
     notesV2: {
       pullDoc: async () => ({ snapshotB64: built.docStateB64, docVersion: 1, updates: [] }),
       pushUpdates: async () => ({ inserted: 0, duplicates: 0, maxUpdateId: null }),
-      saveSnapshot: async () => ({ folded: 0, docVersion: 1 }),
+      saveSnapshot: async () => ({ folded: 0, docVersion: 1, refused: false }),
     },
     spine: {
       listLinks: async () => links,
