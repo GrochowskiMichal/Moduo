@@ -27,10 +27,10 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { TagChip } from "../../../components/tag-chip";
+import { TagAddButton, TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
 import { TeamMark } from "../../../components/ui/avatar";
 import {
@@ -716,40 +716,51 @@ function LevelValue({
 
 function TagsValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
   const taskTags = api.tagsByTask.get(task.id) ?? [];
+  const chip = (t: (typeof taskTags)[number]) => (
+    <TagChip
+      key={t.id}
+      name={t.name}
+      color={t.color}
+      size="md"
+      onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
+    />
+  );
+  const picker = (trigger: ReactNode) => (
+    <TagPicker
+      tags={api.tags}
+      selectedIds={taskTags.map((t) => t.id)}
+      canEdit={canEdit}
+      onToggle={(tagId) => api.toggleTaskTag(task.id, tagId)}
+      onCreate={(name) => api.createTagForTask(name, task.id)}
+      onRecolor={(tagId, color) => api.setTagColor(tagId, color)}
+      onDelete={(tagId) => api.deleteTag(tagId)}
+      trigger={trigger}
+    />
+  );
+  const last = taskTags[taskTags.length - 1];
   return (
     <div className="flex min-h-(--ctrl-h-sm) flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
-      {taskTags.map((t) => (
-        <TagChip
-          key={t.id}
-          name={t.name}
-          color={t.color}
-          size="md"
-          onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
-        />
-      ))}
-      {canEdit ? (
-        <TagPicker
-          tags={api.tags}
-          selectedIds={taskTags.map((t) => t.id)}
-          canEdit={canEdit}
-          onToggle={(tagId) => api.toggleTaskTag(task.id, tagId)}
-          onCreate={(name) => api.createTagForTask(name, task.id)}
-          onRecolor={(tagId, color) => api.setTagColor(tagId, color)}
-          onDelete={(tagId) => api.deleteTag(tagId)}
-          trigger={
-            <PropertyValue
-              icon={<Plus />}
-              empty
-              aria-label="Add tag"
-              className={cn(taskTags.length > 0 && "ml-0 px-1")}
-            >
-              {taskTags.length === 0 ? "Add tag" : null}
-            </PropertyValue>
-          }
-        />
-      ) : taskTags.length === 0 ? (
-        <span className="font-sans text-sm text-muted-foreground">No tags</span>
-      ) : null}
+      {!last ? (
+        canEdit ? (
+          picker(
+            <PropertyValue icon={<Plus />} empty aria-label="Add tag">
+              Add tag
+            </PropertyValue>,
+          )
+        ) : (
+          <span className="font-sans text-sm text-muted-foreground">No tags</span>
+        )
+      ) : (
+        <>
+          {taskTags.slice(0, -1).map(chip)}
+          {/* The "+" rides with the last chip, at its height (MOD-158), so it
+              never wraps onto a line of its own. */}
+          <span className="flex min-w-0 max-w-full items-center gap-1.5">
+            {chip(last)}
+            {canEdit ? picker(<TagAddButton />) : null}
+          </span>
+        </>
+      )}
     </div>
   );
 }

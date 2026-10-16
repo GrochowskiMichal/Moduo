@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { Columns3, List } from "lucide-react";
 import { useState } from "react";
 
+import { AtThreeDensities } from "./kit-densities";
 import { SegmentedControl } from "./segmented-control";
 
 const meta: Meta<typeof SegmentedControl> = {
@@ -96,6 +97,34 @@ export const Small: Story = {
           { value: "board", label: "Board", icon: Columns3 },
         ]}
       />
+    );
+  },
+};
+
+/**
+ * The quiet header switch (MOD-157): `xs` sits on the chip rung with the
+ * section title's own type (13 px medium), so "All · Comments" reads as part
+ * of the "Activity" line, at all three densities.
+ */
+export const InSectionHeader: Story = {
+  render: () => {
+    const [value, setValue] = useState("comments");
+    return (
+      <AtThreeDensities>
+        <div className="flex w-64 min-h-(--ctrl-h-sm) items-center justify-between gap-2">
+          <h3 className="font-sans text-sm font-medium text-foreground">Activity</h3>
+          <SegmentedControl
+            size="xs"
+            aria-label="Show"
+            value={value}
+            onValueChange={setValue}
+            items={[
+              { value: "all", label: "All" },
+              { value: "comments", label: "Comments" },
+            ]}
+          />
+        </div>
+      </AtThreeDensities>
     );
   },
 };

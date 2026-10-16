@@ -18,7 +18,13 @@ export type SegmentedControlProps = {
   value: string;
   onValueChange: (value: string) => void;
   items: SegmentedItem[];
-  size?: "sm" | "default";
+  /**
+   * `default` and `sm` are control rungs (R1: text-base on both). `xs` is the
+   * quiet switch inside a section header (MOD-157): the chip rung
+   * (`--ctrl-h-xs`) and the header's own type (13 px medium), so it reads as
+   * part of the title line, not as a toolbar control beside it.
+   */
+  size?: "xs" | "sm" | "default";
   /** Render icons only (no text labels). Each item then needs `ariaLabel`. */
   iconOnly?: boolean;
   /** Stretch to fill the container with equal-width segments (rail toggles). */
@@ -50,7 +56,8 @@ function SegmentedControl({
   className,
   ...props
 }: SegmentedControlProps) {
-  const heightVar = size === "sm" ? "var(--ctrl-h-sm)" : "var(--ctrl-h)";
+  const heightVar =
+    size === "xs" ? "var(--ctrl-h-xs)" : size === "sm" ? "var(--ctrl-h-sm)" : "var(--ctrl-h)";
   return (
     <ToggleGroupPrimitive.Root
       type="single"
@@ -89,7 +96,8 @@ function SegmentedControl({
               // Nested radius: outer is --radius-md, inset is 2px → inner is
               // calc(--radius-md − 2px) so the corners are concentric. (calc()
               // keeps it token-derived + lint-safe vs. a hardcoded px radius.)
-              "inline-flex h-full items-center justify-center gap-1.5 rounded-[calc(var(--radius-md)-2px)] font-sans text-base font-medium text-muted-foreground",
+              "inline-flex h-full items-center justify-center gap-1.5 rounded-[calc(var(--radius-md)-2px)] font-sans font-medium text-muted-foreground",
+              size === "xs" ? "text-sm" : "text-base",
               "transition-[color,background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
               "hover:text-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
@@ -102,7 +110,7 @@ function SegmentedControl({
               // style never showed on the icon-only view switcher.
               "aria-checked:bg-control-raised aria-checked:text-foreground aria-checked:shadow-control-raised",
               fullWidth && "flex-1",
-              iconOnly ? "aspect-square" : "px-2.5",
+              iconOnly ? "aspect-square" : size === "xs" ? "px-2" : "px-2.5",
               "[&_svg]:size-icon-sm [&_svg]:shrink-0",
             )}
           >
