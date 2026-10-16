@@ -284,6 +284,7 @@ function DetailBody({
       <BlocksSection task={task} onOpenTask={openTask} api={api} />
       {showHub ? (
         <LinkedSection
+          focus={{ type: "task", id: task.id }}
           rows={linkedRows}
           status={hub.status}
           canEdit={canEdit}

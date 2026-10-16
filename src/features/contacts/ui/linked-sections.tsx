@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
+import { MentionedInLines } from "../../chat/mentioned-in";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { type HubRow, type HubSection, isSectionTruncated, visibleRows } from "../../spine/rollup";
 import { EntityHubRow } from "../../spine/ui/entity-hub";
@@ -47,6 +48,8 @@ export type LinkedSectionsProps = {
   onChangeKind?: (link: EntityLink, kind: RelationKind) => void;
   onUnlink?: (link: EntityLink) => void;
   onRetry?: () => void;
+  /** The contact or company: its "Mentioned in" lines close the list (CV-10). */
+  focus?: EntityRef;
 };
 
 export function LinkedSections({
@@ -57,6 +60,7 @@ export function LinkedSections({
   onChangeKind,
   onUnlink,
   onRetry,
+  focus,
 }: LinkedSectionsProps) {
   if (status === "loading") {
     return (
@@ -123,6 +127,7 @@ export function LinkedSections({
           onUnlink={onUnlink}
         />
       ) : null}
+      {focus ? <MentionedInLines entityType={focus.type} entityId={focus.id} /> : null}
     </div>
   );
 }

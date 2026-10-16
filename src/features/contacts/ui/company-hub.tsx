@@ -326,6 +326,7 @@ export function CompanyHub({
         </section>
 
         <LinkedSections
+          focus={{ type: "company", id: company.id }}
           status={status}
           sections={rollup.unionSections}
           canEdit={false}

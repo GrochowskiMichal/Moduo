@@ -26,7 +26,7 @@ import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
-import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
 import { MessageInContext } from "../panel/message-in-context";
@@ -40,6 +40,7 @@ import {
   useChatTypingSnapshot,
 } from "../store/react";
 import type { ChatWindow, ChatWriteResult } from "../store/store";
+import { MadeFromScope, useMadeFrom } from "../stream/made-from";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
 import { authorName } from "../stream/rows";
 import { BrowseChannels } from "./browse-channels";
@@ -409,13 +410,38 @@ export function ChatScreen({
   );
 
   // T / "Make a task": the app's capture opens as Task with the message's words (AC2.7).
-  const makeTaskFrom = useCallback((m: ChatMessage) => {
-    const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 200);
-    dispatchOpenCapture({ type: "task", draft: text });
-  }, []);
+  // With a removable "From: Sofia's message in Acme" chip that links the task
+  // to the message, and "Became a task" under the message once made (CV-10).
+  const madeFromIds = useMemo(
+    () =>
+      (streamWin?.rows ?? []).filter((m) => !m.sendState && m.kind === "message").map((m) => m.id),
+    [streamWin?.rows],
+  );
+  const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
+  const addMadeFrom = madeFrom.add;
+  const makeTaskFrom = useCallback(
+    (m: ChatMessage) => {
+      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200);
+      const chat = runtime?.chat;
+      dispatchOpenCapture({
+        type: "task",
+        draft: text,
+        source:
+          chat && !m.sendState
+            ? {
+                kind: "message",
+                label: messageSourceLabel(m, snap.channels[m.channelId], selfId, personOf),
+                resolve: () => chat.registerMessage(m.id).catch(() => null),
+              }
+            : null,
+        onCreated: (ref) => addMadeFrom(m.id, { type: ref.type, id: ref.id }),
+      });
+    },
+    [runtime, snap.channels, selfId, personOf, addMadeFrom],
+  );
 
   const copyLink = useCallback((m: ChatMessage) => {
     const params = new URLSearchParams({ c: m.channelId, m: m.id });
@@ -615,98 +641,100 @@ export function ChatScreen({
             )
           }
         />
-        <MessageStream
-          key={channel.id}
-          ref={streamRef}
-          conversationId={channel.id}
-          window={streamWin ?? EMPTY_WINDOW}
-          selfId={selfId}
-          personOf={personOf}
-          rowById={(id) => store?.rowById(id)}
-          hidden={hidden}
-          editingId={editingId}
-          canWrite={canWrite}
-          // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
-          canUseTools={!channel.archivedAt}
-          intro={
-            <ConversationStart
-              channel={channel}
-              title={title}
-              people={others}
-              personOf={personOf}
-              workspaceName={workspaceName}
-            />
-          }
-          onLoadOlder={() => void store?.loadOlder(channel.id)}
-          onLoadNewer={() => void store?.loadNewer(channel.id)}
-          onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
-          onSeen={(id) => store?.markSeen(channel.id, id)}
-          onStartEdit={(m) => setEditingId(m.id)}
-          renderEditor={(m) => (
-            <ChatComposer
-              mode="edit"
-              className="mt-0.5"
-              runtime={runtime}
-              workspaceId={workspaceId}
-              selfId={selfId}
-              people={people}
-              placeholder="Edit message"
-              initial={m.body}
-              autoFocus
-              onCancel={() => {
-                setEditingId(null);
-                returnToComposer();
-              }}
-              onSend={(body) => {
-                setEditingId(null);
-                returnToComposer();
-                void store?.edit(m.id, body, "v2").then((res) => {
-                  if (!res.ok) toast(res.offline ? "Offline" : res.message);
-                });
-              }}
-            />
-          )}
-          onDelete={deleteWithUndo}
-          onReact={(m, key, on) => {
-            if (!store || m.sendState) return;
-            void store
-              .react(m.id, key, on)
-              .then((res) => failed(res, "Couldn't add the reaction."));
-          }}
-          onPin={(m) => {
-            if (!store) return;
-            const pinned = !m.pinnedAt;
-            void store.pin(m.id, pinned).then((res) => {
-              if (!failed(res, "Couldn't update the pin.")) {
-                toast(pinned ? "Pinned to the conversation" : "Unpinned");
-              }
-            });
-          }}
-          onTask={makeTaskFrom}
-          onCopyLink={copyLink}
-          onMarkUnread={(m) => {
-            void store
-              ?.markUnread(m.channelId, m.id)
-              .then((res) => failed(res, "Couldn't mark as unread."));
-          }}
-          // Reply chains are CV-12's: until then a chain opens at its first message.
-          onOpenChain={(m) => onOpen(m.channelId, { chainId: m.parentId ?? m.id })}
-          onRetry={(m) => store?.retry(m.id)}
-          onDiscard={(m) => store?.discard(m.id)}
-          onPersonClick={openPerson}
-          personPreview={(id) => (
-            <PersonCard
-              compact
-              userId={id}
-              person={personOf(id)}
-              self={id === selfId}
-              online={id === selfId || online(id)}
-              canMessage={canStart}
-              onMessage={(uid) => openDmWith([uid])}
-            />
-          )}
-          onReturnToComposer={returnToComposer}
-        />
+        <MadeFromScope value={madeFrom}>
+          <MessageStream
+            key={channel.id}
+            ref={streamRef}
+            conversationId={channel.id}
+            window={streamWin ?? EMPTY_WINDOW}
+            selfId={selfId}
+            personOf={personOf}
+            rowById={(id) => store?.rowById(id)}
+            hidden={hidden}
+            editingId={editingId}
+            canWrite={canWrite}
+            // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
+            canUseTools={!channel.archivedAt}
+            intro={
+              <ConversationStart
+                channel={channel}
+                title={title}
+                people={others}
+                personOf={personOf}
+                workspaceName={workspaceName}
+              />
+            }
+            onLoadOlder={() => void store?.loadOlder(channel.id)}
+            onLoadNewer={() => void store?.loadNewer(channel.id)}
+            onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
+            onSeen={(id) => store?.markSeen(channel.id, id)}
+            onStartEdit={(m) => setEditingId(m.id)}
+            renderEditor={(m) => (
+              <ChatComposer
+                mode="edit"
+                className="mt-0.5"
+                runtime={runtime}
+                workspaceId={workspaceId}
+                selfId={selfId}
+                people={people}
+                placeholder="Edit message"
+                initial={m.body}
+                autoFocus
+                onCancel={() => {
+                  setEditingId(null);
+                  returnToComposer();
+                }}
+                onSend={(body) => {
+                  setEditingId(null);
+                  returnToComposer();
+                  void store?.edit(m.id, body, "v2").then((res) => {
+                    if (!res.ok) toast(res.offline ? "Offline" : res.message);
+                  });
+                }}
+              />
+            )}
+            onDelete={deleteWithUndo}
+            onReact={(m, key, on) => {
+              if (!store || m.sendState) return;
+              void store
+                .react(m.id, key, on)
+                .then((res) => failed(res, "Couldn't add the reaction."));
+            }}
+            onPin={(m) => {
+              if (!store) return;
+              const pinned = !m.pinnedAt;
+              void store.pin(m.id, pinned).then((res) => {
+                if (!failed(res, "Couldn't update the pin.")) {
+                  toast(pinned ? "Pinned to the conversation" : "Unpinned");
+                }
+              });
+            }}
+            onTask={makeTaskFrom}
+            onCopyLink={copyLink}
+            onMarkUnread={(m) => {
+              void store
+                ?.markUnread(m.channelId, m.id)
+                .then((res) => failed(res, "Couldn't mark as unread."));
+            }}
+            // Reply chains are CV-12's: until then a chain opens at its first message.
+            onOpenChain={(m) => onOpen(m.channelId, { chainId: m.parentId ?? m.id })}
+            onRetry={(m) => store?.retry(m.id)}
+            onDiscard={(m) => store?.discard(m.id)}
+            onPersonClick={openPerson}
+            personPreview={(id) => (
+              <PersonCard
+                compact
+                userId={id}
+                person={personOf(id)}
+                self={id === selfId}
+                online={id === selfId || online(id)}
+                canMessage={canStart}
+                onMessage={(uid) => openDmWith([uid])}
+              />
+            )}
+            onReturnToComposer={returnToComposer}
+          />
+        </MadeFromScope>
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
           {managersPending ? null : line ? (
@@ -910,4 +938,20 @@ export function ChatScreen({
       />
     </>
   );
+}
+
+/** The capture's "From:" chip for a message: "Sofia's message in Acme". */
+export function messageSourceLabel(
+  m: ChatMessage,
+  where: ChatChannel | undefined,
+  selfId: string,
+  personOf: (id: string) => ChatPerson | undefined,
+): string {
+  const author =
+    m.authorId && m.authorId === selfId
+      ? "Your"
+      : `${authorName(m, m.authorId ? personOf(m.authorId) : undefined)}'s`;
+  return where
+    ? `${author} message in ${conversationTitle(where, selfId, personOf)}`
+    : `${author} message`;
 }

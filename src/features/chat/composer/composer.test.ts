@@ -1,10 +1,12 @@
 // CV-7b · the composer: its grammar, its keys and IME (AC4.3, AC4.7, AC9.7).
-// The typed handle chip (`MOD-142`, CH66) is CV-10's and is proven there.
+// The typed handle chip (`MOD-142`, CH66) is CV-10's: its block is at the end
+// (and live in tests/chat-capture.spec.ts).
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 
+import { handleFinishedAt } from "@/features/spine/references/handle-autolink-plugin";
 import { CAPTURE_OPEN_EVENT } from "@/lib/capture-open";
 import type { CaptureRequest } from "@/lib/capture-registry";
 import { parseStored } from "../markup-v2/parse";
@@ -21,6 +23,7 @@ import {
   overLimit,
   peopleFor,
 } from "./grammar";
+import { escapeUndoesChip } from "./handle-chip";
 
 afterEach(cleanup);
 
@@ -216,5 +219,23 @@ describe("grammar, handle chip, IME: the keys", () => {
     fireEvent.keyDown(box, { key: "Enter" });
     expect(onSend).not.toHaveBeenCalled();
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("grammar, handle chip, IME: the handle chip (CV-10, AC4.1)", () => {
+  it("`MOD-142` counts once it's finished, and only with the workspace's key", () => {
+    expect(handleFinishedAt("see MOD-142 ", 12, ["MOD"])).toEqual({
+      handle: "MOD-142",
+      start: 4,
+      end: 11,
+    });
+    expect(handleFinishedAt("see MOD-142", 11, ["MOD"])).toBeNull();
+    expect(handleFinishedAt("UTF-8 ", 6, ["MOD"])).toBeNull();
+  });
+
+  it("Esc right after the chip went in takes it back; after more typing it doesn't", () => {
+    expect(escapeUndoesChip("see MOD-142 ", "see MOD-142 ")).toBe(true);
+    expect(escapeUndoesChip("see MOD-142 ", "see MOD-142 and")).toBe(false);
+    expect(escapeUndoesChip(null, "anything")).toBe(false);
   });
 });

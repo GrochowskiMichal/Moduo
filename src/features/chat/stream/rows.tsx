@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
 import { messageTree, toBodyText } from "../markup-v2";
 import type { ChatMessage, ChatPerson } from "../model";
+import { MadeFromLine } from "./made-from";
 import { type BodyContext, MessageBody } from "./message-body";
 
 export function authorName(m: ChatMessage, person: ChatPerson | undefined): string {
@@ -372,6 +373,7 @@ export function MessageRow({
               className={pending ? "opacity-60" : undefined}
             />
           )}
+          {editor ? null : <MadeFromLine messageId={message.id} />}
           <SendState
             message={message}
             onRetry={() => handlers.onRetry?.(message)}

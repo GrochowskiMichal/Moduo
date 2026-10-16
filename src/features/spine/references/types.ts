@@ -24,6 +24,8 @@ export type ReferenceKind =
   | "event"
   | "project"
   | "tag"
+  | "message"
+  | "conversation"
   | "other";
 
 /** A stored reference: a polymorphic `(type, id)`, never a title. */

@@ -38,6 +38,7 @@ import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { formatDate, formatDay } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
+import { MentionedInLines } from "../../chat/mentioned-in";
 import { EntityLinkPicker } from "../../contacts/ui/entity-link-picker";
 import { Reference } from "../../spine/references/ui/reference";
 import type { HubRow } from "../../spine/rollup";
@@ -544,7 +545,10 @@ export function LinkedSection({
   onLink,
   onUnlink,
   onRetry,
+  focus,
 }: {
+  /** The task: its "Mentioned in" lines show under the cards (CV-10). */
+  focus?: EntityRef;
   rows: HubRow[];
   status: "loading" | "error" | "ready";
   canEdit: boolean;
@@ -555,7 +559,8 @@ export function LinkedSection({
   onRetry: () => void;
 }) {
   const [all, setAll] = useState(false);
-  if (rows.length === 0 && !canEdit && status !== "error") return null;
+  const mentioned = focus ? <MentionedInLines entityType={focus.type} entityId={focus.id} /> : null;
+  if (rows.length === 0 && !canEdit && status !== "error") return mentioned;
   const shown = all ? rows : rows.slice(0, LINKED_VISIBLE);
   return (
     <div>
@@ -591,6 +596,7 @@ export function LinkedSection({
           </Button>
         </p>
       ) : null}
+      {mentioned}
       <div className="flex flex-col gap-1.5">
         {shown.map((row) => (
           <div key={row.link.id} className="group relative">
