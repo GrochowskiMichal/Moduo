@@ -529,11 +529,12 @@ export function ChatScreen({
     };
     for (const m of streamWin?.rows ?? []) take(m);
     for (const chain of Object.values(snap.chains)) {
+      if (chain.root?.channelId !== conversationId) continue;
       take(chain.root);
       for (const r of chain.replies) take(r);
     }
     return [...ids];
-  }, [streamWin?.rows, snap.chains]);
+  }, [streamWin?.rows, snap.chains, conversationId]);
   const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
   const addMadeFrom = madeFrom.add;
   const makeTaskFrom = useCallback(
