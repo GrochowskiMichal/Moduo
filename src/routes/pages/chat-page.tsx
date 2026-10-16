@@ -2,7 +2,7 @@
 // the open conversation (`c`) and a message to land on (`m`), so notices,
 // copied links and back/forward all land in the same place; the screen is
 // `features/chat/shell/chat-screen.tsx`. A chain (`t`, v1's thread links and
-// chain notices) opens at its first message until reply chains (CV-12).
+// chain notices) opens on the right and the stream lands on its root (CV-12).
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
@@ -66,8 +66,9 @@ export function ChatPage() {
       members={people}
       ownerName={ownerName}
       conversationId={search.c ?? null}
-      // A chain's link lands on its first message (`t`) until CV-12.
+      // A chain's link (`t`) lands on its root and opens the chain on the right.
       messageId={search.m ?? search.t ?? null}
+      chainId={search.t ?? null}
       browsing={search.view === "browse"}
       onOpen={onOpen}
       onBrowse={onBrowse}

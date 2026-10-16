@@ -161,6 +161,7 @@ function StreamDemo() {
         onCopyLink={noop}
         onMarkUnread={noop}
         onOpenChain={noop}
+        onReply={noop}
         onRetry={noop}
         onDiscard={noop}
         onReturnToComposer={noop}

@@ -262,7 +262,7 @@ test("the message keys", async ({ page }) => {
   await expect(edit).toHaveCount(0);
   await expect(composer(page)).toBeFocused();
 
-  // In the stream, ↑↓ step through messages; E edits your own; R opens its chain.
+  // In the stream, ↑↓ step through messages; E edits your own; R replies to it (CV-12).
   await page.getByTestId("message-stream").focus();
   await page.keyboard.press("ArrowUp");
   await expect(page.locator("[data-selected]")).toContainText(`keys ${tag}`);
@@ -275,7 +275,8 @@ test("the message keys", async ({ page }) => {
   await page.getByTestId("message-stream").focus();
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("r");
-  await expect(page).toHaveURL(/[?&]t=/);
+  await expect(page.locator('[data-slot="replying-to"]')).toContainText("Replying to");
+  await expect(composer(page)).toBeFocused();
   // Esc leaves the selection and returns to typing.
   await page.goto(`/chat?c=${room.general}`);
   await page.getByTestId("message-stream").focus();

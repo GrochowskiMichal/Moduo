@@ -6,7 +6,15 @@
 // before a new person (`--feed-person-gap` + the line's 3 px), 6 px between
 // one person's lines; one left edge for text, reactions and the reply line.
 
-import { AlertCircle, ArrowRightLeft, Clock, CornerDownRight, MessageSquare } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRightLeft,
+  Check,
+  ChevronRight,
+  Clock,
+  CornerDownRight,
+  MessageSquare,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -15,7 +23,7 @@ import { Reactions } from "@/components/ui/reactions";
 import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
-import { messageTree, toBodyText } from "../markup-v2";
+import { excerptOf } from "../chains";
 import type { ChatMessage, ChatPerson } from "../model";
 import { type BodyContext, MessageBody } from "./message-body";
 
@@ -159,21 +167,104 @@ function MessageReactions({
   );
 }
 
-function RepliesLine({ message, onOpenChain }: { message: ChatMessage; onOpenChain?: () => void }) {
+/** A person's first name ("You" for yourself), for the chain lines. */
+export function firstName(
+  id: string | null,
+  selfId: string | null,
+  personOf: (id: string) => ChatPerson | undefined,
+): string {
+  if (!id) return "Someone";
+  if (id === selfId) return "You";
+  const name = personOf(id)?.name ?? "Former member";
+  return name.split(/\s+/)[0] || name;
+}
+
+const repliesText = (n: number) => (n === 1 ? "1 reply" : `${n} replies`);
+
+/**
+ * Under a chain's root (round 4 frame 4 "stream", round 5 frame 5): up to
+ * three faces · "4 replies" · "Alex, Jana, Mike" · ›, and "· Reopened by
+ * Mike" after a reopen. A wrapped root says instead (frame 4 "wrapped"):
+ * "✓ Wrapped up by Sofia: Jana "Got them…" · 4 replies ›".
+ */
+export function ChainLine({
+  message,
+  settled,
+  ctx,
+  onOpenChain,
+}: {
+  message: ChatMessage;
+  /** The reply that settled it, when the store holds it. */
+  settled?: ChatMessage;
+  ctx: Pick<BodyContext, "selfId" | "personOf">;
+  onOpenChain?: () => void;
+}) {
   if (message.replyCount <= 0) return null;
+  const name = (id: string | null) => firstName(id, ctx.selfId, ctx.personOf);
+  if (message.wrappedAt) {
+    const by = message.wrappedBy === ctx.selfId ? "you" : name(message.wrappedBy);
+    return (
+      <button
+        type="button"
+        data-slot="chain-wrapped"
+        onClick={onOpenChain}
+        className="-ml-1 mt-1.5 inline-flex h-(--ctrl-h-sm) max-w-full items-center gap-2 rounded-md border border-hairline px-1.5 text-sm text-muted-foreground hover:bg-state-hover"
+      >
+        <Check aria-hidden className="size-icon-xs shrink-0" />
+        <span className="shrink-0 font-medium text-foreground">
+          Wrapped up by {by}
+          {settled ? ":" : ""}
+        </span>
+        {settled ? (
+          <span className="min-w-0 truncate">
+            {name(settled.authorId)} “{excerptOf(settled, 80)}”
+          </span>
+        ) : null}
+        <span className="shrink-0">· {repliesText(message.replyCount)} ›</span>
+      </button>
+    );
+  }
+  const faces = message.replyUserIds.slice(0, 3);
   return (
     <button
       type="button"
+      data-slot="chain-replies"
       onClick={onOpenChain}
-      className="-ml-1 mt-1.5 inline-flex h-(--ctrl-h-sm) items-center gap-2 rounded-md px-1.5 text-sm hover:bg-state-hover"
+      className="-ml-1 mt-1.5 inline-flex h-(--ctrl-h-sm) max-w-full items-center gap-2 rounded-md px-1.5 text-sm hover:bg-state-hover"
     >
-      <MessageSquare aria-hidden className="size-icon-xs text-subtle-foreground" />
-      <span className="font-medium text-foreground">
-        {message.replyCount === 1 ? "1 reply" : `${message.replyCount} replies`}
+      {faces.length > 0 ? (
+        <span aria-hidden className="flex shrink-0 -space-x-1">
+          {faces.map((id) => {
+            const p = ctx.personOf(id);
+            return (
+              <PersonAvatar
+                key={id}
+                name={p?.name ?? "Former member"}
+                id={id}
+                src={p?.avatarUrl}
+                size="icon"
+                className="ring-2 ring-card"
+              />
+            );
+          })}
+        </span>
+      ) : (
+        <MessageSquare aria-hidden className="size-icon-xs text-subtle-foreground" />
+      )}
+      <span className="shrink-0 font-medium text-foreground">
+        {repliesText(message.replyCount)}
       </span>
-      {message.lastReplyAt ? (
-        <span className="text-muted-foreground">{formatStamp(message.lastReplyAt)}</span>
+      {faces.length > 0 ? (
+        <span className="min-w-0 truncate text-muted-foreground">
+          {faces.map((id) => name(id)).join(", ")}
+        </span>
       ) : null}
+      {message.reopenedAt && message.reopenedBy ? (
+        <span data-slot="chain-reopened" className="shrink-0 text-muted-foreground">
+          · Reopened by {message.reopenedBy === ctx.selfId ? "you" : name(message.reopenedBy)}
+        </span>
+      ) : null}
+      <ChevronRight aria-hidden className="size-icon-xs shrink-0 text-subtle-foreground" />
     </button>
   );
 }
@@ -187,11 +278,7 @@ function QuoteLine({
   name: string;
   onClick?: () => void;
 }) {
-  const text = quoted.deletedAt
-    ? "Deleted message"
-    : toBodyText(messageTree(quoted.id, quoted.updatedAt, quoted.body))
-        .replace(/\s+/g, " ")
-        .slice(0, 140);
+  const text = excerptOf(quoted);
   return (
     <button
       type="button"
@@ -208,6 +295,8 @@ function QuoteLine({
 export type RowHandlers = {
   onReact?: (m: ChatMessage, key: string, on: boolean) => void;
   onOpenChain?: (m: ChatMessage) => void;
+  /** A reply's quote line: jump to the message it answers. */
+  onJumpTo?: (m: ChatMessage) => void;
   onRetry?: (m: ChatMessage) => void;
   onDiscard?: (m: ChatMessage) => void;
   onPersonClick?: (userId: string) => void;
@@ -259,6 +348,7 @@ export function MessageRow({
   person,
   quoted,
   quotedName,
+  settled,
   ctx,
   selected,
   target,
@@ -270,12 +360,15 @@ export function MessageRow({
   editor,
   onPointerEnter,
   onContextMenu,
+  hideChainLine = false,
 }: {
   message: ChatMessage;
   first: boolean;
   person: ChatPerson | undefined;
   quoted?: ChatMessage;
   quotedName?: string;
+  /** A wrapped root's settled reply, when held. */
+  settled?: ChatMessage;
   ctx: BodyContext;
   selected?: boolean;
   target?: boolean;
@@ -291,6 +384,8 @@ export function MessageRow({
   editor?: ReactNode;
   onPointerEnter?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** The chain item draws its root without "N replies ›". */
+  hideChainLine?: boolean;
 }) {
   const name = authorName(message, person);
   const pending = message.sendState === "sending" || message.sendState === "waiting";
@@ -362,7 +457,7 @@ export function MessageRow({
             <QuoteLine
               quoted={quoted}
               name={quotedName ?? "Someone"}
-              onClick={() => handlers.onOpenChain?.(message)}
+              onClick={() => handlers.onJumpTo?.(quoted)}
             />
           ) : null}
           {editor ?? (
@@ -383,7 +478,14 @@ export function MessageRow({
             personOf={ctx.personOf}
             onReact={(key, on) => handlers.onReact?.(message, key, on)}
           />
-          <RepliesLine message={message} onOpenChain={() => handlers.onOpenChain?.(message)} />
+          {hideChainLine ? null : (
+            <ChainLine
+              message={message}
+              settled={settled}
+              ctx={ctx}
+              onOpenChain={() => handlers.onOpenChain?.(message)}
+            />
+          )}
         </div>
         {toolbar}
       </div>
@@ -394,9 +496,13 @@ export function MessageRow({
 /** A deleted message that still has replies: its place in the conversation stays. */
 export function DeletedRow({
   message,
+  settled,
+  ctx,
   onOpenChain,
 }: {
   message: ChatMessage;
+  settled?: ChatMessage;
+  ctx: Pick<BodyContext, "selfId" | "personOf">;
   onOpenChain?: (m: ChatMessage) => void;
 }) {
   return (
@@ -405,7 +511,12 @@ export function DeletedRow({
         <span aria-hidden />
         <div className="min-w-0">
           <p className="text-md leading-normal text-muted-foreground italic">Deleted message</p>
-          <RepliesLine message={message} onOpenChain={() => onOpenChain?.(message)} />
+          <ChainLine
+            message={message}
+            settled={settled}
+            ctx={ctx}
+            onOpenChain={() => onOpenChain?.(message)}
+          />
         </div>
       </div>
     </div>

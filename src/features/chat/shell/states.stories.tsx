@@ -279,6 +279,7 @@ function ConversationState({ state }: { state: State }) {
         onCopyLink={noop}
         onMarkUnread={noop}
         onOpenChain={noop}
+        onReply={noop}
         onRetry={noop}
         onDiscard={noop}
         onReturnToComposer={noop}

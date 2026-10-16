@@ -14,6 +14,7 @@ import {
   type SidebarEntry,
   toggleReaction,
   upsertMessage,
+  wrappedReplyIds,
 } from "./timeline";
 
 const ME = "me";
@@ -375,5 +376,45 @@ describe("read mark, New pill, page boundaries", () => {
     expect(isEmojiOnlyText("ok 🎉")).toBe(false);
     expect(isEmojiOnlyText("1")).toBe(false);
     expect(isEmojiOnlyText("🎉".repeat(9))).toBe(false);
+  });
+});
+
+describe("wrapped chains in the stream (CV-12)", () => {
+  const root = msg("r", "2026-10-01T10:00:00Z", { replyCount: 2 });
+  const a = msg("a", "2026-10-01T10:01:00Z", { parentId: "r", replyToId: "r" });
+  const talk = msg("t", "2026-10-01T10:02:00Z", { authorId: ME });
+  const b = msg("b", "2026-10-01T10:03:00Z", { parentId: "r", replyToId: "a" });
+  const ids = (items: ReturnType<typeof buildStream>) =>
+    items.flatMap((i) => (i.type === "message" ? [i.key] : []));
+
+  it("nothing folds automatically: an open chain's replies stay with the talk between them", () => {
+    const rows = [root, a, talk, b];
+    const hidden = wrappedReplyIds(rows, () => undefined);
+    expect(ids(buildStream(rows, { hidden }))).toEqual(["r", "a", "t", "b"]);
+  });
+
+  it("hides the replies of a wrapped root, keeps the root, and joins the deletes", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T11:00:00Z", settledId: "b" };
+    const rows = [wrapped, a, talk, b];
+    const hidden = wrappedReplyIds(rows, () => undefined, new Set(["t"]));
+    expect([...hidden].sort()).toEqual(["a", "b", "t"]);
+    expect(ids(buildStream(rows, { hidden }))).toEqual(["r"]);
+  });
+
+  it("reads a root outside the window from the store; an unknown root keeps its replies", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T11:00:00Z" };
+    const rows = [a, talk, b];
+    expect([...wrappedReplyIds(rows, (id) => (id === "r" ? wrapped : undefined))]).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(wrappedReplyIds(rows, () => undefined).size).toBe(0);
+  });
+
+  it("a reply after the wrap-up shows (it reopened the chain), and so do unsent ones", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T10:02:30Z" };
+    const unsent = msg("u", "2026-10-01T10:02:10Z", { parentId: "r", sendState: "sending" });
+    const rows = [wrapped, a, talk, unsent, b];
+    expect([...wrappedReplyIds(rows, () => undefined)]).toEqual(["a"]);
   });
 });

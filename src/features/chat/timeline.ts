@@ -215,6 +215,33 @@ export function buildStream(
 }
 
 /**
+ * Replies whose chain is wrapped up (CV-12): the stream doesn't draw them (a
+ * drawing rule on the root; they stay rows for unread, Catch up, search and
+ * export). The root is read from the window first (your pending Wrap up shows
+ * at once), then from what the store holds; a reply whose root isn't held
+ * stays drawn, and so do your unsent sends. Joined with the ids deleted
+ * inside their Undo: same path.
+ */
+export function wrappedReplyIds(
+  rows: readonly ChatMessage[],
+  rowById: (id: string) => ChatMessage | undefined,
+  base?: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const inWindow = new Map<string, ChatMessage>();
+  for (const m of rows) inWindow.set(m.id, m);
+  let out: Set<string> | null = null;
+  for (const m of rows) {
+    if (!m.parentId || m.sendState) continue;
+    const root = inWindow.get(m.parentId) ?? rowById(m.parentId);
+    // A reply after the wrap-up reopened it (CH54): it shows before the root's change arrives.
+    if (!root?.wrappedAt || m.createdAt > root.wrappedAt) continue;
+    out ??= new Set(base);
+    out.add(m.id);
+  }
+  return out ?? base ?? new Set();
+}
+
+/**
  * The read mark's candidate: the newest server message at or above `index`
  * (the last row on screen). Unsent sends and event lines never count; null
  * when nothing on screen is a message.

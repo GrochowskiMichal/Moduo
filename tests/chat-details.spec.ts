@@ -68,7 +68,8 @@ test("Details: history, decisions, chains, people", async ({ page }) => {
   expect(channelId).toBeTruthy();
 
   // Details is the panel's first view: About, Linked to, People (you first).
-  await expect(panel(page).getByRole("heading", { name: "Details" })).toBeVisible();
+  // With Reply chains beside it (CV-12) the title is the view switcher, "Details ▾".
+  await expect(panel(page).getByRole("button", { name: "Panel view: Details" })).toBeVisible();
   await expect(details(page).getByText("Homepage and brand guidelines")).toBeVisible();
   const people = details(page).locator('[data-slot="details-people"] button');
   await expect(people).toHaveCount(2, { timeout: 15_000 });

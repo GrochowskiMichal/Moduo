@@ -1837,6 +1837,45 @@ export class ChatStore {
     );
   }
 
+  /** Wrap up a chain (CV-12): its replies leave the stream (a drawing rule on the root). */
+  wrapUp(rootId: string, settledId: string): Promise<ChatWriteResult> {
+    const at = new Date().toISOString();
+    return this.write(
+      rootId,
+      (row) => ({ ...row, wrappedAt: at, wrappedBy: this.userId, settledId }),
+      () => this.transport.wrapUp({ rootId, settledId }),
+    );
+  }
+
+  /** Reopen a wrapped chain (also the wrap-up toast's Undo). */
+  reopen(rootId: string): Promise<ChatWriteResult> {
+    return this.write(
+      rootId,
+      (row) => ({ ...row, wrappedAt: null, wrappedBy: null, settledId: null }),
+      () => this.transport.reopen(rootId),
+    );
+  }
+
+  /** "Reply to…": the message joins `replyToId`'s chain; both chains' roots read again. */
+  async attachToChain(messageId: string, replyToId: string): Promise<ChatWriteResult> {
+    const oldRoot = this.rowById(messageId)?.parentId ?? null;
+    const res = await this.write(
+      messageId,
+      (row) => ({ ...row, parentId: this.rootOf(replyToId), replyToId }),
+      () => this.transport.attachToChain({ messageId, replyToId }),
+    );
+    if (!res.ok) return res;
+    const roots = new Set([oldRoot, this.rowById(messageId)?.parentId ?? null]);
+    for (const id of roots) {
+      if (!id) continue;
+      const root = await this.transport.message(id);
+      if (root.data) this.landRow(root.data);
+    }
+    this.chainCache.clear();
+    this.notify();
+    return res;
+  }
+
   // ── Conversation ops (they throw; the screens say why) ────────────────────
 
   async createChannel(args: {

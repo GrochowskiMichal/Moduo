@@ -221,6 +221,23 @@ export type ChatRuntime = {
   remove(id: string): Promise<ChatResult<ChatMessage>>;
   react(args: { id: string; key: string; on: boolean }): Promise<ChatResult<ChatMessage>>;
   pin(args: { id: string; pinned: boolean }): Promise<ChatResult<ChatMessage>>;
+  /** Wrap up a chain (CV-12): `settledId` is the reply that settled it. */
+  wrapUp(args: {
+    rootId: string;
+    settledId: string;
+    markDecision?: boolean;
+  }): Promise<ChatResult<ChatMessage>>;
+  /** Reopen a wrapped chain (the wrapper within 10 s: the toast's Undo). */
+  reopen(rootId: string): Promise<ChatResult<ChatMessage>>;
+  /** "Reply to…": the message joins the chain of an earlier message. */
+  attachToChain(args: { messageId: string; replyToId: string }): Promise<ChatResult<ChatMessage>>;
+  /** You read the chain on the right: its Catch up items close. */
+  chainRead(rootId: string): Promise<ChatResult<null>>;
+  /** A conversation's reply chains (roots with replies), newest activity first. */
+  chains(channelId: string): Promise<ChatResult<ChatMessage[]>>;
+  /** Whether you follow a chain (no mute row = following). */
+  chainFollowing(rootId: string): Promise<boolean>;
+  followChain(rootId: string, following: boolean): Promise<ChatResult<null>>;
   markRead(args: { channelId: string; messageId: string }): Promise<ChatResult<null>>;
   markUnread(args: { channelId: string; messageId: string }): Promise<ChatResult<null>>;
   /** "I'm typing" (or stopped): the server broadcasts it under the session's id. Best effort. */
