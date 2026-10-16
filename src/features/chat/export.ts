@@ -17,7 +17,7 @@ import type {
   ChatResult,
   ChatRuntime,
 } from "./model";
-import { keyOf } from "./store/keys";
+import { compareKeys, compareRows, keyOf } from "./store/keys";
 import { channelTitle } from "./timeline";
 
 /** The reads the export needs (a slice of ChatRuntime, so tests pass fakes). */
@@ -73,8 +73,15 @@ const PAGE = 200;
 const FILE_PAGE = 200;
 /** Files fetched at once. */
 const FILE_BATCH = 6;
-/** All of chat's file bytes in one export (the zip is built in memory). */
-export const CHAT_EXPORT_FILE_BUDGET = 1024 * 1024 * 1024;
+/** A path part's longest length in the zip. */
+const PART_MAX = 120;
+/**
+ * All of chat's file bytes in one export: the zip is built in memory (and
+ * copied once more when it's packed), so the bytes stay well inside what a
+ * browser tab or the desktop's web view holds. Files past it are listed with
+ * why they're missing.
+ */
+export const CHAT_EXPORT_FILE_BUDGET = 256 * 1024 * 1024;
 
 function unwrap<T>(result: ChatResult<T>): T {
   if (result.error) throw new Error(result.error.message || "Couldn't read chat.");
@@ -86,9 +93,17 @@ function exportMessage(m: ChatMessage): ChatExportMessage {
   return rest;
 }
 
-/** Every message of one conversation, oldest first, plus the replies of chains its pages didn't carry. */
-async function readConversation(reads: ChatExportReads, channelId: string): Promise<ChatMessage[]> {
+/**
+ * Every message of one conversation, oldest first, plus the replies of chains
+ * its pages didn't carry. A chain that can't be read keeps what the pages
+ * brought and is named in `chainErrors`.
+ */
+async function readConversation(
+  reads: ChatExportReads,
+  channelId: string,
+): Promise<{ messages: ChatMessage[]; chainErrors: string[] }> {
   const byId = new Map<string, ChatMessage>();
+  const chainErrors: string[] = [];
   let before: ChatKey | null = null;
   for (;;) {
     const page = unwrap(await reads.page({ channelId, before, limit: PAGE }));
@@ -101,18 +116,21 @@ async function readConversation(reads: ChatExportReads, channelId: string): Prom
   }
   // A chain's replies are in the stream; read the chain itself when its root
   // counts more replies than the pages brought (a wrapped or older chain).
+  const seen = new Map<string, number>();
+  for (const m of byId.values()) {
+    if (m.parentId) seen.set(m.parentId, (seen.get(m.parentId) ?? 0) + 1);
+  }
   for (const root of [...byId.values()]) {
-    if (root.replyCount <= 0) continue;
-    let seen = 0;
-    for (const m of byId.values()) if (m.parentId === root.id) seen += 1;
-    if (seen >= root.replyCount) continue;
-    for (const m of unwrap(await reads.chain(root.id))) {
-      if (m.channelId === channelId) byId.set(m.id, m);
+    if (root.replyCount <= 0 || (seen.get(root.id) ?? 0) >= root.replyCount) continue;
+    try {
+      for (const m of unwrap(await reads.chain(root.id))) {
+        if (m.channelId === channelId) byId.set(m.id, m);
+      }
+    } catch (err) {
+      chainErrors.push(`Chain ${root.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  return [...byId.values()].sort((a, b) =>
-    a.createdAt === b.createdAt ? (a.id < b.id ? -1 : 1) : a.createdAt < b.createdAt ? -1 : 1,
-  );
+  return { messages: [...byId.values()].sort(compareRows), chainErrors };
 }
 
 /** Every file of one conversation (the server's read rule: only what you may read). */
@@ -132,18 +150,27 @@ async function readConversationFiles(
   }
   // Oldest first, so a repeated name's numbering follows the order they were sent.
   return [...out.values()].sort((a, b) =>
-    a.sentAt === b.sentAt ? (a.id < b.id ? -1 : 1) : a.sentAt < b.sentAt ? -1 : 1,
+    compareKeys({ at: a.sentAt, id: a.id }, { at: b.sentAt, id: b.id }),
   );
 }
 
-/** A file's place under `chat/files/`: `attachments/<message>/<name>`, a repeated name numbered. */
+/**
+ * A file's place under `chat/files/`: `attachments/<message>/<name>`, a
+ * repeated name numbered. Every part is already as `cleanPart` leaves it (a
+ * numbered name stays within its length), so the zip's path, `chat.json` and
+ * the Markdown link agree.
+ */
 function attachmentPath(file: ChatFile, taken: Set<string>): string {
   const dir = `attachments/${cleanPart(file.messageId) || "message"}`;
   const name = cleanPart(file.fileName) || "file";
   const dot = name.lastIndexOf(".");
-  const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+  const [stem, ext] =
+    dot > 0 && name.length - dot <= 16 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
   let path = `${dir}/${name}`;
-  for (let n = 2; taken.has(path); n += 1) path = `${dir}/${stem} (${n})${ext}`;
+  for (let n = 2; taken.has(path); n += 1) {
+    const suffix = ` (${n})${ext}`;
+    path = `${dir}/${stem.slice(0, PART_MAX - suffix.length).trimEnd()}${suffix}`;
+  }
   taken.add(path);
   return path;
 }
@@ -225,22 +252,34 @@ export function signedFileBytes(
   };
 }
 
-/** Read Chat for the export. Throws only when the conversation list can't be read. */
+/**
+ * Read Chat for the export. Throws only when the conversation list can't be
+ * read; anything else that can't be read is named in `incomplete` (people's
+ * names fall back to "Former member").
+ */
 export async function readChatExport(
   reads: ChatExportReads,
   workspaceId: string,
   selfId: string,
   opts: { fileBudget?: number } = {},
 ): Promise<ChatExport> {
-  const people = unwrap(await reads.people(workspaceId));
+  const incomplete: { channelId: string; error: string }[] = [];
+  const why = (err: unknown) => (err instanceof Error ? err.message : String(err));
+  let people: ChatPerson[] = [];
+  try {
+    people = unwrap(await reads.people(workspaceId));
+  } catch (err) {
+    incomplete.push({ channelId: "", error: `People: ${why(err)}` });
+  }
   const channels = await reads.listChannels(workspaceId);
   const conversations: { channel: ChatChannel; messages: ChatMessage[] }[] = [];
   const listed: ChatFile[][] = [];
-  const incomplete: { channelId: string; error: string }[] = [];
   for (const channel of channels) {
     let messages: ChatMessage[];
     try {
-      messages = await readConversation(reads, channel.id);
+      const read = await readConversation(reads, channel.id);
+      messages = read.messages;
+      for (const error of read.chainErrors) incomplete.push({ channelId: channel.id, error });
     } catch (err) {
       incomplete.push({
         channelId: channel.id,
@@ -269,7 +308,12 @@ export async function readChatExport(
     listed.push(files);
   }
   const read = await readFileBytes(reads, listed, opts.fileBudget ?? CHAT_EXPORT_FILE_BUDGET);
-  const extra = reads.extraFiles ? await reads.extraFiles(workspaceId) : [];
+  let extra: ChatExportFile[] = [];
+  try {
+    extra = reads.extraFiles ? await reads.extraFiles(workspaceId) : [];
+  } catch (err) {
+    incomplete.push({ channelId: "", error: `Files: ${why(err)}` });
+  }
   return shapeChatExport({
     people,
     conversations: conversations.map((c, i) => ({ ...c, files: read.entries[i] ?? [] })),
@@ -286,7 +330,9 @@ function cleanPart(text: string): string {
       // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes
       .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "")
       .replace(/^[\s.]+|[\s.]+$/g, "")
-      .slice(0, 120)
+      .slice(0, PART_MAX)
+      // Cut again after the cut, so cleaning a clean part changes nothing.
+      .replace(/[\s.]+$/g, "")
   );
 }
 
@@ -336,7 +382,7 @@ export function conversationMarkdown(
     if (attached.length > 0) {
       const named = attached.map((f) =>
         f.path
-          ? `[${f.fileName.replace(/[[\]]/g, "")}](${encodeURI(f.path)})`
+          ? `[${f.fileName.replace(/[[\]]/g, "")}](${f.path.split("/").map(encodeURIComponent).join("/")})`
           : `${f.fileName} (${f.missing ?? "not in the export"})`,
       );
       lines.push("", `Files: ${named.join(" · ")}`);

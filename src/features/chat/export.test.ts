@@ -128,6 +128,7 @@ function fakeReads(
   streams: Record<string, ChatMessage[]>,
   opts: {
     chains?: Record<string, ChatMessage[]>;
+    chainFails?: string[];
     refused?: string[];
     extraFiles?: ChatExportReads["extraFiles"];
     chatFiles?: Record<string, ChatFile[]>;
@@ -171,6 +172,9 @@ function fakeReads(
     },
     async chain(rootId: string) {
       calls.chain.push(rootId);
+      if (opts.chainFails?.includes(rootId)) {
+        return { data: null, error: { code: "500", message: "Chain read failed." } };
+      }
       return { data: opts.chains?.[rootId] ?? [], error: null };
     },
     async people() {
@@ -383,6 +387,45 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
     const listed = out.data.conversations[0]!.files;
     expect(listed.filter((f) => f.path)).toHaveLength(1);
     expect(listed.filter((f) => f.missing === "Over the export's size limit.")).toHaveLength(1);
+  });
+
+  it("a chain that can't be read keeps the conversation's pages and is named as incomplete", async () => {
+    const root = msg("r1", "general", at(1), { replyCount: 3 });
+    const other = msg("g2", "general", at(2));
+    const { reads } = fakeReads({ general: [root, other] }, { chainFails: ["r1"] });
+    const out = await readChatExport(reads, "w", ME);
+    expect(out.data.conversations[0]!.messages.map((m) => m.id)).toEqual(["r1", "g2"]);
+    expect(out.data.incomplete).toEqual([
+      { channelId: "general", error: "Chain r1: Chain read failed." },
+    ]);
+  });
+
+  it("numbered and long names keep one path in the zip, chat.json and the link; # is encoded", async () => {
+    const long = `${"a".repeat(116)}.pdf`;
+    const m1 = msg("m1", "general", at(1));
+    const files = [
+      file("f1", "m1", at(1), { fileName: long }),
+      file("f2", "m1", at(1), { fileName: long }),
+      file("f3", "m1", at(1), { fileName: "invoice #12.pdf" }),
+    ];
+    const bytes = Object.fromEntries(files.map((f) => [f.objectPath, new Uint8Array([1])]));
+    const { reads } = fakeReads({ general: [m1] }, { chatFiles: { general: files }, bytes });
+    const out = await readChatExport(reads, "w", ME);
+    const listed = out.data.conversations[0]!.files;
+    for (const f of listed) expect(out.files[f.path!]).toBeInstanceOf(Uint8Array);
+    const second = listed.find((f) => f.id === "f2")!.path!;
+    expect(second.endsWith(" (2).pdf")).toBe(true);
+    expect(second.split("/").at(-1)!.length).toBeLessThanOrEqual(120);
+    const md = Object.entries(out.files).find(([k]) => k.endsWith(".md"))![1] as string;
+    expect(md).toContain("(files/attachments/m1/invoice%20%2312.pdf)");
+  });
+
+  it("a failed people read keeps the export, with names as former members", async () => {
+    const { reads } = fakeReads({ general: [msg("g1", "general", at(1))] });
+    reads.people = async () => ({ data: null, error: { code: "500", message: "No people." } });
+    const out = await readChatExport(reads, "w", ME);
+    expect(out.data.conversations[0]!.messages).toHaveLength(1);
+    expect(out.data.incomplete).toEqual([{ channelId: "", error: "People: No people." }]);
   });
 
   it("reads bytes through signed links only; a failed fetch is left out", async () => {

@@ -157,7 +157,7 @@ export const WIDGET_CATALOG: Record<WidgetType, WidgetMeta> = {
   },
   // Chat's Catch up (chat v2 CV-22, CH35): what's waiting for you. It keeps
   // v1's "Conversations" type id so saved dashboards keep their widget; a saved
-  // L instance draws as M. Reading works on a paused plan, so always offered.
+  // L instance is fitted to M when the layout loads (fitAllowedSizes). Reading works on a paused plan, so always offered.
   chat: {
     type: "chat",
     label: "Catch up",

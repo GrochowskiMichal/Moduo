@@ -265,8 +265,8 @@ export function chatKeyRows(isMac = isMacPlatform()): ChatKeyRow[] {
     { scope: "A message", keys: ["R", "E", "+"], desc: "Reply · edit · react" },
     {
       scope: "A message",
-      keys: ["P", "T", `${shift}D`, "H"],
-      desc: "Pin · make a task · decision · remind me",
+      keys: ["P", "T", "M", "H"],
+      desc: "Pin · make a task · move · remind me",
     },
     { scope: "A message", keys: [`${mod}⌫`], desc: "Delete your message" },
     { scope: "A message", keys: [`${shift}↑`, `${shift}↓`], desc: "Select several" },
