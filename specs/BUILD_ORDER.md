@@ -349,7 +349,7 @@ _Finished blocks of this section (and the v2 blocks that landed): [BUILD_LOG.md]
 - [x] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy) · ✅ built 2026-10-16 (`t/mike/nr-7-secure-live-channel`, #409); migrations `20261016120000` (and #412's compaction guard `20261016150000`) applied to prod 2026-10-16; the app/`moduo-mcp` ship waits on Maciej's release train
 - [x] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor · ✅ built 2026-10-16 (`t/mike/nr-4-writing-ux`, #414)
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
-- [ ] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`)
+- [x] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`) · ✅ built 2026-10-16 (`t/mike/nr-8-anchored-comments`, #415); migration `20261016180000` tested locally, **not applied to prod**; `moduo-mcp` must redeploy with or before the web release
 - [ ] **NR-10 — ⌘K searches everything** · deps: NR-2 · lane notes-ui
 - [ ] **NR-11 — Import hardening (trashed re-import, size cap, honest progress, >1000 notes)** · deps: NR-3 · lane notes-data
 - [ ] **NR-12 — Flip to New Notes + delete classic** · deps: NR-4, NR-5, NR-6, NR-7, NR-8, NR-10, NR-11 · lane notes-ui

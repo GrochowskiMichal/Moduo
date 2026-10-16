@@ -136,6 +136,10 @@ export type SpineComment = {
   editedAt: string | null;
   /** Who reacted with which of the six (TV-U13, REPLAN 88), oldest first. */
   reactions: CommentReactionMark[];
+  /** The text thread it belongs to (NR-8, notes only); null/absent = note-level. */
+  anchorId?: string | null;
+  /** When its thread was resolved (NR-8). */
+  resolvedAt?: string | null;
 };
 
 /** One person's reaction on a comment. */
@@ -1479,7 +1483,16 @@ export type ModuoRuntime = {
       mentionedUserIds?: string[];
       entityLabel?: string;
       entityIcon?: string | null;
+      /** NR-8: post into this text thread on a note (`comments_op_add_anchored`). */
+      anchorId?: string | null;
     }): Promise<SpineComment>;
+    /** Resolve (or reopen) a note's text thread (NR-8, `comments_op_resolve`). */
+    resolveCommentThread?(input: {
+      workspaceId: string;
+      noteId: string;
+      anchorId: string;
+      resolved: boolean;
+    }): Promise<void>;
     /**
      * The opening words (140 characters) of comments a bell notice names by
      * id (TV-D16: notices carry no comment text). Read through the comments'

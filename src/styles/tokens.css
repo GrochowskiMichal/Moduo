@@ -154,6 +154,10 @@
   --danger:  var(--status-danger);
   --info:    var(--status-info);
 
+  /* Comment highlight on anchored text (NR-8): a soft wash, stronger when its thread is open. */
+  --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 22%, transparent);
+  --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 45%, transparent);
+
   --success-foreground: oklch(0.12 0 0);
   --warning-foreground: oklch(0.12 0 0);
   --danger-foreground:  oklch(0.97 0 0);

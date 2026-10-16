@@ -60,6 +60,7 @@ import {
   NotesEditorBridgeContext,
 } from "../editor/notes-editor-bridge";
 import { BlockHandlePlugin } from "../editor/plugins/block-handle-plugin";
+import { CommentMarksPlugin } from "../editor/plugins/comment-marks-plugin";
 import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
 import { LinkDialogPlugin } from "../editor/plugins/link-dialog-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
@@ -467,6 +468,7 @@ export function NoteEditor({
         tableRow: "notes-table-row",
         tableCell: "notes-table-cell",
         tableCellHeader: "notes-table-cell-header",
+        mark: "notes-comment-mark",
       },
     }),
     [noteId, editable],
@@ -570,7 +572,19 @@ export function NoteEditor({
               format while typing. ⌘B/⌘I ride Lexical's built-in rich-text
               bindings; the floating toolbar makes them discoverable. */}
             <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
-            <FormatToolbarPlugin editable={editable} link={writing} />
+            {bare ? (
+              <CommentMarksPlugin
+                noteId={noteId}
+                editable={editable}
+                runtime={runtime}
+                workspaceId={workspaceId ?? null}
+              />
+            ) : null}
+            <FormatToolbarPlugin
+              editable={editable}
+              link={writing}
+              comment={writing && Boolean(bridge.openComments)}
+            />
             <TaskLinePlugin editable={editable} noteId={noteId} />
             <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
             <InsertEntityChipPlugin noteId={noteId} editable={editable} />

@@ -9,16 +9,21 @@
  * `moveBlockInDoc` on the Yjs doc (see block-move.ts for why not Lexical).
  */
 
+import { $isCodeNode } from "@lexical/code";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $createRangeSelection,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
   $getRoot,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
+  $setSelection,
   COMMAND_PRIORITY_HIGH,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
+  type LexicalNode,
   type NodeKey,
 } from "lexical";
 import { Copy, GripVertical, MessageSquare, Trash2, Type } from "lucide-react";
@@ -46,6 +51,7 @@ import {
 import { type BlockMoveDirection, moveBlockInDoc, stepTarget } from "../block-move";
 import { NOTES_DOC_ROOT } from "../doc-markdown";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
+import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
 
 const BLOCK_MIME = "application/x-moduo-block";
 
@@ -332,7 +338,26 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
                 </DropdownMenuItem>
               ) : null}
               {bridge?.openComments ? (
-                <DropdownMenuItem onSelect={() => bridge.openComments?.()}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    // Anchor a thread to the whole block (NR-8); a block with
+                    // no text opens the panel's note-level thread instead.
+                    let anchored = false;
+                    if (hovered) {
+                      editor.focus();
+                      editor.update(
+                        () => {
+                          const node = $getNodeByKey(hovered.key);
+                          anchored = node ? $selectBlockText(node) : false;
+                        },
+                        { discrete: true },
+                      );
+                    }
+                    if (!anchored || !editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined)) {
+                      bridge.openComments?.();
+                    }
+                  }}
+                >
                   <MessageSquare aria-hidden />
                   Comment
                 </DropdownMenuItem>
@@ -361,4 +386,19 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
       ) : null}
     </>
   );
+}
+
+/** Select every text run of a block, for anchoring a comment to it. */
+function $selectBlockText(node: LexicalNode): boolean {
+  // The code highlighter rebuilds a code block's runs and would drop the mark.
+  if (!$isElementNode(node) || $isCodeNode(node)) return false;
+  const texts = node.getAllTextNodes();
+  const first = texts[0];
+  const last = texts[texts.length - 1];
+  if (!first || !last) return false;
+  const sel = $createRangeSelection();
+  sel.anchor.set(first.getKey(), 0, "text");
+  sel.focus.set(last.getKey(), last.getTextContentSize(), "text");
+  $setSelection(sel);
+  return true;
 }
