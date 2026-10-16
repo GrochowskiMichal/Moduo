@@ -46,8 +46,8 @@ export function AccentPicker({ value, onChange }: Props) {
               onClick={() => onChange(accent)}
               className={
                 checked
-                  ? "group relative grid h-10 w-10 place-items-center rounded-full border border-foreground/30 bg-primary text-primary-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-                  : "group relative grid h-10 w-10 place-items-center rounded-full border border-border bg-primary text-primary-foreground transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  ? "group relative grid h-10 w-10 place-items-center rounded-full border border-foreground/30 bg-primary text-primary-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  : "group relative grid h-10 w-10 place-items-center rounded-full border border-border bg-primary text-primary-foreground transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               }
             >
               {checked ? (

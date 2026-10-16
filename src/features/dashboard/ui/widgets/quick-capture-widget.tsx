@@ -7,11 +7,11 @@ import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "@/components/app/create-events";
+import { Textarea } from "@/components/ui/textarea";
 import { endPosition, makeTask } from "@/features/tasks/helpers";
 import { getRuntime } from "@/lib/runtime";
 import { captureTaskToStore } from "@/lib/sync/capture";
 import { findWorkspaceStore } from "@/lib/sync/store";
-import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
@@ -66,7 +66,8 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
   return (
     <div className="flex h-full flex-col justify-center gap-2 p-3">
       <div className="relative">
-        <textarea
+        {/* The field primitive (MOD-160): its well and its focus edge, as everywhere. */}
+        <Textarea
           ref={inputRef}
           value={text}
           disabled={!canWrite}
@@ -79,10 +80,7 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
           }}
           placeholder={canWrite ? "Capture a task…" : "View only"}
           rows={2}
-          className={cn(
-            "w-full resize-none rounded-md border border-border bg-muted px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            "scrollbar-thin",
-          )}
+          className="min-h-0 resize-none px-2.5 py-2 text-sm"
         />
         {canWrite && text.trim() ? (
           <button
@@ -90,7 +88,7 @@ export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
             onClick={() => void submit()}
             disabled={busy}
             aria-label="Add to Inbox"
-            className="absolute bottom-1.5 right-1.5 grid size-icon-lg place-items-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            className="absolute bottom-1.5 right-1.5 grid size-icon-lg place-items-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-60"
           >
             <ArrowUp className="size-icon-sm" aria-hidden />
           </button>

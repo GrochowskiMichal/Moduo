@@ -149,7 +149,7 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
           <TooltipTrigger asChild>
             <DropdownMenuTrigger
               data-slot="chrome-fade-in"
-              className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               aria-label={`Switch workspace · current: ${workspaceLabel}`}
             >
               <WorkspaceMark

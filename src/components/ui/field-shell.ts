@@ -12,14 +12,19 @@ import { cn } from "@/lib/utils";
  * Variants:
  * - `filled` (default) — a visible well: bg-input + hairline border. Crisp,
  *   for standalone forms.
- * - `ghost` — borderless/transparent at rest; a hairline + muted fill appear on
- *   hover, the focus ring on focus. The quiet, Linear-style inline-edit field
- *   used in the detail panel's property rows.
+ * - `ghost` — borderless/transparent at rest; a hairline + the hover fill
+ *   appear on hover, the focus edge on focus. The quiet, Linear-style
+ *   inline-edit field.
  * - `bare` — no chrome at all (transparent, no border/shadow); for inline title
  *   and rename editors that must look like plain text until focused.
  *
- * Focus is a modern offset-less ring (`ring-2 ring-ring/50`) — no ring-offset
- * gap. Invalid pairs a destructive border with a faint destructive ring.
+ * Focus (MOD-160): a field marks focus on its own edge, the 1 px border turning
+ * the focus colour (`--ring` at 50%), with no halo. The 2 px ring is the
+ * keyboard's mark on buttons, rows and menu triggers, and a text field matches
+ * `:focus-visible` on every click too, so a field ringed like them showed the
+ * keyboard's mark to every mouse user (shadcn's input default). `bare` has no
+ * edge to brighten, so it keeps that ring. Invalid pairs a destructive border
+ * with a faint destructive ring.
  */
 export const fieldShellVariants = cva(
   cn(
@@ -27,20 +32,19 @@ export const fieldShellVariants = cva(
     "placeholder:text-muted-foreground",
     "outline-none transition-[color,background-color,border-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
     "selection:bg-primary selection:text-primary-foreground",
-    "focus-visible:ring-2 focus-visible:ring-ring/50",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/40",
   ),
   {
     variants: {
       variant: {
-        filled: "border border-border bg-input",
+        filled: "border border-border bg-input focus-visible:border-ring/50",
         ghost: cn(
           "border border-transparent bg-transparent",
-          "hover:border-border hover:bg-muted/50",
-          "focus-visible:border-border focus-visible:bg-muted/60",
+          "hover:border-hairline hover:bg-state-hover",
+          "focus-visible:border-ring/50 focus-visible:bg-state-hover",
         ),
-        bare: "border-0 bg-transparent shadow-none",
+        bare: "border-0 bg-transparent shadow-none focus-visible:ring-2 focus-visible:ring-ring/50",
       },
     },
     defaultVariants: {
@@ -48,5 +52,13 @@ export const fieldShellVariants = cva(
     },
   },
 );
+
+/**
+ * The same focus edge for a composite field whose chrome is a wrapper around
+ * a bare text control (a comment box, a tag input): the wrapper's border turns
+ * the focus colour while the text control inside it has focus, not when one of
+ * its buttons does.
+ */
+export const FIELD_FOCUS_WITHIN = "has-[:is(input,textarea):focus]:border-ring/50";
 
 export type FieldShellVariant = NonNullable<VariantProps<typeof fieldShellVariants>["variant"]>;
