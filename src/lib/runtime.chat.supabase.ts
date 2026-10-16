@@ -33,6 +33,7 @@ import {
   mapSyncRow,
   mapUnread,
   mapUserChatPrefs,
+  parseMoveAnswer,
 } from "../features/chat/mappers";
 import {
   CHAT_HISTORY_OPS,
@@ -291,6 +292,18 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
           .rpc("chat_op_attach_to_chain", { p_message_id: messageId, p_reply_to_id: replyToId })
           .select(MESSAGE_COLUMNS);
         return rowResult(data, error, "reply to");
+      }),
+
+    moveMessages: ({ ids, targetId, confirm }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_op_move_messages", {
+          p_ids: ids,
+          p_target_channel_id: targetId,
+          p_confirm: confirm,
+        });
+        if (error) return bad(chatError(error));
+        const answer = parseMoveAnswer(data);
+        return answer ? ok(answer) : bad({ code: null, message: "Couldn't move the messages." });
       }),
 
     chainRead: (rootId) =>

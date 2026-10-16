@@ -582,3 +582,88 @@ describe("a paused plan (CV-8a, CH4a)", () => {
     expect(store.getSnapshot().paused).toBe(false);
   });
 });
+
+describe("Move to… (CV-16)", () => {
+  it("asks first when the op answers confirm; moved rows leave at once and land where they went", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    server.addChannel(D);
+    const root = server.post(uuid(1), C);
+    const reply = server.post(uuid(2), C, { parentId: root.id });
+    server.post(uuid(3), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await store.open(D);
+    await settle();
+
+    server.moveNewly = 2;
+    const asked = await store.moveMessages([root.id], D);
+    expect(asked).toEqual({ ok: true, answer: { status: "confirm", newly: 2 } });
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(root.id);
+
+    const moved = await store.moveMessages([root.id], D, true);
+    expect(moved.ok && moved.answer.status).toBe("moved");
+    // The root brought its chain; both left C before any delta.
+    expect(ids(store.getSnapshot().windows[C]!.rows)).not.toContain(root.id);
+    expect(store.rowById(reply.id)?.channelId ?? D).toBe(D);
+    await store.sync("interval");
+    await settle();
+    expect(ids(store.getSnapshot().windows[D]!.rows)).toContain(root.id);
+  });
+
+  it("a refusal says why and moves nothing", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    server.addChannel(D);
+    const m = server.post(uuid(1), C);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await settle();
+    server.refuse.set("moveMessages", {
+      code: "42501",
+      message: "You can only move your own messages.",
+    });
+    const res = await store.moveMessages([m.id], D);
+    expect(res).toEqual({
+      ok: false,
+      offline: false,
+      message: "You can only move your own messages.",
+    });
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(m.id);
+  });
+
+  it("an Undo's deleted moved_in line drops the ids it brought; a moved_out line drops them at the source", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    server.addChannel(D);
+    const a = server.post(uuid(1), C);
+    const b = server.post(uuid(2), D);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await store.open(D);
+    await settle();
+
+    const out = server.post(uuid(3), C, {
+      kind: "event",
+      event: { type: "moved_out", ids: [a.id] },
+    });
+    live.emit({ type: "message", row: out, insert: true });
+    expect(ids(store.getSnapshot().windows[C]!.rows)).not.toContain(a.id);
+
+    const inLine = server.post(uuid(4), D, {
+      kind: "event",
+      event: { type: "moved_in", ids: [b.id] },
+    });
+    live.emit({ type: "message", row: inLine, insert: true });
+    expect(ids(store.getSnapshot().windows[D]!.rows)).toContain(b.id);
+    live.emit({
+      type: "message",
+      row: server.change(inLine.id, { deletedAt: server.now() }),
+      insert: false,
+    });
+    expect(ids(store.getSnapshot().windows[D]!.rows)).not.toContain(b.id);
+  });
+});

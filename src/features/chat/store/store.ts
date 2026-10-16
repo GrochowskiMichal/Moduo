@@ -47,6 +47,7 @@ import type {
   ChatKey,
   ChatMember,
   ChatMessage,
+  ChatMoveAnswer,
   ChatNotifyLevel,
   ChatPerson,
   ChatResult,
@@ -220,8 +221,15 @@ const ZERO = (channelId: string): ChatUnread => ({
 
 const micros = (at: string | null | undefined) => timestampMicros(at) ?? 0;
 
+/**
+ * A line that takes ids away from the conversation it's in: a live moved_out
+ * line (CV-16), or a moved_in line its Undo deleted (the messages went back).
+ */
 const isMoveLine = (row: ChatMessage) =>
-  row.kind === "event" && row.event?.type === "moved_out" && Array.isArray(row.event?.ids);
+  row.kind === "event" &&
+  Array.isArray(row.event?.ids) &&
+  ((row.event?.type === "moved_out" && !row.deletedAt) ||
+    (row.event?.type === "moved_in" && !!row.deletedAt));
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -1882,6 +1890,36 @@ export class ChatStore {
     this.chainCache.clear();
     this.notify();
     return res;
+  }
+
+  /**
+   * "Move to…" (CV-16). `confirm` answers the audience warning; the same call
+   * back (the moved ids, the source as the target) within 10 s is the Undo.
+   * The moved rows leave this conversation at once; the delta re-files them
+   * where they went (when this copy holds it).
+   */
+  async moveMessages(
+    ids: readonly string[],
+    targetId: string,
+    confirm = false,
+  ): Promise<
+    { ok: true; answer: ChatMoveAnswer } | { ok: false; offline: boolean; message: string }
+  > {
+    if (browserOffline()) return { ok: false, offline: true, message: "Offline" };
+    const res = await this.transport.moveMessages({ ids: [...ids], targetId, confirm });
+    if (res.error) {
+      const failed = this.failed(res.error);
+      return failed.ok ? { ok: false, offline: false, message: res.error.message } : failed;
+    }
+    this.wentOnline();
+    const answer = res.data;
+    if (answer.status !== "confirm") {
+      this.forgetIds(answer.ids.filter((id) => this.where.get(id) === answer.from));
+      this.chainCache.clear();
+      this.notify();
+      void this.sync("interval");
+    }
+    return { ok: true, answer };
   }
 
   // ── Conversation ops (they throw; the screens say why) ────────────────────

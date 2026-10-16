@@ -41,6 +41,7 @@ import {
   makePrivateCopy,
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
+import { type MoveStep, MoveToDialog, moveTargets } from "../dialogs/move-dialog";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
@@ -114,6 +115,16 @@ function webOrigin(): string {
   const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
   return configured || window.location.origin;
 }
+
+/** A message's words on one line (a task's title from it). */
+function wordsOf(m: ChatMessage): string {
+  return toBodyText(messageTree(m.id, m.updatedAt, m.body))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** How long "Moved to …" offers Undo (the op accepts it for 10 s). */
+const MOVE_UNDO_MS = 8_000;
 
 function failed(res: ChatWriteResult, fallback: string): boolean {
   if (res.ok) return false;
@@ -505,6 +516,105 @@ export function ChatScreen({
     [store, unhide],
   );
 
+  // The multi-select's Delete (CV-16): one toast and one Undo for them all;
+  // each is sent when the toast goes, like a single delete.
+  const deleteManyWithUndo = useCallback(
+    (ms: ChatMessage[]) => {
+      const fresh = ms.filter((m) => !m.sendState && !pendingDeletes.current.has(m.id));
+      if (fresh.length === 0) return;
+      if (fresh.length === 1 && fresh[0]) {
+        deleteWithUndo(fresh[0]);
+        return;
+      }
+      setHidden((prev) => {
+        const next = new Set(prev);
+        for (const m of fresh) next.add(m.id);
+        return next;
+      });
+      for (const m of fresh) pendingDeletes.current.set(m.id, m);
+      const commitAll = () => {
+        for (const m of fresh) commitRef.current(m.id);
+      };
+      toast(`Deleted ${fresh.length} messages`, {
+        id: `chat-delete-many-${fresh[0]?.id}`,
+        duration: DELETE_UNDO_MS,
+        onAutoClose: commitAll,
+        onDismiss: commitAll,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            for (const m of fresh) {
+              pendingDeletes.current.delete(m.id);
+              unhide(m.id);
+            }
+          },
+        },
+      });
+    },
+    [deleteWithUndo, unhide],
+  );
+
+  // Move to… (CV-16): pick a conversation; the audience warning first when
+  // people there couldn't read this one; then "Moved to …" with Undo for 8 s.
+  const [moveFor, setMoveFor] = useState<ChatMessage[] | null>(null);
+  const [moveStep, setMoveStep] = useState<MoveStep>({ step: "pick" });
+  const [moveBusy, setMoveBusy] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  useEffect(() => setMoveFor(null), [conversationId]);
+  const moveTargetsFor = useCallback(
+    (query: string) =>
+      moveTargets(
+        Object.values(snap.channels),
+        people,
+        selfId,
+        conversationId ?? "",
+        new Set(Object.keys(snap.mine)),
+        query,
+      ),
+    [snap.channels, snap.mine, people, selfId, conversationId],
+  );
+  const askMove = useCallback((ms: ChatMessage[]) => {
+    if (ms.length === 0) return;
+    setMoveStep({ step: "pick" });
+    setMoveFor(ms);
+  }, []);
+  const runMove = useCallback(
+    async (target: ChatChannel, title: string, confirm: boolean) => {
+      const ms = moveFor;
+      if (!store || !ms || moveBusy) return;
+      setMoveBusy(true);
+      const res = await store.moveMessages(
+        ms.map((m) => m.id),
+        target.id,
+        confirm,
+      );
+      setMoveBusy(false);
+      if (!res.ok) {
+        toast(res.offline ? "Offline" : res.message || "Couldn't move the messages.");
+        return;
+      }
+      const answer = res.answer;
+      if (answer.status === "confirm") {
+        setMoveStep({ step: "confirm", target, targetTitle: title, newly: answer.newly });
+        return;
+      }
+      setMoveFor(null);
+      if (answer.status !== "moved") return;
+      toast(`Moved to ${title}`, {
+        id: `chat-move-${answer.ids[0]}`,
+        duration: MOVE_UNDO_MS,
+        action: {
+          label: "Undo",
+          onClick: () =>
+            void store.moveMessages(answer.ids, answer.from).then((r) => {
+              if (!r.ok) toast(r.offline ? "Offline" : r.message || "Couldn't undo the move.");
+            }),
+        },
+      });
+    },
+    [store, moveFor, moveBusy],
+  );
+
   // Wrapped-up chains: their replies leave the stream (a drawing rule, CV-12),
   // on the same path as the deletes inside their Undo.
   const streamHidden = useMemo(
@@ -574,12 +684,9 @@ export function ChatScreen({
   }, [streamWin?.rows, snap.chains, conversationId]);
   const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
   const addMadeFrom = madeFrom.add;
-  const makeTaskFrom = useCallback(
-    (m: ChatMessage) => {
-      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 200);
+  const makeTaskWith = useCallback(
+    (m: ChatMessage, words: string) => {
+      const text = words.slice(0, 200);
       const chat = runtime?.chat;
       dispatchOpenCapture({
         type: "task",
@@ -600,6 +707,16 @@ export function ChatScreen({
       });
     },
     [runtime, snap.channels, selfId, personOf, addMadeFrom],
+  );
+  const makeTaskFrom = useCallback((m: ChatMessage) => makeTaskWith(m, wordsOf(m)), [makeTaskWith]);
+  // T on a multi-select (CV-16): one task with the picked messages' words in
+  // order, From the first of them.
+  const makeTaskFromMany = useCallback(
+    (ms: ChatMessage[]) => {
+      const first = ms[0];
+      if (first) makeTaskWith(first, ms.map(wordsOf).filter(Boolean).join(" · "));
+    },
+    [makeTaskWith],
   );
 
   const copyLink = useCallback((m: ChatMessage) => {
@@ -956,6 +1073,9 @@ export function ChatScreen({
             }
             onRetry={(m) => store?.retry(m.id)}
             onDiscard={(m) => store?.discard(m.id)}
+            onMoveMany={channel.archivedAt ? undefined : askMove}
+            onTaskMany={makeTaskFromMany}
+            onDeleteMany={deleteManyWithUndo}
             onPersonClick={openPerson}
             personPreview={(id) => (
               <PersonCard
@@ -1327,6 +1447,23 @@ export function ChatScreen({
           void store.attachToChain(m.id, target.id).then((res) => {
             if (!failed(res, "Couldn't add it to the chain.")) toast("Added to the chain");
           });
+        }}
+      />
+      <MoveToDialog
+        open={!!moveFor}
+        onOpenChange={(open) => {
+          if (!open) setMoveFor(null);
+        }}
+        count={moveFor?.length ?? 0}
+        sourceTitle={channel ? conversationTitle(channel, selfId, personOf) : ""}
+        targets={moveTargetsFor}
+        step={moveStep}
+        busy={moveBusy}
+        onPick={(target, title) => void runMove(target, title, false)}
+        onConfirm={() => {
+          if (moveStep.step === "confirm") {
+            void runMove(moveStep.target, moveStep.targetTitle, true);
+          }
         }}
       />
       <NewConversationDialog

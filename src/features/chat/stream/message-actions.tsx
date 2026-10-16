@@ -3,13 +3,14 @@
 // Reply · Task · ⋯ (Reply before Task). ⋯ holds the verbs whose blocks exist
 // today: Edit (own) · Delete (own) · Pin to conversation · Make a task ·
 // Copy link · Mark unread. Reply to… and Wrap up (a root with replies) came with CV-12;
-// Mark as decision, Move to…, Make a note and Remind me join with their
-// blocks (CV-14, CV-16, CV-15).
+// Move to… came with CV-16 (Make a note waits on Notes' op); Mark as
+// decision and Remind me join with their blocks.
 // Right-click opens the same menu with your whole quick row on top and
 // "Customize…" (CV-7c, CH16a); "any emoji" shows once the picker passes
 // `onAnyEmoji` (CV-7b).
 
 import {
+  ArrowRightLeft,
   Check,
   CheckSquare,
   CornerUpLeft,
@@ -47,6 +48,8 @@ export type MessageVerbs = {
   onReplyTo?: () => void;
   /** Wrap up this root's chain (absent: no item). */
   onWrapUp?: () => void;
+  /** "Move to…" another conversation (CV-16; absent: no item). */
+  onMoveTo?: () => void;
   onTask: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -128,6 +131,13 @@ function ActionsMenu({
           <DropdownMenuItem onSelect={verbs.onWrapUp}>
             <Check aria-hidden />
             Wrap up
+          </DropdownMenuItem>
+        ) : null}
+        {verbs.onMoveTo ? (
+          <DropdownMenuItem onSelect={verbs.onMoveTo}>
+            <ArrowRightLeft aria-hidden />
+            Move to…
+            <DropdownMenuShortcut>M</DropdownMenuShortcut>
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onSelect={verbs.onTask}>

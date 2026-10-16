@@ -167,8 +167,9 @@ export function buildStream(
     if (seen.has(m.id)) continue;
     seen.add(m.id);
     if (opts.hidden?.has(m.id)) continue;
-    // A deleted message without replies leaves no trace.
-    if (m.deletedAt && m.replyCount === 0 && m.kind !== "event") continue;
+    // A deleted message without replies leaves no trace, nor does an event
+    // line its Undo deleted (CV-16).
+    if (m.deletedAt && (m.replyCount === 0 || m.kind === "event")) continue;
 
     const day = localDay(m.createdAt);
     const newDay = !prev || localDay(prev.createdAt) !== day;

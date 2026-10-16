@@ -10,6 +10,7 @@ import type {
   ChatKey,
   ChatMember,
   ChatMessage,
+  ChatMoveAnswer,
   ChatResult,
   ChatRuntime,
   ChatSyncRow,
@@ -139,6 +140,8 @@ export class FakeChatServer {
   marks: { channelId: string; messageId: string }[] = [];
   /** Chains I stopped following. */
   muted = new Set<string>();
+  /** People a move would newly reach (non-zero: the first call answers "confirm"). */
+  moveNewly = 0;
 
   now(): string {
     this.clock += 1000;
@@ -384,6 +387,26 @@ export class FakeChatServer {
           recount(old);
           recount(root);
           return res;
+        }),
+      moveMessages: ({ ids, targetId, confirm }) =>
+        this.gate("moveMessages", (): ChatResult<ChatMoveAnswer> => {
+          const first = this.rows.get(ids[0] ?? "");
+          if (!first || !this.readable.has(first.channelId) || !this.readable.has(targetId)) {
+            return {
+              data: null,
+              error: { code: "P0002", message: "That message no longer exists." },
+            };
+          }
+          if (this.moveNewly > 0 && !confirm) {
+            return ok<ChatMoveAnswer>({ status: "confirm", newly: this.moveNewly });
+          }
+          const from = first.channelId;
+          const all = [...this.rows.values()]
+            .filter((r) => ids.includes(r.id) || (r.parentId !== null && ids.includes(r.parentId)))
+            .map((r) => r.id);
+          for (const id of all)
+            this.change(id, { channelId: targetId, pinnedAt: null, pinnedBy: null });
+          return ok<ChatMoveAnswer>({ status: "moved", ids: all, from, to: targetId });
         }),
       chainRead: () => this.gate("chainRead", () => ok(null)),
       chains: (channelId) =>

@@ -340,6 +340,18 @@ describe("read mark, New pill, page boundaries", () => {
     expect(items[3]).toMatchObject({ first: true });
   });
 
+  it("an event line its Undo deleted leaves no trace (CV-16)", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("ev", T(1), {
+        kind: "event",
+        event: { type: "moved_in", ids: ["x"] },
+        deletedAt: T(2),
+      }),
+    ];
+    expect(buildStream(rows).map((i) => i.type)).toEqual(["day", "message"]);
+  });
+
   it("the mark moves to the last message on screen, skipping unsent sends and events", () => {
     const rows = [
       msg("a", T(0)),
