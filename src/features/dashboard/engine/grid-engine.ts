@@ -449,7 +449,7 @@ export function fitAllowedSizes(
         .filter((s) => spanOf(s).w <= old.w && spanOf(s).h <= old.h)
         .sort((a, b) => spanOf(b).w * spanOf(b).h - spanOf(a).w * spanOf(a).h);
       const size = inside[0];
-      // No allowed size fits inside the old span: leave it (repair handles it next load).
+      // No allowed size fits inside the old span: it keeps its size.
       if (!size) return w;
       pageChanged = true;
       return { ...w, size, config: { ...w.config } };

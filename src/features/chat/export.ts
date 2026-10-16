@@ -329,7 +329,7 @@ function cleanPart(text: string): string {
     text
       // Also the direction overrides that could disguise a name's ending.
       // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes
-      .replace(/[\\/:*?"<>|\u0000-\u001f\u007f‪-‮⁦-⁩]/g, "")
+      .replace(/[\\/:*?"<>|\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/g, "")
       .replace(/^[\s.]+|[\s.]+$/g, "")
       .slice(0, PART_MAX)
       // Cut again after the cut, so cleaning a clean part changes nothing.
@@ -383,7 +383,7 @@ export function conversationMarkdown(
     if (attached.length > 0) {
       const named = attached.map((f) =>
         f.path
-          ? `[${f.fileName.replace(/[[\]]/g, "")}](${f.path.split("/").map(encodeURIComponent).join("/")})`
+          ? `[${f.fileName.replace(/[[\]\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/g, "")}](${f.path.split("/").map(encodeURIComponent).join("/")})`
           : `${f.fileName} (${f.missing ?? "not in the export"})`,
       );
       lines.push("", `Files: ${named.join(" · ")}`);
