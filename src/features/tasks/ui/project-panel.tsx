@@ -10,14 +10,34 @@
 
 import type { ProjectState } from "@contracts/vocabularies";
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
-import { Archive, Clock, Copy, CopyPlus, FolderKanban, Paperclip, Plus } from "lucide-react";
+import {
+  Archive,
+  CalendarDays,
+  CircleDashed,
+  Clock,
+  Contact,
+  Copy,
+  CopyPlus,
+  Ellipsis,
+  FolderKanban,
+  Paperclip,
+  UserRound,
+} from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { TitleActions } from "../../../components/app/title-actions";
 import { Button } from "../../../components/ui/button";
 import { Chip } from "../../../components/ui/chip";
 import { CollectionHeader } from "../../../components/ui/collection-header";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { IconButton } from "../../../components/ui/icon-button";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Progress } from "../../../components/ui/progress";
 import { PropertyRow } from "../../../components/ui/property-row";
@@ -41,6 +61,7 @@ import {
 import { bucketDotColor } from "../sidebar";
 import { reportRange } from "../time-report";
 import { nowOn, useToday } from "../use-today";
+import { type AddPropertyItem, AddPropertyLine } from "./add-property-line";
 import { AssigneeAvatar } from "./assignee-avatar";
 import {
   ProjectClientValue,
@@ -79,9 +100,17 @@ export type ProjectChatSlots = {
 const NO_COMPLETIONS: readonly TaskCompletion[] = [];
 const NO_WAITING: readonly TaskWaitingEntry[] = [];
 
-/** The quiet optional fields, revealed from the "+" line (hidden until set). */
+/**
+ * The quiet optional fields, hidden until set and revealed from the task
+ * details' own "+" line and its menu (MOD-151), in panel order, with the
+ * icons their values show.
+ */
 type Optional = "start" | "lead" | "client";
-const OPTIONAL_LABEL: Record<Optional, string> = { start: "Start", lead: "Lead", client: "Client" };
+const OPTIONAL_FIELDS: readonly AddPropertyItem<Optional>[] = [
+  { key: "start", label: "Start", icon: CalendarDays },
+  { key: "lead", label: "Lead", icon: UserRound },
+  { key: "client", label: "Client", icon: Contact },
+];
 
 export function ProjectPanel({
   project,
@@ -95,6 +124,7 @@ export function ProjectPanel({
   onOpenTask,
   onArchive,
   onDuplicate,
+  onEditStatuses,
   chat,
 }: {
   project: Bucket | null;
@@ -111,6 +141,9 @@ export function ProjectPanel({
   onOpenTask?: (taskId: string) => void;
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
+  /** The title row's ⋯ → Statuses… (TV-D9; MOD-150 moved it here from the
+   *  plan header's ⋯). Shown only to someone who may edit the project. */
+  onEditStatuses?: (project: Bucket) => void;
   /** Chat's slots (empty until Chat fills them). */
   chat?: ProjectChatSlots;
 }) {
@@ -138,6 +171,7 @@ export function ProjectPanel({
       onOpenTask={onOpenTask}
       onArchive={onArchive}
       onDuplicate={onDuplicate}
+      onEditStatuses={onEditStatuses}
       chat={chat}
     />
   );
@@ -155,6 +189,7 @@ function ProjectOverview({
   onOpenTask,
   onArchive,
   onDuplicate,
+  onEditStatuses,
   chat,
 }: {
   project: Bucket;
@@ -168,12 +203,21 @@ function ProjectOverview({
   onOpenTask?: (taskId: string) => void;
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
+  onEditStatuses?: (project: Bucket) => void;
   chat?: ProjectChatSlots;
 }) {
   const { byId } = useAssignees();
   const region = useTimeRegion();
   const [reportOpen, setReportOpen] = useState(false);
-  const [revealed, setRevealed] = useState<Optional | null>(null);
+  // Fields picked from the "+" line stay while this project is open, even
+  // empty, and the one just picked opens its editor once, on mount: the task
+  // details' behaviour (MOD-151), so revealing Lead keeps a revealed Start.
+  const [revealed, setRevealed] = useState<ReadonlySet<Optional>>(() => new Set());
+  const [opening, setOpening] = useState<Optional | null>(null);
+  const reveal = (o: Optional) => {
+    setRevealed((prev) => new Set(prev).add(o));
+    setOpening(o);
+  };
   // Tasks edit in the workspace isn't enough: a project can be shared view-only.
   const access = useProjectEditable(project.id, canEdit);
   const allowed = canEdit && access === true;
@@ -246,13 +290,11 @@ function ProjectOverview({
 
   const state: ProjectState = project.status ?? "active";
   const shows = (o: Optional) =>
-    revealed === o ||
+    revealed.has(o) ||
     (o === "start" && !!project.startsOn) ||
     (o === "lead" && !!project.leadId) ||
     (o === "client" && !!project.clientContactId);
-  const quiet = editable
-    ? (["start", "lead", "client"] as Optional[]).filter((o) => !shows(o))
-    : [];
+  const quiet = editable ? OPTIONAL_FIELDS.filter((f) => !shows(f.key)) : [];
 
   const copyText = () => {
     const open = mine.filter((t) => !isClosedTask(t));
@@ -281,6 +323,26 @@ function ProjectOverview({
 
   return (
     <div className="pane-scroll flex h-full min-h-0 flex-col gap-5 overflow-y-auto px-1 pt-2.5 pb-4">
+      {/* The view's own ⋯ in the panel's title row ("Project ▾ ……… ⋯", as the
+          task's sit beside "Details ▾"): Statuses…, which left the ⋯ beside
+          the centre's title (MOD-150; it changes round-2b's `.pmore`). The
+          title still opens this view in one click (MOD-131), and a Board
+          column's header keeps its own "Edit statuses…". */}
+      {allowed && onEditStatuses ? (
+        <TitleActions>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton icon={Ellipsis} label="Project actions" tooltip={null} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onSelect={() => onEditStatuses(project)}>
+                <CircleDashed aria-hidden />
+                Statuses…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TitleActions>
+      ) : null}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <NavRowDot color={bucketDotColor(project)} />
@@ -305,7 +367,7 @@ function ProjectOverview({
                 label="Start date"
                 placeholder="Set a start"
                 canEdit={editable}
-                defaultOpen={revealed === "start"}
+                defaultOpen={opening === "start"}
                 onChange={(day) => edit({ startsOn: day })}
               />
             </PropertyRow>
@@ -326,7 +388,7 @@ function ProjectOverview({
               <ProjectLeadValue
                 leadId={project.leadId ?? null}
                 canEdit={editable}
-                defaultOpen={revealed === "lead"}
+                defaultOpen={opening === "lead"}
                 onChange={(id) => edit({ leadId: id })}
               />
             </PropertyRow>
@@ -337,35 +399,13 @@ function ProjectOverview({
                 workspaceId={project.workspaceId}
                 clientId={project.clientContactId ?? null}
                 canEdit={editable}
-                defaultOpen={revealed === "client"}
+                defaultOpen={opening === "client"}
                 onChange={(id) => edit({ clientContactId: id })}
               />
             </PropertyRow>
           ) : null}
-          {quiet.length > 0 ? (
-            <div className="flex min-h-(--ctrl-h-sm) items-center gap-2 font-sans text-sm text-muted-foreground">
-              <Plus className="size-icon-sm shrink-0" aria-hidden />
-              <span className="flex min-w-0 flex-wrap items-center">
-                {quiet.map((o, i) => (
-                  <span key={o} className="flex items-center">
-                    {i > 0 ? (
-                      <span aria-hidden className="px-1">
-                        ·
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => setRevealed(o)}
-                      aria-label={`Add ${OPTIONAL_LABEL[o].toLowerCase()}`}
-                      className="rounded-sm whitespace-nowrap transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    >
-                      {OPTIONAL_LABEL[o]}
-                    </button>
-                  </span>
-                ))}
-              </span>
-            </div>
-          ) : null}
+          {/* The task details' "+" line and its menu (MOD-151). */}
+          {quiet.length > 0 ? <AddPropertyLine items={quiet} onPick={reveal} /> : null}
         </div>
 
         <ProjectDescription
@@ -402,17 +442,19 @@ function ProjectOverview({
               <li key={t.id}>
                 <OverviewTaskButton task={t} onOpen={onOpenTask}>
                   {t.dueOn || t.dueDate ? (
-                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                    <FirstLine className="whitespace-nowrap text-xs text-muted-foreground">
                       {formatDay(t.dueOn ? `${t.dueOn}T12:00:00` : (t.dueDate as string))}
-                    </span>
+                    </FirstLine>
                   ) : null}
                   {t.assigneeId ? (
-                    <AssigneeAvatar
-                      assignee={byId(t.assigneeId)}
-                      assigneeId={t.assigneeId}
-                      size="icon"
-                      className="shrink-0"
-                    />
+                    <FirstLine>
+                      <AssigneeAvatar
+                        assignee={byId(t.assigneeId)}
+                        assigneeId={t.assigneeId}
+                        size="icon"
+                        className="shrink-0"
+                      />
+                    </FirstLine>
                   ) : null}
                 </OverviewTaskButton>
               </li>
@@ -482,10 +524,10 @@ function ProjectOverview({
             {waits.map((w) => (
               <li key={w.task.id}>
                 <OverviewTaskButton task={w.task} onOpen={onOpenTask}>
-                  <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                  <FirstLine className="whitespace-nowrap text-xs text-muted-foreground">
                     {waitingWho(w.entries[0], sentenceNameOf)}
                     {w.entries.length > 1 ? ` +${w.entries.length - 1}` : ""} · {formatDay(w.since)}
-                  </span>
+                  </FirstLine>
                 </OverviewTaskButton>
               </li>
             ))}
@@ -550,7 +592,7 @@ function ProjectOverview({
                   type="button"
                   onClick={() => onOpenTask?.(a.task.id)}
                   disabled={!onOpenTask}
-                  className={ROW_BUTTON}
+                  className={FIRST_LINE_ROW}
                 >
                   <span className="min-w-0 flex-1 break-words">
                     <span className="text-muted-foreground">
@@ -558,9 +600,10 @@ function ProjectOverview({
                     </span>
                     {a.task.title || "Untitled"}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {/* "Today" at the top, on the first line (MOD-153). */}
+                  <FirstLine className="text-xs text-muted-foreground tabular-nums">
                     {formatDay(a.at)}
-                  </span>
+                  </FirstLine>
                 </button>
               </li>
             ))}
@@ -568,23 +611,41 @@ function ProjectOverview({
         </section>
       ) : null}
 
-      <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" variant="secondary" onClick={() => setReportOpen(true)}>
+      {/* The ways out, one under another (MOD-154: "we'll need to scroll down
+          there anyway"): full-width quiet rows, icon and label, read like a
+          panel's action list; the icons sit on the rows' status column above. */}
+      <div data-slot="project-actions" className="flex flex-col">
+        <Button
+          size="sm"
+          variant="ghost"
+          className={ACTION_ROW}
+          onClick={() => setReportOpen(true)}
+        >
           <Clock aria-hidden />
           Time report
         </Button>
-        <Button size="sm" variant="ghost" onClick={copyText}>
+        <Button size="sm" variant="ghost" className={ACTION_ROW} onClick={copyText}>
           <Copy aria-hidden />
           Copy as text
         </Button>
         {onDuplicate && access === true ? (
-          <Button size="sm" variant="ghost" onClick={() => onDuplicate(project)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={ACTION_ROW}
+            onClick={() => onDuplicate(project)}
+          >
             <CopyPlus aria-hidden />
             Duplicate…
           </Button>
         ) : null}
         {allowed && onArchive ? (
-          <Button size="sm" variant="ghost" onClick={() => onArchive(project)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={ACTION_ROW}
+            onClick={() => onArchive(project)}
+          >
             <Archive aria-hidden />
             Archive…
           </Button>
@@ -607,6 +668,31 @@ const ROW_BUTTON = cn(
   "disabled:cursor-default disabled:hover:bg-transparent",
 );
 
+/** One of the actions at the foot (MOD-154): the rows' 4 px inset, the label left. */
+const ACTION_ROW = "w-full justify-start gap-2 px-1";
+
+/**
+ * A row whose title wraps (Next up, Waiting, Recently; MOD-153): its status,
+ * picture and time sit on the title's first line (`FirstLine`), not the
+ * middle of the box, so where an item starts never moves with its length.
+ * The padding centres that first line in the rung, so a one-line row is the
+ * height it was (ItemCardTitle's way, round-2b's `.card .ct`).
+ */
+const FIRST_LINE_ROW = cn(ROW_BUTTON, "items-start py-(--row-first-line-pad)");
+
+/**
+ * A row's icon, picture or time on the title's first line: a box one of the
+ * row's own lines tall, centred on it. The box takes the row's 14 px line
+ * (`h-lh`), so small text goes on the span inside, never on the box.
+ */
+function FirstLine({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <span className="flex h-lh shrink-0 items-center">
+      {className ? <span className={className}>{children}</span> : children}
+    </span>
+  );
+}
+
 /** One task in an overview list: its status, its title, then its facts. */
 function OverviewTaskButton({
   task,
@@ -622,9 +708,11 @@ function OverviewTaskButton({
       type="button"
       onClick={() => onOpen?.(task.id)}
       disabled={!onOpen}
-      className={ROW_BUTTON}
+      className={FIRST_LINE_ROW}
     >
-      <TaskStatusIcon category={taskCategoryOf(task)} className="shrink-0" />
+      <FirstLine>
+        <TaskStatusIcon category={taskCategoryOf(task)} className="shrink-0" />
+      </FirstLine>
       <span className="min-w-0 flex-1 break-words">{task.title || "Untitled"}</span>
       {children}
     </button>
