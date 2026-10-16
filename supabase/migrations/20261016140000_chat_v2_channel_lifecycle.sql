@@ -14,7 +14,7 @@
 --      drops it).
 --   5. chat_op_make_private: public → private, one way.
 --   6. chat_op_delete_channel / chat_op_restore_channel / chat_recently_deleted.
---   7. chat__purge_deleted + the daily chat-purge-deleted job.
+--   7. chat__purge_deleted + the hourly chat-purge-deleted job (small batches).
 --   8. Redefined from their live bodies: chat_op_remove_member (a removal is
 --      recorded whether or not they were still in it; the quiet line; their
 --      items close), chat_op_add_members (the quiet line), chat_op_join and
@@ -174,7 +174,9 @@ BEGIN
       RETURN;
     END IF;
     -- The last manager in effect stays one (they can leave; leaving hands it on).
-    IF NOT EXISTS (SELECT 1 FROM public.chat_channel_managers m
+    -- A row that manages nothing (its holder left or became a viewer) can go.
+    IF public.chat__is_manager(v_channel, p_user_id)
+       AND NOT EXISTS (SELECT 1 FROM public.chat_channel_managers m
                     WHERE m.channel_id = p_channel_id AND m.user_id <> p_user_id
                       AND public.chat__can_manage(v_channel, m.user_id)) THEN
       RAISE EXCEPTION 'A channel needs a manager. Make someone else a manager first.' USING ERRCODE = '22023';
@@ -356,16 +358,14 @@ BEGIN
     RAISE EXCEPTION 'That channel was deleted for good.' USING ERRCODE = 'P0002';
   END IF;
   v_name := v_channel.name;
-  IF NOT v_channel.is_private THEN
+  PERFORM public.chat__lock_name(v_channel.workspace_id, v_name);
+  -- Its name was taken meanwhile (create and rename's rule: a public channel,
+  -- or for a private one also a private channel the restorer is in): it comes
+  -- back as "… (restored)".
+  IF public.chat__name_taken(v_channel.workspace_id, v_name, v_channel.id,
+                             CASE WHEN v_channel.is_private THEN v_me END) THEN
+    v_name := btrim(left(v_channel.name, 69)) || ' (restored)';
     PERFORM public.chat__lock_name(v_channel.workspace_id, v_name);
-    -- A public channel took its name meanwhile: it comes back as "… (restored)".
-    IF EXISTS (SELECT 1 FROM public.chat_channels c
-                WHERE c.workspace_id = v_channel.workspace_id AND c.kind = 'channel'
-                  AND c.deleted_at IS NULL AND NOT c.is_private AND c.id <> v_channel.id
-                  AND lower(c.name) = lower(v_name)) THEN
-      v_name := btrim(left(v_channel.name, 69)) || ' (restored)';
-      PERFORM public.chat__lock_name(v_channel.workspace_id, v_name);
-    END IF;
   END IF;
   BEGIN
     UPDATE public.chat_channels SET deleted_at = NULL, deleted_by = NULL, name = v_name
@@ -422,7 +422,7 @@ DECLARE
 BEGIN
   SELECT coalesce(array_agg(c.id), '{}') INTO v_ids FROM (
     SELECT c.id FROM public.chat_channels c
-     WHERE c.deleted_at IS NOT NULL AND c.purged_at IS NULL
+     WHERE c.kind = 'channel' AND c.deleted_at IS NOT NULL AND c.purged_at IS NULL
        AND c.deleted_at < now() - interval '30 days'
      ORDER BY c.deleted_at
      LIMIT greatest(coalesce(p_limit, 200), 1)
@@ -463,8 +463,8 @@ $function$;
 
 SELECT cron.schedule(
   'chat-purge-deleted',
-  '17 4 * * *',
-  $cron$SET statement_timeout = '50s'; SELECT public.chat__purge_deleted(500);$cron$
+  '17 * * * *',
+  $cron$SET statement_timeout = '50s'; SELECT public.chat__purge_deleted(25);$cron$
 );
 
 -- ── 8. Redefined ops ─────────────────────────────────────────────────────────

@@ -281,6 +281,8 @@ export class ChatStore {
   /** Draft keys this tab cleared this session. */
   private clearedDrafts = new Set<string>();
   private metaDirty = false;
+  /** Channels you deleted here: your own row's access stamp mustn't bring one back. */
+  private deletedHere = new Set<string>();
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private persisting: Promise<void> = Promise.resolve();
 
@@ -1458,6 +1460,9 @@ export class ChatStore {
         return;
       case "member": {
         const before = this.mine.get(event.member.channelId);
+        // The delete's access stamp on your own row, after this copy forgot the
+        // channel: skipped once (a later restore's stamp, from anywhere, still lands).
+        if (!before && this.deletedHere.delete(event.member.channelId)) return;
         this.mine.set(event.member.channelId, event.member);
         this.metaDirty = true;
         this.schedulePersist();
@@ -1962,6 +1967,7 @@ export class ChatStore {
   /** To Recently deleted: it leaves this copy at once (the server no longer lets anyone read it). */
   async deleteChannel(channelId: string): Promise<void> {
     await this.transport.deleteChannel(channelId);
+    this.deletedHere.add(channelId);
     this.forgetConversations([channelId]);
     this.channels.delete(channelId);
     this.mine.delete(channelId);
@@ -1973,6 +1979,7 @@ export class ChatStore {
 
   async restoreChannel(channelId: string): Promise<ChatChannel> {
     const channel = await this.transport.restoreChannel(channelId);
+    this.deletedHere.delete(channel.id);
     this.channels.set(channel.id, channel);
     await this.readSidebar();
     this.notify();

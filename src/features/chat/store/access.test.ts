@@ -158,6 +158,26 @@ describe("losing access without an event", () => {
     expect(store.getSnapshot().channels[DEL]).toBeUndefined();
   });
 
+  it("your own delete's stamp doesn't bring the channel back; a later restore's does (CV-15)", async () => {
+    const { server, store, live } = await world();
+    const before = store.getSnapshot().mine[DEL];
+    Object.assign(store.transport, {
+      deleteChannel: async () => {
+        server.readable.delete(DEL);
+      },
+    });
+    await store.deleteChannel(DEL);
+    expect(store.getSnapshot().mine[DEL]).toBeUndefined();
+    live.emit({ type: "member", member: { ...before!, accessAt: "2026-10-16T10:00:00.000Z" } });
+    await settle(30);
+    expect(store.getSnapshot().mine[DEL]).toBeUndefined();
+    // Restored elsewhere: the next stamp on your row lands as usual.
+    server.readable.add(DEL);
+    live.emit({ type: "member", member: { ...before!, accessAt: "2026-10-16T11:00:00.000Z" } });
+    await settle(30);
+    expect(store.getSnapshot().mine[DEL]).toBeDefined();
+  });
+
   it("a membership echo that changes nothing about access runs no check", async () => {
     const { server, store, live } = await world();
     const before = store.getSnapshot().mine[DEL];

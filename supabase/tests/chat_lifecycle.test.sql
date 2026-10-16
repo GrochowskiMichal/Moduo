@@ -130,6 +130,20 @@ BEGIN
   PERFORM test.ok(v LIKE '22023%', 'last manager: now B is the last and stays', v);
   v := test.op('D', q_unset, 'P', 'B');
   PERFORM test.ok(v NOT LIKE 'ok%', 'last manager: an admin outside the private channel can''t reach it', v);
+  -- A row that manages nothing (its holder's role became a viewer's) can go,
+  -- even while no other manager is in effect.
+  PERFORM test.set_role('B', 'viewer');
+  v := test.op('B', q_unset, 'P', 'B');
+  PERFORM test.ok(v LIKE '42501%', 'last manager: a viewer can''t change managers', v);
+  PERFORM test.set_role('A', 'viewer');
+  v := test.op('O', q_unset, 'Q', 'B');
+  PERFORM test.ok(v LIKE 'ok%' AND NOT EXISTS (SELECT 1 FROM public.chat_channel_managers
+                                                WHERE channel_id = test.ref('Q') AND user_id = test.id('B')),
+    'last manager: a manager row that manages nothing can be removed', v);
+  PERFORM test.set_role('A', 'member');
+  PERFORM test.set_role('B', 'member');
+  v := test.op('A', q_set, 'Q', 'B');
+  PERFORM test.ok(v LIKE 'ok%', 'managers: B manages Q again', v);
   v := test.op('A', q_set, 'DM', 'B');
   PERFORM test.ok(v LIKE '22023%', 'managers: a direct message has none', v);
 END;
@@ -406,6 +420,17 @@ BEGIN
   v := test.op('D', $q$SELECT public.chat_op_restore_channel(%L)$q$, 'S');
   PERFORM test.ok(v LIKE 'ok%' AND (test.chan('S')).name = 'alpha (restored)',
     'restore: an admin restores it; the taken name becomes "alpha (restored)"', v);
+
+  -- A private one too, when a private channel the restorer is in took its name.
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'beta', '', true, ARRAY[%L]::uuid[])$q$,
+    test.id('W'), test.id('B')));
+  INSERT INTO test.ids SELECT 'PB', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'beta';
+  PERFORM test.op('A', $q$SELECT public.chat_op_delete_channel(%L)$q$, 'PB');
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'beta', '', true, ARRAY[%L]::uuid[])$q$,
+    test.id('W'), test.id('B')));
+  v := test.op('A', $q$SELECT public.chat_op_restore_channel(%L)$q$, 'PB');
+  PERFORM test.ok(v LIKE 'ok%' AND (test.chan('PB')).name = 'beta (restored)',
+    'restore: a private channel whose name was taken comes back as "beta (restored)"', v);
   PERFORM test.remember();
 END;
 $$;
@@ -442,7 +467,13 @@ BEGIN
   PERFORM test.ok(v LIKE 'P0002%', 'purge: it can''t be restored', v);
   PERFORM test.ok(test.value_as('A', format($q$SELECT count(*) FROM public.chat_recently_deleted(%L) WHERE id = %L$q$,
     test.id('W'), test.ref('T'))) = '0', 'purge: it leaves Recently deleted');
-  PERFORM test.ok(EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'chat-purge-deleted'), 'purge: the daily job is scheduled');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'chat-purge-deleted'), 'purge: the hourly job is scheduled');
+  -- Only channels: a direct message soft-deleted elsewhere (the v1 conversion's) is never purged.
+  UPDATE public.chat_channels SET deleted_at = now() - interval '31 days' WHERE id = test.ref('DM');
+  PERFORM public.chat__purge_deleted(50);
+  PERFORM test.ok((test.chan('DM')).purged_at IS NULL,
+    'purge: a deleted direct message is left alone');
+  UPDATE public.chat_channels SET deleted_at = NULL WHERE id = test.ref('DM');
 END;
 $$;
 
