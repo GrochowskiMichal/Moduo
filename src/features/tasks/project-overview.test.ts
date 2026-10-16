@@ -1,6 +1,6 @@
 // TV-U16 · The project overview's numbers and lists (AC6.6 "Done this month ·
-// 14 · 22h", AC6.4's client rollup, AC5.6's departure words): what's next,
-// sections, who's on it, completions in a month in the reader's zone, waiting,
+// 14 · 22h", AC6.4's client rollup, AC5.6's departure words): sections,
+// who's on it, completions in a month in the reader's zone, waiting,
 // what happened recently, and what someone leaving hands on.
 
 import { describe, expect, it } from "@rstest/core";
@@ -13,7 +13,6 @@ import {
   departureLines,
   departureSummary,
   doneInRange,
-  nextUp,
   projectPeople,
   recentActivity,
   sectionProgress,
@@ -82,27 +81,6 @@ const waiting = (taskId: string, since: string): TaskWaitingEntry => ({
   since,
   createdBy: "ann",
   updatedAt: since,
-});
-
-describe("nextUp", () => {
-  it("puts started work first, then dated by date, then the project's order", () => {
-    const tasks = [
-      task("undated-b", { sectionId: "s2", position: "a" }),
-      task("undated-a", { sectionId: "s1", position: "b" }),
-      task("loose", { position: "z" }),
-      task("later", { dueOn: "2026-10-20" }),
-      task("soon", { dueOn: "2026-10-14" }),
-      task("started", { statusCategory: "in_progress", status: "in_progress" }),
-      task("done", { statusCategory: "done", status: "done" }),
-      task("parked", { statusCategory: "backlog" }),
-      task("step", { parentId: "soon" }),
-      task("elsewhere", { bucketId: "p2" }),
-    ];
-    const sections = [section("s1", 0), section("s2", 1)];
-    const { tasks: next, rest } = nextUp(tasks, "p1", sections, 5);
-    expect(next.map((t) => t.id)).toEqual(["started", "soon", "later", "loose", "undated-a"]);
-    expect(rest).toBe(1);
-  });
 });
 
 describe("sectionProgress", () => {
