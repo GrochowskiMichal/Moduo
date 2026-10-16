@@ -782,20 +782,57 @@ describe("writes go through the ops, checked before anything is written", () => 
       }
     });
 
-    it("a reference inside code is kept as written (checked all the same) and links nothing", async () => {
+    it("a reference inside code is written as checked (never the agent's spelling) and links nothing", async () => {
       const { write, linked } = described();
       const inline = `Run \`[it](moduo://task/MOD-50)\` and see [it](moduo://task/MOD-50)`;
       expect(await write(inline)).toBe(
-        `Run \`[it](moduo://task/MOD-50)\` and see [task](moduo://task/${SEEN})`,
+        `Run \`[task](moduo://task/${SEEN})\` and see [task](moduo://task/${SEEN})`,
       );
       expect(linked()).toEqual([`task:${SEEN}`]);
       const { write: writeFenced, linked: linkedFenced } = described();
-      const fenced = `\`\`\`\n[it](moduo://task/${SEEN})\n\`\`\``;
-      expect(await writeFenced(fenced)).toBe(fenced);
+      expect(await writeFenced(`\`\`\`\n[it](moduo://task/MOD-50)\n\`\`\``)).toBe(
+        `\`\`\`\n[task](moduo://task/${SEEN})\n\`\`\``,
+      );
       expect(linkedFenced()).toEqual([]);
       // An unreachable one in code still goes to its words.
       const { write: writeHidden } = described();
       expect(await writeHidden(`\`[x](moduo://task/${SECRET})\``)).toBe("`x`");
+      // What the editor doesn't read as code (a ~~~ fence, an escaped backtick)
+      // is no code here either: written as checked, and linked.
+      for (const notCode of [
+        `~~~\n[it](moduo://task/MOD-50)\n~~~`,
+        `\\\`[it](moduo://task/MOD-50)\``,
+      ]) {
+        const { write: writeNot, linked: linkedNot } = described();
+        expect(await writeNot(notCode), notCode).toContain(`[task](moduo://task/${SEEN})`);
+        expect(linkedNot(), notCode).toEqual([`task:${SEEN}`]);
+      }
+    });
+
+    it("a malformed task reference is words", async () => {
+      const { write, linked } = described();
+      expect(await write("See [it](moduo://task/abc) and [x](moduo://task/MOD-0)")).toBe("See it and x");
+      expect(linked()).toEqual([]);
+    });
+
+    it("a workspace read that fails fails a handle's write, never turning it into words", async () => {
+      const made = setup({
+        scopes: { tasks: "edit", links: "edit" },
+        rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] },
+      });
+      const from = made.ctx.db.from.bind(made.ctx.db);
+      (made.ctx.db as { from: unknown }).from = (table: string) =>
+        table === "workspaces"
+          ? {
+              select: () => ({
+                eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "timeout" } }) }),
+              }),
+            }
+          : from(table);
+      await expect(
+        call("tasks_update", { task_id: "t-open", description: "See [it](moduo://task/MOD-50)" }, made.ctx),
+      ).rejects.toThrow("timeout");
+      expect(made.rpcCalls.some((c) => c.fn === "tasks_op_update_with")).toBe(false);
     });
 
     it("a lookup that fails fails the write, never turning a reference into words", async () => {

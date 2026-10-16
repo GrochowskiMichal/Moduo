@@ -455,6 +455,115 @@ describe("what ends a description and what starts its lines (validator, call #15
     }
   });
 
+  it("a paragraph line starting with a star bullet stays words (indented, tabbed, after a line break)", () => {
+    for (const lines of [[" * x"], ["\t* x"], ["a", " * b"], ["* x"]]) {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          const paragraph = $createParagraphNode();
+          lines.forEach((line, i) => {
+            if (i > 0) paragraph.append($createLineBreakNode());
+            paragraph.append($createTextNode(line));
+          });
+          $getRoot().clear().append(paragraph);
+        },
+        { discrete: true },
+      );
+      const reread = load(save(editor));
+      expect(
+        reread.getEditorState().read(() => all(reread).some($isListNode)),
+        lines.join("⏎"),
+      ).toBe(false);
+      expect(paragraphs(reread), lines.join("⏎")).toEqual([lines.join("\n")]);
+    }
+  });
+
+  it("counts the empty items that end it in every shape: nested, before an empty paragraph, a quote with a line break", () => {
+    const cases: Array<[string, () => void, string]> = [
+      [
+        "an empty nested item after an empty item",
+        () => {
+          const nested = $createListNode("bullet").append($createListItemNode());
+          $getRoot()
+            .clear()
+            .append(
+              $createListNode("bullet").append(
+                $createListItemNode().append($createTextNode("a")),
+                $createListItemNode(),
+                $createListItemNode().append(nested),
+              ),
+            );
+        },
+        "- a",
+      ],
+      [
+        "an empty item, then an empty paragraph",
+        () => {
+          $getRoot()
+            .clear()
+            .append(
+              $createListNode("bullet").append(
+                $createListItemNode().append($createTextNode("a")),
+                $createListItemNode(),
+              ),
+              $createParagraphNode(),
+            );
+        },
+        "- a",
+      ],
+      [
+        "an empty quote holding a line break",
+        () => {
+          $getRoot()
+            .clear()
+            .append(
+              $createParagraphNode().append($createTextNode("Notes")),
+              $createQuoteNode().append($createLineBreakNode()),
+            );
+        },
+        "Notes",
+      ],
+    ];
+    for (const [name, build, expected] of cases) {
+      const editor = markdownEditor();
+      editor.update(build, { discrete: true });
+      const saved = save(editor);
+      expect(saved, name).toBe(expected);
+      expect(save(load(saved)), name).toBe(expected);
+    }
+  });
+
+  it("a moduo: link saved as its words never joins the words around it into a reference", () => {
+    for (const [before, inside, after] of [
+      ["[a]", `(moduo://task/${TASK})`, ""],
+      ["", "[a]", `(moduo://task/${TASK})`],
+      ["[a]", "", `(moduo://task/${TASK})`],
+    ] as const) {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          const link = $createLinkNode(`moduo://task/${TASK}`);
+          if (inside) link.append($createTextNode(inside));
+          const paragraph = $createParagraphNode();
+          if (before) paragraph.append($createTextNode(before));
+          paragraph.append(link);
+          if (after) paragraph.append($createTextNode(after));
+          $getRoot().clear().append(paragraph);
+        },
+        { discrete: true },
+      );
+      let value = save(editor);
+      for (let round = 0; round < 3; round++) {
+        const reread = load(value);
+        expect(
+          reread.getEditorState().read(() => all(reread).filter($isReferenceNode).length),
+          `${before}|${inside}|${after} → ${value}`,
+        ).toBe(0);
+        value = save(reread);
+      }
+    }
+  });
+
   it("words that spell a character reference stay those words", () => {
     const words = "use &#40; for ( and &#38; for &";
     const editor = markdownEditor();

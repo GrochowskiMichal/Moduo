@@ -126,8 +126,8 @@ function reachType(type: string): string {
  *   scope, the item live in this workspace, its person able to see it); a
  *   task's handle (`moduo://task/MOD-12`) becomes its uuid; only a reference
  *   that passed is written as one (labelled with its kind, RF-1), and only
- *   those are answered as the items to link (one inside code is kept as
- *   written and links nothing); a failed lookup fails the write;
+ *   those are answered as the items to link (one inside code, shown as
+ *   code, links nothing); a failed lookup fails the write;
  * - anything else (an item the key can't reach or that isn't there, a kind
  *   agents can't point at, a tag, past MAX_DESCRIPTION_REFERENCES) goes back
  *   to its label as plain words;
@@ -172,12 +172,10 @@ async function describeForWrite(
         words += escapeMarkdownText(token.label);
         continue;
       }
-      // In code it's shown as code: kept as written (checked all the same), linked to nothing.
-      if (token.inCode) {
-        live(token.raw);
-        continue;
-      }
+      // Written the same in code or out of it (as checked, never the agent's
+      // own spelling); one in code is shown as code, so it links nothing.
       live(referenceMarkdown(token.type, uuid, token.display));
+      if (token.inCode) continue;
       const target = reachType(token.type);
       if (!linked.has(`${target}:${uuid}`)) {
         linked.add(`${target}:${uuid}`);

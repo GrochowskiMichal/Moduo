@@ -280,6 +280,20 @@ describe("the reference syntax", () => {
     ]);
   });
 
+  it("reads code as the editor does: backtick fences only, and an escaped backtick opens nothing", () => {
+    const tilde = `~~~\n[a](moduo://task/${TASK})\n~~~`;
+    expect(descriptionTokens(tilde).some((t) => t.kind === "link" && t.inCode)).toBe(false);
+    const escaped = `\\\`[a](moduo://task/${TASK})\``;
+    expect(descriptionTokens(escaped).some((t) => t.kind === "link" && t.inCode)).toBe(false);
+    // An even run of backslashes escapes itself: the backtick opens.
+    const doubled = `\\\\\`[a](moduo://task/${TASK})\``;
+    expect(descriptionTokens(doubled).some((t) => t.kind === "link" && t.inCode)).toBe(true);
+  });
+
+  it("keeps a code block's blank lines inside a quote", () => {
+    expect(htmlToMarkdown("<blockquote><pre>a\n\nb</pre></blockquote>")).toBe("> ```\n> a\n> \n> b\n> ```");
+  });
+
   it("finds code in one pass", () => {
     const text = Array.from({ length: 4_000 }, (_, i) => `${"`".repeat((i % 50) + 1)} x`).join(" ");
     const start = performance.now();

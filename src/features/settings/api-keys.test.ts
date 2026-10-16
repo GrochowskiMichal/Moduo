@@ -80,16 +80,21 @@ function connectorModuleSources(): ConnectorFile[] {
 
 const RPC_CALL = /(?:callOp\(ctx,\s*|\.rpc\(\s*)"(\w+)"/g;
 
-/** The source of the top-level function a position sits in, up to that position. */
+/** Where a top-level helper starts: a function (exported or not, async or not) or an arrow const. */
+const HELPER_START =
+  /\n(?:export\s+)?(?:async\s+)?function\s|\n(?:export\s+)?const\s+\w+\s*(?::[^=\n]+)?=\s*(?:async\s*)?\(/g;
+
+/** The source of the top-level helper a position sits in, from its start up to that position. */
 function enclosingFunction(source: string, at: number): string {
-  const start = Math.max(
-    source.lastIndexOf("\nfunction ", at),
-    source.lastIndexOf("\nasync function ", at),
-  );
+  let start = -1;
+  for (const m of source.slice(0, at).matchAll(HELPER_START)) start = m.index ?? start;
   return start < 0 ? source.slice(0, at) : source.slice(start, at);
 }
 
-/** Does this helper check the key's scope for `lane` itself (before the call)? */
+/**
+ * Does this helper check the key's scope for `lane` itself before the call?
+ * `helper` runs from the helper's start to the call, so the check precedes it.
+ */
 function helperChecksLane(helper: string, lane: string): boolean {
   const [module, level = "edit"] = lane.split("@");
   return helper.includes(`keyScopeAllows(ctx.key.scopes, "${module}", "${level}")`);
@@ -289,11 +294,22 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       '  if (!keyScopeAllows(ctx.key.scopes, "links", "view")) return;',
       '  return ctx.db.rpc("links_op_create", {});',
       "}",
+      "export async function exportedGated(ctx) {",
+      '  if (!keyScopeAllows(ctx.key.scopes, "links", "edit")) return;',
+      '  await ctx.db.rpc("links_op_create", {});',
+      "}",
+      "const arrowUngated = async (ctx) => {",
+      '  await ctx.db.rpc("links_op_create", {});',
+      "};",
+      "export function checkAfter(ctx) {",
+      '  void ctx.db.rpc("links_op_create", {});',
+      '  return keyScopeAllows(ctx.key.scopes, "links", "edit");',
+      "}",
     ].join("\n");
     const covered = [...preamble.matchAll(RPC_CALL)].map((m) =>
       helperChecksLane(enclosingFunction(preamble, m.index ?? 0), "links"),
     );
-    expect(covered).toEqual([true, false, false]);
+    expect(covered).toEqual([true, false, false, true, false, false]);
   });
 
   it("never stamps auth.uid() where a key calls: rows a key makes belong to its creator", () => {

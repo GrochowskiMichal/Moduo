@@ -49,6 +49,7 @@ import {
   $isLineBreakNode,
   $isParagraphNode,
   $isTextNode,
+  type ElementNode,
   type LexicalNode,
   ParagraphNode,
   type SerializedTextNode,
@@ -199,6 +200,13 @@ function $onlyBacktickInBlock(node: TextNode): boolean {
  * (`defuseReferences`), so saving never turns words into a reference; inline
  * code is never read for references and stays as it is.
  */
+/** Words starting "(" then a moduo: address keep that "(" as `&#40;`: whatever ends in "]" before them can't make them a link. */
+function defuseLeadingParen(words: string): string {
+  return words.startsWith("(") && readsAsModuoAddress(words.slice(1))
+    ? `&#40;${words.slice(1)}`
+    : words;
+}
+
 export const DESCRIPTION_TEXT: TextMatchTransformer = {
   dependencies: [RawTextNode],
   export: (node, _exportChildren, exportFormat) => {
@@ -211,7 +219,10 @@ export const DESCRIPTION_TEXT: TextMatchTransformer = {
       (previous && $isElementNode(previous)) ||
       $isLinkNode(node.getParent())
     ) {
-      const defused = defuseReferences(text);
+      let defused = defuseReferences(text);
+      // Right after an element (a moduo: link saved as its words could end in
+      // "]"), a leading "(moduo:…" keeps its "(" spelled out too.
+      if (previous && $isElementNode(previous)) defused = defuseLeadingParen(defused);
       return defused !== text && exportFormat ? exportFormat(node, defused) : null;
     }
     return defuseReferences(
@@ -235,7 +246,11 @@ export const DESCRIPTION_TEXT: TextMatchTransformer = {
 export const DESCRIPTION_WEB_LINK: TextMatchTransformer = {
   ...LINK,
   export: (node, exportChildren, exportFormat) => {
-    if ($isLinkNode(node) && readsAsModuoAddress(node.getURL())) return exportChildren(node);
+    if ($isLinkNode(node) && readsAsModuoAddress(node.getURL())) {
+      // Its words, which mustn't join the words before them into a link
+      // ("[a]" then "(moduo://…)"): a leading "(" of a moduo: address is spelled out.
+      return defuseLeadingParen(exportChildren(node));
+    }
     return LINK.export ? LINK.export(node, exportChildren, exportFormat) : null;
   },
   replace: (textNode, match) => {
@@ -490,44 +505,55 @@ export function $importDescription(value: string): void {
 /** A line that is only a list or quote marker (`-`, `2.`, `- [ ]`, `>`), spaces aside. */
 const MARKER_LINE = /^\s*(?:(?:[-*+]|\d+\.)(?:\s+\[(?:\s|[xX])?\])?|>)\s*$/;
 
-/** The deepest last item of a list (a nested list sits in an item of its own). */
-function $lastLeafItem(list: ListNode): ListItemNode | null {
-  let item = list.getLastChild();
-  while ($isListItemNode(item)) {
-    const only = item.getChildrenSize() === 1 ? item.getFirstChild() : null;
-    if (!$isListNode(only)) return item;
-    item = only.getLastChild();
-  }
-  return null;
+/** A list's items that are lines (not the holders of a nested list), in order, nested ones included. */
+function $leafItems(list: ListNode): ListItemNode[] {
+  const out: ListItemNode[] = [];
+  const walk = (node: ListNode) => {
+    for (const item of node.getChildren()) {
+      if (!$isListItemNode(item)) continue;
+      const nested = item.getChildren().filter($isListNode);
+      if (nested.length === 0 || item.getChildren().some((c) => !$isListNode(c))) out.push(item);
+      for (const sub of nested) walk(sub);
+    }
+  };
+  walk(list);
+  return out;
+}
+
+/** How many lines an empty block saves as: one, plus one for each line break in it. */
+function $emptyLines(block: ElementNode): number {
+  return 1 + block.getChildren().filter($isLineBreakNode).length;
 }
 
 /**
  * How many lines at the end of the saved Markdown are empty list items or an
  * empty quote, counted on the tree (⏎ for a new bullet, then a click away):
- * the last blocks while they are an empty quote or a list's empty last items.
+ * from the last block back, empty paragraphs aside (they save as blank
+ * lines), while they are an empty quote or a list's empty last items, nested
+ * ones included (an empty item after an empty item, at any depth).
  */
 function $trailingEmptyItemLines(): number {
   let lines = 0;
   let block = $getRoot().getLastChild();
   while (block) {
+    if ($isParagraphNode(block) && block.getTextContent().trim() === "") {
+      block = block.getPreviousSibling();
+      continue;
+    }
     if ($isQuoteNode(block) && block.getTextContent().trim() === "") {
-      lines++;
+      lines += $emptyLines(block);
       block = block.getPreviousSibling();
       continue;
     }
     if (!$isListNode(block)) break;
-    let item = $lastLeafItem(block);
-    let all = true;
-    while (item) {
-      if (item.getTextContent().trim() !== "" || item.getChildren().some($isListNode)) {
-        all = false;
-        break;
-      }
-      lines++;
-      const before = item.getPreviousSibling();
-      item = $isListItemNode(before) ? before : null;
+    const items = $leafItems(block);
+    let k = items.length - 1;
+    for (; k >= 0; k--) {
+      const item = items[k] as ListItemNode;
+      if (item.getTextContent().trim() !== "") break;
+      lines += $emptyLines(item);
     }
-    if (!all) break;
+    if (k >= 0) break;
     block = block.getPreviousSibling();
   }
   return lines;

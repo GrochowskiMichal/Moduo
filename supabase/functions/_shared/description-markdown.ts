@@ -86,30 +86,40 @@ export type DescriptionToken =
       inCode: boolean;
     };
 
-const FENCE_LINE = /^[ \t]*(`{3,}|~{3,})/;
+/** The editor's fences: backticks only (Lexical's CODE). */
+const FENCE_LINE = /^[ \t]*(`{3,})/;
+
+/** Is the character at `at` escaped (an odd run of backslashes before it)? */
+function escapedAt(line: string, at: number): boolean {
+  let n = 0;
+  for (let i = at - 1; i >= 0 && line[i] === "\\"; i--) n++;
+  return n % 2 === 1;
+}
 
 /**
  * Where a description's code is, as [start, end) offsets in order: fenced
  * blocks (to their closing fence, or the end) and inline code spans (a run of
- * backticks to the next run as long, on one line). One pass: each length's
- * runs are looked through once.
+ * backticks that isn't escaped, to the next run as long, on one line). One
+ * pass: each length's runs are looked through once. It only decides what is
+ * linked: a reference is checked and written the same in code or out of it.
  */
 export function codeRanges(markdown: string): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   let offset = 0;
-  let fence: { char: string; length: number; start: number } | null = null;
+  let fence: { length: number; start: number } | null = null;
   for (const line of markdown.split("\n")) {
     const lineEnd = offset + line.length;
     const open = FENCE_LINE.exec(line);
     if (fence) {
-      if (open && open[1]?.[0] === fence.char && (open[1]?.length ?? 0) >= fence.length && line.trim() === open[1]) {
+      if (open && (open[1]?.length ?? 0) >= fence.length && line.trim() === open[1]) {
         ranges.push([fence.start, lineEnd]);
         fence = null;
       }
     } else if (open) {
-      fence = { char: open[1]?.[0] ?? "`", length: open[1]?.length ?? 3, start: offset };
+      fence = { length: open[1]?.length ?? 3, start: offset };
     } else if (line.includes("`")) {
-      const runs: Array<[number, number]> = [];
+      // [position, length, escaped]
+      const runs: Array<[number, number, boolean]> = [];
       for (let i = 0; i < line.length; ) {
         if (line[i] !== "`") {
           i++;
@@ -117,7 +127,7 @@ export function codeRanges(markdown: string): Array<[number, number]> {
         }
         let j = i;
         while (line[j] === "`") j++;
-        runs.push([i, j - i]);
+        runs.push([i, j - i, escapedAt(line, i)]);
         i = j;
       }
       const byLength = new Map<number, number[]>();
@@ -128,7 +138,12 @@ export function codeRanges(markdown: string): Array<[number, number]> {
       });
       const next = new Map<number, number>();
       for (let k = 0; k < runs.length; ) {
-        const [pos, length] = runs[k] as [number, number];
+        const [pos, length, escaped] = runs[k] as [number, number, boolean];
+        // An escaped backtick is a literal one: it opens nothing.
+        if (escaped) {
+          k++;
+          continue;
+        }
         const list = byLength.get(length) as number[];
         let p = next.get(length) ?? 0;
         while (p < list.length && (list[p] as number) <= k) p++;
@@ -138,7 +153,7 @@ export function codeRanges(markdown: string): Array<[number, number]> {
           continue;
         }
         const close = list[p] as number;
-        ranges.push([offset + pos, offset + (runs[close] as [number, number])[0] + length]);
+        ranges.push([offset + pos, offset + (runs[close] as [number, number, boolean])[0] + length]);
         k = close + 1;
       }
     }
@@ -348,7 +363,7 @@ export function escapeBlockStarts(markdown: string): string {
     .split("\n")
     .map((line) =>
       line
-        .replace(/^(\s*)([-+])(?=\s)/, "$1\\$2")
+        .replace(/^(\s*)([-*+])(?=\s)/, "$1\\$2")
         .replace(/^(\s*)(\d+)\.(?=\s)/, "$1$2\\.")
         .replace(/^(\s*)>/, "$1\\>")
         .replace(/^(\s*)\[(\s|[xX])?\](?=\s)/, "$1\\[$2]"),
@@ -799,9 +814,21 @@ function blocksMarkdown(nodes: Node[]): string[] {
     } else if (node.tag === "blockquote") {
       // One quote: its paragraphs are its lines (a bare ">" line would read
       // back as the words ">", and nest on the next save).
-      const inner = blocksMarkdown(node.children).join("\n");
-      const lines = inner.split("\n").filter((line) => line.trim() !== "");
-      if (lines.length) blocks.push(lines.map((line) => `> ${line}`).join("\n"));
+      // A blank line inside it (a code block's) stays, as "> ", which reads
+      // back as the quote's own empty line.
+      const lines = blocksMarkdown(node.children).join("\n").split("\n");
+      let first = 0;
+      let last = lines.length - 1;
+      while (first <= last && (lines[first] as string).trim() === "") first++;
+      while (last >= first && (lines[last] as string).trim() === "") last--;
+      if (first <= last) {
+        blocks.push(
+          lines
+            .slice(first, last + 1)
+            .map((line) => `> ${line}`)
+            .join("\n"),
+        );
+      }
     } else if (node.tag === "pre") {
       // Code as written, in a fence longer than any run of backticks in it.
       const code = preText(node).replace(/\n$/, "");
