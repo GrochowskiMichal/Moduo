@@ -42,6 +42,8 @@ type Entry = {
   addedAt: number;
   /** Taking it back out failed: it's still on the server and still goes. */
   problem: string | null;
+  /** Came back after a failed take-out: the next stale check leaves it (else it'd fail again at once). */
+  spareStale?: boolean;
 };
 
 type Draft = {
@@ -54,6 +56,10 @@ type Draft = {
   removing: number;
   /** Bumped when a file comes back (its take-out failed): a held send must not go on its own. */
   returned: number;
+  /** Server ids whose upload finished under this draft's id (the queue says so, even after a dismiss). */
+  finished: Set<string>;
+  /** Server ids taken out with × before they finished, whose take-out failed: if one finishes later it would go. */
+  unfinished: Set<string>;
 };
 
 type Remover = Pick<ModuoRuntime, "attachments">;
@@ -119,13 +125,21 @@ export class ComposerFilesStore {
       const found = [...this.drafts.entries()].find(([, x]) => x.messageId === target.entityId);
       if (!found) return;
       const [channelId, d] = found;
+      // Recorded first, whatever follows: a × in the moment between finalize
+      // and the queue's next snapshot still sees the file as uploading.
+      d.finished.add(rec.id);
       if (d.entries.some((e) => e.attachmentId === rec.id)) return;
-      if ([...this.known.values()].includes(rec.id) || this.dropping.has(rec.id)) return;
+      // Taken out before it finished and the take-out failed: it's ready now,
+      // so it'd go. Take it out again (the chip comes back if that fails).
+      // Checked before `dropping`, which that failed take-out leaves a moment later.
+      const late = d.unfinished.delete(rec.id);
+      if (!late && this.dropping.has(rec.id)) return;
+      if (!late && [...this.known.values()].includes(rec.id)) return;
       // The queue announces each id as begin answers (captured above); a file
       // here without one may be this, so leave it (and only for a name no
       // other file shares, say it is).
       const open = d.entries.filter((x) => !x.attachmentId);
-      if (open.length > 0) {
+      if (!late && open.length > 0) {
         const named = open.filter((x) => x.fileName === rec.fileName);
         const e = named.length === 1 ? named[0] : undefined;
         if (e) e.attachmentId = rec.id;
@@ -149,9 +163,21 @@ export class ComposerFilesStore {
   /**
    * Take a file out of the unsent message on the server; the send waits until
    * it's out. When that fails and `back` is given, the file comes back as a
-   * chip saying it still goes (else it would go unseen).
+   * chip saying it still goes (else it would go unseen). With `ifFinished`
+   * (× on a file still uploading) it comes back only if its upload finished:
+   * an unfinished row never joins the send, so a chip would promise a file
+   * that doesn't go. (A finalize the server did but whose answer was lost
+   * looks unfinished here; if it was ready, its send carries it unseen. So
+   * does a send made before a late finish lands: the draft is gone by then.)
    */
-  private dropOnServer(channelId: string, d: Draft, id: string, back: Entry | null, at = -1) {
+  private dropOnServer(
+    channelId: string,
+    d: Draft,
+    id: string,
+    back: Entry | null,
+    at = -1,
+    ifFinished = false,
+  ) {
     const runtime = this.remover;
     if (!runtime) {
       if (back) this.putBack(channelId, d, back, at);
@@ -172,7 +198,11 @@ export class ComposerFilesStore {
           const gone = e instanceof AttachmentOpError && e.code === "attachment_not_found";
           if (!back) return;
           if (gone) release(back);
-          else this.putBack(channelId, d, back, at);
+          else if (ifFinished && !d.finished.has(id)) {
+            // Not finished: it won't go, unless it finishes later (watched).
+            d.unfinished.add(id);
+            release(back);
+          } else this.putBack(channelId, d, back, at);
         },
       )
       .finally(() => {
@@ -188,9 +218,9 @@ export class ComposerFilesStore {
       return;
     }
     e.problem = REMOVE_FAILED;
-    // It still goes: counted from now, so the stale check doesn't take it out
-    // (and fail) over and over.
-    e.addedAt = this.now();
+    // It still goes. Its server clock keeps running (addedAt stays), but the
+    // next stale check leaves it, so it isn't taken out (and failing) over and over.
+    e.spareStale = true;
     d.returned += 1;
     const i = at < 0 ? d.entries.length : Math.min(at, d.entries.length);
     d.entries.splice(i, 0, e);
@@ -270,6 +300,8 @@ export class ComposerFilesStore {
         adding: 0,
         removing: 0,
         returned: 0,
+        finished: new Set(),
+        unfinished: new Set(),
       };
       this.drafts.set(channelId, d);
     }
@@ -401,7 +433,7 @@ export class ComposerFilesStore {
       // dismissed while finalizing): take the row out too. Not found = the
       // dismiss already let it go; any other failure brings the chip back.
       if (entry.attachmentId && this.remover) {
-        this.dropOnServer(channelId, d, entry.attachmentId, stopped ? null : entry, i);
+        this.dropOnServer(channelId, d, entry.attachmentId, stopped ? null : entry, i, true);
         if (stopped) release(entry);
       } else release(entry);
     } else if (entry.attachmentId) {
@@ -421,7 +453,10 @@ export class ComposerFilesStore {
     const d = this.drafts.get(channelId);
     if (!d) return false;
     const states = new Map(this.files(channelId).map((f) => [f.key, f.state]));
-    const stale = d.entries.filter((e) => this.now() - e.addedAt > DRAFT_FILE_STALE_MS);
+    const stale = d.entries.filter(
+      (e) => !e.spareStale && this.now() - e.addedAt > DRAFT_FILE_STALE_MS,
+    );
+    for (const e of d.entries) e.spareStale = false;
     // A stopped file never goes anyway: it leaves quietly.
     const going = stale.filter((e) => states.get(e.key) !== "failed");
     for (const e of stale) this.remove(channelId, e.key, null);

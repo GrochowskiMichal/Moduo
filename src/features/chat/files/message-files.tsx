@@ -125,13 +125,20 @@ export function useSignedLinks(
     round: number;
   } | null>(null);
   // Re-signed before the links expire, so a conversation left open keeps
-  // loading its pictures. A re-sign skips the shared cache: it would hand back
-  // the same link (fresh until a minute before it dies) for another cycle.
+  // loading its pictures. The first round takes a cached link only if it
+  // outlives the cycle (a remount stays instant, with the browser's cached
+  // picture); later rounds skip the cache, which would hand the same link back.
   const [round, setRound] = useState(0);
   useEffect(() => {
     if (!runtime || !key) return;
     let live = true;
-    void signPaths(runtime, key.split("\n"), ttlSeconds, Date.now, { fresh: round > 0 })
+    void signPaths(
+      runtime,
+      key.split("\n"),
+      ttlSeconds,
+      Date.now,
+      round > 0 ? { fresh: true } : { minRemainingMs: resignDelayMs(ttlSeconds) + 60_000 },
+    )
       .then((map) => {
         if (live) setLinks({ key, map, round });
       })

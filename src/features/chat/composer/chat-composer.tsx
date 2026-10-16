@@ -413,7 +413,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     flushDraft();
     live.current.onTyping?.(false);
     setGrown(false);
-  }, [mode, initial, onCancel, onSend, flushDraft, files?.busy, hasFiles]);
+  }, [mode, initial, onCancel, onSend, flushDraft, files?.busy, files?.returned, hasFiles]);
 
   useEffect(() => {
     if (!holding) return;

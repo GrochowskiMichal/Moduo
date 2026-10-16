@@ -5,7 +5,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { clearSignedUrlCache, signPaths } from "@/features/attachments/signed-urls";
 import { AttachmentOpError } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
@@ -19,7 +22,7 @@ import {
   staleNotice,
 } from "./composer-files";
 import { type ChatFileGate, type ChatFilesState, filesState, uploadQueueGate } from "./gate";
-import { asAttachmentRecord, resignDelayMs } from "./message-files";
+import { asAttachmentRecord, MessageFiles, resignDelayMs, useSignedLinks } from "./message-files";
 import { capNotice, FEED_MEDIA, fileShape, fitMedia, hasSendableFiles, takeFiles } from "./model";
 
 describe("files in a message (CV-9, §7)", () => {
@@ -127,9 +130,17 @@ function fakeQueue() {
   };
   let n = 0;
   return {
+    /** Files added from now on have no server id yet (begin hasn't answered). */
+    idless: false,
     onUploaded(fn: (rec: unknown, target: UploadView["target"]) => void) {
       uploaded.add(fn);
       return () => uploaded.delete(fn);
+    },
+    /** The queue's finalize answering, before its next snapshot (the item still shows). */
+    announce(id: string, target: UploadView["target"], fileName: string) {
+      for (const fn of uploaded) {
+        fn({ id: `a-${id}`, fileName, mime: "image/png", sizeBytes: 1, status: "ready" }, target);
+      }
     },
     /** The queue's finalize answering for this file (even after a dismiss). */
     finishWith(id: string, target: UploadView["target"], fileName: string) {
@@ -159,7 +170,7 @@ function fakeQueue() {
           sizeBytes: files[i]!.size,
           loaded: 0,
           total: files[i]!.size,
-          attachmentId: `a-${id}`,
+          attachmentId: this.idless ? null : `a-${id}`,
         } as unknown as UploadView);
       });
       emit();
@@ -408,7 +419,7 @@ describe("the composer's files", () => {
     expect(store.busy("c")).toBe(true);
   });
 
-  it("× during finalize: a failed take-out brings the chip back; not found means it's gone", async () => {
+  it("× during finalize: a failed take-out brings the chip back if it finished; not found means it's gone", async () => {
     const q = fakeQueue();
     const store = new ComposerFilesStore(
       () => q as never,
@@ -424,14 +435,116 @@ describe("the composer's files", () => {
     store.remove("c", "q1", r.runtime);
     store.remove("c", "q2", r.runtime);
     const before = store.view("c").returned;
+    // a.png's finalize lands while it's being taken out: its row is ready.
+    q.finishWith("q1", T("m"), "a.png");
     r.calls[0]!.fail();
     r.calls[1]!.fail("attachment_not_found");
     await settle();
-    expect(store.files("c").map((f) => [f.fileName, f.problem])).toEqual([
-      ["a.png", REMOVE_FAILED],
+    expect(store.files("c").map((f) => [f.fileName, f.state, f.problem])).toEqual([
+      ["a.png", "ready", REMOVE_FAILED],
     ]);
     expect(store.view("c").returned).toBe(before + 1);
     expect(store.take("c")).toEqual({ id: "m", files: 1 });
+  });
+
+  it("× mid-upload while offline: the take-out fails but the unfinished file never goes, so no chip", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const runtime = {
+      attachments: {
+        remove: async () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+    } as never;
+    await store.add({
+      channelId: "c",
+      workspaceId: WS,
+      userId: ME,
+      files: [file("a.png")],
+      runtime,
+    });
+    const before = store.view("c").returned;
+    store.remove("c", "q1", runtime);
+    await settle();
+    await settle();
+    expect(store.files("c")).toEqual([]);
+    expect(store.busy("c")).toBe(false);
+    expect(store.view("c").returned).toBe(before);
+    expect(store.take("c")).toBeNull();
+  });
+
+  it("× right after finalize (the queue not caught up): a failed take-out brings the chip back", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const r = remover();
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    q.announce("q1", T("m"), "a.png");
+    store.remove("c", "q1", r.runtime);
+    r.calls[0]!.fail();
+    await settle();
+    expect(store.files("c").map((f) => [f.fileName, f.state, f.problem])).toEqual([
+      ["a.png", "ready", REMOVE_FAILED],
+    ]);
+    expect(store.take("c")).toEqual({ id: "m", files: 1 });
+  });
+
+  it("× mid-upload, take-out fails, then it finishes: it's taken out again, the chip back if that fails", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const r = remover();
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    // A second paste of the same name, still waiting for its server id.
+    q.idless = true;
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    store.remove("c", "q1", r.runtime);
+    r.calls[0]!.fail();
+    await settle();
+    expect(store.files("c")).toHaveLength(1);
+    // Its finalize lands late: taken out again, not handed to the same-named file.
+    q.announce("q1", T("m"), "a.png");
+    expect(r.calls.map((c) => c.id)).toEqual(["a-q1", "a-q1"]);
+    expect(store.busy("c")).toBe(true);
+    r.calls[1]!.fail();
+    await settle();
+    expect(store.files("c").map((f) => [f.key, f.problem])).toEqual([
+      ["q2", null],
+      ["done:a-q1", REMOVE_FAILED],
+    ]);
+  });
+
+  it("a chip back from a failed take-out keeps its age; only the next stale check spares it", async () => {
+    const q = fakeQueue();
+    let now = 0;
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+      () => now,
+    );
+    const r = remover();
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    q.finish("q1");
+    now += DRAFT_FILE_STALE_MS + 1;
+    store.setRemover(r.runtime);
+    expect(store.dropStale("c")).toBe(true);
+    r.calls[0]!.fail();
+    await settle();
+    expect(store.files("c").map((f) => f.problem)).toEqual([REMOVE_FAILED]);
+    // The send right after goes with it…
+    expect(store.dropStale("c")).toBe(false);
+    expect(store.files("c")).toHaveLength(1);
+    // …but its server clock kept running: a later check takes it out again.
+    expect(store.dropStale("c")).toBe(true);
+    expect(r.calls).toHaveLength(2);
   });
 
   it("a stale file whose row the server already purged leaves for good (no loop)", async () => {
@@ -668,15 +781,94 @@ describe("chat file links", () => {
     clearSignedUrlCache();
   });
 
-  it("chat originals use the 3-minute link; tasks keep their default", () => {
-    expect(CHAT_FILE_LINK_TTL_SECONDS.original).toBe(180);
-    const read = (f: string) =>
-      readFileSync(resolve(process.cwd(), "src/features/chat/files", f), "utf8");
-    for (const f of ["files-view.tsx", "message-files.tsx"]) {
-      expect(read(f)).toContain("originalTtlSeconds={CHAT_FILE_LINK_TTL_SECONDS.original}");
+  it("a mount reuses a cached link only if it outlives the cycle; each cycle signs fresh", async () => {
+    clearSignedUrlCache();
+    const calls: { paths: string[]; ttl: number }[] = [];
+    const runtime = {
+      attachments: {
+        signedUrls: async (paths: string[], ttl: number) => {
+          calls.push({ paths, ttl });
+          return new Map(paths.map((p) => [p, `${p}#${calls.length}`]));
+        },
+      },
+    } as never;
+    const ttl = CHAT_FILE_LINK_TTL_SECONDS.preview;
+    rs.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    try {
+      // A link signed earlier, 8 minutes ago: still "fresh" to the cache.
+      await signPaths(runtime, ["p"], ttl);
+      rs.advanceTimersByTime(8 * 60_000);
+      const { result, unmount } = renderHook(() => useSignedLinks(runtime, ["p"], ttl));
+      await act(async () => {});
+      expect(calls).toHaveLength(2);
+      expect(result.current?.get("p")).toBe("p#2");
+      await act(async () => {
+        rs.advanceTimersByTime(resignDelayMs(ttl));
+      });
+      expect(calls).toHaveLength(3);
+      expect(result.current?.get("p")).toBe("p#3");
+      unmount();
+      // A remount right after (scrolling back) keeps that link: no request.
+      const again = renderHook(() => useSignedLinks(runtime, ["p"], ttl));
+      await act(async () => {});
+      expect(calls).toHaveLength(3);
+      expect(again.result.current?.get("p")).toBe("p#3");
+      again.unmount();
+    } finally {
+      rs.useRealTimers();
+      clearSignedUrlCache();
     }
-    const viewer = read("../../attachments/ui/attachment-viewer.tsx");
-    expect(viewer).toContain("originalTtlSeconds = ATTACHMENT_LINK_TTL_SECONDS.original");
-    expect(viewer.match(/signPaths\(runtime, \[[^\]]+\], originalTtlSeconds\)/g)).toHaveLength(2);
+  });
+
+  it("opening a chat picture drawn from its original signs the original for 3 minutes", async () => {
+    clearSignedUrlCache();
+    const calls: { paths: string[]; ttl: number }[] = [];
+    const picture = {
+      id: "f1",
+      messageId: "m1",
+      authorId: ME,
+      fileName: "a.png",
+      mime: "image/png",
+      sizeBytes: 10,
+      width: 10,
+      height: 10,
+      objectPath: "obj/a.png",
+      previewPath: null,
+      previewMime: null,
+      sentAt: "2026-10-16T00:00:00Z",
+    };
+    const runtime = {
+      chat: { messageFiles: async () => ({ data: [picture], error: null }) },
+      attachments: {
+        signedUrls: async (paths: string[], ttl: number) => {
+          calls.push({ paths, ttl });
+          return new Map(paths.map((p) => [p, `${p}@${ttl}`]));
+        },
+      },
+    } as never;
+    render(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(MessageFiles, { message: { id: "m1" } as never, runtime }),
+      ),
+    );
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    // The stream draws it from the original with the preview's lifetime…
+    expect(calls).toEqual([{ paths: ["obj/a.png"], ttl: CHAT_FILE_LINK_TTL_SECONDS.preview }]);
+    fireEvent.click(screen.getByRole("button", { name: "Open a.png" }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // …and the viewer signs it again for 3 minutes, never reusing that link.
+    expect(calls.at(-1)).toEqual({
+      paths: ["obj/a.png"],
+      ttl: CHAT_FILE_LINK_TTL_SECONDS.original,
+    });
+    expect(CHAT_FILE_LINK_TTL_SECONDS.original).toBe(180);
+    cleanup();
+    clearSignedUrlCache();
   });
 });

@@ -267,6 +267,21 @@ describe("⏎ while files are being added or taken out (CV-9)", () => {
     expect(onSend).not.toHaveBeenCalled();
     expect(screen.queryByText("Waiting for the files…")).toBeNull();
   });
+
+  it("a file that came back before ⏎ doesn't cancel the hold it starts", async () => {
+    const onSend = rs.fn();
+    const { rerender } = render(createElement(ChatComposer, props(onSend, true, 0)));
+    await settle();
+    // A take-out failed earlier (returned bumped) while another is still going.
+    rerender(createElement(ChatComposer, props(onSend, true, 1)));
+    await settle();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Message #general" }), { key: "Enter" });
+    await settle();
+    expect(screen.getByText("Waiting for the files…")).toBeTruthy();
+    rerender(createElement(ChatComposer, props(onSend, false, 1)));
+    await settle();
+    expect(onSend).toHaveBeenCalledWith("hello");
+  });
 });
 
 describe("grammar, handle chip, IME: the handle chip (CV-10, AC4.1)", () => {
