@@ -467,3 +467,431 @@ SELECT test.ok(NOT EXISTS (
   'every conversation in the registry carries its channel''s name, or none');
 
 -- ── CV-13: the channel link half goes below ────────────────────────────────
+-- Rules, as behaviour: a channel links to at most one project, client or team;
+-- linking needs being in the conversation, able to post, and edit rights on
+-- the item; the item's conversation line and its spine row are readable only by
+-- the conversation's readers; "Start a conversation for X" is public when every
+-- member who uses chat sees X, else private with exactly those who do, named
+-- after X with " 2" on a clash; linking a team adds nobody (the app offers the
+-- people once, through chat_op_add_members); no op takes a person from the
+-- caller; a key reads nothing.
+--
+-- Cast added: C1 a company A makes; TM a team of A and N; PB2 a project only O
+-- and A can see (A at edit); PA an archived project.
+CREATE FUNCTION test.link(p_who text, p_channel text, p_type text, p_id uuid) RETURNS text LANGUAGE sql AS $$
+  SELECT test.as_user(p_who, format($q$SELECT public.chat_op_link_channel(%L::uuid, %L::text, %L::uuid)$q$,
+    test.ref(p_channel), p_type, p_id))
+$$;
+CREATE FUNCTION test.linked(p_channel text) RETURNS text LANGUAGE sql VOLATILE AS $$
+  SELECT coalesce(linked_type || ':' || linked_id, 'none') FROM public.chat_channels WHERE id = test.ref(p_channel)
+$$;
+CREATE FUNCTION test.mirrors(p_channel text) RETURNS text LANGUAGE sql VOLATILE AS $$
+  SELECT coalesce(string_agg(target_type || ':' || target_id, ','), 'none') FROM public.entity_links
+   WHERE workspace_id = test.id('W') AND source_type = 'chat_channel' AND source_id = test.ref(p_channel)
+     AND relation_kind = 'conversation-of' AND deleted_at IS NULL
+$$;
+CREATE FUNCTION test.convo(p_who text, p_type text, p_id uuid) RETURNS text LANGUAGE sql AS $$
+  SELECT coalesce(test.value_as(p_who, format(
+    $q$SELECT string_agg(channel_name || '/' || unread, ',' ORDER BY channel_name)
+         FROM public.chat_conversations_for_item(%L, %L::uuid) WHERE relation = 'conversation-of'$q$, p_type, p_id)), '')
+$$;
+
+DO $$
+BEGIN
+  INSERT INTO public.companies (id, workspace_id, owner_id, name) VALUES (test.id('C1'), test.id('W'), test.id('A'), 'Acme');
+  INSERT INTO public.teams (id, workspace_id, name, mark) VALUES (test.id('TM'), test.id('W'), 'Design', 'D');
+  INSERT INTO public.team_members (workspace_id, team_id, user_id)
+  VALUES (test.id('W'), test.id('TM'), test.id('A')), (test.id('W'), test.id('TM'), test.id('N'));
+  INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position) VALUES
+    (test.id('PB2'), test.id('W'), test.id('O'), 'Website', false, '0003'),
+    (test.id('PA'), test.id('W'), test.id('O'), 'Old site', false, '0004');
+  DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id = test.id('PB2');
+  INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+  VALUES (test.id('W'), 'bucket', test.id('PB2'), 'member', test.id('A'), 'edit', test.id('O'));
+  UPDATE public.buckets SET archived_at = now() WHERE id = test.id('PA');
+  PERFORM test.ok(public.can_access('bucket', test.id('SB'), 'edit', test.id('A')),
+    'setup: A may edit the shared project');
+END;
+$$;
+
+-- ── AC9.1: one link per channel, from Details ──────────────────────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.link('A', 'Q', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE 'ok %', 'A (in Q, can post, edits Shared) links Q to the project', v);
+  PERFORM test.ok(test.linked('Q') = 'bucket:' || test.id('SB'), 'the channel points at the project');
+  PERFORM test.ok(test.mirrors('Q') = 'bucket:' || test.id('SB'), 'one conversation-of row mirrors it');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity WHERE entity_id = test.ref('Q') AND op = 'chat.channel_link'
+                            AND payload ->> 'linked_type' = 'bucket'), 'the link is in the channel''s history');
+  v := test.link('A', 'Q', 'company', test.id('C1'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'company:' || test.id('C1'), 'relinking replaces the link', v);
+  PERFORM test.ok(test.mirrors('Q') = 'company:' || test.id('C1'), 'the old row goes, one row stays');
+  v := test.link('A', 'Q', NULL, NULL);
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'none' AND test.mirrors('Q') = 'none', 'unlinking clears both', v);
+
+  -- Who may not.
+  v := test.link('N', 'Q', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE '42501 %', 'N reads Q but isn''t in it: refused', v);
+  v := test.link('X', 'Q', 'project', test.id('SB'));
+  PERFORM test.ok(v NOT LIKE 'ok %', 'an outsider: refused', v);
+  v := test.as_key('K', format($q$SELECT public.chat_op_link_channel(%L::uuid, 'project', %L::uuid)$q$, test.ref('Q'), test.id('SB')));
+  PERFORM test.ok(v NOT LIKE 'ok %', 'an API key: refused', v);
+  v := test.link('A', 'Q', 'project', test.id('PB'));
+  PERFORM test.ok(v LIKE '42501 %' AND test.linked('Q') = 'none', 'a project A can''t edit (O''s private one): refused', v);
+  v := test.link('B', 'Q', 'company', test.id('C1'));
+  PERFORM test.ok(v LIKE '42501 %' AND test.linked('Q') = 'none', 'B (in Q) can''t edit A''s company: refused', v);
+  v := test.link('A', 'Q', 'company', test.id('C1'));
+  PERFORM test.ok(v LIKE 'ok %', 'A links Q to the company', v);
+  v := test.link('A', 'Q', 'project', test.id('PA'));
+  PERFORM test.ok(v LIKE '22023 %' AND test.linked('Q') = 'company:' || test.id('C1'), 'an archived project: refused, the link stays', v);
+  v := test.link('A', 'Q', 'note', test.id('SB'));
+  PERFORM test.ok(v LIKE '22023 %', 'a conversation links only to a project, client or team', v);
+  v := test.link('A', 'Q', 'project', test.id('nothing'));
+  PERFORM test.ok(v LIKE 'P0002 %', 'an unknown id: refused', v);
+  v := test.link('A', 'Q', 'project', test.id('SB2'));
+  PERFORM test.ok(v LIKE 'P0002 %', 'another workspace''s project: refused', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])$q$, test.id('W'), test.id('B')));
+  INSERT INTO test.ids SELECT 'DM', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND kind = 'dm' LIMIT 1;
+  v := test.link('A', 'DM', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE '22023 %', 'a direct message links to nothing', v);
+END;
+$$;
+
+-- ── The spine row: written by the chat op only, read by readers only ───────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'chat_channel', %L, 'bucket', %L, 'conversation-of', 'manual')$q$,
+    test.id('W'), test.ref('Q'), test.id('SB')));
+  PERFORM test.ok(v NOT LIKE 'ok %', 'the link op can''t write a conversation-of row', v);
+  v := test.as_op('A', format($q$INSERT INTO public.entity_links (workspace_id, source_type, source_id, target_type, target_id, relation_kind)
+    VALUES (%L, 'chat_channel', %L, 'bucket', %L, 'conversation-of')$q$, test.id('W'), test.ref('Q'), test.id('SB')));
+  PERFORM test.ok(v LIKE '42501 %', 'nor can a row for an item the channel doesn''t link to', v);
+  v := test.as_op('A', format($q$UPDATE public.entity_links SET relation_kind = 'references'
+    WHERE source_id = %L AND relation_kind = 'conversation-of'$q$, test.ref('Q')));
+  PERFORM test.ok(v LIKE '42501 %', 'a conversation-of row never changes kind', v);
+  -- An item's restore brings back its row only while the link holds.
+  UPDATE public.entity_links SET deleted_at = now()
+   WHERE source_id = test.ref('Q') AND relation_kind = 'conversation-of' AND target_id = test.id('SB');
+  UPDATE public.entity_links SET deleted_at = NULL
+   WHERE source_id = test.ref('Q') AND relation_kind = 'conversation-of' AND target_id = test.id('SB');
+  PERFORM test.ok(test.mirrors('Q') = 'company:' || test.id('C1'), 'an old row of a former link never comes back');
+
+  v := test.link('A', 'P', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE 'ok %', 'A links the private P to the shared project', v);
+END;
+$$;
+SELECT test.ok(test.value_as('N', format($q$SELECT count(*) FROM public.entity_links
+    WHERE source_id = %L::uuid AND relation_kind = 'conversation-of'$q$, test.ref('P'))) = '0',
+  'N (not in P) reads no conversation-of row of P');
+SELECT test.ok(test.value_as('B', format($q$SELECT count(*) FROM public.entity_links
+    WHERE source_id = %L::uuid AND relation_kind = 'conversation-of' AND deleted_at IS NULL$q$, test.ref('P'))) = '1',
+  'B (in P) reads it');
+SELECT test.ok(test.value_as('N', format($q$SELECT count(*) FROM public.entity_links
+    WHERE source_id = %L::uuid AND relation_kind = 'conversation-of' AND deleted_at IS NULL$q$, test.ref('Q'))) = '1',
+  'N reads the public Q''s row');
+
+-- ── AC5.1 / AC6.1: the item shows its conversation, with the reader's unread ─
+SELECT test.ok(test.send('B', 'q4', 'Q', 'logo is in') LIKE 'ok %', 'setup: B posts in Q');
+SELECT test.ok(test.convo('A', 'company', test.id('C1')) = 'acme/' || test.value_as('A', format(
+    $q$SELECT unread FROM public.chat_unread_counts(%L) WHERE channel_id = %L$q$, test.id('W'), test.ref('Q')))
+  AND test.convo('A', 'company', test.id('C1')) <> 'acme/0',
+  'the company shows "Conversation: acme · N new" to A, N being A''s unread in Q', test.convo('A', 'company', test.id('C1')));
+SELECT test.ok(test.convo('N', 'company', test.id('C1')) = '',
+  'N reads Q but can''t open A''s company: no line', test.convo('N', 'company', test.id('C1')));
+SELECT test.ok(test.convo('A', 'project', test.id('SB')) = 'founders/0', 'the project shows P to A',
+  test.convo('A', 'project', test.id('SB')));
+SELECT test.ok(test.convo('N', 'project', test.id('SB')) = '', 'N (not in P) sees no line for P');
+SELECT test.ok(test.convo('X', 'company', test.id('C1')) = '', 'an outsider sees nothing');
+SELECT test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_conversations_for_item('company', %L::uuid)$q$,
+  test.id('C1'))) = 'ok 0', 'an API key reads no line');
+SELECT test.ok(test.as_key('K', format($q$SELECT 1 FROM public.entity_links WHERE source_id = %L AND relation_kind = 'conversation-of'
+    AND public.perm_can_see_entity(workspace_id, source_type, source_id)$q$, test.ref('Q'))) = 'ok 0',
+  'an API key sees no conversation-of row through the spine');
+
+-- ── AC9.2: linking a team adds nobody; the offer adds its people once ───────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.link('B', 'Q', 'team', test.id('TM'));
+  PERFORM test.ok(v LIKE '42501 %', 'B isn''t in the team: refused', v);
+  v := test.link('A', 'Q', 'team', test.id('TM'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM'), 'A (in the team) links Q to it', v);
+  PERFORM test.ok(test.mirrors('Q') = 'none', 'a team link is the column only');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_members WHERE channel_id = test.ref('Q') AND user_id = test.id('N')),
+    'linking adds nobody');
+  PERFORM test.ok(test.convo('A', 'team', test.id('TM')) LIKE 'acme/%', 'the team''s conversation answers for it');
+  v := test.as_user('A', format($q$SELECT public.chat_op_add_members(%L, ARRAY[%L, %L]::uuid[])$q$,
+    test.ref('Q'), test.id('A'), test.id('N')));
+  PERFORM test.ok(v LIKE 'ok %' AND EXISTS (SELECT 1 FROM public.chat_members WHERE channel_id = test.ref('Q')
+    AND user_id = test.id('N') AND left_at IS NULL), 'the offer adds the team''s people', v);
+  INSERT INTO public.team_members (workspace_id, team_id, user_id) VALUES (test.id('W'), test.id('TM'), test.id('O'));
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_members WHERE channel_id = test.ref('Q') AND user_id = test.id('O')),
+    'a later team change doesn''t follow');
+END;
+$$;
+
+-- ── New conversation with a link ───────────────────────────────────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'kickoff', '', false, '{}'::uuid[], false, 'company', %L)$q$,
+    test.id('W'), test.id('C1')));
+  PERFORM test.ok(v LIKE 'ok %', 'A makes "kickoff" linked to the company', v);
+  INSERT INTO test.ids SELECT 'KO', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'kickoff';
+  PERFORM test.ok(test.linked('KO') = 'company:' || test.id('C1') AND test.mirrors('KO') = 'company:' || test.id('C1'),
+    'it is linked from the start');
+  v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'secret', '', false, '{}'::uuid[], false, 'project', %L)$q$,
+    test.id('W'), test.id('PB')));
+  PERFORM test.ok(v LIKE '42501 %' AND NOT EXISTS (SELECT 1 FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'secret'),
+    'linked to a project A can''t edit: refused, nothing made', v);
+END;
+$$;
+
+-- ── "Start a conversation for X" (CH56) ────────────────────────────────────
+DO $$
+DECLARE
+  v text;
+  r public.chat_channels;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'project', %L)$q$, test.id('W'), test.id('SB')));
+  PERFORM test.ok(v LIKE 'ok %', 'A starts a conversation for the shared project', v);
+  SELECT * INTO r FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Shared';
+  PERFORM test.ok(r.id IS NOT NULL AND NOT r.is_private AND r.linked_type = 'bucket' AND r.linked_id = test.id('SB'),
+    'everyone sees it: a public channel named after it, linked to it');
+  PERFORM test.ok((SELECT array_agg(user_id) FROM public.chat_members WHERE channel_id = r.id AND left_at IS NULL) = ARRAY[test.id('A')],
+    'with the creator in it');
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'project', %L)$q$, test.id('W'), test.id('SB')));
+  PERFORM test.ok(v LIKE 'ok %' AND EXISTS (SELECT 1 FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Shared 2'),
+    'again: "Shared 2"', v);
+
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'project', %L)$q$, test.id('W'), test.id('PB2')));
+  PERFORM test.ok(v LIKE 'ok %', 'A starts one for Website, which only O and A see', v);
+  SELECT * INTO r FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Website';
+  PERFORM test.ok(r.is_private AND r.linked_id = test.id('PB2'), 'it is private and linked');
+  PERFORM test.ok((SELECT array_agg(user_id ORDER BY user_id) FROM public.chat_members WHERE channel_id = r.id AND left_at IS NULL)
+                  = (SELECT array_agg(x ORDER BY x) FROM unnest(ARRAY[test.id('A'), test.id('O')]) x),
+    'with exactly the people who can see the project');
+
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'company', %L)$q$, test.id('W'), test.id('C1')));
+  PERFORM test.ok(v LIKE 'ok %' AND EXISTS (SELECT 1 FROM public.chat_channels WHERE workspace_id = test.id('W')
+    AND name = 'Acme 2' AND linked_type = 'company'),
+    'from a client''s hub: named after Acme, "Acme 2" beside the channel acme, linked to the company', v);
+  v := test.as_user('N', format($q$SELECT public.chat_op_start_conversation(%L, 'project', %L)$q$, test.id('W'), test.id('PB2')));
+  PERFORM test.ok(v LIKE '42501 %', 'N can''t edit Website: refused', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'team', %L)$q$, test.id('W'), test.id('TM')));
+  PERFORM test.ok(v LIKE '22023 %', 'a team has no "Start a conversation"', v);
+END;
+$$;
+
+-- ── Capture's destination: the linked project, for whoever may add to it ───
+CREATE FUNCTION test.files_here(p_who text, p_channel_name text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format($q$SELECT public.chat_link_files_here(%L::uuid)::text$q$,
+    (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = p_channel_name)))
+$$;
+SELECT test.ok(test.files_here('A', 'Shared') = 'true', 'A, who edits Shared, files into it from its channel');
+SELECT test.ok(test.files_here('A', 'Website') = 'true', 'and into Website from its private channel');
+SELECT test.ok(test.files_here('O', 'Website') = 'true', 'O, its owner, too');
+SELECT test.ok(test.files_here('N', 'Website') = 'false', 'N (can''t read the channel): no');
+SELECT test.ok(test.files_here('A', 'kickoff') = 'false', 'a channel linked to a client: the Inbox');
+SELECT test.ok(test.as_key('K', format($q$SELECT 1 WHERE public.chat_link_files_here(%L)$q$,
+  (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Shared'))) = 'ok 0',
+  'an API key: no');
+
+-- ── The linked project is deleted: the channel stays ───────────────────────
+DO $$
+BEGIN
+  UPDATE public.buckets SET deleted_at = now() WHERE id = test.id('PB2');
+  PERFORM test.ok(test.files_here('A', 'Website') = 'false', 'a deleted project: capture falls back to the Inbox');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_channels WHERE name = 'Website' AND deleted_at IS NULL
+    AND linked_id = test.id('PB2')), 'the channel stays, still pointing at it (the chip shows the tombstone)');
+END;
+$$;
+
+-- ── Relinking: one row per conversation and item; a lost row comes back ────
+DO $$
+DECLARE
+  v text;
+  n bigint;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'relink', '', false, '{}'::uuid[])$q$, test.id('W')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A makes the public channel "relink"', v);
+  INSERT INTO test.ids SELECT 'RL', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'relink';
+  PERFORM test.ok(test.link('A', 'RL', 'project', test.id('SB')) LIKE 'ok %'
+                  AND test.link('A', 'RL', 'company', test.id('C1')) LIKE 'ok %'
+                  AND test.link('A', 'RL', 'project', test.id('SB')) LIKE 'ok %', 'A links it to Shared, Acme, then Shared again');
+  SELECT count(*) INTO n FROM public.entity_links
+   WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND target_id = test.id('SB');
+  PERFORM test.ok(n = 1 AND test.mirrors('RL') = 'bucket:' || test.id('SB'),
+    'relinking to Shared brings its row back: one row for the pair, live', n::text);
+  -- The column still holds but the row went (an item's delete and restore can do this).
+  UPDATE public.entity_links SET deleted_at = now()
+   WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL;
+  PERFORM test.ok(test.mirrors('RL') = 'none', 'setup: the row is gone, the link holds');
+  SELECT count(*) INTO n FROM public.module_activity WHERE entity_id = test.ref('RL') AND op = 'chat.channel_link';
+  v := test.link('A', 'RL', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'linking it there again restores the row', v);
+  PERFORM test.ok((SELECT count(*) FROM public.module_activity WHERE entity_id = test.ref('RL') AND op = 'chat.channel_link') = n,
+    'with no second history line');
+
+  -- The row is changed only from the conversation.
+  v := test.as_user('A', format($q$SELECT public.links_op_delete(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.entity_links WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL)));
+  PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'the link op can''t remove it', v);
+  v := test.as_op('A', format($q$UPDATE public.entity_links SET target_id = %L
+    WHERE source_id = %L AND relation_kind = 'conversation-of' AND deleted_at IS NULL$q$, test.id('PB2'), test.ref('RL')));
+  PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'nor can it move to another item', v);
+  -- A row removed outright while the link holds is made again.
+  DELETE FROM public.entity_links WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of';
+  v := test.link('A', 'RL', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'a row removed outright comes back on relinking', v);
+END;
+$$;
+SELECT test.ok(test.convo('A', 'project', test.id('SB')) LIKE '%founders/0%'
+               AND test.convo('A', 'project', test.id('SB')) LIKE '%relink/0%',
+  'every conversation linked to Shared answers, each with A''s unread', test.convo('A', 'project', test.id('SB')));
+
+-- ── Capture: a project archived after linking falls back to the Inbox ──────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position)
+  VALUES (test.id('PL'), test.id('W'), test.id('O'), 'Launch', false, '0005');
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'project', %L)$q$, test.id('W'), test.id('PL')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.files_here('A', 'Launch') = 'true', 'A files into Launch from its channel', v);
+  UPDATE public.buckets SET archived_at = now() WHERE id = test.id('PL');
+  PERFORM test.ok(test.files_here('A', 'Launch') = 'false', 'Launch archived: capture falls back to the Inbox');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_channels WHERE name = 'Launch' AND linked_id = test.id('PL')),
+    'the channel keeps its link (the chip shows the tombstone)');
+END;
+$$;
+
+-- ── A contact as the link ──────────────────────────────────────────────────
+DO $$
+DECLARE
+  v text;
+  r public.chat_channels;
+BEGIN
+  INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES (test.id('CT'), test.id('W'), test.id('A'), 'Jane Roe');
+  v := test.link('A', 'RL', 'contact', test.id('CT'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('RL') = 'contact:' || test.id('CT')
+                  AND test.mirrors('RL') = 'contact:' || test.id('CT'), 'A links "relink" to the contact', v);
+  v := test.as_user('A', format($q$SELECT public.contacts_op_unlink(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.entity_links WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL)));
+  PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'contact:' || test.id('CT'), 'Contacts'' unlink can''t remove it', v);
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('RL'))) LIKE 'ok %', 'setup: B joins "relink"');
+  PERFORM test.ok(test.link('B', 'RL', 'company', test.id('C1')) LIKE '42501 %', 'B (in it) can''t edit the company: refused');
+  v := test.link('A', 'RL', 'project', test.id('SB'));
+  v := test.link('B', 'RL', 'contact', test.id('CT'));
+  PERFORM test.ok(v LIKE '42501 %' AND test.linked('RL') = 'bucket:' || test.id('SB'), 'B (in it) can''t edit A''s contact: refused', v);
+  v := test.link('A', 'RL', 'contact', test.id('CT'));
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'contact', %L)$q$, test.id('W'), test.id('CT')));
+  PERFORM test.ok(v LIKE 'ok %', 'A starts a conversation for the contact', v);
+  SELECT * INTO r FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Jane Roe';
+  PERFORM test.ok(r.id IS NOT NULL AND r.linked_type = 'contact' AND r.linked_id = test.id('CT'),
+    'named after the contact, linked to it');
+  PERFORM test.ok(r.is_private = EXISTS (
+      SELECT 1 FROM public.workspace_members wm
+       WHERE wm.workspace_id = test.id('W')
+         AND NOT public.spine__visible_to(test.id('W'), 'contact', test.id('CT'), wm.user_id)),
+    'private exactly when someone can''t see the contact');
+END;
+$$;
+
+-- ── Who may link a team besides its people ─────────────────────────────────
+-- Q is linked to TM; O (the owner), B (TM2's maker) and D (an admin) join Q.
+SELECT test.person('D');
+DO $$
+DECLARE
+  v text;
+BEGIN
+  INSERT INTO public.workspace_members (workspace_id, user_id, role)
+  VALUES (test.id('W'), test.id('D'), 'admin');
+  PERFORM test.ok(public.perm_user_has(test.id('W'), test.id('D'), 'ws.manage_roles'), 'setup: D, an admin, manages roles');
+  INSERT INTO public.teams (id, workspace_id, name, mark, created_by) VALUES
+    (test.id('TM2'), test.id('W'), 'Ops', 'O', test.id('B')),
+    (test.id('TM3'), test.id('W'), 'Sales', 'S', NULL),
+    (test.id('TM4'), test.id('W'), 'Legal', 'L', NULL);
+  PERFORM test.ok(test.as_user('O', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('Q'))) LIKE 'ok %'
+                  AND test.as_user('D', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('Q'))) LIKE 'ok %',
+    'setup: O and D join Q');
+  v := test.link('B', 'Q', 'team', test.id('TM2'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM2'), 'B made Ops (not in it): may link it', v);
+  v := test.link('O', 'Q', 'team', test.id('TM3'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM3'), 'O owns the workspace: may link Sales', v);
+  v := test.link('D', 'Q', 'team', test.id('TM4'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM4'), 'D, an admin: may link Legal', v);
+  v := test.link('B', 'Q', 'team', test.id('TM3'));
+  PERFORM test.ok(v LIKE '42501 %' AND test.linked('Q') = 'team:' || test.id('TM4'), 'B for Sales (none of those): refused', v);
+END;
+$$;
+
+-- ── The server reads references with the client's grammar ─────────────────
+-- (src/features/chat/markup-v2/refs-parity.test.ts runs the whole corpus
+-- through both sides; these pin the edges here too.)
+CREATE FUNCTION test.refs_of(p_body text) RETURNS text LANGUAGE sql AS $f$
+  SELECT coalesce(string_agg(r.ref_type || '/' || left(r.ref_id::text, 8), ' '), '')
+    FROM public.chat__body_refs(p_body) r
+$f$;
+DO $$
+DECLARE
+  t text := 'moduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6';
+  o text := 'moduo://note/a137b0b7-4125-415d-bef9-72662d6b58e6';
+BEGIN
+  PERFORM test.ok(test.refs_of('``a ' || t || ' b`` ' || o) = 'note/a137b0b7',
+    'a double-backtick code span holds no reference', test.refs_of('``a ' || t || ' b`` ' || o));
+  PERFORM test.ok(test.refs_of('\`` ' || t || ' `') = '',
+    'an escaped backtick, then a code span: no reference', test.refs_of('\`` ' || t || ' `'));
+  PERFORM test.ok(test.refs_of('[see docs](https://example.com/' || t || ')') = '',
+    'a link''s target is not a reference');
+  PERFORM test.ok(test.refs_of('[title](' || t || ') ' || o || ' ' || t) = 'task/d037b0b7 note/a137b0b7',
+    'a titled reference counts once, in order');
+  PERFORM test.ok(test.refs_of(E'```\n' || t || E'\n```\n' || o) = 'note/a137b0b7',
+    'a fenced block holds no reference');
+  PERFORM test.ok(test.refs_of(E'> ' || t || E'\n- ' || o) = 'task/d037b0b7 note/a137b0b7',
+    'quotes and list items are read');
+  PERFORM test.ok(test.refs_of('moduo\://task/d037b0b7-4125-415d-bef9-72662d6b58e6') = '',
+    'an escaped reference is text');
+  PERFORM test.ok((SELECT m.people = ARRAY['d037b0b7-4125-415d-bef9-72662d6b58e6'::uuid] AND m.everyone
+                     FROM public.chat__mentions('@channel moduo://person/d037b0b7-4125-415d-bef9-72662d6b58e6 `moduo://person/a137b0b7-4125-415d-bef9-72662d6b58e6`') m),
+    'chat__mentions reads people and @channel as before');
+END;
+$$;
+
+-- ── No op takes a person; grants ───────────────────────────────────────────
+SELECT test.ok(NOT EXISTS (
+  SELECT 1 FROM pg_proc p
+   WHERE p.pronamespace = 'public'::regnamespace
+     AND p.proname IN ('chat_op_link_channel', 'chat_op_start_conversation', 'chat_op_create_channel', 'chat_conversations_for_item')
+     AND (pg_get_function_identity_arguments(p.oid) ~ 'user')),
+  'the link ops and read take no user id');
+CREATE TABLE test.fn_grants_13 (fn text PRIMARY KEY, app boolean NOT NULL);
+INSERT INTO test.fn_grants_13 VALUES
+  ('public.chat_op_link_channel(uuid, text, uuid)', true),
+  ('public.chat_op_start_conversation(uuid, text, uuid)', true),
+  ('public.chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean, text, uuid)', true),
+  ('public.chat_conversations_for_item(text, uuid)', true),
+  ('public.chat_link_files_here(uuid)', true),
+  ('public.chat__links_to(uuid, text, uuid)', false),
+  ('public.chat__link_type(text)', false),
+  ('public.chat__check_link_target(uuid, text, uuid, uuid)', false),
+  ('public.chat__set_link(public.chat_channels, text, uuid, uuid)', false),
+  ('public.chat__body_runs(text)', false),
+  ('public.chat__inline_scan(text)', false),
+  ('public.chat__mentions_inline(text)', false),
+  ('public.chat__mentions(text)', false),
+  ('public.chat__body_refs(text)', false);
+SELECT test.ok(NOT has_function_privilege('anon', g.fn, 'execute'), 'anon can''t run ' || g.fn) FROM test.fn_grants_13 g;
+SELECT test.ok(has_function_privilege('authenticated', g.fn, 'execute') = g.app,
+  CASE WHEN g.app THEN 'the app runs ' ELSE 'the app can''t run ' END || g.fn) FROM test.fn_grants_13 g;
+SELECT test.ok(has_function_privilege('service_role', g.fn, 'execute'), 'the server runs ' || g.fn) FROM test.fn_grants_13 g;
+SELECT test.ok(NOT EXISTS (SELECT 1 FROM test.fn_grants_13 g, aclexplode((SELECT proacl FROM pg_proc WHERE oid = g.fn::regprocedure)) a
+                            WHERE a.grantee = 0), 'no CV-13 function is open to PUBLIC');
+SELECT test.ok(NOT has_function_privilege('authenticated', 'public.chat__guard_conversation_of()', 'execute'),
+  'the trigger function is nobody''s to call');

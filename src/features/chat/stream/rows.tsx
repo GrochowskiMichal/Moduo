@@ -118,6 +118,18 @@ function SendState({
       </p>
     );
   }
+  if (message.sendState === "failed" && message.sendRetry === false) {
+    // Nothing left to send (its files all stopped): say why; Delete only.
+    return (
+      <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
+        <AlertCircle aria-hidden className="size-icon-sm text-muted-foreground" />
+        <span>Not sent · {message.sendError}</span>
+        <Button size="sm" variant="ghost" onClick={onDiscard}>
+          Delete
+        </Button>
+      </div>
+    );
+  }
   if (message.sendState === "failed") {
     return (
       <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
@@ -303,6 +315,8 @@ export type RowHandlers = {
   onPersonClick?: (userId: string) => void;
   /** A person's card, previewed on hover over an author's name (CV-8b). */
   personPreview?: (userId: string) => ReactNode;
+  /** CV-9: a message's files (previews and chips), under its words. */
+  renderFiles?: (m: ChatMessage) => ReactNode;
 };
 
 /** An author's name: opens their card on click, previews it on hover (CV-8b). */
@@ -468,6 +482,7 @@ export function MessageRow({
               className={pending ? "opacity-60" : undefined}
             />
           )}
+          {(message.fileCount ?? 0) > 0 ? handlers.renderFiles?.(message) : null}
           <SendState
             message={message}
             onRetry={() => handlers.onRetry?.(message)}

@@ -29,8 +29,8 @@ import {
   isChatEnd,
   type LinkOrigin,
   RELATION_KIND_LABELS,
-  RELATION_KINDS,
   type RelationKind,
+  USER_RELATION_KINDS,
 } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { UNDO_TOAST_MS } from "@/lib/undo-toast";
@@ -103,7 +103,7 @@ function DropLinkToastCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {RELATION_KINDS.filter(
+          {USER_RELATION_KINDS.filter(
             // "Mentioned in" with a conversation or a message is Chat's alone.
             (k) => k !== "mentions" || (!isChatEnd(link.sourceType) && !isChatEnd(link.targetType)),
           ).map((k) => (

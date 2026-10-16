@@ -339,7 +339,7 @@ BEGIN
   SELECT string_agg(f, ', ') INTO v_bad
     FROM unnest(ARRAY['chat_op_send(uuid, uuid, text, uuid)', 'chat_op_pin(uuid, boolean)',
                       'share_op_announce(uuid, boolean)', 'chat_op_leave(uuid)', 'chat_op_remove_member(uuid, uuid)',
-                      'chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean)',
+                      'chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean, text, uuid)',
                       'chat_op_update_channel(uuid, text, text)', 'chat_op_bootstrap(uuid)']) AS f
    WHERE has_function_privilege('anon', 'public.' || f, 'EXECUTE')
       OR NOT has_function_privilege('authenticated', 'public.' || f, 'EXECUTE');

@@ -27,6 +27,8 @@ export type ProjectPreviewRow = {
   name: string;
   isSystem: boolean;
   deletedAt: string | null;
+  /** Archived (CV-13): the reference shows its archived tombstone. */
+  archivedAt?: string | null;
   /** Card level: live tasks done and in all. */
   progress?: { done: number; total: number } | null;
 };

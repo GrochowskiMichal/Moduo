@@ -55,6 +55,11 @@ export function deletedLabel(kind: ReferenceKind): string {
   return `Deleted ${NOUN[kind]}`;
 }
 
+/** An archived item's tombstone: "Website · archived" (its noun when it has no name). */
+export function archivedLabel(kind: ReferenceKind, title: string): string {
+  return `${title.trim() || `Archived ${NOUN[kind]}`}${title.trim() ? " · archived" : ""}`;
+}
+
 /** What an item you can't open reads as, everywhere (no title, no type). */
 export const PRIVATE_ITEM_LABEL = "Private item";
 

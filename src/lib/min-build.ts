@@ -93,10 +93,18 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_caps_get",
   // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
   "chat_conversations_for_item",
+  // CV-9: a conversation's Files view.
+  "chat_files",
+  // CV-19: ⌘K's Conversations by name.
+  "chat_find_conversations",
+  // CV-13: whether capture from a linked channel files into its project.
+  "chat_link_files_here",
   "chat_message_refs",
   // CV-3: the chat store's access check and its people.
   "chat_people",
   "chat_recently_deleted",
+  // CV-19: ⌘K's Messages, Chat's Search and find in a conversation.
+  "chat_search",
   "chat_sync_ids",
   "chat_unread_counts",
   "chat_catchup_open",

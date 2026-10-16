@@ -300,6 +300,13 @@ export function spineActivityLine(
     }
     case "chat.member_remove":
       return "removed someone";
+    // CV-13: ids only, so the line names the kind, not the item.
+    case "chat.channel_link": {
+      const t = str(p.linked_type);
+      if (!t) return "unlinked this channel";
+      const what = t === "bucket" ? "a project" : t === "team" ? "a team" : "a client";
+      return `linked this channel to ${what}`;
+    }
     // Lifecycle (CV-15): ids only.
     case "chat.manager_add":
       return "made someone a manager";
