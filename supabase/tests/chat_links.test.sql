@@ -713,6 +713,102 @@ BEGIN
 END;
 $$;
 
+-- ── Relinking: one row per conversation and item; a lost row comes back ────
+DO $$
+DECLARE
+  v text;
+  n bigint;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'relink', '', false, '{}'::uuid[])$q$, test.id('W')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A makes the public channel "relink"', v);
+  INSERT INTO test.ids SELECT 'RL', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'relink';
+  PERFORM test.ok(test.link('A', 'RL', 'project', test.id('SB')) LIKE 'ok %'
+                  AND test.link('A', 'RL', 'company', test.id('C1')) LIKE 'ok %'
+                  AND test.link('A', 'RL', 'project', test.id('SB')) LIKE 'ok %', 'A links it to Shared, Acme, then Shared again');
+  SELECT count(*) INTO n FROM public.entity_links
+   WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND target_id = test.id('SB');
+  PERFORM test.ok(n = 1 AND test.mirrors('RL') = 'bucket:' || test.id('SB'),
+    'relinking to Shared brings its row back: one row for the pair, live', n::text);
+  -- The column still holds but the row went (an item's delete and restore can do this).
+  UPDATE public.entity_links SET deleted_at = now()
+   WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL;
+  PERFORM test.ok(test.mirrors('RL') = 'none', 'setup: the row is gone, the link holds');
+  v := test.link('A', 'RL', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'linking it there again restores the row', v);
+END;
+$$;
+SELECT test.ok(test.convo('A', 'project', test.id('SB')) LIKE '%founders/0%'
+               AND test.convo('A', 'project', test.id('SB')) LIKE '%relink/0%',
+  'every conversation linked to Shared answers, each with A''s unread', test.convo('A', 'project', test.id('SB')));
+
+-- ── Capture: a project archived after linking falls back to the Inbox ──────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position)
+  VALUES (test.id('PL'), test.id('W'), test.id('O'), 'Launch', false, '0005');
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'project', %L)$q$, test.id('W'), test.id('PL')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.files_here('A', 'Launch') = 'true', 'A files into Launch from its channel', v);
+  UPDATE public.buckets SET archived_at = now() WHERE id = test.id('PL');
+  PERFORM test.ok(test.files_here('A', 'Launch') = 'false', 'Launch archived: capture falls back to the Inbox');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_channels WHERE name = 'Launch' AND linked_id = test.id('PL')),
+    'the channel keeps its link (the chip shows the tombstone)');
+END;
+$$;
+
+-- ── A contact as the link ──────────────────────────────────────────────────
+DO $$
+DECLARE
+  v text;
+  r public.chat_channels;
+BEGIN
+  INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES (test.id('CT'), test.id('W'), test.id('A'), 'Jane Roe');
+  v := test.link('A', 'RL', 'contact', test.id('CT'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('RL') = 'contact:' || test.id('CT')
+                  AND test.mirrors('RL') = 'contact:' || test.id('CT'), 'A links "relink" to the contact', v);
+  PERFORM test.ok(test.link('B', 'RL', 'contact', test.id('CT')) NOT LIKE 'ok %', 'B (not in it, can''t edit the contact): refused');
+  v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'contact', %L)$q$, test.id('W'), test.id('CT')));
+  PERFORM test.ok(v LIKE 'ok %', 'A starts a conversation for the contact', v);
+  SELECT * INTO r FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Jane Roe';
+  PERFORM test.ok(r.id IS NOT NULL AND r.linked_type = 'contact' AND r.linked_id = test.id('CT'),
+    'named after the contact, linked to it');
+  PERFORM test.ok(r.is_private = EXISTS (
+      SELECT 1 FROM public.workspace_members wm
+       WHERE wm.workspace_id = test.id('W')
+         AND NOT public.spine__visible_to(test.id('W'), 'contact', test.id('CT'), wm.user_id)),
+    'private exactly when someone can''t see the contact');
+END;
+$$;
+
+-- ── Who may link a team besides its people ─────────────────────────────────
+-- Q is linked to TM; O (the owner), B (TM2's maker) and D (an admin) join Q.
+SELECT test.person('D');
+DO $$
+DECLARE
+  v text;
+BEGIN
+  INSERT INTO public.workspace_members (workspace_id, user_id, role)
+  VALUES (test.id('W'), test.id('D'), 'admin');
+  PERFORM test.ok(public.perm_user_has(test.id('W'), test.id('D'), 'ws.manage_roles'), 'setup: D, an admin, manages roles');
+  INSERT INTO public.teams (id, workspace_id, name, mark, created_by) VALUES
+    (test.id('TM2'), test.id('W'), 'Ops', 'O', test.id('B')),
+    (test.id('TM3'), test.id('W'), 'Sales', 'S', NULL),
+    (test.id('TM4'), test.id('W'), 'Legal', 'L', NULL);
+  PERFORM test.ok(test.as_user('O', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('Q'))) LIKE 'ok %'
+                  AND test.as_user('D', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('Q'))) LIKE 'ok %',
+    'setup: O and D join Q');
+  v := test.link('B', 'Q', 'team', test.id('TM2'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM2'), 'B made Ops (not in it): may link it', v);
+  v := test.link('O', 'Q', 'team', test.id('TM3'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM3'), 'O owns the workspace: may link Sales', v);
+  v := test.link('D', 'Q', 'team', test.id('TM4'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.linked('Q') = 'team:' || test.id('TM4'), 'D, an admin: may link Legal', v);
+  v := test.link('B', 'Q', 'team', test.id('TM3'));
+  PERFORM test.ok(v LIKE '42501 %' AND test.linked('Q') = 'team:' || test.id('TM4'), 'B for Sales (none of those): refused', v);
+END;
+$$;
+
 -- ── The server reads references with the client's grammar ─────────────────
 -- (src/features/chat/markup-v2/refs-parity.test.ts runs the whole corpus
 -- through both sides; these pin the edges here too.)

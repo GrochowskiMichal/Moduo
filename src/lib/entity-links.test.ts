@@ -70,6 +70,7 @@ describe("Chat's own links", () => {
     expect(at("note", "chat_channel", "references", "ref")).toBe(true);
     expect(at("task", "chat_message", "spawned-from", "manual")).toBe(false);
     expect(at("task", "note", "mentions", "ref")).toBe(false);
+    expect(at("chat_channel", "bucket", "conversation-of", "manual")).toBe(true);
   });
 });
 

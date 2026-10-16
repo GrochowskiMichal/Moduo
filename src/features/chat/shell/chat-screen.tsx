@@ -1383,6 +1383,7 @@ export function ChatScreen({
             onOpenChain={(root) => openChain(root.id)}
             linkSection={
               <ChannelLinkSection
+                key={channel.id}
                 channel={channel}
                 runtime={runtime}
                 canLink={

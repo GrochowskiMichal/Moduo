@@ -12,6 +12,7 @@ import type {
   ChatMessageKind,
   ChatNotifyLevel,
   ContentAuthorKind,
+  RelationKind,
 } from "@contracts/vocabularies";
 
 export type {
@@ -25,6 +26,9 @@ export type {
 
 /** A channel's link (CV-13): a project (`bucket`), a client or a team. */
 export type ChatLink = { type: ChatLinkTarget; id: string };
+
+/** What "Start a conversation for X" takes: a project or a client, never a team. */
+export type ChatStartableTarget = Exclude<ChatLinkTarget, "team">;
 
 export type ChatChannel = {
   id: string;
@@ -360,7 +364,7 @@ export type ChatRuntime = {
   /** "Start a conversation for X" (CH56): named after X, public or private by who sees X. */
   startConversation(args: {
     workspaceId: string;
-    type: "bucket" | "company" | "contact";
+    type: ChatStartableTarget;
     id: string;
   }): Promise<ChatChannel>;
   /** Links the channel to one item, or unlinks it (null). */
@@ -435,7 +439,7 @@ export type ChatItemConversation = {
   channelKind: ChatChannelKind;
   channelName: string | null;
   channelPrivate: boolean;
-  relation: "mentions" | "conversation-of";
+  relation: Extract<RelationKind, "mentions" | "conversation-of">;
   since: string;
   /** Your unread messages in a linked conversation (0 when you aren't in it). */
   unread: number;

@@ -65,7 +65,9 @@ ALTER TABLE public.entity_links DROP CONSTRAINT IF EXISTS entity_links_relation_
 ALTER TABLE public.entity_links ADD CONSTRAINT entity_links_relation_kind_check
   CHECK (relation_kind = ANY (ARRAY['references'::text, 'spawned-from'::text, 'blocks'::text,
     'attachment'::text, 'mentions'::text, 'works-at'::text, 'follow-up'::text, 'paid-by'::text,
-    'conversation-of'::text]));
+    'conversation-of'::text])) NOT VALID;
+-- Checked apart from the ALTER, so the table isn't held for the whole scan.
+ALTER TABLE public.entity_links VALIDATE CONSTRAINT entity_links_relation_kind_check;
 
 -- Does conversation p_channel link to (p_type, p_id) right now?
 CREATE OR REPLACE FUNCTION public.chat__links_to(p_channel_id uuid, p_type text, p_id uuid)
@@ -96,6 +98,14 @@ BEGIN
   END IF;
   IF NEW.relation_kind IS DISTINCT FROM OLD.relation_kind
      AND 'conversation-of' IN (NEW.relation_kind, OLD.relation_kind) THEN
+    RAISE EXCEPTION 'Link a conversation from its Details.' USING ERRCODE = '42501';
+  END IF;
+  -- A live row never moves to another conversation or item.
+  IF NEW.relation_kind = 'conversation-of' AND NEW.deleted_at IS NULL
+     AND (NEW.source_type, NEW.source_id, NEW.target_type, NEW.target_id)
+         IS DISTINCT FROM (OLD.source_type, OLD.source_id, OLD.target_type, OLD.target_id)
+     AND NOT (NEW.source_type = 'chat_channel'
+              AND public.chat__links_to(NEW.source_id, NEW.target_type, NEW.target_id)) THEN
     RAISE EXCEPTION 'Link a conversation from its Details.' USING ERRCODE = '42501';
   END IF;
   -- An item's restore brings its links back; a conversation's only while the
@@ -203,7 +213,25 @@ BEGIN
      AND l.source_type = 'chat_channel' AND l.source_id = p_channel.id
      AND l.relation_kind = 'conversation-of' AND l.deleted_at IS NULL;
 
+  -- Relinking to an item it linked to before brings that row back (one row
+  -- per conversation and item); a new item gets a new row.
   IF p_id IS NOT NULL AND p_type <> 'team' THEN
+    UPDATE public.entity_links l
+       SET deleted_at = NULL
+     WHERE l.id = (SELECT x.id FROM public.entity_links x
+                    WHERE x.workspace_id = v_channel.workspace_id
+                      AND x.source_type = 'chat_channel' AND x.source_id = v_channel.id
+                      AND x.target_type = p_type AND x.target_id = p_id
+                      AND x.relation_kind = 'conversation-of' AND x.deleted_at IS NOT NULL
+                    ORDER BY x.deleted_at DESC, x.created_at DESC
+                    LIMIT 1);
+  END IF;
+
+  IF p_id IS NOT NULL AND p_type <> 'team'
+     AND NOT EXISTS (SELECT 1 FROM public.entity_links l
+                      WHERE l.workspace_id = v_channel.workspace_id
+                        AND l.source_type = 'chat_channel' AND l.source_id = v_channel.id
+                        AND l.relation_kind = 'conversation-of' AND l.deleted_at IS NULL) THEN
     INSERT INTO public.entities (workspace_id, entity_type, entity_id, label, icon)
     VALUES (v_channel.workspace_id, 'chat_channel', v_channel.id, v_channel.name, NULL)
     ON CONFLICT (workspace_id, entity_type, entity_id) DO NOTHING;
@@ -271,7 +299,13 @@ BEGIN
   END IF;
 
   v_type := public.chat__link_type(p_type);
-  IF v_channel.linked_type = v_type AND v_channel.linked_id = p_id THEN
+  -- Already linked there: nothing to do, unless its row went (an item's
+  -- delete and restore can leave it gone), which relinking brings back.
+  IF v_channel.linked_type = v_type AND v_channel.linked_id = p_id
+     AND (v_type = 'team' OR EXISTS (SELECT 1 FROM public.entity_links l
+                                       WHERE l.workspace_id = v_channel.workspace_id
+                                         AND l.source_type = 'chat_channel' AND l.source_id = v_channel.id
+                                         AND l.relation_kind = 'conversation-of' AND l.deleted_at IS NULL)) THEN
     RETURN v_channel;
   END IF;
   PERFORM public.chat__check_link_target(v_channel.workspace_id, v_type, p_id, v_me);
@@ -461,21 +495,132 @@ AS $function$
       FROM public.chat_channels c, item
      WHERE auth.uid() IS NOT NULL
        AND c.linked_type = item.t AND c.linked_id = p_id
+  ), unread AS MATERIALIZED (
+    -- The caller's unread counts, read once per workspace and only when a
+    -- conversation links here.
+    SELECT u.channel_id, u.unread
+      FROM (SELECT DISTINCT h.workspace_id FROM hits h WHERE h.rel = 'conversation-of') w,
+           LATERAL public.chat_unread_counts(w.workspace_id) u
   )
   SELECT c.id, c.workspace_id, c.kind,
          CASE WHEN c.kind = 'channel' THEN c.name END,
          c.is_private, h.rel, h.since,
-         CASE WHEN h.rel = 'conversation-of' THEN
-           coalesce((SELECT u.unread FROM public.chat_unread_counts(c.workspace_id) u WHERE u.channel_id = c.id), 0)
-         END,
+         CASE WHEN h.rel = 'conversation-of' THEN coalesce(un.unread, 0) END,
          c.archived_at IS NOT NULL
     FROM hits h
     JOIN public.chat_channels c ON c.id = h.cid AND c.workspace_id = h.workspace_id AND c.deleted_at IS NULL
+    LEFT JOIN unread un ON un.channel_id = c.id AND h.rel = 'conversation-of'
     , item
    WHERE public.chat_can_read_channel(c.id)
      AND public.perm_can_see_entity(h.workspace_id, item.t, p_id)
    ORDER BY h.rel = 'mentions', h.since DESC, c.id
    LIMIT 50
+$function$;
+
+-- ── 6b. The link row is changed from the conversation (live bodies, CV-10-fix) ──
+-- links_op_delete and contacts_op_unlink refuse a `conversation-of` row, as
+-- they refuse Chat's "Mentioned in" rows; the item's own delete still
+-- closes it. Grants unchanged (CREATE OR REPLACE keeps them).
+CREATE OR REPLACE FUNCTION public.links_op_delete(p_workspace_id uuid, p_link_id uuid)
+ RETURNS entity_links
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_link public.entity_links;
+BEGIN
+  PERFORM public.spine_op__guard(p_workspace_id);
+
+  SELECT * INTO v_link FROM public.entity_links
+    WHERE id = p_link_id AND workspace_id = p_workspace_id AND deleted_at IS NULL
+    FOR UPDATE;
+  IF NOT FOUND THEN
+    SELECT * INTO v_link FROM public.entity_links
+      WHERE id = p_link_id AND workspace_id = p_workspace_id;
+    IF v_link.id IS NULL THEN
+      RETURN NULL;
+    END IF;
+    RETURN v_link;
+  END IF;
+
+  -- A "Mentioned in" line is history: it stays.
+  IF v_link.relation_kind = 'mentions'
+     AND (lower(btrim(v_link.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(v_link.target_type)) IN ('chat_channel', 'chat_message')) THEN
+    RAISE EXCEPTION 'A mention in a conversation stays: it''s part of the conversation''s history.'
+      USING ERRCODE = '42501';
+  END IF;
+  -- A conversation's link to its item is changed from the conversation (CV-13).
+  IF v_link.relation_kind = 'conversation-of' THEN
+    RAISE EXCEPTION 'Unlink it from the conversation''s Details.' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.entity_links
+    SET deleted_at = now()
+    WHERE id = v_link.id
+    RETURNING * INTO v_link;
+
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'links', v_link.source_type, v_link.source_id, 'links.delete',
+    jsonb_build_object(
+      'link_id', v_link.id, 'relation_kind', v_link.relation_kind,
+      'target_type', v_link.target_type, 'target_id', v_link.target_id)
+  );
+  RETURN v_link;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.contacts_op_unlink(p_workspace_id uuid, p_link_id uuid)
+ RETURNS entity_links
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_link public.entity_links;
+BEGIN
+  PERFORM public.contacts_op__guard(p_workspace_id);
+
+  SELECT * INTO v_link FROM public.entity_links
+    WHERE id = p_link_id AND workspace_id = p_workspace_id AND deleted_at IS NULL
+    FOR UPDATE;
+  IF NOT FOUND THEN
+    SELECT * INTO v_link FROM public.entity_links
+      WHERE id = p_link_id AND workspace_id = p_workspace_id;
+    IF v_link.id IS NULL THEN
+      RETURN NULL;
+    END IF;
+    RETURN v_link;
+  END IF;
+
+  IF v_link.source_type NOT IN ('contact', 'company')
+     AND v_link.target_type NOT IN ('contact', 'company') THEN
+    RAISE EXCEPTION 'This link is not owned by Contacts.';
+  END IF;
+  -- A "Mentioned in" line is history: it stays.
+  IF v_link.relation_kind = 'mentions'
+     AND (lower(btrim(v_link.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(v_link.target_type)) IN ('chat_channel', 'chat_message')) THEN
+    RAISE EXCEPTION 'A mention in a conversation stays: it''s part of the conversation''s history.'
+      USING ERRCODE = '42501';
+  END IF;
+  -- A conversation's link to its item is changed from the conversation (CV-13).
+  IF v_link.relation_kind = 'conversation-of' THEN
+    RAISE EXCEPTION 'Unlink it from the conversation''s Details.' USING ERRCODE = '42501';
+  END IF;
+
+  UPDATE public.entity_links
+    SET deleted_at = now()
+    WHERE id = v_link.id
+    RETURNING * INTO v_link;
+
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'contacts', v_link.source_type, v_link.source_id, 'contacts.unlink',
+    jsonb_build_object(
+      'link_id', v_link.id, 'relation_kind', v_link.relation_kind,
+      'target_type', v_link.target_type, 'target_id', v_link.target_id)
+  );
+  RETURN v_link;
+END;
 $function$;
 
 -- ── 7. References, read with the client's grammar ──────────────────────────

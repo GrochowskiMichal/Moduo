@@ -28,8 +28,16 @@ import type { ChatChannel, ChatLink } from "../model";
 
 type Teams = { teams: Team[]; members: TeamMember[] };
 
-/** The workspace's teams and their people, read once per workspace while shown. */
-function useTeams(runtime: ModuoRuntime | null, workspaceId: string | null, enabled: boolean) {
+/**
+ * The workspace's teams and their people, read while shown; read again when
+ * `refresh` changes (the linked team, so a team made since is found).
+ */
+function useTeams(
+  runtime: ModuoRuntime | null,
+  workspaceId: string | null,
+  enabled: boolean,
+  refresh: string | null = null,
+) {
   const [teams, setTeams] = useState<Teams | null>(null);
   useEffect(() => {
     if (!enabled || !runtime?.tasks.listTeams || !workspaceId) return;
@@ -43,7 +51,7 @@ function useTeams(runtime: ModuoRuntime | null, workspaceId: string | null, enab
     return () => {
       live = false;
     };
-  }, [runtime, workspaceId, enabled]);
+  }, [runtime, workspaceId, enabled, refresh]);
   return teams;
 }
 
@@ -125,7 +133,12 @@ export function ChannelLinkSection({
 }: ChannelLinkSectionProps) {
   const link = channel.link ?? null;
   const [busy, setBusy] = useState(false);
-  const teams = useTeams(runtime, channel.workspaceId, link?.type === "team");
+  const teams = useTeams(
+    runtime,
+    channel.workspaceId,
+    link?.type === "team",
+    link?.type === "team" ? link.id : null,
+  );
   /** The once-only offer after linking a team: the people to add. */
   const [offer, setOffer] = useState<string[] | null>(null);
 
@@ -229,7 +242,12 @@ export function LinkChip({
   runtime: ModuoRuntime | null;
 }) {
   const link = channel.link ?? null;
-  const teams = useTeams(runtime, channel.workspaceId, link?.type === "team");
+  const teams = useTeams(
+    runtime,
+    channel.workspaceId,
+    link?.type === "team",
+    link?.type === "team" ? link.id : null,
+  );
   if (!link) return null;
   const refType = linkReferenceType(link);
   if (refType) {

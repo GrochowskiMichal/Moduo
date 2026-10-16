@@ -12,8 +12,9 @@ import type { ModuoRuntime } from "@/lib/runtime.types";
 import { useAuth } from "@/providers/auth-provider";
 import { WorkspaceContext } from "../workspaces/workspace-context";
 import { CONVERSATION_STARTED_EVENT } from "./mentioned-in";
+import type { ChatStartableTarget } from "./model";
 
-export type StartableType = "bucket" | "company" | "contact";
+export type StartableType = ChatStartableTarget;
 
 export async function startConversationFor(
   runtime: ModuoRuntime | null,
