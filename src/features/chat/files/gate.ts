@@ -22,6 +22,8 @@ export type ChatFileGate = {
    * file: the rest keep going and the message waits for them), or all (Discard).
    */
   release(messageId: string, only?: "stopped"): void;
+  /** How many of its uploads stopped and how many still move (finished ones have left). */
+  counts?(messageId: string): { stopped: number; moving: number };
 };
 
 /** The state of one message's uploads, from the queue's items. */
@@ -48,6 +50,18 @@ type QueueLike = Pick<UploadQueue, "getSnapshot" | "subscribe" | "onUploaded" | 
 export function uploadQueueGate(queue: QueueLike): ChatFileGate {
   return {
     state: (messageId) => filesState(queue.getSnapshot().items, messageId, queue.hasRestored()),
+    counts(messageId) {
+      let stopped = 0;
+      let moving = 0;
+      for (const item of queue.getSnapshot().items) {
+        if (item.target.entityType !== "chat_message" || item.target.entityId !== messageId) {
+          continue;
+        }
+        if (item.state === "failed" || item.state === "rejected") stopped += 1;
+        else moving += 1;
+      }
+      return { stopped, moving };
+    },
     subscribe(fn) {
       const a = queue.subscribe(fn);
       const b = queue.onUploaded(() => fn());

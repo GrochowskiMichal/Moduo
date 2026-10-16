@@ -47,12 +47,12 @@ function ComposerChip({ file, onRemove }: { file: ComposerFile; onRemove: () => 
       ? (file.problem ?? "Not attached")
       : file.state === "uploading"
         ? `${pct}%`
-        : formatBytes(file.sizeBytes);
+        : (file.problem ?? formatBytes(file.sizeBytes));
   return (
     <div
       data-slot="composer-file"
       data-state={file.state}
-      title={file.state === "failed" ? (file.problem ?? file.fileName) : file.fileName}
+      title={file.problem ?? file.fileName}
       className={cn(
         "group/file relative flex h-12 max-w-feed-media min-w-50 items-center gap-2.5 rounded-md px-2.5 ring-1 ring-hairline ring-inset",
         file.state === "failed" && "opacity-60",

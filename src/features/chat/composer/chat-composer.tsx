@@ -58,6 +58,7 @@ import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
 import { ComposerFileChips } from "../files/composer-chips";
 import type { ComposerFilesApi } from "../files/composer-files";
+import { hasSendableFiles } from "../files/model";
 import { FilePastePlugin } from "../files/paste-plugin";
 import {
   $exportStored,
@@ -276,7 +277,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   ref,
 ) {
   const fileInput = useRef<HTMLInputElement | null>(null);
-  const hasFiles = (files?.files.length ?? 0) > 0;
+  // A stopped file never goes: only the others make a message of files only.
+  const hasFiles = hasSendableFiles(files?.files);
   const editorRef = useRef<LexicalEditor | null>(null);
   // What an untouched edit exports (a body written elsewhere may not be in the
   // canonical form): ⏎ on it saves nothing.
@@ -289,6 +291,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const [grown, setGrown] = useState(() => initial.includes("\n"));
   const [count, setCount] = useState(initial.length);
   const [error, setError] = useState<string | null>(null);
+  // ⏎ while files are still being read in (or taken out): sent once they are.
+  const [holding, setHolding] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const menus = useRef(new Set<string>());
@@ -370,7 +374,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     if (!editor) return;
     const stored = editor.getEditorState().read($exportStored);
     // CV-9: files still being read in hold the send (their id isn't taken yet).
-    if (mode === "message" && files?.busy) return;
+    if (mode === "message" && files?.busy) {
+      setHolding(true);
+      return;
+    }
+    setHolding(false);
     // A message of files only may have no words.
     if (!stored.trim() && !(mode === "message" && hasFiles)) {
       if (mode === "edit") onCancel?.();
@@ -402,6 +410,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     live.current.onTyping?.(false);
     setGrown(false);
   }, [mode, initial, onCancel, onSend, flushDraft, files?.busy, hasFiles]);
+
+  useEffect(() => {
+    if (holding && !files?.busy) send();
+  }, [holding, files?.busy, send]);
 
   // ── inserting: chips, emoji, captures ───────────────────────────────────
   const insertAt = useCallback((saved: RangeSelection | null, run: () => void) => {
@@ -738,7 +750,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               <SendHorizontal className="size-icon" aria-hidden />
             </ToolButton>
           </div>
-          {error || note || showCount || mode === "edit" ? (
+          {error || holding || note || showCount || mode === "edit" ? (
             <p
               className={cn(
                 "mt-1 flex gap-3 px-1 text-xs",
@@ -747,7 +759,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               role={error ? "alert" : undefined}
             >
               <span className="min-w-0 flex-1">
-                {error ?? note ?? (mode === "edit" ? "Esc to cancel · ⏎ to save" : null)}
+                {error ??
+                  (holding ? "Waiting for the files…" : null) ??
+                  note ??
+                  (mode === "edit" ? "Esc to cancel · ⏎ to save" : null)}
               </span>
               {showCount ? (
                 <span className="tabular-nums">

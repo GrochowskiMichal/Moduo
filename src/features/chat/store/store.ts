@@ -187,6 +187,9 @@ export const DEFAULT_CHAT_TIMING: ChatStoreTiming = {
 };
 
 /** The stream's page: it draws 50 and needs one past the edge. */
+/** CV-9: why a message of files only whose files all stopped isn't sent. */
+export const FILES_ALL_STOPPED = "its files didn't upload";
+
 export const PAGE = 51;
 /** A jump loads this many on each side of its target (+1 to know there's more). */
 export const JUMP_SPAN = 100;
@@ -505,6 +508,7 @@ export class ChatStore {
       fileCount: entry.files ?? 0,
       sendState,
       ...(entry.failed ? { sendError: entry.failed } : {}),
+      ...(entry.dead ? { sendRetry: false as const } : {}),
     };
   }
 
@@ -1660,7 +1664,7 @@ export class ChatStore {
   /** "Not sent · Retry": send it again under the same id. */
   retry(id: string): void {
     const entry = this.outbox.find((e) => e.id === id);
-    if (!entry?.failed) return;
+    if (!entry?.failed || entry.dead) return;
     delete entry.failed;
     if (entry.files && this.files?.state(entry.id) === "failed") {
       // A file stopped: it goes with the files that made it (and waits for
@@ -1715,7 +1719,16 @@ export class ChatStore {
     if (!entry.files || !this.files) return true;
     const state = this.files.state(entry.id);
     if (state === "failed") {
-      entry.failed = "A file didn't upload";
+      // A message of files only whose files all stopped has nothing to send:
+      // Retry would fail "empty" forever, so it says why and offers Delete only.
+      const c = this.files.counts?.(entry.id);
+      const none = !!c && c.moving === 0 && c.stopped >= (entry.files ?? 0);
+      if (!entry.body.trim() && none) {
+        entry.failed = FILES_ALL_STOPPED;
+        entry.dead = true;
+      } else {
+        entry.failed = "A file didn't upload";
+      }
       this.touch(entry.channelId);
       this.metaDirty = true;
       this.notify();

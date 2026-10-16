@@ -27,7 +27,7 @@ export type ComposerFile = {
   /** Bytes sent so far, of `total`. */
   loaded: number;
   total: number;
-  /** Why it stopped (failed only). */
+  /** Why it stopped (failed), or that taking it out failed (ready: it still goes). */
   problem: string | null;
 };
 
@@ -38,9 +38,38 @@ type Entry = {
   sizeBytes: number;
   thumb: string | null;
   attachmentId: string | null;
+  /** When it was added: the server lets an unsent message's file go after a day. */
+  addedAt: number;
+  /** Taking it back out failed: it's still on the server and still goes. */
+  problem: string | null;
 };
 
-type Draft = { messageId: string; entries: Entry[]; notice: string | null; adding: number };
+type Draft = {
+  messageId: string;
+  entries: Entry[];
+  notice: string | null;
+  /** Files still being read in (not in the queue yet). */
+  adding: number;
+  /** Files being taken back out on the server: until they are, they'd still go. */
+  removing: number;
+};
+
+type Remover = Pick<ModuoRuntime, "attachments">;
+
+/**
+ * The server drops an unsent message's files a day after upload (the purge):
+ * a draft's file older than this is taken out at send, with a line saying so,
+ * rather than going missing on the way.
+ */
+export const DRAFT_FILE_STALE_MS = 23 * 60 * 60 * 1000;
+
+export const REMOVE_FAILED = "Couldn't take it out: it still goes. Try again.";
+
+export function staleNotice(n: number): string {
+  return n === 1
+    ? "A file waited over a day and was taken out: send again to post without it"
+    : `${n} files waited over a day and were taken out: send again to post without them`;
+}
 
 type QueueApi = Pick<
   ReturnType<typeof getUploadQueue>,
@@ -57,7 +86,18 @@ export class ComposerFilesStore {
   constructor(
     private readonly queue: () => QueueApi,
     private readonly mint: () => string = newMessageId,
+    private readonly now: () => number = Date.now,
   ) {}
+
+  /** What takes a file back out on the server (the composer hands it over). */
+  private remover: Remover | null = null;
+
+  setRemover(runtime: Remover | null): void {
+    if (runtime) this.remover = runtime;
+  }
+
+  /** Server ids being taken out right now. */
+  private dropping = new Set<string>();
 
   private watching = false;
 
@@ -73,15 +113,76 @@ export class ComposerFilesStore {
     q.subscribe(() => this.capture());
     q.onUploaded?.((rec, target) => {
       if (!rec || target.entityType !== "chat_message") return;
-      for (const d of this.drafts.values()) {
-        if (d.messageId !== target.entityId) continue;
-        // The queue announces each id as begin answers (captured above); this
-        // is a fallback, and only for a name no other file here shares.
-        const open = d.entries.filter((x) => !x.attachmentId && x.fileName === rec.fileName);
-        const e = open.length === 1 ? open[0] : undefined;
+      // Only an unsent draft's files: a taken draft's files belong to its send.
+      const found = [...this.drafts.entries()].find(([, x]) => x.messageId === target.entityId);
+      if (!found) return;
+      const [channelId, d] = found;
+      if (d.entries.some((e) => e.attachmentId === rec.id)) return;
+      if ([...this.known.values()].includes(rec.id) || this.dropping.has(rec.id)) return;
+      // The queue announces each id as begin answers (captured above); a file
+      // here without one may be this, so leave it (and only for a name no
+      // other file shares, say it is).
+      const open = d.entries.filter((x) => !x.attachmentId);
+      if (open.length > 0) {
+        const named = open.filter((x) => x.fileName === rec.fileName);
+        const e = named.length === 1 ? named[0] : undefined;
         if (e) e.attachmentId = rec.id;
+        return;
       }
+      // Taken out with × while it finished: it's ready under this draft's id
+      // and the send would take it. Take it out on the server too.
+      this.dropOnServer(channelId, d, rec.id, {
+        key: `done:${rec.id}`,
+        fileName: rec.fileName,
+        mime: rec.mime,
+        sizeBytes: rec.sizeBytes,
+        thumb: null,
+        attachmentId: rec.id,
+        addedAt: this.now(),
+        problem: null,
+      });
     });
+  }
+
+  /**
+   * Take a file out of the unsent message on the server; the send waits until
+   * it's out. When that fails and `back` is given, the file comes back as a
+   * chip saying it still goes (else it would go unseen).
+   */
+  private dropOnServer(channelId: string, d: Draft, id: string, back: Entry | null, at = -1) {
+    const runtime = this.remover;
+    if (!runtime) {
+      if (back) this.putBack(channelId, d, back, at);
+      return;
+    }
+    d.removing += 1;
+    this.dropping.add(id);
+    this.emit();
+    void runtime.attachments
+      .remove(id)
+      .then(
+        () => {
+          if (back) release(back);
+        },
+        () => {
+          if (back) this.putBack(channelId, d, back, at);
+        },
+      )
+      .finally(() => {
+        d.removing -= 1;
+        this.dropping.delete(id);
+        this.emit();
+      });
+  }
+
+  private putBack(channelId: string, d: Draft, e: Entry, at: number) {
+    if (this.drafts.get(channelId) !== d) {
+      release(e);
+      return;
+    }
+    e.problem = REMOVE_FAILED;
+    const i = at < 0 ? d.entries.length : Math.min(at, d.entries.length);
+    d.entries.splice(i, 0, e);
   }
 
   /** Queue key → server id, for chat uploads, kept even before the composer
@@ -150,7 +251,7 @@ export class ComposerFilesStore {
   private draft(channelId: string): Draft {
     let d = this.drafts.get(channelId);
     if (!d) {
-      d = { messageId: this.mint(), entries: [], notice: null, adding: 0 };
+      d = { messageId: this.mint(), entries: [], notice: null, adding: 0, removing: 0 };
       this.drafts.set(channelId, d);
     }
     return d;
@@ -165,9 +266,10 @@ export class ComposerFilesStore {
     return this.drafts.get(channelId)?.notice ?? null;
   }
 
-  /** Files still being prepared (not in the queue yet): the send waits for them. */
+  /** Files still being read in, or being taken back out: the send waits for them. */
   busy(channelId: string): boolean {
-    return (this.drafts.get(channelId)?.adding ?? 0) > 0;
+    const d = this.drafts.get(channelId);
+    return !!d && d.adding + d.removing > 0;
   }
 
   /** What the composer shows, from the queue's live state. */
@@ -199,8 +301,10 @@ export class ComposerFilesStore {
     workspaceId: string;
     userId: string;
     files: File[];
+    runtime?: Remover | null;
   }): Promise<void> {
     this.watch();
+    this.setRemover(args.runtime ?? null);
     const d = this.draft(args.channelId);
     // A file that stopped never goes: it doesn't take a place.
     const current =
@@ -240,6 +344,8 @@ export class ComposerFilesStore {
               ? URL.createObjectURL(file)
               : null,
           attachmentId: this.known.get(key) ?? null,
+          addedAt: this.now(),
+          problem: null,
         });
       });
     } finally {
@@ -248,8 +354,13 @@ export class ComposerFilesStore {
     }
   }
 
-  /** Take a file back out (before sending): its upload stops, or the finished file goes. */
-  remove(channelId: string, key: string, runtime: Pick<ModuoRuntime, "attachments"> | null): void {
+  /**
+   * Take a file back out (before sending): its upload stops, and a file the
+   * server already holds (finished, or finishing) is taken out there too; the
+   * send waits until it is.
+   */
+  remove(channelId: string, key: string, runtime: Remover | null): void {
+    this.setRemover(runtime);
     const d = this.drafts.get(channelId);
     const i = d?.entries.findIndex((e) => e.key === key) ?? -1;
     if (!d || i < 0) return;
@@ -258,24 +369,39 @@ export class ComposerFilesStore {
     this.capture();
     entry.attachmentId ??= this.known.get(key) ?? null;
     this.known.delete(key);
+    d.notice = null;
     const inQueue = this.queue()
       .getSnapshot()
       .items.some((item) => item.id === key);
-    if (inQueue) this.queue().dismiss(key);
-    else if (entry.attachmentId && runtime) {
-      // The send waits until the file is out (else it would still go).
-      d.adding += 1;
-      void runtime.attachments
-        .remove(entry.attachmentId)
-        .catch(() => {})
-        .finally(() => {
-          d.adding -= 1;
-          this.emit();
-        });
+    if (inQueue) {
+      this.queue().dismiss(key);
+      // Its finalize may already be on the way (the queue attaches a file
+      // dismissed while finalizing): take the row out too. A failure here is
+      // the row the dismiss already let go; onUploaded catches a late finish.
+      if (entry.attachmentId) this.dropOnServer(channelId, d, entry.attachmentId, null);
+      release(entry);
+    } else if (entry.attachmentId) {
+      this.dropOnServer(channelId, d, entry.attachmentId, entry, i);
+    } else {
+      release(entry);
     }
-    release(entry);
-    d.notice = null;
     this.emit();
+  }
+
+  /**
+   * Before a send: take out files that waited longer than the server keeps an
+   * unsent message's files, with a line saying so. True when it took any out
+   * (the send holds: the person sees why, and sends again).
+   */
+  dropStale(channelId: string): boolean {
+    const d = this.drafts.get(channelId);
+    if (!d) return false;
+    const stale = d.entries.filter((e) => this.now() - e.addedAt > DRAFT_FILE_STALE_MS);
+    if (stale.length === 0) return false;
+    for (const e of stale) this.remove(channelId, e.key, null);
+    d.notice = staleNotice(stale.length);
+    this.emit();
+    return true;
   }
 
   /**
@@ -306,7 +432,13 @@ function release(e: Entry) {
 
 function view(e: Entry, item: UploadView | undefined): ComposerFile {
   if (!item) {
-    return { ...pick(e), state: "ready", loaded: e.sizeBytes, total: e.sizeBytes, problem: null };
+    return {
+      ...pick(e),
+      state: "ready",
+      loaded: e.sizeBytes,
+      total: e.sizeBytes,
+      problem: e.problem,
+    };
   }
   const failed = item.state === "failed" || item.state === "rejected";
   return {
@@ -356,6 +488,8 @@ export type ComposerFilesApi = {
   busy: boolean;
   add: (files: File[]) => void;
   remove: (key: string) => void;
+  /** Before a send: take out files too old to go (true: the send holds). */
+  dropStale: () => boolean;
   /** At send: the id and count for the outbox, or null without files. */
   take: () => { id: string; files: number } | null;
 };
@@ -378,15 +512,16 @@ export function useComposerFiles(args: {
   const add = useCallback(
     (files: File[]) => {
       if (!workspaceId || !userId || files.length === 0) return;
-      void store.add({ channelId, workspaceId, userId, files });
+      void store.add({ channelId, workspaceId, userId, files, runtime });
     },
-    [store, channelId, workspaceId, userId],
+    [store, channelId, workspaceId, userId, runtime],
   );
   const remove = useCallback(
     (key: string) => store.remove(channelId, key, runtime),
     [store, channelId, runtime],
   );
   const take = useCallback(() => store.take(channelId), [store, channelId]);
+  const dropStale = useCallback(() => store.dropStale(channelId), [store, channelId]);
   if (!workspaceId || !userId) return null;
   return {
     files: snap.files,
@@ -394,6 +529,7 @@ export function useComposerFiles(args: {
     busy: snap.busy,
     add,
     remove,
+    dropStale,
     take,
   };
 }

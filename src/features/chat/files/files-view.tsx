@@ -4,7 +4,7 @@
 // app's viewer; "Show more" reads the next page.
 
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fileIconFor } from "@/features/attachments/files";
 import { AttachmentViewer } from "@/features/attachments/ui/attachment-viewer";
 import type { ModuoRuntime } from "@/lib/runtime.types";
@@ -42,26 +42,40 @@ export function FilesView({
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
 
+  // How many rows the view holds: a refresh reads that many again (pages
+  // already shown stay), up to the server's 200.
+  const shown = useRef(PAGE);
   const read = useCallback(
     async (before: ChatFile | null) => {
       if (!chat?.files) return;
+      const limit = before ? PAGE : Math.min(200, Math.max(PAGE, shown.current));
       const res = await chat.files({
         channelId,
         before: before ? { sentAt: before.sentAt, id: before.id } : null,
-        limit: PAGE,
+        limit,
       });
       if (res.error) {
         setFailed(true);
         return;
       }
       setFailed(false);
-      setMore(res.data.length === PAGE);
-      setFiles((prev) => (before && prev ? [...prev, ...res.data] : res.data));
+      setMore(res.data.length === limit);
+      setFiles((prev) => {
+        const next = before && prev ? [...prev, ...res.data] : res.data;
+        shown.current = next.length;
+        return next;
+      });
     },
     [chat, channelId],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey asks for a fresh first page.
+  // A new conversation starts from one page.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: channelId resets the page count.
+  useEffect(() => {
+    shown.current = PAGE;
+  }, [channelId]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey asks for the shown pages again.
   useEffect(() => {
     void read(null);
   }, [read, refreshKey]);

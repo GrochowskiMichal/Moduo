@@ -744,3 +744,80 @@ $function$;
 
 REVOKE ALL ON FUNCTION public.chat_files(uuid, timestamptz, integer, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_files(uuid, timestamptz, integer, uuid) TO authenticated, service_role;
+
+
+-- ── 11. Notices for a message of files only ────────────────────────────────
+-- The bell, Catch up and device notices read the payload's excerpt: a message
+-- with no words but files says "Sent a file" / "Sent N files". From the live
+-- body (CV-5's, 20261015170000); grants as there.
+
+CREATE OR REPLACE FUNCTION public.chat__activity(p_channel chat_channels, p_msg chat_messages, p_actor uuid, p_op text, p_reason text, p_users uuid[], p_team_ids uuid[] DEFAULT NULL::uuid[])
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_id uuid;
+  v_key uuid;
+  v_label text;
+  v_person text;
+  v_payload jsonb;
+BEGIN
+  IF cardinality(coalesce(p_users, '{}'::uuid[])) = 0 THEN
+    RETURN NULL;
+  END IF;
+  v_payload := jsonb_build_object(
+    'message_id', p_msg.id,
+    'parent_id', p_msg.parent_id,
+    'reply_to_id', p_msg.reply_to_id,
+    'channel_name', p_channel.name,
+    'channel_kind', p_channel.kind,
+    -- CV-9: a message of files only says so (else the notice reads blank).
+    'excerpt', CASE
+      WHEN btrim(coalesce(p_msg.body, ''), E' \n\t') = '' AND coalesce(p_msg.file_count, 0) > 0 THEN
+        CASE WHEN p_msg.file_count = 1 THEN 'Sent a file'
+             ELSE 'Sent ' || p_msg.file_count || ' files' END
+      ELSE public.chat__excerpt(p_msg.body)
+    END,
+    'format_version', 2,
+    'notify_user_ids', to_jsonb(ARRAY(SELECT DISTINCT u::text FROM unnest(p_users) u ORDER BY 1)));
+  IF p_reason IS NOT NULL THEN
+    v_payload := v_payload || jsonb_build_object('reason', p_reason);
+  END IF;
+  IF cardinality(coalesce(p_team_ids, '{}'::uuid[])) > 0 THEN
+    v_payload := v_payload || jsonb_build_object('team_ids', to_jsonb(p_team_ids));
+  END IF;
+
+  IF p_actor IS NOT NULL THEN
+    INSERT INTO public.module_activity
+      (workspace_id, module, entity_type, entity_id, op, actor_type, actor_id, actor_label, payload)
+    VALUES
+      (p_channel.workspace_id, 'chat', 'chat_channel', p_channel.id, p_op, 'user', p_actor,
+       (SELECT p.display_name FROM public.profiles p WHERE p.id = p_actor), v_payload)
+    RETURNING id INTO v_id;
+    RETURN v_id;
+  END IF;
+
+  v_key := public.module_api_key_id();
+  IF v_key IS NULL THEN
+    RAISE EXCEPTION 'No actor context for activity attribution.';
+  END IF;
+  SELECT k.name, nullif(btrim(p.display_name), '')
+    INTO v_label, v_person
+    FROM public.workspace_api_keys k
+    LEFT JOIN public.profiles p ON p.id = k.created_by
+   WHERE k.id = v_key AND k.workspace_id = p_channel.workspace_id;
+  IF v_person IS NOT NULL THEN
+    v_label := v_person || ' · via ' || coalesce(nullif(btrim(v_label), ''), 'an API key');
+  END IF;
+  INSERT INTO public.module_activity
+    (workspace_id, module, entity_type, entity_id, op, actor_type, actor_id, actor_label, payload)
+  VALUES
+    (p_channel.workspace_id, 'chat', 'chat_channel', p_channel.id, p_op, 'api_key', v_key, v_label, v_payload)
+  RETURNING id INTO v_id;
+  RETURN v_id;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.chat__activity(public.chat_channels, public.chat_messages, uuid, text, text, uuid[], uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.chat__activity(public.chat_channels, public.chat_messages, uuid, text, text, uuid[], uuid[]) TO service_role;

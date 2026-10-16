@@ -14,11 +14,12 @@ export async function signPaths(
   paths: string[],
   ttlSeconds: number,
   now: () => number = Date.now,
+  opts: { fresh?: boolean } = {},
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const missing: string[] = [];
   for (const path of new Set(paths)) {
-    const hit = cache.get(path);
+    const hit = opts.fresh ? undefined : cache.get(path);
     if (hit && hit.expiresAt - MARGIN_MS > now()) out.set(path, hit.url);
     else missing.push(path);
   }

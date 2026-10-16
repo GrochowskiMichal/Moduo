@@ -4,15 +4,22 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { afterEach, describe, expect, it } from "@rstest/core";
+import { clearSignedUrlCache, signPaths } from "@/features/attachments/signed-urls";
 import type { UploadView } from "@/lib/uploads/queue";
 import { memoryChatCopy } from "../store/device-copy";
-import { ChatStore } from "../store/store";
+import { ChatStore, FILES_ALL_STOPPED } from "../store/store";
 import { FakeChatServer, fakeLive, ME, settle, uuid, WS } from "../store/testing";
-import { ComposerFilesStore } from "./composer-files";
+import {
+  ComposerFilesStore,
+  DRAFT_FILE_STALE_MS,
+  REMOVE_FAILED,
+  staleNotice,
+} from "./composer-files";
 import { type ChatFileGate, type ChatFilesState, filesState, uploadQueueGate } from "./gate";
-import { asAttachmentRecord } from "./message-files";
-import { capNotice, FEED_MEDIA, fileShape, fitMedia, takeFiles } from "./model";
+import { asAttachmentRecord, resignDelayMs } from "./message-files";
+import { capNotice, FEED_MEDIA, fileShape, fitMedia, hasSendableFiles, takeFiles } from "./model";
 
 describe("files in a message (CV-9, §7)", () => {
   it("fits a picture's stored size inside the 360 × 240 media box, never enlarging it", () => {
@@ -112,12 +119,25 @@ function fakeQueue() {
   let items: UploadView[] = [];
   let snapshot = { items: [] as readonly UploadView[], almostFull: {} };
   const listeners = new Set<() => void>();
+  const uploaded = new Set<(rec: unknown, target: UploadView["target"]) => void>();
   const emit = () => {
     snapshot = { items: [...items], almostFull: {} };
     for (const fn of listeners) fn();
   };
   let n = 0;
   return {
+    onUploaded(fn: (rec: unknown, target: UploadView["target"]) => void) {
+      uploaded.add(fn);
+      return () => uploaded.delete(fn);
+    },
+    /** The queue's finalize answering for this file (even after a dismiss). */
+    finishWith(id: string, target: UploadView["target"], fileName: string) {
+      items = items.filter((i) => i.id !== id);
+      for (const fn of uploaded) {
+        fn({ id: `a-${id}`, fileName, mime: "image/png", sizeBytes: 1, status: "ready" }, target);
+      }
+      emit();
+    },
     added: [] as { target: UploadView["target"]; names: string[] }[],
     dismissed: [] as string[],
     getSnapshot: () => snapshot,
@@ -263,6 +283,132 @@ describe("the composer's files", () => {
     expect(store.busy("c")).toBe(false);
   });
 
+  // A remover whose calls resolve (or fail) when the test says.
+  function remover() {
+    const calls: { id: string; ok: () => void; fail: () => void }[] = [];
+    const runtime = {
+      attachments: {
+        remove: (id: string) =>
+          new Promise<void>((ok, no) => {
+            calls.push({ id, ok, fail: () => no(new Error("offline")) });
+          }),
+      },
+    };
+    return { calls, runtime: runtime as never };
+  }
+  const T = (id: string) => ({
+    workspaceId: WS,
+    entityType: "chat_message" as const,
+    entityId: id,
+    channelId: "c",
+  });
+
+  it("× while the upload finishes: the file is taken out on the server and the send waits", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const r = remover();
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    // Still in the queue (finalize on its way): dismissed, and the row goes too.
+    store.remove("c", "q1", r.runtime);
+    expect(q.dismissed).toEqual(["q1"]);
+    expect(r.calls.map((c) => c.id)).toEqual(["a-q1"]);
+    expect(store.busy("c")).toBe(true);
+    // The queue's finalize lands anyway: no second remove (already going).
+    q.finishWith("q1", T("m"), "a.png");
+    expect(r.calls).toHaveLength(1);
+    r.calls[0]!.ok();
+    await settle();
+    expect(store.busy("c")).toBe(false);
+    expect(store.take("c")).toBeNull();
+  });
+
+  it("a finish no live chip owns (removed before its id was known) is taken out; the send waits", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const r = remover();
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    store.setRemover(r.runtime);
+    // A finish under this draft's id for a file no chip holds.
+    q.finishWith("q9", T("m"), "z.png");
+    expect(r.calls.map((c) => c.id)).toEqual(["a-q9"]);
+    expect(store.busy("c")).toBe(true);
+    r.calls[0]!.ok();
+    await settle();
+    expect(store.busy("c")).toBe(false);
+  });
+
+  it("a finish after the send took the draft is left alone (it belongs to that message)", async () => {
+    const q = fakeQueue();
+    let minted = 0;
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => `m${++minted}`,
+    );
+    const r = remover();
+    store.setRemover(r.runtime);
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    expect(store.take("c")).toEqual({ id: "m1", files: 1 });
+    q.finishWith("q1", T("m1"), "a.png");
+    expect(r.calls).toEqual([]);
+  });
+
+  it("a failed remove puts the chip back saying it still goes", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const r = remover();
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    q.finish("q1");
+    store.remove("c", "q1", r.runtime);
+    expect(store.files("c")).toHaveLength(0);
+    expect(store.busy("c")).toBe(true);
+    r.calls[0]!.fail();
+    await settle();
+    expect(store.busy("c")).toBe(false);
+    expect(store.files("c").map((f) => [f.fileName, f.state, f.problem])).toEqual([
+      ["a.png", "ready", REMOVE_FAILED],
+    ]);
+    // It's still on the server, so it's counted in the send.
+    expect(store.take("c")).toEqual({ id: "m", files: 1 });
+  });
+
+  it("files older than the server keeps an unsent message's files are taken out at send, with a line", async () => {
+    const q = fakeQueue();
+    let now = 1_000;
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+      () => now,
+    );
+    const r = remover();
+    store.setRemover(r.runtime);
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("old.png")] });
+    q.finish("q1");
+    expect(store.dropStale("c")).toBe(false);
+    now += DRAFT_FILE_STALE_MS + 1;
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("new.png")] });
+    expect(store.dropStale("c")).toBe(true);
+    expect(store.notice("c")).toBe(staleNotice(1));
+    expect(store.files("c").map((f) => f.fileName)).toEqual(["new.png"]);
+    expect(r.calls.map((c) => c.id)).toEqual(["a-q1"]);
+    expect(store.busy("c")).toBe(true);
+  });
+
+  it("only files that didn't stop make a message of files only", () => {
+    expect(hasSendableFiles(undefined)).toBe(false);
+    expect(hasSendableFiles([{ state: "failed" }, { state: "failed" }])).toBe(false);
+    expect(hasSendableFiles([{ state: "failed" }, { state: "uploading" }])).toBe(true);
+    expect(hasSendableFiles([{ state: "ready" }])).toBe(true);
+  });
+
   it("doesn't count a stopped file against the 10", async () => {
     const q = fakeQueue();
     const store = new ComposerFilesStore(
@@ -377,5 +523,91 @@ describe("a send with files waits for them (upload first, send after)", () => {
     await settle(20);
     expect(released).toContain(stuck);
     expect(server.rows.has(stuck)).toBe(true);
+  });
+
+  it("a message of files only whose files all stopped says why and offers no Retry", async () => {
+    const C = uuid(9102);
+    const counts = new Map<string, { stopped: number; moving: number }>();
+    const released: string[] = [];
+    const gate: ChatFileGate = {
+      state: () => "failed",
+      subscribe: () => () => {},
+      release: (id) => released.push(id),
+      counts: (id) => counts.get(id) ?? { stopped: 0, moving: 0 },
+    };
+    const server = new FakeChatServer();
+    server.addChannel(C, { isDefault: true });
+    const store = new ChatStore(server.transport(), ME, WS, {
+      copy: memoryChatCopy(),
+      live: fakeLive(),
+      files: gate,
+      timing: { persistMs: 0, markReadMs: 0, joinDebounceMs: 0, focusThrottleMs: 0 },
+    });
+    stores.push(store);
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+
+    const dead = uuid(9301);
+    counts.set(dead, { stopped: 2, moving: 0 });
+    store.send({ channelId: C, body: "", id: dead, files: 2 });
+    // One of two stopped (the other made it): Retry still sends it.
+    const half = uuid(9302);
+    counts.set(half, { stopped: 1, moving: 0 });
+    store.send({ channelId: C, body: "", id: half, files: 2 });
+    await settle(20);
+    const rows = store.getSnapshot().windows[C]!.rows;
+    const d = rows.find((r) => r.id === dead);
+    expect(d?.sendState).toBe("failed");
+    expect(d?.sendError).toBe(FILES_ALL_STOPPED);
+    expect(d?.sendRetry).toBe(false);
+    const h = rows.find((r) => r.id === half);
+    expect(h?.sendError).toBe("A file didn't upload");
+    expect(h?.sendRetry).toBeUndefined();
+    store.retry(dead);
+    await settle(20);
+    expect(released).not.toContain(dead);
+    expect(store.getSnapshot().windows[C]!.rows.find((r) => r.id === dead)?.sendState).toBe(
+      "failed",
+    );
+  });
+});
+
+describe("chat file links", () => {
+  it("re-signs to a new link each cycle, before the old one dies", async () => {
+    clearSignedUrlCache();
+    let now = 0;
+    let n = 0;
+    const runtime = {
+      attachments: {
+        signedUrls: async (paths: string[]) => new Map(paths.map((p) => [p, `${p}#${++n}`])),
+      },
+    } as never;
+    const ttl = CHAT_FILE_LINK_TTL_SECONDS.preview;
+    const delay = resignDelayMs(ttl);
+    expect(delay).toBeLessThan(ttl * 1000 - 60_000);
+    const first = await signPaths(runtime, ["p"], ttl, () => now);
+    const seen = [first.get("p")];
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      now += delay;
+      // A plain read still hands back the cached link (fresh until a minute before it dies)…
+      expect((await signPaths(runtime, ["p"], ttl, () => now)).get("p")).toBe(seen.at(-1));
+      // …so the hook's re-sign skips the cache: a new link, alive for a full ttl.
+      seen.push((await signPaths(runtime, ["p"], ttl, () => now, { fresh: true })).get("p"));
+    }
+    expect(new Set(seen).size).toBe(4);
+    clearSignedUrlCache();
+  });
+
+  it("chat originals use the 3-minute link; tasks keep their default", () => {
+    expect(CHAT_FILE_LINK_TTL_SECONDS.original).toBe(180);
+    const read = (f: string) =>
+      readFileSync(resolve(process.cwd(), "src/features/chat/files", f), "utf8");
+    for (const f of ["files-view.tsx", "message-files.tsx"]) {
+      expect(read(f)).toContain("originalTtlSeconds={CHAT_FILE_LINK_TTL_SECONDS.original}");
+    }
+    const viewer = read("../../attachments/ui/attachment-viewer.tsx");
+    expect(viewer).toContain("originalTtlSeconds = ATTACHMENT_LINK_TTL_SECONDS.original");
+    expect(viewer.match(/signPaths\(runtime, \[[^\]]+\], originalTtlSeconds\)/g)).toHaveLength(2);
   });
 });

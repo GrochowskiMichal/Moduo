@@ -30,14 +30,31 @@ type Cache = {
   timer: ReturnType<typeof setTimeout> | null;
   listeners: Set<() => void>;
   version: number;
+  /** One per cache: a stable function keeps useSyncExternalStore from resubscribing each render. */
+  subscribe: (fn: () => void) => () => void;
 };
+
+const noSubscribe = () => () => {};
 
 const caches = new WeakMap<ChatRuntime, Cache>();
 
 function cacheFor(chat: ChatRuntime): Cache {
   let c = caches.get(chat);
   if (!c) {
-    c = { files: new Map(), wanted: new Set(), timer: null, listeners: new Set(), version: 0 };
+    const listeners = new Set<() => void>();
+    c = {
+      files: new Map(),
+      wanted: new Set(),
+      timer: null,
+      listeners,
+      version: 0,
+      subscribe: (fn) => {
+        listeners.add(fn);
+        return () => {
+          listeners.delete(fn);
+        };
+      },
+    };
     caches.set(chat, c);
   }
   return c;
@@ -75,11 +92,7 @@ export function useMessageFiles(chat: ChatRuntime | null, messageId: string): Ch
   // The snapshot is the message's files themselves: with the React Compiler on,
   // a read beside `useSyncExternalStore` is memoised away (gotchas/ui.md, RF-1).
   const files = useSyncExternalStore(
-    (fn) => {
-      if (!c) return () => {};
-      c.listeners.add(fn);
-      return () => c.listeners.delete(fn);
-    },
+    c?.subscribe ?? noSubscribe,
     () => c?.files.get(messageId) ?? null,
     () => c?.files.get(messageId) ?? null,
   );
@@ -94,6 +107,11 @@ export function clearMessageFilesCache(chat: ChatRuntime): void {
   caches.delete(chat);
 }
 
+/** When a page of signed links is made again: two minutes before they die. */
+export function resignDelayMs(ttlSeconds: number): number {
+  return Math.max(30_000, ttlSeconds * 1000 - 120_000);
+}
+
 /** Signed links for these paths (null until they're made). */
 export function useSignedLinks(
   runtime: Pick<ModuoRuntime, "attachments"> | null,
@@ -106,21 +124,19 @@ export function useSignedLinks(
     map: ReadonlyMap<string, string>;
     round: number;
   } | null>(null);
-  // Re-signed a minute before the links expire (signed-urls.ts reuses them
-  // until then), so a conversation left open keeps loading its pictures.
+  // Re-signed before the links expire, so a conversation left open keeps
+  // loading its pictures. A re-sign skips the shared cache: it would hand back
+  // the same link (fresh until a minute before it dies) for another cycle.
   const [round, setRound] = useState(0);
   useEffect(() => {
     if (!runtime || !key) return;
     let live = true;
-    void signPaths(runtime, key.split("\n"), ttlSeconds)
+    void signPaths(runtime, key.split("\n"), ttlSeconds, Date.now, { fresh: round > 0 })
       .then((map) => {
         if (live) setLinks({ key, map, round });
       })
       .catch(() => {});
-    const again = setTimeout(
-      () => setRound((r) => r + 1),
-      Math.max(30_000, ttlSeconds * 1000 - 60_000),
-    );
+    const again = setTimeout(() => setRound((r) => r + 1), resignDelayMs(ttlSeconds));
     return () => {
       live = false;
       clearTimeout(again);

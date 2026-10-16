@@ -116,6 +116,8 @@ export type ChatMessage = {
   sendState?: ChatSendState;
   /** Client-only: why the server refused it ("Not sent · Retry"). */
   sendError?: string;
+  /** Client-only (CV-9): false when Retry can't help (a message of files only whose files all stopped). */
+  sendRetry?: false;
   /** Client-only, v1's screens: an optimistic send that hasn't been confirmed yet. */
   pending?: boolean;
   /** Client-only, v1's screens: an optimistic send the server refused — offer retry. */

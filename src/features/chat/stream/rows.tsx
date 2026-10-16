@@ -118,6 +118,18 @@ function SendState({
       </p>
     );
   }
+  if (message.sendState === "failed" && message.sendRetry === false) {
+    // Nothing left to send (its files all stopped): say why; Delete only.
+    return (
+      <div className="mt-1 flex items-center gap-2 text-sm text-foreground">
+        <AlertCircle aria-hidden className="size-icon-sm text-muted-foreground" />
+        <span>Not sent · {message.sendError}</span>
+        <Button size="sm" variant="ghost" onClick={onDiscard}>
+          Delete
+        </Button>
+      </div>
+    );
+  }
   if (message.sendState === "failed") {
     return (
       <div className="mt-1 flex items-center gap-2 text-sm text-foreground">

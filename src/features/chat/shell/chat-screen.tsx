@@ -46,6 +46,7 @@ import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { useComposerFiles } from "../files/composer-files";
 import { FilesView } from "../files/files-view";
 import { MessageFiles } from "../files/message-files";
+import { hasSendableFiles } from "../files/model";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import { ChainItem } from "../panel/chain-item";
@@ -1085,7 +1086,9 @@ export function ChatScreen({
                 onSend={(body) => {
                   if (!store) return false;
                   // CV-9: upload first, send after: the files went up under this id.
-                  const going = composerFiles?.files.some((f) => f.state !== "failed");
+                  // Files that waited past the server's day are taken out first, with a line.
+                  if (composerFiles?.dropStale()) return false;
+                  const going = hasSendableFiles(composerFiles?.files);
                   if (!body.trim() && !going) return false;
                   const withFiles = composerFiles?.take() ?? null;
                   if (!body.trim() && !withFiles) return false;

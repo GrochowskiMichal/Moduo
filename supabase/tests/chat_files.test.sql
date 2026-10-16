@@ -221,6 +221,33 @@ BEGIN
     'send: and it stays unreadable to the conversation');
 END $$;
 
+-- ── A message of files only reads "Sent a file" in notices ───────────────
+DO $$
+DECLARE
+  c public.chat_channels;
+  m public.chat_messages;
+  v_id uuid;
+  ex text;
+BEGIN
+  SELECT * INTO c FROM public.chat_channels WHERE id = test.ref('P');
+  SELECT * INTO m FROM public.chat_messages WHERE id = test.mid('m1');
+  v_id := public.chat__activity(c, m, test.id('A'), 'chat.mention', 'person', ARRAY[test.id('B')]);
+  SELECT payload->>'excerpt' INTO ex FROM public.module_activity WHERE id = v_id;
+  PERFORM test.ok(ex = 'Sent a file', 'notice: one file and no words reads "Sent a file"', ex);
+  m.file_count := 3;
+  v_id := public.chat__activity(c, m, test.id('A'), 'chat.mention', 'person', ARRAY[test.id('B')]);
+  SELECT payload->>'excerpt' INTO ex FROM public.module_activity WHERE id = v_id;
+  PERFORM test.ok(ex = 'Sent 3 files', 'notice: three files read "Sent 3 files"', ex);
+  m.body := 'look at these';
+  v_id := public.chat__activity(c, m, test.id('A'), 'chat.mention', 'person', ARRAY[test.id('B')]);
+  SELECT payload->>'excerpt' INTO ex FROM public.module_activity WHERE id = v_id;
+  PERFORM test.ok(ex = 'look at these', 'notice: words win over the file line', ex);
+  m.body := ''; m.file_count := 0;
+  v_id := public.chat__activity(c, m, test.id('A'), 'chat.mention', 'person', ARRAY[test.id('B')]);
+  SELECT payload->>'excerpt' INTO ex FROM public.module_activity WHERE id = v_id;
+  PERFORM test.ok(ex = '', 'notice: no words and no files stays blank', ex);
+END $$;
+
 -- ── The composer's remove, before the send only ───────────────────────────
 DO $$
 DECLARE

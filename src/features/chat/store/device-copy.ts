@@ -45,6 +45,8 @@ export type ChatOutboxEntry = {
   deleted?: boolean;
   /** CV-9: how many files were uploading under its id when it was sent: it waits for them. */
   files?: number;
+  /** CV-9: a message of files only whose files all stopped: Retry can't send it. */
+  dead?: boolean;
 };
 
 export type ChatHeldConversation = { openedAt: number; edge?: ChatKey | null };
@@ -113,7 +115,7 @@ export interface ChatDeviceCopy {
 
 /** Strip what only this tab knows: the copy holds server rows. */
 function serverRow(row: ChatMessage): ChatMessage {
-  const { sendState: _s, sendError: _e, pending: _p, failed: _f, ...rest } = row;
+  const { sendState: _s, sendError: _e, sendRetry: _r, pending: _p, failed: _f, ...rest } = row;
   return rest;
 }
 

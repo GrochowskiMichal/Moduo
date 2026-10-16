@@ -76,3 +76,13 @@ export function capNotice(refused: number, cap: number = CHAT_FILES_PER_MESSAGE)
     ? `A message holds up to ${cap} files: 1 wasn't added`
     : `A message holds up to ${cap} files: ${refused} weren't added`;
 }
+
+/**
+ * Whether any of a composer's files would go with the send: a file that
+ * stopped never does, so a message of only stopped files has nothing to send.
+ */
+export function hasSendableFiles(
+  files: readonly { state: "uploading" | "ready" | "failed" }[] | null | undefined,
+): boolean {
+  return !!files?.some((f) => f.state !== "failed");
+}
