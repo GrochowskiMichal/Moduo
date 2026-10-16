@@ -83,6 +83,8 @@ export function NoteCommentsPanel({
                 author={
                   c.authorKind === "api_key" || !c.createdBy ? null : people.personOf(c.createdBy)
                 }
+                // An app's comment shows the plug mark, not the "?" (MOD-149).
+                app={c.authorKind === "api_key"}
                 authorName={commentAuthorName(c, currentUserId, people.nameOf)}
                 time={relativeTime(c.createdAt)}
                 timeTitle={new Date(c.createdAt).toLocaleString()}
