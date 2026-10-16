@@ -51,6 +51,12 @@ export function createCommandsFor(query: string): Array<{ id: CreateCommand; tit
   );
 }
 
+/** Whether a `/` query offers `/remind` (CV-11): its word so far, nothing after it. */
+export function remindMatches(query: string): boolean {
+  const q = query.replace(/^\s+/, "").toLowerCase();
+  return !/\s/.test(q) && "remind".startsWith(q);
+}
+
 // ── `@`: people first ───────────────────────────────────────────────────────
 
 export type MentionablePerson = { id: string; name: string; email?: string | null };

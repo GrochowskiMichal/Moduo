@@ -1,6 +1,6 @@
 // Details: the right panel's first view (spec §12, prototype round 5 frame 4,
 // "As a member"). Top to bottom as frame 4 draws it: About (the topic) ·
-// Linked to (CV-13's chip; empty until then) · People (with presence; the
+// Linked to (the linked item and "Link to…", CV-13) · People (with presence; the
 // status line is CV-17's) · Your notifications (Notify me, Pin to sidebar) ·
 // Reply chains (CV-12) · Decisions (CV-14) · Pinned · then the quiet History
 // of every change (AC15.5) and the conversation's own actions (Leave).
@@ -26,6 +26,7 @@ import { FeedItem } from "@/components/ui/feed";
 import { GroupHeader } from "@/components/ui/group-header";
 import { PropertyRow, PropertyValue } from "@/components/ui/property-row";
 import { Switch } from "@/components/ui/switch";
+import type { PresenceState } from "@/lib/statuses/model";
 import { formatAge, formatDate, formatStamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
@@ -56,6 +57,9 @@ export type DetailsViewProps = {
   /** Whether this person's role posts (only they can be made a manager); default: not a viewer. */
   canBeManager?: (id: string) => boolean;
   online: (id: string) => boolean;
+  /** The presence shape and the "now" line per person (CV-17). */
+  stateOf?: (id: string) => PresenceState;
+  statusOf?: (id: string) => string;
   members: readonly ChatMember[] | null;
   pinned: readonly ChatMessage[] | null;
   history: readonly ChatHistoryEntry[] | null;
@@ -85,6 +89,8 @@ export type DetailsViewProps = {
   /** The conversation's reply chains, open then wrapped (null while they load). */
   chains: { open: ChainEntry[]; wrapped: ChainEntry[] } | null;
   onOpenChain: (root: ChatMessage) => void;
+  /** "Linked to"'s body (CV-13's ChannelLinkSection); its empty line without one. */
+  linkSection?: React.ReactNode;
 };
 
 export function DetailsView({
@@ -94,6 +100,8 @@ export function DetailsView({
   personOf,
   canBeManager,
   online,
+  stateOf,
+  statusOf,
   members,
   pinned,
   history,
@@ -116,9 +124,10 @@ export function DetailsView({
   onOpenMessage,
   chains,
   onOpenChain,
+  linkSection,
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
-  const people = members ? detailsPeople(members, selfId, personOf, online) : null;
+  const people = members ? detailsPeople(members, selfId, personOf, online, stateOf) : null;
   const canLeave = isChannel && !!member && !channel.isDefault;
   const managerSet = new Set(managers ?? []);
   // Archive sits in Channel settings (frame 4); an archived channel shows no
@@ -139,9 +148,11 @@ export function DetailsView({
       ) : null}
 
       {isChannel ? (
-        // The link's chip and "Link to…" are CV-13's: the section's frame and its empty line.
+        // The linked item, "Link to…" and the team offer (CV-13, link-section.tsx).
         <Section title="Linked to">
-          <Quiet data-slot="details-link">Not linked to a project or task yet.</Quiet>
+          {linkSection ?? (
+            <Quiet data-slot="details-link">Not linked to a project, client or team yet.</Quiet>
+          )}
         </Section>
       ) : null}
 
@@ -175,12 +186,7 @@ export function DetailsView({
                   data-person={p.userId}
                   className={ROW_BUTTON}
                 >
-                  <PresenceAvatar
-                    name={p.name}
-                    id={p.userId}
-                    src={p.avatarUrl}
-                    online={p.online && !p.former}
-                  />
+                  <PresenceAvatar name={p.name} id={p.userId} src={p.avatarUrl} state={p.state} />
                   <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
                   {isChannel && managerSet.has(p.userId) ? (
                     <span
@@ -190,12 +196,11 @@ export function DetailsView({
                       Manager
                     </span>
                   ) : null}
-                  {/* The status line (presets, "clear after") arrives with CV-17. */}
                   <span
                     data-slot="person-status"
-                    className="shrink-0 text-xs text-subtle-foreground"
+                    className="min-w-0 max-w-1/2 shrink truncate text-xs text-subtle-foreground"
                   >
-                    {p.self ? "you" : p.former ? "former member" : null}
+                    {p.self ? "you" : p.former ? "former member" : statusOf?.(p.userId) || null}
                   </span>
                   {settingsShown && !p.former ? (
                     <span aria-hidden className="w-5 shrink-0" />

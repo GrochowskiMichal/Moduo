@@ -6,13 +6,29 @@
 // UI and names the transport the chat store (`store/store.ts`) reads through.
 
 import type {
+  ChatCatchupReason,
   ChatChannelKind,
+  ChatLinkTarget,
   ChatMessageKind,
   ChatNotifyLevel,
   ContentAuthorKind,
+  RelationKind,
 } from "@contracts/vocabularies";
 
-export type { ChatChannelKind, ChatMessageKind, ChatNotifyLevel, ContentAuthorKind };
+export type {
+  ChatCatchupReason,
+  ChatChannelKind,
+  ChatLinkTarget,
+  ChatMessageKind,
+  ChatNotifyLevel,
+  ContentAuthorKind,
+};
+
+/** A channel's link (CV-13): a project (`bucket`), a client or a team. */
+export type ChatLink = { type: ChatLinkTarget; id: string };
+
+/** What "Start a conversation for X" takes: a project or a client, never a team. */
+export type ChatStartableTarget = Exclude<ChatLinkTarget, "team">;
 
 export type ChatChannel = {
   id: string;
@@ -33,6 +49,8 @@ export type ChatChannel = {
   isDefault?: boolean;
   /** An announcement channel: only its managers post (CH23a). */
   managersOnly?: boolean;
+  /** What the channel links to (CV-13), null when nothing. */
+  link?: ChatLink | null;
   /** When its people or managers last changed (CV-15): People and managers are re-read on it. */
   rosterAt?: string | null;
 };
@@ -133,6 +151,30 @@ export type ChatUnread = {
   catchup: number;
 };
 
+/**
+ * One open Catch up item (`chat_catchup_open`, CV-11): showing now, in a
+ * conversation you can still read. A grouped item (a chain, an Every-message
+ * line) names its newest message; a conversation reminder that found no
+ * message has none.
+ */
+export type ChatCatchupItem = {
+  id: string;
+  channelId: string;
+  messageId: string | null;
+  chainRootId: string | null;
+  reason: ChatCatchupReason;
+  actorId: string | null;
+  createdAt: string;
+  /** Set when it was put off (Later / Remind me). */
+  laterUntil: string | null;
+  /** When it came back from Later (it sorts on top from then). */
+  returnedAt: string | null;
+  /** The list's order: its newest message, or when it came back. */
+  at: string;
+  /** The conversation's name as stored with the item (a "removed you" line's private channel you can no longer read). */
+  channelName?: string | null;
+};
+
 /** A workspace person as chat renders them. */
 export type ChatPerson = {
   userId: string;
@@ -161,6 +203,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.leave",
   "chat.member_add",
   "chat.member_remove",
+  "chat.channel_link",
   "chat.manager_add",
   "chat.manager_remove",
   "chat.announcement_switch",
@@ -278,6 +321,24 @@ export type ChatRuntime = {
   reopen(rootId: string): Promise<ChatResult<ChatMessage>>;
   /** "Reply to…": the message joins the chain of an earlier message. */
   attachToChain(args: { messageId: string; replyToId: string }): Promise<ChatResult<ChatMessage>>;
+  /** Several messages by id (what you can read of them). */
+  messages(ids: readonly string[]): Promise<ChatResult<ChatMessage[]>>;
+  /** Catch up's open items in this workspace (CV-11). */
+  catchupOpen(workspaceId: string): Promise<ChatResult<ChatCatchupItem[]>>;
+  /** Done: your items close (and their bell rows). Up to 1,000 ids. */
+  catchupDone(ids: readonly string[]): Promise<ChatResult<number>>;
+  /** Undo Done. */
+  catchupReopen(ids: readonly string[]): Promise<ChatResult<number>>;
+  /**
+   * Later / Remind me on a message, `/remind` on a conversation, or Later on
+   * Catch up items by id (one of the three); `at` null clears.
+   */
+  remind(args: {
+    messageId?: string | null;
+    channelId?: string | null;
+    itemIds?: readonly string[] | null;
+    at: string | null;
+  }): Promise<ChatResult<number>>;
   /** You read the chain on the right: its Catch up items close. */
   chainRead(rootId: string): Promise<ChatResult<null>>;
   /** A conversation's reply chains (roots with replies), newest activity first. */
@@ -328,7 +389,19 @@ export type ChatRuntime = {
     memberIds?: string[];
     /** Only managers post (CH23a); the creator is the first manager. */
     announcement?: boolean;
+    /** The optional link (CV-13): needs edit rights on the item. */
+    link?: ChatLink | null;
   }): Promise<ChatChannel>;
+  /** "Start a conversation for X" (CH56): named after X, public or private by who sees X. */
+  startConversation(args: {
+    workspaceId: string;
+    type: ChatStartableTarget;
+    id: string;
+  }): Promise<ChatChannel>;
+  /** Links the channel to one item, or unlinks it (null). */
+  linkChannel(args: { channelId: string; link: ChatLink | null }): Promise<ChatChannel>;
+  /** Whether capture from the channel files into its linked project for you (else the Inbox). */
+  linkFilesHere(channelId: string): Promise<boolean>;
   openDm(args: { workspaceId: string; userIds: string[] }): Promise<ChatChannel>;
   updateChannel(args: { channelId: string; name?: string; topic?: string }): Promise<ChatChannel>;
   archiveChannel(args: { channelId: string; archived: boolean }): Promise<ChatChannel>;
@@ -389,15 +462,19 @@ export type ChatMessageRef = {
   excerpt: string | null;
 };
 
-/** One "Mentioned in" line (chat_conversations_for_item). */
+/** One line of an item's conversations (chat_conversations_for_item): a
+ *  "Mentioned in" line, or a conversation linked to it (CV-13). */
 export type ChatItemConversation = {
   channelId: string;
   workspaceId: string;
   channelKind: ChatChannelKind;
   channelName: string | null;
   channelPrivate: boolean;
-  relation: "mentions";
+  relation: Extract<RelationKind, "mentions" | "conversation-of">;
   since: string;
+  /** Your unread messages in a linked conversation (0 when you aren't in it). */
+  unread: number;
+  archived: boolean;
 };
 
 /** An item made from a message (a `spawned-from` link to it). */

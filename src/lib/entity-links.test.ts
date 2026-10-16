@@ -33,7 +33,7 @@ describe("relation kinds (AC1)", () => {
     expect(isRelationKind(42)).toBe(false);
   });
 
-  it("locks the exact alpha set of eight kinds", () => {
+  it("locks the exact set of nine kinds (conversation-of is chat's, CV-13)", () => {
     expect([...RELATION_KINDS]).toEqual([
       "references",
       "spawned-from",
@@ -43,6 +43,7 @@ describe("relation kinds (AC1)", () => {
       "works-at",
       "follow-up",
       "paid-by",
+      "conversation-of",
     ]);
     expect(DEFAULT_RELATION_KIND).toBe("references");
   });
@@ -69,6 +70,7 @@ describe("Chat's own links", () => {
     expect(at("note", "chat_channel", "references", "ref")).toBe(true);
     expect(at("task", "chat_message", "spawned-from", "manual")).toBe(false);
     expect(at("task", "note", "mentions", "ref")).toBe(false);
+    expect(at("chat_channel", "bucket", "conversation-of", "manual")).toBe(true);
   });
 });
 

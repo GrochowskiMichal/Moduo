@@ -15,10 +15,11 @@ import {
   type LinkOrigin,
   RELATION_KINDS,
   type RelationKind,
+  USER_RELATION_KINDS,
 } from "@contracts/vocabularies";
 
 export type { LinkOrigin, RelationKind };
-export { LINK_ORIGINS, RELATION_KINDS };
+export { LINK_ORIGINS, RELATION_KINDS, USER_RELATION_KINDS };
 
 /** The default kind when a gesture implies no stronger relationship. */
 export const DEFAULT_RELATION_KIND: RelationKind = "references";
@@ -33,6 +34,7 @@ export const RELATION_KIND_LABELS: Record<RelationKind, string> = {
   "works-at": "Works at",
   "follow-up": "Follow-up",
   "paid-by": "Paid by",
+  "conversation-of": "Conversation",
 };
 
 /**
@@ -125,9 +127,10 @@ export function isChatEnd(type: string): boolean {
 }
 
 /**
- * A link only Chat's send and edit write ("Mentioned in"): a mention, or an
- * inline reference, with a conversation or a message at either end. No other
- * path makes, moves, retypes or removes one (the server refuses).
+ * A link only Chat writes: "Mentioned in" (a mention, or an inline reference,
+ * with a conversation or a message at either end; the send and edit write it)
+ * and a conversation's link to its item (`conversation-of`, mirrored from the
+ * conversation's Details). No other path makes, moves or retypes one.
  */
 export function isChatOwnedLink(link: {
   sourceType: string;
@@ -136,8 +139,9 @@ export function isChatOwnedLink(link: {
   origin?: string | null;
 }): boolean {
   return (
-    (isChatEnd(link.sourceType) || isChatEnd(link.targetType)) &&
-    (link.relationKind === "mentions" || link.origin === "ref")
+    link.relationKind === "conversation-of" ||
+    ((isChatEnd(link.sourceType) || isChatEnd(link.targetType)) &&
+      (link.relationKind === "mentions" || link.origin === "ref"))
   );
 }
 

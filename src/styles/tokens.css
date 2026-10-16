@@ -153,6 +153,9 @@
   --warning: var(--status-warning);
   --danger:  var(--status-danger);
   --info:    var(--status-info);
+  /* Presence (chat v2 CV-17, AC11.1): the one green, "reachable now"; it
+     keeps 3:1 on the card in both themes. */
+  --presence-reachable: var(--status-success);
 
   --success-foreground: oklch(0.12 0 0);
   --warning-foreground: oklch(0.12 0 0);
@@ -197,6 +200,7 @@
 
   --success-foreground: oklch(0.97 0 0);
   --warning-foreground: oklch(0.15 0 0);
+  --presence-reachable: oklch(0.6 0.15 145);
   --danger-foreground:  oklch(0.97 0 0);
   --info-foreground:    oklch(0.97 0 0);
 }
@@ -912,6 +916,7 @@
 
   --color-success:              var(--success);
   --color-success-foreground:   var(--success-foreground);
+  --color-presence-reachable:   var(--presence-reachable);
   --color-warning:              var(--warning);
   --color-warning-foreground:   var(--warning-foreground);
   --color-danger:               var(--danger);

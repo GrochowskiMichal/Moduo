@@ -8,12 +8,21 @@
 // snapshot itself (docs/gotchas/ui.md, RF-1).
 
 import { useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+  currentChatServerPrefs,
+  forgetChatServerPrefs,
+  readChatServerPrefs,
+  subscribeChatServerPrefs,
+} from "@/lib/notices/chat-prefs";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { supabaseClient } from "@/lib/runtime.web";
+import { forgetPeopleNow } from "@/lib/statuses/store";
 import { getUploadQueue } from "@/lib/uploads";
 import { uploadQueueGate } from "../files/gate";
 import { postgresChangesSource } from "../realtime";
-import { type ChatPresenceSnapshot, chatPresence } from "./presence";
+import { type ChatPresenceSnapshot, chatPresence, forgetChatPresenceStores } from "./presence";
+import { documentVisibility, PresenceSelfRegistry, windowInput } from "./presence-self";
+import "@/lib/statuses/live";
 import {
   type ChatSnapshot,
   type ChatStore,
@@ -32,6 +41,7 @@ const emptySnapshot = () => EMPTY_CHAT_SNAPSHOT;
 const EMPTY_PRESENCE: ChatPresenceSnapshot = {
   status: "connecting",
   online: new Set(),
+  away: new Set(),
   error: null,
 };
 const emptyPresence = () => EMPTY_PRESENCE;
@@ -68,15 +78,40 @@ export function useChatPresence(
 ): ChatPresenceSnapshot {
   const store = useMemo(
     () =>
-      enabled && workspaceId && userId ? chatPresence(supabaseClient, workspaceId, userId) : null,
+      enabled && workspaceId && userId
+        ? chatPresence(supabaseClient, workspaceId, userId, presenceSelves.for(userId))
+        : null,
     [enabled, workspaceId, userId],
   );
   useEffect(() => store?.acquire(), [store]);
+  // Another device's "Show me as online": read again while presence is held.
+  useEffect(() => (store ? presenceSelves.watch() : undefined), [store]);
   return useSyncExternalStore(
     store ? store.subscribe : noSubscribe,
     store ? store.getSnapshot : emptyPresence,
     store ? store.getSnapshot : emptyPresence,
   );
+}
+
+/** This tab's "me" on presence (CV-17), for the signed-in person only: it
+ *  tracks nothing until their own "Show me as online" is read (a failed read
+ *  tries again), follows it (another tab's change at once, another device's
+ *  within a minute), and is away after 10 minutes without input. */
+const presenceSelves = new PresenceSelfRegistry(
+  {
+    get: (userId) => currentChatServerPrefs(userId)?.showOnline ?? null,
+    subscribe: subscribeChatServerPrefs,
+    read: readChatServerPrefs,
+  },
+  { onInput: windowInput, visibility: documentVisibility() },
+);
+
+/** Sign-out: no presence "me", switch or status copy outlives the person. */
+export function forgetChatPresence(): void {
+  forgetChatPresenceStores();
+  presenceSelves.forget();
+  forgetChatServerPrefs();
+  forgetPeopleNow();
 }
 
 const typingStores = new Map<string, ChatTypingStore>();

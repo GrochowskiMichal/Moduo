@@ -146,6 +146,18 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("chat.member_remove", { user_id: "u1" }))).toBe(
       "removed someone",
     );
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: "bucket", linked_id: "b" })),
+    ).toBe("linked this channel to a project");
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: "company", linked_id: "c" })),
+    ).toBe("linked this channel to a client");
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: "team", linked_id: "t" })),
+    ).toBe("linked this channel to a team");
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: null, linked_id: null })),
+    ).toBe("unlinked this channel");
   });
 
   it("renders a channel's lifecycle, naming no one (CV-15)", () => {
@@ -223,6 +235,32 @@ describe("spineActivityLine", () => {
         { referenceName: () => "Sofia" },
       ),
     ).toBe("mentioned you in #plans: “over to Sofia”");
+  });
+
+  it("draws a stored-form chat excerpt as words: no marks, people named (CV-11)", () => {
+    const sofia = "moduo://person/7b0c2b6e-0b1d-4c55-9a51-3f0e4f6b8a01";
+    const name = { referenceName: () => "Sofia" };
+    expect(
+      spineActivityLine(
+        entry("chat.mention", {
+          channel_name: "plans",
+          format_version: 2,
+          excerpt: `**Ship it**, ${sofia}\n- one *more* thing`,
+        }),
+        name,
+      ),
+    ).toBe("mentioned you in #plans: “Ship it, Sofia one more thing”");
+    // The server cut the excerpt inside a reference: the half reference goes.
+    expect(
+      spineActivityLine(
+        entry("chat.reply", {
+          channel_name: "plans",
+          format_version: 2,
+          excerpt: "ask moduo://person/7b0c2b6e-0b1d",
+        }),
+        name,
+      ),
+    ).toBe("replied in #plans: “ask …”");
   });
 
   it("never lies by omission — unknown ops fall back to the op name", () => {
