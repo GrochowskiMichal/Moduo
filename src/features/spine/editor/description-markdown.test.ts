@@ -523,6 +523,39 @@ describe("what ends a description and what starts its lines (validator, call #15
         },
         "Notes",
       ],
+      // ⇧⏎ in an empty last bullet, then a click away: the words above stay.
+      [
+        'a paragraph "-", then an empty item holding a line break',
+        () => {
+          $getRoot()
+            .clear()
+            .append(
+              $createParagraphNode().append($createTextNode("-")),
+              $createListNode("bullet").append(
+                $createListItemNode().append($createLineBreakNode()),
+              ),
+            );
+        },
+        "-",
+      ],
+      [
+        'a paragraph "a⏎-", then an empty item holding a line break',
+        () => {
+          $getRoot()
+            .clear()
+            .append(
+              $createParagraphNode().append(
+                $createTextNode("a"),
+                $createLineBreakNode(),
+                $createTextNode("-"),
+              ),
+              $createListNode("bullet").append(
+                $createListItemNode().append($createLineBreakNode()),
+              ),
+            );
+        },
+        "a\n-",
+      ],
     ];
     for (const [name, build, expected] of cases) {
       const editor = markdownEditor();

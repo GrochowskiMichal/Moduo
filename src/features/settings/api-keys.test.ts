@@ -82,7 +82,7 @@ const RPC_CALL = /(?:callOp\(ctx,\s*|\.rpc\(\s*)"(\w+)"/g;
 
 /** Where a top-level helper starts: a function (exported or not, async or not) or an arrow const. */
 const HELPER_START =
-  /\n(?:export\s+)?(?:async\s+)?function\s|\n(?:export\s+)?const\s+\w+\s*(?::[^=\n]+)?=\s*(?:async\s*)?\(/g;
+  /\n(?:export\s+)?(?:async\s+)?function\s|\n(?:export\s+)?const\s+\w+\s*(?::[^\n]*?)?=\s*(?:async\s+)?(?:\(|\w+\s*=>)/g;
 
 /** The source of the top-level helper a position sits in, from its start up to that position. */
 function enclosingFunction(source: string, at: number): string {
@@ -305,11 +305,22 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       '  void ctx.db.rpc("links_op_create", {});',
       '  return keyScopeAllows(ctx.key.scopes, "links", "edit");',
       "}",
+      // Each helper below starts its own slice, so the gate in the one above doesn't count.
+      'const typedGated = async (ctx) => keyScopeAllows(ctx.key.scopes, "links", "edit");',
+      "const typedUngated: (ctx: Ctx) => Promise<void> = async (ctx) => {",
+      '  await ctx.db.rpc("links_op_create", {});',
+      "};",
+      'const bareGated = async ctx => keyScopeAllows(ctx.key.scopes, "links", "edit");',
+      "const bareUngated = async ctx => {",
+      '  await ctx.db.rpc("links_op_create", {});',
+      "};",
+      'const plainGated = ctx => keyScopeAllows(ctx.key.scopes, "links", "edit");',
+      'const plainUngated = ctx => ctx.db.rpc("links_op_create", {});',
     ].join("\n");
     const covered = [...preamble.matchAll(RPC_CALL)].map((m) =>
       helperChecksLane(enclosingFunction(preamble, m.index ?? 0), "links"),
     );
-    expect(covered).toEqual([true, false, false, true, false, false]);
+    expect(covered).toEqual([true, false, false, true, false, false, false, false, false]);
   });
 
   it("never stamps auth.uid() where a key calls: rows a key makes belong to its creator", () => {

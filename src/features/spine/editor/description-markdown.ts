@@ -520,9 +520,13 @@ function $leafItems(list: ListNode): ListItemNode[] {
   return out;
 }
 
-/** How many lines an empty block saves as: one, plus one for each line break in it. */
-function $emptyLines(block: ElementNode): number {
-  return 1 + block.getChildren().filter($isLineBreakNode).length;
+/**
+ * How many marker lines an empty quote saves as: one, plus one for each line
+ * break in it (each is a `> ` line). An empty list item is always one marker
+ * line: a line break in it saves as a bare blank line, which the trim takes.
+ */
+function $emptyQuoteLines(quote: ElementNode): number {
+  return 1 + quote.getChildren().filter($isLineBreakNode).length;
 }
 
 /**
@@ -541,7 +545,7 @@ function $trailingEmptyItemLines(): number {
       continue;
     }
     if ($isQuoteNode(block) && block.getTextContent().trim() === "") {
-      lines += $emptyLines(block);
+      lines += $emptyQuoteLines(block);
       block = block.getPreviousSibling();
       continue;
     }
@@ -551,7 +555,7 @@ function $trailingEmptyItemLines(): number {
     for (; k >= 0; k--) {
       const item = items[k] as ListItemNode;
       if (item.getTextContent().trim() !== "") break;
-      lines += $emptyLines(item);
+      lines++;
     }
     if (k >= 0) break;
     block = block.getPreviousSibling();
