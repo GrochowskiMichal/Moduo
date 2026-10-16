@@ -40,6 +40,8 @@ function msg(
     reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
+    decisionAt: null,
+    decisionBy: null,
     editedAt: null,
     deletedAt: null,
     clientId: id,

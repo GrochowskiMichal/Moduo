@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Clock,
   CornerDownRight,
+  Flag,
   MessageSquare,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -349,6 +350,8 @@ export type RowHandlers = {
   personPreview?: (userId: string) => ReactNode;
   /** CV-9: a message's files (previews and chips), under its words. */
   renderFiles?: (m: ChatMessage) => ReactNode;
+  /** CV-14: "Unmark" beside a decision's label (the chain panel, which has no ⋯ menu). */
+  onUnmarkDecision?: (m: ChatMessage) => void;
 };
 
 /** An author's name: opens their card on click, previews it on hover (CV-8b). */
@@ -543,10 +546,49 @@ export function MessageRow({
               onOpenChain={() => handlers.onOpenChain?.(message)}
             />
           )}
+          {message.decisionAt && !editor ? (
+            <DecisionLabel
+              onUnmark={
+                handlers.onUnmarkDecision && !message.sendState && !message.deletedAt
+                  ? () => handlers.onUnmarkDecision?.(message)
+                  : undefined
+              }
+            />
+          ) : null}
           {editor ? null : <MadeFromLine messageId={message.id} />}
         </div>
         {toolbar}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The quiet "Decision" label under a message marked as one (CV-14, §8); with
+ * `onUnmark`, a quiet "Unmark" beside it (where the row has no ⋯ menu).
+ */
+export function DecisionLabel({ onUnmark }: { onUnmark?: () => void }) {
+  return (
+    <div
+      data-slot="message-decision"
+      className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+    >
+      <Flag className="size-icon-xs shrink-0" aria-hidden />
+      Decision
+      {onUnmark ? (
+        <>
+          <span aria-hidden>·</span>
+          <button
+            type="button"
+            data-slot="message-decision-unmark"
+            aria-label="Unmark decision"
+            className="rounded-sm hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={onUnmark}
+          >
+            Unmark
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }

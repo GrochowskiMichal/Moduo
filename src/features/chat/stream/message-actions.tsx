@@ -2,9 +2,9 @@
 // toolbar floats over the row's top edge: your first three quick reactions ·
 // Reply · Task · ⋯ (Reply before Task). ⋯ holds the verbs whose blocks exist
 // today: Edit (own) · Delete (own) · Pin to conversation · Make a task ·
-// Remind me… (CV-11, H) · Copy link · Mark unread. Reply to… and Wrap up (a
-// root with replies) came with CV-12; Move to… came with CV-16 (Make a note
-// waits on Notes' op); Mark as decision joins with its block (CV-14).
+// Mark as decision (CV-14, ⇧D) · Remind me… (CV-11, H) · Copy link · Mark
+// unread. Reply to… and Wrap up (a root with replies) came with CV-12; Move
+// to… came with CV-16 (Make a note waits on Notes' op).
 // Right-click opens the same menu with your whole quick row on top and
 // "Customize…" (CV-7c, CH16a); "any emoji" shows once the picker passes
 // `onAnyEmoji` (CV-7b).
@@ -14,6 +14,7 @@ import {
   Check,
   CheckSquare,
   CornerUpLeft,
+  Flag,
   Link2,
   MessageSquareLock,
   MoreHorizontal,
@@ -57,6 +58,8 @@ export type MessageVerbs = {
   onDelete?: () => void;
   /** Pinning writes (a reader on a paused plan or a viewer can't): absent = no item. */
   onPin?: () => void;
+  /** Mark as decision / Unmark decision (CV-14, ⇧D): posters only; absent = no item. */
+  onDecision?: () => void;
   onCopyLink: () => void;
   onMarkUnread: () => void;
 };
@@ -80,6 +83,7 @@ function ActionsMenu({
   quickRow: readonly string[];
 }) {
   const pinned = !!message.pinnedAt;
+  const decided = !!message.decisionAt;
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
       <DropdownMenuTrigger asChild>
@@ -140,6 +144,13 @@ function ActionsMenu({
           Make a task
           <DropdownMenuShortcut>T</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {verbs.onDecision ? (
+          <DropdownMenuItem onSelect={verbs.onDecision}>
+            <Flag aria-hidden />
+            {decided ? "Unmark decision" : "Mark as decision"}
+            <DropdownMenuShortcut>⇧D</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        ) : null}
         {verbs.onRemind ? (
           <DropdownMenuItem onSelect={verbs.onRemind}>
             <AlarmClock aria-hidden />

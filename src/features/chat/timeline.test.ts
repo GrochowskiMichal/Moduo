@@ -49,6 +49,8 @@ function msg(id: string, createdAt: string, extra: Partial<ChatMessage> = {}): C
     reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
+    decisionAt: null,
+    decisionBy: null,
     editedAt: null,
     deletedAt: null,
     clientId: null,

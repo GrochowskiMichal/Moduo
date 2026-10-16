@@ -2,10 +2,12 @@
 // "Which reply settled it?" (the chain's replies, the last one picked), and
 // "Reply to…" picks an earlier message of this conversation for a stray one
 // to answer (open chains first, then the newest messages; a filter on top).
-// CV-14 adds "Also mark as decision" to Wrap up.
+// Wrap up's "Also mark as decision" (CV-14) is ticked by default in a channel
+// linked to a project, client or team (CH53).
 
 import { useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +34,8 @@ export function WrapUpDialog({
   onOpenChange,
   replies,
   loaded,
+  linked,
+  canDecide,
   personOf,
   onConfirm,
 }: Named & {
@@ -41,7 +45,11 @@ export function WrapUpDialog({
   replies: readonly ChatMessage[];
   /** The chain's read finished (with or without replies to pick). */
   loaded: boolean;
-  onConfirm: (settledId: string) => void;
+  /** The channel links to an item: "Also mark as decision" starts ticked. */
+  linked: boolean;
+  /** You may post here (a decision needs it): otherwise no tick. */
+  canDecide: boolean;
+  onConfirm: (settledId: string, markDecision: boolean) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,6 +64,8 @@ export function WrapUpDialog({
         ) : open ? (
           <WrapUpForm
             replies={replies}
+            linked={linked}
+            canDecide={canDecide}
             personOf={personOf}
             onCancel={() => onOpenChange(false)}
             onConfirm={onConfirm}
@@ -68,22 +78,30 @@ export function WrapUpDialog({
 
 function WrapUpForm({
   replies,
+  linked,
+  canDecide,
   personOf,
   onCancel,
   onConfirm,
 }: Named & {
   replies: readonly ChatMessage[];
+  linked: boolean;
+  canDecide: boolean;
   onCancel: () => void;
-  onConfirm: (settledId: string) => void;
+  onConfirm: (settledId: string, markDecision: boolean) => void;
 }) {
   const [picked, setPicked] = useState(replies[replies.length - 1]?.id ?? "");
+  // The tick follows the conversation's link (its default) until you change it;
+  // without post rights there's no decision to make.
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const markDecision = canDecide && (chosen ?? linked);
   const base = useId();
   return (
     <form
       className="flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
-        if (picked) onConfirm(picked);
+        if (picked) onConfirm(picked, markDecision);
       }}
     >
       <DialogHeader>
@@ -113,6 +131,19 @@ function WrapUpForm({
           </label>
         ))}
       </RadioGroup>
+      {canDecide ? (
+        <label
+          htmlFor={`${base}-decision`}
+          className="flex cursor-pointer items-center gap-2.5 px-2 text-sm text-foreground"
+        >
+          <Checkbox
+            id={`${base}-decision`}
+            checked={markDecision}
+            onCheckedChange={(v) => setChosen(v === true)}
+          />
+          Also mark as decision
+        </label>
+      ) : null}
       <DialogFooter>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel

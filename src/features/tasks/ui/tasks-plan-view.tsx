@@ -55,7 +55,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
-import { ConversationLines } from "../../chat/mentioned-in";
+import { useItemChatSlots } from "../../chat/mentioned-in";
 import { useStartConversation } from "../../chat/start-conversation";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
@@ -2301,6 +2301,23 @@ export function TasksPlanView({
         api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
         null)
       : scopeProject);
+  // Nothing selected inside a project, or a task in the centre: the panel
+  // shows Project (the one exception to "the panel remembers its view").
+  // The Timeline's No date stays open while you work the canvas (TV-TL2).
+  const panelActive =
+    multiSelect.multi && !(askedProject && panelView === "project")
+      ? "details"
+      : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
+        ? NO_DATE_PANEL_VIEW
+        : panelProject && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+          ? "project"
+          : panelView;
+  // The overview's conversation and decision lines, from one read (CV-13, CV-14),
+  // only while the Project view shows.
+  const projectChat = useItemChatSlots(
+    "project",
+    panelActive === "project" && panelProject ? panelProject.id : "",
+  );
   const projectView = panelProject ? (
     <ProjectPanel
       project={panelProject}
@@ -2317,23 +2334,9 @@ export function TasksPlanView({
       }}
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
-      chat={{
-        conversation: <ConversationLines entityType="project" entityId={panelProject.id} />,
-      }}
+      chat={projectChat}
     />
   ) : null;
-  // Nothing selected inside a project, or a task in the centre: the panel
-  // shows Project (the one exception to "the panel remembers its view").
-  // The Timeline's No date stays open while you work the canvas (TV-TL2).
-  const panelActive =
-    multiSelect.multi && !(askedProject && panelView === "project")
-      ? "details"
-      : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
-        ? NO_DATE_PANEL_VIEW
-        : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
-          ? "project"
-          : panelView;
-
   // The right panel's title row names and switches its views (SH-1): Details
   // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
   const right = (

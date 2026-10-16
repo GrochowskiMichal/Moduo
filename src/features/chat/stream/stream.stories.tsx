@@ -51,6 +51,8 @@ function msg(author: string, body: string, minutes: number, extra: Partial<ChatM
     reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
+    decisionAt: null,
+    decisionBy: null,
     editedAt: null,
     deletedAt: null,
     clientId: null,

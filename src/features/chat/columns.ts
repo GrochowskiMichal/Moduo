@@ -32,6 +32,8 @@ export const CHAT_MESSAGE_COLUMN_LIST = [
   "file_count",
   "pinned_at",
   "pinned_by",
+  "decision_at",
+  "decision_by",
   "edited_at",
   "deleted_at",
   "created_at",

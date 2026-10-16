@@ -28,7 +28,8 @@ import type {
 import { compareRows, sortableAt } from "./keys";
 
 /** Bumped when the stored shape changes: an older copy's rows go (its outbox is kept). */
-export const CHAT_COPY_VERSION = 1;
+// 2: rows carry decision_at / decision_by (CV-14).
+export const CHAT_COPY_VERSION = 2;
 
 /** A message sent while offline or not yet confirmed (CH64). */
 export type ChatOutboxEntry = {

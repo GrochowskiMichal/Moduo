@@ -121,6 +121,9 @@ export type ChatMessage = {
   reopenedBy: string | null;
   pinnedAt: string | null;
   pinnedBy: string | null;
+  /** Marked as a decision (CV-14): a quiet label, Details' Decisions, the items it's linked to. */
+  decisionAt: string | null;
+  decisionBy: string | null;
   editedAt: string | null;
   deletedAt: string | null;
   /** v1 only; the store never reads it (it equals `id` until CV-23). */
@@ -216,6 +219,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.message_restore",
   "chat.wrap_up",
   "chat.reopen",
+  "chat.decision",
   "chat.move",
 ] as const;
 
@@ -370,6 +374,8 @@ export type ChatRuntime = {
   remove(id: string): Promise<ChatResult<ChatMessage>>;
   react(args: { id: string; key: string; on: boolean }): Promise<ChatResult<ChatMessage>>;
   pin(args: { id: string; pinned: boolean }): Promise<ChatResult<ChatMessage>>;
+  /** Mark or unmark a message as a decision (CV-14). */
+  markDecision(args: { id: string; on: boolean }): Promise<ChatResult<ChatMessage>>;
   /** Wrap up a chain (CV-12): `settledId` is the reply that settled it. */
   wrapUp(args: {
     rootId: string;
@@ -442,6 +448,8 @@ export type ChatRuntime = {
   listChannelMembers(channelId: string): Promise<ChatMember[]>;
   unreadCounts(workspaceId: string): Promise<ChatUnread[]>;
   listPinned(channelId: string): Promise<ChatMessage[]>;
+  /** The conversation's decisions (Details), newest marked first. */
+  listDecisions(channelId: string): Promise<ChatMessage[]>;
   /** A conversation's quiet history (Details, AC15.5): its logged changes, newest first. */
   history(args: {
     workspaceId: string;
@@ -509,6 +517,8 @@ export type ChatRuntime = {
   messageRefs(ids: readonly string[]): Promise<ChatMessageRef[]>;
   /** The "Mentioned in" lines you can read for an item you can open. */
   conversationsForItem(type: string, id: string): Promise<ChatItemConversation[]>;
+  /** The decisions an item shows to this reader (CV-14, CH52). */
+  decisionsForItem(type: string, id: string): Promise<ChatItemDecision[]>;
   /** The tasks, notes and events made from these messages ("Became a task"). */
   madeFrom(messageIds: readonly string[]): Promise<ChatMadeFrom[]>;
 };
@@ -545,6 +555,28 @@ export type ChatItemConversation = {
   /** Your unread messages in a linked conversation (0 when you aren't in it). */
   unread: number;
   archived: boolean;
+};
+
+/**
+ * A decision shown on an item ("Decided with Mike · Oct 12: …", CV-14): from a
+ * conversation linked to the item, or one whose decision refers to it. Only
+ * conversations the reader can read.
+ */
+export type ChatItemDecision = {
+  messageId: string;
+  /** Its chain's root when it's a reply (opens the chain beside the conversation). */
+  parentId: string | null;
+  channelId: string;
+  workspaceId: string;
+  channelKind: ChatChannelKind;
+  /** Null for a direct message. */
+  channelName: string | null;
+  /** A direct message's other people, by name (empty for a channel). */
+  withNames: string[];
+  decisionAt: string;
+  /** The stored-form excerpt (`format_version` 2). */
+  excerpt: string;
+  createdAt: string;
 };
 
 /** An item made from a message (a `spawned-from` link to it). */

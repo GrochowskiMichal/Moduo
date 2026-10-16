@@ -584,6 +584,87 @@ describe("a paused plan (CV-8a, CH4a)", () => {
   });
 });
 
+describe("decisions (CV-14)", () => {
+  it("marking shows at once, unmarking takes it back, and a refusal rolls it back", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const row = server.post(uuid(1), C, { authorId: YOU, body: "we go with Stripe" });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    const shown = () => store.getSnapshot().windows[C]!.rows.find((r) => r.id === row.id)!;
+
+    expect(await store.markDecision(row.id, true)).toEqual({ ok: true });
+    expect(shown().decisionAt).not.toBeNull();
+    expect(shown().decisionBy).toBe(ME);
+    expect(await store.markDecision(row.id, false)).toEqual({ ok: true });
+    expect(shown().decisionAt).toBeNull();
+
+    server.refuse.set("markDecision", {
+      code: "42501",
+      message: "Your role can't mark decisions here.",
+    });
+    const res = await store.markDecision(row.id, true);
+    expect(res).toEqual({
+      ok: false,
+      offline: false,
+      message: "Your role can't mark decisions here.",
+    });
+    expect(shown().decisionAt).toBeNull();
+  });
+
+  it("Wrap up with “Also mark as decision” marks the settling reply; without it, nothing", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const root = server.post(uuid(1), C, { authorId: ME, body: "Which logo?", replyCount: 2 });
+    const r1 = server.post(uuid(2), C, { authorId: YOU, body: "round", parentId: root.id });
+    const r2 = server.post(uuid(3), C, { authorId: YOU, body: "square", parentId: root.id });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+
+    expect(await store.wrapUp(root.id, r1.id)).toEqual({ ok: true });
+    expect(store.rowById(r1.id)?.decisionAt ?? null).toBeNull();
+    expect(await store.wrapUp(root.id, r2.id, true)).toEqual({ ok: true });
+    expect(store.rowById(r2.id)?.decisionAt).not.toBeNull();
+    expect(store.rowById(root.id)?.settledId).toBe(r2.id);
+  });
+
+  it("the wrap-up's Undo is one op: the chain opens and the decision it made goes with it", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    const root = server.post(uuid(1), C, { authorId: ME, body: "Which logo?", replyCount: 2 });
+    const r1 = server.post(uuid(2), C, { authorId: YOU, body: "round", parentId: root.id });
+    const r2 = server.post(uuid(3), C, { authorId: YOU, body: "square", parentId: root.id });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    const calls = () => server.calls.filter((c) => c === "reopen" || c === "markDecision").length;
+
+    expect(await store.wrapUp(root.id, r1.id, true)).toEqual({ ok: true });
+    expect(store.rowById(r1.id)?.decisionAt).not.toBeNull();
+    const before = calls();
+    expect(await store.reopen(root.id)).toEqual({ ok: true });
+    expect(calls() - before).toBe(1);
+    expect(store.rowById(root.id)?.wrappedAt ?? null).toBeNull();
+    expect(store.rowById(r1.id)?.decisionAt ?? null).toBeNull();
+
+    // A decision marked before the wrap-up stays.
+    expect(await store.markDecision(r2.id, true)).toEqual({ ok: true });
+    expect(await store.wrapUp(root.id, r2.id, true)).toEqual({ ok: true });
+    expect(await store.reopen(root.id)).toEqual({ ok: true });
+    expect(store.rowById(r2.id)?.decisionAt).not.toBeNull();
+
+    // A refused Undo changes neither.
+    expect(await store.markDecision(r2.id, false)).toEqual({ ok: true });
+    expect(await store.wrapUp(root.id, r1.id, true)).toEqual({ ok: true });
+    server.refuse.set("reopen", { code: "42501", message: "No." });
+    expect((await store.reopen(root.id)).ok).toBe(false);
+    expect(store.rowById(root.id)?.wrappedAt).not.toBeNull();
+    expect(store.rowById(r1.id)?.decisionAt).not.toBeNull();
+  });
+});
+
 describe("Move to… (CV-16)", () => {
   it("asks first when the op answers confirm; moved rows leave at once and land where they went", async () => {
     const { server, store } = setup();

@@ -168,6 +168,11 @@ test("from the project's ⋯ and the company's hub: Start a conversation, then t
   await page.getByRole("menuitem", { name: "Start a conversation" }).click();
   await expect(page).toHaveURL(/\/chat/, { timeout: 20_000 });
   await expect(page.locator("[data-slot='link-chip']")).toContainText(launch);
+  // CV-14 (AC5.2): a decision in the linked channel reaches the project's overview.
+  const launchChannel = new URL(page.url()).searchParams.get("c") ?? "";
+  expect(launchChannel).toBeTruthy();
+  const decisionId = await sendAs(room.owner, launchChannel, `we go with Stripe ${tag}`);
+  await rpc(room.owner, "chat_op_mark_decision", { p_message_id: decisionId, p_on: true });
 
   // Back on the project: its overview shows "Conversation: Launch …".
   await page.goto(`/tasks?id=${launchId}`);
@@ -177,6 +182,11 @@ test("from the project's ⋯ and the company's hub: Start a conversation, then t
     `Conversation: ${launch}`,
     { timeout: 20_000 },
   );
+  // …and the decision: "Decided in Launch … · Oct 16: we go with Stripe …".
+  await expect(page.locator("[data-slot='item-decisions']").first()).toContainText(
+    new RegExp(`Decided in .+ · .+: we go with Stripe ${tag}`),
+    { timeout: 20_000 },
+  );
 
   // The company's hub: ⋯ → Start a conversation, then its Linked shows the line.
   await page.goto(`/contacts?type=company&id=${companyId}`);
@@ -184,9 +194,18 @@ test("from the project's ⋯ and the company's hub: Start a conversation, then t
   await page.getByRole("menuitem", { name: "Start a conversation" }).click();
   await expect(page).toHaveURL(/\/chat/, { timeout: 20_000 });
   await expect(page.locator("[data-slot='link-chip']")).toContainText(company);
+  // CV-14 (AC3.3, the hub half): a decision in the company's channel shows on its hub.
+  const companyChannel = new URL(page.url()).searchParams.get("c") ?? "";
+  expect(companyChannel).toBeTruthy();
+  const companyDecision = await sendAs(room.owner, companyChannel, `renew in March ${tag}`);
+  await rpc(room.owner, "chat_op_mark_decision", { p_message_id: companyDecision, p_on: true });
   await page.goto(`/contacts?type=company&id=${companyId}`);
   await expect(page.locator("[data-slot='item-conversation']").first()).toContainText(
     `Conversation: ${company}`,
+    { timeout: 20_000 },
+  );
+  await expect(page.locator("[data-slot='item-decisions']").first()).toContainText(
+    new RegExp(`Decided in .+ · .+: renew in March ${tag}`),
     { timeout: 20_000 },
   );
 });

@@ -9,8 +9,8 @@ import { rest, rpc, runTag, signInPage } from "./support/local-stack";
  *   scripts/agent/e2e.sh tests/chat-details.spec.ts
  * A Duo room of its own (details-owner@ and details-member@moduo.local). New
  * conversation makes a channel with someone in it; Details lists its people
- * (you first, with presence), Pinned, the empty Decisions and Reply chains
- * frames and a quiet history of every logged change; a pin opens in context
+ * (you first, with presence), Pinned, the empty Reply chains frame, Decisions
+ * (empty, then one marked from ⋯, CV-14) and a quiet history of every logged change; a pin opens in context
  * and a person opens their card; Browse channels joins a public channel; a
  * direct message with only yourself offers a note; a viewer can't start one.
  */
@@ -80,7 +80,7 @@ test("Details: history, decisions, chains, people", async ({ page }) => {
   // The toolbar counts the people Details read.
   await expect(page.locator('[data-slot="conversation-toolbar"]')).toContainText("2 people");
 
-  // Decisions and Reply chains: their frames, empty until CV-14 / CV-12.
+  // Decisions and Reply chains: empty frames until something is marked or answered.
   await expect(details(page).locator('[data-slot="details-decisions"]')).toHaveText(
     "Nothing marked as a decision yet.",
   );
@@ -104,6 +104,19 @@ test("Details: history, decisions, chains, people", async ({ page }) => {
   await expect(history.locator('[data-op="chat.pin"]')).toContainText(
     `${MEMBER.name} pinned a message`,
   );
+
+  // ⋯ → Mark as decision (CV-14, AC8.7): the quiet label, Details' Decisions, the history.
+  const decided = page.getByRole("article").filter({ hasText: `staging is up ${tag}` });
+  await decided.hover();
+  await decided.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: /Mark as decision/ }).click();
+  await expect(decided.locator('[data-slot="message-decision"]')).toHaveText("Decision", {
+    timeout: 15_000,
+  });
+  const decisionRows = details(page).locator('[data-slot="details-decisions"] button');
+  await expect(decisionRows).toHaveCount(1, { timeout: 15_000 });
+  await expect(decisionRows).toContainText(`staging is up ${tag}`);
+  await expect(history.locator('[data-op="chat.decision"]')).toContainText("You marked a decision");
 
   // A pin opens in context: an item with "← Details" and "Open in conversation".
   await pinned.click();

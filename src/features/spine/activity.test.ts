@@ -178,6 +178,15 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("chat.channel_restore"))).toBe("restored this channel");
   });
 
+  it("renders a decision marked and taken back (CV-14)", () => {
+    expect(spineActivityLine(entry("chat.decision", { message_id: "m1", on: true }))).toBe(
+      "marked a decision",
+    );
+    expect(spineActivityLine(entry("chat.decision", { message_id: "m1", on: false }))).toBe(
+      "took back a decision",
+    );
+  });
+
   it("renders a reply chain's wrap-up, reopen and undo (CV-12)", () => {
     const m = { message_id: "m1" };
     expect(spineActivityLine(entry("chat.wrap_up", { ...m, settled_id: "m2" }))).toBe(

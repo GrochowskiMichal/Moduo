@@ -105,6 +105,8 @@ export function message(
     reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
+    decisionAt: null,
+    decisionBy: null,
     editedAt: null,
     deletedAt: null,
     clientId: null,
@@ -363,26 +365,50 @@ export class FakeChatServer {
             pinnedBy: pinned ? ME : null,
           })),
         ),
-      wrapUp: ({ rootId, settledId }) =>
-        this.gate("wrapUp", () =>
-          this.mine(rootId, () => ({
-            wrappedAt: this.now(),
+      markDecision: ({ id, on }) =>
+        this.gate("markDecision", () =>
+          this.mine(id, () => ({
+            decisionAt: on ? this.now() : null,
+            decisionBy: on ? ME : null,
+          })),
+        ),
+      wrapUp: ({ rootId, settledId, markDecision }) =>
+        this.gate("wrapUp", () => {
+          // "Also mark as decision" (CV-14) marks the settling reply, at the wrap-up's own time.
+          const at = this.now();
+          if (markDecision && !this.rows.get(settledId)?.decisionAt) {
+            this.mine(settledId, () => ({ decisionAt: at, decisionBy: ME }));
+          }
+          return this.mine(rootId, () => ({
+            wrappedAt: at,
             wrappedBy: ME,
             settledId,
             reopenedAt: null,
             reopenedBy: null,
-          })),
-        ),
+          }));
+        }),
       reopen: (rootId) =>
-        this.gate("reopen", () =>
-          this.mine(rootId, () => ({
+        this.gate("reopen", () => {
+          // Like chat_op_reopen: the wrapper's reopen also takes back the decision
+          // that wrap-up made (same person, the wrap-up's own time), in one op.
+          const root = this.rows.get(rootId);
+          const settled = root?.settledId ? this.rows.get(root.settledId) : undefined;
+          if (
+            root?.wrappedAt &&
+            root.wrappedBy === ME &&
+            settled?.decisionBy === ME &&
+            settled.decisionAt === root.wrappedAt
+          ) {
+            this.mine(settled.id, () => ({ decisionAt: null, decisionBy: null }));
+          }
+          return this.mine(rootId, () => ({
             wrappedAt: null,
             wrappedBy: null,
             settledId: null,
             reopenedAt: this.now(),
             reopenedBy: ME,
-          })),
-        ),
+          }));
+        }),
       attachToChain: ({ messageId, replyToId }) =>
         this.gate("attachToChain", () => {
           const target = this.rows.get(replyToId);

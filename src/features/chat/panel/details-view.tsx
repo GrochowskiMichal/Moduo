@@ -9,7 +9,7 @@
 // switch, Private one way, Name and topic, Archive, Delete). A viewer gets the
 // same view without what they can't do.
 
-import { MoreHorizontal, Pin, Plus } from "lucide-react";
+import { Flag, MoreHorizontal, Pin, Plus } from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
 
@@ -62,6 +62,8 @@ export type DetailsViewProps = {
   statusOf?: (id: string) => string;
   members: readonly ChatMember[] | null;
   pinned: readonly ChatMessage[] | null;
+  /** Marked decisions, newest first (CV-14); null while they load. */
+  decisions?: readonly ChatMessage[] | null;
   history: readonly ChatHistoryEntry[] | null;
   /** Archive and unarchive (a manager or an admin, while the plan allows writing). */
   canArchive: boolean;
@@ -104,6 +106,7 @@ export function DetailsView({
   statusOf,
   members,
   pinned,
+  decisions = [],
   history,
   canArchive,
   managers = null,
@@ -336,9 +339,32 @@ export function DetailsView({
         )}
       </Section>
 
-      {/* Marked decisions: CV-14 fills this. */}
-      <Section title="Decisions">
-        <Quiet data-slot="details-decisions">Nothing marked as a decision yet.</Quiet>
+      {/* Marked decisions (CV-14; round 5 frame 4): the flag, the words, the day it was marked. */}
+      <Section title="Decisions" count={decisions?.length || undefined}>
+        {decisions === null ? (
+          <Quiet>Loading…</Quiet>
+        ) : decisions.length === 0 ? (
+          <Quiet data-slot="details-decisions">Nothing marked as a decision yet.</Quiet>
+        ) : (
+          <ul className="flex flex-col gap-px" data-slot="details-decisions">
+            {decisions.map((m) => (
+              <li key={m.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpenMessage(m)}
+                  data-message={m.id}
+                  className={ROW_BUTTON}
+                >
+                  <Flag className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-foreground">{excerpt(m)}</span>
+                  <span className="shrink-0 text-xs text-subtle-foreground tabular-nums">
+                    {formatDate(m.decisionAt ?? m.createdAt)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
 
       <Section title="Pinned" count={pinned?.length || undefined}>

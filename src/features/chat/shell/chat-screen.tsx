@@ -763,18 +763,38 @@ export function ChatScreen({
     },
     [store],
   );
+  // Mark as decision / Unmark (CV-14): ⋯ and ⇧D in the stream, "Unmark" in a chain.
+  const toggleDecision = useCallback(
+    (m: ChatMessage) => {
+      if (!store) return;
+      const on = !m.decisionAt;
+      void store.markDecision(m.id, on).then((res) => {
+        if (!failed(res, "Couldn't update the decision.")) {
+          toast(on ? "Marked as a decision" : "No longer a decision");
+        }
+      });
+    },
+    [store],
+  );
   const wrapUp = useCallback(
-    (rootId: string, settledId: string) => {
+    (rootId: string, settledId: string, markDecision: boolean) => {
       if (!store) return;
       setWrapFor(null);
-      void store.wrapUp(rootId, settledId).then((res) => {
+      // "Also mark as decision" (CV-14): Undo takes back only a decision this wrap-up made
+      // (the server tells them apart; the toast only reads it back).
+      const prior =
+        store.rowById(settledId) ??
+        store.getSnapshot().chains[rootId]?.replies.find((r) => r.id === settledId);
+      const newDecision = markDecision && !!prior && !prior.decisionAt;
+      void store.wrapUp(rootId, settledId, markDecision).then((res) => {
         if (failed(res, "Couldn't wrap it up.")) return;
-        toast("Wrapped up", {
+        toast(newDecision ? "Wrapped up · marked as a decision" : "Wrapped up", {
           id: `chat-wrap-${rootId}`,
           duration: WRAP_UNDO_MS,
           action: {
             label: "Undo",
             onClick: () =>
+              // One op: the server takes back the decision this wrap-up made with it.
               void store.reopen(rootId).then((r) => failed(r, "Couldn't undo the wrap-up.")),
           },
         });
@@ -1309,6 +1329,7 @@ export function ChatScreen({
                 }
               });
             }}
+            onDecision={toggleDecision}
             onTask={makeTaskFrom}
             onRemind={(m) => setRemindFor({ messageId: m.id })}
             onReplyPrivately={
@@ -1541,6 +1562,11 @@ export function ChatScreen({
               onPersonClick={openPerson}
               onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
               onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
+              onUnmarkDecision={
+                channel && canWriteHere && root?.channelId === channel.id
+                  ? toggleDecision
+                  : undefined
+              }
               renderComposer={
                 channel && canWriteHere && root?.channelId === channel.id
                   ? (placeholder) => (
@@ -1616,6 +1642,7 @@ export function ChatScreen({
             statusOf={statusOf}
             members={details.members}
             pinned={details.pinned}
+            decisions={details.decisions}
             history={details.history}
             canArchive={
               channel.kind === "channel" &&
@@ -1751,8 +1778,10 @@ export function ChatScreen({
         }}
         replies={wrapReplies ?? []}
         loaded={!!wrapFor && !!snap.chains[wrapFor]?.loaded}
+        linked={!!channel?.link}
+        canDecide={canWriteHere}
         personOf={personOf}
-        onConfirm={(settledId) => wrapFor && wrapUp(wrapFor, settledId)}
+        onConfirm={(settledId, markDecision) => wrapFor && wrapUp(wrapFor, settledId, markDecision)}
       />
       <ReplyToDialog
         open={!!attachFor}
