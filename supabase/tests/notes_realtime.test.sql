@@ -183,6 +183,18 @@ BEGIN
   v := test.writes('E', 'note:' || test.id('N')::text, 'broadcast');
   PERFORM test.ok(v LIKE '42501 %', 'topic: there is no per-note topic to send on', v);
 
+  -- ── A live pull skips the snapshot while doc_version is unchanged, so
+  -- every function that writes notes.doc_state (an UPDATE … SET) must bump
+  -- doc_version in the same statement.
+  PERFORM test.ok(NOT EXISTS (
+      SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.prosrc ~* '(\mset|,)\s*doc_state\s*='
+        AND p.prosrc !~* '(\mset|,)\s*doc_version\s*='),
+    'drift: every function that writes doc_state also bumps doc_version',
+    (SELECT string_agg(p.proname, ', ') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.prosrc ~* '(\mset|,)\s*doc_state\s*=' AND p.prosrc !~* '(\mset|,)\s*doc_version\s*='));
+
   -- ── Grants ───────────────────────────────────────────────────────────────
   PERFORM test.ok(has_function_privilege('authenticated', 'public.notes_live_here(uuid, text, boolean)', 'EXECUTE')
               AND NOT has_function_privilege('anon', 'public.notes_live_here(uuid, text, boolean)', 'EXECUTE')

@@ -384,15 +384,21 @@ export class NotesSyncEngineV2 {
         sinceUpdateId: s.state.lastPulledUpdateId,
         knownDocVersion: s.docVersion,
       });
+      // Resolved before applying anything, so snapshot + rows apply in one go.
+      const ownClient = await this.resolveClientId();
       if (res.snapshotB64) {
         try {
           Y.applyUpdate(s.doc, decodeBase64ToUint8(res.snapshotB64), "remote");
         } catch (e) {
+          // The doc lacks what the snapshot folded: never compact over it.
           console.warn("[notes-sync] bad remote snapshot ignored", e);
+          s.compactVeto = true;
         }
       }
       const ids: number[] = [];
+      let ownRows = 0;
       for (const u of res.updates) {
+        if (u.clientId === ownClient) ownRows += 1;
         // Own echoes apply too — Yjs makes it a no-op when the doc already
         // has them, and a cache-evicted client NEEDS them (skipping by
         // clientId lost history whenever local persistence didn't survive).
@@ -414,7 +420,7 @@ export class NotesSyncEngineV2 {
           ids.push(u.id);
         }
       }
-      s.state = advanceCursor(s.state, ids);
+      s.state = advanceCursor(s.state, ids, ownRows);
       s.docVersion = res.docVersion;
       await writeNoteState(s.state);
       s.synced = true;
@@ -588,7 +594,7 @@ export class NotesSyncEngineV2 {
       if (s.compactVeto) return; // the pull we just did may have tripped it
       const snapshot = encodeUint8ToBase64(Y.encodeStateAsUpdate(s.doc));
       const body = tryDeriveNoteBody(s.doc);
-      await this.runtime.notesV2.saveSnapshot({
+      const saved = await this.runtime.notesV2.saveSnapshot({
         workspaceId: this.workspaceId,
         noteId: s.noteId,
         snapshotB64: snapshot,
@@ -597,6 +603,9 @@ export class NotesSyncEngineV2 {
         bodyMd: body?.md ?? null,
       });
       s.state = { ...s.state, updatesSinceCompact: 0 };
+      // Our own fold: exact under the server's row lock, so the next live
+      // pull doesn't download the snapshot we just wrote.
+      if (saved?.docVersion != null) s.docVersion = saved.docVersion;
       await writeNoteState(s.state);
     } catch (e) {
       // Compaction is an optimization — a failure must never lose edits.

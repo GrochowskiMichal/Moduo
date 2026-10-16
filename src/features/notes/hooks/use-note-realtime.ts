@@ -46,9 +46,11 @@ export function useNoteRealtime({ notes, engine, noteId, enabled, selfUserId, pe
 
     engine.getOrCreateSession(noteId);
     // One pull at a time: saves that land meanwhile ask for one more, after.
+    let disposed = false;
     let pulling = false;
     let again = false;
     const pull = () => {
+      if (disposed) return;
       if (pulling) {
         again = true;
         return;
@@ -69,13 +71,8 @@ export function useNoteRealtime({ notes, engine, noteId, enabled, selfUserId, pe
       onViewers: setViewerIds,
     });
 
-    // Closing the tab: say goodbye if the request still gets out (best
-    // effort; otherwise the server forgets the tab after a minute).
-    const onPageHide = () => live.close();
-    window.addEventListener("pagehide", onPageHide);
-
     return () => {
-      window.removeEventListener("pagehide", onPageHide);
+      disposed = true;
       live.close();
       setViewerIds(NOBODY);
     };
