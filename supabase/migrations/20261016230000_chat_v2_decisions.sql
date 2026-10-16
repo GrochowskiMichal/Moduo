@@ -19,6 +19,8 @@
 --      Activity `chat.decision` with ids only; no notice (quiet).
 --   3. chat_op_wrap_up (CV-12's live body): "Also mark as decision" now marks
 --      the settling reply, under the same rule as 2.
+--   3b. chat_op_reopen (CV-12's live body): the wrap-up toast's Undo also
+--      takes back the decision that wrap-up made, in the same transaction.
 --   4. chat_decisions_for_item(type, id): the decisions to show on an item
 --      ("Decided with Mike · Oct 12: …"), from the conversations linked to it
 --      (all their decisions) or that mention it (the decisions whose own text
@@ -73,7 +75,9 @@ BEGIN
     RAISE EXCEPTION 'Say whether to mark or unmark it.' USING ERRCODE = '22023';
   END IF;
   SELECT * INTO v_msg FROM public.chat_messages WHERE id = p_message_id FOR UPDATE;
-  IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL THEN
+  -- A message you can't read answers like one that isn't there.
+  IF v_msg.id IS NULL OR v_msg.deleted_at IS NOT NULL
+     OR NOT public.chat_can_read_channel(v_msg.channel_id) THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   -- Signed in, in the workspace, on a plan with chat, reading the conversation.
@@ -113,6 +117,9 @@ DECLARE
   v_root public.chat_messages;
   v_channel public.chat_channels;
   v_settled public.chat_messages;
+  -- One clock for the wrap-up and the decision it makes: the toast's Undo
+  -- (chat_op_reopen) recognises that decision by it.
+  v_at timestamptz := clock_timestamp();
 BEGIN
   v_root := public.chat__chain_root(p_root_id);
   v_channel := public.chat_op__channel(v_root.channel_id);
@@ -134,7 +141,7 @@ BEGIN
   END IF;
   IF coalesce(p_mark_decision, false) AND v_settled.decision_at IS NULL THEN
     UPDATE public.chat_messages
-       SET decision_at = now(), decision_by = v_me
+       SET decision_at = v_at, decision_by = v_me
      WHERE id = v_settled.id
     RETURNING * INTO v_settled;
     PERFORM public.module_activity_log(v_settled.workspace_id, 'chat', 'chat_channel', v_settled.channel_id,
@@ -145,7 +152,7 @@ BEGIN
   END IF;
   -- The clock, not the transaction's start: the Undo window is measured on it.
   UPDATE public.chat_messages
-     SET wrapped_at = clock_timestamp(), wrapped_by = v_me, settled_id = v_settled.id,
+     SET wrapped_at = v_at, wrapped_by = v_me, settled_id = v_settled.id,
          reopened_at = NULL, reopened_by = NULL
    WHERE id = v_root.id
   RETURNING * INTO v_root;
@@ -153,6 +160,46 @@ BEGIN
     'chat.wrap_up', jsonb_build_object('message_id', v_root.id, 'settled_id', v_settled.id,
                                        'mark_decision', coalesce(p_mark_decision, false)));
   RETURN v_root;
+END;
+$function$;
+
+-- ── 3b. Reopen: the toast's Undo also takes back the decision its wrap-up made
+-- (CV-12's live body). The Undo is chat__reopen_chain's: the person who
+-- wrapped it, within 10 s. The decision it clears is the one that wrap-up set
+-- (same person, the wrap-up's own time), never one marked before or by someone
+-- else; one transaction, so the chain and the decision come back together. No
+-- "took back a decision" line: "undid a wrap-up" says it.
+CREATE OR REPLACE FUNCTION public.chat_op_reopen(p_root_id uuid)
+ RETURNS public.chat_messages
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_me uuid := auth.uid();
+  v_root public.chat_messages;
+  v_channel public.chat_channels;
+BEGIN
+  v_root := public.chat__chain_root(p_root_id);
+  v_channel := public.chat_op__channel(v_root.channel_id);
+  IF v_channel.archived_at IS NOT NULL THEN
+    RAISE EXCEPTION 'This channel is archived.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.chat__may_wrap(v_channel, v_root, v_me) THEN
+    RAISE EXCEPTION 'Only whoever started the chain, the channel''s managers and admins can reopen it.'
+      USING ERRCODE = '42501';
+  END IF;
+  -- CV-14: the same Undo test chat__reopen_chain applies (p_at is null here).
+  IF v_root.wrapped_at IS NOT NULL AND v_root.settled_id IS NOT NULL
+     AND v_root.wrapped_by = v_me
+     AND clock_timestamp() - v_root.wrapped_at <= interval '10 seconds' THEN
+    UPDATE public.chat_messages
+       SET decision_at = NULL, decision_by = NULL
+     WHERE id = v_root.settled_id
+       AND decision_at = v_root.wrapped_at
+       AND decision_by = v_me;
+  END IF;
+  RETURN public.chat__reopen_chain(v_root, v_me, NULL);
 END;
 $function$;
 
@@ -221,7 +268,7 @@ AS $function$
 $function$;
 
 -- ── 5. Grants (re-stated by name; DROP + CREATE reset them) ─────────────────
--- chat_op_wrap_up's are CV-12's (…_chat_v2_chains.sql): signed-in people and
+-- chat_op_wrap_up's and chat_op_reopen's are CV-12's (…_chat_v2_chains.sql): signed-in people and
 -- the service role, never anon.
 DO $$
 DECLARE
@@ -230,6 +277,7 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'chat_op_mark_decision(uuid, boolean)',
     'chat_op_wrap_up(uuid, uuid, boolean)',
+    'chat_op_reopen(uuid)',
     'chat_decisions_for_item(text, uuid)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);

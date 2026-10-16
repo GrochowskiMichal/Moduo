@@ -40,8 +40,16 @@ export function decidedLead(
   return `Decided ${decidedWhere(row)} · ${formatDate(row.decisionAt, now)}`;
 }
 
-/** The item's decisions as the reader sees them (empty when chat is off for them). */
-export function useItemDecisions(entityType: string, entityId: string): ChatItemDecision[] {
+/**
+ * The item's decisions as the reader sees them (empty when chat is off for
+ * them). `enabled` false (the item has no conversation the reader can see, so
+ * it has no decision either) skips the read; it runs once one arrives.
+ */
+export function useItemDecisions(
+  entityType: string,
+  entityId: string,
+  enabled = true,
+): ChatItemDecision[] {
   const { runtime } = useAuth();
   const workspace = useContext(WorkspaceContext);
   const selectedWorkspaceId = workspace?.selectedWorkspaceId ?? null;
@@ -50,7 +58,7 @@ export function useItemDecisions(entityType: string, entityId: string): ChatItem
 
   useEffect(() => {
     setRows([]);
-    if (!runtime?.chat || !canChat || !entityId) return;
+    if (!runtime?.chat || !canChat || !entityId || !enabled) return;
     let live = true;
     const read = () =>
       runtime.chat
@@ -66,7 +74,7 @@ export function useItemDecisions(entityType: string, entityId: string): ChatItem
       live = false;
       window.removeEventListener("focus", read);
     };
-  }, [runtime, canChat, entityType, entityId, selectedWorkspaceId]);
+  }, [runtime, canChat, entityType, entityId, selectedWorkspaceId, enabled]);
 
   return rows;
 }
@@ -88,8 +96,17 @@ const LINE =
   "flex min-w-0 items-center gap-1.5 rounded-sm text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** The item's decisions, one quiet line each (nothing when there are none). */
-export function DecisionLines({ entityType, entityId }: { entityType: string; entityId: string }) {
-  const rows = useItemDecisions(entityType, entityId);
+export function DecisionLines({
+  entityType,
+  entityId,
+  enabled = true,
+}: {
+  entityType: string;
+  entityId: string;
+  /** False while the item has no conversation the reader can see: no read. */
+  enabled?: boolean;
+}) {
+  const rows = useItemDecisions(entityType, entityId, enabled);
   // References inside the words read as names for this reader ("Private item"
   // when they can't open one), never as raw links.
   const refs = useMemo(() => {

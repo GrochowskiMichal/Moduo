@@ -7,7 +7,7 @@
 // `conversation-of` links from a conversation) stay out of the item's link
 // cards (spine/rollup.ts).
 
-import { useContext, useEffect, useState } from "react";
+import { type ReactNode, useContext, useEffect, useState } from "react";
 
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import { formatDate } from "@/lib/time-format";
@@ -101,17 +101,23 @@ function iconFor(r: ChatItemConversation) {
 const LINE =
   "flex min-w-0 items-center gap-1.5 rounded-sm text-left text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** "Conversation: Acme · 3 new" lines alone (the project overview's slot, CV-13). */
-export function ConversationLines({
-  entityType,
-  entityId,
-}: {
-  entityType: string;
-  entityId: string;
-}) {
-  const { linked } = itemConversationLines(useItemConversations(entityType, entityId));
-  if (linked.length === 0) return null;
-  return <LinkedLines rows={linked} />;
+/**
+ * The project overview's two chat slots from one read: "Conversation: Acme ·
+ * 3 new" lines (CV-13) and its decisions (CV-14), read only when the item has
+ * a conversation the reader can see.
+ */
+export function useItemChatSlots(
+  entityType: string,
+  entityId: string,
+): { conversation: ReactNode; decisions: ReactNode } {
+  const rows = useItemConversations(entityType, entityId);
+  const { linked } = itemConversationLines(rows);
+  return {
+    conversation: linked.length > 0 ? <LinkedLines rows={linked} /> : null,
+    decisions: (
+      <DecisionLines entityType={entityType} entityId={entityId} enabled={rows.length > 0} />
+    ),
+  };
 }
 
 function LinkedLines({ rows }: { rows: readonly ChatItemConversation[] }) {
@@ -144,9 +150,12 @@ export function MentionedInLines({
   entityType: string;
   entityId: string;
 }) {
-  const { linked, mentioned } = itemConversationLines(useItemConversations(entityType, entityId));
-  // The item's decisions (CV-14) follow its conversations.
-  const decisions = <DecisionLines entityType={entityType} entityId={entityId} />;
+  const rows = useItemConversations(entityType, entityId);
+  const { linked, mentioned } = itemConversationLines(rows);
+  // The item's decisions (CV-14) follow its conversations; with none, there's nothing to read.
+  const decisions = (
+    <DecisionLines entityType={entityType} entityId={entityId} enabled={rows.length > 0} />
+  );
   if (linked.length === 0 && mentioned.length === 0) return decisions;
   const now = new Date();
   return (

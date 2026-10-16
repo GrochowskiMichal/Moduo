@@ -28,6 +28,8 @@ export type ChainItemProps = {
   onWrapUp?: () => void;
   onReopen?: () => void;
   onPersonClick?: (userId: string) => void;
+  /** Take back a decision in the chain (CV-14; absent: you can't post here). */
+  onUnmarkDecision?: (m: ChatMessage) => void;
   /** The chain's own box (absent: you can't post here). */
   renderComposer?: (placeholder: string) => ReactNode;
 };
@@ -42,6 +44,7 @@ export function ChainItem({
   onWrapUp,
   onReopen,
   onPersonClick,
+  onUnmarkDecision,
   renderComposer,
 }: ChainItemProps) {
   useEffect(() => onLoad(rootId), [onLoad, rootId]);
@@ -97,7 +100,7 @@ export function ChainItem({
   }
 
   const ctx: BodyContext = { selfId, personOf, onPersonClick };
-  const handlers = { onPersonClick, onJumpTo: jumpTo };
+  const handlers = { onPersonClick, onJumpTo: jumpTo, onUnmarkDecision };
   const people = [root.authorId, ...replies.map((r) => r.authorId)].filter(
     (id, i, all): id is string => !!id && all.indexOf(id) === i,
   );

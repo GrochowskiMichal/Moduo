@@ -55,8 +55,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
-import { DecisionLines } from "../../chat/decisions";
-import { ConversationLines } from "../../chat/mentioned-in";
+import { useItemChatSlots } from "../../chat/mentioned-in";
 import { useStartConversation } from "../../chat/start-conversation";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
@@ -2302,6 +2301,8 @@ export function TasksPlanView({
         api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
         null)
       : scopeProject);
+  // The overview's conversation and decision lines, from one read (CV-13, CV-14).
+  const projectChat = useItemChatSlots("project", panelProject?.id ?? "");
   const projectView = panelProject ? (
     <ProjectPanel
       project={panelProject}
@@ -2318,10 +2319,7 @@ export function TasksPlanView({
       }}
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
-      chat={{
-        conversation: <ConversationLines entityType="project" entityId={panelProject.id} />,
-        decisions: <DecisionLines entityType="project" entityId={panelProject.id} />,
-      }}
+      chat={projectChat}
     />
   ) : null;
   // Nothing selected inside a project, or a task in the centre: the panel

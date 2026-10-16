@@ -91,7 +91,10 @@ function WrapUpForm({
   onConfirm: (settledId: string, markDecision: boolean) => void;
 }) {
   const [picked, setPicked] = useState(replies[replies.length - 1]?.id ?? "");
-  const [markDecision, setMarkDecision] = useState(linked && canDecide);
+  // The tick follows the conversation's link (its default) until you change it;
+  // without post rights there's no decision to make.
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const markDecision = canDecide && (chosen ?? linked);
   const base = useId();
   return (
     <form
@@ -136,7 +139,7 @@ function WrapUpForm({
           <Checkbox
             id={`${base}-decision`}
             checked={markDecision}
-            onCheckedChange={(v) => setMarkDecision(v === true)}
+            onCheckedChange={(v) => setChosen(v === true)}
           />
           Also mark as decision
         </label>

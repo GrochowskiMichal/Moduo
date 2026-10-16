@@ -1942,14 +1942,7 @@ export class ChatStore {
       () => this.transport.wrapUp({ rootId, settledId, markDecision }),
     );
     // "Also mark as decision" (CV-14): the settling reply changed on the server too.
-    if (res.ok && markDecision) {
-      const settled = await this.transport.message(settledId);
-      if (settled.data) {
-        this.landRow(settled.data);
-        this.chainCache.clear();
-        this.notify();
-      }
-    }
+    if (res.ok && markDecision) await this.readBack(settledId);
     return res;
   }
 
@@ -1967,13 +1960,28 @@ export class ChatStore {
     );
   }
 
-  /** Reopen a wrapped chain (also the wrap-up toast's Undo). */
-  reopen(rootId: string): Promise<ChatWriteResult> {
-    return this.write(
+  /**
+   * Reopen a wrapped chain (also the wrap-up toast's Undo). The server's Undo
+   * also takes back the decision that wrap-up made (CV-14), in the same op:
+   * with `settledId`, the settling reply is read back once it answers.
+   */
+  async reopen(rootId: string, settledId?: string): Promise<ChatWriteResult> {
+    const res = await this.write(
       rootId,
       (row) => ({ ...row, wrappedAt: null, wrappedBy: null, settledId: null }),
       () => this.transport.reopen(rootId),
     );
+    if (res.ok && settledId) await this.readBack(settledId);
+    return res;
+  }
+
+  /** A row another op changed on the server lands as it is there now. */
+  private async readBack(id: string): Promise<void> {
+    const row = await this.transport.message(id);
+    if (!row.data) return;
+    this.landRow(row.data);
+    this.chainCache.clear();
+    this.notify();
   }
 
   /** "Reply to…": the message joins `replyToId`'s chain; both chains' roots read again. */

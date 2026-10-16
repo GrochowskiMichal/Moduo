@@ -763,11 +763,25 @@ export function ChatScreen({
     },
     [store],
   );
+  // Mark as decision / Unmark (CV-14): ⋯ and ⇧D in the stream, "Unmark" in a chain.
+  const toggleDecision = useCallback(
+    (m: ChatMessage) => {
+      if (!store) return;
+      const on = !m.decisionAt;
+      void store.markDecision(m.id, on).then((res) => {
+        if (!failed(res, "Couldn't update the decision.")) {
+          toast(on ? "Marked as a decision" : "No longer a decision");
+        }
+      });
+    },
+    [store],
+  );
   const wrapUp = useCallback(
     (rootId: string, settledId: string, markDecision: boolean) => {
       if (!store) return;
       setWrapFor(null);
-      // "Also mark as decision" (CV-14): Undo takes back only a decision this wrap-up made.
+      // "Also mark as decision" (CV-14): Undo takes back only a decision this wrap-up made
+      // (the server tells them apart; the toast only reads it back).
       const prior =
         store.rowById(settledId) ??
         store.getSnapshot().chains[rootId]?.replies.find((r) => r.id === settledId);
@@ -780,12 +794,10 @@ export function ChatScreen({
           action: {
             label: "Undo",
             onClick: () =>
-              void store.reopen(rootId).then((r) => {
-                if (failed(r, "Couldn't undo the wrap-up.") || !newDecision) return;
-                void store
-                  .markDecision(settledId, false)
-                  .then((d) => failed(d, "Couldn't take back the decision."));
-              }),
+              // One op: the server takes back the decision this wrap-up made with it.
+              void store
+                .reopen(rootId, newDecision ? settledId : undefined)
+                .then((r) => failed(r, "Couldn't undo the wrap-up.")),
           },
         });
       });
@@ -1319,15 +1331,7 @@ export function ChatScreen({
                 }
               });
             }}
-            onDecision={(m) => {
-              if (!store) return;
-              const on = !m.decisionAt;
-              void store.markDecision(m.id, on).then((res) => {
-                if (!failed(res, "Couldn't update the decision.")) {
-                  toast(on ? "Marked as a decision" : "No longer a decision");
-                }
-              });
-            }}
+            onDecision={toggleDecision}
             onTask={makeTaskFrom}
             onRemind={(m) => setRemindFor({ messageId: m.id })}
             onReplyPrivately={
@@ -1560,6 +1564,11 @@ export function ChatScreen({
               onPersonClick={openPerson}
               onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
               onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
+              onUnmarkDecision={
+                channel && canWriteHere && root?.channelId === channel.id
+                  ? toggleDecision
+                  : undefined
+              }
               renderComposer={
                 channel && canWriteHere && root?.channelId === channel.id
                   ? (placeholder) => (

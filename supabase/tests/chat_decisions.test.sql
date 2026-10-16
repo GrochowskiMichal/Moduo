@@ -103,7 +103,8 @@ BEGIN
 END;
 $$;
 -- Every message gets a name in test.ids, so test.on_item can name what it sees.
-INSERT INTO test.ids SELECT n, test.mid(n) FROM unnest(ARRAY['q1', 'q2', 'q3', 'p1', 'p2', 'd1', 'd2', 'r', 'r1', 'r2', 's', 's1']) AS n;
+INSERT INTO test.ids SELECT n, test.mid(n) FROM unnest(ARRAY['q1', 'q2', 'q3', 'p1', 'p2', 'p4', 'd1', 'd2', 'g1', 'r', 'r1', 'r2', 's', 's1', 'u', 'u1', 'u2']) AS n;
+INSERT INTO test.ids SELECT 'G', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND is_default;
 
 -- ── Marking: who may, what may be ───────────────────────────────────────────
 DO $$
@@ -133,7 +134,8 @@ BEGIN
   v := test.send('B', 'p1', 'P', 'Founders only: we go with Stripe');
   PERFORM test.ok(v LIKE 'ok %', 'setup: B posts in P', v);
   v := test.mark('N', 'p1');
-  PERFORM test.ok(v LIKE '42501 %' AND NOT test.is_decision('p1'), 'someone who can''t read the conversation can''t mark', v);
+  PERFORM test.ok(v LIKE 'P0002 %' AND NOT test.is_decision('p1'),
+    'someone who can''t read the conversation can''t mark: answered like a missing message', v);
   v := test.mark('X', 'p1');
   PERFORM test.ok(v NOT LIKE 'ok %' AND NOT test.is_decision('p1'), 'an outsider can''t mark', v);
   v := test.as_key('K', format($q$SELECT id FROM public.chat_op_mark_decision(%L::uuid, true)$q$, test.mid('p1')));
@@ -191,7 +193,6 @@ BEGIN
   v := test.send('A', 'p2', 'P', 'Launch on the 20th for moduo://project/' || test.id('SB'));
   v := test.mark('A', 'p2');
   PERFORM test.ok(v LIKE 'ok %', 'A marks a decision in P that names the project', v);
-  v := test.send('A', 'p3x', 'P', 'Also moduo://project/' || test.id('PB'));
 END;
 $$;
 SELECT test.ok(test.on_item('N', 'project', test.id('SB')) = 'q1',
@@ -201,7 +202,26 @@ SELECT test.ok(test.on_item('A', 'project', test.id('SB')) = 'p2,q1',
 SELECT test.ok(test.on_item('A', 'bucket', test.id('SB')) = 'p2,q1', 'the registry''s name answers the same');
 SELECT test.ok(test.on_item('V', 'project', test.id('SB')) = 'q1', 'a viewer reading Q sees its decision');
 SELECT test.ok(test.on_item('X', 'project', test.id('SB')) = '', 'an outsider sees nothing on the project');
-SELECT test.ok(test.on_item('A', 'project', test.id('PB')) = '', 'an item the caller can''t open shows nothing');
+-- O (who can open the private project PB) names it in General and marks it.
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.ok(test.ref('G') IS NOT NULL, 'setup: the workspace has General');
+  -- The project in the registry (a mention links only a registered item).
+  INSERT INTO public.entities (workspace_id, entity_type, entity_id, label)
+  VALUES (test.id('W'), 'bucket', test.id('PB'), 'O private')
+  ON CONFLICT (workspace_id, entity_type, entity_id) DO NOTHING;
+  v := test.send('O', 'g1', 'G', 'We archive moduo://project/' || test.id('PB') || ' in May');
+  PERFORM test.ok(v LIKE 'ok %', 'setup: O names the private project in General', v);
+  v := test.mark('O', 'g1');
+  PERFORM test.ok(v LIKE 'ok %', 'setup: O marks it as a decision', v);
+END;
+$$;
+SELECT test.ok(test.on_item('O', 'project', test.id('PB')) = 'g1', 'O, who can open the project, sees the decision on it');
+SELECT test.ok(test.on_item('N', 'project', test.id('PB')) = '',
+  'N reads General but can''t open the project: nothing');
+SELECT test.ok(test.on_item('A', 'project', test.id('PB')) = '', 'nor A: an item the caller can''t open shows nothing');
 
 -- A decision in a mentioning conversation that doesn't refer to the item stays off it.
 SELECT test.ok(test.on_item('A', 'contact', test.ref('CT')) = 'd1',
@@ -245,6 +265,52 @@ BEGIN
     'wrapping up again on the same reply logs no second decision', v);
   PERFORM test.ok(test.on_item('N', 'project', test.id('SB')) = 'q1,r2',
     'the settled decision shows on the linked project');
+END;
+$$;
+
+-- ── The wrap-up toast's Undo takes back the decision that wrap-up made ─────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.send('A', 'u', 'Q', 'Which colour?');
+  v := test.send('B', 'u1', 'Q', 'Blue', 'u');
+  v := test.send('B', 'u2', 'Q', 'Green', 'u');
+  PERFORM test.ok(v LIKE 'ok %', 'setup: a chain of two replies', v);
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('u'), test.mid('u1')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u1'), 'setup: A wraps it up and marks the decision', v);
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_reopen(%L::uuid)$q$, test.mid('u')));
+  PERFORM test.ok(v LIKE 'ok %' AND NOT test.is_decision('u1')
+                  AND (SELECT wrapped_at IS NULL AND reopened_at IS NULL FROM public.chat_messages WHERE id = test.mid('u')),
+    'Undo opens the chain and takes back its decision in one op', v);
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity WHERE op = 'chat.decision'
+                                AND payload->>'message_id' = test.mid('u1')::text AND payload->>'on' = 'false'),
+    'no "took back a decision" line: "undid a wrap-up" says it');
+
+  -- A decision marked before the wrap-up stays.
+  v := test.mark('B', 'u2');
+  PERFORM test.ok(v LIKE 'ok %', 'setup: B marks the other reply first', v);
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('u'), test.mid('u2')));
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_reopen(%L::uuid)$q$, test.mid('u')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u2'), 'Undo leaves a decision marked before the wrap-up', v);
+
+  -- Someone else's reopen is no Undo: the decision stays.
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('u'), test.mid('u1')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u1'), 'setup: wrapped and marked again', v);
+  v := test.as_user('M', format($q$SELECT id FROM public.chat_op_reopen(%L::uuid)$q$, test.mid('u')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u1'), 'an admin reopening it leaves the decision', v);
+
+  -- Past the Undo window, reopening keeps it too.
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_mark_decision(%L::uuid, false)$q$, test.mid('u1')));
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('u'), test.mid('u1')));
+  UPDATE public.chat_messages SET wrapped_at = wrapped_at - interval '1 minute' WHERE id = test.mid('u');
+  UPDATE public.chat_messages SET decision_at = decision_at - interval '1 minute' WHERE id = test.mid('u1');
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_reopen(%L::uuid)$q$, test.mid('u')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u1'), 'a reopen after the Undo window keeps the decision', v);
+  -- Clean up: the later checks count Q's decisions.
+  v := test.mark('A', 'u1', false);
+  v := test.mark('A', 'u2', false);
+  PERFORM test.ok(NOT test.is_decision('u1') AND NOT test.is_decision('u2'), 'setup: the chain''s decisions unmarked', v);
 END;
 $$;
 
@@ -300,6 +366,26 @@ BEGIN
 END;
 $$;
 
+-- A moved decision that names an item still shows on it, from where it went,
+-- to readers who can open the item (the move re-links its mentions).
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.send('A', 'p4', 'P', 'Ship it for moduo://contact/' || test.ref('CT'));
+  v := test.mark('A', 'p4');
+  PERFORM test.ok(v LIKE 'ok %' AND test.on_item('A', 'contact', test.ref('CT')) = 'd1,p4',
+    'setup: a decision in P names the contact', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_move_messages(ARRAY[%L]::uuid[], %L::uuid, true, false)$q$,
+    test.mid('p4'), test.ref('G')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A moves it into General', v);
+  PERFORM test.ok(test.on_item('A', 'contact', test.ref('CT')) = 'd1,p4',
+    'it still shows on the contact, from General');
+  PERFORM test.ok(test.on_item('N', 'contact', test.ref('CT')) = '',
+    'N reads General but can''t open the contact: nothing');
+END;
+$$;
+
 -- ── The plan, an archived channel ───────────────────────────────────────────
 DO $$
 DECLARE
@@ -324,7 +410,7 @@ SELECT test.ok(has_function_privilege('authenticated', 'public.' || fn, 'EXECUTE
                AND NOT has_function_privilege('anon', 'public.' || fn, 'EXECUTE'),
                'grants: ' || fn || ' for signed-in people and the service role, never anon')
   FROM unnest(ARRAY['chat_op_mark_decision(uuid, boolean)', 'chat_op_wrap_up(uuid, uuid, boolean)',
-                    'chat_decisions_for_item(text, uuid)']) AS fn;
+                    'chat_op_reopen(uuid)', 'chat_decisions_for_item(text, uuid)']) AS fn;
 SELECT test.ok(NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
                             WHERE p.oid = 'public.chat_op_mark_decision(uuid, boolean)'::regprocedure
                               AND a.grantee = 0),
