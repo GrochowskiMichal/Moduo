@@ -49,8 +49,10 @@ import { useAssignees } from "../assignees";
 import { projectOverviewText } from "../list-export";
 import type { Bucket, Section, Task, TaskCompletion, TaskWaitingEntry } from "../model";
 import {
+  clientPatch,
   doneInRange,
   nextUp,
+  projectClient,
   projectFacts,
   projectPeople,
   recentActivity,
@@ -81,7 +83,9 @@ export type ProjectOverviewPatch = {
   startsOn?: string | null;
   targetOn?: string | null;
   leadId?: string | null;
+  /** A person or a company (MOD-155): the row sends the one that changed. */
   clientContactId?: string | null;
+  clientCompanyId?: string | null;
   description?: string | null;
 };
 
@@ -293,7 +297,7 @@ function ProjectOverview({
     revealed.has(o) ||
     (o === "start" && !!project.startsOn) ||
     (o === "lead" && !!project.leadId) ||
-    (o === "client" && !!project.clientContactId);
+    (o === "client" && !!(project.clientContactId || project.clientCompanyId));
   const quiet = editable ? OPTIONAL_FIELDS.filter((f) => !shows(f.key)) : [];
 
   const copyText = () => {
@@ -397,10 +401,11 @@ function ProjectOverview({
             <PropertyRow label="Client">
               <ProjectClientValue
                 workspaceId={project.workspaceId}
-                clientId={project.clientContactId ?? null}
+                client={projectClient(project)}
+                companies={project.clientCompanyId !== undefined}
                 canEdit={editable}
                 defaultOpen={opening === "client"}
-                onChange={(id) => edit({ clientContactId: id })}
+                onChange={(next) => edit(clientPatch(project, next))}
               />
             </PropertyRow>
           ) : null}

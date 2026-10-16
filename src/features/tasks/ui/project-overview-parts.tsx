@@ -29,9 +29,11 @@ import { PropertyValue } from "../../../components/ui/property-row";
 import { Textarea } from "../../../components/ui/textarea";
 import type { EntityRecord } from "../../../lib/entity-links";
 import { getRuntime } from "../../../lib/runtime";
+import { resolveEntityIcon } from "../../spine/icon-map";
 import { Reference } from "../../spine/references/ui/reference";
 import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { useAssignees } from "../assignees";
+import type { ProjectClient } from "../project-overview";
 import { AssigneeAvatar } from "./assignee-avatar";
 
 export const PROJECT_STATE_LABEL: Record<ProjectState, string> = {
@@ -192,8 +194,16 @@ export function ProjectLeadValue({
   );
 }
 
-/** Contacts by name, from the registry (only the ones the reader can see). */
-function useContactSearch(workspaceId: string, query: string, open: boolean): EntityRecord[] {
+const CLIENT_SEARCH_LIMIT = 8;
+
+/** People and companies by name, from the registry (only the ones the reader
+ *  can see): one query per kind, so neither crowds the other out. */
+function useClientSearch(
+  workspaceId: string,
+  query: string,
+  open: boolean,
+  companies: boolean,
+): EntityRecord[] {
   const [results, setResults] = useState<EntityRecord[]>([]);
   useEffect(() => {
     if (!open) return;
@@ -201,83 +211,99 @@ function useContactSearch(workspaceId: string, query: string, open: boolean): En
     if (!runtime) return;
     let live = true;
     const timer = setTimeout(() => {
-      runtime.spine
-        .searchEntities({ workspaceId, query: query.trim(), types: ["contact"], limit: 8 })
-        .then(
-          (r) => {
-            if (live) setResults(r.filter((e) => !e.deletedAt));
-          },
-          () => {
-            if (live) setResults([]);
-          },
-        );
+      const kinds: ProjectClient["type"][] = companies ? ["contact", "company"] : ["contact"];
+      // Each kind on its own: a failed company search keeps the people.
+      void Promise.allSettled(
+        kinds.map((type) =>
+          runtime.spine.searchEntities({
+            workspaceId,
+            query: query.trim(),
+            types: [type],
+            limit: CLIENT_SEARCH_LIMIT,
+          }),
+        ),
+      ).then((answers) => {
+        if (!live) return;
+        const found = answers.flatMap((a) => (a.status === "fulfilled" ? a.value : []));
+        setResults(found.filter((e) => !e.deletedAt));
+      });
     }, 150);
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [workspaceId, query, open]);
+  }, [workspaceId, query, open, companies]);
   return results;
 }
 
 /**
- * The project's client: a contact, shown as a reference (it opens their hub,
- * where the client's work and time roll up), changed from the pencil.
+ * The project's client: a person or a company (MOD-155), shown as a reference
+ * (a person opens their hub, where the client's work and time roll up),
+ * changed from the pencil. One search finds both, under People and
+ * Companies; `companies` is false on a database from before company clients,
+ * and then only people are offered.
  */
 export function ProjectClientValue({
   workspaceId,
-  clientId,
+  client,
+  companies = true,
   canEdit,
   defaultOpen,
   onChange,
 }: {
   workspaceId: string;
-  clientId: string | null;
+  client: ProjectClient | null;
+  companies?: boolean;
   canEdit: boolean;
   defaultOpen?: boolean;
-  onChange: (contactId: string | null) => void;
+  onChange: (next: ProjectClient | null) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [query, setQuery] = useState("");
-  const results = useContactSearch(workspaceId, query, open);
+  const results = useClientSearch(workspaceId, query, open, companies);
+  const people = results.filter((e) => e.type === "contact");
+  const orgs = results.filter((e) => e.type === "company");
+  const pick = (next: ProjectClient | null) => {
+    setOpen(false);
+    if (next?.type !== client?.type || next?.id !== client?.id) onChange(next);
+  };
+  const items = (type: ProjectClient["type"], list: EntityRecord[]) =>
+    list.map((e) => {
+      const Icon = resolveEntityIcon(e.type, e.icon);
+      return (
+        <CommandItem key={e.id} value={`${type}:${e.id}`} onSelect={() => pick({ type, id: e.id })}>
+          <Icon aria-hidden />
+          {e.label || (type === "company" ? "Untitled company" : "Unnamed contact")}
+        </CommandItem>
+      );
+    });
   const picker = (
     <PopoverContent align="start" className="w-64 p-0">
       <Command shouldFilter={false}>
         <CommandInput value={query} onValueChange={setQuery} placeholder="Client…" />
         <CommandList>
-          <CommandEmpty>No contact by that name.</CommandEmpty>
-          <CommandGroup>
-            {clientId ? (
-              <CommandItem
-                value="__none__"
-                onSelect={() => {
-                  setOpen(false);
-                  onChange(null);
-                }}
-              >
+          <CommandEmpty>
+            {companies ? "No person or company by that name." : "No contact by that name."}
+          </CommandEmpty>
+          {client ? (
+            <CommandGroup>
+              <CommandItem value="__none__" onSelect={() => pick(null)}>
                 <X aria-hidden />
                 No client
               </CommandItem>
-            ) : null}
-            {results.map((c) => (
-              <CommandItem
-                key={c.id}
-                value={c.id}
-                onSelect={() => {
-                  setOpen(false);
-                  if (c.id !== clientId) onChange(c.id);
-                }}
-              >
-                <Contact aria-hidden />
-                {c.label || "Unnamed contact"}
-              </CommandItem>
-            ))}
-          </CommandGroup>
+            </CommandGroup>
+          ) : null}
+          {people.length > 0 ? (
+            <CommandGroup heading="People">{items("contact", people)}</CommandGroup>
+          ) : null}
+          {orgs.length > 0 ? (
+            <CommandGroup heading="Companies">{items("company", orgs)}</CommandGroup>
+          ) : null}
         </CommandList>
       </Command>
     </PopoverContent>
   );
-  if (!clientId) {
+  if (!client) {
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild disabled={!canEdit}>
@@ -292,7 +318,7 @@ export function ProjectClientValue({
   return (
     // One line: the chip gives way (its name truncates) before the pencil wraps.
     <span className="flex min-w-0 items-center gap-1">
-      <Reference type="contact" id={clientId} display="chip" className="min-w-0 shrink" />
+      <Reference type={client.type} id={client.id} display="chip" className="min-w-0 shrink" />
       {canEdit ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>

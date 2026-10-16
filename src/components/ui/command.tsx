@@ -55,9 +55,6 @@ function CommandDialog({
           className={cn(
             "[&_[cmdk-input-wrapper]_svg]:size-4",
             "[&_[cmdk-input]]:bg-transparent [&_[cmdk-input]]:outline-none",
-            // The eyebrow recipe (see `eyebrowVariants`), applied through cmdk's
-            // own heading element — it can't be swapped for the component.
-            "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-sans [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase",
             "[&_[cmdk-group]]:px-1",
             "[&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-2",
             "[&_[cmdk-item]_svg]:size-4",
@@ -120,7 +117,14 @@ function CommandGroup({
   return (
     <CommandPrimitive.Group
       data-slot="command-group"
-      className={cn("overflow-hidden p-1 text-popover-foreground", className)}
+      className={cn(
+        "overflow-hidden p-1 text-popover-foreground",
+        // The eyebrow recipe (see `eyebrowVariants`), applied through cmdk's
+        // own heading element — it can't be swapped for the component. On the
+        // group, so a popover's picker gets it as the palette does (MOD-155).
+        "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-sans [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase",
+        className,
+      )}
       {...props}
     />
   );
