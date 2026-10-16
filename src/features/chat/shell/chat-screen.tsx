@@ -799,7 +799,10 @@ export function ChatScreen({
             onLoadNewer={() => void store?.loadNewer(channel.id)}
             onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
             onSeen={(id) =>
-              store?.markSeen(channel.id, readThroughHidden(streamWin?.rows ?? [], id, streamHidden))
+              store?.markSeen(
+                channel.id,
+                readThroughHidden(streamWin?.rows ?? [], id, streamHidden),
+              )
             }
             onStartEdit={(m) => setEditingId(m.id)}
             renderEditor={(m) => (
