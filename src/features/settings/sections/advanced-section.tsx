@@ -133,9 +133,7 @@ async function gatherExport(
             people: (ws) => c.people(ws),
             // CV-9: each conversation's files, then their bytes through signed links.
             files: c.files ? (args) => c.files!(args) : undefined,
-            fileBytes: signedFileBytes((paths, ttl) =>
-              runtime.attachments.signedUrls(paths, ttl),
-            ),
+            fileBytes: signedFileBytes((paths, ttl) => runtime.attachments.signedUrls(paths, ttl)),
           },
           workspaceId,
           userId,

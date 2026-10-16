@@ -74,7 +74,12 @@ const PEOPLE: ChatPerson[] = [
 
 const at = (n: number) => new Date(Date.UTC(2026, 9, 10, 0, 0, n)).toISOString();
 
-function file(id: string, messageId: string, sentAt: string, extra: Partial<ChatFile> = {}): ChatFile {
+function file(
+  id: string,
+  messageId: string,
+  sentAt: string,
+  extra: Partial<ChatFile> = {},
+): ChatFile {
   return {
     id,
     messageId,
@@ -102,7 +107,9 @@ function fakeFiles(byChannel: Record<string, ChatFile[]>): NonNullable<ChatExpor
       a.sentAt === b.sentAt ? (a.id < b.id ? 1 : -1) : a.sentAt < b.sentAt ? 1 : -1,
     );
     const older = before
-      ? all.filter((f) => f.sentAt < before.sentAt || (f.sentAt === before.sentAt && f.id < before.id))
+      ? all.filter(
+          (f) => f.sentAt < before.sentAt || (f.sentAt === before.sentAt && f.id < before.id),
+        )
       : all;
     return { data: older.slice(0, 2), error: null };
   };
