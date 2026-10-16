@@ -17,7 +17,7 @@
 
 import { CodeHighlightNode, CodeNode } from "@lexical/code";
 import { $isLinkNode, LinkNode } from "@lexical/link";
-import { ListItemNode, ListNode } from "@lexical/list";
+import { $isListItemNode, ListItemNode, ListNode } from "@lexical/list";
 import {
   $convertToMarkdownString,
   $generateNodesFromMarkdownString,
@@ -40,6 +40,7 @@ import {
   UNORDERED_LIST,
 } from "@lexical/markdown";
 import { QuoteNode } from "@lexical/rich-text";
+import { $findMatchingParent } from "@lexical/utils";
 import {
   $applyNodeReplacement,
   $createParagraphNode,
@@ -62,6 +63,7 @@ import {
   escapeBlockStarts,
   escapeMarkdownText,
   guardMarkdownStart,
+  readsAsModuoAddress,
   referenceMarkdown,
 } from "../../../../supabase/functions/_shared/description-markdown";
 import { $createDateNode, $isDateNode, DateNode } from "../references/date-node";
@@ -152,16 +154,38 @@ export const DESCRIPTION_REFERENCE: TextMatchTransformer = {
   type: "text-match",
 };
 
-/** Whether `node` holds its block's only backtick (no inline code there either). */
+/** During one `$exportDescription`: each block's "holds one lone backtick" answer, by key. */
+let loneBacktickBlocks: Map<string, boolean> | null = null;
+
+/**
+ * Whether `node` holds its block's only backtick (no inline code there
+ * either). The block is the nearest list item, else the top-level element: a
+ * code span never crosses either. Only a node with a backtick asks, and each
+ * block is counted once per save, so a long list saves in one pass (counting
+ * the whole list for every item was quadratic: 3.5 s for 4,900 items).
+ */
 function $onlyBacktickInBlock(node: TextNode): boolean {
-  const block = node.getTopLevelElement();
+  if (!node.getTextContent().includes("`")) return false;
+  const block = $findMatchingParent(node, $isListItemNode) ?? node.getTopLevelElement();
   if (!block || !$isElementNode(block)) return false;
+  const known = loneBacktickBlocks?.get(block.getKey());
+  if (known !== undefined) return known;
   let count = 0;
+  let lone = true;
   for (const text of block.getAllTextNodes()) {
-    if (text.hasFormat("code")) return false;
-    for (const ch of text.getTextContent()) if (ch === "`" && ++count > 1) return false;
+    if (text.hasFormat("code")) {
+      lone = false;
+      break;
+    }
+    for (const ch of text.getTextContent()) if (ch === "`") count++;
+    if (count > 1) {
+      lone = false;
+      break;
+    }
   }
-  return count === 1;
+  lone = lone && count === 1;
+  loneBacktickBlocks?.set(block.getKey(), lone);
+  return lone;
 }
 
 /**
@@ -198,6 +222,26 @@ export const DESCRIPTION_TEXT: TextMatchTransformer = {
   regExp: NEVER,
   replace: () => {},
   type: "text-match",
+};
+
+/**
+ * Lexical's link, minus any address that reads as the app's own `moduo:`
+ * scheme (`readsAsModuoAddress`: `moduo\://`, `moduo&#58;//`, `<moduo:…>` and
+ * the like). Lexical decodes an address before it keeps it, so such a link
+ * would save back as `[task](moduo://…)` and read as a reference next time:
+ * it stays words when read, and a link that holds one anyway (pasted HTML)
+ * saves as its words. References only ever come from DESCRIPTION_REFERENCE.
+ */
+export const DESCRIPTION_WEB_LINK: TextMatchTransformer = {
+  ...LINK,
+  export: (node, exportChildren, exportFormat) => {
+    if ($isLinkNode(node) && readsAsModuoAddress(node.getURL())) return exportChildren(node);
+    return LINK.export ? LINK.export(node, exportChildren, exportFormat) : null;
+  },
+  replace: (textNode, match) => {
+    if (readsAsModuoAddress(match[2] ?? match[3] ?? "")) return;
+    return LINK.replace(textNode, match);
+  },
 };
 
 /** A paragraph of raw text (and line breaks) only: nothing to escape. */
@@ -248,7 +292,7 @@ export const DESCRIPTION_TRANSFORMERS: Transformer[] = [
   STRIKETHROUGH,
   DESCRIPTION_REFERENCE,
   DESCRIPTION_TEXT,
-  LINK,
+  DESCRIPTION_WEB_LINK,
 ];
 
 /**
@@ -445,6 +489,11 @@ export function $importDescription(value: string): void {
 
 /** The editor's content as the Markdown a description stores ("" when empty). */
 export function $exportDescription(): string {
-  const markdown = $convertToMarkdownString(DESCRIPTION_TRANSFORMERS).trimEnd();
-  return markdown.trim() ? guardMarkdownStart(markdown) : "";
+  loneBacktickBlocks = new Map();
+  try {
+    const markdown = $convertToMarkdownString(DESCRIPTION_TRANSFORMERS).trimEnd();
+    return markdown.trim() ? guardMarkdownStart(markdown) : "";
+  } finally {
+    loneBacktickBlocks = null;
+  }
 }

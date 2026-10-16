@@ -800,6 +800,20 @@ describe("writes go through the ops, checked before anything is written", () => 
         `<p>See <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${SECRET}">Board secret</span> ` +
           `and <a href="moduo://task/${SECRET}">x</a> and <a href="moduo://task/${SECRET} &quot;chip&quot;">y</a></p>`,
         `<p>[x]&#40;moduo://task/${SECRET}) <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="MOD-50">t</span></p>`,
+        // An address spelled so only a decoding reader sees moduo: (validator, call #15).
+        `See [task](moduo\\://task/${SECRET}) here`,
+        `[task](moduo&#58;//task/${SECRET})`,
+        `[task](&#109;oduo://task/${SECRET})`,
+        `[task](moduo&#58;&#47;&#47;task&#47;${SECRET})`,
+        `[task](moduo&#x3A;//task/${SECRET})`,
+        `[task](mo\\duo://task/${SECRET})`,
+        `[task](<moduo\\://task/${SECRET}>)`,
+        `[task]( moduo\\://task/${SECRET})`,
+        `[task](${" ".repeat(300)}moduo\\://task/${SECRET})`,
+        `[note](moduo\\://note/${SECRET} "card")`,
+        `[task](MoDuO\\://task/${SECRET} (chip))`,
+        `<p><a href="moduo&amp;#58;//task/${SECRET}">x</a></p>`,
+        `<p><a href="moduo\\://task/${SECRET}">x</a></p>`,
       ];
       for (const description of crafted) {
         const { write, linked } = described();

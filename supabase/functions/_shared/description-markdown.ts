@@ -111,16 +111,52 @@ export function descriptionReferences(value: string | null | undefined): Array<{
   return out;
 }
 
+/** How far into an address its scheme is read (spellings included). */
+const ADDRESS_LOOK = 128;
+const SKIPPED = /[\s<\\]/;
+
+/** A code point from a character reference, or nothing when it names none. */
+function fromCodePoint(code: number): string {
+  return Number.isInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+}
+
 /**
- * Words that would read as a `moduo://` link, now or once read back (`](`,
- * then spaces or `<`, then `moduo:` in any case), keep that `(` as `&#40;`:
- * Markdown's own spelling of "(", which the editor reads back as "(" in plain
- * words, while no reference or link pattern matches it. So words never turn
- * into a reference: not when they are stored, and not when the editor saves
- * them again.
+ * Does a link address read as the app's `moduo:` scheme, however it's
+ * spelled? The editor's link reader decodes an address before it keeps it
+ * (backslash escapes, `&#58;`-style character references, a `<…>` form,
+ * spaces before it), so this decodes the same and more: every backslash,
+ * space and `<` dropped, decimal and hex references decoded, any case.
+ */
+export function readsAsModuoAddress(address: string): boolean {
+  const plain = address
+    .slice(0, ADDRESS_LOOK)
+    .replace(/&#[xX]([0-9a-fA-F]+);?/g, (_, hex: string) => fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);?/g, (_, dec: string) => fromCodePoint(Number(dec)))
+    .replace(/[\\\s<]/g, "");
+  return plain.slice(0, 6).toLowerCase() === "moduo:";
+}
+
+/**
+ * Words that would read as a `moduo:` link, now or once read back (a `](`
+ * whose address reads as `moduo:`, `readsAsModuoAddress`), keep that `(` as
+ * `&#40;`: Markdown's own spelling of "(", which the editor reads back as "("
+ * in plain words, while no reference or link pattern matches it. So words
+ * never turn into a reference: not when they are stored, and not when the
+ * editor saves them again. One look per `](`, each at most ADDRESS_LOOK long.
  */
 export function defuseReferences(text: string): string {
-  return text.replace(/\]\((?=[\s<]*moduo:)/gi, "]&#40;");
+  let out = "";
+  let at = 0;
+  for (let i = text.indexOf("]("); i >= 0; i = text.indexOf("](", i + 2)) {
+    // Spaces, `<` and backslashes before the address, however many (each run
+    // follows one `](` only, so this stays one pass).
+    let start = i + 2;
+    while (start < text.length && SKIPPED.test(text[start] as string)) start++;
+    if (!readsAsModuoAddress(text.slice(start, start + ADDRESS_LOOK))) continue;
+    out += `${text.slice(at, i)}]&#40;`;
+    at = i + 2;
+  }
+  return out + text.slice(at);
 }
 
 /** A date chip as the description stores it; the label is for people reading the raw text. */

@@ -19,6 +19,7 @@ import {
   htmlToMarkdown,
   isHtmlDescription,
   markdownExcerpt,
+  readsAsModuoAddress,
   referenceMarkdown,
 } from "./description-markdown.ts";
 
@@ -214,6 +215,34 @@ describe("the reference syntax", () => {
     );
     // Defused, nothing matches the reference pattern.
     expect(descriptionReferences(defuseReferences(`[x](moduo://task/${TASK})`))).toEqual([]);
+  });
+
+  it("reads an address the way a decoding reader does: escapes, character references, <…>, spaces, any case", () => {
+    for (const address of [
+      "moduo://task/x",
+      "moduo\\://task/x",
+      "mo\\duo://task/x",
+      "moduo&#58;//task/x",
+      "moduo&#0000058;//task/x",
+      "&#109;oduo://task/x",
+      "moduo&#x3A;//task/x",
+      "<moduo\\://task/x>",
+      "   MoDuO://task/x",
+    ]) {
+      expect(readsAsModuoAddress(address), address).toBe(true);
+      expect(defuseReferences(`[t](${address})`), address).toBe(`[t]&#40;${address})`);
+    }
+    for (const address of ["https://moduo.app", "modu://x", "moduox://x", "mailto:moduo@x"]) {
+      expect(readsAsModuoAddress(address), address).toBe(false);
+    }
+    expect(defuseReferences(`[t](${" ".repeat(500)}moduo\\://task/x)`)).toContain("]&#40;");
+  });
+
+  it("defuses a long crafted run in one pass", () => {
+    const text = `](${" ".repeat(40)}&#109;`.repeat(20_000);
+    const start = performance.now();
+    defuseReferences(text);
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });
 

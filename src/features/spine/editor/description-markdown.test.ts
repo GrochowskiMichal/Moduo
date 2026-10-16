@@ -6,7 +6,7 @@
 
 import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes } from "@lexical/html";
-import { $isLinkNode } from "@lexical/link";
+import { $createLinkNode, $isLinkNode } from "@lexical/link";
 import { $isListItemNode, $isListNode } from "@lexical/list";
 import { $isQuoteNode } from "@lexical/rich-text";
 import { describe, expect, it } from "@rstest/core";
@@ -401,6 +401,14 @@ describe("words never save as a reference", () => {
       `[x]\\(moduo://task/${TASK})`,
       `**[x]&#40;moduo://task/${TASK})**`,
       `[[a]&#40;moduo://task/${TASK})](https://example.com)`,
+      // A link address only a decoding reader sees as moduo: (validator, call #15).
+      `[task](moduo\\://task/${TASK})`,
+      `[task](moduo&#58;//task/${TASK})`,
+      `[task](&#109;oduo://task/${TASK})`,
+      `[task](<moduo\\://task/${TASK}>)`,
+      `[task]( moduo\\://task/${TASK})`,
+      `[note](moduo\\://note/${NOTE} "card")`,
+      `[task](MODUO://task/${TASK})`,
     ]) {
       let value = stored;
       for (let round = 0; round < 3; round++) {
@@ -410,6 +418,26 @@ describe("words never save as a reference", () => {
         value = save(editor);
       }
     }
+  });
+
+  it("a link to a moduo: address (pasted HTML) saves as its words; a web link stays a link", () => {
+    const editor = markdownEditor();
+    editor.update(
+      () => {
+        $getRoot().clear();
+        $getRoot().append(
+          $createParagraphNode().append(
+            $createLinkNode(`moduo://task/${TASK}`).append($createTextNode("task")),
+            $createTextNode(" and "),
+            $createLinkNode("https://example.com").append($createTextNode("docs")),
+          ),
+        );
+      },
+      { discrete: true },
+    );
+    const saved = save(editor);
+    expect(saved).toBe("task and [docs](https://example.com)");
+    expect(refs(load(saved))).toBe(0);
   });
 });
 
@@ -508,6 +536,16 @@ describe("a crafted description can't freeze the editor", () => {
     ["blocks of 299 *a", Array.from({ length: 60 }, () => "*a".repeat(149)).join("\n\n")],
     ["blocks of 299 ~~", Array.from({ length: 60 }, () => "~~a".repeat(100)).join("\n\n")],
     ["blocks of 299 _a_", Array.from({ length: 60 }, () => " _a_".repeat(149)).join("\n\n")],
+    // A long list saves in one pass (each item once counted its whole list's backticks).
+    ["a list of 4,900 items", Array.from({ length: 4_900 }, (_, i) => `- item ${i}`).join("\n")],
+    [
+      "a list of 4,900 items with a backtick each",
+      Array.from({ length: 4_900 }, (_, i) => `- item \` ${i}`).join("\n"),
+    ],
+    [
+      "runs of ]( and spaces",
+      Array.from({ length: 40 }, () => `](${" ".repeat(60)}`.repeat(40)).join("\n\n"),
+    ],
   ] as const) {
     it(`reads and saves ${name} quickly`, () => {
       let editor = markdownEditor();
