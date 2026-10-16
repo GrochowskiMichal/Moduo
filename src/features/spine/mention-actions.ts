@@ -12,6 +12,8 @@ import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { MentionResolution } from "./mention";
 
+const CHAT_ENDS = new Set(["chat_channel", "chat_message"]);
+
 /** The entity to insert as an inline `EntityRefChip` after a successful write. */
 export type MentionInsert = { ref: EntityRef; label: string; icon: string | null };
 
@@ -47,6 +49,11 @@ export async function executeMention(
 ): Promise<MentionInsert | null> {
   switch (resolution.action) {
     case "link": {
+      // A conversation or a message stays a chip in the text: "Mentioned in"
+      // lines to them are written by Chat's send and edit alone.
+      if (CHAT_ENDS.has(resolution.target.type)) {
+        return { ref: resolution.target, label: resolution.label, icon: resolution.icon };
+      }
       await runtime.spine.createLink({
         workspaceId: ctx.workspaceId,
         source: ctx.source,

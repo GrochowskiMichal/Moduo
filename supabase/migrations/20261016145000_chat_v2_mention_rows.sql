@@ -17,7 +17,9 @@
 --      to turn such a link into one.
 --   3. chat_conversations_for_item counts only rows the chat path writes
 --      (source a conversation, relation `mentions`, origin `ref`).
---   4. Registry labels: a message has none; a conversation carries its
+--   4. Once: a live mention row with a chat end that isn't in the chat path's
+--      shape is closed (soft delete).
+--   5. Registry labels: a message has none; a conversation carries its
 --      channel's current name, none for a direct or group message or a purged
 --      channel.
 
@@ -448,7 +450,17 @@ $function$;
 REVOKE ALL ON FUNCTION public.chat_conversations_for_item(text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat_conversations_for_item(text, uuid) TO authenticated, service_role;
 
--- ── 7. Registry labels for conversations and messages (once; idempotent) ───
+-- ── 7. Mention rows with a chat end not in the chat path's shape (once) ────
+-- They give no line, can't be removed through any op, and share the chat
+-- path's pair key: closed here (soft delete), so a later send writes its own.
+UPDATE public.entity_links l
+   SET deleted_at = now()
+ WHERE l.deleted_at IS NULL
+   AND l.relation_kind = 'mentions'
+   AND (l.source_type IN ('chat_channel', 'chat_message') OR l.target_type IN ('chat_channel', 'chat_message'))
+   AND NOT (l.source_type = 'chat_channel' AND l.origin = 'ref');
+
+-- ── 8. Registry labels for conversations and messages (once; idempotent) ───
 UPDATE public.entities e
    SET label = '', updated_at = now()
  WHERE e.entity_type = 'chat_message'

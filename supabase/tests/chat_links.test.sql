@@ -397,7 +397,7 @@ BEGIN
   PERFORM test.ok(test.lines('A', 'T5') = '', 'rows the chat path didn''t write give no "Mentioned in" line',
     test.lines('A', 'T5'));
   INSERT INTO test.ids SELECT 'G', id FROM public.chat_channels
-   WHERE workspace_id = test.id('W') AND kind = 'channel' AND name NOT IN ('acme', 'founders') LIMIT 1;
+   WHERE workspace_id = test.id('W') AND kind = 'channel' AND name NOT IN ('acme', 'founders') ORDER BY id LIMIT 1;
   v := test.send('A', 'g5', 'G', 'see ' || test.uri('task', 'T5'));
   PERFORM test.ok(v LIKE 'ok %' AND test.lines('A', 'T5') = (SELECT name FROM public.chat_channels WHERE id = test.ref('G')),
     'a send gives its line', test.lines('A', 'T5'));
@@ -409,8 +409,30 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.contacts_op_link(%L, 'contact', %L, 'task', %L, 'references', 'manual')$q$,
     test.id('W'), test.ref('CI'), test.id('T')));
   PERFORM test.ok(v LIKE 'ok %', 'Contacts still links a contact to a task', v);
+
+  -- Nor can Email; its ordinary links work as before.
+  INSERT INTO public.email_refs (id, workspace_id, owner_id, thread_key, subject)
+  VALUES (test.id('E1'), test.id('W'), test.id('A'), 'thread-cv10fix', 'Logo files');
+  v := test.as_user('A', format($q$SELECT public.email_op_link(%L, %L, 'chat_channel', %L, 'mentions', 'manual')$q$,
+    test.id('W'), test.id('E1'), test.ref('Q')));
+  PERFORM test.ok(v LIKE '42501 %', 'Email can''t make a "Mentioned in" row', v);
+  v := test.as_user('A', format($q$SELECT public.email_op_link(%L, %L, 'chat_channel', %L, 'references', 'ref')$q$,
+    test.id('W'), test.id('E1'), test.ref('Q')));
+  PERFORM test.ok(v LIKE '42501 %', 'nor one with origin ref', v);
+  v := test.as_user('A', format($q$SELECT public.email_op_link(%L, %L, 'task', %L, 'references', 'manual')$q$,
+    test.id('W'), test.id('E1'), test.id('T')));
+  PERFORM test.ok(v LIKE 'ok %', 'Email still links a thread to a task', v);
 END;
 $$;
+
+-- The one-time close: no live mention row with a chat end is outside the chat
+-- path's shape (this file's own forged rows aside).
+SELECT test.ok(NOT EXISTS (
+  SELECT 1 FROM public.entity_links l
+   WHERE l.deleted_at IS NULL AND l.relation_kind = 'mentions' AND l.workspace_id <> test.id('W')
+     AND (l.source_type IN ('chat_channel', 'chat_message') OR l.target_type IN ('chat_channel', 'chat_message'))
+     AND NOT (l.source_type = 'chat_channel' AND l.origin = 'ref')),
+  'no live mention row with a chat end is outside Chat''s shape');
 
 -- Registry labels: a message has none; a conversation carries its channel's
 -- name, none for a direct or group message or a purged channel.

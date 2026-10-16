@@ -30,7 +30,8 @@ const isAttachable = (t: string) => ATTACHABLE_TYPES.has(t);
  * {@link RELATION_KINDS} order. Symmetric: `allowedKinds(a, b)` === `allowedKinds(b, a)`.
  *
  * - `references` — always (the generic default; any pair may just be "related").
- * - `mentions`   — always (a prose @mention can point at anything).
+ * - `mentions`   — always (a prose @mention can point at anything), except with a
+ *                  conversation or a message at either end: those lines are Chat's.
  * - `works-at`   — only contact↔company.
  * - `paid-by`    — only when one end is a payment/invoice and the other is a party.
  * - `attachment` — only when one end is attachable (file/email/receipt); never person↔person.
@@ -38,10 +39,14 @@ const isAttachable = (t: string) => ATTACHABLE_TYPES.has(t);
  * - `blocks`     — only work↔work (a dependency edge between tasks/projects).
  * - `follow-up`  — when a work item is involved (a follow-up task owed on an entity).
  */
+/** "Mentioned in" lines to these are written by Chat's send and edit alone. */
+const CHAT_ENDS = new Set(["chat_channel", "chat_message"]);
+
 export function allowedKinds(a: string, b: string): RelationKind[] {
   const pairIs = (x: string, y: string) => (a === x && b === y) || (a === y && b === x);
 
-  const allowed = new Set<RelationKind>([DEFAULT_RELATION_KIND, "mentions"]);
+  const allowed = new Set<RelationKind>([DEFAULT_RELATION_KIND]);
+  if (!CHAT_ENDS.has(a) && !CHAT_ENDS.has(b)) allowed.add("mentions");
   if (pairIs("contact", "company")) allowed.add("works-at");
   if ((isMoney(a) && isParty(b)) || (isMoney(b) && isParty(a))) allowed.add("paid-by");
   if (isAttachable(a) || isAttachable(b)) allowed.add("attachment");
