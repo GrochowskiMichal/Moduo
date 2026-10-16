@@ -248,9 +248,13 @@ if (CHAT_CHANNEL && has("chat_post"))
   });
 
 // A key must be refused what it can't do: pick a write tool it doesn't list.
-const refusal = ["notes_create", "tasks_commit", "contacts_create", "links_create", "chat_post"].find(
-  (t) => !has(t),
-);
+const refusal = [
+  "notes_create",
+  "tasks_commit",
+  "contacts_create",
+  "links_create",
+  "chat_post",
+].find((t) => !has(t));
 if (refusal)
   await check("scope", `refuses ${refusal}`, async () => {
     try {

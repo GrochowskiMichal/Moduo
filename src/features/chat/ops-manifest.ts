@@ -15,7 +15,7 @@ import type { ModuleManifest } from "../../lib/module-manifest";
 export const chatModuleManifest: ModuleManifest = {
   module: "chat",
   summary:
-    "Conversations for Duo/Team workspaces. A key reads, searches and posts as its creator (\"Alex · via CI key\") in public channels, and in private ones its creator is in only when the key allows it; direct messages stay off-limits.",
+    'Conversations for Duo/Team workspaces. A key reads, searches and posts as its creator ("Alex · via CI key") in public channels, and in private ones its creator is in only when the key allows it; direct messages stay off-limits.',
   permissionKey: "chat",
   activityEntityTypes: ["chat_channel"],
   ops: [
@@ -36,7 +36,7 @@ export const chatModuleManifest: ModuleManifest = {
       rpc: "chat_op_agent_react",
       summary: "Add or take back the key creator's reaction on a message. Needs Chat: Edit.",
       args: {
-        p_workspace_id: "workspace uuid (the key's)", 
+        p_workspace_id: "workspace uuid (the key's)",
         p_message_id: "chat_messages uuid",
         p_key: "emoji or :name:",
         p_on: "boolean",
@@ -46,7 +46,11 @@ export const chatModuleManifest: ModuleManifest = {
       op: "chat.agent_mark_decision",
       rpc: "chat_op_agent_mark_decision",
       summary: "Mark or unmark a message as a decision. Needs Chat: Edit.",
-      args: { p_workspace_id: "workspace uuid (the key's)", p_message_id: "chat_messages uuid", p_on: "boolean" },
+      args: {
+        p_workspace_id: "workspace uuid (the key's)",
+        p_message_id: "chat_messages uuid",
+        p_on: "boolean",
+      },
     },
     {
       op: "chat.agent_wrap_up",
@@ -73,12 +77,19 @@ export const chatModuleManifest: ModuleManifest = {
     },
   ],
   resources: [
-    { name: "chat.conversations", summary: "The conversations the key can read (chat_agent_conversations)." },
+    {
+      name: "chat.conversations",
+      summary: "The conversations the key can read (chat_agent_conversations).",
+    },
     {
       name: "chat.messages",
-      summary: "A conversation's messages or one reply chain, in keyset pages (chat_agent_messages).",
+      summary:
+        "A conversation's messages or one reply chain, in keyset pages (chat_agent_messages).",
     },
-    { name: "chat.search", summary: "Search the conversations the key can read (chat_agent_search)." },
+    {
+      name: "chat.search",
+      summary: "Search the conversations the key can read (chat_agent_search).",
+    },
     {
       name: "chat.addressed",
       summary:

@@ -627,9 +627,14 @@ export function ApiKeysSection() {
     setPrivateBusyId(key.id);
     try {
       const next = await runtime.workspace.setApiKeyPrivateChat(key.id, on);
-      setKeys((prev) => prev?.map((k) => (k.id === key.id ? { ...k, includePrivateChat: next } : k)) ?? prev);
+      setKeys(
+        (prev) =>
+          prev?.map((k) => (k.id === key.id ? { ...k, includePrivateChat: next } : k)) ?? prev,
+      );
       toast.success(
-        next ? `${key.name} can read your private channels.` : `${key.name} reads public channels only.`,
+        next
+          ? `${key.name} can read your private channels.`
+          : `${key.name} reads public channels only.`,
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't change the key.");

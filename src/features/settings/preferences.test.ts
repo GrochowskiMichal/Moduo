@@ -572,8 +572,9 @@ describe("chatKeyReplies (CV-21): a reply switch per key", () => {
     const id = "11111111-1111-4111-8111-111111111111";
     expect(sanitizePreferences({}).chatKeyReplies).toEqual({});
     expect(
-      sanitizePreferences({ chatKeyReplies: { [id]: false, "not-a-key": true, [id.replace("1", "2")]: "yes" } })
-        .chatKeyReplies,
+      sanitizePreferences({
+        chatKeyReplies: { [id]: false, "not-a-key": true, [id.replace("1", "2")]: "yes" },
+      }).chatKeyReplies,
     ).toEqual({ [id]: false });
     expect(sanitizePreferences({ chatKeyReplies: "nope" }).chatKeyReplies).toEqual({});
   });

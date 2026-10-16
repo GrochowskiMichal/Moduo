@@ -590,13 +590,17 @@ describe("the key's private channels switch (CV-21)", () => {
     mocks.workspace.setApiKeyPrivateChat.mockResolvedValue(true);
     const { user } = renderSection();
     await screen.findByText("View: Tasks");
-    await user.click(within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }));
+    await user.click(
+      within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }),
+    );
     expect(within(keyRow("Claude")).queryByRole("switch")).toBeNull();
 
     await user.click(scopeOption(keyRow("Claude"), "Chat", "View"));
     expect(isChecked(privateSwitch())).toBe(false);
     await user.click(privateSwitch());
-    await waitFor(() => expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", true));
+    await waitFor(() =>
+      expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", true),
+    );
     await waitFor(() => expect(isChecked(privateSwitch())).toBe(true));
     // Not part of the scopes map: nothing went through the scopes call.
     expect(mocks.workspace.setApiKeyScopes).not.toHaveBeenCalled();
@@ -609,7 +613,9 @@ describe("the key's private channels switch (CV-21)", () => {
     ]);
     const { user } = renderSection();
     await screen.findByText("Claude", { selector: "p" });
-    await user.click(within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }));
+    await user.click(
+      within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }),
+    );
     expect(isDisabled(privateSwitch())).toBe(true);
     within(keyRow("Claude")).getByText("Only Anna can turn this on. You can turn it off.");
     cleanup();
@@ -625,6 +631,8 @@ describe("the key's private channels switch (CV-21)", () => {
     );
     expect(isDisabled(privateSwitch())).toBe(false);
     await second.user.click(privateSwitch());
-    await waitFor(() => expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", false));
+    await waitFor(() =>
+      expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", false),
+    );
   });
 });

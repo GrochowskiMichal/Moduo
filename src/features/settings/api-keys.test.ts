@@ -594,7 +594,14 @@ describe("keysWithReplySwitch: a reply switch per key of yours that reads chat (
       { ...base, id: "b", name: "Reader", scopes: { chat: "view" }, createdBy: "me" },
       { ...base, id: "c", name: "Tasks", scopes: { tasks: "edit" }, createdBy: "me" },
       { ...base, id: "d", name: "Theirs", scopes: { chat: "edit" }, createdBy: "anna" },
-      { ...base, id: "e", name: "Old", scopes: { chat: "edit" }, createdBy: "me", expiresAt: "2026-10-01T00:00:00Z" },
+      {
+        ...base,
+        id: "e",
+        name: "Old",
+        scopes: { chat: "edit" },
+        createdBy: "me",
+        expiresAt: "2026-10-01T00:00:00Z",
+      },
     ];
     expect(keysWithReplySwitch(keys, "me", now).map((k) => k.id)).toEqual(["a", "b"]);
   });

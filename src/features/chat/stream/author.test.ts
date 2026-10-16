@@ -41,7 +41,9 @@ describe("who wrote it (CV-21)", () => {
       createdAt: AT,
       snippet: "",
     };
-    expect(authorOf({ ...hit, authorId: YOU, authorLabel: "Claude" }, personOf)).toBe("Alex Rivera · via Claude");
+    expect(authorOf({ ...hit, authorId: YOU, authorLabel: "Claude" }, personOf)).toBe(
+      "Alex Rivera · via Claude",
+    );
     expect(authorOf({ ...hit, authorId: null, authorLabel: "CI" }, personOf)).toBe("CI");
     expect(authorOf({ ...hit, authorId: YOU, authorLabel: null }, personOf)).toBe("Alex Rivera");
   });

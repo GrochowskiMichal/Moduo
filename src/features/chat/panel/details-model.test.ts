@@ -179,8 +179,12 @@ describe("keyReadersLine (CV-21): who has an app that reads this private channel
   it("names the people whose keys read it, yours first", () => {
     expect(keyReadersLine([], "me")).toBeNull();
     expect(keyReadersLine(null, "me")).toBeNull();
-    expect(keyReadersLine([{ userId: "a", name: "Alex" }], "me")).toBe("An app of Alex's can read this");
-    expect(keyReadersLine([{ userId: "me", name: "Me" }], "me")).toBe("An app of yours can read this");
+    expect(keyReadersLine([{ userId: "a", name: "Alex" }], "me")).toBe(
+      "An app of Alex's can read this",
+    );
+    expect(keyReadersLine([{ userId: "me", name: "Me" }], "me")).toBe(
+      "An app of yours can read this",
+    );
     expect(
       keyReadersLine(
         [
