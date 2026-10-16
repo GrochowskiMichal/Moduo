@@ -83,3 +83,31 @@ export async function ackNotices(ids: string[]): Promise<void> {
     // The browser's push may ring once more: never worth an error.
   }
 }
+
+/** One of your apps or tabs as the export lists it (CV-22). */
+export type MyClient = {
+  id: string;
+  surface: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  lastActiveAt: string | null;
+};
+
+/** Your own apps and tabs (the table's rule shows each person only their own). */
+export async function listMyClients(userId: string): Promise<MyClient[]> {
+  const { data, error } = await supabaseClient
+    .from("user_clients")
+    .select("id, surface, user_agent, created_at, last_seen_at, last_active_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    id: String(r.id),
+    surface: String(r.surface),
+    userAgent: r.user_agent == null ? null : String(r.user_agent),
+    createdAt: String(r.created_at),
+    lastSeenAt: String(r.last_seen_at),
+    lastActiveAt: r.last_active_at == null ? null : String(r.last_active_at),
+  }));
+}

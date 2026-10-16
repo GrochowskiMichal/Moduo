@@ -140,27 +140,27 @@ describe("postgresChangesSource", () => {
     expect(events.at(-1)).toEqual({ type: "lost", source: "messages" });
   });
 
-  it("only your own membership leaves: Realtime doesn't filter deletes (CV-3 review)", () => {
+  it("only your own membership leaves; a removed row is a bare key and says nothing (CV-22)", () => {
     const { socket, channels, fire } = fakeSocket();
     const events: ChatLiveEvent[] = [];
     postgresChangesSource(socket)({ workspaceId: WS, userId: ME }, (e) => events.push(e));
     const members = channels[2]!;
-    // Someone else's row removed (their account went): the old record is the key.
-    fire(members, "postgres_changes", {
-      eventType: "DELETE",
-      new: {},
-      old: { channel_id: "general", user_id: "ana" },
-    });
+    // A removed row: its old record is the row's own id, nothing else.
+    fire(members, "postgres_changes", { eventType: "DELETE", new: {}, old: { id: "row-1" } });
     // Your row in another workspace stamped as left.
     fire(members, "postgres_changes", {
       eventType: "UPDATE",
       new: { channel_id: "c9", user_id: ME, workspace_id: "ws-2", left_at: "2026-10-14T12:00:00Z" },
     });
+    // Someone else's row in this workspace.
+    fire(members, "postgres_changes", {
+      eventType: "UPDATE",
+      new: { channel_id: "general", user_id: "ana", workspace_id: WS, left_at: "2026-10-14T12:00:00Z" },
+    });
     expect(events).toEqual([]);
     fire(members, "postgres_changes", {
-      eventType: "DELETE",
-      new: {},
-      old: { channel_id: "general", user_id: ME },
+      eventType: "UPDATE",
+      new: { channel_id: "general", user_id: ME, workspace_id: WS, left_at: "2026-10-14T12:00:00Z" },
     });
     expect(events).toEqual([{ type: "member-left", channelId: "general" }]);
   });
