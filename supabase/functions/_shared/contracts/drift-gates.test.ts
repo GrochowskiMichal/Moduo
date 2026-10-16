@@ -71,6 +71,8 @@ import {
   TEMPLATE_LINK_TYPES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
+  STATUS_CLEAR_AFTER,
+  STATUS_PRESETS,
   WAITLIST_STATUSES,
 } from "./vocabularies.ts";
 
@@ -156,6 +158,19 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`linked_type IN (${inList(CHAT_LINK_TARGETS)})`);
     const kinds = RELATION_KINDS.map((k) => `'${k}'::text`).join(", ");
     expect(sql.replace(/\s+/g, " ")).toContain(`relation_kind = ANY (ARRAY[${kinds}])`);
+  });
+
+  it("statuses vocabularies match the …_chat_v2_statuses CHECKs (CV-17)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_statuses.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const spaced = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`preset IN (${inList(STATUS_PRESETS)})`);
+    expect(sql).toContain(`clear_after IN (${inList(STATUS_CLEAR_AFTER)})`);
+    // The ops check the same lists.
+    expect(sql).toContain(`preset NOT IN (${spaced(STATUS_PRESETS)})`);
+    expect(sql).toContain(`clear_after NOT IN (${spaced(STATUS_CLEAR_AFTER)})`);
   });
 
   it("CHAT_MENTION_REASONS are the reasons the fan-out writes on chat.mention rows (CV-5)", () => {

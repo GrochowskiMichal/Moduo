@@ -28,6 +28,13 @@ import { useCatchupScreen } from "../catchup/catchup-view";
 import { LaterDialog } from "../catchup/later-dialog";
 import { laterHint } from "../catchup/later-times";
 import {
+  composerHoldLine,
+  nowLine,
+  type PresenceState,
+  presenceStateOf,
+} from "@/lib/statuses/model";
+import { usePeopleNow } from "@/lib/statuses/store";
+import {
   type ChainRights,
   chainGroups,
   chainsStamp,
@@ -74,7 +81,7 @@ import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
 import { composerLine, newestPost } from "./composer-state";
-import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
+import { ComposerLineView, ConversationStart, HoldLine, OfflineLine } from "./conversation-states";
 import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
 import {
@@ -190,7 +197,7 @@ export function ChatScreen({
   const store = useChatStore(runtime, userId, workspaceId);
   const snap = useChatSnapshot(store);
   const ready = snap.status === "ready";
-  const presence = useChatPresence(workspaceId, userId, ready && !snap.paused);
+  const presence = useChatPresence(workspaceId, userId, ready);
   const typingStore = useMemo(
     () => (runtime && userId ? chatTypingStore(runtime, userId) : null),
     [runtime, userId],
@@ -218,6 +225,25 @@ export function ChatScreen({
     [peopleById],
   );
   const online = useCallback((id: string) => presence.online.has(id), [presence.online]);
+  // CV-17: the shapes and "now" lines from presence plus chat_now.
+  const peopleNow = usePeopleNow(userId, workspaceId);
+  const nowOf = useCallback((id: string) => peopleNow.people.get(id), [peopleNow.people]);
+  const stateOf = useCallback(
+    (id: string): PresenceState => {
+      const n = peopleNow.people.get(id);
+      return presenceStateOf({
+        online: presence.online.has(id),
+        away: presence.away.has(id),
+        dnd: n?.dnd,
+        focusing: n?.focusing,
+      });
+    },
+    [peopleNow.people, presence.online, presence.away],
+  );
+  const statusOf = useCallback(
+    (id: string) => nowLine(peopleNow.people.get(id), stateOf(id)),
+    [peopleNow.people, stateOf],
+  );
 
   // ── the left panel ────────────────────────────────────────────────────────
   const model = useMemo(
@@ -814,7 +840,7 @@ export function ChatScreen({
       model={model}
       activeId={browsing || catchup ? null : conversationId}
       personOf={personOf}
-      online={online}
+      online={stateOf}
       collapsed={collapsed}
       onToggleSection={toggleSection}
       onOpen={(id) => onOpen(id)}
@@ -910,6 +936,11 @@ export function ChatScreen({
   } else {
     const title = conversationTitle(channel, selfId, personOf);
     const others = channel.kind === "dm" ? dmPeople(channel, selfId) : [];
+    // CV-17: a one-to-one direct message to someone on do not disturb.
+    const other = others.length === 1 ? others[0]! : null;
+    const holdLine = other
+      ? composerHoldLine((personOf(other)?.name ?? "They").split(/\s+/)[0]!, nowOf(other))
+      : null;
     const line = composerRefusal;
     const canWrite = canWriteHere;
     const typingNames = typing.entries
@@ -925,7 +956,12 @@ export function ChatScreen({
           row={{ channel, people: others, title }}
           member={member}
           personOf={personOf}
-          online={online}
+          online={stateOf}
+          statusText={
+            channel.kind === "dm" && others.length === 1
+              ? nowLine(nowOf(others[0]!), stateOf(others[0]!), new Date(), { task: true })
+              : undefined
+          }
           peopleCount={peopleCount}
           canManage={canManage}
           paused={snap.paused}
@@ -1080,7 +1116,8 @@ export function ChatScreen({
                 userId={id}
                 person={personOf(id)}
                 self={id === selfId}
-                online={id === selfId || online(id)}
+                state={stateOf(id)}
+                now={nowOf(id)}
                 canMessage={canStart}
                 onMessage={(uid) => openDmWith([uid])}
               />
@@ -1090,6 +1127,7 @@ export function ChatScreen({
         </MadeFromScope>
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
+          {holdLine ? <HoldLine text={holdLine} /> : null}
           {managersPending ? null : line ? (
             <ComposerLineView
               line={line}
@@ -1219,7 +1257,8 @@ export function ChatScreen({
             userId={entry.id}
             person={person}
             self={entry.id === selfId}
-            online={entry.id === selfId || online(entry.id)}
+            state={stateOf(entry.id)}
+            now={nowOf(entry.id)}
             canMessage={canStart}
             onMessage={(uid) => openDmWith([uid])}
           />
@@ -1316,6 +1355,8 @@ export function ChatScreen({
             selfId={selfId}
             personOf={personOf}
             online={online}
+            stateOf={stateOf}
+            statusOf={statusOf}
             members={details.members}
             pinned={details.pinned}
             history={details.history}

@@ -26,6 +26,7 @@ import { FeedItem } from "@/components/ui/feed";
 import { GroupHeader } from "@/components/ui/group-header";
 import { PropertyRow, PropertyValue } from "@/components/ui/property-row";
 import { Switch } from "@/components/ui/switch";
+import type { PresenceState } from "@/lib/statuses/model";
 import { formatAge, formatDate, formatStamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
@@ -56,6 +57,9 @@ export type DetailsViewProps = {
   /** Whether this person's role posts (only they can be made a manager); default: not a viewer. */
   canBeManager?: (id: string) => boolean;
   online: (id: string) => boolean;
+  /** The presence shape and the "now" line per person (CV-17). */
+  stateOf?: (id: string) => PresenceState;
+  statusOf?: (id: string) => string;
   members: readonly ChatMember[] | null;
   pinned: readonly ChatMessage[] | null;
   history: readonly ChatHistoryEntry[] | null;
@@ -96,6 +100,8 @@ export function DetailsView({
   personOf,
   canBeManager,
   online,
+  stateOf,
+  statusOf,
   members,
   pinned,
   history,
@@ -121,7 +127,7 @@ export function DetailsView({
   linkSection,
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
-  const people = members ? detailsPeople(members, selfId, personOf, online) : null;
+  const people = members ? detailsPeople(members, selfId, personOf, online, stateOf) : null;
   const canLeave = isChannel && !!member && !channel.isDefault;
   const managerSet = new Set(managers ?? []);
   // Archive sits in Channel settings (frame 4); an archived channel shows no
@@ -180,12 +186,7 @@ export function DetailsView({
                   data-person={p.userId}
                   className={ROW_BUTTON}
                 >
-                  <PresenceAvatar
-                    name={p.name}
-                    id={p.userId}
-                    src={p.avatarUrl}
-                    online={p.online && !p.former}
-                  />
+                  <PresenceAvatar name={p.name} id={p.userId} src={p.avatarUrl} state={p.state} />
                   <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
                   {isChannel && managerSet.has(p.userId) ? (
                     <span
@@ -195,12 +196,11 @@ export function DetailsView({
                       Manager
                     </span>
                   ) : null}
-                  {/* The status line (presets, "clear after") arrives with CV-17. */}
                   <span
                     data-slot="person-status"
-                    className="shrink-0 text-xs text-subtle-foreground"
+                    className="min-w-0 max-w-1/2 shrink truncate text-xs text-subtle-foreground"
                   >
-                    {p.self ? "you" : p.former ? "former member" : null}
+                    {p.self ? "you" : p.former ? "former member" : statusOf?.(p.userId) || null}
                   </span>
                   {settingsShown && !p.former ? (
                     <span aria-hidden className="w-5 shrink-0" />
