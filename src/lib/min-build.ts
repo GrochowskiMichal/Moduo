@@ -124,6 +124,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   // CV-17: teammates' "now" (statuses, do not disturb, Focusing).
   "chat_now",
   "user_time_region",
+  // CV-18: the workspaces whose notifications you paused (the switcher).
+  "workspace_notice_pauses",
 ]);
 
 /**
