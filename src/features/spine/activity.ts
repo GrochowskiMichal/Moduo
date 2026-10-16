@@ -318,6 +318,11 @@ export function spineActivityLine(
       return "deleted a message";
     case "chat.message_restore":
       return "brought back a message";
+    // Reply chains (CV-12): the toast's Undo reads as one, quietly.
+    case "chat.wrap_up":
+      return "wrapped up a reply chain";
+    case "chat.reopen":
+      return p.undo === true ? "undid a wrap-up" : "reopened a reply chain";
     case "chat.react":
       return p.on === false ? "took back a reaction" : "reacted to a message";
     default:

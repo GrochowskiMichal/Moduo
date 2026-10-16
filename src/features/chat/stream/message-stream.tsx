@@ -103,6 +103,8 @@ export type MessageStreamHandle = {
   focusLast: () => void;
   /** Go to the newest message (after you send, from anywhere in history). */
   showLatest: () => void;
+  /** Bring a drawn message into view and light it (a quote line); false: not drawn. */
+  jumpTo: (messageId: string) => boolean;
 };
 
 export type MessageStreamProps = {
@@ -141,6 +143,14 @@ export type MessageStreamProps = {
   onCopyLink: (m: ChatMessage) => void;
   onMarkUnread: (m: ChatMessage) => void;
   onOpenChain: (m: ChatMessage) => void;
+  /** Reply (R, the toolbar): the composer answers `m` (CV-12). */
+  onReply: (m: ChatMessage) => void;
+  /** A reply's quote line: go to the message it answers. */
+  onJumpTo?: (m: ChatMessage) => void;
+  /** ⋯ → Reply to… for `m`, when you may (absent: no item). */
+  replyToFor?: (m: ChatMessage) => (() => void) | undefined;
+  /** ⋯ → Wrap up for a root with replies, when you may. */
+  wrapUpFor?: (m: ChatMessage) => (() => void) | undefined;
   onRetry: (m: ChatMessage) => void;
   onDiscard: (m: ChatMessage) => void;
   onPersonClick?: (userId: string) => void;
@@ -444,7 +454,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       return () => document.removeEventListener("visibilitychange", onVisible);
     }, [reportSeen]);
 
-    const fresh = atEnd || win.hasNewer ? 0 : countNewSince(win.rows, baseline, selfId);
+    const fresh = atEnd || win.hasNewer ? 0 : countNewSince(win.rows, baseline, selfId, hidden);
 
     // The polite live region names a new message from someone else.
     const [announce, setAnnounce] = useState("");
@@ -499,6 +509,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         }
         requestAnimationFrame(() => virtualizer.scrollToEnd());
       },
+      jumpTo: (id) => {
+        const i = indexOfKey(id);
+        if (i < 0) return false;
+        virtualizer.scrollToIndex(i, { align: "center" });
+        setLit(id);
+        return true;
+      },
     }));
 
     // Editing starts on a row that may be off screen (↑ from the composer): bring it in.
@@ -524,7 +541,9 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           const mine = !!selfId && (m.reactions[key] ?? []).includes(selfId);
           p.onReact(m, key, !mine);
         },
-        onReply: () => p.onOpenChain(m),
+        onReply: () => p.onReply(m),
+        onReplyTo: p.replyToFor?.(m),
+        onWrapUp: p.wrapUpFor?.(m),
         onReplyPrivately:
           p.onReplyPrivately && m.authorId && m.authorKind === "user" && !own(m)
             ? () => p.onReplyPrivately?.(m)
@@ -635,6 +654,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     const handlers = {
       onReact: (m: ChatMessage, key: string, on: boolean) => live.current.onReact(m, key, on),
       onOpenChain: (m: ChatMessage) => live.current.onOpenChain(m),
+      onJumpTo: (m: ChatMessage) => live.current.onJumpTo?.(m),
       onRetry: (m: ChatMessage) => live.current.onRetry(m),
       onDiscard: (m: ChatMessage) => live.current.onDiscard(m),
       onPersonClick: props.onPersonClick,
@@ -652,10 +672,18 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "event":
           return <EventLine message={row.message} />;
         case "deleted":
-          return <DeletedRow message={row.message} onOpenChain={handlers.onOpenChain} />;
+          return (
+            <DeletedRow
+              message={row.message}
+              settled={row.message.settledId ? rowById(row.message.settledId) : undefined}
+              ctx={ctx}
+              onOpenChain={handlers.onOpenChain}
+            />
+          );
         default: {
           const m = row.message;
           const person = m.authorId ? personOf(m.authorId) : undefined;
+          const settled = m.settledId ? rowById(m.settledId) : undefined;
           const quoted = m.replyToId ? rowById(m.replyToId) : undefined;
           const quotedPerson = quoted?.authorId ? personOf(quoted.authorId) : undefined;
           const editing = editingId === m.id;
@@ -671,6 +699,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               person={person}
               quoted={quoted}
               quotedName={quoted ? authorName(quoted, quotedPerson) : undefined}
+              settled={settled}
               ctx={ctx}
               selected={selected === row.key}
               target={lit === row.key}

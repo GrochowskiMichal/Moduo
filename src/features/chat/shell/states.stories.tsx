@@ -83,6 +83,11 @@ function msg(author: string, body: string, minutes: number): ChatMessage {
     replyCount: 0,
     lastReplyAt: null,
     replyUserIds: [],
+    wrappedAt: null,
+    wrappedBy: null,
+    settledId: null,
+    reopenedAt: null,
+    reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
     editedAt: null,
@@ -274,6 +279,7 @@ function ConversationState({ state }: { state: State }) {
         onCopyLink={noop}
         onMarkUnread={noop}
         onOpenChain={noop}
+        onReply={noop}
         onRetry={noop}
         onDiscard={noop}
         onReturnToComposer={noop}

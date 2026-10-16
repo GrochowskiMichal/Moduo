@@ -166,6 +166,17 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("chat.channel_restore"))).toBe("restored this channel");
   });
 
+  it("renders a reply chain's wrap-up, reopen and undo (CV-12)", () => {
+    const m = { message_id: "m1" };
+    expect(spineActivityLine(entry("chat.wrap_up", { ...m, settled_id: "m2" }))).toBe(
+      "wrapped up a reply chain",
+    );
+    expect(spineActivityLine(entry("chat.reopen", { ...m, undo: false }))).toBe(
+      "reopened a reply chain",
+    );
+    expect(spineActivityLine(entry("chat.reopen", { ...m, undo: true }))).toBe("undid a wrap-up");
+  });
+
   it("renders a conversation's message changes for Details' history (CV-8b)", () => {
     const m = { message_id: "m1" };
     expect(spineActivityLine(entry("chat.pin", { ...m, pinned: true }))).toBe("pinned a message");

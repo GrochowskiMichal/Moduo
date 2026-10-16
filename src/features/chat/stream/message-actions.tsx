@@ -2,14 +2,17 @@
 // toolbar floats over the row's top edge: your first three quick reactions ·
 // Reply · Task · ⋯ (Reply before Task). ⋯ holds the verbs whose blocks exist
 // today: Edit (own) · Delete (own) · Pin to conversation · Make a task ·
-// Copy link · Mark unread. Mark as decision, Reply to…, Move to…, Make a note
-// and Remind me join with their blocks (CV-13, CV-12, CV-16, CV-15, CV-14).
+// Copy link · Mark unread. Reply to… and Wrap up (a root with replies) came with CV-12;
+// Mark as decision, Move to…, Make a note and Remind me join with their
+// blocks (CV-14, CV-16, CV-15).
 // Right-click opens the same menu with your whole quick row on top and
 // "Customize…" (CV-7c, CH16a); "any emoji" shows once the picker passes
 // `onAnyEmoji` (CV-7b).
 
 import {
+  Check,
   CheckSquare,
+  CornerUpLeft,
   Link2,
   MessageSquareLock,
   MoreHorizontal,
@@ -40,6 +43,10 @@ export type MessageVerbs = {
   onReply: () => void;
   /** An announcement channel you can't post in: a direct message to the author (CH50). */
   onReplyPrivately?: () => void;
+  /** "Reply to…": attach this message to an earlier one's chain (absent: no item). */
+  onReplyTo?: () => void;
+  /** Wrap up this root's chain (absent: no item). */
+  onWrapUp?: () => void;
   onTask: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -109,6 +116,18 @@ function ActionsMenu({
           <DropdownMenuItem onSelect={verbs.onReplyPrivately}>
             <MessageSquareLock aria-hidden />
             Reply privately
+          </DropdownMenuItem>
+        ) : null}
+        {verbs.onReplyTo ? (
+          <DropdownMenuItem onSelect={verbs.onReplyTo}>
+            <CornerUpLeft aria-hidden />
+            Reply to…
+          </DropdownMenuItem>
+        ) : null}
+        {verbs.onWrapUp ? (
+          <DropdownMenuItem onSelect={verbs.onWrapUp}>
+            <Check aria-hidden />
+            Wrap up
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onSelect={verbs.onTask}>
