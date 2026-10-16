@@ -889,6 +889,11 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               picked={picked.has(row.key)}
               onClick={(e) => {
                 if (!(e.metaKey || e.ctrlKey) || m.sendState) return;
+                // ⌘-click on a link, chip or button inside keeps its own meaning.
+                const inner = (e.target as Element).closest(
+                  'a, button, [role="button"], [contenteditable="true"]',
+                );
+                if (inner && e.currentTarget.contains(inner)) return;
                 e.preventDefault();
                 togglePicked(row.key);
                 scrollRef.current?.focus({ preventScroll: true });
