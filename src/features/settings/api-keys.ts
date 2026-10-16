@@ -20,7 +20,6 @@ import {
   type WorkspaceRole,
 } from "@contracts/vocabularies";
 
-import type { WorkspaceApiKey } from "../../lib/runtime.types";
 import { formatFullDate } from "../../lib/time-format";
 
 export { MCP_KEY_MODULES, MCP_KEY_SCOPES, type McpKeyModule, type McpKeyScope, type McpKeyScopes };
@@ -299,21 +298,4 @@ export function keyLifecycle(
         : `Never used in ${idleDays} days. Revoke it if you no longer need it.`
       : null;
   return { status, expiryLine, staleNote };
-}
-
-/**
- * Chat (CV-21, §11): the keys that get a "Replies to posts by <key>" switch in
- * Settings: yours, live (not expired), reading chat.
- */
-export function keysWithReplySwitch(
-  keys: ReadonlyArray<WorkspaceApiKey>,
-  userId: string,
-  now: number = Date.now(),
-): WorkspaceApiKey[] {
-  return keys.filter(
-    (k) =>
-      k.createdBy === userId &&
-      (k.expiresAt === null || Date.parse(k.expiresAt) > now) &&
-      toKeyScopes(k.scopes).chat !== "none",
-  );
 }

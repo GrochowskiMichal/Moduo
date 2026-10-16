@@ -32,10 +32,9 @@ import {
   type NotificationType,
   usePreferences,
 } from "../../../lib/preferences";
-import { isTauriRuntime, type WorkspaceApiKey } from "../../../lib/runtime";
+import { isTauriRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import { keysWithReplySwitch } from "../api-keys";
 
 import { QuietHoursGroup } from "./quiet-hours-group";
 import { SettingsSectionShell } from "./section-shell";
@@ -412,24 +411,23 @@ function ChatNotificationsGroup() {
 
 /** One switch per live key of yours that reads chat here (CV-21, §11): a reply
  *  to a post made through that key reaches you only while it's on, unless the
- *  reply mentions you. Keys are listed to key managers (who make keys). */
+ *  reply mentions you. Your keys whatever your role now: they still post as you. */
 function ChatKeyReplyRows() {
   const { runtime, userId } = useAuth();
-  const { selectedWorkspace, can } = useWorkspace();
+  const { selectedWorkspace } = useWorkspace();
   const { preferences, setPreferences } = usePreferences();
-  const [keys, setKeys] = useState<WorkspaceApiKey[]>([]);
+  const [keys, setKeys] = useState<Array<{ id: string; name: string }>>([]);
   const workspaceId = selectedWorkspace?.id ?? null;
-  const canList = can("ws.api_keys");
 
   useEffect(() => {
-    if (!runtime || !workspaceId || !userId || !canList) {
+    if (!runtime || !workspaceId || !userId) {
       setKeys([]);
       return;
     }
     let cancelled = false;
-    runtime.workspace.listApiKeys(workspaceId).then(
+    runtime.workspace.listMyChatKeys(workspaceId).then(
       (list) => {
-        if (!cancelled) setKeys(keysWithReplySwitch(list, userId));
+        if (!cancelled) setKeys(list);
       },
       () => {
         if (!cancelled) setKeys([]);
@@ -438,7 +436,7 @@ function ChatKeyReplyRows() {
     return () => {
       cancelled = true;
     };
-  }, [runtime, workspaceId, userId, canList]);
+  }, [runtime, workspaceId, userId]);
 
   return keys.map((key) => (
     <PrefRow

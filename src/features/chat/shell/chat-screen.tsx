@@ -93,7 +93,7 @@ import {
 import type { ChatWindow, ChatWriteResult } from "../store/store";
 import { MadeFromScope, useMadeFrom } from "../stream/made-from";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
-import { authorName } from "../stream/rows";
+import { authorName, viaKey } from "../stream/rows";
 import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
@@ -549,16 +549,16 @@ export function ChatScreen({
   /** ↑ in an empty composer edits your last message; with none, it steps into the stream. */
   const editLast = useCallback(
     (items: ChatMessage[], skip: ReadonlySet<string>) => {
-      const mine = [...items]
-        .reverse()
-        .find(
-          (m) =>
-            !skip.has(m.id) &&
-            m.authorId === selfId &&
-            m.kind !== "event" &&
-            !m.deletedAt &&
-            !m.sendState,
-        );
+      const mine = [...items].reverse().find(
+        (m) =>
+          !skip.has(m.id) &&
+          m.authorId === selfId &&
+          // A post through your key (CV-21) is yours, but not one ↑ edits.
+          m.authorKind === "user" &&
+          m.kind !== "event" &&
+          !m.deletedAt &&
+          !m.sendState,
+      );
       if (mine) setEditingId(mine.id);
       else streamRef.current?.focusLast();
     },
@@ -1950,10 +1950,13 @@ export function messageSourceLabel(
   selfId: string,
   personOf: (id: string) => ChatPerson | undefined,
 ): string {
+  const person = m.authorId ? personOf(m.authorId) : undefined;
   const author =
     m.authorId && m.authorId === selfId
       ? "Your"
-      : `${authorName(m, m.authorId ? personOf(m.authorId) : undefined)}'s`;
+      : viaKey(m)
+        ? `${person?.name ?? "Former member"}'s`
+        : `${authorName(m, person)}'s`;
   return where
     ? `${author} message in ${conversationTitle(where, selfId, personOf)}`
     : `${author} message`;

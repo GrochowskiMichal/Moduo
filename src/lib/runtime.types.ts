@@ -485,6 +485,8 @@ export type ModuoRuntime = {
      * turns it on; any key manager turns it off. Resolves to the new value.
      */
     setApiKeyPrivateChat(keyId: string, on: boolean): Promise<boolean>;
+    /** Chat (CV-21): your own live keys that read chat here (Settings' reply switches). */
+    listMyChatKeys(workspaceId: string): Promise<Array<{ id: string; name: string }>>;
     revokeApiKey(keyId: string): Promise<void>;
     /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
     getMcpEndpoint(): string;

@@ -6,6 +6,7 @@ import { describe, expect, it } from "@rstest/core";
 import { authorOf } from "../find/chat-search-view";
 import type { ChatPerson } from "../model";
 import { message, YOU } from "../store/testing";
+import { countNewSince } from "../timeline";
 import { authorName, viaKey } from "./rows";
 
 const alex: ChatPerson = { userId: YOU, name: "Alex Rivera", avatarUrl: null, role: "member" };
@@ -46,5 +47,20 @@ describe("who wrote it (CV-21)", () => {
     );
     expect(authorOf({ ...hit, authorId: null, authorLabel: "CI" }, personOf)).toBe("CI");
     expect(authorOf({ ...hit, authorId: YOU, authorLabel: null }, personOf)).toBe("Alex Rivera");
+  });
+});
+
+describe("a post through your key is new to you (CV-21)", () => {
+  it("counts in the stream's new-messages pill; your own writing doesn't", () => {
+    const rows = [
+      message("a", "c1", "2026-10-16T10:00:00.000000+00:00"),
+      message("b", "c1", "2026-10-16T10:01:00.000000+00:00", {
+        authorKind: "api_key",
+        authorLabel: "CI",
+      }),
+      message("c", "c1", "2026-10-16T10:02:00.000000+00:00"),
+    ];
+    // Every row is YOU's: only the key's post counts.
+    expect(countNewSince(rows, "a", YOU)).toBe(1);
   });
 });

@@ -53,7 +53,8 @@
 --      through chat__search_in), chat_agent_addressed (the creator's open
 --      Catch up items, never a direct message).
 --   8. chat_key_readers(channel): who has a key that reads this private
---      channel, for Details' "An app of Alex's can read this".
+--      channel, for Details' "An app of Alex's can read this"; chat_my_keys:
+--      your keys that read chat, for Settings' reply switches.
 --
 -- Left as they are: chat_op_send and the person's other ops (a key still gets
 -- "You don't have access to this workspace."); v1 app rows keep a null author
@@ -66,6 +67,9 @@ SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE public.workspace_api_keys
   ADD COLUMN IF NOT EXISTS include_private_chat boolean NOT NULL DEFAULT false;
+
+-- Clients read keys column by column (the hash never): add this one.
+GRANT SELECT (include_private_chat) ON public.workspace_api_keys TO authenticated;
 
 COMMENT ON COLUMN public.workspace_api_keys.include_private_chat IS
   'Chat (CV-21): the key also reads the private channels its creator is a member of. Off by default; only the creator turns it on.';
@@ -323,17 +327,11 @@ BEGIN
     RAISE EXCEPTION 'Only managers can post in this channel.' USING ERRCODE = '42501';
   END IF;
 
-  IF btrim(v_body, E' \n\t') = '' THEN
-    RAISE EXCEPTION 'A message can''t be empty.' USING ERRCODE = '22023';
-  END IF;
-  IF char_length(v_body) > 8000 THEN
-    RAISE EXCEPTION 'That message is too long (8,000 characters max).' USING ERRCODE = '22023';
-  END IF;
-  -- Apps write v1's markup (<@USER_ID>, **bold**); the stored form is v2's.
+  -- A person's send's rules, on what's typed and on what's stored: apps write
+  -- v1's markup (<@USER_ID>, **bold**), the stored form is v2's.
+  PERFORM public.chat__check_body(v_body);
   v_stored := public.chat__v1_to_v2(v_body);
-  IF char_length(v_stored) > 8000 THEN
-    RAISE EXCEPTION 'That message is too long (8,000 characters max).' USING ERRCODE = '22023';
-  END IF;
+  PERFORM public.chat__check_body(v_stored);
 
   -- A reply joins the chain of what it answers (as chat_op_send does): the
   -- quoted message and its root locked in id order, then read again.
@@ -460,8 +458,9 @@ BEGIN
     v_payload := v_payload || jsonb_build_object('team_ids', to_jsonb(p_team_ids));
   END IF;
 
-  -- CV-21: a post through a key keeps the key's attribution ("<person> · via <key>").
-  IF p_actor IS NOT NULL AND p_msg.api_key_id IS NULL THEN
+  -- CV-21: what a key does now keeps the key's attribution ("<person> · via
+  -- <key>"), even though its creator is the actor; a person's edit is theirs.
+  IF p_actor IS NOT NULL AND public.module_api_key_id() IS NULL THEN
     INSERT INTO public.module_activity
       (workspace_id, module, entity_type, entity_id, op, actor_type, actor_id, actor_label, payload)
     VALUES
@@ -471,7 +470,7 @@ BEGIN
     RETURN v_id;
   END IF;
 
-  v_key := coalesce(p_msg.api_key_id, public.module_api_key_id());
+  v_key := public.module_api_key_id();
   IF v_key IS NULL THEN
     RAISE EXCEPTION 'No actor context for activity attribution.';
   END IF;
@@ -506,8 +505,11 @@ DECLARE
   v_people uuid[] := coalesce(p_msg.mentioned_user_ids, '{}'::uuid[]);
   v_teams uuid[] := coalesce(p_msg.mentioned_team_ids, '{}'::uuid[]);
   v_everyone boolean := coalesce(p_msg.mentions_everyone, false);
-  -- CV-21: a post through a key is new to its creator too, so nobody is skipped.
-  v_skip uuid := CASE WHEN p_msg.api_key_id IS NULL THEN p_actor END;
+  -- CV-21: a post the key is making now is new to its creator too, so nobody
+  -- is skipped (an edit its creator makes in the app is theirs, as usual).
+  v_skip uuid := CASE WHEN p_msg.api_key_id IS NOT NULL
+                           AND public.module_api_key_id() IS NOT DISTINCT FROM p_msg.api_key_id
+                      THEN NULL ELSE p_actor END;
   v_reason text;
   v_users uuid[];
   v_bell uuid[];
@@ -703,8 +705,10 @@ DECLARE
     WHEN 'reply' THEN 'chat_reply'
     WHEN 'announcement' THEN 'chat_announcement' END;
   v_now timestamptz := now();
-  -- CV-21: a post through a key rings its creator too.
-  v_skip uuid := CASE WHEN p_msg.api_key_id IS NULL THEN p_actor END;
+  -- CV-21: a post the key is making now rings its creator too.
+  v_skip uuid := CASE WHEN p_msg.api_key_id IS NOT NULL
+                           AND public.module_api_key_id() IS NOT DISTINCT FROM p_msg.api_key_id
+                      THEN NULL ELSE p_actor END;
   v_tag text;
   v_title text;
   v_url text;
@@ -1411,7 +1415,7 @@ BEGIN
   IF p_root_id IS NOT NULL AND NOT EXISTS (
        SELECT 1 FROM public.chat_messages rt
         WHERE rt.id = p_root_id AND rt.channel_id = p_channel_id AND rt.parent_id IS NULL
-          AND rt.kind = 'message') THEN
+          AND rt.kind = 'message' AND rt.deleted_at IS NULL) THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   -- A page may start from a message alone: its time is read here.
@@ -1646,8 +1650,14 @@ BEGIN
       LEFT JOIN public.profiles p ON p.id = m.author_id
      WHERE k.user_id = v_actor.creator AND k.workspace_id = v_actor.workspace_id
        AND k.done_at IS NULL
-       AND (k.later_until IS NULL OR k.later_until <= now())
+       -- What Catch up shows now (chat_catchup_open's rules): not put off
+       -- with Later, no team mention while teams are muted, no muted chain.
+       AND (k.later_until IS NULL OR k.later_notified_at IS NOT NULL OR k.later_until <= now())
        AND k.reason IN ('mention', 'team_mention', 'everyone', 'reply', 'announcement')
+       AND NOT (k.reason = 'team_mention' AND public.chat__team_muted(v_actor.creator))
+       AND NOT (k.reason = 'reply' AND EXISTS (
+             SELECT 1 FROM public.chat_chain_mutes cm
+              WHERE cm.user_id = v_actor.creator AND cm.root_id = k.chain_root_id))
        AND m.channel_id IN (SELECT public.chat__key_channel_ids(v_actor.workspace_id, v_actor.creator,
                                                                 v_actor.private_ok))
      ORDER BY m.created_at DESC, k.id DESC
@@ -1678,6 +1688,22 @@ BEGIN
        AND coalesce(public.module_api_key_effective_scopes(k.id) ->> 'chat', 'none') IN ('view', 'edit')
        AND public.chat__can_read_channel_as(c.id, k.created_by);
 END;
+$$;
+
+-- Your own live keys that read chat here (Settings' "Replies to posts by <key>"),
+-- whether or not you still manage keys.
+CREATE OR REPLACE FUNCTION public.chat_my_keys(p_workspace_id uuid)
+  RETURNS TABLE (id uuid, name text)
+  LANGUAGE sql
+  STABLE SECURITY DEFINER
+  SET search_path = ''
+AS $$
+  SELECT k.id, k.name
+    FROM public.workspace_api_keys k
+   WHERE k.workspace_id = p_workspace_id AND k.created_by = auth.uid()
+     AND k.revoked_at IS NULL AND (k.expires_at IS NULL OR k.expires_at > now())
+     AND coalesce(public.module_api_key_effective_scopes(k.id) ->> 'chat', 'none') IN ('view', 'edit')
+   ORDER BY k.created_at, k.id
 $$;
 
 -- ── Grants (DROP-free: redefined functions keep theirs; restated by name) ────
@@ -1744,6 +1770,7 @@ BEGIN
     'chat_unread_counts(uuid)',
     'chat_catchup_open(uuid)',
     'chat_key_readers(uuid)',
+    'chat_my_keys(uuid)',
     'workspace_api_keys_set_private_chat(uuid, boolean)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, service_role', fn);

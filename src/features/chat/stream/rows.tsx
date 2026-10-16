@@ -501,9 +501,7 @@ export function MessageRow({
             <div className="flex min-w-0 items-baseline gap-2 leading-normal">
               <AuthorName
                 name={viaKey(message) ? (person?.name ?? "Former member") : name}
-                userId={
-                  message.authorKind === "api_key" && !message.authorId ? null : message.authorId
-                }
+                userId={message.authorId}
                 handlers={handlers}
               />
               {/* A named delegate (§14): the person, then the key, no badge. */}

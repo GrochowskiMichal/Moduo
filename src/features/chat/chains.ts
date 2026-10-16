@@ -79,7 +79,9 @@ export function chainGroups(
     if (!mark) return { root, fresh: 0 };
     let fresh = 0;
     for (const r of opts.repliesOf(root.id)) {
-      if (r.deletedAt || r.authorId === opts.selfId || r.sendState) continue;
+      // A reply through your key (CV-21) is new to you; your own isn't.
+      if (r.deletedAt || (r.authorId === opts.selfId && r.authorKind === "user") || r.sendState)
+        continue;
       if (r.createdAt > mark) fresh += 1;
     }
     if (

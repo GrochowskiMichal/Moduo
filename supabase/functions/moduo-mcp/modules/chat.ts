@@ -75,6 +75,12 @@ export async function conversation(ctx: ToolContext, channel: string): Promise<R
   return found;
 }
 
+/** A conversation's id: as given when it's an id (the RPC applies the key's rules), else by name. */
+export async function conversationId(ctx: ToolContext, channel: string): Promise<string> {
+  const wanted = channel.trim();
+  return UUID.test(wanted) ? wanted.toLowerCase() : (await conversation(ctx, wanted)).id;
+}
+
 function shapeMessage(m: Row): Row {
   return {
     id: m.id,
@@ -136,7 +142,8 @@ export const chatConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         const channel = await conversation(ctx, str(args, "channel"));
-        const chain = messageId(args, "chain_id", false) || null;
+        // thread_id: v1's name for it, still read from agents set up then.
+        const chain = messageId(args, "chain_id", false) || messageId(args, "thread_id", false) || null;
         const limit = clampLimit(args, 30, 100);
         const before = messageId(args, "before", false);
         const list = await call<Row[]>(ctx, "chat_agent_messages", {
@@ -170,11 +177,11 @@ export const chatConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         const only = str(args, "channel", false);
-        const channel = only ? await conversation(ctx, only) : null;
+        const channelId = only ? await conversationId(ctx, only) : null;
         const list = await call<Row[]>(ctx, "chat_agent_search", {
           p_workspace_id: ctx.key.workspaceId,
           p_query: str(args, "query"),
-          p_channel_id: channel?.id ?? null,
+          p_channel_id: channelId,
           p_limit: clampLimit(args, 20, 50),
         });
         return list.map((h) => ({
@@ -183,7 +190,7 @@ export const chatConnectorModule: ConnectorModule = {
           chain_root_id: h.parent_id ?? null,
           author: { user_id: h.author_id ?? null, name: byline(h.author_name, h.via) },
           // The match is marked with U+E000 … U+E001; agents get **…**.
-          snippet: String(h.snippet ?? "").replace(//g, "**").replace(//g, "**"),
+          snippet: String(h.snippet ?? "").replace(/\uE000/g, "**").replace(/\uE001/g, "**"),
           created_at: h.created_at,
         }));
       },
@@ -229,16 +236,16 @@ export const chatConnectorModule: ConnectorModule = {
         required: ["channel", "text"],
       },
       handler: async (args, ctx) => {
-        const channel = await conversation(ctx, str(args, "channel"));
+        const channelId = await conversationId(ctx, str(args, "channel"));
         const m = one(
           await call(ctx, "chat_op_agent_post", {
             p_workspace_id: ctx.key.workspaceId,
-            p_channel_id: channel.id,
+            p_channel_id: channelId,
             p_body: str(args, "text"),
             p_parent_id: messageId(args, "thread_id", false) || null,
           }),
         );
-        return { id: m?.id, channel: channel.name, chain_root_id: m?.parent_id ?? null, created_at: m?.created_at };
+        return { id: m?.id, channel_id: m?.channel_id, chain_root_id: m?.parent_id ?? null, created_at: m?.created_at };
       },
     },
     {

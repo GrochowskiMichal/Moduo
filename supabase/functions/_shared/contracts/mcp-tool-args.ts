@@ -313,6 +313,7 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   chat_read: z.object({
     channel: nonempty,
     chain_id: nonempty.optional(),
+    thread_id: nonempty.optional(),
     before: nonempty.optional(),
     limit,
   }),

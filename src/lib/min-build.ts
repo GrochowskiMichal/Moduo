@@ -108,6 +108,7 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   // CV-19: ⌘K's Messages, Chat's Search and find in a conversation.
   "chat_search",
   "chat_key_readers",
+  "chat_my_keys",
   "chat_sync_ids",
   "chat_unread_counts",
   "chat_catchup_open",

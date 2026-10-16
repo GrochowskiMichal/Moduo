@@ -209,19 +209,26 @@ DO $$
 DECLARE
   v text;
   m public.chat_messages;
+  v_addressed text;
 BEGIN
   v := test.say('B', 'Q', 'b1', 'what failed?', 'k1');
   PERFORM test.ok(v LIKE 'ok %' AND test.items('A', 'b1') = 'reply',
     'switch on (default): B''s reply to the key''s post reaches A', test.items('A', 'b1'));
 
   PERFORM test.set_key_replies('A', 'KA', false);
+  v_addressed := test.value_as('A', format(
+      $q$SELECT addressed::text FROM public.chat_unread_counts(%L) WHERE channel_id = %L$q$,
+      test.id('W'), test.ref('Q')));
   v := test.say('C', 'Q', 'c1', 'still failing', 'k2');
   PERFORM test.ok(v LIKE 'ok %' AND test.items('A', 'c1') = '',
     'switch off: a reply to the key''s post doesn''t reach A', test.items('A', 'c1'));
   PERFORM test.ok(test.value_as('A', format(
       $q$SELECT addressed::text FROM public.chat_unread_counts(%L) WHERE channel_id = %L$q$,
-      test.id('W'), test.ref('Q'))) IS NOT NULL,
-    'switch off: counts still answer');
+      test.id('W'), test.ref('Q'))) = v_addressed,
+    'switch off: a reply to the key''s post doesn''t add to what''s addressed to A',
+    test.value_as('A', format(
+      $q$SELECT addressed::text FROM public.chat_unread_counts(%L) WHERE channel_id = %L$q$,
+      test.id('W'), test.ref('Q'))));
   v := test.say('C', 'Q', 'c2', format('ping %s', test.uri('person', test.id('A'))), 'k2');
   PERFORM test.ok(v LIKE 'ok %' AND test.items('A', 'c2') = 'mention',
     'switch off: a reply that mentions A still reaches A', test.items('A', 'c2'));
@@ -398,6 +405,58 @@ BEGIN
 END;
 $$;
 
+-- ── 8b. Review follow-ups ───────────────────────────────────────────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.age(interval '2 minutes');
+  -- The creator edits a key's post in the app: their edit, not the key's.
+  v := test.as_user('A', format($q$SELECT public.chat_op_edit(%L::uuid, %L::text)$q$,
+    test.ref('k3'), format('second deploy %s', test.uri('person', test.id('C')))));
+  PERFORM test.ok(v LIKE 'ok %' AND test.items('C', 'k3') = 'mention' AND test.items('A', 'k3') = '',
+    'edit: the creator''s edit names C; A isn''t told of their own edit', v);
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a
+                           WHERE a.op = 'chat.mention' AND a.payload ->> 'message_id' = test.ref('k3')::text
+                             AND a.actor_type = 'user' AND a.actor_id = test.id('A')),
+    'edit: the bell row is A''s own, not the key''s');
+
+  -- Addressed follows Catch up: a muted chain's reply isn't listed.
+  PERFORM test.say('A', 'Q', 'a9', 'a question from A');
+  PERFORM test.age(interval '15 seconds');
+  PERFORM test.say('B', 'Q', 'b9', 'an answer from B', 'a9');
+  v := test.key_value('KV', format($q$SELECT count(*)::text FROM public.chat_agent_addressed(%L) WHERE message_id = %L$q$,
+    test.id('W'), test.ref('b9')));
+  PERFORM test.ok(v = '1', 'addressed: a reply in A''s chain is listed', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_follow_chain(%L::uuid, false)$q$, test.ref('a9')));
+  v := test.key_value('KV', format($q$SELECT count(*)::text FROM public.chat_agent_addressed(%L) WHERE message_id = %L$q$,
+    test.id('W'), test.ref('b9')));
+  PERFORM test.ok(v = '0', 'addressed: not once A stops following the chain', v);
+
+  -- Replies and reads that name another conversation's message.
+  PERFORM test.age(interval '15 seconds');
+  v := test.post('KA', 'Q', 'kx', 'into the DM by reply', 'dm1');
+  PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'reply: never to a direct message''s message', v);
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_post(%L, NULL, 'by reply', %L)).id::text$q$,
+    test.id('W'), test.ref('r1')));
+  PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'reply: never to a channel the key can''t read', v);
+  v := test.key_value('KA', format($q$SELECT count(*)::text FROM public.chat_agent_messages(%L, %L)$q$,
+    test.ref('Q'), test.ref('dm1')));
+  PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'read: a chain id from another conversation is refused', v);
+  v := test.post('KA', 'Q', 'blank', '   ');
+  PERFORM test.ok(v = 'ERROR A message can''t be empty.', 'post: a person''s body rules apply', v);
+
+  -- Settings' reply switches list your own chat keys, whatever your role.
+  PERFORM test.ok(test.value_as('A', format($q$SELECT string_agg(name, ',' ORDER BY name) FROM public.chat_my_keys(%L)$q$, test.id('W'))) = 'CI key,Reader',
+    'chat_my_keys: A''s keys that read chat');
+  PERFORM test.ok(test.value_as('C', format($q$SELECT count(*)::text FROM public.chat_my_keys(%L)$q$, test.id('W'))) = '0',
+    'chat_my_keys: someone without keys sees none');
+  -- (The local stack's table grants are broader than prod's column grants.)
+  PERFORM test.ok(has_column_privilege('authenticated', 'public.workspace_api_keys', 'include_private_chat', 'SELECT'),
+    'column: key managers can read the switch');
+END;
+$$;
+
 -- ── 8. Grants ───────────────────────────────────────────────────────────────
 DO $$
 DECLARE
@@ -418,12 +477,15 @@ BEGIN
     'chat__react_as(uuid, uuid, text, boolean)', 'chat__mark_decision_as(uuid, uuid, boolean)',
     'chat__wrap_up_as(uuid, uuid, uuid, boolean)',
     'chat__create_channel_as(uuid, uuid, text, text, boolean, uuid[], boolean, text, uuid)',
-    'chat__search_in(uuid[], uuid, text, timestamptz, uuid, integer, uuid, timestamptz, boolean)']) f
+    'chat__search_in(uuid[], uuid, text, timestamptz, uuid, integer, uuid, timestamptz, boolean)',
+    'chat__key_channel_ids(uuid, uuid, boolean)', 'chat__key_message(uuid, uuid, text)',
+    'chat__op_guard_as(uuid, uuid)', 'chat__op_reader_as(uuid, uuid)', 'chat__op_channel_as(uuid, uuid)',
+    'chat__chain_root_as(uuid, uuid)']) f
    WHERE has_function_privilege('anon', 'public.' || f, 'EXECUTE')
       OR has_function_privilege('authenticated', 'public.' || f, 'EXECUTE');
   PERFORM test.ok(v_bad IS NULL, 'grants: the "as a person" bodies aren''t callable by clients', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad FROM unnest(ARRAY[
-    'chat_key_readers(uuid)', 'workspace_api_keys_set_private_chat(uuid, boolean)']) f
+    'chat_key_readers(uuid)', 'chat_my_keys(uuid)', 'workspace_api_keys_set_private_chat(uuid, boolean)']) f
    WHERE has_function_privilege('anon', 'public.' || f, 'EXECUTE')
       OR has_function_privilege('service_role', 'public.' || f, 'EXECUTE')
       OR NOT has_function_privilege('authenticated', 'public.' || f, 'EXECUTE');

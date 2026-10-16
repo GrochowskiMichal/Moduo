@@ -145,6 +145,18 @@ describe("chat tools: what they send", () => {
     expect(out.more).toEqual({ before: "a" });
   });
 
+  it("chat_read still reads v1's thread_id as the chain", async () => {
+    const { db, calls } = fakeDb({ chat_agent_conversations: [{ id: CH, name: "builds" }] });
+    await tool("chat_read").handler({ channel: CH, thread_id: MSG }, { key: key({ chat: "view" }), db });
+    expect(calls[1].params).toMatchObject({ p_root_id: MSG });
+  });
+
+  it("chat_post with a conversation id goes straight to the post (the server checks it)", async () => {
+    const { db, calls } = fakeDb({ chat_op_agent_post: { id: "m", channel_id: CH } });
+    await tool("chat_post").handler({ channel: CH, text: "hi" }, { key: key({ chat: "edit" }), db });
+    expect(calls.map((c) => c.fn)).toEqual(["chat_op_agent_post"]);
+  });
+
   it("chat_create_channel sends the name as typed", async () => {
     const { db, calls } = fakeDb({ chat_op_agent_create_channel: { id: CH, name: "Release Train", is_private: false } });
     await tool("chat_create_channel").handler({ name: "Release Train" }, { key: key({ chat: "edit" }), db });

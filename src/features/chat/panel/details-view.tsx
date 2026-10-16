@@ -134,6 +134,7 @@ export function DetailsView({
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
   const people = members ? detailsPeople(members, selfId, personOf, online, stateOf) : null;
+  const appLine = keyReadersLine(keyReaders, selfId);
   const canLeave = isChannel && !!member && !channel.isDefault;
   const managerSet = new Set(managers ?? []);
   // Archive sits in Channel settings (frame 4); an archived channel shows no
@@ -230,8 +231,8 @@ export function DetailsView({
           </ul>
         )}
         {/* CV-21: a key with "Include private channels I'm in" reads this channel. */}
-        {isChannel && channel.isPrivate && keyReadersLine(keyReaders, selfId) ? (
-          <Quiet data-slot="details-key-readers">{keyReadersLine(keyReaders, selfId)}</Quiet>
+        {isChannel && channel.isPrivate && appLine ? (
+          <Quiet data-slot="details-key-readers">{appLine}</Quiet>
         ) : null}
       </Section>
 

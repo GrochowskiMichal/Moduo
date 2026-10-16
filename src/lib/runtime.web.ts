@@ -1012,7 +1012,9 @@ export const webRuntime: ModuoRuntime = {
       // 42703 = a newer column isn't on this backend yet (expires_at:
       // 20261009210000; include_private_chat: CV-21's 20261017000000): list the
       // keys without them rather than lose the whole list.
-      if (error?.code === "42703") ({ data, error } = await list(`${columns}, expires_at`));
+      // 42501: the column is there but not yet readable by clients.
+      if (error?.code === "42703" || error?.code === "42501")
+        ({ data, error } = await list(`${columns}, expires_at`));
       if (error?.code === "42703") ({ data, error } = await list(columns));
       if (error) throw new Error(error.message);
       return ((data ?? []) as unknown as Array<Record<string, any>>).map((row) => ({
@@ -1051,6 +1053,17 @@ export const webRuntime: ModuoRuntime = {
         includePrivateChat: false,
         secret: row.secret,
       };
+    },
+    async listMyChatKeys(workspaceId) {
+      const { data, error } = await supabaseClient.rpc("chat_my_keys", {
+        p_workspace_id: workspaceId,
+      });
+      // Not on this server yet (CV-21's migration): no switches to show.
+      if (error?.code === "PGRST202") return [];
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as Array<{ id?: unknown; name?: unknown }>)
+        .filter((r) => typeof r.id === "string")
+        .map((r) => ({ id: r.id as string, name: typeof r.name === "string" ? r.name : "A key" }));
     },
     async setApiKeyPrivateChat(keyId, on) {
       const { data, error } = await supabaseClient.rpc("workspace_api_keys_set_private_chat", {
