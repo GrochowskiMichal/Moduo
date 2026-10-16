@@ -138,6 +138,8 @@ export type MessageStreamProps = {
   onReact: (m: ChatMessage, key: string, on: boolean) => void;
   onPin: (m: ChatMessage) => void;
   onTask: (m: ChatMessage) => void;
+  /** ⋯ → Remind me… and H (CV-11): absent, no item. */
+  onRemind?: (m: ChatMessage) => void;
   /** Announcement channels you can't post in: Reply privately to the author (CV-15). */
   onReplyPrivately?: (m: ChatMessage) => void;
   onCopyLink: (m: ChatMessage) => void;
@@ -549,6 +551,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
             ? () => p.onReplyPrivately?.(m)
             : undefined,
         onTask: () => p.onTask(m),
+        onRemind: p.onRemind && !m.sendState ? () => p.onRemind?.(m) : undefined,
         onEdit: canWrite && own(m) ? () => p.onStartEdit(m) : undefined,
         onDelete: canWrite && own(m) ? () => p.onDelete(m) : undefined,
         onPin: canWrite ? () => p.onPin(m) : undefined,
@@ -634,6 +637,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "T":
           e.preventDefault();
           verbs.onTask();
+          return;
+        case "h":
+        case "H":
+          if (verbs.onRemind) {
+            e.preventDefault();
+            verbs.onRemind();
+          } else if (canWrite) typeIntoComposer(e);
           return;
         default:
           if (canWrite) typeIntoComposer(e);

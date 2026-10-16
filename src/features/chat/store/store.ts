@@ -309,6 +309,7 @@ export class ChatStore {
   private lastFocusSync = 0;
 
   private listeners = new Set<() => void>();
+  private catchupListeners = new Set<() => void>();
   private snap: ChatSnapshot | null = null;
   private windowCache = new Map<string, ChatWindow>();
   private chainCache = new Map<string, ChatChain>();
@@ -330,6 +331,14 @@ export class ChatStore {
   }
 
   // ── Readers ───────────────────────────────────────────────────────────────
+
+  /** Your Catch up rows changed on the server (Realtime): Catch up's list re-reads (CV-11). */
+  onCatchupChange(fn: () => void): () => void {
+    this.catchupListeners.add(fn);
+    return () => {
+      this.catchupListeners.delete(fn);
+    };
+  }
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -602,6 +611,7 @@ export class ChatStore {
     if (this.persistTimer) clearTimeout(this.persistTimer);
     if (this.markTimer) clearTimeout(this.markTimer);
     this.listeners.clear();
+    this.catchupListeners.clear();
   }
 
   private async boot(): Promise<void> {
@@ -1490,9 +1500,11 @@ export class ChatStore {
         void this.checkAccess();
         return;
       case "catchup":
-        // Catch up's items are CV-11's. Your rows moved (a message wrote one,
-        // Done closed one): the counts are re-read once a burst settles (CV-6b).
+        // Your rows moved (a message wrote one, Done closed one): the counts
+        // are re-read once a burst settles (CV-6b), and Catch up's list
+        // (`catchup/catchup-store.ts`, CV-11) hears it.
         this.countsSoon();
+        for (const fn of this.catchupListeners) fn();
         return;
       case "joined":
         if (this.joinTimer) clearTimeout(this.joinTimer);

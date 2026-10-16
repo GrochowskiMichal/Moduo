@@ -6,7 +6,13 @@
 // Pure + deterministic; the runtime does the two reads (links + a batched
 // registry lookup) and hands them here.
 
-import type { EntityLink, EntityRecord, LinkOrigin, RelationKind } from "../../lib/entity-links";
+import {
+  type EntityLink,
+  type EntityRecord,
+  isChatEnd,
+  type LinkOrigin,
+  type RelationKind,
+} from "../../lib/entity-links";
 
 /** One endpoint of a recent link, label/icon resolved from the registry. */
 export type RecentLinkEndpoint = {
@@ -26,8 +32,6 @@ export type RecentLinkItem = {
   source: RecentLinkEndpoint;
   target: RecentLinkEndpoint;
 };
-
-const CHAT_ENDS = new Set(["chat_channel", "chat_message"]);
 
 function refKey(type: string, id: string): string {
   return `${type}:${id}`;
@@ -59,7 +63,7 @@ export function shapeRecentLinks(
     links
       // Chat's own links ("Mentioned in", "Became a task") show in chat and on
       // the item, not as workspace link activity (CV-10).
-      .filter((link) => !CHAT_ENDS.has(link.sourceType) && !CHAT_ENDS.has(link.targetType))
+      .filter((link) => !isChatEnd(link.sourceType) && !isChatEnd(link.targetType))
       .map((link) => ({
         id: link.id,
         relationKind: link.relationKind,

@@ -4,12 +4,14 @@
 
 import {
   isChatChannelKind,
+  normalizeChatCatchupReason,
   normalizeChatLinkTarget,
   normalizeChatMessageKind,
   normalizeChatNotifyLevel,
   normalizeContentAuthorKind,
 } from "@contracts/vocabularies";
 import type {
+  ChatCatchupItem,
   ChatChannel,
   ChatDeletedChannel,
   ChatHistoryEntry,
@@ -160,6 +162,28 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     createdAt,
     // A row read before CV-1's stamp (none on the server now) falls back to its time.
     updatedAt: str(r.updated_at) ?? createdAt,
+  };
+}
+
+export function mapCatchupItem(raw: unknown): ChatCatchupItem | null {
+  const r = asRow(raw);
+  const id = str(r?.id);
+  const channelId = str(r?.channel_id);
+  const reason = normalizeChatCatchupReason(r?.reason);
+  if (!r || !id || !channelId || !reason) return null;
+  const createdAt = str(r.created_at) ?? EPOCH;
+  return {
+    id,
+    channelId,
+    messageId: str(r.message_id),
+    chainRootId: str(r.chain_root_id),
+    reason,
+    actorId: str(r.actor_id),
+    createdAt,
+    laterUntil: str(r.later_until),
+    returnedAt: str(r.returned_at),
+    at: str(r.at) ?? createdAt,
+    channelName: str(r.channel_name),
   };
 }
 

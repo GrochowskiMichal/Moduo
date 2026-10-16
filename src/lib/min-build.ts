@@ -101,6 +101,7 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_recently_deleted",
   "chat_sync_ids",
   "chat_unread_counts",
+  "chat_catchup_open",
   "chat_workspace_enabled",
   "contact_merge_candidates",
   "focus_claims",
