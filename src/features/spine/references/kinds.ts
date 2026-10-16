@@ -16,6 +16,8 @@ const KIND_BY_TYPE: Record<string, ReferenceKind> = {
   project: "project",
   bucket: "project",
   tag: "tag",
+  chat_message: "message",
+  chat_channel: "conversation",
 };
 
 /** The reference kind for an entity type; anything unknown is `other`. */
@@ -41,6 +43,8 @@ const NOUN: Record<ReferenceKind, string> = {
   event: "event",
   project: "project",
   tag: "tag",
+  message: "message",
+  conversation: "conversation",
   other: "item",
 };
 
@@ -52,6 +56,11 @@ export function referenceNoun(kind: ReferenceKind): string {
 /** A deleted item's whole label: "Deleted task", "Deleted note" (no title, call 55). */
 export function deletedLabel(kind: ReferenceKind): string {
   return `Deleted ${referenceNoun(kind)}`;
+}
+
+/** An archived item's tombstone: "Website · archived" (its noun when it has no name). */
+export function archivedLabel(kind: ReferenceKind, title: string): string {
+  return `${title.trim() || `Archived ${NOUN[kind]}`}${title.trim() ? " · archived" : ""}`;
 }
 
 /** What an item you can't open reads as, everywhere (no title, no type). */
@@ -72,6 +81,9 @@ export function openInLabel(kind: ReferenceKind): string | null {
       return "Open in Notes";
     case "event":
       return "Open in Calendar";
+    case "message":
+    case "conversation":
+      return "Open in Chat";
     default:
       return null;
   }

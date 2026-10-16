@@ -13,6 +13,7 @@ const mocks = rs.hoisted(() => {
     listApiKeys: rs.fn(),
     createApiKey: rs.fn(),
     setApiKeyScopes: rs.fn(),
+    setApiKeyPrivateChat: rs.fn(),
     revokeApiKey: rs.fn(),
     getMcpEndpoint: () => "https://example.supabase.co/functions/v1/moduo-mcp",
   };
@@ -68,6 +69,7 @@ function storedKey(
     createdAt: "2026-10-01T00:00:00Z",
     lastUsedAt: null,
     expiresAt: null,
+    includePrivateChat: false,
     ...overrides,
   };
 }
@@ -576,5 +578,61 @@ describe("key expiry and staleness on a row", () => {
     renderSection();
     const row = await waitFor(() => keyRow("Claude"));
     expect(within(row).getByText(/^Unused for 75 days/)).toBeTruthy();
+  });
+});
+
+describe("the key's private channels switch (CV-21)", () => {
+  const privateSwitch = () =>
+    within(keyRow("Claude")).getByRole("switch", { name: "Include private channels I'm in" });
+
+  it("shows only once the key reads chat, and turns on through its own call", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([storedKey({ ...NONE, tasks: "view" })]);
+    mocks.workspace.setApiKeyPrivateChat.mockResolvedValue(true);
+    const { user } = renderSection();
+    await screen.findByText("View: Tasks");
+    await user.click(
+      within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }),
+    );
+    expect(within(keyRow("Claude")).queryByRole("switch")).toBeNull();
+
+    await user.click(scopeOption(keyRow("Claude"), "Chat", "View"));
+    expect(isChecked(privateSwitch())).toBe(false);
+    await user.click(privateSwitch());
+    await waitFor(() =>
+      expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", true),
+    );
+    await waitFor(() => expect(isChecked(privateSwitch())).toBe(true));
+    // Not part of the scopes map: nothing went through the scopes call.
+    expect(mocks.workspace.setApiKeyScopes).not.toHaveBeenCalled();
+  });
+
+  it("on someone else's key: can't turn it on, can turn it off", async () => {
+    mocks.ws.current = { ...mocks.ws.current, members: [anna] };
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey({ ...NONE, chat: "view" }, { createdBy: "u-anna" }),
+    ]);
+    const { user } = renderSection();
+    await screen.findByText("Claude", { selector: "p" });
+    await user.click(
+      within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }),
+    );
+    expect(isDisabled(privateSwitch())).toBe(true);
+    within(keyRow("Claude")).getByText("Only Anna can turn this on. You can turn it off.");
+    cleanup();
+
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey({ ...NONE, chat: "view" }, { createdBy: "u-anna", includePrivateChat: true }),
+    ]);
+    mocks.workspace.setApiKeyPrivateChat.mockResolvedValue(false);
+    const second = renderSection();
+    await screen.findByText("Claude", { selector: "p" });
+    await second.user.click(
+      within(keyRow("Claude")).getByRole("button", { name: "Edit access for Claude" }),
+    );
+    expect(isDisabled(privateSwitch())).toBe(false);
+    await second.user.click(privateSwitch());
+    await waitFor(() =>
+      expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", false),
+    );
   });
 });

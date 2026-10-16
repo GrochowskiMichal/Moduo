@@ -42,6 +42,7 @@ import {
   UPDATES_SENDER_ADDRESS,
 } from "./send.ts";
 import { BOOKING_QUEUED } from "./templates/booking.ts";
+import { chatWaitingEmail, parseChatWaitingPayload } from "./templates/chat-waiting.ts";
 import { opsAlertEmail, parseOpsAlertPayload } from "./templates/ops-alert.ts";
 import { parseWaitlistInvitePayload, waitlistInviteEmail } from "./templates/waitlist-invite.ts";
 import { WORKSPACE_QUEUED } from "./templates/workspace.ts";
@@ -96,6 +97,7 @@ export type QueuedTemplate = (payload: Record<string, unknown>) => QueuedEmail;
 export const OUTBOX_TEMPLATES: Partial<Record<EmailKind, QueuedTemplate>> = {
   waitlist_invite: (payload) => ({ doc: waitlistInviteEmail(parseWaitlistInvitePayload(payload)) }),
   ops_alert: (payload) => ({ doc: opsAlertEmail(parseOpsAlertPayload(payload)) }),
+  chat_waiting: (payload) => ({ doc: chatWaitingEmail(parseChatWaitingPayload(payload)) }),
   ...BOOKING_QUEUED,
   ...WORKSPACE_QUEUED,
 };

@@ -31,7 +31,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { Input } from "./input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 // NavRow — the sidebar row for every module (design-state-layer DS-3).
@@ -192,6 +191,12 @@ type NavRowProps = Omit<React.ComponentProps<"div">, "children" | "onSelect"> & 
   countLabel?: string;
   /** The destination you are on: `aria-current="page"`, neutral active fill. */
   current?: boolean;
+  /**
+   * Something new is waiting here (Chat's conversations, spec §2): the label
+   * turns to the strong weight and the foreground colour. Weight, never a
+   * coloured pill; the count stays for what is addressed to you.
+   */
+  unread?: boolean;
   onSelect?: () => void;
   /** An always-visible mark before the slot (drift, unread). Never swaps. */
   indicator?: React.ReactNode;
@@ -220,12 +225,82 @@ type NavRowProps = Omit<React.ComponentProps<"div">, "children" | "onSelect"> & 
 
 const LEVEL_PAD = { 0: "pl-2", 1: "pl-6", 2: "pl-10" } as const;
 
+// ── inline name field (MOD-159) ──────────────────────────────────────────────
+// Naming something in a rail (a rename, a new project or area) never moves a
+// row: the field is the label's own text, set in the label's type with no box
+// or padding of its own, so the caret sits where the label's first letter did
+// and the row keeps its height, padding and icon. The row rings while it is
+// edited, the way a keyboard-focused row does (MOD-160).
+const FIELD_TEXT = {
+  row: "font-display text-base font-medium",
+  header: "font-display text-sm font-medium",
+} as const;
+const FIELD_RING =
+  "has-[[data-slot=nav-row-input]:focus]:ring-2 has-[[data-slot=nav-row-input]:focus]:ring-ring/50";
+
+type NavRowInputProps = Omit<React.ComponentProps<"input">, "type"> & {
+  /** Whose text it stands in for: a row's label or a section header's. */
+  kind?: keyof typeof FIELD_TEXT;
+};
+
+// Not `Input variant="bare"`: that sets its own inline --ctrl-h height and the
+// bare field's ring, and this one must be the row's height with the ring on
+// the row.
+function NavRowInput({ kind = "row", className, ...props }: NavRowInputProps) {
+  return (
+    <input
+      type="text"
+      autoComplete="off"
+      data-slot="nav-row-input"
+      className={cn(
+        "h-full min-w-0 flex-1 bg-transparent p-0 text-foreground outline-none",
+        "placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground",
+        FIELD_TEXT[kind],
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+type NavRowFieldProps = Omit<NavRowInputProps, "className"> & {
+  /** The leading slot of the row it becomes (a row only), so the icon stays put. */
+  icon?: React.ReactNode;
+  level?: 0 | 1 | 2;
+  /** On the row box, e.g. the margin of the row it replaces. */
+  className?: string;
+};
+
+/**
+ * A rail's inline name field where there is no row to edit in place (a new
+ * project or area, an area's rename): a box with exactly the geometry of the
+ * NavRow (`kind="row"`) or NavSectionHeader (`kind="header"`) it stands in for.
+ */
+function NavRowField({ kind = "row", icon, level = 0, className, ...props }: NavRowFieldProps) {
+  return (
+    <div
+      data-slot="nav-row-field"
+      className={cn(
+        "relative flex min-w-0 items-center gap-2.5 rounded-md pr-1.5 text-muted-foreground",
+        "transition-shadow duration-(--motion-fade) ease-(--ease-out)",
+        kind === "header" ? "h-(--row-h-sm) pl-2" : ["h-(--row-h)", LEVEL_PAD[level]],
+        FIELD_RING,
+        className,
+      )}
+    >
+      {icon && kind === "row" ? <IconSlot>{icon}</IconSlot> : null}
+      <NavRowInput kind={kind} {...props} />
+    </div>
+  );
+}
+
 function NavRow({
   label,
   icon,
   count,
   countLabel,
   current = false,
+  unread = false,
   onSelect,
   indicator,
   menu,
@@ -272,6 +347,7 @@ function NavRow({
       data-slot="nav-row"
       data-nav-id={navId}
       data-current={current || undefined}
+      data-unread={unread || undefined}
       data-drop-target={dropTarget || undefined}
       data-dragging={dragging || undefined}
       className={cn(
@@ -279,10 +355,12 @@ function NavRow({
         "font-display text-base font-medium select-none",
         "transition-[color,background-color,box-shadow,opacity] duration-(--motion-fade) ease-(--ease-out)",
         "has-[[data-slot=nav-row-main]:focus-visible]:ring-2 has-[[data-slot=nav-row-main]:focus-visible]:ring-ring/50",
+        FIELD_RING,
         LEVEL_PAD[level],
         current
           ? "bg-state-active text-foreground"
           : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
+        unread && "font-semibold text-foreground",
         // DS-4's shared drag look; after the row's own classes so its hover:
         // copy replaces the row's hover (the dragged overlay passes the pointer through).
         dropTarget && [DROP_TARGET, "text-foreground"],
@@ -326,6 +404,7 @@ function NavRow({
             <span data-slot="nav-row-label" className="min-w-0 flex-1 truncate">
               {label}
             </span>
+            {unread ? <span className="sr-only">, unread</span> : null}
             {showCount ? <span className="sr-only">, {countLabel ?? String(count)}</span> : null}
           </button>
           {indicator ? (
@@ -433,9 +512,8 @@ function RenameField({
   };
 
   return (
-    <Input
+    <NavRowInput
       ref={ref}
-      size="sm"
       aria-label="Name"
       value={value}
       onChange={(e) => setValue(e.target.value)}
@@ -450,7 +528,6 @@ function RenameField({
         }
       }}
       onBlur={() => finish(true, false)}
-      className="min-w-0 flex-1 px-1.5 font-sans"
     />
   );
 }
@@ -653,5 +730,13 @@ function restoreNavFocus(
   focusNavRow(container, navId);
 }
 
-export type { NavRowProps, NavSectionHeaderProps };
-export { focusNavRow, NavRow, NavRowDot, NavSectionHeader, restoreNavFocus };
+export type { NavRowFieldProps, NavRowInputProps, NavRowProps, NavSectionHeaderProps };
+export {
+  focusNavRow,
+  NavRow,
+  NavRowDot,
+  NavRowField,
+  NavRowInput,
+  NavSectionHeader,
+  restoreNavFocus,
+};

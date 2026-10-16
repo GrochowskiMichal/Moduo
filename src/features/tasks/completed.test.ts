@@ -64,6 +64,11 @@ describe("partitionCompleted", () => {
 
   it("the line reads like the comp", () => {
     expect(completedLabel(5)).toBe("5 completed");
+    expect(completedLabel(5, "hidden")).toBe("5 completed");
+  });
+
+  it('in "7 days" it names the older ones, since the last week\'s show (MOD-148 follow-up)', () => {
+    expect(completedLabel(5, "week")).toBe("5 older completed");
   });
 });
 

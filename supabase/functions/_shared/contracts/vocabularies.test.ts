@@ -26,6 +26,7 @@ import {
   PRIORITY_LEVELS,
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
+  USER_RELATION_KINDS,
   TASK_STATUSES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
@@ -99,7 +100,9 @@ describe("vocabulary value sets", () => {
       "works-at",
       "follow-up",
       "paid-by",
+      "conversation-of",
     ]);
+    expect(USER_RELATION_KINDS).toEqual(RELATION_KINDS.filter((k) => k !== "conversation-of"));
     expect(LINK_ORIGINS).toEqual(["manual", "drag", "mention", "ref", "suggest"]);
   });
 
@@ -169,6 +172,7 @@ describe("vocabulary value sets", () => {
       "announcement",
       "build_update",
       "ops_alert",
+      "chat_waiting",
     ]);
     expect(isEmailKind("auth_code")).toBe(true);
     expect(isEmailKind("newsletter")).toBe(false);
@@ -422,6 +426,102 @@ describe("chat vocabularies", () => {
   });
 });
 
+describe("statuses (CV-17)", () => {
+  it("mirror the …_chat_v2_statuses CHECKs; parse, normalize and is agree", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.STATUS_PRESETS]).toEqual(["meeting", "sick", "vacation", "commuting"]);
+    expect([...v.STATUS_CLEAR_AFTER]).toEqual(["30m", "1h", "today", "this_week", "date", "never"]);
+    expect(v.parseStatusPreset("sick").success).toBe(true);
+    expect(v.parseStatusPreset("lunch").success).toBe(false);
+    expect(v.normalizeStatusPreset("lunch")).toBeNull();
+    expect(v.isStatusPreset("vacation")).toBe(true);
+    expect(v.parseStatusClearAfter("this_week").success).toBe(true);
+    expect(v.parseStatusClearAfter("fortnight").success).toBe(false);
+    expect(v.normalizeStatusClearAfter("fortnight")).toBe("never");
+    // Out sick and On vacation hold pings (AC6.6); every preset has its words.
+    expect(v.STATUS_PRESET_DEFAULTS.sick.dnd && v.STATUS_PRESET_DEFAULTS.vacation.dnd).toBe(true);
+    for (const p of v.STATUS_PRESETS) {
+      expect(v.STATUS_PRESET_DEFAULTS[p].text.length).toBeLessThanOrEqual(v.STATUS_TEXT_MAX);
+    }
+  });
+});
+
+describe("chat v2 vocabularies (CV-1)", () => {
+  it("mirror the …_chat_v2_foundation CHECKs", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CHAT_MESSAGE_KINDS]).toEqual(["message", "event"]);
+    expect([...v.CHAT_EVENT_TYPES]).toEqual(["moved_out", "moved_in"]);
+    expect([...v.CHAT_CATCHUP_REASONS]).toEqual([
+      "dm",
+      "mention",
+      "team_mention",
+      "everyone",
+      "reply",
+      "announcement",
+      "every_message",
+      "reminder",
+      "added",
+      "removed",
+      "level_reset",
+    ]);
+    expect([...v.CHAT_CATCHUP_DONE_HOW]).toEqual(["done", "read", "bell", "closed"]);
+  });
+  it("parse strictly for writes", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.parseChatMessageKind("event").success).toBe(true);
+    expect(v.parseChatMessageKind("note").success).toBe(false);
+    expect(v.parseChatEventType("moved_in").success).toBe(true);
+    expect(v.parseChatEventType("copied").success).toBe(false);
+    expect(v.parseChatCatchupReason("level_reset").success).toBe(true);
+    expect(v.parseChatCatchupReason("gossip").success).toBe(false);
+    expect(v.parseChatCatchupDoneHow("bell").success).toBe(true);
+    expect(v.parseChatCatchupDoneHow("ignored").success).toBe(false);
+  });
+  it("normalize reads: a missing kind is a message; unknown kinds, events and reasons are skipped", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeChatMessageKind(undefined)).toBe("message");
+    expect(v.normalizeChatMessageKind("event")).toBe("event");
+    expect(v.normalizeChatMessageKind("huddle")).toBeNull();
+    expect(v.normalizeChatEventType("huddle_started")).toBeNull();
+    expect(v.normalizeChatEventType("moved_out")).toBe("moved_out");
+    expect(v.normalizeChatCatchupReason("gossip")).toBeNull();
+    expect(v.normalizeChatCatchupReason("dm")).toBe("dm");
+    expect(v.normalizeChatCatchupDoneHow(null)).toBeNull();
+    expect(v.normalizeChatCatchupDoneHow("snoozed")).toBe("done");
+    expect(v.isChatCatchupDoneHow("read")).toBe(true);
+    expect(v.isChatEventType(42)).toBe(false);
+  });
+  it("a chat.mention bell row says why it reached you (CV-5)", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CHAT_MENTION_REASONS]).toEqual(["person", "team", "everyone"]);
+    expect(v.parseChatMentionReason("team").success).toBe(true);
+    expect(v.parseChatMentionReason("channel").success).toBe(false);
+    expect(v.normalizeChatMentionReason(undefined)).toBe("person");
+    expect(v.normalizeChatMentionReason("everyone")).toBe("everyone");
+    expect(v.isChatMentionReason("someone")).toBe(false);
+  });
+  it("device notices: chat's six kinds, and which app a client is (CV-6a)", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.NOTICE_DELIVERY_KINDS]).toEqual([
+      "reminder",
+      "agent",
+      "chat_message",
+      "chat_mention",
+      "chat_reply",
+      "chat_announcement",
+      "chat_reminder",
+      "chat_focus_summary",
+    ]);
+    expect(v.normalizeNoticeDeliveryKind("chat_reply")).toBe("chat_reply");
+    expect(v.normalizeNoticeDeliveryKind("chat_typing")).toBe("reminder");
+    expect([...v.CLIENT_SURFACES]).toEqual(["desktop", "web"]);
+    expect(v.parseClientSurface("desktop").success).toBe(true);
+    expect(v.parseClientSurface("phone").success).toBe(false);
+    expect(v.isClientSurface("web")).toBe(true);
+    expect(v.normalizeClientSurface(undefined)).toBe("web");
+  });
+});
+
 describe("MCP key scopes: modules, maps and strict parses", () => {
   it("lists the key modules in key-card order, Links last", async () => {
     const v = await import("./vocabularies.ts");
@@ -481,6 +581,108 @@ describe("content author kinds (chat messages and comments)", () => {
     expect(v.normalizeContentAuthorKind(undefined)).toBe("user");
     expect(v.normalizeContentAuthorKind("bot")).toBe("user");
     expect(v.isContentAuthorKind("bot")).toBe(false);
+  });
+});
+
+describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", () => {
+  it("default to Moduo's six, in order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.DEFAULT_QUICK_REACTIONS.join("")).toBe("👍✅👀🙏❤️😄");
+    expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.isReactionKey(k))).toBe(true);
+    // Stored as they are: a quick-row key and the key it reacts with are one chip.
+    expect(v.DEFAULT_QUICK_REACTIONS.every((k) => v.canonicalReactionKey(k) === k)).toBe(true);
+    expect(v.MAX_REACTION_KINDS).toBe(20);
+    expect(v.MAX_QUICK_REACTIONS).toBe(6);
+  });
+
+  it("accept exactly what the server accepts (the corpus in chat_reactions.test.sql)", async () => {
+    const v = await import("./vocabularies.ts");
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      "utf8",
+    );
+    const block = sql.slice(sql.indexOf("-- corpus:begin"), sql.indexOf("-- corpus:end"));
+    const rows = [...block.matchAll(/\('([0-9A-F ]*)', (true|false)\)/g)];
+    expect(rows.length).toBeGreaterThan(40);
+    for (const [, hex, ok] of rows) {
+      const key = hex ? String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16))) : "";
+      expect(v.isReactionKey(key), `[${hex}]`).toBe(ok === "true");
+      expect(v.parseReactionKey(key).success, `[${hex}]`).toBe(ok === "true");
+      const once = v.canonicalReactionKey(key);
+      expect(v.canonicalReactionKey(once), `[${hex}] spelled twice`).toBe(once);
+    }
+  });
+
+  it("have one spelling, the same as the server's (the canonical corpus)", async () => {
+    const v = await import("./vocabularies.ts");
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const sql = readFileSync(
+      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      "utf8",
+    );
+    const block = sql.slice(sql.indexOf("-- canonical:begin"), sql.indexOf("-- canonical:end"));
+    const rows = [...block.matchAll(/\('([0-9A-F ]+)', '([0-9A-F ]+)'\)/g)];
+    expect(rows.length).toBeGreaterThan(5);
+    const fromHex = (hex: string) =>
+      String.fromCodePoint(...hex.split(" ").map((h) => Number.parseInt(h, 16)));
+    for (const [, hex, want] of rows) {
+      expect(v.canonicalReactionKey(fromHex(hex)), `[${hex}]`).toBe(fromHex(want));
+      expect(v.canonicalReactionKey(fromHex(want)), `[${want}] again`).toBe(fromHex(want));
+      expect(v.isReactionKey(fromHex(want)), `[${want}]`).toBe(true);
+    }
+  });
+
+  it("refuse what the database can't even hold, and anything not a string", async () => {
+    const v = await import("./vocabularies.ts");
+    const lone = String.fromCharCode(0xd83d);
+    for (const k of [lone, `👍${String.fromCharCode(0xdc00)}`, "👍".repeat(400), "x".repeat(1024), null, 42, {}]) {
+      expect(v.isReactionKey(k), String(k).slice(0, 8)).toBe(false);
+    }
+  });
+
+  it("read: only a key shows; anything else stored is left out", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeReactionKey("🎉")).toBe("🎉");
+    expect(v.normalizeReactionKey(`👍${String.fromCodePoint(0x202e)}`)).toBeNull();
+    expect(v.normalizeReactionKey("thumbs_up")).toBeNull();
+    expect(v.normalizeReactionKey("")).toBeNull();
+    expect(v.normalizeReactionKey(7)).toBeNull();
+  });
+});
+
+describe("custom emoji (CV-20)", () => {
+  it("a name is 2–32 of a–z 0–9 - _ with a letter; its key is the name between colons", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const ok of ["shipit", "v2", "party-moduo", "a_b", "x".repeat(32)]) {
+      expect(v.isCustomEmojiName(ok), ok).toBe(true);
+      expect(v.isReactionKey(`:${ok}:`), ok).toBe(true);
+      expect(v.customEmojiNameOf(`:${ok}:`)).toBe(ok);
+    }
+    for (const bad of ["a", "12", "Shipit", "a b", "a+b", "x".repeat(33), "", ":ab:"]) {
+      expect(v.isCustomEmojiName(bad), bad).toBe(false);
+    }
+    expect(v.customEmojiNameOf("👍")).toBeNull();
+    expect(v.customEmojiNameOf(":ab")).toBeNull();
+  });
+
+  it("a custom key is already its one spelling", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const k of [":v2:", ":1a:", ":shipit:"]) expect(v.canonicalReactionKey(k)).toBe(k);
+  });
+
+  it("stores PNG, GIF and WebP only (never SVG), each under its own extension", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CUSTOM_EMOJI_MIMES]).toEqual(["image/png", "image/gif", "image/webp"]);
+    expect(v.isCustomEmojiMime("image/svg+xml")).toBe(false);
+    expect(v.parseCustomEmojiMime("image/jpeg").success).toBe(false);
+    expect(v.normalizeCustomEmojiMime("image/gif")).toBe("image/gif");
+    expect(v.normalizeCustomEmojiMime("text/html")).toBeNull();
+    expect(v.CUSTOM_EMOJI_EXT).toEqual({ "image/png": "png", "image/gif": "gif", "image/webp": "webp" });
+    expect(v.CUSTOM_EMOJI_MAX_BYTES).toBe(256 * 1024);
+    expect(v.CUSTOM_EMOJI_PER_WORKSPACE).toBe(500);
   });
 });
 

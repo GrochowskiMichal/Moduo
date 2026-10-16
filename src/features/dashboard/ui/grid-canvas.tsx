@@ -88,8 +88,10 @@ export function GridCanvas({
   // While dragging, render the live preview layout; otherwise the stored one.
   const rendered = drag?.preview ?? widgets;
 
+  // The gap is the panels' 8 (MOD-163). The drag reads it back off the
+  // computed style at press, so the cell math follows it.
   return (
-    <div ref={gridRef} className="grid h-full w-full grid-cols-8 grid-rows-4 gap-3">
+    <div ref={gridRef} className="grid h-full w-full grid-cols-8 grid-rows-4 gap-(--panel-gap)">
       <GridLines editing={editing} />
       {rendered.map((widget) => {
         const isActive = drag?.activeId === widget.id;
@@ -108,11 +110,10 @@ export function GridCanvas({
             transition={
               isActive ? INSTANT_FOLLOW : { duration: motionSpec.duration, ease: motionSpec.ease }
             }
+            // No wheel handler: a sideways swipe over a widget turns the page,
+            // and the pager leaves one over a sideways scroller to it (MOD-163,
+            // spec assumption 11).
             onPointerDown={(e) => onWidgetPointerDown?.(widget.id, e)}
-            // A widget swallows its own wheel events so the pager only turns pages
-            // over the grid BACKGROUND (spec assumption 11); DB-5 scrollable
-            // widgets then consume the wheel naturally.
-            onWheel={(e) => e.stopPropagation()}
             className={cn(
               "min-h-0 min-w-0",
               editing && (isActive ? "cursor-grabbing" : "cursor-grab"),

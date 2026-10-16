@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 /**
  * Tasks Board — visual regression (TV-U1, TV-U11). One card width per density
  * (296 / 280 / 264 px), the kit card with its status icon, tint selection,
- * faded done cards and each column's "N completed" line, the folded Backlog
+ * faded done cards, the board's one "N completed · Show" (MOD-148; "N older
+ * completed · Show" in "7 days"), the folded Backlog
  * button (53b), a project's own statuses (53a), sections, lanes (85) and the
  * Detailed card with its description preview (AC4.2, AC7.4, AC11.6), under
  * every density × radius, every dark shade and every accent.

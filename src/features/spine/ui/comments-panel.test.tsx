@@ -16,7 +16,7 @@ import {
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { useCommentThread } from "../hooks/use-comment-thread";
-import { CommentComposer } from "./comments-panel";
+import { CommentCard, CommentComposer } from "./comments-panel";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -193,5 +193,30 @@ describe("a comment thread on a task", () => {
       await result.current.post({ body: "No team", mentionedUserIds: [] });
     });
     expect(mentionTeams).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CommentCard's avatar (MOD-149)", () => {
+  const card = (props: { app?: boolean; author: { name: string; avatarUrl: null } | null }) =>
+    render(
+      <TooltipProvider>
+        <CommentCard {...props} authorName="Claude Code (app)" time="2:55 PM">
+          Filed from the connector
+        </CommentCard>
+      </TooltipProvider>,
+    );
+
+  it("an app's comment (Notes' and Tasks' alike) shows the plug, not the ?", () => {
+    const { container } = card({ app: true, author: null });
+    const mark = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(mark.getAttribute("data-kind")).toBe("app");
+    expect(mark.textContent).toBe("");
+  });
+
+  it("an author the app can't name, who isn't an app, keeps the gray ?", () => {
+    const { container } = card({ author: null });
+    const mark = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(mark.hasAttribute("data-kind")).toBe(false);
+    expect(mark.textContent).toBe("?");
   });
 });

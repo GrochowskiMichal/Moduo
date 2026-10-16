@@ -12,7 +12,8 @@
 // (removable, a muted × at the end). Used by Tasks (rows, cards, the details
 // panel, templates), Contacts, Notes and Mail.
 
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
+import type * as React from "react";
 import { cn } from "../lib/utils";
 import { normalizeLabelColor } from "./tag-colors";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -120,6 +121,51 @@ export function TagChip({
         </Tooltip>
       ) : null}
     </span>
+  );
+}
+
+const ADD_SIZE = { sm: "size-4.5", md: "size-5.5" } as const;
+
+/**
+ * The "+" that ends a row of chips (MOD-158): a round, quiet button at the
+ * chips' own height (`md` 22 px, `sm` 18 px), a muted plus that lights on
+ * hover, so it reads as the row's last item rather than a control of its own.
+ * Its hit area still reaches 24 px (`.hit-min`, R13). Use it as a picker's
+ * trigger (`asChild`); the label is its name and its tooltip.
+ */
+export function TagAddButton({
+  size = "md",
+  label = "Add tag",
+  className,
+  ...props
+}: Omit<React.ComponentProps<"button">, "children"> & {
+  /** The chips it follows. */
+  size?: "sm" | "md";
+  label?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          className={cn(
+            "hit-min inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none",
+            "transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            "hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active aria-expanded:text-foreground",
+            "focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+            ADD_SIZE[size],
+            className,
+          )}
+          {...props}
+          // After the spread: a Radix trigger (asChild) passes its own data-slot.
+          data-slot="tag-add"
+        >
+          <Plus aria-hidden className={size === "md" ? "size-icon-sm" : "size-icon-xs"} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 

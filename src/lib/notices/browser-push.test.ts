@@ -164,4 +164,31 @@ describe("what a pushed notice shows (public/push-display.js)", () => {
     expect(show({ ...data, url: "https://evil.example" }, "u1").url).toBe("/");
     expect(show({ ...data, url: "//evil.example" }, "u1").url).toBe("/");
   });
+
+  // CV-6b: a chat notice keeps push-send's lengths and its burst tag.
+  it("shows a chat notice in the server's words, its tag replacing the last", () => {
+    const chat = {
+      uid: "u1",
+      title: `Sofia Ortiz · #plans · ${"A".repeat(200)}`,
+      body: "x".repeat(300),
+      url: "/chat?c=c1&m=m1",
+      tag: "chat:c1",
+    };
+    const shown = show(chat, "u1");
+    expect(shown.title).toHaveLength(120);
+    expect(shown.body).toHaveLength(160);
+    expect(shown.tag).toBe("chat:c1");
+    expect(shown.url).toBe("/chat?c=c1&m=m1");
+    expect(show({ ...chat, title: "" }, "u1").title).toBe("New message");
+  });
+
+  it("says nothing of a message to anyone else", () => {
+    const shown = show(
+      { uid: "u1", title: "Sofia · Acme", body: "secret", tag: "chat:c1", url: "/chat?c=c1" },
+      "u2",
+    );
+    expect(shown.title).toBe("Moduo");
+    expect(shown.body).not.toMatch(/secret|Sofia|reminder/i);
+    expect(shown.tag).toBe("moduo-notice");
+  });
 });

@@ -51,7 +51,7 @@ export function AboutSection() {
                   <button
                     onClick={() => void check()}
                     disabled={updaterState.phase === "checking"}
-                    className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:cursor-wait disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:cursor-wait disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
                   >
                     {updaterState.phase === "checking" ? (
                       <RefreshCw className="h-3 w-3 animate-spin" aria-hidden />
@@ -120,7 +120,7 @@ export function AboutSection() {
               target="_blank"
               rel="noopener noreferrer"
               onClick={openExternal(link.href)}
-              className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card rounded-sm"
+              className="text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
             >
               {link.label}
             </a>

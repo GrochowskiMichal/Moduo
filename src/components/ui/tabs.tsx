@@ -63,7 +63,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
         "transition-[color,background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
         "text-muted-foreground hover:text-foreground",
         "group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start",
-        "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "focus-visible:ring-2 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
         // Raised plate on the bg-muted list (--control-raised, tokens.css §5b).
         "data-[state=active]:bg-control-raised data-[state=active]:text-foreground data-[state=active]:shadow-control-raised",

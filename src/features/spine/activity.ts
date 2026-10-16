@@ -4,8 +4,10 @@
 // spine mutation logs an attributed `module_activity` row; this is how that row
 // reads. Newest-first in the hub trail and the notification card.
 
+import { normalizeChatMentionReason } from "@contracts/vocabularies";
 import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
 import { dayShort, time24 } from "../calendar/booking/sentence";
+import { parseStored, toExcerptText } from "../chat/markup-v2";
 import { referenceTextToPlain } from "./references/text";
 import type { ReferenceRef } from "./references/types";
 
@@ -29,9 +31,27 @@ export function spineActorName(
   }
   if (entry.actorId && currentUserId && entry.actorId === currentUserId) return "You";
   if (entry.actorLabel) return entry.actorLabel;
-  if (entry.actorType === "agent") return "An agent";
+  // Every "agent" row is Moduo's own work (MOD-149 follow-up): the mark beside it is Moduo's.
+  if (entry.actorType === "agent") return "Moduo";
   if (entry.actorType === "api_key") return "An API client";
   return "Someone";
+}
+
+/**
+ * Whether an app made a change rather than a person, and which (MOD-149): its
+ * `actorId` is a key's id or nothing, never a member's, so it shows
+ * `AppAvatar`, never the former member's "?". "app" is a connected app over
+ * an API key, the plug. "moduo" is Moduo's own work, the Moduo mark (the
+ * MOD-149 follow-up): every writer of `actor_type` "agent" is the server's,
+ * labelled "Moduo" with no id (a repeat's `tasks.catch_up`, and
+ * `tasks__notice`'s reminder, waiting, team check-back and hand-back lines);
+ * an outside agent writes as its key. A new "agent" writer that isn't Moduo
+ * needs its own check here. `null` is a person's.
+ */
+export function appActorKind(entry: Pick<SpineActorFields, "actorType">): "app" | "moduo" | null {
+  if (entry.actorType === "api_key") return "app";
+  if (entry.actorType === "agent") return "moduo";
+  return null;
 }
 
 function str(v: unknown): string | null {
@@ -253,13 +273,29 @@ export function spineActivityLine(
       return "added this company";
     case "companies.update":
       return "updated this company";
-    // Chat (specs/chat.md). Only mentions + thread replies notify (quiet bar).
+    // Chat's bell rows (specs/chat-v2.md §11, CV-5): @you, @Team, @channel, a
+    // reply in a chain you're in, an announcement. The excerpt is the stored
+    // form, so its references are named for this reader.
     case "chat.mention":
-    case "chat.reply": {
+    case "chat.reply":
+    case "chat.announcement": {
       const name = str(p.channel_name);
       const where = name ? `in #${name}` : "in a direct message";
-      const verb = entry.op === "chat.mention" ? "mentioned you" : "replied in a thread";
-      const excerpt = str(p.excerpt);
+      const reason = normalizeChatMentionReason(p.reason);
+      const verb =
+        entry.op === "chat.reply"
+          ? "replied"
+          : entry.op === "chat.announcement"
+            ? "posted"
+            : reason === "team"
+              ? "mentioned your team"
+              : reason === "everyone"
+                ? "mentioned everyone"
+                : "mentioned you";
+      const excerpt =
+        p.format_version === 2
+          ? chatExcerptText(p.excerpt, opts.referenceName)
+          : excerptText(p.excerpt);
       return excerpt ? `${verb} ${where}: “${excerpt}”` : `${verb} ${where}`;
     }
     case "chat.channel_create": {
@@ -270,7 +306,87 @@ export function spineActivityLine(
       return "archived this channel";
     case "chat.channel_unarchive":
       return "unarchived this channel";
+    // Chat v2 conversation ops (CV-2b): ids only, so the lines name no one.
+    case "chat.channel_rename":
+      return "renamed this channel";
+    case "chat.channel_topic":
+      return "changed the topic";
+    case "chat.join":
+      return "joined this channel";
+    case "chat.leave":
+      return "left this channel";
+    case "chat.member_add": {
+      const n = Array.isArray(p.user_ids) ? p.user_ids.length : 0;
+      return n === 1 ? "added someone" : n > 1 ? `added ${n} people` : "added people";
+    }
+    case "chat.member_remove":
+      return "removed someone";
+    // CV-13: ids only, so the line names the kind, not the item.
+    case "chat.channel_link": {
+      const t = str(p.linked_type);
+      if (!t) return "unlinked this channel";
+      const what = t === "bucket" ? "a project" : t === "team" ? "a team" : "a client";
+      return `linked this channel to ${what}`;
+    }
+    // Lifecycle (CV-15): ids only.
+    case "chat.manager_add":
+      return "made someone a manager";
+    case "chat.manager_remove":
+      return "removed a manager";
+    case "chat.announcement_switch":
+      return p.on === false ? "let everyone post again" : "made this an announcement channel";
+    case "chat.channel_private":
+      return "made this channel private";
+    case "chat.channel_delete":
+      return "deleted this channel";
+    case "chat.channel_restore":
+      return "restored this channel";
+    // A conversation's message changes (CV-8b, Details' history): ids only.
+    case "chat.pin":
+      return p.pinned === false ? "unpinned a message" : "pinned a message";
+    case "chat.message_edit":
+      return "edited a message";
+    case "chat.message_delete":
+      return "deleted a message";
+    case "chat.message_restore":
+      return "brought back a message";
+    // Reply chains (CV-12): the toast's Undo reads as one, quietly.
+    case "chat.wrap_up":
+      return "wrapped up a reply chain";
+    case "chat.reopen":
+      return p.undo === true ? "undid a wrap-up" : "reopened a reply chain";
+    // Decisions (CV-14): ids only.
+    case "chat.decision":
+      return p.on === false ? "took back a decision" : "marked a decision";
+    // Move to… (CV-16): logged on the conversation the messages left.
+    case "chat.move": {
+      if (p.undo === true) return "undid a move";
+      const n = typeof p.count === "number" ? p.count : 1;
+      return n === 1 ? "moved a message out" : `moved ${n} messages out`;
+    }
+    case "chat.react":
+      return p.on === false ? "took back a reaction" : "reacted to a message";
     default:
       return entry.op;
   }
+}
+
+/**
+ * A chat excerpt in the stored form (`payload.format_version = 2`, CV-1) as
+ * one line of words: marks dropped, references named for this reader (a
+ * person by name, never `moduo://person/<id>`), CV-11. An excerpt the server
+ * cut inside a reference loses that half reference.
+ */
+export function chatExcerptText(
+  value: unknown,
+  referenceName: ((ref: ReferenceRef) => string) | undefined,
+): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const cut = value.replace(/moduo:\/?\/?[a-z_-]*\/?[A-Za-z0-9-]*$/, (rest) =>
+    /^moduo:\/\/[a-z][a-z_-]*\/[0-9a-fA-F-]{36}$/.test(rest) ? rest : "…",
+  );
+  const text = toExcerptText(parseStored(cut), (type, id) =>
+    referenceName ? referenceName({ type, id }) : "a linked item",
+  );
+  return text || null;
 }

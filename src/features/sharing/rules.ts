@@ -88,6 +88,7 @@ export const CHAT_CAP_DEFAULTS: Record<"admin" | "member" | "viewer", Record<str
     mention_everyone: true,
     post: true,
     start_calls: true,
+    add_emoji: true,
   },
   member: {
     create_public: true,
@@ -97,6 +98,7 @@ export const CHAT_CAP_DEFAULTS: Record<"admin" | "member" | "viewer", Record<str
     mention_everyone: true,
     post: true,
     start_calls: true,
+    add_emoji: true,
   },
   viewer: {
     create_public: false,
@@ -106,5 +108,6 @@ export const CHAT_CAP_DEFAULTS: Record<"admin" | "member" | "viewer", Record<str
     mention_everyone: false,
     post: false,
     start_calls: false,
+    add_emoji: false,
   },
 };

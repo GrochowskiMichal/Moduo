@@ -16,7 +16,10 @@ const SKELETON_CELLS: CSSProperties[] = [
  */
 export function GridSkeleton() {
   return (
-    <div className="grid min-h-0 w-full flex-1 grid-cols-8 grid-rows-4 gap-3" aria-hidden>
+    <div
+      className="grid min-h-0 w-full flex-1 grid-cols-8 grid-rows-4 gap-(--panel-gap)"
+      aria-hidden
+    >
       {SKELETON_CELLS.map((style, i) => (
         <div key={i} style={style} className="rounded-lg border border-border bg-muted/40" />
       ))}

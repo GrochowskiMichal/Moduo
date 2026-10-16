@@ -34,7 +34,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
-import { type CompletedMode, partitionCompleted } from "../completed";
+import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
 import {
   type OrderDirection,
   orderTasks,
@@ -285,15 +285,28 @@ type ListItem =
       /** The block's last drawn row. */
       blockEnd: boolean;
     }
-  /** The group's "N completed · show" line (an extra group's "Show n more") and the gap after it. */
+  /** The group's end: the gap after it (an extra group's "Show n more" too). */
   | { kind: "end"; key: string; groupKey: string }
   /** The group's folded "Backlog · n" line (REPLAN 53b). */
   | { kind: "backlog"; key: string; groupKey: string }
   /** A project's "+ Add section" line. */
-  | { kind: "add-section"; key: string };
+  | { kind: "add-section"; key: string }
+  /**
+   * The list's one "N completed · Show" line, while Display hides completed
+   * tasks: all of them in Hidden, the older ones in "7 days" (MOD-148 and its
+   * follow-up).
+   */
+  | { kind: "completed"; key: string };
 
 /** First guesses at heights (px), corrected once an item is drawn. */
-const ITEM_HEIGHT = { header: 28, row: 34, end: 4, backlog: 28, "add-section": 28 } as const;
+const ITEM_HEIGHT = {
+  header: 28,
+  row: 34,
+  end: 4,
+  backlog: 28,
+  "add-section": 28,
+  completed: 28,
+} as const;
 
 /** A group as the List draws it. */
 type ListGroup = {
@@ -303,8 +316,12 @@ type ListGroup = {
   tasks: Task[];
   /** Every task of the group in order, hidden ones included (drops land among them). */
   all: Task[];
-  /** Completed tasks Display hides ("N completed · show"). */
-  hidden: Task[];
+  /**
+   * What the group adds to the end line's count (MOD-148): its completed
+   * tasks Display hides, the selected one included, so the count holds still
+   * as the cursor moves and the line never vanishes under Show.
+   */
+  doneCount: number;
   /** Backlog tasks folded behind "Backlog · n". */
   backlog: Task[];
   /** A group the view added (TV-U15): its own header, no drops. */
@@ -430,18 +447,29 @@ export function TaskListView({
     return parent ? parent.title || "Untitled" : null;
   };
 
-  // Groups whose hidden completed tasks were asked for ("· show"), and whose
-  // folded Backlog was opened; both reset when the scope or grouping changes.
+  // Extra groups whose rows past their limit were asked for ("Show n more"),
+  // and groups whose folded Backlog was opened; both reset when the scope or
+  // grouping changes.
   const [revealedGroups, setRevealedGroups] = useState<ReadonlySet<string>>(NO_IDS);
+  // No group has a completed line of its own, in any mode: one line at the
+  // list's end shows what Display hides in place (every completed task while
+  // Hidden, the older ones in "7 days"), for as long as the scope, grouping
+  // and Completed stay (MOD-148 and its follow-up). It never saves Display.
+  // It keeps the view it was asked in: a change ends it, in the same render.
+  const doneKey = `${selection}:${groupBy}:${completed}`;
+  const [doneShownIn, setDoneShownIn] = useState<string | null>(null);
+  if (doneShownIn !== null && doneShownIn !== doneKey) setDoneShownIn(null);
+  const doneShown = doneShownIn === doneKey;
   const [openBacklogs, setOpenBacklogs] = useState<ReadonlySet<string>>(NO_IDS);
   // The Backlog line you closed on the selection, with nowhere else to move
   // it: that line doesn't open again for it until the selection moves or you
   // open it yourself (MOD-124).
   const closedOnRef = useRef<{ key: string; id: string } | null>(null);
 
-  // Completed tasks Display hides drop out of each group, behind its
-  // "N completed · show" line (tasks-v2 §6), and Backlog tasks behind
-  // "Backlog · n" (53b; grouped by status, Backlog is its own group, folded).
+  // Completed tasks Display hides drop out of each group (tasks-v2 §6), behind
+  // the list's one end line in Hidden and "7 days" alike (MOD-148 and its
+  // follow-up). Backlog tasks wait behind each group's "Backlog · n" (53b;
+  // grouped by status, Backlog is its own group, folded).
   // The Queue keeps its own rule: done leaves it, and a task checked off there
   // stays until the next load. The Date groups and "7 days" roll over at
   // midnight.
@@ -465,7 +493,7 @@ export function TaskListView({
           teams,
         });
     if (selection === "today") {
-      return all.map((g) => ({ ...g, all: g.tasks, hidden: [], backlog: [] }));
+      return all.map((g) => ({ ...g, all: g.tasks, backlog: [], doneCount: 0 }));
     }
     // Kept even when done: staying (checked off or opened in this scope); the
     // selected task and its parent (a deep link or the panel must never point
@@ -488,14 +516,13 @@ export function TaskListView({
       const backlog =
         groupBy === "status" ? [] : g.tasks.filter((t) => isBacklogTask(t) && !keepOutOfBacklog(t));
       const rest = backlog.length === 0 ? g.tasks : g.tasks.filter((t) => !backlog.includes(t));
-      const { shown, hidden } = partitionCompleted(rest, { mode: completed, now, keep });
-      return {
-        ...g,
-        all: g.tasks,
-        tasks: revealedGroups.has(g.key) ? rest : shown,
-        hidden,
-        backlog,
-      };
+      const { shown } = partitionCompleted(rest, { mode: completed, now, keep });
+      // The end line counts without the selection's keep (a checked-off task
+      // and a parent with open subtasks still show, so they never count).
+      const doneCount = rest.filter((t) =>
+        isCompletedHidden(t, { mode: completed, now, keep: keepOutOfBacklog }),
+      ).length;
+      return { ...g, all: g.tasks, tasks: doneShown ? rest : shown, doneCount, backlog };
     });
     if (extraGroups.length === 0) return mapped;
     // The view's own groups (TV-U15): their tasks in the given order, the
@@ -512,7 +539,7 @@ export function TaskListView({
         label: g.label,
         all: list,
         tasks: revealedGroups.has(g.key) ? list : list.slice(0, limit),
-        hidden: [],
+        doneCount: 0,
         backlog: [],
         extra: g,
         more: list.slice(limit),
@@ -546,8 +573,13 @@ export function TaskListView({
     selectedId,
     taskById,
     revealedGroups,
+    doneShown,
     api.subtasksByParent,
   ]);
+  // What the end line counts: every completed task Display hides in the view,
+  // folded groups' and the selected one too (Show lists them in their groups;
+  // a fold stays yours).
+  const hiddenDone = useMemo(() => groups.reduce((n, g) => n + g.doneCount, 0), [groups]);
 
   // ── folded groups, remembered (research §2) ─────────────────────────────────
   // Everything starts open except Backlog (grouped by status); what you fold
@@ -582,7 +614,7 @@ export function TaskListView({
   }, []);
 
   // A new scope or grouping starts with every parent folded and every
-  // "completed" and "Backlog" line closed.
+  // "Show n more" and "Backlog" line closed (the end line by its own key).
   const viewSignature = `${selection}:${groupBy}`;
   const lastSignature = useRef(viewSignature);
   useEffect(() => {
@@ -597,6 +629,9 @@ export function TaskListView({
   const toggleRevealGroup = useCallback((key: string) => {
     setRevealedGroups((prev) => toggled(prev, key));
   }, []);
+  const toggleDoneShown = useCallback(() => {
+    setDoneShownIn((prev) => (prev === doneKey ? null : doneKey));
+  }, [doneKey]);
 
   // ── the facts rows show (row-facts.ts, TV-D11b) ─────────────────────────────
   const sectionNames = useMemo(
@@ -1719,9 +1754,10 @@ export function TaskListView({
     canEdit && chosenGroupBy === "section" && isProjectScope(selection) && !!onAddSection;
 
   // The List flattened (TV-D11b): a header per group, each top-level task
-  // with its expanded subtasks, the group's end (its "N completed" line and
-  // the gap after it), its folded "Backlog · n" line and, opened, its Backlog
-  // rows. Collapsed groups keep their header.
+  // with its expanded subtasks, the group's end (the gap after it), its
+  // folded "Backlog · n" line and, opened, its Backlog rows. Collapsed groups
+  // keep their header. The list ends with "+ Add section", then its one
+  // completed line (MOD-148, in Hidden and "7 days" alike).
   const items = useMemo(() => {
     const out: ListItem[] = [];
     const pushRows = (group: ListGroup, list: readonly Task[]) => {
@@ -1763,6 +1799,7 @@ export function TaskListView({
       }
     }
     if (addsSections) out.push({ kind: "add-section", key: "add-section" });
+    if (hiddenDone > 0) out.push({ kind: "completed", key: "completed" });
     return out;
   }, [
     groups,
@@ -1773,6 +1810,7 @@ export function TaskListView({
     api.subtasksByParent,
     openBacklogs,
     addsSections,
+    hiddenDone,
   ]);
 
   const stickyIndexes = useMemo(
@@ -1815,6 +1853,16 @@ export function TaskListView({
   const renderItem = (item: ListItem) => {
     if (item.kind === "add-section") {
       return onAddSection ? <AddSectionLine onAdd={onAddSection} /> : null;
+    }
+    if (item.kind === "completed") {
+      return (
+        <CompletedLine
+          count={hiddenDone}
+          shown={doneShown}
+          onToggle={toggleDoneShown}
+          mode={completed}
+        />
+      );
     }
     if (item.kind === "header") {
       const group = groupByKey.get(item.groupKey);
@@ -1914,15 +1962,9 @@ export function TaskListView({
           </div>
         );
       }
-      return (
-        <div className="pb-1">
-          <CompletedLine
-            count={group.hidden.length}
-            shown={revealedGroups.has(group.key)}
-            onToggle={() => toggleRevealGroup(group.key)}
-          />
-        </div>
-      );
+      // No group ends with a completed line, in any mode (MOD-148 and its
+      // follow-up): only the gap after it.
+      return <div className="pb-1" />;
     }
     if (item.kind === "backlog") {
       const group = groupByKey.get(item.groupKey);

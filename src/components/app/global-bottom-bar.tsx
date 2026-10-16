@@ -21,6 +21,7 @@ import {
 import { dispatchOpenCapture } from "./capture-shell";
 import { dispatchCreateNew } from "./create-events";
 import { dispatchOpenPalette } from "./global-command-palette";
+import { requestModuleSearch } from "./search-events";
 
 function BarButton({
   onClick,
@@ -36,7 +37,7 @@ function BarButton({
   return (
     <Tooltip>
       <TooltipTrigger
-        className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         onClick={onClick}
         aria-label={hint ? `${label} (${hint})` : label}
       >
@@ -148,7 +149,13 @@ function GlobalTools() {
       role="toolbar"
       aria-label="Global actions"
     >
-      <BarButton onClick={() => dispatchOpenPalette()} label="Search" hint={searchHint}>
+      <BarButton
+        onClick={() => {
+          if (!requestModuleSearch()) dispatchOpenPalette();
+        }}
+        label="Search"
+        hint={searchHint}
+      >
         <Search className="size-4" aria-hidden />
       </BarButton>
       <BarButton onClick={() => dispatchOpenCapture()} label="Quick capture" hint={captureHint}>

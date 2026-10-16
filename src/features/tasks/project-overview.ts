@@ -18,6 +18,52 @@ import type {
 
 const live = (t: Task) => !t.deletedAt;
 
+// ── A project's client (MOD-155) ────────────────────────────────────────────
+
+/** A project's client: a person (a contact) or a company, never both (MOD-155). */
+export type ProjectClient = { type: "contact" | "company"; id: string };
+
+/** The client a project names, company first (the server never keeps both). */
+export function projectClient(
+  project: Pick<Bucket, "clientContactId" | "clientCompanyId">,
+): ProjectClient | null {
+  if (project.clientCompanyId) return { type: "company", id: project.clientCompanyId };
+  if (project.clientContactId) return { type: "contact", id: project.clientContactId };
+  return null;
+}
+
+/**
+ * What a pick saves: only the key that changes. The op clears the other one
+ * (MOD-155), and a person pick then still works on a database from before
+ * company clients. "No client" clears whichever is set.
+ */
+export function clientPatch(
+  project: Pick<Bucket, "clientContactId" | "clientCompanyId">,
+  next: ProjectClient | null,
+): { clientContactId?: string | null; clientCompanyId?: string | null } {
+  if (next)
+    return next.type === "company" ? { clientCompanyId: next.id } : { clientContactId: next.id };
+  return {
+    ...(project.clientContactId ? { clientContactId: null } : {}),
+    ...(project.clientCompanyId ? { clientCompanyId: null } : {}),
+  };
+}
+
+/**
+ * What a client edit changes in the reader's copy besides the key it sends:
+ * the op clears the other kind, so the copy does too (and puts it back if the
+ * save is refused). Nothing when the other kind isn't set, so a row from
+ * before company clients keeps having no company field.
+ */
+export function clientCopyClears(
+  existing: Pick<Bucket, "clientContactId" | "clientCompanyId"> | undefined,
+  patch: { clientContactId?: string | null; clientCompanyId?: string | null },
+): Pick<Bucket, "clientContactId" | "clientCompanyId"> {
+  if (patch.clientContactId && existing?.clientCompanyId) return { clientCompanyId: null };
+  if (patch.clientCompanyId && existing?.clientContactId) return { clientContactId: null };
+  return {};
+}
+
 /** A project's live tasks (subtasks too). */
 export function tasksOfProject(tasks: readonly Task[], projectId: string): Task[] {
   return tasks.filter((t) => t.bucketId === projectId && live(t));
@@ -39,41 +85,6 @@ export function projectFacts(tasks: readonly Task[], projectId: string) {
 }
 
 const dueKey = (t: Task) => t.dueOn ?? t.dueDate?.slice(0, 10) ?? null;
-
-/**
- * What's next in a project: its open top-level tasks (To do and In progress),
- * work already started first, then by due date (dated before undated), then
- * in the project's own order (section, then place). `rest` counts the others.
- */
-export function nextUp(
-  tasks: readonly Task[],
-  projectId: string,
-  sections: readonly Section[],
-  limit = 5,
-): { tasks: Task[]; rest: number } {
-  const sectionPos = new Map(
-    sections.filter((s) => s.projectId === projectId).map((s) => [s.id, s.position]),
-  );
-  const open = tasksOfProject(tasks, projectId).filter((t) => !t.parentId && isOpenTask(t));
-  const sorted = [...open].sort((a, b) => {
-    const started =
-      Number(taskCategoryOf(b) === "in_progress") - Number(taskCategoryOf(a) === "in_progress");
-    if (started) return started;
-    const da = dueKey(a);
-    const db = dueKey(b);
-    if (da !== db) {
-      if (da === null) return 1;
-      if (db === null) return -1;
-      return da < db ? -1 : 1;
-    }
-    // Tasks outside a section come first, as in the List.
-    const sa = a.sectionId ? (sectionPos.get(a.sectionId) ?? 0) + 1 : 0;
-    const sb = b.sectionId ? (sectionPos.get(b.sectionId) ?? 0) + 1 : 0;
-    if (sa !== sb) return sa - sb;
-    return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
-  });
-  return { tasks: sorted.slice(0, limit), rest: Math.max(0, sorted.length - limit) };
-}
 
 export type SectionProgress = {
   section: Section;

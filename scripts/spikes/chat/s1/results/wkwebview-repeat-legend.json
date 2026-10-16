@@ -1,0 +1,145 @@
+{
+  "engine": "wkwebview-repeat-legend",
+  "libs": {
+    "legend": {
+      "at": "2026-10-14T13:23:10.209Z",
+      "fingerprint": {
+        "engine": "wkwebview-repeat-legend",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "platform": "MacIntel",
+        "maxTouchPoints": 0,
+        "devicePixelRatio": 1,
+        "viewport": "1280x840",
+        "overflowAnchorSupported": true,
+        "scrollendEvent": true,
+        "entryTypes": "event,first-input,largest-contentful-paint,mark,measure,navigation,paint,resource",
+        "tauri": false,
+        "brands": "",
+        "build": "development"
+      },
+      "results": [
+        {
+          "scenario": "prepend-honest",
+          "lib": "legend",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": false,
+          "metrics": {
+            "maxDrift": 3.38,
+            "maxFinalDrift": 3.38,
+            "perPrependMax": [0.25, 3.38, 0.38, 1.25, 1.5, 2.5, 1, 2, 1.5, 0],
+            "rowsAtEnd": 550,
+            "firstBad": {
+              "prepend": 1,
+              "anchor": "m09901",
+              "fonts": "loaded",
+              "frames": [
+                0.5, 0.88, 1.63, 2.5, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38,
+                3.38, 3.38
+              ]
+            }
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "legend",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": false,
+          "metrics": {
+            "maxDrift": 3.38,
+            "maxFinalDrift": 3.38,
+            "perPrependMax": [0.25, 3.38, 0.38, 1.25, 1.5, 2.5, 1, 2, 1.5, 0],
+            "rowsAtEnd": 550,
+            "firstBad": {
+              "prepend": 1,
+              "anchor": "m09901",
+              "fonts": "loaded",
+              "frames": [
+                0.5, 0.88, 1.63, 2.5, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38,
+                3.38, 3.38
+              ]
+            }
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "legend",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": false,
+          "metrics": {
+            "maxDrift": 3.38,
+            "maxFinalDrift": 3.38,
+            "perPrependMax": [0.25, 3.38, 0.38, 1.25, 1.5, 2.5, 1, 2, 1.5, 0],
+            "rowsAtEnd": 550,
+            "firstBad": {
+              "prepend": 1,
+              "anchor": "m09901",
+              "fonts": "loaded",
+              "frames": [
+                0.5, 0.88, 1.63, 2.5, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38,
+                3.38, 3.38
+              ]
+            }
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "legend",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": false,
+          "metrics": {
+            "maxDrift": 3.38,
+            "maxFinalDrift": 3.38,
+            "perPrependMax": [0.25, 3.38, 0.38, 1.25, 1.5, 2.5, 1, 2, 1.5, 0],
+            "rowsAtEnd": 550,
+            "firstBad": {
+              "prepend": 1,
+              "anchor": "m09901",
+              "fonts": "loaded",
+              "frames": [
+                0.5, 0.88, 1.63, 2.5, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38,
+                3.38, 3.38
+              ]
+            }
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "legend",
+          "config": "base",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": false,
+          "metrics": {
+            "maxDrift": 3.38,
+            "maxFinalDrift": 3.38,
+            "perPrependMax": [0.25, 3.38, 0.38, 1.25, 1.5, 2.5, 1, 2, 1.5, 0],
+            "rowsAtEnd": 550,
+            "firstBad": {
+              "prepend": 1,
+              "anchor": "m09901",
+              "fonts": "loaded",
+              "frames": [
+                0.5, 0.88, 1.63, 2.5, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38, 3.38,
+                3.38, 3.38
+              ]
+            }
+          }
+        },
+        {
+          "scenario": "max-elements",
+          "lib": "legend",
+          "config": "all",
+          "bar": "≤ 3,000 elements in the stream",
+          "pass": true,
+          "metrics": {
+            "maxElements": 218,
+            "where": "base/prepend"
+          }
+        }
+      ]
+    }
+  }
+}

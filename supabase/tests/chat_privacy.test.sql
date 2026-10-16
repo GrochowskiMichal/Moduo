@@ -26,7 +26,7 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: #general exists', v);
   INSERT INTO test.ids SELECT 'G', id FROM public.chat_channels
-    WHERE workspace_id = test.id('W') AND kind = 'channel' AND name = 'general';
+    WHERE workspace_id = test.id('W') AND kind = 'channel' AND is_default;
 
   v := test.as_user('A', format(
     $q$SELECT public.chat_op_create_channel(%L, 'secret-plans', 'quiet', true, ARRAY[%L]::uuid[])$q$,
@@ -57,10 +57,17 @@ BEGIN
     $q$SELECT public.chat_op_send(%L, 'psst <@%s>', NULL, ARRAY[%L]::uuid[], false, NULL, 'psst @B')$q$,
     test.ref('D'), test.id('B'), test.id('B')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A mentions B in D', v);
+  -- A direct message rings no bell (CV-5), so A's edit writes the row about D.
+  v := test.as_user('A', format(
+    $q$SELECT public.chat_op_edit(m.id, 'psst again'::text) FROM public.chat_messages m WHERE m.channel_id = %L$q$,
+    test.ref('D')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A edits the message in D', v);
 
-  -- The registry: a row for P, as a later chat op (or a link) would write it.
-  INSERT INTO public.entities (workspace_id, entity_type, entity_id, label)
-  VALUES (test.id('W'), 'chat_channel', test.ref('P'), 'secret-plans');
+  -- The registry: making P wrote its row (CV-2b registers every conversation).
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.entities WHERE workspace_id = test.id('W')
+                            AND entity_type = 'chat_channel' AND entity_id = test.ref('P')
+                            AND label = 'secret-plans'),
+    'setup: making P registered it, its name as the label');
 END;
 $$;
 
@@ -108,8 +115,8 @@ BEGIN
   PERFORM test.ok(test.value_as('A', format($q$SELECT count(*)::text FROM public.chat_channels WHERE id = %L$q$,
       test.ref('P2'))) = '0',
     'activity: A no longer reads P2 itself');
-  PERFORM test.ok(test.activity_rows('A', 'P2') = 1, 'activity: A still reads the row they wrote about P2');
-  PERFORM test.ok(test.activity_rows('B', 'P2') = 1, 'activity: B, in P2, reads it');
+  PERFORM test.ok(test.activity_rows('A', 'P2') = 2, 'activity: A still reads the rows they wrote about P2 (made it, left it)');
+  PERFORM test.ok(test.activity_rows('B', 'P2') = 2, 'activity: B, in P2, reads them');
   PERFORM test.ok(test.activity_rows('C', 'P2') = 0, 'activity: C reads nothing about P2');
 
   PERFORM test.ok(test.value_as('C', format(
@@ -248,12 +255,14 @@ DECLARE
   v_p text := 'chat:typing:' || test.ref('P')::text;
 BEGIN
   v := test.as_user('X', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('Q')));
-  PERFORM test.ok(v = 'P0001 You don''t have access to this workspace.', 'typing: X, in no workspace, is refused', v);
+  PERFORM test.ok(v = '42501 You don''t have access to this workspace.', 'typing: X, in no workspace, is refused', v);
   v := test.as_user('C', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('P')));
-  PERFORM test.ok(v = 'P0001 You''re not a member of this conversation.', 'typing: C, not in P, is refused', v);
+  PERFORM test.ok(v = '42501 You''re not a member of this conversation.', 'typing: C, not in P, is refused', v);
   v := test.as_user('C', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('D')));
-  PERFORM test.ok(v = 'P0001 You''re not a member of this conversation.', 'typing: C is refused for the direct message D', v);
-  PERFORM test.ok((SELECT count(*) FROM realtime.messages WHERE topic LIKE 'chat:typing:%') = 0,
+  PERFORM test.ok(v = '42501 You''re not a member of this conversation.', 'typing: C is refused for the direct message D', v);
+  -- Only this test's conversations: a live client on the shared stack may type elsewhere.
+  PERFORM test.ok((SELECT count(*) FROM realtime.messages
+                   WHERE topic IN ('chat:typing:' || test.ref('Q')::text, v_p, 'chat:typing:' || test.ref('D')::text)) = 0,
     'typing: a refusal writes nothing');
 
   v := test.as_user('B', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('P')));
@@ -266,17 +275,25 @@ BEGIN
   PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('P', 'A', false, 'M') = 1,
     'typing: a thread''s typing names the thread', v);
   v := test.as_user('A', format($q$SELECT public.chat_op_typing(%L, %L, false)$q$, test.ref('Q'), test.ref('M')));
-  PERFORM test.ok(v = 'P0001 That thread no longer exists.', 'typing: a thread from another conversation is refused', v);
+  PERFORM test.ok(v = 'P0002 That thread no longer exists.', 'typing: a thread from another conversation is refused', v);
+  -- Chat v2 (CV-2a): typing is the members' (the topic's readers), so C, who reads
+  -- the public Q without being in it, is refused and nothing is sent.
   v := test.as_user('C', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('Q')));
-  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('Q', 'C', false) = 1, 'typing: C can type in the public channel Q', v);
+  PERFORM test.ok(v = '42501 You''re not a member of this conversation.' AND test.typing_rows('Q', 'C', false) = 0,
+    'typing: C, who only reads the public channel Q, is refused (members only)', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_typing(%L, NULL, false)$q$, test.ref('Q')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.typing_rows('Q', 'A', false) = 1, 'typing: A, in Q, can type there', v);
 
   -- Reading the typing topic: the conversation's readers only.
   PERFORM test.ok(test.realtime_reads('B', v_p) = 3, 'realtime: B reads P''s typing topic');
   PERFORM test.ok(test.realtime_reads('A', v_p) = 3, 'realtime: A reads P''s typing topic');
   PERFORM test.ok(test.realtime_reads('C', v_p) = 0, 'realtime: C, not in P, reads nothing on P''s typing topic');
   PERFORM test.ok(test.realtime_reads('X', v_p) = 0, 'realtime: X reads nothing on P''s typing topic');
-  PERFORM test.ok(test.realtime_reads('C', 'chat:typing:' || test.ref('Q')::text) = 1,
-    'realtime: C reads the public channel Q''s typing topic');
+  -- Chat v2 (CV-1, …_chat_v2_foundation): a typing topic is its members' only, so
+  -- C, who reads the public Q without being in it, gets none.
+  PERFORM test.ok(test.realtime_reads('C', 'chat:typing:' || test.ref('Q')::text) = 0
+                  AND test.realtime_reads('A', 'chat:typing:' || test.ref('Q')::text) = 1,
+    'realtime: the public channel Q''s typing topic is read by its member A, not by C who only reads Q');
 
   -- Writing: nobody writes a typing topic; members track presence on the workspace topic.
   v := test.realtime_writes('B', v_p, 'broadcast');

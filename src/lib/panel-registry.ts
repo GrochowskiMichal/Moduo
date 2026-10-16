@@ -14,6 +14,7 @@
 import type { LucideIcon } from "lucide-react";
 
 import { calendarPanelViews } from "../features/calendar/panel-views";
+import { chatPanelViews } from "../features/chat/panel-views";
 import { contactsPanelViews } from "../features/contacts/panel-views";
 import { emailPanelViews } from "../features/email/panel-views";
 import { notesPanelViews } from "../features/notes/panel-views";
@@ -31,7 +32,7 @@ export type PanelViewDef = {
   icon: LucideIcon;
 };
 
-export type PanelModule = "tasks" | "calendar" | "email" | "notes" | "contacts";
+export type PanelModule = "tasks" | "calendar" | "email" | "notes" | "contacts" | "chat";
 
 /** At most this many views per module (72a: "about 6 per module at most"). */
 export const MAX_PANEL_VIEWS = 6;
@@ -42,6 +43,7 @@ export const PANEL_VIEWS: Record<PanelModule, readonly PanelViewDef[]> = {
   email: emailPanelViews,
   notes: notesPanelViews,
   contacts: contactsPanelViews,
+  chat: chatPanelViews,
 };
 
 const GROUP_ORDER: readonly PanelViewGroup[] = ["about", "alongside"];

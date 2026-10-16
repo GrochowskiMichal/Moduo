@@ -13,8 +13,9 @@
 import type { ModuoRuntime, StoredDashboardLayout } from "@/lib/runtime.types";
 
 import { createDefaultLayout } from "../engine/default-layout";
-import { sanitizeLayout } from "../engine/grid-engine";
+import { fitAllowedSizes, sanitizeLayout } from "../engine/grid-engine";
 import type { DashboardLayout } from "../engine/types";
+import { allowedSizesFor } from "../registry/catalog";
 
 /** localStore namespace for the per-workspace layout cache (key = workspaceId). */
 const CACHE_NS = "dashboard";
@@ -61,7 +62,7 @@ export function resolveLoad(
   const cloudWins = !!cloud && (!cache || toMillis(cloud.updatedAt) >= toMillis(cache.updatedAt));
   const winner = (cloudWins ? cloud : cache) as StoredDashboardLayout;
   return {
-    layout: sanitizeLayout(winner.layout),
+    layout: fitAllowedSizes(sanitizeLayout(winner.layout), allowedSizesFor),
     updatedAt: winner.updatedAt,
     origin: cloudWins ? "cloud" : "cache",
   };

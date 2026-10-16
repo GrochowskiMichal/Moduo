@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from "sonner";
 import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
-import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
+import { useChatTab } from "../../features/chat/shell/chat-tab";
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
@@ -50,7 +50,6 @@ import { Icon } from "../ui/icon";
 import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
 import { visibleModuleNavItems } from "./app-chrome-constants";
@@ -64,6 +63,7 @@ import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
 import { NoticeDeliveries } from "./notice-deliveries";
+import { StatusMenu } from "./status-menu";
 import { TasksSyncStatus } from "./sync-status";
 import { TimeRegionPrompt } from "./time-region-prompt";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
@@ -90,7 +90,7 @@ function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabPr
         aria-current={active ? "page" : undefined}
         aria-label={ariaLabel}
         onClick={onClick}
-        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-state-active text-foreground" : "bg-transparent text-muted-foreground hover:bg-state-hover hover:text-foreground"}`}
+        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${active ? "bg-state-active text-foreground" : "bg-transparent text-muted-foreground hover:bg-state-hover hover:text-foreground"}`}
       >
         <span className="relative flex">
           <Icon name={item.iconName} size={14} />
@@ -125,15 +125,22 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   // AT-2: pending uploads resume for whoever is signed in.
   useUploadQueueBoot(userId ?? null, runtime);
-  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace } =
+  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace, members } =
     useWorkspace();
   // What a deep link to another workspace needs, without re-adding the listener.
   const workspaceNav = useRef({ selectedWorkspaceId, workspaces, selectWorkspace });
   useLayoutEffect(() => {
     workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
   });
-  // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
-  const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
+  // Chat tab: its count, whether it shows, and app-wide presence (you show as
+  // online anywhere in Moduo). It reads the chat store (CV-8a).
+  const chatMemberCount = members.filter((m) => m.isActive && !m.removedAt).length;
+  const chatBadge = useChatTab({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    userId,
+    memberCount: chatMemberCount,
+  });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
   useShortcut(
     "new-note",
@@ -248,6 +255,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           to?: string;
           search?: Record<string, string>;
           workspaceId?: string;
+          /** A chat notice's message and chain (CV-3). */
+          messageId?: string;
+          chainId?: string;
         }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
@@ -281,7 +291,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         dispatchOpenSettings({ section: detail.id });
         return;
       }
-      const target = entityOpenTarget(detail.type, detail.id ?? "");
+      const target = entityOpenTarget(detail.type, detail.id ?? "", {
+        messageId: detail.messageId,
+        chainId: detail.chainId,
+      });
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,
@@ -301,9 +314,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
   }, [navigate]);
 
+  const chatTabShows = chatBadge.shows;
   const modulesNavItems = useMemo(
-    () => visibleModuleNavItems(modulePermissions),
-    [modulePermissions],
+    () =>
+      visibleModuleNavItems(modulePermissions).filter(
+        (tab) => tab.module !== "chat" || chatTabShows,
+      ),
+    [modulePermissions, chatTabShows],
   );
 
   const navHrefs = useMemo(() => modulesNavItems.map((tab) => tab.href), [modulesNavItems]);
@@ -527,7 +544,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   return (
     // One reference store for the whole shell (RF-1): pages, the panel, the bell.
     <ReferencesProvider>
-      <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+      {/* Clipped, never a scroll container (MOD-161): focus or a scroll to
+          something off screen can't shift the app sideways. */}
+      <div className="flex h-screen min-h-screen flex-col overflow-clip bg-background">
         <TrialBanner />
         <MinBuildBanner />
         <nav
@@ -594,10 +613,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               }
             />
             <NotificationCenter />
-            <NoticeDeliveries />
+            <NoticeDeliveries chat={chatBadge} />
             {/* Asks once when this device is in another time zone (TV-D14). */}
             <TimeRegionPrompt />
-            <UserMenu
+            {/* Your status and saved ones, Do not disturb, then Settings (CV-17, §15). */}
+            <StatusMenu
+              userId={userId ?? null}
+              workspaceId={selectedWorkspaceId ?? null}
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}
               onOpenSettings={() => dispatchOpenSettings()}
@@ -605,7 +627,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           </div>
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-clip">
           <Outlet />
         </div>
 
@@ -628,7 +650,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             ) : (
               <Tooltip>
                 <TooltipTrigger
-                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   onClick={toggleLeftPanel}
                   aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
                 >
@@ -672,7 +694,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             ) : !isSettingsRoute ? (
               <Tooltip>
                 <TooltipTrigger
-                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   onClick={toggleRightPanel}
                   aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
                 >

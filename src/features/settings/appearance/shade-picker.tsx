@@ -42,8 +42,8 @@ export function ShadePicker({ value, onChange }: Props) {
               onClick={() => onChange(shade)}
               className={
                 checked
-                  ? "group relative grid h-10 w-10 place-items-center rounded-full border border-foreground/30 bg-popover text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-                  : "group relative grid h-10 w-10 place-items-center rounded-full border border-border bg-popover text-foreground transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  ? "group relative grid h-10 w-10 place-items-center rounded-full border border-foreground/30 bg-popover text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  : "group relative grid h-10 w-10 place-items-center rounded-full border border-border bg-popover text-foreground transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               }
             >
               {checked ? (

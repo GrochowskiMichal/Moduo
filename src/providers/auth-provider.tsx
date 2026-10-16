@@ -7,6 +7,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { forgetSearches } from "../features/chat/find/model";
+import { forgetChatPresence } from "../features/chat/store/react";
+import { attachChatUser, wipeChatCopies } from "../features/chat/store/store";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachRunUser } from "../features/focus/run";
 import { attachTagUser } from "../features/tags/store";
@@ -154,6 +157,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const uid = event === "SIGNED_OUT" ? null : (nextSession?.user?.id ?? null);
       const previousUser = sessionUser.current;
       sessionUser.current = uid;
+      // Another person (or nobody): no presence, "Show me as online" or
+      // statuses read for the one before stay in this tab (CV-17).
+      if (previousUser && previousUser !== uid) forgetChatPresence();
 
       if (event === "TOKEN_REFRESHED") {
         console.debug("[auth] token refreshed", {
@@ -196,6 +202,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // expired token offline): the Tasks device copy, its waiting captures
         // and the remembered workspace list go (TV-D11a).
         void wipeSyncCopies();
+        void wipeChatCopies();
+        // Chat's remembered searches are the person's words too (CV-19).
+        forgetSearches();
         forgetRememberedWorkspaces();
         // This browser's notices stop showing the person's words (TV-D12).
         void forgetBrowserPush(null);
@@ -225,6 +234,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     attachFocusUser(sessionUserId);
     attachTagUser(sessionUserId);
     void attachSyncUser(sessionUserId);
+    // Chat's device copy is one person's too (CV-3).
+    void attachChatUser(sessionUserId);
     // Another person's kept capture drafts go too (TV-U14).
     if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
     // The push worker shows a notice's words only to who's signed in (TV-D12).
@@ -248,6 +259,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // auth-js couldn't end the session (offline with an expired token, so no
     // SIGNED_OUT event follows) (TV-D11a).
     void wipeSyncCopies();
+    void wipeChatCopies();
+    forgetSearches();
+    forgetChatPresence();
     forgetRememberedWorkspaces();
     forgetCaptureDrafts();
     clearTemplates();

@@ -28,7 +28,7 @@ describe("activityActorName", () => {
       "Someone",
     );
     expect(activityActorName({ actorType: "agent", actorId: null, actorLabel: null }, "u1")).toBe(
-      "An agent",
+      "Moduo",
     );
     expect(activityActorName({ actorType: "api_key", actorId: null, actorLabel: null }, "u1")).toBe(
       "An API client",
