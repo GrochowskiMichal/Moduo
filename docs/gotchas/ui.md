@@ -308,3 +308,7 @@ Read before working in `src/components/`, `src/routes/`, `.storybook/`, dashboar
 - **Computed colours come back as `oklch(...)`:** the visual spec converts through a 1×1 canvas before measuring contrast. (CV-17)
 - **With the React Compiler on, a hook returns what `useSyncExternalStore` hands it (RF-1):** `useComposerFiles` read the store beside a version token and the chips never showed; only the e2e caught it. It returns `store.view(channel)`, and `useMessageFiles` returns the cached files as its snapshot. (CV-9)
 - **The attachment viewer looks a preview up by path** (`previews.get(rec.previewPath)`), not by file id. (CV-9)
+
+## Chat export (CV-22)
+
+- **`ExportBundle.entries` are text or bytes now:** a test that `JSON.parse`s an entry needs `String(…)` first. (CV-22)

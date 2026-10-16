@@ -311,3 +311,33 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 - **Under `SET LOCAL ROLE authenticated` a test loses the `test` schema:** build ids and names before switching role, map returned ids to names after. (CV-19)
 - **`SET LOCAL session_replication_role = replica` loads a 100,000-row fixture into `chat_messages` without the ops' triggers,** with no `ALTER TABLE … DISABLE TRIGGER` (which would lock the shared stack's table for the whole test). (CV-19)
 - **A `statement_timeout` in a function's `SET` clause doesn't bound the statement that calls it in psql;** PostgREST applies it per call. (CV-19)
+
+## Chat moves (CV-16)
+
+- **DB tests share one `now()`, so a pace test can't post six messages through `chat_op_send`** (the sending limit counts them): write them straight in as the test's admin. (CV-16)
+- **`share_chat_message_guard` checks the announcement rule on event inserts too:** an op that writes a line in someone's name must check that rule first, or the insert fails with a less useful message. (CV-16)
+- **The store dropped ids only on `moved_out`:** an Undo's soft-deleted `moved_in` line must drop them too, or readers of the target who can't read the source keep the rows. (CV-16)
+
+## Chat quiet hours and holds (CV-18)
+
+- **A check in the same statement as a volatile call doesn't see its writes** (`test.ok(f() >= 1 AND NOT EXISTS (…))` reads the snapshot from before `f` ran): call the function first, then check. (CV-18)
+- **Rows inserted in one transaction share `now()`:** tests that order Focus runs by `started_at` set them apart by hand. (CV-18)
+- **`test.try` runs its SQL and then rolls it back (it is for refusals):** writes a later check depends on must use `test.as_user`. (CV-18)
+- **`pg_temp.recut` edits one step at a time:** each step must compile on its own (a select list using a join added by a later step fails). (CV-18)
+- **A partial index in a migration is built without `CONCURRENTLY` (a migration runs in one transaction):** `notice_deliveries_held_open` briefly locks writes to that table; fine at today's size, apply in a quiet window. (CV-18)
+
+## Chat Realtime keys and export (CV-22)
+
+- **A removed row's key reaches Realtime listeners without a read rule, and a filtered subscription whose filter column isn't in the key gets no deletes at all:** key a published table by its own row id. The migration's assert and `chat_erasure.test.sql` fail on a table keyed by a person. (CV-22)
+
+## Chat decisions (CV-14)
+
+- **A mention links only an item in `entities`:** a test that inserts a bucket directly must register it, or its "Mentioned in" (and decision) lines never appear. (CV-14)
+- **The CHECK and two indexes on `chat_messages` take short locks on a big table (`lock_timeout` 5 s):** the columns are nullable without a default, so no rewrite. `chat_op_wrap_up` locks the root, then the settling reply, the order every chain op uses. (CV-14)
+- **`chat_decisions_for_item`'s readable-conversation CTE groups by `c.id` to fold its two halves;** a test's `value_as` runs as `authenticated` and can't read the `test` schema, so map ids outside it. (CV-14)
+
+## Chat custom emoji (CV-20)
+
+- **A policy may not call `chat_is_workspace_member(ws, auth.uid())` directly (`access_check`'s rule):** wrap it in a caller-only SECURITY DEFINER helper (`chat_emoji__readable`). (CV-20)
+- **`storage.objects` refuses a direct DELETE in SQL ("use the Storage API"):** a test of "nobody deletes" sees that error, not `ok 0`. (CV-20)
+- **The `chat_realtime` publication test lists chat tables exactly:** a new published chat table updates it. (CV-20)
