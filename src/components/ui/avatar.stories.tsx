@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
 import {
+  AppAvatar,
   Avatar,
   AvatarBadge,
   AvatarFallback,
@@ -143,6 +144,44 @@ export const Identity: Story = {
           <TeamMark key={size} name="Design" id="t-design" size={size} />
         ))}
       </div>
+    </div>
+  ),
+};
+
+/**
+ * A connected app (MOD-149): what an API key or an agent wrote shows the gray
+ * circle with a small plug, at every rung and density; a former member keeps
+ * "?". No colour and no AI badge: the name beside it says which app.
+ */
+export const ConnectedApp: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 font-sans text-sm text-foreground">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="flex items-center gap-1.5">
+          <AppAvatar />
+          Claude Code (app)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <AppAvatar />
+          Maciej · via Claude Code
+        </span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <PersonAvatar name="?" />
+          Former member
+        </span>
+      </div>
+      <div className="flex items-end gap-3">
+        {(["icon", "sm", "default", "lg"] as const).map((size) => (
+          <AppAvatar key={size} size={size} />
+        ))}
+      </div>
+      <AtThreeDensities>
+        <div className="flex items-center gap-2">
+          <AppAvatar />
+          <PersonAvatar name="?" />
+          <PersonAvatar name="Maciej" id="u-maciej" />
+        </div>
+      </AtThreeDensities>
     </div>
   ),
 };

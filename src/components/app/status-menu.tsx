@@ -236,7 +236,7 @@ export function StatusMenu({
       <PopoverTrigger
         type="button"
         data-slot="status-menu-trigger"
-        className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-avatar border border-border bg-muted text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-avatar border border-border bg-muted text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         aria-label={mine ? `Your status: ${statusLine(mine)}` : "Your status and settings"}
       >
         <Avatar size="sm" className="size-full">

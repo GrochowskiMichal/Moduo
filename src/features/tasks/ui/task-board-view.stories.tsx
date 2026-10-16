@@ -128,11 +128,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Across projects: the five categories; the Done column ends with its
- *  "N completed · show" line; a column's "+" says "Pick a project first". */
+/** Across projects: the five categories; no column ends with a completed
+ *  line: the board's end has one "N completed · Show" for every column's
+ *  hidden cards (MOD-148); a column's "+" says "Pick a project first". */
 export const ByStatus: Story = {};
 
-/** Display → Completed: 7 days — recent done cards show, faded. */
+/** Display → Completed: 7 days — recent done cards show, faded; the older
+ *  ones wait behind the column's own "N completed · show" line. */
 export const RecentCompleted: Story = {
   args: { completed: "week" },
 };
@@ -155,7 +157,9 @@ export const ProjectStatuses: Story = {
   },
 };
 
-/** Grouped by section (22a): No section first, then the weeks, "+ Add section". */
+/** Grouped by section (22a): No section first, then the weeks, "+ Add
+ *  section", then the one "N completed · Show" for the done cards of every
+ *  section (MOD-148). */
 export const BySection: Story = {
   args: { ...ProjectStatuses.args, boardGroupBy: "section" },
 };

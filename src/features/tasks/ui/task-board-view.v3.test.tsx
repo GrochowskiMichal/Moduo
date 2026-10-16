@@ -242,3 +242,23 @@ describe("Board v3 (TV-U11)", () => {
     });
   });
 });
+
+// MOD-161 — a sideways swipe that runs out at the Board's end stays in the
+// Board: its scroller contains the overscroll (the columns and the lanes
+// layout alike), so it never chains to the centre panel or the window, which
+// the desktop app's WebKit view would rubber-band. Measured live with a
+// sideways wheel: the Board scrolls to its end and the document never moves.
+describe("the Board's sideways scroll (MOD-161)", () => {
+  it("is contained in the columns' scroller", () => {
+    renderBoard([task("a")]);
+    const scroller = document.querySelector("section[data-board-column]")?.parentElement;
+    expect(scroller?.className).toMatch(/\boverflow-x-auto\b/);
+    expect(scroller?.className).toMatch(/\boverscroll-x-contain\b/);
+  });
+
+  it("is contained in the lanes' scroller", () => {
+    renderBoard([task("a", { priority: "high" })], { lanes: "priority" });
+    const lane = document.querySelector("[data-board-lane-key]") as HTMLElement;
+    expect(lane.closest(".overflow-auto")?.className).toMatch(/\boverscroll-x-contain\b/);
+  });
+});

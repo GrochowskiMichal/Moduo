@@ -191,7 +191,7 @@ export function SettingsModal() {
               <div className="flex items-center justify-between px-2 pt-1">
                 <Eyebrow>Settings</Eyebrow>
                 <DialogPrimitive.Close
-                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   aria-label="Close settings"
                 >
                   <X className="size-4" />

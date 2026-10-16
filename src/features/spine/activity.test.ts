@@ -5,7 +5,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { dayShort, time24 } from "../calendar/booking/sentence";
-import { spineActivityLine, spineActorName } from "./activity";
+import { isAppActor, spineActivityLine, spineActorName } from "./activity";
 
 function entry(op: string, payload: Record<string, unknown> = {}) {
   return { op, payload };
@@ -71,6 +71,16 @@ describe("spineActorName", () => {
     expect(spineActorName({ actorType: "api_key", actorId: null, actorLabel: null }, "u1")).toBe(
       "An API client",
     );
+  });
+});
+
+describe("isAppActor (MOD-149)", () => {
+  it("an API key's or an agent's change is an app's; a person's, even unknown, isn't", () => {
+    expect(isAppActor({ actorType: "api_key" })).toBe(true);
+    expect(isAppActor({ actorType: "agent" })).toBe(true);
+    expect(isAppActor({ actorType: "user" })).toBe(false);
+    // A row with no type predates attribution: a person's, like `normalizeContentAuthorKind`.
+    expect(isAppActor({ actorType: null })).toBe(false);
   });
 });
 

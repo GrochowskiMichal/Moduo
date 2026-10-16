@@ -167,7 +167,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
                     setError(null);
                   }}
                   className={
-                    "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background " +
+                    "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
                     (provider === tab.id
                       ? "bg-control-raised text-foreground shadow-control-raised"
                       : "text-muted-foreground hover:text-foreground")

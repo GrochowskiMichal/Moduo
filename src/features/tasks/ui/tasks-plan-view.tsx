@@ -1798,21 +1798,8 @@ export function TasksPlanView({
       view !== "timeline" && order !== "manual" && showsSortedNote(place, order) ? (
         <SortedOrderLine label={sortedByLabel(order)} onManualOrder={backToManualOrder} />
       ) : null,
-    project: titleProjectId
-      ? {
-          onOpenDetails: openProjectDetails,
-          // An archived project is read-only (TV-U6).
-          onEditStatuses:
-            canEdit && !archivedProject
-              ? () => setStatusesEditor({ projectId: titleProjectId })
-              : undefined,
-          // Chat's "Start a conversation for X" (CV-13): the server checks edit rights.
-          onStartConversation:
-            startConversation && canEdit && !archivedProject
-              ? () => startConversation("bucket", titleProjectId)
-              : undefined,
-        }
-      : undefined,
+    // Statuses… lives in the Project view's ⋯ now (MOD-150).
+    project: titleProjectId ? { onOpenDetails: openProjectDetails } : undefined,
   };
 
   const sharedViewProps = {
@@ -2543,6 +2530,20 @@ export function TasksPlanView({
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
       chat={projectChat}
+      // The title row's ⋯ → Statuses… (MOD-150, from the plan header's ⋯);
+      // an archived project is read-only (TV-U6).
+      onEditStatuses={
+        canEdit && !panelProject.archivedAt
+          ? (p) => setStatusesEditor({ projectId: p.id })
+          : undefined
+      }
+      // Chat's "Start a conversation for X" (CV-13), moved with Statuses… into
+      // this ⋯ (MOD-150); the server checks edit rights.
+      onStartConversation={
+        startConversation && canEdit && !panelProject.archivedAt
+          ? (p) => startConversation("bucket", p.id)
+          : undefined
+      }
     />
   ) : null;
   // The right panel's title row names and switches its views (SH-1): Details

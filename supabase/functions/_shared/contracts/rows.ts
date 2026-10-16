@@ -324,6 +324,8 @@ export const bucketRowSchema = z.object({
   trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
   /** TV-U16: the project's description (plain text, '' for none). Absent before its migration. */
   description: optStr,
+  /** MOD-155: the client when it's a company (never set with client_contact_id). Absent before its migration. */
+  client_company_id: optStr,
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 

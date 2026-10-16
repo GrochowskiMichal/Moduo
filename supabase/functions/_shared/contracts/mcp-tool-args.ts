@@ -195,6 +195,9 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     target_on: ymd.optional(),
     color: nonempty.optional(),
     lead_id: nonempty.optional(),
+    // MOD-155: the client is a person or a company, never both.
+    client_contact_id: nonempty.optional(),
+    client_company_id: nonempty.optional(),
     // TV-U16's description, plain text ('' for none); the ops cap it at 20,000.
     description: projectDescription.optional(),
     import_id: nonempty.optional(),
@@ -208,6 +211,8 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     target_on: z.union([ymd, z.null()]).optional(),
     color: z.union([nonempty, z.null()]).optional(),
     lead_id: z.union([nonempty, z.null()]).optional(),
+    client_contact_id: z.union([nonempty, z.null()]).optional(),
+    client_company_id: z.union([nonempty, z.null()]).optional(),
     description: z.union([projectDescription, z.null()]).optional(),
     archived: z.boolean().optional(),
   }),

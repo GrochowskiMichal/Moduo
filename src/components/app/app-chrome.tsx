@@ -90,7 +90,7 @@ function ModuleTab({ item, active, index, onClick, badgeCount = 0 }: ModuleTabPr
         aria-current={active ? "page" : undefined}
         aria-label={ariaLabel}
         onClick={onClick}
-        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${active ? "bg-state-active text-foreground" : "bg-transparent text-muted-foreground hover:bg-state-hover hover:text-foreground"}`}
+        className={`flex h-8 flex-row items-center gap-2 rounded-md px-3 transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${active ? "bg-state-active text-foreground" : "bg-transparent text-muted-foreground hover:bg-state-hover hover:text-foreground"}`}
       >
         <span className="relative flex">
           <Icon name={item.iconName} size={14} />
@@ -544,7 +544,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   return (
     // One reference store for the whole shell (RF-1): pages, the panel, the bell.
     <ReferencesProvider>
-      <div className="flex h-screen min-h-screen flex-col overflow-hidden bg-background">
+      {/* Clipped, never a scroll container (MOD-161): focus or a scroll to
+          something off screen can't shift the app sideways. */}
+      <div className="flex h-screen min-h-screen flex-col overflow-clip bg-background">
         <TrialBanner />
         <MinBuildBanner />
         <nav
@@ -625,7 +627,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           </div>
         </nav>
 
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-clip">
           <Outlet />
         </div>
 
@@ -648,7 +650,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             ) : (
               <Tooltip>
                 <TooltipTrigger
-                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   onClick={toggleLeftPanel}
                   aria-label={currentPanels.left ? "Collapse left panel" : "Expand left panel"}
                 >
@@ -692,7 +694,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             ) : !isSettingsRoute ? (
               <Tooltip>
                 <TooltipTrigger
-                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   onClick={toggleRightPanel}
                   aria-label={currentPanels.right ? "Collapse right panel" : "Expand right panel"}
                 >

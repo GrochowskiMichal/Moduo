@@ -36,6 +36,16 @@ export function spineActorName(
   return "Someone";
 }
 
+/**
+ * A change an app made, not a person (MOD-149): written over an API key, or
+ * by an agent (Moduo's own catch-up and reminders too). Its `actorId` is the
+ * key's id or nothing, never a member, so it shows the app mark
+ * (`AppAvatar`), not the former member's "?".
+ */
+export function isAppActor(entry: Pick<SpineActorFields, "actorType">): boolean {
+  return entry.actorType === "api_key" || entry.actorType === "agent";
+}
+
 function str(v: unknown): string | null {
   return typeof v === "string" && v ? v : null;
 }

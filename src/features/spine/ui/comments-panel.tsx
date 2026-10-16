@@ -23,7 +23,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
-import { PersonAvatar as KitPersonAvatar, TeamMark } from "@/components/ui/avatar";
+import { AppAvatar, PersonAvatar as KitPersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -56,16 +56,22 @@ import { Reference } from "../references/ui/reference";
  * A comment author's (or a mentioned person's) small avatar: the kit's two
  * initials on a stable colour (DS-6, call 43), keyed on the person's id when
  * known so it matches every other surface. Decorative: a name always sits
- * beside it. Someone the app can't resolve (an API key, a former member) is a
- * gray "?", like an unknown assignee; never the empty "unassigned" ring.
+ * beside it. A connected app (`app`: an API key's comment, an agent's change)
+ * is the gray circle with a plug (MOD-149); someone the app can't resolve (a
+ * former member) is a gray "?", like an unknown assignee; never the empty
+ * "unassigned" ring.
  */
 export function PersonAvatar({
   person,
+  app = false,
   className,
 }: {
   person: (Pick<CommentPerson, "name" | "avatarUrl" | "unnamed"> & { id?: string }) | null;
+  /** Written by a connected app, not a person: the plug, whoever the person is. */
+  app?: boolean;
   className?: string;
 }) {
+  if (app) return <AppAvatar size="icon" className={className} />;
   return (
     <KitPersonAvatar
       name={person && !person.unnamed ? person.name || "?" : "?"}
@@ -222,6 +228,7 @@ function HandleReference({ handle }: { handle: string }) {
 /** One comment: avatar, author, when, then the body (and anything above it, e.g. a quote). */
 export function CommentCard({
   author,
+  app = false,
   authorName,
   time,
   timeTitle,
@@ -231,6 +238,8 @@ export function CommentCard({
   children,
 }: {
   author: (Pick<CommentPerson, "name" | "avatarUrl"> & { id?: string }) | null;
+  /** Posted by a connected app over an API key (`authorKind` "api_key"): the plug mark (MOD-149). */
+  app?: boolean;
   authorName: string;
   time: string;
   /** The full date, as a tooltip on the relative time. */
@@ -245,7 +254,7 @@ export function CommentCard({
 }) {
   return (
     <FeedCard
-      avatar={<PersonAvatar person={author} />}
+      avatar={<PersonAvatar person={author} app={app} />}
       author={authorName}
       time={time}
       timeTitle={timeTitle}

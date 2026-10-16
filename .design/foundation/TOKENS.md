@@ -157,7 +157,7 @@ Dark mode shadows are subtle drop shadows with high opacity (since pure-black al
 | `--shadow-md` | Popovers, dropdowns |
 | `--shadow-lg` | Sheets |
 | `--shadow-overlay` | Dialogs |
-| `--shadow-focus` | Composite focus ring (background spacer + ring color) |
+| ~~`--shadow-focus`~~ | Retired 2026-10-16 (MOD-160): focus is the offset-less ring on controls and the `--ring` edge on fields, never an offset ring |
 
 ## Motion
 

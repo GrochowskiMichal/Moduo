@@ -12,8 +12,7 @@ import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
-const buttonFocus =
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+const buttonFocus = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /**
  * The running Focus session's timer, in the top bar left of Help (tasks-v3

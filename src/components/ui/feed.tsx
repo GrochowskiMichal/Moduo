@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { FIELD_FOCUS_WITHIN } from "./field-shell";
 
 /*
  * Feed — the history under an item (DS-6, promoted from the spine's comment
@@ -156,7 +157,11 @@ const FeedComposer = React.forwardRef<
       className={cn(
         variant === "filled"
           ? FEED_COMPOSER_FILLED
-          : "rounded-lg border border-hairline bg-transparent transition-[border-color] duration-(--motion-fade) ease-(--ease-out) focus-within:border-border",
+          : cn(
+              "rounded-lg border border-hairline bg-transparent transition-[border-color] duration-(--motion-fade) ease-(--ease-out)",
+              // A field's focus edge (MOD-160), on the box: its text, not its buttons.
+              FIELD_FOCUS_WITHIN,
+            ),
         className,
       )}
       {...props}

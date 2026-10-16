@@ -4,7 +4,7 @@
 // - Who's in it: your dated tasks plus unassigned ones in projects you can
 //   see (the store holds only those), minus Backlog and unassigned tasks
 //   routed to a team you're not in. Won't do sits out; a task done today or
-//   later stays in its day, behind "N completed · show".
+//   later stays in its day, behind the list's one "N completed · Show" (MOD-148).
 // - One row per task, at its next session or its due date, whichever comes
 //   first by day (`rowDateOf`, the List's own rule). A session that ended
 //   with the task still open reads "missed 2:00 PM"; a passed due date reads
@@ -80,7 +80,7 @@ export function inUpcoming(task: Task, coverage: UpcomingCoverage, now: Date): b
   const at = rowDateOf(task);
   if (!at) return false;
   // Finished earlier work isn't upcoming; finished work on a coming day stays
-  // in its day, behind that day's "N completed · show".
+  // in its day, behind the list's one "N completed · Show" (MOD-148).
   if (category === "done" && dayOffset(at, now) < 0) return false;
   const assignee = task.assigneeId;
   if (assignee === "" || (assignee !== null && assignee === coverage.me)) return true;

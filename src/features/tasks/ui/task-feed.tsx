@@ -6,7 +6,9 @@
 // "Created by · Updated" line under it: the trail's first and last lines say
 // both (MOD-129).
 //
-// - "All · Comments" in the header, remembered per person on this device.
+// - "All · Comments" in the header, a quiet switch at the title's size, on
+//   Comments until you pick All (MOD-157: most people only want the talk);
+//   your pick is remembered per person on this device.
 // - One person's changes within 10 minutes merge ("changed due, priority and
 //   2 more", click to see each); runs of changes between comments fold into
 //   "Show 12 earlier changes", and after the last comment the latest five
@@ -34,6 +36,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
+import { isAppActor } from "../../spine/activity";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { type CommentThread, useCommentThread } from "../../spine/hooks/use-comment-thread";
@@ -83,12 +86,13 @@ type Props = {
 
 const FILTER_KEY = "moduo:task-feed-filter";
 
+/** Comments unless you picked All on this device (MOD-157). */
 function readFilter(userId: string | null): FeedFilter {
   try {
     const v = localStorage.getItem(`${FILTER_KEY}:${userId ?? "anon"}`);
-    return v === "comments" ? "comments" : "all";
+    return v === "all" ? "all" : "comments";
   } catch {
-    return "all";
+    return "comments";
   }
 }
 
@@ -253,8 +257,9 @@ export function TaskFeed({
     <section aria-label="Comments and activity" className="flex flex-col gap-2.5">
       <div className="flex min-h-(--ctrl-h-sm) items-center justify-between gap-2">
         <h3 className="font-sans text-sm font-medium text-foreground">Activity</h3>
+        {/* round-2b `.shead .fseg`, at the title's 13 px (MOD-157). */}
         <SegmentedControl
-          size="sm"
+          size="xs"
           aria-label="Show"
           value={filter}
           onValueChange={(v) => setFilter(v === "comments" ? "comments" : "all")}
@@ -265,7 +270,10 @@ export function TaskFeed({
         />
       </div>
       {rows.map(render)}
-      {filter === "comments" && rows.length === 0 && !thread.loading ? (
+      {/* Comments on and none yet (most tasks, MOD-157): one quiet line, so the
+          header doesn't sit over nothing; the changes are a click away on All.
+          Not when the read failed: then the Retry line below says so. */}
+      {filter === "comments" && rows.length === 0 && !thread.loading && !thread.failed ? (
         <p className="font-sans text-xs text-muted-foreground">No comments yet.</p>
       ) : null}
       {thread.failed ? (
@@ -313,9 +321,11 @@ function TrailLine({ item, currentUserId }: { item: FeedItem; currentUserId: str
     );
   }
   if (item.kind === "activity") {
+    const app = isAppActor(item.entry);
     return (
       <FeedEvent
-        person={item.entry.actorId ? people.personOf(item.entry.actorId) : null}
+        app={app}
+        person={!app && item.entry.actorId ? people.personOf(item.entry.actorId) : null}
         time={feedTime(item.at)}
         title={formatTimestamp(item.at)}
       >
@@ -358,9 +368,12 @@ function MergedLine({
       </>
     );
   }
+  // One actor per merged run (`feed.ts` keys runs on the actor), so the first speaks for all.
+  const app = isAppActor(first);
   return (
     <FeedEvent
-      person={first.actorId ? people.personOf(first.actorId) : null}
+      app={app}
+      person={!app && first.actorId ? people.personOf(first.actorId) : null}
       time={feedTime(at)}
       title={formatTimestamp(at)}
     >
@@ -377,20 +390,26 @@ function MergedLine({
   );
 }
 
-/** One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem). */
+/**
+ * One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem).
+ * A change made over an API key or by an agent (`app`) shows the plug mark,
+ * not the "?" a former member gets (MOD-149).
+ */
 function FeedEvent({
   person,
+  app = false,
   time,
   title,
   children,
 }: {
   person: { id?: string; name: string; avatarUrl: string | null } | null;
+  app?: boolean;
   time: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <FeedLine avatar={<PersonAvatar person={person} />} time={time} timeTitle={title}>
+    <FeedLine avatar={<PersonAvatar person={person} app={app} />} time={time} timeTitle={title}>
       {children}
     </FeedLine>
   );
@@ -486,6 +505,7 @@ function CommentItem({
   return (
     <CommentCard
       author={author}
+      app={comment.authorKind === "api_key"}
       authorName={commentAuthorName(comment, currentUserId, people.nameOf)}
       time={feedTime(comment.createdAt)}
       timeTitle={formatTimestamp(comment.createdAt)}
