@@ -267,8 +267,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
         case "reply":
           if (!m) return;
           showRight();
-          // After the panel opens and draws the box.
-          requestAnimationFrame(() => onFocusReply?.());
+          onFocusReply?.();
           return;
         case "done":
           done(row);

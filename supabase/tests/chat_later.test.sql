@@ -290,3 +290,34 @@ SELECT test.ok(test.remind('B', 'a2', NULL, now() + interval '5 hours') = 'ok 1'
   'clear: an item put off shows again at once, with its bell row');
 SELECT test.ok(test.value_as('X', format($q$SELECT count(*)::text FROM public.chat_catchup_open(%L)$q$, test.id('W'))) = '0',
   'list: someone else sees none of B''s items');
+
+-- ── Catch up's list follows the count's rules, but Nothing still lists ───────
+SELECT test.ok(test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L::uuid, 'none', NULL)$q$, test.ref('L'))) = 'ok 1',
+  'setup: B sets L to Nothing');
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.send('A', 'L', 'n1', 'quiet one for ' || 'moduo://person/' || test.id('B'), 20);
+  PERFORM test.ok(v = 'ok 1', 'setup: A mentions B in L while B is on Nothing', v);
+END;
+$$;
+SELECT test.ok(test.listed('B', 'n1') = 'mention' AND test.catchup('B', 'L') = '0',
+  'list: on Nothing, the @you waits in Catch up silently (listed, not counted; AC7.4)');
+SELECT test.ok(test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L::uuid, 'all', NULL)$q$, test.ref('L'))) = 'ok 1',
+  'setup: B sets L to Every message');
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.send('A', 'L', 'e1', 'news for everyone', 21);
+  PERFORM test.ok(v = 'ok 1', 'setup: A posts in L', v);
+END;
+$$;
+SELECT test.ok(test.listed('B', 'e1') = 'every_message', 'list: on Every message, the conversation''s line is listed');
+SELECT test.ok(test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L::uuid, 'mentions', NULL)$q$, test.ref('L'))) = 'ok 1'
+               AND test.listed('B', 'e1') = '',
+  'list: back on Mentions and replies, the line isn''t listed');
+SELECT test.ok(test.as_user('A', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('n1'))) LIKE 'ok %'
+               AND test.listed('B', 'n1') = '',
+  'list: a deleted message''s item isn''t listed');

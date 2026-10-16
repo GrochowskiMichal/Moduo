@@ -579,7 +579,19 @@ export function ChatScreen({
     onOpenConversation: (channelId, messageId) => onOpen(channelId, messageId ? { messageId } : {}),
     onLeave: () => onLeaveCatchup?.(),
     onMakeTask: makeTaskFrom,
-    onFocusReply: () => catchupReplyRef.current?.focus(),
+    // The panel may be opening: try for a few frames until the box is there.
+    onFocusReply: () => {
+      let tries = 0;
+      const attempt = () => {
+        if (catchupReplyRef.current) {
+          catchupReplyRef.current.focus();
+          return;
+        }
+        tries += 1;
+        if (tries < 20) requestAnimationFrame(attempt);
+      };
+      attempt();
+    },
     // A reply from Catch up joins the message's chain, like Reply in the stream.
     renderReply: (m) => {
       const c = snap.channels[m.channelId];
