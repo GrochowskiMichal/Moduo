@@ -7,7 +7,7 @@ import { messageTree, toBodyText } from "./markup-v2";
 import type { ChatChannel, ChatMessage } from "./model";
 
 export type ChainRights = {
-  /** You may post here (not a viewer, the plan isn't paused, the channel isn't archived). */
+  /** Your role may post here (not a viewer; in an announcement channel, a manager). */
   canPost: boolean;
   paused: boolean;
   /** A manager of this channel or an admin ("Manage any channel"). */
@@ -21,9 +21,11 @@ export function mayWrap(
   channel: Pick<ChatChannel, "kind" | "archivedAt">,
   r: ChainRights,
 ): boolean {
-  if (!r.canPost || r.paused || channel.archivedAt) return false;
-  if (channel.kind === "dm" || r.canManage) return true;
-  return root.authorKind === "user" && root.authorId === r.selfId;
+  if (r.paused || channel.archivedAt) return false;
+  // Managing the channel is enough (even from outside a public one); else you must post here.
+  if (r.canManage) return true;
+  if (!r.canPost) return false;
+  return channel.kind === "dm" || (root.authorKind === "user" && root.authorId === r.selfId);
 }
 
 /** "Reply to…": your own message, or anyone's for managers and admins. */
@@ -32,10 +34,11 @@ export function mayAttach(
   channel: Pick<ChatChannel, "archivedAt">,
   r: ChainRights,
 ): boolean {
-  if (!r.canPost || r.paused || channel.archivedAt) return false;
+  if (r.paused || channel.archivedAt) return false;
   // A message with replies of its own stays a root (the op refuses it).
   if (m.kind !== "message" || m.deletedAt || m.replyCount > 0) return false;
-  return r.canManage || (m.authorKind === "user" && m.authorId === r.selfId);
+  if (r.canManage) return true;
+  return r.canPost && m.authorKind === "user" && m.authorId === r.selfId;
 }
 
 /** One line of a message's words. */

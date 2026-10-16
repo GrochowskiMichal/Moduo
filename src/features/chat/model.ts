@@ -145,6 +145,8 @@ export const CHAT_HISTORY_OPS = [
   "chat.message_edit",
   "chat.message_delete",
   "chat.message_restore",
+  "chat.wrap_up",
+  "chat.reopen",
 ] as const;
 
 /** One line of a conversation's history (a `module_activity` row). */

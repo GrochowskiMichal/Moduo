@@ -283,6 +283,8 @@ export function ChatScreen({
   // A link's chain (`t`) opens on the right once the conversation is there.
   const openedChain = useRef<string | null>(null);
   useEffect(() => {
+    // The link let go of its chain: the same `t` opens it again later.
+    if (!chainId) openedChain.current = null;
     if (!ready || !known || !chainId || openedChain.current === chainId) return;
     openedChain.current = chainId;
     openChain(chainId);
@@ -613,25 +615,28 @@ export function ChatScreen({
   );
 
   // Who may wrap up and Reply to… (a mirror of the ops' rules; the server decides).
+  // Role, plan and archive decide; membership doesn't (a manager outside a public
+  // channel may still wrap up). The chain's own box still needs the main box's rule.
   const chainRights: ChainRights = {
-    canPost:
-      !!channel &&
-      composerLine({
-        channel,
-        member,
-        selfId,
-        personOf,
-        paused: snap.paused,
-        isOwner: role === "owner",
-        ownerName,
-        canPost: rights.canPost,
-        canManage,
-      }) === null &&
-      !managersPending,
+    canPost: rights.canPost && (!channel?.managersOnly || canManage),
     paused: snap.paused,
     canManage,
     selfId,
   };
+  const canWriteHere =
+    !!channel &&
+    composerLine({
+      channel,
+      member,
+      selfId,
+      personOf,
+      paused: snap.paused,
+      isOwner: role === "owner",
+      ownerName,
+      canPost: rights.canPost,
+      canManage,
+    }) === null &&
+    !managersPending;
   const canWrapUp = (root: ChatMessage) => !!channel && mayWrap(root, channel, chainRights);
 
   let center: React.ReactNode;
@@ -1010,7 +1015,7 @@ export function ChatScreen({
             onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
             onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
             renderComposer={
-              channel && chainRights.canPost && root?.channelId === channel.id
+              channel && canWriteHere && root?.channelId === channel.id
                 ? (placeholder) => (
                     <ChatComposer
                       key={`chain:${entry.id}`}

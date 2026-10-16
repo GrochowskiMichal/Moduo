@@ -32,6 +32,14 @@ describe("who may wrap up and Reply to… (§12)", () => {
     expect(mayWrap(theirs, { kind: "dm", archivedAt: null }, member)).toBe(true);
   });
 
+  it("a manager or admin outside a public channel may still wrap up and attach others'", () => {
+    const outside: ChainRights = { ...member, canPost: false, canManage: true };
+    expect(mayWrap(theirs, channel, outside)).toBe(true);
+    expect(mayAttach(m("b", "2026-10-01T10:00:00Z"), channel, outside)).toBe(true);
+    expect(mayWrap(theirs, channel, { ...outside, paused: true })).toBe(false);
+    expect(mayWrap(theirs, { ...channel, archivedAt: "x" }, outside)).toBe(false);
+  });
+
   it("never for a viewer, on a paused plan or in an archived channel", () => {
     expect(mayWrap(mine, channel, { ...member, canPost: false })).toBe(false);
     expect(mayWrap(mine, channel, { ...member, paused: true })).toBe(false);
