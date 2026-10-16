@@ -147,7 +147,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
-- 2026-10-16 · NR-7: note live channels are private (`note:<id>`, `realtime.messages` policies: view listens, edit sends), joined through `notesV2.joinLive`; presence names come from the member list.
+- 2026-10-16 · NR-7: clients send nothing over Realtime; the server stamps who is viewing (`notes_live_here`) and hands each saved update to people who may still view the note (`notes-live:<uid>` topics).
 - 2026-10-14 · NR-6 built — agent (MCP) note writes are real Yjs updates: they land live, are attributed, and can be undone.
 - 2026-10-13 · NR-3 built — one markdown converter reads the CRDT back through the real binding, node schemas load without React, and an open note paints from its cache.
 - 2026-10-13 · NR-2 built — New Notes ships behind a synced per-user switch, and a new note is a device-only draft until its first character.

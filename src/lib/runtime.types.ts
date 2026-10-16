@@ -141,22 +141,24 @@ export type SpineComment = {
 /** One person's reaction on a comment. */
 export type CommentReactionMark = { userId: string; reaction: CommentReaction };
 
-/** NR-7: what `notesV2.joinLive` reports to the open editor. */
+/** NR-7: what `notesV2.joinLive` reports to the open editor. Everything
+ * comes from the server; the client sends nothing over Realtime. */
 export type NoteLiveJoin = {
   noteId: string;
   selfUserId: string;
-  /** A broadcast on the note's `NOTE_UPDATE_EVENT`: a peer's update or the agent cue. */
-  onBroadcast(payload: Record<string, unknown> | undefined): void;
-  /** Presence after every sync/join/leave: presence key (user id) → metas. */
-  onPresence(state: Record<string, Array<Record<string, unknown>>>): void;
+  /** Saved updates from another tab or person, to apply as remote. */
+  onUpdates(updatesB64: string[]): void;
+  /** Something was saved that must be pulled (an agent write, a big update,
+   * or anything missed while the socket was down). */
+  onPull(): void;
+  /** Who has the note open right now (user ids, self included), as the
+   * server stamped them; [] when this person may not view it. */
+  onViewers(userIds: string[]): void;
 };
 
-/** NR-7: a joined (or joining) note live channel. */
+/** NR-7: an open note's live channel. */
 export type NoteLiveChannel = {
-  /** Relay a merged local update. Dropped unless joined: durability rides the
-   * outbox and the peer's next pull, never the socket. */
-  sendUpdate(updateB64: string): void;
-  /** Untrack and leave. Safe to call before the join finished. */
+  /** Say goodbye and stop listening for this note. */
   close(): void;
 };
 
@@ -658,12 +660,10 @@ export type ModuoRuntime = {
       ids: string[];
     }): Promise<{ id: string; title: string; bodyMd: string }[]>;
     /**
-     * NR-7: join the note's private live channel (`note:<id>`): peers' edits,
-     * the agent's "pull" cue and presence. The server admits only people who
-     * can view the note and lets only editors broadcast (`realtime.messages`
-     * policies), so a refused join simply never delivers anything and the
-     * editor keeps pulling. Presence is keyed by `selfUserId`; nothing else
-     * is tracked (names come from the member list, never from the channel).
+     * NR-7: follow an open note live: saved updates from others, and who is
+     * viewing. The server sends both only to people who may view the note,
+     * checked on every save and every heartbeat (`notes_live_here`); a
+     * refusal just means nothing arrives and the editor keeps pulling.
      */
     joinLive(input: NoteLiveJoin): NoteLiveChannel;
   };

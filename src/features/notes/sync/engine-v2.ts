@@ -66,6 +66,10 @@ export type NotesSyncStatusV2 = "synced" | "pending" | "offline";
 
 const CLIENT_ID_KEY = "moduo:notes:client-id:v1";
 const FLUSH_DEBOUNCE_MS = 400;
+/** NR-7: peers see edits when they are saved (the server hands each save to
+ * the people with the note open), so steady typing must still save this
+ * often instead of waiting for a pause. */
+const FLUSH_MAX_WAIT_MS = 800;
 const RETRY_BASE_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
@@ -115,6 +119,8 @@ type NoteSession = {
   syncReported: boolean;
   syncListeners: Set<(isSynced: boolean) => void>;
   flushTimer: ReturnType<typeof setTimeout> | null;
+  /** When the pending debounced flush must fire by, however much typing follows. */
+  flushDueBy: number | null;
   retryTimer: ReturnType<typeof setTimeout> | null;
   retryMs: number;
   flushing: boolean;
@@ -279,6 +285,7 @@ export class NotesSyncEngineV2 {
       syncReported: false,
       syncListeners,
       flushTimer: null,
+      flushDueBy: null,
       retryTimer: null,
       retryMs: RETRY_BASE_MS,
       flushing: false,
@@ -436,11 +443,15 @@ export class NotesSyncEngineV2 {
   }
 
   private scheduleFlush(s: NoteSession, delay = FLUSH_DEBOUNCE_MS) {
+    const now = Date.now();
     if (s.flushTimer) clearTimeout(s.flushTimer);
+    else s.flushDueBy = now + Math.max(delay, FLUSH_MAX_WAIT_MS);
+    const wait = Math.max(0, Math.min(delay, (s.flushDueBy ?? now + delay) - now));
     s.flushTimer = setTimeout(() => {
       s.flushTimer = null;
+      s.flushDueBy = null;
       void this.flush(s);
-    }, delay);
+    }, wait);
   }
 
   private async flush(s: NoteSession): Promise<void> {

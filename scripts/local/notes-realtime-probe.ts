@@ -1,14 +1,15 @@
-// NR-7 live probe (specs/notes-refresh.md AC12): a note's private live channel
-// against the LOCAL stack's real Realtime server, with the policies from
-// 20261016120000_notes_live_channel.sql. `bun run local:up` first, then
+// NR-7 live probe (specs/notes-refresh.md AC12) against the LOCAL stack's real
+// Realtime server, with 20261016120000_notes_live_channel.sql applied.
+// `bun run local:up` first, then
 //
 //   bun scripts/local/notes-realtime-probe.ts
 //
-// It makes three throwaway local people (owner O, viewer V, member M with no
-// share), a workspace and a note, joins `note:<id>` as each, and checks: M is
-// refused; V listens and appears in presence but can't send; O's edits reach
-// V; the service role's content-free agent cue reaches V. Everything it made
-// is deleted at the end. Local only: it refuses any non-local URL.
+// Three throwaway local people: owner O, viewer V (view share), member M (no
+// share). It checks that the server, not the client, says who is viewing; that
+// saved updates reach V while V may view the note and stop the moment the
+// share is taken away, with V still connected; that M can't listen in; and
+// that nobody can send on a live topic. Everything it made is deleted at the
+// end. Local only: it refuses any non-local URL.
 
 import { execSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -34,7 +35,7 @@ const run = randomBytes(4).toString("hex");
 const password = randomBytes(18).toString("hex");
 const noteId = randomUUID();
 const wsId = randomUUID();
-const topic = `note:${noteId}`;
+let seq = 0;
 
 let failed = 0;
 function check(ok: boolean, label: string) {
@@ -62,22 +63,34 @@ async function person(tag: string) {
   return { id: data.user.id, client };
 }
 
-function join(client: SupabaseClient, key: string) {
-  const got: unknown[] = [];
-  const channel = client.channel(topic, {
-    config: { private: true, broadcast: { self: false }, presence: { key } },
-  });
+type Heard = { event: string; payload: Record<string, unknown> };
+function listen(client: SupabaseClient, topic: string) {
+  const heard: Heard[] = [];
+  const channel = client.channel(topic, { config: { private: true } });
   const status = new Promise<string>((resolve) => {
     channel
-      .on("broadcast", { event: "u" }, (m) => got.push(m.payload))
+      .on("broadcast", { event: "*" }, (m) =>
+        heard.push({ event: m.event, payload: m.payload as Record<string, unknown> }),
+      )
       .subscribe((s) => {
-        if (s === "SUBSCRIBED") void channel.track({ at: Date.now() });
         if (s !== "CLOSED") resolve(s);
       });
     setTimeout(() => resolve("TIMED_OUT"), 8000);
   });
-  return { channel, got, status };
+  return { channel, heard, status };
 }
+
+const here = (client: SupabaseClient, session: string) =>
+  client.rpc("notes_live_here", { p_note_id: noteId, p_session_id: session, p_leaving: false });
+const save = (origin = "user", b64 = "AQ==") => {
+  seq += 1;
+  psql(`INSERT INTO public.note_updates (workspace_id, note_id, client_id, client_seq, update_b64, origin)
+        VALUES ('${wsId}', '${noteId}', 'probe', ${seq}, '${b64}', '${origin}');`);
+};
+const changed = (h: Heard[]) =>
+  h.filter((x) => x.event === "changed" && x.payload.noteId === noteId);
+const lastViewers = (h: Heard[]) =>
+  (h.filter((x) => x.event === "viewers").at(-1)?.payload.viewers as string[] | undefined) ?? [];
 
 const people: Array<{ id: string; client: SupabaseClient }> = [];
 const channels: Array<{ client: SupabaseClient; channel: RealtimeChannel }> = [];
@@ -98,49 +111,74 @@ try {
     VALUES ('${wsId}', 'note', '${noteId}', 'member', '${V.id}', 'view', '${O.id}');
   `);
 
-  const o = join(O.client, O.id);
-  const v = join(V.client, V.id);
-  const m = join(M.client, M.id);
+  const o = listen(O.client, `notes-live:${O.id}`);
+  const v = listen(V.client, `notes-live:${V.id}`);
+  const spy = listen(M.client, `notes-live:${O.id}`);
   channels.push({ client: O.client, channel: o.channel }, { client: V.client, channel: v.channel });
-  channels.push({ client: M.client, channel: m.channel });
-  const [os, vs, ms] = await Promise.all([o.status, v.status, m.status]);
-  check(os === "SUBSCRIBED", `the owner joins ${topic} (${os})`);
-  check(vs === "SUBSCRIBED", `the viewer joins (${vs})`);
-  check(ms !== "SUBSCRIBED", `a member without access is refused (${ms})`);
+  channels.push({ client: M.client, channel: spy.channel });
+  const [os, vs, ms] = await Promise.all([o.status, v.status, spy.status]);
+  check(os === "SUBSCRIBED" && vs === "SUBSCRIBED", `O and V join their own topics (${os}, ${vs})`);
+  check(ms !== "SUBSCRIBED", `M can't listen on O's topic (${ms})`);
 
-  await wait(1500);
-  const seen = Object.keys(o.channel.presenceState());
-  check(seen.includes(V.id), "the owner sees the viewer in presence");
-  check(!seen.includes(M.id), "the refused member never appears in presence");
+  // ── Presence comes from the server ──
+  await here(O.client, "o1");
+  const vHere = await here(V.client, "v1");
   check(
-    Object.values(o.channel.presenceState())
-      .flat()
-      .every((meta) => !("name" in (meta as object))),
-    "presence carries no name",
+    Array.isArray(vHere.data) && vHere.data.includes(O.id),
+    "V's heartbeat answers that O is viewing",
+  );
+  const mHere = await here(M.client, "m1");
+  check(mHere.data === null, "M's heartbeat is refused");
+  await wait(1000);
+  const oViewers = lastViewers(o.heard);
+  check(oViewers.includes(V.id) && !oViewers.includes(M.id), "O is told V (not M) is viewing");
+
+  const forged = V.client.channel(`notes-live:${O.id}`, { config: { private: true } });
+  const sendOwn = await forged.httpSend("viewers", { noteId, viewers: [V.id, "fake"] }).then(
+    () => "sent",
+    (e: Error) => e.message,
+  );
+  await V.client.removeChannel(forged);
+  await wait(800);
+  check(
+    sendOwn !== "sent" && !lastViewers(o.heard).includes("fake"),
+    `nobody can broadcast a fake viewer list (${sendOwn})`,
   );
 
-  await o.channel.send({ type: "broadcast", event: "u", payload: { b64: "AQ==" } });
-  await v.channel.send({ type: "broadcast", event: "u", payload: { b64: "Ag==" } });
-  await wait(1500);
+  // ── Saved updates reach V; an agent write is announced ──
+  save();
+  await wait(1000);
   check(
-    v.got.some((p) => (p as { b64?: string }).b64 === "AQ=="),
-    "the owner's edit reaches the viewer",
+    changed(v.heard).some((x) => JSON.stringify(x.payload.updates) === '["AQ=="]'),
+    "a saved update reaches V inline",
   );
+  save("api_key");
+  await wait(1000);
   check(
-    !o.got.some((p) => (p as { b64?: string }).b64 === "Ag=="),
-    "the viewer can listen but not send",
+    changed(v.heard).some((x) => x.payload.pull === true && !("updates" in x.payload)),
+    "an agent write reaches V content-free (pull)",
   );
-  check(m.got.length === 0, "the refused member hears nothing");
+  check(changed(spy.heard).length === 0, "M hears nothing");
 
-  // The MCP connector's cue: service role, private, content-free.
-  const cue = admin.channel(topic, { config: { private: true } });
-  await cue.httpSend("u", { origin: "api_key" });
-  await admin.removeChannel(cue);
+  // ── Revoke while V stays connected ──
+  psql(
+    `DELETE FROM public.resource_grants WHERE resource_id = '${noteId}' AND subject_id = '${V.id}';`,
+  );
+  const before = changed(v.heard).length;
+  save("user", "Ag==");
   await wait(1500);
   check(
-    v.got.some((p) => (p as { origin?: string }).origin === "api_key"),
-    "the agent cue (service role, private) reaches the viewer",
+    changed(v.heard).length === before,
+    "after the share is taken away, V (still connected) hears nothing",
   );
+  check(
+    changed(o.heard).some((x) => JSON.stringify(x.payload.updates) === '["Ag=="]'),
+    "while O still gets it",
+  );
+  const vAgain = await here(V.client, "v1");
+  check(vAgain.data === null, "V's next heartbeat is refused");
+  await wait(1000);
+  check(!lastViewers(o.heard).includes(V.id), "and O is told V is gone");
 } catch (e) {
   failed += 1;
   console.log(`FAIL: ${e instanceof Error ? e.message : String(e)}`);
@@ -148,6 +186,7 @@ try {
   for (const { client, channel } of channels) await client.removeChannel(channel);
   try {
     psql(`
+      DELETE FROM public.note_updates WHERE note_id = '${noteId}';
       DELETE FROM public.resource_grants WHERE resource_id = '${noteId}';
       DELETE FROM public.notes WHERE id = '${noteId}';
       DELETE FROM public.workspace_members WHERE workspace_id = '${wsId}';

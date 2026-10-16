@@ -200,7 +200,8 @@ async function planAgentEdit(
   };
 }
 
-/** After the write: refuse a silent no-op, cue open editors, and return the
+/** After the write: refuse a silent no-op (open editors hear of it from the
+ * server: NR-7's note_updates trigger), and return the
  * arguments for a body re-save when another write landed between this one's
  * read and its insert (its bodies were derived without that write). */
 async function afterAgentWrite(
@@ -210,7 +211,6 @@ async function afterAgentWrite(
   applied: Row | null,
 ): Promise<Row | null> {
   if (Number(applied?.inserted ?? 0) < 1) throw new Error("The edit could not be saved.");
-  await cueOpenEditors(ctx, noteId);
   const since = await noteUpdateLog(ctx, noteId, plan.readUpto);
   if (since.updates.length <= 1) return null;
   const lib = await notesDoc();
@@ -223,29 +223,6 @@ async function afterAgentWrite(
     p_body_md: body.bodyMd,
     p_body_text: body.bodyText,
   };
-}
-
-/** Tell open editors to pull. Best effort: a missed cue is caught up by the
- * editor's next pull, so it never fails the write. */
-async function cueOpenEditors(ctx: ToolContext, noteId: string) {
-  const lib = await notesDoc();
-  const payload = { origin: lib.AGENT_WRITE_CUE };
-  try {
-    // The note's private channel (NR-7): the service role passes its
-    // `realtime.messages` policies; the cue itself stays content-free.
-    const channel = ctx.db.channel(lib.noteChannelName(noteId), { config: { private: true } });
-    try {
-      if (typeof channel.httpSend === "function") {
-        await channel.httpSend(lib.NOTE_UPDATE_EVENT, payload);
-      } else {
-        await channel.send({ type: "broadcast", event: lib.NOTE_UPDATE_EVENT, payload });
-      }
-    } finally {
-      await ctx.db.removeChannel(channel);
-    }
-  } catch (e) {
-    console.warn("[notes] live cue failed; editors catch up on their next pull", e);
-  }
 }
 
 export const notesConnectorModule: ConnectorModule = {
