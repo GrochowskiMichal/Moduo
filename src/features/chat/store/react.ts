@@ -115,7 +115,27 @@ function loadShowOnline(userId: string, attempt: number): void {
 }
 
 function tabPresenceSelf(userId: string) {
+  watchShowOnlineElsewhere();
   return presenceSelves.for(userId);
+}
+
+/** How often the switch is read again, for a change made on another device
+ *  or browser (other tabs here hear it at once). */
+const SHOW_ONLINE_REREAD_MS = 60_000;
+let rereading = false;
+
+/** Another device's change: read the switch again each minute and whenever
+ *  the tab comes back into view, while this tab holds a person. */
+function watchShowOnlineElsewhere(): void {
+  if (rereading || typeof window === "undefined") return;
+  rereading = true;
+  const reread = () => {
+    if (presenceSelves.userId) void readChatServerPrefs().catch(() => undefined);
+  };
+  window.setInterval(reread, SHOW_ONLINE_REREAD_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") reread();
+  });
 }
 
 /** Sign-out: no presence "me", switch or status copy outlives the person. */

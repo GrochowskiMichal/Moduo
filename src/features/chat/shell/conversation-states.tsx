@@ -186,7 +186,6 @@ export function ComposerLineView({
   );
 }
 
-/** Offline: the conversation reads from this device; what you send waits. */
 /**
  * The line above the box when the person you're writing to won't be pinged
  * (CV-17, #33; prototype round 5, the DM note): "Jana is on vacation until
@@ -205,6 +204,7 @@ export function HoldLine({ text }: { text: string }) {
   );
 }
 
+/** Offline: the conversation reads from this device; what you send waits. */
 export function OfflineLine() {
   return (
     <p
