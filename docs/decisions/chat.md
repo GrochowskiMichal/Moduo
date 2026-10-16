@@ -2,6 +2,226 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index. Earlier chat lines (v1 ships as the 7th tab, 2026-10-06; chat + calls become a planned module, 2026-10-02) stay under Billing and Product in the index.
 
+## 2026-10-16 · CV-20 (custom emoji) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016235000_chat_v2_custom_emoji.sql`; see [the record](../build/chat-v2/CV-20.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+
+- **CV20-1 · A name is 2–32 characters of a–z 0–9 - _ with a letter, no `+`; never a standard shortcode** → CV-20
+  - Who: agent's choice, deferred — confirmed for building, revisitable.
+  - Decision: the intersection of the brief's `[a-z0-9_-]{1,32}` and the text grammar, so every name also draws in a message; unique per workspace among live emoji.
+  - Why: a one-character name would never draw as `:x:`.
+  - Rejected: 1-character names.
+- **CV20-2 · Images live under an upload slot the server mints, not under a content hash; the add op takes the slot, not paths** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_op_custom_emoji_begin` mints a slot for one person in one workspace (an hour, at most 20 open); the image and its poster frame upload under it; `chat_op_custom_emoji_add(slot, …)` names the paths and consumes the slot. Identical images are not shared.
+  - Why: nobody can take or prepare another person's path, and the server can't check a hash.
+  - Rejected: `<sha256>` paths with dedupe, and the brief's `(ws, name, path, poster_path, …)` signature.
+- **CV20-3 · A JPEG is accepted and stored as the PNG it becomes; an APNG counts as animated** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: still images are redrawn at 128 px as PNG; animated ones over 128 px or 256 KB are refused and stored as they are otherwise, with a still frame; SVG never.
+  - Why: stored types stay PNG, GIF and WebP as the spec says; browsers animate an APNG, so it needs its still frame.
+  - Rejected: storing JPEG.
+- **CV20-4 · "Add emoji…" in the picker opens Settings → Chat** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: one place to add; the picker shows the workspace's section first and the `:` menu puts custom emoji first.
+  - Why: one upload surface.
+  - Rejected: a second upload dialog in the composer.
+- **CV20-5 · The export carries only the emoji you added, outside the chat file budget; erasure unattributes the rest** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the account export holds your own emoji (at most 500 × 256 KB) as `chat/files/emoji/<name>.<ext>`; erasure sets `created_by` to null in other workspaces and removes the owned workspaces' images.
+  - Why: the export is your data; the workspace's emoji stay for the people who use them.
+  - Rejected: exporting every live emoji of the workspace.
+- **CV20-6 · Removed emoji's images stay in storage until a purge job exists** → polish
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: removal is a soft delete; abandoned or failed upload slots also leave objects behind; the purge (objects no live row names, older than the slot hour) is deferred.
+  - Why: soft delete keeps a removal undoable and the purge needs its own job.
+  - Rejected: deleting storage objects in the remove op (Storage refuses a direct delete in SQL).
+- **CV20-7 · An animated emoji draws its still frame until hover, and never plays with reduced motion** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: one glyph component (an `<img>`) in the picker, bodies, reaction chips and comments; a removed or unknown name reads `:name:`.
+  - Why: motion is opt-in and a removed emoji must stay readable.
+  - Rejected: always-playing GIFs.
+
+## 2026-10-16 · CV-14 (decisions) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016230000_chat_v2_decisions.sql`; see [the record](../build/chat-v2/CV-14.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+
+- **CV14-1 · Marking a decision needs post rights in the conversation, nothing more; any poster may unmark anyone's** → CV-14
+  - Who: agent's choice, deferred — confirmed for building, revisitable.
+  - Decision: `chat__can_post` decides (an admin outside an announcement channel can't mark there); the verb belongs to members, not authors; a workspace member may mark in a public channel they haven't joined.
+  - Why: a decision is a statement about the conversation, and §12 gives the verb to members.
+  - Rejected: pin's extra "Manage any channel" path; only the marker unmarking.
+- **CV14-2 · Wrap up with "Also mark as decision" is refused as a whole when the wrapper can't post** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the app shows the tick only to people who can post; the tick is on by default in a linked channel and follows the conversation's link while the dialog is open until you change it.
+  - Why: the ops decide and the menu doesn't offer what they refuse.
+  - Rejected: silently skipping the mark; reading the link once on open.
+- **CV14-3 · Undo of a wrap-up also takes back the decision that wrap-up made, in the same op** → CV-14
+  - Who: orchestrator's call after review, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_op_reopen` takes back a decision stamped with the wrap-up's own time within the 10 s window, never one marked before or by someone else, and writes no "took back" line.
+  - Why: Undo should leave things as they were, and a failure can't leave half of it.
+  - Rejected: a second call from the toast.
+- **CV14-4 · A decision on a deleted message stays stored but hidden; a decision follows a moved message** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: restoring brings the decision back; a deleted message can't be unmarked; a move (CV-16) leaves `decision_at/by` on the row and re-links its mentions.
+  - Why: delete and move both have an Undo.
+  - Rejected: clearing the decision on delete.
+- **CV14-5 · On an item: every decision of a linked channel; from a mentioning conversation only decisions whose own text refers to the item** → CV-14
+  - Who: agent's choice (the brief's rule), deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_decisions_for_item` returns only conversations the caller reads and only for an item the caller can open; 50 newest.
+  - Why: a mention in passing shouldn't promote every decision of that conversation.
+  - Rejected: every decision of any mentioning conversation.
+- **CV14-6 · "Decided with Ana, Mike and 2 others" for a direct message, "Decided in acme" for a channel; the label is a quiet line under the message** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the label reads like "Became a task" (flag + "Decision"), not a chip in the name row, so it survives grouped rows.
+  - Why: the frames don't draw it.
+  - Rejected: a chip in the name row.
+- **CV14-7 · ⇧D works only in the stream; the chain panel unmarks through "Unmark" beside the label; no pace limit; no "Decided" line in Catch up or the bell** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the chain panel has no message menu yet; marking writes no event line and each change is one attributed history row like pin; the spec says quiet, no notice.
+  - Why: nothing in marking needs a counter.
+  - Rejected: a PT429 counter.
+
+## 2026-10-16 · CV-22 (Home widgets, export and the shortcut sheet) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016220000_chat_v2_home_export.sql`; see [the record](../build/chat-v2/CV-22.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+
+- **CV22-1 · `user_statuses` and `chat_members` are keyed by their own id** → CV-22
+  - Who: agent's choice, accepted by the orchestrator; deferred to by Maciej, 2026-10-16.
+  - Decision: a removed row (erasure, an account's cascade, a deleted conversation's cascade) reaches Realtime listeners as an opaque id; the person columns stay unique (`user_statuses_user_id_key`, `chat_members_channel_user_key`); the migration asserts no published table is keyed by a person.
+  - Why: a removed row's key is all a listener receives, so the key should say nothing about a person.
+  - Rejected: soft-removing in erasure (the cascade still removes the rows), leaving these tables out of the publication.
+- **CV22-2 · Your own removal stays live through `left_at` updates; a deleted conversation arrives on `chat_channels`** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `realtime.ts` reports `member-left` from your own membership row's update and ignores a bare-key removal; `chat_sync_ids` stays the truth on every rejoin.
+  - Why: one source of truth for the same fact.
+  - Rejected: mapping membership row ids in the store.
+- **CV22-3 · The widget keeps type id `chat` and is now "Catch up" (S and M); every row opens Catch up** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: saved dashboards keep their widget with no data migration; a saved L instance fits to M (`fitAllowedSizes`); the count sits on a "Waiting for you" label line; words follow frame 8 ("sent you a message", "replied in your chain").
+  - Why: no data migration, no change to the shared `WidgetFrame`.
+  - Rejected: a new `catchup` type plus a migration of saved layouts.
+- **CV22-4 · The Team widget's now line reads `chat_now` and presence through the store the Chat tab already holds** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: Active · Away · Focusing (until …) · the status; nothing for someone with nothing to say; Home joins no new topic.
+  - Why: no new tracking.
+  - Rejected: a second presence subscription on Home.
+- **CV22-5 · The export pages until an empty page, writes Chat's files, caps file bytes at 256 MB and keeps stored text as written** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat.json` plus one Markdown file per conversation, files as bytes under `chat/files/attachments/`; files past the cap stay listed with "Over the export's size limit."; references stay as their links; a conversation the server refuses is listed in `incomplete`.
+  - Why: lossless, and the zip is built in memory.
+  - Rejected: a 1 GB cap (tabs crash), a streamed zip (a rewrite of the shared export), rendering references to names.
+- **CV22-6 · `devices.json` exports your own `user_clients` and the workspaces whose notices you paused** → CV-22
+  - Who: the orchestrator's rule, reversing CV-6a's choice; deferred to by Maciej, 2026-10-16.
+  - Decision: per-person notice settings sit next to your devices; `user_status_changes` (a rate counter) is erased, not exported.
+  - Why: no new module key in the manifest.
+  - Rejected: a `notices` module.
+- **CV22-7 · The shortcut sheet lists bound keys only and scrolls** → CV-23
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: ⇧D (not bound) is off it, M is on; `max-h-[85vh]` fits the 1024×700 window; CV-23 adds the §16 rows it verifies bound.
+  - Why: a sheet that lists unbound keys lies.
+  - Rejected: listing every §16 row.
+- **CV22-8 · Erasure is re-cut in place from its live body** → CV-22
+  - Who: agent's choice (code review), deferred to by Maciej, 2026-10-16.
+  - Decision: `pg_temp.recut` keeps any other change to `account_erase_workspace_data` and stops the migration if the body moved on.
+  - Why: a replaced whole body would drop other blocks' changes.
+  - Rejected: replacing the whole body.
+
+## 2026-10-16 · CV-18 (quiet hours, pausing and holds) — the agent's choices beyond the pause table (deferred to by Maciej)
+
+Migration `20261016210000_chat_v2_quiet_hours.sql`; see [the record](../build/chat-v2/CV-18.md). The pause table is CV18-0 below. Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+
+- **CV18-1 · Do not disturb drops pings instead of holding them** → CV-18
+  - Who: agent's choice (the brief binds drop), deferred — confirmed for building, revisitable.
+  - Decision: CV-17's `hold` becomes `drop`; the rows CV-17 held for do not disturb close quietly when the migration runs, so the sweep never rings them as "N messages while you focused".
+  - Why: a held row is only released by a Focus end.
+  - Rejected: keeping CV-17's hold.
+- **CV18-2 · Pausing Focus counts as ending it; new messages ring during Pomodoro breaks and a break releases what the work phase held** → CV-18
+  - Who: agent's choice (after code review), deferred to by Maciej, 2026-10-16.
+  - Decision: the run leaving `running` writes the summary (tag `chat:focus:<run>`, so a device shows the latest); the hold reads the work phase only, and a device unseen for 3 minutes doesn't hold.
+  - Why: holding older pings while newer ones ring would deliver them out of order.
+  - Rejected: any running run holds; keeping the work phase's holds until the run ends.
+- **CV18-3 · A Focus that never ended is released after 10 minutes unseen** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a job every 5 minutes (`focus-release-stale-holds`) releases with a summary tagged `chat:focus:<run>:stale`; starting the next Focus also ends a run still running, and its summary rings.
+  - Why: a closed app must not keep rows held; 10 minutes rides out a sleeping laptop.
+  - Rejected: release only at the next Focus start; releasing silently without the summary.
+- **CV18-4 · One summary per release, in the workspace of the latest released message that isn't paused (else the run's); the summary itself goes through the gate** → CV-18
+  - Who: orchestrator's call after validator round 2, deferred to by Maciej, 2026-10-16.
+  - Decision: a summary the gate drops (quiet hours, do not disturb, or a paused workspace at release) writes nothing, the holds close and the items wait in Catch up.
+  - Why: the click lands on the Catch up that holds them, and a paused workspace never silences another's messages.
+  - Rejected: one summary per workspace; always the run's workspace; letting the summary skip the quiet rules.
+- **CV18-5 · The email job stamps what quiet hours, a pause or a switch kept quiet, so it never emails later** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `held_at` is stamped on those Catch up items; a switch turned back on later doesn't email the backlog.
+  - Why: "nothing pings at 9:00" includes email.
+  - Rejected: emailing a backlog when quiet hours end; reading the switch only when the email goes.
+- **CV18-6 · Quiet hours are in Settings → Preferences (Notifications); pause is a bell button on each switcher row; "N held until Focus ends" sits above Catch up's list** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: times follow the Time & region zone, named in the group's line; the pause button has the tooltip "Pause notifications from this workspace" and a filled `bell-off` while paused; an owner without a member row can pause.
+  - Why: spec §15 puts quiet hours under Notifications; no frame draws the pause and the row already has icon buttons.
+  - Rejected: a second copy in Time & region; a per-row menu; the Focus timer for the held count.
+- **CV18-7 · Status changes are limited to 30 in 10 minutes** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `user_status_changes` counts sets and clears; past it, `PT429`.
+  - Why: each change reaches every teammate live.
+  - Rejected: a per-minute limit (presets clicked in a row).
+- **CV18-8 · ❓ "Back 9:00" is shown on the reader's clock; do not disturb's line wins over quiet hours'** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: "Sofia's quiet hours · back 9:00" reads on the reader's own clock.
+  - Why: spec §15 draws the line with a time; the reader needs it in their own clock.
+  - Rejected: none yet; open question for Maciej: keep, coarsen (e.g. "back in the morning") or hide the time.
+
+## 2026-10-16 · CV-16 (moving messages and multi-select) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016200000_chat_v2_move_messages.sql`; see [the record](../build/chat-v2/CV-16.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+
+- **CV16-1 · "Mentioned in" follows the moved message, written as its author** → CV-10-fix
+  - Who: orchestrator (brief §4.4), deferred to by Maciej — confirmed for building, revisitable.
+  - Decision: `chat__move_relink` calls `chat__link_mentions(msg, author)` for each moved message; a source line nothing left there refers to is retired; Undo does the same back.
+  - Why: a move never adds a line the author's mention couldn't.
+  - Rejected: lines in the mover's name; direct inserts.
+- **CV16-2 · Someone else's messages (a chain's replies too) move only by the source's managers and admins, and only when nobody new would read them** → CV-21
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: refused with no confirm path otherwise; your own messages into a wider audience answer `{status: "confirm", newly}` and move only with `confirm`; a key moves nothing.
+  - Why: their words never reach new readers on someone else's confirm.
+  - Rejected: letting the root's author confirm others' replies into a wider audience.
+- **CV16-3 · Undo is the same op called back (the moved ids, the source as the target, the mover, within 10 s)** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: it finds the move by its `moved_in` line, puts every row back, restores chains, quotes and pins (kept on the `moved_out` line), soft-deletes both lines and asks no audience question; it touches only rows back in that conversation and drops a chain or quote a moved message took up where it went; it isn't held to 100 ids (the move took up to 500).
+  - Why: Undo should leave things as they were.
+  - Rejected: a separate undo op; a reverse move that writes two more lines; restoring by id alone; carrying a chain across conversations back.
+- **CV16-4 · An id you can't read answers like one that doesn't exist; a destination in another workspace answers like a missing conversation** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: readability is checked on every picked id, not on one of the picked conversations.
+  - Why: "two conversations" would confirm that a message you can't read exists.
+  - Rejected: checking one conversation only.
+- **CV16-5 · A reply moved alone leaves its chain and drops its quote; a quote of a message that stays behind is dropped too; both come back on Undo** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a root brings its chain; a chain a move settled reopens ("Reopened by …"); pins drop.
+  - Why: a quote pointing into another conversation would read as a broken line.
+  - Rejected: keeping cross-conversation quotes.
+- **CV16-6 · Five moves per person per 10 s (PT429); nothing pings; event lines in the mover's name** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: counted by the `moved_out` lines you wrote (Undo isn't counted); `moved_out` and `moved_in` lines carry the other conversation as a reference chip; a non-manager can't move out of an announcement channel.
+  - Why: event rows skip fan-out and the sending limit, so the op keeps its own pace.
+  - Rejected: no pace.
+- **CV16-7 · Catch up items about moved messages follow them for people who can read the target; everyone else's open ones close as `closed`** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: an every-message, level, added or removed line stays where it is.
+  - Why: people who can't follow a message shouldn't keep an item for it.
+  - Rejected: leaving items that point at a conversation the person can't read.
+- **CV16-8 · Multi-select: the mode row shows from the first picked message; Delete is offered only when every picked message is yours; T makes one task** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: bare ⌫ deletes only with two or more picked, ⌘⌫ any number; T joins the picked words with " · " (cut at 200), From the first; picked rows stay picked when the stream loses focus.
+  - Why: ⌘-click gets visible feedback; only your own messages delete.
+  - Rejected: showing the row only from two; deleting the own ones silently; a task per message.
+- **CV16-9 · Make a note stays hidden until Notes' op exists** → N19
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `tests/chat-tidy.spec.ts` "Make a note" is a documented skip; the bar's More appears past six actions.
+  - Why: Notes' op and its call N19 aren't on this branch.
+  - Rejected: an empty More.
+
 ## 2026-10-16 · Notice pauses live in an owner-only table (CV-18) — supersedes the spec's C2-27 column
 
 - **CV18-0 · A person's pause on notices is a row in `user_notice_pauses`, readable and writable only by its owner, not a column on `workspace_members`** → CV-18
