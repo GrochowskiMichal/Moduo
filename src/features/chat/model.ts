@@ -252,6 +252,17 @@ export type ChatSearchHit = {
   snippet: string;
 };
 
+/** One of ⌘K's Conversations (`chat_find_conversations`, CV-19): a conversation you can read now. */
+export type ChatConversationFound = {
+  channelId: string;
+  kind: ChatChannelKind;
+  /** The channel's name; null for a direct message (name it from `people`). */
+  name: string | null;
+  /** A direct message's other people. */
+  people: string[];
+  archived: boolean;
+};
+
 /** What Chat's Search asks for: the words, and the FilterBar's from · in · has a file · date. */
 export type ChatSearchQuery = {
   workspaceId: string;
@@ -306,6 +317,12 @@ export type ChatRuntime = {
   people(workspaceId: string): Promise<ChatResult<ChatPerson[]>>;
   /** Server search over the messages you can read now (CV-19: ⌘K, Chat's Search, find in a conversation). */
   search(args: ChatSearchQuery): Promise<ChatResult<ChatSearchHit[]>>;
+  /** ⌘K's Conversations: readable conversations by name, without diacritics (CV-19). */
+  findConversations(args: {
+    workspaceId: string;
+    query: string;
+    limit?: number;
+  }): Promise<ChatResult<ChatConversationFound[]>>;
   counts(workspaceId: string): Promise<ChatResult<ChatUnread[]>>;
   /** Send under a client-minted id: a resend returns the stored row. */
   send(args: {

@@ -36,6 +36,9 @@ let generalHit = "";
 let olderHit = "";
 let privateId = "";
 let plansId = "";
+let sourcesId = "";
+let bellGeneral = "";
+let bellPlans = "";
 
 test.beforeAll(async () => {
   tag = runTag();
@@ -69,6 +72,23 @@ test.beforeAll(async () => {
     },
   );
   plansId = (Array.isArray(plans) ? plans[0] : plans)?.id ?? "";
+  // AC4.5: one word said in two conversations comes back as one list.
+  bellGeneral = await sendAs(room.owner, room.general, `Dzwonek ${tag} w General`);
+  bellPlans = await sendAs(room.owner, plansId, `Dzwonek ${tag} w planach`);
+  // ⌘K's Conversations find a name with diacritics typed without them.
+  const sources = await rpc<{ id: string } | Array<{ id: string }>>(
+    room.owner,
+    "chat_op_create_channel",
+    {
+      p_workspace_id: room.ws,
+      p_name: `źródła-${tag}`,
+      p_topic: "",
+      p_is_private: false,
+      p_member_ids: [],
+      p_announcement: false,
+    },
+  );
+  sourcesId = (Array.isArray(sources) ? sources[0] : sources)?.id ?? "";
 });
 
 test.afterAll(async () => {
@@ -101,6 +121,21 @@ test("⌘K finds messages and conversations, and See all opens Chat's Search", a
     },
   );
 
+  // Without diacritics: "zrodla" finds "źródła-…".
+  await input.fill(`zrodla ${tag}`);
+  await expect(conversations.locator(`[data-chat-conversation="${sourcesId}"]`)).toBeVisible({
+    timeout: 15_000,
+  });
+
+  // A failed message search says so; "No results." never shows meanwhile.
+  await page.route("**/rest/v1/rpc/chat_search", (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: '{"message":"boom"}' }),
+  );
+  await input.fill(`zolw ${tag} boom`);
+  await expect(palette(page).getByText("Search isn't available")).toBeVisible({ timeout: 15_000 });
+  await expect(palette(page).getByText("No results.")).toHaveCount(0);
+  await page.unroute("**/rest/v1/rpc/chat_search");
+
   await input.fill(`zolw ${tag}`);
   await expect(messages.getByRole("option")).toHaveCount(2, { timeout: 15_000 });
   await palette(page).getByRole("option", { name: "See all in Chat" }).click();
@@ -113,6 +148,14 @@ test("⌘K finds messages and conversations, and See all opens Chat's Search", a
   // A hit lands in its conversation, on the message.
   await hits.first().click();
   await expect(page).toHaveURL(new RegExp(`m=${generalHit}`));
+
+  // AC4.5: hits from two conversations come back as one list, newest first.
+  await page.goto(`/chat?view=search&q=${encodeURIComponent(`dzwonek ${tag}`)}`);
+  await expect(hits).toHaveCount(2, { timeout: 15_000 });
+  await expect(hits.nth(0)).toHaveAttribute("data-search-hit", bellPlans);
+  await expect(hits.nth(1)).toHaveAttribute("data-search-hit", bellGeneral);
+  await expect(hits.nth(0)).toContainText(`plans-${tag}`);
+  await expect(hits.nth(1)).toContainText("general", { ignoreCase: true });
 });
 
 test("Chat's Search: the FilterBar, people by name, honest errors", async ({ page }) => {
@@ -137,6 +180,18 @@ test("Chat's Search: the FilterBar, people by name, honest errors", async ({ pag
   await page.goto(`/chat?view=search&q=${encodeURIComponent(`zolw ${tag}`)}&date=today`);
   await expect(hits).toHaveCount(2, { timeout: 15_000 });
   await expect(view(page).getByRole("button", { name: /Date values: Today/ })).toBeVisible();
+
+  // Negated words only name nothing to find: never every message.
+  await page.goto(`/chat?view=search&q=${encodeURIComponent(`-${tag}`)}`);
+  await expect(view(page).getByText("Type a word to search for.")).toBeVisible({ timeout: 15_000 });
+  await expect(hits).toHaveCount(0);
+
+  // Typing fast keeps every key in the box (the link follows a beat later).
+  const box = view(page).getByLabel("Search messages");
+  await box.fill("");
+  await box.pressSequentially(`zolw ${tag}`, { delay: 5 });
+  await expect(box).toHaveValue(`zolw ${tag}`);
+  await expect(hits).toHaveCount(2, { timeout: 15_000 });
 
   // People by name, Polish without diacritics; never through message text.
   await page.goto("/chat?view=search&q=lucja");
@@ -181,4 +236,16 @@ test("a conversation's own Search, the bottom bar's Search, and ⌘J retired", a
   await page.getByRole("button", { name: /^Search \(/ }).click();
   await expect(page).toHaveURL(/view=search/);
   await expect(view(page)).toBeVisible();
+
+  // …and comes back with the words and filters it had after you open a hit.
+  await page.goto(
+    `/chat?view=search&q=${encodeURIComponent(`zolw ${tag}`)}&from=${room.member.user.id}`,
+  );
+  const hit = view(page).locator("[data-search-hit]");
+  await expect(hit).toHaveCount(1, { timeout: 15_000 });
+  await hit.first().click();
+  await expect(page).not.toHaveURL(/view=search/);
+  await page.getByRole("button", { name: /^Search \(/ }).click();
+  await expect(page).toHaveURL(new RegExp(`from=${room.member.user.id}`));
+  await expect(view(page).getByLabel("Search messages")).toHaveValue(`zolw ${tag}`);
 });

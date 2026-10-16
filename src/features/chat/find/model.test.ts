@@ -7,11 +7,17 @@ import {
   dateRangeStart,
   findPosition,
   foldText,
+  forgetSearchesForTests,
+  hasSearchableWords,
+  inFilterConversations,
   MARK_END,
   MARK_START,
   matchPeople,
   pageCursor,
   paramsFromConditions,
+  reconcileTyped,
+  rememberSearch,
+  reopenSearch,
   searchQuery,
   splitSnippet,
   stepFind,
@@ -103,5 +109,64 @@ describe("chat search model (CV-19)", () => {
     expect(findPosition(1, 3, false)).toBe("2 of 3");
     expect(findPosition(0, 50, true)).toBe("1 of 50+");
     expect(findPosition(-1, 0, false)).toBe("No matches");
+  });
+
+  test("negated words only name nothing to find", () => {
+    expect(hasSearchableWords("-standup")).toBe(false);
+    expect(hasSearchableWords('-"stand up" -retro')).toBe(false);
+    expect(hasSearchableWords("  -standup  or  ")).toBe(false);
+    expect(hasSearchableWords("-")).toBe(false);
+    expect(hasSearchableWords("standup -retro")).toBe(true);
+    expect(hasSearchableWords('"stand up"')).toBe(true);
+    expect(hasSearchableWords("żółw")).toBe(true);
+    expect(hasSearchableWords("e-mail")).toBe(true);
+  });
+
+  test("the In filter offers every conversation you can read, by title", () => {
+    const channels = {
+      s: { id: "s" }, // starred
+      p: { id: "p" }, // public, not joined
+      a: { id: "a" }, // archived
+      d: { id: "d" }, // a direct message
+    };
+    const titles: Record<string, string> = {
+      s: "design",
+      p: "announcements",
+      a: "old",
+      d: "Łucja",
+    };
+    expect(inFilterConversations(channels, (id) => titles[id] ?? "")).toEqual([
+      { id: "p", label: "announcements" },
+      { id: "s", label: "design" },
+      { id: "d", label: "Łucja" },
+      { id: "a", label: "old" },
+    ]);
+  });
+
+  test("typing keeps the box while the link echoes older words; a change from outside replaces it", () => {
+    const pending = ["s", "st", "sta"];
+    // The link catches up with "s" while "sta" is in the box: the box stays.
+    expect(reconcileTyped("sta", "s", pending)).toBe("sta");
+    expect(pending).toEqual(["st", "sta"]);
+    expect(reconcileTyped("sta", "sta", pending)).toBe("sta");
+    expect(pending).toEqual([]);
+    // Typing "a", "ab", then back to "a": each echo is consumed in order, never a stale "ab".
+    const again = ["a", "ab", "a"];
+    expect(reconcileTyped("a", "a", again)).toBe("a");
+    expect(reconcileTyped("a", "ab", again)).toBe("a");
+    expect(reconcileTyped("a", "a", again)).toBe("a");
+    expect(again).toEqual([]);
+    // Back/forward or "See all" brings other words: they replace the box.
+    expect(reconcileTyped("sta", "zolw", pending)).toBe("zolw");
+  });
+
+  test("the bottom bar's Search reopens with the last words and filters", () => {
+    forgetSearchesForTests();
+    expect(reopenSearch("w1", null)).toEqual({});
+    rememberSearch("w1", { q: "żółw", from: "u1", date: "7d" });
+    expect(reopenSearch("w1", null)).toEqual({ q: "żółw", from: "u1", date: "7d" });
+    expect(reopenSearch("w2", null)).toEqual({});
+    expect(reopenSearch("w1", { q: "now" })).toEqual({ q: "now" });
+    expect(reopenSearch(null, null)).toEqual({});
   });
 });

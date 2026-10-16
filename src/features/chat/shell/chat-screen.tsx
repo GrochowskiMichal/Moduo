@@ -57,6 +57,7 @@ import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { ChatSearchView } from "../find/chat-search-view";
 import { FindBar } from "../find/find-bar";
 import type { SearchParams } from "../find/model";
+import { inFilterConversations, rememberSearch, reopenSearch } from "../find/model";
 import { captureDestination, useLinkFilesHere } from "../linking";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type {
@@ -275,21 +276,29 @@ export function ChatScreen({
   const [collapsed, toggleSection] = useCollapsedSections();
 
   // ── search (CV-19) ──────────────────────────────────────────────────────────
-  // The bottom bar's Search opens Chat's Search while Chat is open (⌘K stays ⌘K).
+  // The bottom bar's Search opens Chat's Search while Chat is open (⌘K stays ⌘K),
+  // with the words and filters it last had.
+  const searchNow = useRef(search);
+  searchNow.current = search;
+  useEffect(() => {
+    if (workspaceId && search) rememberSearch(workspaceId, search);
+  }, [workspaceId, search]);
   useEffect(() => {
     if (!onSearch) return;
     return onSearchRequest(() => {
-      onSearch({});
+      onSearch(reopenSearch(workspaceId, searchNow.current));
       return true;
     });
-  }, [onSearch]);
+  }, [onSearch, workspaceId]);
+  // "In": every conversation you can read (the store holds only those), starred,
+  // unjoined public and archived ones included.
   const searchConversations = useMemo(
     () =>
-      [...model.channels, ...model.dms, ...model.archived].map((r) => ({
-        id: r.channel.id,
-        label: r.title,
-      })),
-    [model],
+      inFilterConversations(snap.channels, (id) => {
+        const c = snap.channels[id];
+        return c ? conversationTitle(c, selfId, personOf) : "";
+      }),
+    [snap.channels, selfId, personOf],
   );
   const hitConversation = useCallback(
     (hit: ChatSearchHit) => {

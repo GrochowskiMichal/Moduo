@@ -7,6 +7,7 @@
 --      "żółw" when someone typed "zolw".
 --   3. chat_search: newest first, at most 50 rows, a marked snippet; only
 --      messages of conversations the caller can read right now.
+--   3b. chat_find_conversations: ⌘K's Conversations by name, without diacritics.
 --   4. Grants, by name.
 --
 -- The columns (body_text, search_tsv), chat__unaccent and the GIN index came with
@@ -22,7 +23,8 @@ SET LOCAL lock_timeout = '5s';
 -- websearch syntax ("a phrase", or, -word) over the unaccented query, at most 256
 -- characters and 32 words; each word of 3+ letters becomes a prefix ('zadan':*),
 -- shorter ones match whole words only ("ok", "UI", "za"), a negated word stays
--- exact. Punctuation-only input gives null (no rows, never every row). It never
+-- exact. Punctuation-only input, or a query with no word it needs (only negated
+-- words, "x or -y"), gives null (no rows, never every row). It never
 -- raises on what someone typed: if the rewrite can't be read back, the plain query
 -- is used.
 
@@ -39,7 +41,10 @@ DECLARE
   v_q tsquery := pg_catalog.websearch_to_tsquery(
     'pg_catalog.simple'::regconfig, public.chat__unaccent(v_text));
 BEGIN
-  IF pg_catalog.numnode(v_q) = 0 THEN
+  -- Nothing searchable, or nothing to find: a query an empty message would match
+  -- ("-standup", "x or -y") has no word it needs, so it would list every message.
+  IF pg_catalog.numnode(v_q) = 0
+     OR ''::pg_catalog.tsvector OPERATOR(pg_catalog.@@) v_q THEN
     RETURN NULL;
   END IF;
   BEGIN
@@ -168,6 +173,80 @@ $$;
 COMMENT ON FUNCTION public.chat_search(uuid, text, uuid, timestamptz, uuid, integer, uuid, timestamptz, boolean) IS
   'Chat search (CV-19): messages of conversations the caller can read now, newest first, at most 50, with a marked snippet (U+E000/U+E001).';
 
+-- ── 3b. chat_find_conversations ──────────────────────────────────────────────
+-- ⌘K's Conversations: the conversations the caller can read right now whose name
+-- has every typed word, Polish without diacritics ("zrodla" finds "Źródła"); a
+-- direct message by its people's names. Archived channels are included (they
+-- stay readable); deleted ones and ones you left are not. At most 20 rows, the
+-- words capped like chat_search's (256 characters, 8 words). People only.
+
+CREATE OR REPLACE FUNCTION public.chat_find_conversations(
+  p_workspace_id uuid,
+  p_query text,
+  p_limit integer DEFAULT 5
+)
+  RETURNS TABLE (
+    channel_id uuid,
+    kind text,
+    name text,
+    people uuid[],
+    archived boolean)
+  LANGUAGE plpgsql STABLE SECURITY DEFINER
+  SET search_path = ''
+  SET statement_timeout = '5s'
+AS $$
+DECLARE
+  v_me uuid := auth.uid();
+  v_words text[];
+  v_limit integer := least(greatest(coalesce(p_limit, 5), 1), 20);
+BEGIN
+  IF v_me IS NULL OR p_workspace_id IS NULL OR p_query IS NULL THEN
+    RETURN;
+  END IF;
+  v_words := (SELECT coalesce(pg_catalog.array_agg(w), '{}')
+                FROM pg_catalog.unnest((pg_catalog.regexp_split_to_array(
+                       pg_catalog.lower(public.chat__unaccent(pg_catalog.btrim(pg_catalog.left(p_query, 256)))),
+                       '[\s#]+'))[1:8]) AS w
+               WHERE w <> '');
+  IF pg_catalog.cardinality(v_words) = 0 THEN
+    RETURN;
+  END IF;
+  RETURN QUERY
+    WITH readable AS (
+      SELECT r.id FROM public.chat__readable_channel_ids(p_workspace_id, v_me) AS r(id)
+    ), named AS (
+      SELECT c.id, c.kind, c.name, c.archived_at, c.created_at,
+             CASE WHEN c.kind = 'channel' THEN '{}'::uuid[]
+                  ELSE coalesce((SELECT pg_catalog.array_agg(mb.user_id ORDER BY mb.user_id)
+                                   FROM public.chat_members mb
+                                  WHERE mb.channel_id = c.id AND mb.left_at IS NULL
+                                    AND mb.user_id <> v_me), '{}') END AS people,
+             pg_catalog.lower(public.chat__unaccent(
+               CASE WHEN c.kind = 'channel' THEN coalesce(c.name, '')
+                    -- The other people (your own name would match every one of yours);
+                    -- a note-to-self by your name.
+                    ELSE coalesce((SELECT pg_catalog.string_agg(p.display_name, ' ')
+                                     FROM public.chat_members mb
+                                     JOIN public.profiles p ON p.id = mb.user_id
+                                    WHERE mb.channel_id = c.id AND mb.left_at IS NULL
+                                      AND mb.user_id <> v_me),
+                                  (SELECT p.display_name FROM public.profiles p WHERE p.id = v_me),
+                                  '') END)) AS hay
+        FROM public.chat_channels c
+        JOIN readable r ON r.id = c.id
+    )
+    SELECT n.id, n.kind, n.name, n.people, n.archived_at IS NOT NULL
+      FROM named n
+     WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.unnest(v_words) AS w
+                        WHERE pg_catalog.strpos(n.hay, w) = 0)
+     ORDER BY (n.archived_at IS NOT NULL), (n.kind <> 'channel'), n.hay, n.id
+     LIMIT v_limit;
+END;
+$$;
+
+COMMENT ON FUNCTION public.chat_find_conversations(uuid, text, integer) IS
+  '⌘K''s Conversations (CV-19): readable conversations whose name (a direct message: its people) has every word, without diacritics.';
+
 -- ── 4. Grants ────────────────────────────────────────────────────────────────
 
 DO $$
@@ -189,6 +268,15 @@ BEGIN
      OR has_function_privilege('service_role', 'public.chat_search(uuid, text, uuid, timestamptz, uuid, integer, uuid, timestamptz, boolean)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.chat_search(uuid, text, uuid, timestamptz, uuid, integer, uuid, timestamptz, boolean)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Grants on public.chat_search are not as intended: signed-in people only.';
+  END IF;
+
+  -- ⌘K's Conversations: people only, like chat_search.
+  REVOKE ALL ON FUNCTION public.chat_find_conversations(uuid, text, integer)
+    FROM PUBLIC, anon, authenticated, service_role;
+  GRANT EXECUTE ON FUNCTION public.chat_find_conversations(uuid, text, integer) TO authenticated;
+  IF has_function_privilege('anon', 'public.chat_find_conversations(uuid, text, integer)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.chat_find_conversations(uuid, text, integer)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'Grants on public.chat_find_conversations are not as intended: signed-in people only.';
   END IF;
 END;
 $$;

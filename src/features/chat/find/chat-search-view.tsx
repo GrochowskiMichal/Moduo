@@ -8,7 +8,7 @@
 // read says "Search isn't available", never "No messages match" (AC1.10).
 
 import { MessageCircle } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -20,12 +20,13 @@ import {
   conditionsFromParams,
   matchPeople,
   paramsFromConditions,
+  reconcileTyped,
   type SearchParams,
   searchDimensions,
   searchQuery,
 } from "./model";
 import { Snippet } from "./snippet";
-import { useChatSearch } from "./use-chat-search";
+import { NOTHING_TO_FIND, useChatSearch } from "./use-chat-search";
 
 export type ChatSearchViewProps = {
   chat: ChatRuntime | null;
@@ -59,6 +60,21 @@ export function ChatSearchView({
   selfId,
 }: ChatSearchViewProps) {
   const q = params.q ?? "";
+  // The box owns what is typed: the link follows it a beat later (a router
+  // update), so reading the value back from the link would move the caret.
+  // A change from outside (back/forward, ⌘K's "See all") still lands in the box.
+  const [text, setTextState] = useState(q);
+  const textRef = useRef(q);
+  const sent = useRef<string[]>([]);
+  const setText = (next: string) => {
+    textRef.current = next;
+    setTextState(next);
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the link's words change
+  useEffect(() => {
+    const next = reconcileTyped(textRef.current, q, sent.current);
+    if (next !== textRef.current) setText(next);
+  }, [q]);
   const conditions = useMemo(() => conditionsFromParams(params), [params]);
   const dimensions = useMemo(
     () => searchDimensions({ people, conversations }),
@@ -82,7 +98,7 @@ export function ChatSearchView({
   );
 
   const setFilters = (next: Parameters<typeof paramsFromConditions>[0]) =>
-    onParamsChange({ ...(q ? { q } : {}), ...paramsFromConditions(next) });
+    onParamsChange({ ...(text ? { q: text } : {}), ...paramsFromConditions(next) });
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-slot="chat-search">
@@ -95,14 +111,17 @@ export function ChatSearchView({
           aria-label="Search messages"
           placeholder="Search messages and people"
           className="min-w-0 flex-1"
-          value={q}
+          value={text}
           maxLength={256}
-          onChange={(e) =>
+          onChange={(e) => {
+            const next = e.target.value;
+            setText(next);
+            sent.current.push(next);
             onParamsChange({
               ...paramsFromConditions(conditions),
-              ...(e.target.value ? { q: e.target.value } : {}),
-            })
-          }
+              ...(next ? { q: next } : {}),
+            });
+          }}
         />
         <FilterButton dimensions={dimensions} value={conditions} onValueChange={setFilters} />
       </header>
@@ -153,6 +172,8 @@ export function ChatSearchView({
                   Try again
                 </Button>
               </div>
+            ) : state.status === "nothing" ? (
+              <p className="px-3 py-2 text-sm text-subtle-foreground">{NOTHING_TO_FIND}.</p>
             ) : state.status === "ready" && state.hits.length === 0 ? (
               <p className="px-3 py-2 text-sm text-subtle-foreground">No messages match.</p>
             ) : state.status === "ready" ? (

@@ -17,8 +17,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filesLabel } from "../../features/attachments/files";
+import { hasSearchableWords } from "../../features/chat/find/model";
 import { Snippet } from "../../features/chat/find/snippet";
-import type { ChatSearchHit } from "../../features/chat/model";
+import type { ChatConversationFound, ChatSearchHit } from "../../features/chat/model";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import type { EntityRecord } from "../../lib/entity-links";
@@ -83,11 +84,13 @@ export function GlobalCommandPalette() {
   const [results, setResults] = useState<EntityRecord[]>([]);
   const [searching, setSearching] = useState(false);
   const reqRef = useRef(0);
-  // Chat (CV-19): Messages from the server search, Conversations from the
-  // registry, the top five each, then "See all in Chat".
+  // Chat (CV-19): Messages from the server search, Conversations by name
+  // (Polish without diacritics), the top five each, then "See all in Chat".
   const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
-  const [chatConversations, setChatConversations] = useState<EntityRecord[]>([]);
+  const [chatConversations, setChatConversations] = useState<ChatConversationFound[]>([]);
   const [chatFailed, setChatFailed] = useState(false);
+  // While chat's answers are on their way, "No results." waits.
+  const [chatSearching, setChatSearching] = useState(false);
   const chatReqRef = useRef(0);
   const chatOn = modulePermissions.chat !== "none";
   const trimmed = query.trim();
@@ -117,6 +120,7 @@ export function GlobalCommandPalette() {
       setChatHits([]);
       setChatConversations([]);
       setChatFailed(false);
+      setChatSearching(false);
     }
   }, [open]);
 
@@ -130,38 +134,49 @@ export function GlobalCommandPalette() {
       setChatHits([]);
       setChatConversations([]);
       setChatFailed(false);
+      setChatSearching(false);
       return;
     }
+    setChatSearching(true);
     const timer = setTimeout(() => {
-      void runtime.chat
-        .search({ workspaceId: selectedWorkspaceId, query: trimmed, limit: 5 })
-        .then((res) => {
-          if (reqId !== chatReqRef.current) return;
-          setChatFailed(res.error !== null);
-          setChatHits(res.error ? [] : res.data);
-        });
-      void runtime.spine
-        .searchEntities({
-          workspaceId: selectedWorkspaceId,
-          query: trimmed,
-          types: ["chat_channel"],
-          limit: 5,
-        })
-        .then((records) => {
-          if (reqId === chatReqRef.current) setChatConversations(records.slice(0, 5));
-        })
-        .catch(() => {
-          if (reqId === chatReqRef.current) setChatConversations([]);
-        });
+      // Negated words only ("-standup") name nothing to find: no Messages.
+      const messages = hasSearchableWords(trimmed)
+        ? runtime.chat.search({ workspaceId: selectedWorkspaceId, query: trimmed, limit: 5 })
+        : Promise.resolve({ data: [] as ChatSearchHit[], error: null });
+      const conversations = runtime.chat.findConversations({
+        workspaceId: selectedWorkspaceId,
+        query: trimmed,
+        limit: 5,
+      });
+      void Promise.all([messages, conversations]).then(([hits, convs]) => {
+        if (reqId !== chatReqRef.current) return;
+        setChatFailed(hits.error !== null);
+        setChatHits(hits.error ? [] : hits.data);
+        setChatConversations(convs.error ? [] : convs.data.slice(0, 5));
+        setChatSearching(false);
+      });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [open, trimmed, runtime, selectedWorkspaceId, chatOn]);
 
-  const memberName = useMemo(() => {
-    const names = new Map(members.map((m) => [m.userId, m.displayName?.trim() || "Member"]));
-    return (hit: ChatSearchHit) =>
-      hit.authorLabel ?? (hit.authorId ? names.get(hit.authorId) : null) ?? "Former member";
-  }, [members]);
+  const memberNames = useMemo(
+    () => new Map(members.map((m) => [m.userId, m.displayName?.trim() || "Member"])),
+    [members],
+  );
+  const memberName = useCallback(
+    (hit: ChatSearchHit) =>
+      hit.authorLabel ?? (hit.authorId ? memberNames.get(hit.authorId) : null) ?? "Former member",
+    [memberNames],
+  );
+  // A direct message reads as its people.
+  const conversationName = useCallback(
+    (c: ChatConversationFound) =>
+      c.kind === "channel"
+        ? (c.name ?? "Channel")
+        : c.people.map((id) => memberNames.get(id) ?? "Former member").join(", ") ||
+          "Direct message",
+    [memberNames],
+  );
 
   // Debounced registry search — last-write-wins via a request counter so a slow
   // response can't overwrite a newer query's results. Only navigable kinds are
@@ -248,6 +263,13 @@ export function GlobalCommandPalette() {
           ...(hit.parentId ? { t: hit.parentId } : {}),
         } as Record<string, string>,
       });
+    },
+    [navigate],
+  );
+  const openConversation = useCallback(
+    (c: ChatConversationFound) => {
+      setOpen(false);
+      void navigate({ to: "/chat", search: { c: c.channelId } as Record<string, string> });
     },
     [navigate],
   );
@@ -367,6 +389,7 @@ export function GlobalCommandPalette() {
     resultGroups.length === 0 &&
     actionCount === 0 &&
     chatFound === 0 &&
+    !chatSearching &&
     !chatFailed;
 
   const renderAction = ({ id, label, icon: Icon, shortcut, run }: Action) => (
@@ -430,16 +453,20 @@ export function GlobalCommandPalette() {
         ) : null}
         {showChat && chatConversations.length > 0 ? (
           <CommandGroup heading="Conversations">
-            {chatConversations.map((record) => {
-              const Icon = resolveEntityIcon(record.type, record.icon);
+            {chatConversations.map((c) => {
+              const Icon = resolveEntityIcon("chat_channel");
               return (
                 <CommandItem
-                  key={`chat_channel:${record.id}`}
-                  value={`entity:chat_channel:${record.id}`}
-                  onSelect={() => openEntityResult(record)}
+                  key={`chat_channel:${c.channelId}`}
+                  value={`entity:chat_channel:${c.channelId}`}
+                  data-chat-conversation={c.channelId}
+                  onSelect={() => openConversation(c)}
                 >
                   <Icon />
-                  <span className="min-w-0 flex-1 truncate">{record.label || "Conversation"}</span>
+                  <span className="min-w-0 flex-1 truncate">{conversationName(c)}</span>
+                  {c.archived ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">Archived</span>
+                  ) : null}
                 </CommandItem>
               );
             })}

@@ -12,7 +12,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { Kbd } from "@/components/ui/kbd";
 import type { ChatRuntime, ChatSearchHit } from "../model";
 import { findPosition, stepFind } from "./model";
-import { useChatSearch } from "./use-chat-search";
+import { NOTHING_TO_FIND, useChatSearch } from "./use-chat-search";
 
 const NO_HITS: ChatSearchHit[] = [];
 
@@ -57,11 +57,13 @@ export function FindBar({ chat, workspaceId, channelId, onJump, onClose, onSeeAl
 
   const status = !q.trim()
     ? null
-    : state.status === "error"
-      ? "Search isn't available"
-      : state.status === "ready"
-        ? findPosition(index, hits.length, full)
-        : "Searching…";
+    : state.status === "nothing"
+      ? NOTHING_TO_FIND
+      : state.status === "error"
+        ? "Search isn't available"
+        : state.status === "ready"
+          ? findPosition(index, hits.length, full)
+          : "Searching…";
 
   return (
     <div

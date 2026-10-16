@@ -3,6 +3,8 @@
 // the open thread and a message to focus are URL-held so links, back/forward and
 // notification deep-links all land in the same place.
 
+import { type DateRange, isDateRange } from "./find/model";
+
 export type ChatSearch = {
   /** Open conversation (chat_channels.id). */
   c?: string;
@@ -21,8 +23,6 @@ export type ChatSearch = {
   file?: "1";
   date?: DateRange;
 };
-
-import { type DateRange, isDateRange } from "./find/model";
 
 const ID = /^[0-9a-fA-F-]{36}$/;
 const pick = (v: unknown): string | undefined =>

@@ -25,6 +25,7 @@ import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import {
   mapCatchupItem,
   mapChannel,
+  mapConversationFound,
   mapDeletedChannel,
   mapHistory,
   mapMember,
@@ -206,6 +207,17 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         });
         if (error) return bad(chatError(error));
         return ok(mapRows(data, mapSearchHit));
+      }),
+
+    findConversations: ({ workspaceId, query, limit }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_find_conversations", {
+          p_workspace_id: workspaceId,
+          p_query: query,
+          p_limit: limit ?? 5,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapConversationFound));
       }),
 
     counts: (workspaceId) =>

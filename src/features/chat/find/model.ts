@@ -52,6 +52,60 @@ export function matchPeople<P extends { name: string }>(people: readonly P[], qu
   });
 }
 
+// ── The words ───────────────────────────────────────────────────────────────
+
+/**
+ * Whether the words name something to find: a query of negated words only
+ * ("-standup", `-"stand up"`) needs no word, so it would list every message.
+ * The server returns nothing for it (`chat__search_query`); the surfaces say
+ * "type something to search for" instead of asking.
+ */
+export function hasSearchableWords(query: string): boolean {
+  const rest = query
+    .replace(/(^|\s)-"[^"]*"?/g, " ")
+    .replace(/(^|\s)-\S*/g, " ")
+    .replace(/(^|\s)or(?=\s|$)/gi, " ");
+  return /[\p{L}\p{N}]/u.test(rest);
+}
+
+/** Every conversation the "in" filter offers: everything you can read right now —
+ *  yours (starred or not, direct messages included), public channels you haven't
+ *  joined, and archived channels. The store holds only conversations you can read. */
+export function inFilterConversations(
+  channels: Readonly<Record<string, { id: string }>>,
+  titleOf: (id: string) => string,
+): { id: string; label: string }[] {
+  return Object.values(channels)
+    .map((c) => ({ id: c.id, label: titleOf(c.id) }))
+    .sort(
+      (a, b) =>
+        a.label.localeCompare(b.label, undefined, { sensitivity: "base" }) ||
+        a.id.localeCompare(b.id),
+    );
+}
+
+/**
+ * What the search box shows when the link's words change. Typing writes the
+ * link a beat later, so an older value of the box arrives while newer keys are
+ * already in it: an echo of what was typed (in `pending`, oldest first) keeps
+ * the box; anything else came from outside (back/forward, "See all") and
+ * replaces it. Drops the echoes it has seen from `pending`.
+ */
+export function reconcileTyped(current: string, fromLink: string, pending: string[]): string {
+  // The link echoes in order, so the oldest matching value is this echo.
+  const i = pending.indexOf(fromLink);
+  if (i >= 0) {
+    pending.splice(0, i + 1);
+    return current;
+  }
+  if (fromLink === current) {
+    pending.length = 0;
+    return current;
+  }
+  pending.length = 0;
+  return fromLink;
+}
+
 // ── The FilterBar: from · in · has a file · date ─────────────────────────────
 
 export const DATE_RANGES = [
@@ -172,6 +226,29 @@ export function searchQuery(
     after: p.date ? dateRangeStart(p.date, now) : null,
     hasFile: p.file === "1",
   };
+}
+
+// ── Reopening ───────────────────────────────────────────────────────────────
+
+/** The last words and filters of Chat's Search, per workspace, for this tab. */
+const lastSearch = new Map<string, SearchParams>();
+
+/** Note what Chat's Search shows (called whenever its link changes). */
+export function rememberSearch(workspaceId: string, p: SearchParams): void {
+  lastSearch.set(workspaceId, { ...p });
+}
+
+/** What the bottom bar's Search reopens: what is on screen, else the last search. */
+export function reopenSearch(
+  workspaceId: string | null,
+  onScreen: SearchParams | null,
+): SearchParams {
+  if (onScreen) return onScreen;
+  return (workspaceId ? lastSearch.get(workspaceId) : undefined) ?? {};
+}
+
+export function forgetSearchesForTests(): void {
+  lastSearch.clear();
 }
 
 // ── Paging and stepping ─────────────────────────────────────────────────────

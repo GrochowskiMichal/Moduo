@@ -126,6 +126,13 @@ BEGIN
     'words: every word must match, each a prefix', test.found('C', 'zolw ogrod'));
   PERFORM test.ok(test.found('C', 'zolw -ogrodzie') = 'q_zolw_b,r_zolw',
     'words: a negated word leaves its messages out', test.found('C', 'zolw -ogrodzie'));
+  PERFORM test.ok(test.found('C', '-ogrodzie') = '' AND test.found('C', '-standup -zolw') = '',
+    'words: a query of negated words only finds nothing (never every message)', test.found('C', '-ogrodzie'));
+  PERFORM test.ok(test.found('C', 'zolw or -ogrodzie') = '',
+    'words: "x or -y" needs no word, so it finds nothing', test.found('C', 'zolw or -ogrodzie'));
+  PERFORM test.ok(public.chat__search_query('-standup') IS NULL
+      AND public.chat__search_query('zolw -standup') IS NOT NULL,
+    'words: the query builder gives null for "-standup"');
   PERFORM test.ok(test.found('C', '"zadaniem jest"') = 'q_zadaniem',
     'words: a quoted phrase matches in order', test.found('C', '"zadaniem jest"'));
   PERFORM test.ok(test.value_as('C', format(
@@ -195,6 +202,50 @@ BEGIN
          IS DISTINCT FROM (test.value_as(who, format($q$SELECT public.chat_can_read_channel(%L)::text$q$, c.id)) = 'true');
   PERFORM test.ok(v_bad = 0, 'parity: the readable set equals chat_can_read_channel for every conversation and person',
     v_bad || ' mismatches');
+END;
+$$;
+
+-- ── 2b. ⌘K's Conversations: by name, without diacritics, readers only ───────
+CREATE FUNCTION test.convs(p_who text, p_query text) RETURNS text
+LANGUAGE plpgsql AS $$
+DECLARE
+  v text := test.value_as(p_who, format(
+    $q$SELECT coalesce(string_agg(channel_id::text, ','), '') FROM public.chat_find_conversations(%L, %L, 20)$q$,
+    test.id('W'), p_query));
+BEGIN
+  IF v LIKE 'ERROR%' OR v = '' THEN
+    RETURN v;
+  END IF;
+  RETURN (SELECT string_agg(coalesce(i.name, '?'), ',' ORDER BY coalesce(i.name, '?'))
+            FROM unnest(string_to_array(v, ',')::uuid[]) AS x(id) LEFT JOIN test.ids i ON i.id = x.id);
+END;
+$$;
+
+DO $$
+BEGIN
+  PERFORM test.ok(test.as_user('A', format(
+    $q$SELECT public.chat_op_create_channel(%L, 'źródła-wiedzy', '', false, '{}'::uuid[])$q$,
+    test.id('W'))) LIKE 'ok %', 'setup: A makes the public channel S "źródła-wiedzy"');
+  INSERT INTO test.ids SELECT 'S', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'źródła-wiedzy';
+  UPDATE public.profiles SET display_name = 'Bożena Wróbel' WHERE id = test.id('B');
+
+  PERFORM test.ok(test.convs('C', 'zrodla') = 'S' AND test.convs('C', 'ŹRÓDŁA wied') = 'S',
+    'conversations: "zrodla" finds "źródła-wiedzy", every word must match', test.convs('C', 'zrodla'));
+  PERFORM test.ok(test.convs('C', 'plans') = 'Q,R',
+    'conversations: C finds the public and the archived channel, never the private P, the deleted Z or L it left',
+    test.convs('C', 'plans'));
+  PERFORM test.ok(test.convs('B', 'plans') = 'P,Q,R', 'conversations: B, in P, finds it', test.convs('B', 'plans'));
+  PERFORM test.ok(test.convs('A', 'bozena wrob') = 'D' AND test.convs('C', 'bozena') = '',
+    'conversations: a direct message by its other person''s name, only for its people', test.convs('A', 'bozena wrob'));
+  PERFORM test.ok(test.convs('B', 'bozena') = '',
+    'conversations: your own name doesn''t list your direct messages', test.convs('B', 'bozena'));
+  PERFORM test.ok(test.convs('X', 'plans') = '' AND test.convs('C', '   ') = '',
+    'conversations: no workspace or no words, nothing');
+  PERFORM test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_find_conversations(%L, 'plans')$q$, test.id('W'))) LIKE '42501 %',
+    'conversations: an app''s key cannot call it');
+  PERFORM test.ok(test.as_user(NULL, format($q$SELECT * FROM public.chat_find_conversations(%L, 'plans')$q$, test.id('W'))) = 'ok 0',
+    'conversations: no session, no rows');
+  UPDATE public.profiles SET display_name = 'B' WHERE id = test.id('B');
 END;
 $$;
 

@@ -13,6 +13,7 @@ import {
 import type {
   ChatCatchupItem,
   ChatChannel,
+  ChatConversationFound,
   ChatDeletedChannel,
   ChatHistoryEntry,
   ChatMember,
@@ -272,6 +273,21 @@ export function mapHistory(raw: unknown): ChatHistoryEntry | null {
 }
 
 /** A `chat_search` row (CV-19). */
+export function mapConversationFound(raw: unknown): ChatConversationFound | null {
+  const r = asRow(raw);
+  const channelId = str(r?.channel_id);
+  if (!r || !channelId || !isChatChannelKind(r.kind)) return null;
+  return {
+    channelId,
+    kind: r.kind,
+    name: str(r.name),
+    people: Array.isArray(r.people)
+      ? r.people.filter((x): x is string => typeof x === "string")
+      : [],
+    archived: r.archived === true,
+  };
+}
+
 export function mapSearchHit(raw: unknown): ChatSearchHit | null {
   const r = asRow(raw);
   const messageId = str(r?.message_id);
