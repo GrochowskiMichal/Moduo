@@ -102,14 +102,14 @@ export function AddEmojiDialog({
     setBusy(true);
     setError(null);
     try {
-      const { path, posterPath } = emojiPaths(workspaceId, prepared);
+      // A fresh slot each time: a failed try never reuses one.
+      const slot = await chat.beginCustomEmoji(workspaceId);
+      const { path, posterPath } = emojiPaths(workspaceId, slot, prepared.mime);
       await chat.uploadEmojiImage(path, prepared.image, prepared.mime);
       await chat.uploadEmojiImage(posterPath, prepared.poster, "image/png");
       const row = await chat.addCustomEmoji({
-        workspaceId,
+        uploadId: slot,
         name: tidy,
-        path,
-        posterPath,
         mime: prepared.mime,
         width: prepared.width,
         height: prepared.height,

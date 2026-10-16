@@ -20,10 +20,9 @@ export type { CustomEmoji };
 
 /** What `chat_op_custom_emoji_add` takes (the adder is the session, never sent). */
 export type CustomEmojiInput = {
-  workspaceId: string;
+  /** The upload slot from `beginCustomEmoji` (the server names the paths). */
+  uploadId: string;
   name: string;
-  path: string;
-  posterPath: string;
   mime: string;
   width: number;
   height: number;
@@ -452,7 +451,9 @@ export type ChatRuntime = {
   //    rule (members of the workspace); writes only through the ops. ──
   /** The workspace's live custom emoji. */
   customEmoji(workspaceId: string): Promise<CustomEmoji[]>;
-  /** Puts one image in the private `chat-emoji` bucket; one already there counts. */
+  /** A slot to upload one emoji's two images into (server-minted, yours, an hour). */
+  beginCustomEmoji(workspaceId: string): Promise<string>;
+  /** Puts one image in the private `chat-emoji` bucket, under your slot. */
   uploadEmojiImage(path: string, image: Blob, mime: string): Promise<void>;
   addCustomEmoji(input: CustomEmojiInput): Promise<CustomEmoji>;
   /** A soft delete: its adder or an admin. */

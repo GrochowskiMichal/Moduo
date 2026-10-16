@@ -779,19 +779,22 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       const { error } = await db()
         .storage.from(CHAT_EMOJI_BUCKET)
         .upload(path, image, { contentType: mime, upsert: false, cacheControl: "31536000" });
-      // The same picture uploaded before (by anyone here) is already there.
-      if (!error) return;
-      const status = String((error as { statusCode?: unknown; status?: unknown }).statusCode ?? "");
-      if (status === "409" || /already exists|duplicate/i.test(error.message)) return;
-      throw new Error(error.message);
+      if (error) throw new Error(error.message);
+    },
+
+    async beginCustomEmoji(workspaceId) {
+      const { data, error } = await db().rpc("chat_op_custom_emoji_begin", {
+        p_workspace_id: workspaceId,
+      });
+      fail(error);
+      if (typeof data !== "string") throw new Error("Couldn't start the upload.");
+      return data;
     },
 
     async addCustomEmoji(input) {
       const { data, error } = await db().rpc("chat_op_custom_emoji_add", {
-        p_workspace_id: input.workspaceId,
+        p_upload_id: input.uploadId,
         p_name: input.name,
-        p_path: input.path,
-        p_poster_path: input.posterPath,
         p_mime: input.mime,
         p_width: input.width,
         p_height: input.height,

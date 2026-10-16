@@ -3,7 +3,8 @@
 // never SVG, and the name's extension must say the same), decodes it, scales a
 // still image down to 128 px as a PNG, refuses an animated one over 128 px or
 // 256 KB (it's stored as it is), draws the still frame shown until you hover,
-// and names both by the image's SHA-256. The server checks it all again.
+// and uploads both under a slot the server minted for you (paths are never
+// made up here). The server checks it all again.
 
 import {
   CUSTOM_EMOJI_EXT,
@@ -135,23 +136,18 @@ export type PreparedEmoji = {
   animated: boolean;
   /** The still frame (PNG), shown until you hover. */
   poster: Blob;
-  sha256: string;
 };
 
-/** `<workspace>/<sha256>.<ext>` and `<workspace>/<sha256>.poster.png`. */
+/** `<workspace>/<slot>.<ext>` and `<workspace>/<slot>.poster.png` (the slot is the server's). */
 export function emojiPaths(
   workspaceId: string,
-  e: Pick<PreparedEmoji, "sha256" | "mime">,
+  slot: string,
+  mime: CustomEmojiMime,
 ): { path: string; posterPath: string } {
   return {
-    path: `${workspaceId}/${e.sha256}.${CUSTOM_EMOJI_EXT[e.mime]}`,
-    posterPath: `${workspaceId}/${e.sha256}.poster.png`,
+    path: `${workspaceId}/${slot}.${CUSTOM_EMOJI_EXT[mime]}`,
+    posterPath: `${workspaceId}/${slot}.poster.png`,
   };
-}
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
 async function drawPng(source: ImageBitmap, w: number, h: number): Promise<Blob> {
@@ -210,7 +206,6 @@ export async function prepareEmojiFile(file: File): Promise<PreparedEmoji> {
         bytes: file.size,
         animated: true,
         poster,
-        sha256: await sha256Hex(buffer),
       };
     }
     const { w, h } = fitWithin(bitmap.width, bitmap.height);
@@ -218,7 +213,6 @@ export async function prepareEmojiFile(file: File): Promise<PreparedEmoji> {
     if (image.size > CUSTOM_EMOJI_MAX_BYTES) {
       throw new EmojiFileError(`That image is over ${KB} KB even at ${CUSTOM_EMOJI_MAX_PX} px.`);
     }
-    const imageBytes = await image.arrayBuffer();
     return {
       image,
       mime: "image/png",
@@ -228,7 +222,6 @@ export async function prepareEmojiFile(file: File): Promise<PreparedEmoji> {
       animated: false,
       // A still image is its own still frame.
       poster: image,
-      sha256: await sha256Hex(imageBytes),
     };
   } finally {
     bitmap.close();

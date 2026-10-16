@@ -193,7 +193,9 @@ export function useWorkspaceEmoji(workspaceId: string | null | undefined): Works
     () => EMPTY,
   );
   useEffect(() => {
-    if (!workspaceId) return;
+    // No chat runtime (signed out, or a surface rendered on its own): nothing
+    // to read, so no live channel either.
+    if (!workspaceId || !deps.runtime()?.customEmoji) return;
     load(workspaceId);
     return hold(workspaceId);
   }, [workspaceId]);

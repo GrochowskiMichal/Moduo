@@ -20,12 +20,16 @@
 --      the workspace reads it (paused chat still reads); only the ops write.
 --      Published, so an add or a removal reaches open apps.
 --   4. Storage bucket chat-emoji (private): PNG, GIF, WebP, 256 KB. Paths
---      `<workspace>/<sha256>.<ext>` and `<workspace>/<sha256>.poster.png`.
---      Uploading needs the switch in that workspace; reading needs membership.
---   5. chat_op_custom_emoji_add(ws, name, path, poster_path, mime, width,
---      height, bytes, animated): signed in, chat on the plan, the switch, the
---      name, the type and its extension, the size, both images uploaded with
---      that type and size, at most 500 live per workspace.
+--      `<workspace>/<slot>.<ext>` and `<workspace>/<slot>.poster.png`, where
+--      the slot is an id the server mints for one uploader in one workspace
+--      (chat_op_custom_emoji_begin). Uploading needs your own open slot in that
+--      folder and the switch; reading needs membership; nobody overwrites or
+--      deletes an image.
+--   5. chat_op_custom_emoji_begin(ws) → slot; chat_op_custom_emoji_add(slot,
+--      name, mime, width, height, bytes, animated): signed in, chat on the
+--      plan, the switch, your own unused slot, the name, the type (its
+--      extension is the server's), the size, both images uploaded by you into
+--      that slot with that type and size, at most 500 live per workspace.
 --      chat_op_custom_emoji_remove(id): its adder or an admin; a soft delete.
 --      Activity chat.emoji_add / chat.emoji_remove.
 --   6. chat_op_react and comments_op_react take a `:name:` only while it
@@ -507,22 +511,52 @@ ON CONFLICT (id) DO UPDATE
       file_size_limit = 262144,
       allowed_mime_types = ARRAY['image/png', 'image/gif', 'image/webp'];
 
--- The workspace an object path names, or null when it isn't an emoji path
+-- An upload slot: the server mints the id the two images are stored under,
+-- for one person in one workspace, for an hour. Uploads go only into a slot
+-- of your own, and an emoji is made only from the images you uploaded into
+-- it, so no path can be taken or prepared by anyone else. Server only.
+CREATE TABLE IF NOT EXISTS public.chat_custom_emoji_uploads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  uploader_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  used_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS chat_custom_emoji_uploads_uploader
+  ON public.chat_custom_emoji_uploads (uploader_id, created_at);
+ALTER TABLE public.chat_custom_emoji_uploads ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.chat_custom_emoji_uploads FROM PUBLIC, anon, authenticated;
+GRANT ALL ON public.chat_custom_emoji_uploads TO service_role;
+
+-- The slot an object path names (`<workspace>/<slot>.<ext>` or
+-- `<workspace>/<slot>.poster.png`), or null when it isn't an emoji path
 -- (checked before the cast, so a stray name can't make a policy throw).
-CREATE OR REPLACE FUNCTION public.chat_emoji__path_workspace(p_name text)
+CREATE OR REPLACE FUNCTION public.chat_emoji__path_slot(p_name text)
 RETURNS uuid
 LANGUAGE sql
 IMMUTABLE PARALLEL SAFE
 SET search_path TO ''
 AS $function$
   SELECT CASE
-    WHEN p_name ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{64}\.(png|gif|webp|poster\.png)$'
-    THEN split_part(p_name, '/', 1)::uuid
+    WHEN p_name ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(png|gif|webp|poster\.png)$'
+    THEN substring(p_name FROM 38 FOR 36)::uuid
   END
 $function$;
 
+CREATE OR REPLACE FUNCTION public.chat_emoji__path_workspace(p_name text)
+RETURNS uuid
+LANGUAGE sql
+IMMUTABLE PARALLEL SAFE
+SET search_path TO ''
+AS $function$
+  SELECT CASE WHEN public.chat_emoji__path_slot(p_name) IS NOT NULL
+              THEN split_part(p_name, '/', 1)::uuid END
+$function$;
+
 -- Storage policies' checks, about the caller only (policies run them as the
--- signed-in person, so they're granted to authenticated).
+-- signed-in person, so they're granted to authenticated). Uploading needs an
+-- open slot of your own in that very workspace folder, and still the switch
+-- and the plan.
 CREATE OR REPLACE FUNCTION public.chat_emoji__may_upload(p_name text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -531,9 +565,13 @@ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_ws uuid := public.chat_emoji__path_workspace(p_name);
+  v_slot uuid := public.chat_emoji__path_slot(p_name);
 BEGIN
   RETURN v_ws IS NOT NULL
      AND auth.uid() IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.chat_custom_emoji_uploads u
+                  WHERE u.id = v_slot AND u.workspace_id = v_ws AND u.uploader_id = auth.uid()
+                    AND u.used_at IS NULL AND u.created_at > now() - interval '1 hour')
      AND public.chat_is_workspace_member(v_ws, auth.uid())
      AND public.chat_workspace_enabled(v_ws)
      AND public.chat_has_cap(v_ws, auth.uid(), 'add_emoji');
@@ -549,6 +587,8 @@ AS $function$
   SELECT public.chat_emoji__readable(public.chat_emoji__path_workspace(p_name))
 $function$;
 
+-- Insert and read only: nobody overwrites or deletes an emoji's image (no
+-- UPDATE or DELETE rule; removing an emoji is the op's soft delete).
 DROP POLICY IF EXISTS chat_emoji_upload ON storage.objects;
 CREATE POLICY chat_emoji_upload ON storage.objects
   FOR INSERT TO authenticated
@@ -560,11 +600,36 @@ CREATE POLICY chat_emoji_read ON storage.objects
 
 -- ── 5. The ops ─────────────────────────────────────────────────────────────
 
+-- A slot to upload into (at most 20 open per person an hour).
+CREATE OR REPLACE FUNCTION public.chat_op_custom_emoji_begin(p_workspace_id uuid)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_me uuid := auth.uid();
+  v_id uuid;
+BEGIN
+  PERFORM public.chat_op__guard(p_workspace_id);
+  IF NOT public.chat_has_cap(p_workspace_id, v_me, 'add_emoji') THEN
+    RAISE EXCEPTION 'Your role can''t add custom emoji.' USING ERRCODE = '42501';
+  END IF;
+  IF (SELECT count(*) FROM public.chat_custom_emoji_uploads u
+       WHERE u.uploader_id = v_me AND u.used_at IS NULL
+         AND u.created_at > now() - interval '1 hour') >= 20 THEN
+    RAISE EXCEPTION 'Too many emoji uploads at once. Try again in a while.' USING ERRCODE = '54000';
+  END IF;
+  INSERT INTO public.chat_custom_emoji_uploads (workspace_id, uploader_id)
+  VALUES (p_workspace_id, v_me)
+  RETURNING id INTO v_id;
+  RETURN v_id;
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.chat_op_custom_emoji_add(
-  p_workspace_id uuid,
+  p_upload_id uuid,
   p_name text,
-  p_path text,
-  p_poster_path text,
   p_mime text,
   p_width integer,
   p_height integer,
@@ -578,19 +643,31 @@ SET search_path TO 'public'
 AS $function$
 DECLARE
   v_me uuid := auth.uid();
-  v_name text := lower(btrim(coalesce(p_name, '')));
+  v_name text := btrim(lower(btrim(coalesce(p_name, ''))), ':');
+  v_slot public.chat_custom_emoji_uploads;
+  v_ws uuid;
   v_ext text;
-  v_sha text;
-  v_obj jsonb;
-  v_poster jsonb;
+  v_path text;
+  v_poster_path text;
+  v_obj storage.objects;
+  v_poster storage.objects;
   v_row public.chat_custom_emoji;
 BEGIN
-  PERFORM public.chat_op__guard(p_workspace_id);
-  IF NOT public.chat_has_cap(p_workspace_id, v_me, 'add_emoji') THEN
+  IF v_me IS NULL THEN
+    RAISE EXCEPTION 'You don''t have access to this workspace.' USING ERRCODE = '42501';
+  END IF;
+  -- Only your own open slot (someone else's answers as a missing one).
+  SELECT * INTO v_slot FROM public.chat_custom_emoji_uploads
+   WHERE id = p_upload_id AND uploader_id = v_me FOR UPDATE;
+  IF v_slot.id IS NULL OR v_slot.used_at IS NOT NULL OR v_slot.created_at <= now() - interval '1 hour' THEN
+    RAISE EXCEPTION 'Upload the image first.' USING ERRCODE = '22023';
+  END IF;
+  v_ws := v_slot.workspace_id;
+  PERFORM public.chat_op__guard(v_ws);
+  IF NOT public.chat_has_cap(v_ws, v_me, 'add_emoji') THEN
     RAISE EXCEPTION 'Your role can''t add custom emoji.' USING ERRCODE = '42501';
   END IF;
 
-  v_name := btrim(v_name, ':');
   IF v_name !~ '^(?=[a-z0-9_-]*[a-z])[a-z0-9_-]{2,32}$' THEN
     RAISE EXCEPTION 'A name is 2 to 32 lowercase letters, digits, - or _, with at least one letter.'
       USING ERRCODE = '22023';
@@ -604,14 +681,6 @@ BEGIN
   IF v_ext IS NULL THEN
     RAISE EXCEPTION 'Use a PNG, GIF or WebP image.' USING ERRCODE = '22023';
   END IF;
-  IF p_path IS NULL
-     OR p_path !~ ('^' || p_workspace_id::text || '/[0-9a-f]{64}\.' || v_ext || '$') THEN
-    RAISE EXCEPTION 'That image isn''t uploaded here.' USING ERRCODE = '22023';
-  END IF;
-  v_sha := substring(p_path FROM '/([0-9a-f]{64})\.');
-  IF p_poster_path IS DISTINCT FROM (p_workspace_id::text || '/' || v_sha || '.poster.png') THEN
-    RAISE EXCEPTION 'That image''s still frame isn''t uploaded here.' USING ERRCODE = '22023';
-  END IF;
   IF p_width IS NULL OR p_height IS NULL OR p_width NOT BETWEEN 1 AND 128 OR p_height NOT BETWEEN 1 AND 128 THEN
     RAISE EXCEPTION 'A custom emoji is at most 128 by 128 pixels.' USING ERRCODE = '22023';
   END IF;
@@ -622,41 +691,49 @@ BEGIN
     RAISE EXCEPTION 'Say whether the emoji is animated.' USING ERRCODE = '22023';
   END IF;
 
-  -- Both images are in the bucket, stored with the type and size claimed.
-  SELECT o.metadata INTO v_obj FROM storage.objects o
-   WHERE o.bucket_id = 'chat-emoji' AND o.name = p_path;
-  SELECT o.metadata INTO v_poster FROM storage.objects o
-   WHERE o.bucket_id = 'chat-emoji' AND o.name = p_poster_path;
-  IF v_obj IS NULL OR v_poster IS NULL THEN
+  -- The paths come from the slot, never from the caller: the image under the
+  -- extension its type names, and its still frame beside it.
+  v_path := v_ws::text || '/' || v_slot.id::text || '.' || v_ext;
+  v_poster_path := v_ws::text || '/' || v_slot.id::text || '.poster.png';
+  SELECT * INTO v_obj FROM storage.objects o
+   WHERE o.bucket_id = 'chat-emoji' AND o.name = v_path;
+  SELECT * INTO v_poster FROM storage.objects o
+   WHERE o.bucket_id = 'chat-emoji' AND o.name = v_poster_path;
+  -- Both uploaded, by you.
+  IF v_obj.id IS NULL OR v_poster.id IS NULL
+     OR coalesce(v_obj.owner_id, v_obj.owner::text) IS DISTINCT FROM v_me::text
+     OR coalesce(v_poster.owner_id, v_poster.owner::text) IS DISTINCT FROM v_me::text THEN
     RAISE EXCEPTION 'Upload the image first.' USING ERRCODE = '22023';
   END IF;
-  IF v_obj ->> 'mimetype' IS DISTINCT FROM p_mime
-     OR (v_obj ->> 'size') IS NULL OR (v_obj ->> 'size')::bigint <> p_bytes THEN
+  -- Stored with the type and size described.
+  IF v_obj.metadata ->> 'mimetype' IS DISTINCT FROM p_mime
+     OR (v_obj.metadata ->> 'size') IS NULL OR (v_obj.metadata ->> 'size')::bigint <> p_bytes THEN
     RAISE EXCEPTION 'The uploaded image isn''t the one described.' USING ERRCODE = '22023';
   END IF;
-  IF v_poster ->> 'mimetype' IS DISTINCT FROM 'image/png'
-     OR (v_poster ->> 'size') IS NULL OR (v_poster ->> 'size')::bigint NOT BETWEEN 1 AND 262144 THEN
+  IF v_poster.metadata ->> 'mimetype' IS DISTINCT FROM 'image/png'
+     OR (v_poster.metadata ->> 'size') IS NULL
+     OR (v_poster.metadata ->> 'size')::bigint NOT BETWEEN 1 AND 262144 THEN
     RAISE EXCEPTION 'The still frame must be a PNG of at most 256 KB.' USING ERRCODE = '22023';
   END IF;
 
   -- One add at a time per workspace, so the 500 and the name hold.
-  PERFORM pg_advisory_xact_lock(hashtextextended('chat_custom_emoji:' || p_workspace_id::text, 0));
+  PERFORM pg_advisory_xact_lock(hashtextextended('chat_custom_emoji:' || v_ws::text, 0));
   IF (SELECT count(*) FROM public.chat_custom_emoji e
-       WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL) >= 500 THEN
+       WHERE e.workspace_id = v_ws AND e.deleted_at IS NULL) >= 500 THEN
     RAISE EXCEPTION 'This workspace has 500 custom emoji, the most it can hold. Remove one first.'
       USING ERRCODE = '22023';
   END IF;
   IF EXISTS (SELECT 1 FROM public.chat_custom_emoji e
-              WHERE e.workspace_id = p_workspace_id AND e.name = v_name AND e.deleted_at IS NULL) THEN
+              WHERE e.workspace_id = v_ws AND e.name = v_name AND e.deleted_at IS NULL) THEN
     RAISE EXCEPTION 'There''s already an emoji called :%:.', v_name USING ERRCODE = '23505';
   END IF;
 
+  UPDATE public.chat_custom_emoji_uploads SET used_at = now() WHERE id = v_slot.id;
   INSERT INTO public.chat_custom_emoji (
     workspace_id, name, storage_path, poster_path, mime, width, height, bytes, animated, created_by)
-  VALUES (p_workspace_id, v_name, p_path, p_poster_path, p_mime, p_width, p_height, p_bytes,
-          p_animated, v_me)
+  VALUES (v_ws, v_name, v_path, v_poster_path, p_mime, p_width, p_height, p_bytes, p_animated, v_me)
   RETURNING * INTO v_row;
-  PERFORM public.module_activity_log(p_workspace_id, 'chat', 'chat_custom_emoji', v_row.id,
+  PERFORM public.module_activity_log(v_ws, 'chat', 'chat_custom_emoji', v_row.id,
     'chat.emoji_add', jsonb_build_object('name', v_row.name));
   RETURN v_row;
 END;
@@ -755,6 +832,7 @@ SELECT pg_temp.recut(
 $old$,
   $new$  DELETE FROM public.user_saved_statuses x WHERE x.user_id = p_user;
   UPDATE public.chat_custom_emoji x SET created_by = NULL WHERE x.created_by = p_user;
+  DELETE FROM public.chat_custom_emoji_uploads x WHERE x.uploader_id = p_user;
 $new$);
 
 -- ── 8. Published ───────────────────────────────────────────────────────────
@@ -784,6 +862,7 @@ BEGIN
     'chat__emoji_name_reserved(text)',
     'chat__emoji_live(uuid, text)',
     'chat_emoji__path_workspace(text)',
+    'chat_emoji__path_slot(text)',
     'chat_has_cap(uuid, uuid, text)',
     'share_seed_workspace()',
     'account_erase_workspace_data(uuid, boolean)'
@@ -795,7 +874,8 @@ BEGIN
   -- run as the signed-in person and answer only about them. The key checks are
   -- pure (the app may call them).
   FOREACH fn IN ARRAY ARRAY[
-    'chat_op_custom_emoji_add(uuid, text, text, text, text, integer, integer, integer, boolean)',
+    'chat_op_custom_emoji_begin(uuid)',
+    'chat_op_custom_emoji_add(uuid, text, text, integer, integer, integer, boolean)',
     'chat_op_custom_emoji_remove(uuid)',
     'chat_emoji__may_upload(text)',
     'chat_emoji__may_read(text)',
@@ -823,7 +903,19 @@ BEGIN
      OR has_table_privilege('anon', 'public.chat_custom_emoji', 'SELECT') THEN
     RAISE EXCEPTION 'chat_custom_emoji is written only through the ops.';
   END IF;
-  IF has_function_privilege('anon', 'public.chat_op_custom_emoji_add(uuid, text, text, text, text, integer, integer, integer, boolean)', 'EXECUTE')
+  IF has_table_privilege('authenticated', 'public.chat_custom_emoji_uploads', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.chat_custom_emoji_uploads', 'INSERT')
+     OR has_table_privilege('anon', 'public.chat_custom_emoji_uploads', 'SELECT') THEN
+    RAISE EXCEPTION 'Upload slots are the server''s only.';
+  END IF;
+  -- Nobody overwrites or deletes an emoji image (only insert and read rules).
+  IF EXISTS (SELECT 1 FROM pg_policies
+              WHERE schemaname = 'storage' AND tablename = 'objects'
+                AND cmd IN ('UPDATE', 'DELETE', 'ALL')
+                AND (coalesce(qual, '') || coalesce(with_check, '')) LIKE '%chat-emoji%') THEN
+    RAISE EXCEPTION 'An emoji image must not be changeable or deletable by a person.';
+  END IF;
+  IF has_function_privilege('anon', 'public.chat_op_custom_emoji_add(uuid, text, text, integer, integer, integer, boolean)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.chat__emoji_live(uuid, text)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.chat_has_cap(uuid, uuid, text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'A server-only function is open to callers.';

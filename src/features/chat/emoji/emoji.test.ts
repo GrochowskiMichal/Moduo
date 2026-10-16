@@ -127,10 +127,10 @@ describe("custom emoji names", () => {
 
 describe("the add-emoji switch on the client", () => {
   it("admins and members by default, never a viewer, owners always", () => {
-    expect(rightsFrom(null, "member", false).addEmoji).toBe(true);
+    expect(rightsFrom(null, "editor", false).addEmoji).toBe(true);
     expect(rightsFrom(null, "viewer", false).addEmoji).toBe(false);
-    expect(rightsFrom(null, "member", true).addEmoji).toBe(false);
-    expect(rightsFrom([{ role_key: "member", add_emoji: false }], "member", false).addEmoji).toBe(
+    expect(rightsFrom(null, "editor", true).addEmoji).toBe(false);
+    expect(rightsFrom([{ role_key: "member", add_emoji: false }], "editor", false).addEmoji).toBe(
       false,
     );
     expect(rightsFrom([], "owner", false).addEmoji).toBe(true);
@@ -199,9 +199,9 @@ describe("a picked file", () => {
     expect(fitWithin(40, 30)).toEqual({ w: 40, h: 30 });
   });
 
-  it("is stored as <workspace>/<sha256>.<ext> with its still frame beside it", () => {
+  it("is stored under the server's slot as <workspace>/<slot>.<ext>, its still frame beside it", () => {
     const sha = "b".repeat(64);
-    expect(emojiPaths(WS, { sha256: sha, mime: "image/gif" })).toEqual({
+    expect(emojiPaths(WS, sha, "image/gif")).toEqual({
       path: `${WS}/${sha}.gif`,
       posterPath: `${WS}/${sha}.poster.png`,
     });
