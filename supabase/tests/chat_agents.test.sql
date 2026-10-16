@@ -412,10 +412,44 @@ DECLARE
 BEGIN
   PERFORM test.age(interval '2 minutes');
   -- The creator edits a key's post in the app: their edit, not the key's.
+  -- Control: the key naming A reaches A (an item and a notice row).
+  v := test.post('KA', 'Q', 'k5', format('ping <@%s>', test.id('A')));
+  PERFORM test.ok(v = 'ok' AND test.items('A', 'k5') = 'mention'
+                  AND EXISTS (SELECT 1 FROM public.notice_deliveries d
+                               WHERE d.user_id = test.id('A') AND d.message_id = test.ref('k5')),
+    'edit control: the key naming its creator reaches them, item and notice', v);
+  PERFORM test.age(interval '15 seconds');
+  -- A's own edit in the app that names A and C: C hears it, A doesn't.
   v := test.as_user('A', format($q$SELECT public.chat_op_edit(%L::uuid, %L::text)$q$,
-    test.ref('k3'), format('second deploy %s', test.uri('person', test.id('C')))));
-  PERFORM test.ok(v LIKE 'ok %' AND test.items('C', 'k3') = 'mention' AND test.items('A', 'k3') = '',
-    'edit: the creator''s edit names C; A isn''t told of their own edit', v);
+    test.ref('k3'), format('second deploy %s %s', test.uri('person', test.id('A')),
+                           test.uri('person', test.id('C')))));
+  PERFORM test.ok(v LIKE 'ok %' AND test.items('C', 'k3') = 'mention' AND test.items('A', 'k3') = ''
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d
+                                   WHERE d.user_id = test.id('A') AND d.message_id = test.ref('k3')),
+    'edit: the creator''s own edit naming themselves and C: C is told, A gets no item and no notice', v);
+  -- Addressed never hands a key its own posts back; another key of A's sees it.
+  v := test.key_value('KA', format($q$SELECT count(*)::text FROM public.chat_agent_addressed(%L) WHERE message_id = %L$q$,
+    test.id('W'), test.ref('k5')));
+  PERFORM test.ok(v = '0', 'addressed: never the acting key''s own posts', v);
+  v := test.key_value('KV', format($q$SELECT count(*)::text FROM public.chat_agent_addressed(%L) WHERE message_id = %L$q$,
+    test.id('W'), test.ref('k5')));
+  PERFORM test.ok(v = '1', 'addressed: another key of A''s does list it', v);
+
+  -- Agent's choice: the creator's own agent's reply in their chain is new to
+  -- them, never a reply item; someone else's reply there is.
+  PERFORM test.say('A', 'Q', 'a10', 'A asks the CI');
+  PERFORM test.age(interval '15 seconds');
+  v := test.post('KA', 'Q', 'k6', 'the CI answers', 'a10');
+  PERFORM test.ok(v = 'ok' AND test.items('A', 'k6') = '', 'own agent''s reply: no reply item for its creator', v);
+  PERFORM test.say('B', 'Q', 'b10', 'B answers too', 'a10');
+  PERFORM test.ok(test.items('A', 'b10') = 'reply', 'someone else''s reply there: a reply item for A', test.items('A', 'b10'));
+  PERFORM test.age(interval '15 seconds');
+
+  -- A key without private access checks name clashes against public channels only.
+  v := test.key_value('KB', format($q$SELECT (public.chat_op_agent_create_channel(%L, 'hidden')).name$q$, test.id('W')));
+  PERFORM test.ok(v = 'hidden', 'create: a private channel''s name never reads as taken to a key without private access', v);
+  v := test.key_value('KB', format($q$SELECT (public.chat_op_agent_create_channel(%L, 'builds')).name$q$, test.id('W')));
+  PERFORM test.ok(v LIKE 'ERROR A channel named "builds" already exists%', 'create: a public channel''s name is taken', v);
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a
                            WHERE a.op = 'chat.mention' AND a.payload ->> 'message_id' = test.ref('k3')::text
                              AND a.actor_type = 'user' AND a.actor_id = test.id('A')),
@@ -476,7 +510,7 @@ BEGIN
     'chat__key_actor(text)', 'chat__key_reads_channel(uuid, uuid, boolean)', 'chat__key_replies_on(uuid, uuid)',
     'chat__react_as(uuid, uuid, text, boolean)', 'chat__mark_decision_as(uuid, uuid, boolean)',
     'chat__wrap_up_as(uuid, uuid, uuid, boolean)',
-    'chat__create_channel_as(uuid, uuid, text, text, boolean, uuid[], boolean, text, uuid)',
+    'chat__create_channel_as(uuid, uuid, text, text, boolean, uuid[], boolean, text, uuid, uuid)',
     'chat__search_in(uuid[], uuid, text, timestamptz, uuid, integer, uuid, timestamptz, boolean)',
     'chat__key_channel_ids(uuid, uuid, boolean)', 'chat__key_message(uuid, uuid, text)',
     'chat__op_guard_as(uuid, uuid)', 'chat__op_reader_as(uuid, uuid)', 'chat__op_channel_as(uuid, uuid)',

@@ -803,3 +803,70 @@ describe("Chat's Search · the In filter (CV-19)", () => {
     expect(offered.map((c) => c.label)).toEqual(["archived", "starred", "unjoined"]);
   });
 });
+
+describe("posts through your own key (CV-21)", () => {
+  const KEY = uuid(7001);
+  const viaMyKey = {
+    authorId: ME,
+    authorKind: "api_key" as const,
+    authorLabel: "CI",
+    apiKeyId: KEY,
+  };
+
+  async function opened(keyRepliesOn: (keyId: string) => boolean) {
+    const env = setup({ keyRepliesOn });
+    env.server.addChannel(C, { isDefault: true });
+    env.store.acquire();
+    await env.store.ready();
+    await env.store.open(C);
+    await settle();
+    return env;
+  }
+
+  it("count as new to you, never as addressed to you", async () => {
+    const { server, store, live } = await opened(() => true);
+    live.emit({ type: "message", row: server.post(uuid(10), C, viaMyKey), insert: true });
+    expect(store.getSnapshot().unread[C]?.unread).toBe(1);
+    expect(store.getSnapshot().unread[C]?.addressed ?? 0).toBe(0);
+  });
+
+  it("a reply to your key's post is addressed to you only while that key's switch is on", async () => {
+    for (const [on, addressed] of [
+      [true, 1],
+      [false, 0],
+    ] as const) {
+      const { server, store, live } = await opened((id) => (id === KEY ? on : true));
+      const root = server.post(uuid(20), C, viaMyKey);
+      live.emit({ type: "message", row: root, insert: true });
+      const reply = server.post(uuid(21), C, { parentId: root.id, replyToId: root.id });
+      live.emit({ type: "message", row: reply, insert: true });
+      expect(store.getSnapshot().unread[C]?.unread).toBe(2);
+      expect(store.getSnapshot().unread[C]?.addressed ?? 0).toBe(addressed);
+      for (const st of stores.splice(0)) st.dispose({ persist: false });
+    }
+  });
+
+  it("mark unread counts your key's posts again, not what you wrote", async () => {
+    const { server, store, live } = await opened(() => true);
+    const from = server.post(uuid(40), C, viaMyKey);
+    live.emit({ type: "message", row: from, insert: true });
+    live.emit({ type: "message", row: server.post(uuid(41), C, { authorId: ME }), insert: true });
+    live.emit({ type: "message", row: server.post(uuid(42), C), insert: true });
+    const res = await store.markUnread(C, from.id);
+    expect(res.ok).toBe(true);
+    expect(store.getSnapshot().unread[C]?.unread).toBe(2);
+  });
+
+  it("your own key's reply in your chain isn't addressed to you", async () => {
+    const { server, store, live } = await opened(() => true);
+    const mine = server.post(uuid(30), C, { authorId: ME });
+    live.emit({ type: "message", row: mine, insert: true });
+    live.emit({
+      type: "message",
+      row: server.post(uuid(31), C, { ...viaMyKey, parentId: mine.id, replyToId: mine.id }),
+      insert: true,
+    });
+    expect(store.getSnapshot().unread[C]?.unread).toBe(1);
+    expect(store.getSnapshot().unread[C]?.addressed ?? 0).toBe(0);
+  });
+});

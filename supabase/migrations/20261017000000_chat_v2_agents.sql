@@ -36,7 +36,8 @@
 --      (mentions, Every message); a reply to a key's post reaches its creator
 --      only while that key's notification switch is on
 --      (user_preferences.preferences.chatKeyReplies.<key id>, on when unset),
---      unless it mentions them; the bell, notices and emails say
+--      unless it mentions them; its own replies are new to its creator but
+--      never a reply item for them; the bell, notices and emails say
 --      "<person> · via <key>".
 --   5. Counts (chat_unread_counts, chat_catchup_open): a key's posts count as
 --      unread for their creator; replies to them count only through the switch.
@@ -510,6 +511,9 @@ DECLARE
   v_skip uuid := CASE WHEN p_msg.api_key_id IS NOT NULL
                            AND public.module_api_key_id() IS NOT DISTINCT FROM p_msg.api_key_id
                       THEN NULL ELSE p_actor END;
+  -- The key's creator, while their key posts: its replies are new to them,
+  -- never a reply addressed to them.
+  v_key_self uuid := CASE WHEN v_skip IS NULL AND p_msg.api_key_id IS NOT NULL THEN p_actor END;
   v_reason text;
   v_users uuid[];
   v_bell uuid[];
@@ -591,6 +595,8 @@ BEGIN
              WHEN v_everyone AND mem.user_id IS NOT NULL THEN 'everyone'
              WHEN v_edit THEN NULL
              WHEN p_channel.managers_only AND p_msg.parent_id IS NULL AND mem.user_id IS NOT NULL THEN 'announcement'
+             WHEN ch.u IS NOT NULL AND c.u = v_key_self THEN
+               CASE WHEN mem.notify_level = 'all' THEN 'every_message' END
              WHEN ch.u IS NOT NULL THEN 'reply'
              WHEN mem.notify_level = 'all' THEN 'every_message'
            END AS reason,
@@ -800,6 +806,8 @@ AS $$
            -- CV-21: your key's post brings you into its chain only through
            -- that key's notification switch.
            (m.parent_id IS NOT NULL
+            -- your own key's reply is new to you, not addressed to you
+            AND NOT (m.api_key_id IS NOT NULL AND m.author_id = (SELECT id FROM me))
             AND NOT EXISTS (SELECT 1 FROM public.chat_chain_mutes cm
                              WHERE cm.user_id = (SELECT id FROM me) AND cm.root_id = m.parent_id)
             AND (EXISTS (SELECT 1 FROM public.chat_messages q
@@ -1163,6 +1171,8 @@ END;
 $$;
 
 -- chat_op_create_channel (CV-13's live body), for p_user.
+-- p_names_of: whose private channels a new name may clash with (the person
+-- creating it, or null for public channels only).
 CREATE OR REPLACE FUNCTION public.chat__create_channel_as(
   p_user uuid,
   p_workspace_id uuid,
@@ -1172,7 +1182,8 @@ CREATE OR REPLACE FUNCTION public.chat__create_channel_as(
   p_member_ids uuid[],
   p_announcement boolean,
   p_link_type text,
-  p_link_id uuid)
+  p_link_id uuid,
+  p_names_of uuid)
   RETURNS public.chat_channels
   LANGUAGE plpgsql
   SET search_path = 'public'
@@ -1202,9 +1213,10 @@ BEGIN
   END IF;
   v_name := public.chat__channel_name(p_name);
   v_topic := public.chat__channel_topic(p_topic);
-  -- The name clashes only with channels the creator can see.
+  -- The name clashes only with channels the creator can see (public ones,
+  -- and p_names_of's private ones).
   PERFORM public.chat__lock_name(p_workspace_id, v_name);
-  IF public.chat__name_taken(p_workspace_id, v_name, NULL, v_me) THEN
+  IF public.chat__name_taken(p_workspace_id, v_name, NULL, p_names_of) THEN
     RAISE EXCEPTION 'A channel named "%" already exists.', v_name USING ERRCODE = '23505';
   END IF;
 
@@ -1250,7 +1262,7 @@ CREATE OR REPLACE FUNCTION public.chat_op_create_channel(
 AS $$
 BEGIN
   RETURN public.chat__create_channel_as(auth.uid(), p_workspace_id, p_name, p_topic, p_is_private,
-    p_member_ids, p_announcement, p_link_type, p_link_id);
+    p_member_ids, p_announcement, p_link_type, p_link_id, auth.uid());
 END;
 $$;
 
@@ -1337,8 +1349,10 @@ BEGIN
     RAISE EXCEPTION 'Turn on "Include private channels I''m in" for this key to create private channels.'
       USING ERRCODE = '42501';
   END IF;
+  -- A key without private access checks name clashes against public channels only.
   RETURN public.chat__create_channel_as(v_actor.creator, p_workspace_id, p_name, p_topic, p_is_private,
-    '{}'::uuid[], false, NULL, NULL);
+    '{}'::uuid[], false, NULL, NULL,
+    CASE WHEN v_actor.private_ok THEN v_actor.creator END);
 END;
 $$;
 
@@ -1654,6 +1668,8 @@ BEGIN
        -- with Later, no team mention while teams are muted, no muted chain.
        AND (k.later_until IS NULL OR k.later_notified_at IS NOT NULL OR k.later_until <= now())
        AND k.reason IN ('mention', 'team_mention', 'everyone', 'reply', 'announcement')
+       -- Never the key's own posts back to it.
+       AND m.api_key_id IS DISTINCT FROM public.module_api_key_id()
        AND NOT (k.reason = 'team_mention' AND public.chat__team_muted(v_actor.creator))
        AND NOT (k.reason = 'reply' AND EXISTS (
              SELECT 1 FROM public.chat_chain_mutes cm
@@ -1727,7 +1743,7 @@ BEGIN
     'chat__react_as(uuid, uuid, text, boolean)',
     'chat__mark_decision_as(uuid, uuid, boolean)',
     'chat__wrap_up_as(uuid, uuid, uuid, boolean)',
-    'chat__create_channel_as(uuid, uuid, text, text, boolean, uuid[], boolean, text, uuid)',
+    'chat__create_channel_as(uuid, uuid, text, text, boolean, uuid[], boolean, text, uuid, uuid)',
     'chat__search_in(uuid[], uuid, text, timestamptz, uuid, integer, uuid, timestamptz, boolean)',
     'chat__sender_label(public.chat_messages, uuid)',
     'chat__activity(public.chat_channels, public.chat_messages, uuid, text, text, uuid[], uuid[])',

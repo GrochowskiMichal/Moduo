@@ -177,7 +177,8 @@ export const chatConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         const only = str(args, "channel", false);
-        const channelId = only ? await conversationId(ctx, only) : null;
+        // By id or by name, a conversation the key can't read answers the same.
+        const channelId = only ? (await conversation(ctx, only)).id : null;
         const list = await call<Row[]>(ctx, "chat_agent_search", {
           p_workspace_id: ctx.key.workspaceId,
           p_query: str(args, "query"),
@@ -245,7 +246,18 @@ export const chatConnectorModule: ConnectorModule = {
             p_parent_id: messageId(args, "thread_id", false) || null,
           }),
         );
-        return { id: m?.id, channel_id: m?.channel_id, chain_root_id: m?.parent_id ?? null, created_at: m?.created_at };
+        // v1 agents read `channel` (the name): keep it beside the id.
+        const typed = str(args, "channel");
+        const name = UUID.test(typed)
+          ? ((await conversation(ctx, typed).catch(() => null))?.name ?? null)
+          : typed.replace(/^#/, "");
+        return {
+          id: m?.id,
+          channel: name,
+          channel_id: m?.channel_id,
+          chain_root_id: m?.parent_id ?? null,
+          created_at: m?.created_at,
+        };
       },
     },
     {

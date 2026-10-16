@@ -36,6 +36,7 @@
 // The read mark is the last message that was on screen, never "now", and it
 // moves forward only.
 
+import { currentPreferences } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { browserOffline } from "../../../lib/sync/network";
 import { timestampMicros } from "../../tasks/live";
@@ -214,6 +215,11 @@ export type ChatStoreOptions = {
   deltaLimit?: number;
   /** CV-9: whether a message's files are up (a send with files waits for them). */
   files?: ChatFileGate;
+  /**
+   * CV-21: whether replies to posts made through this key of yours reach you
+   * (Settings' "Replies to posts by <key>"; on when unset).
+   */
+  keyRepliesOn?: (keyId: string) => boolean;
 };
 
 let nextOp = 1;
@@ -254,6 +260,7 @@ export class ChatStore {
   private readonly timing: ChatStoreTiming;
   private readonly deltaLimit: number;
   private readonly files: ChatFileGate | null;
+  private readonly keyRepliesOn: (keyId: string) => boolean;
   private stopFiles: (() => void) | null = null;
 
   private status: ChatStatus = "idle";
@@ -345,6 +352,8 @@ export class ChatStore {
     this.timing = { ...DEFAULT_CHAT_TIMING, ...opts.timing };
     this.deltaLimit = opts.deltaLimit ?? DELTA_LIMIT;
     this.files = opts.files ?? null;
+    this.keyRepliesOn =
+      opts.keyRepliesOn ?? ((keyId) => currentPreferences().chatKeyReplies[keyId] ?? true);
   }
 
   // ── Readers ───────────────────────────────────────────────────────────────
@@ -1553,9 +1562,20 @@ export class ChatStore {
     }
   };
 
+  /** Whether a message is one you wrote yourself (a post through your key isn't: it's new to you, CV-21). */
+  private ownWriting(row: ChatMessage): boolean {
+    return row.authorId === this.userId && row.authorKind === "user";
+  }
+
+  /** A message of yours that brings you into its chain: yours, or your key's while its replies reach you. */
+  private bringsMeIn(row: ChatMessage | undefined): boolean {
+    if (!row || row.authorId !== this.userId) return false;
+    return row.authorKind === "user" || !row.apiKeyId || this.keyRepliesOn(row.apiKeyId);
+  }
+
   /** A new message from someone else moves the badge slice (the server recounts at the next gap fill). */
   private countArrival(row: ChatMessage): boolean {
-    if (row.kind !== "message" || row.deletedAt || row.authorId === this.userId) return false;
+    if (row.kind !== "message" || row.deletedAt || this.ownWriting(row)) return false;
     const channel = this.channels.get(row.channelId);
     if (channel && micros(row.createdAt) > micros(channel.lastMessageAt)) {
       this.channels.set(row.channelId, { ...channel, lastMessageAt: row.createdAt });
@@ -1566,10 +1586,13 @@ export class ChatStore {
     const counts = this.unread.get(row.channelId) ?? ZERO(row.channelId);
     const mentioned = row.mentionedUserIds.includes(this.userId) || row.mentionsEveryone;
     const level: ChatNotifyLevel = member.notifyLevel;
+    // Your own key's reply is new to you, never a reply addressed to you (CV-21).
+    const ownKeys = row.authorId === this.userId;
     const inMyChain =
+      !ownKeys &&
       row.parentId !== null &&
-      (this.rowById(row.parentId)?.authorId === this.userId ||
-        (row.replyToId !== null && this.rowById(row.replyToId)?.authorId === this.userId));
+      (this.bringsMeIn(this.rowById(row.parentId)) ||
+        (row.replyToId !== null && this.bringsMeIn(this.rowById(row.replyToId))));
     const addressed =
       level !== "none" && (channel?.kind === "dm" || level === "all" || mentioned || inMyChain);
     this.unread.set(row.channelId, {
@@ -1641,7 +1664,7 @@ export class ChatStore {
     if (conv && from) {
       let n = 0;
       for (const row of conv.rows.values()) {
-        if (row.authorId === this.userId || row.deletedAt || row.kind !== "message") continue;
+        if (this.ownWriting(row) || row.deletedAt || row.kind !== "message") continue;
         if (compareKeys(keyOf(row), keyOf(from)) >= 0) n += 1;
       }
       const counts = this.unread.get(channelId) ?? ZERO(channelId);

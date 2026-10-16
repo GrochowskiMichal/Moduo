@@ -118,6 +118,8 @@ export type ChatMessage = {
   authorKind: ContentAuthorKind;
   /** The app's name at post time, for api_key authors. */
   authorLabel: string | null;
+  /** CV-21: the key a post went through (absent on rows copied before CV-21). */
+  apiKeyId?: string | null;
   body: string;
   mentionedUserIds: string[];
   mentionedTeamIds: string[];

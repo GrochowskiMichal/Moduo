@@ -146,6 +146,7 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     authorId: str(r.author_id),
     authorKind: normalizeContentAuthorKind(r.author_kind),
     authorLabel: str(r.author_label),
+    apiKeyId: str(r.api_key_id),
     body: str(r.body) ?? "",
     mentionedUserIds: strArr(r.mentioned_user_ids),
     mentionedTeamIds: strArr(r.mentioned_team_ids),

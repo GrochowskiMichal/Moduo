@@ -151,10 +151,28 @@ describe("chat tools: what they send", () => {
     expect(calls[1].params).toMatchObject({ p_root_id: MSG });
   });
 
-  it("chat_post with a conversation id goes straight to the post (the server checks it)", async () => {
+  it("chat_post with a conversation id posts first (the server checks it)", async () => {
     const { db, calls } = fakeDb({ chat_op_agent_post: { id: "m", channel_id: CH } });
     await tool("chat_post").handler({ channel: CH, text: "hi" }, { key: key({ chat: "edit" }), db });
-    expect(calls.map((c) => c.fn)).toEqual(["chat_op_agent_post"]);
+    // No lookup before the post; its name is read after, for the answer.
+    expect(calls[0]?.fn).toBe("chat_op_agent_post");
+  });
+
+  it("chat_post still answers the channel's name (v1 agents read it)", async () => {
+    const { db } = fakeDb({
+      chat_agent_conversations: [{ id: CH, name: "builds" }],
+      chat_op_agent_post: { id: "m", channel_id: CH },
+    });
+    const out = await tool("chat_post").handler({ channel: "#builds", text: "hi" }, { key: key({ chat: "edit" }), db });
+    expect(out).toMatchObject({ channel: "builds", channel_id: CH });
+  });
+
+  it("chat_search with a conversation id the key can't read says so, like a name", async () => {
+    const { db, calls } = fakeDb({ chat_agent_conversations: [] });
+    await expect(
+      tool("chat_search").handler({ query: "x", channel: CH }, { key: key({ chat: "view" }), db }),
+    ).rejects.toThrow(`No conversation "${CH}"`);
+    expect(calls.map((c) => c.fn)).toEqual(["chat_agent_conversations"]);
   });
 
   it("chat_create_channel sends the name as typed", async () => {
