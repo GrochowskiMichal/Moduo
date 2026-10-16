@@ -16,6 +16,7 @@ import type {
   ChatMessage,
   ChatPerson,
   ChatReactions,
+  ChatSearchHit,
   ChatSyncRow,
   ChatUnread,
   UserChatPrefs,
@@ -234,5 +235,25 @@ export function mapHistory(raw: unknown): ChatHistoryEntry | null {
     actorLabel: str(r.actor_label),
     payload: asRow(r.payload) ?? {},
     createdAt,
+  };
+}
+
+/** A `chat_search` row (CV-19). */
+export function mapSearchHit(raw: unknown): ChatSearchHit | null {
+  const r = asRow(raw);
+  const messageId = str(r?.message_id);
+  const channelId = str(r?.channel_id);
+  if (!r || !messageId || !channelId || !isChatChannelKind(r.channel_kind)) return null;
+  return {
+    messageId,
+    channelId,
+    channelKind: r.channel_kind,
+    channelName: str(r.channel_name),
+    parentId: str(r.parent_id),
+    replyToId: str(r.reply_to_id),
+    authorId: str(r.author_id),
+    authorLabel: r.author_kind === "api_key" ? str(r.author_label) : null,
+    createdAt: str(r.created_at) ?? EPOCH,
+    snippet: str(r.snippet) ?? "",
   };
 }

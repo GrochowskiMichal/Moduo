@@ -1,0 +1,107 @@
+import { describe, expect, test } from "@rstest/core";
+
+import type { ChatSearchHit } from "../model";
+import {
+  appendPage,
+  conditionsFromParams,
+  dateRangeStart,
+  findPosition,
+  foldText,
+  MARK_END,
+  MARK_START,
+  matchPeople,
+  pageCursor,
+  paramsFromConditions,
+  searchQuery,
+  splitSnippet,
+  stepFind,
+} from "./model";
+
+const hit = (id: string, at: string): ChatSearchHit => ({
+  messageId: id,
+  channelId: "c",
+  channelKind: "channel",
+  channelName: "general",
+  parentId: null,
+  replyToId: null,
+  authorId: "a",
+  authorLabel: null,
+  createdAt: at,
+  snippet: "",
+});
+
+describe("chat search model (CV-19)", () => {
+  test("a snippet splits into plain and marked runs, never HTML", () => {
+    expect(splitSnippet(`Mamy ${MARK_START}żółw${MARK_END} w <b>ogrodzie</b>`)).toEqual([
+      { text: "Mamy ", hit: false },
+      { text: "żółw", hit: true },
+      { text: " w <b>ogrodzie</b>", hit: false },
+    ]);
+    expect(splitSnippet("plain")).toEqual([{ text: "plain", hit: false }]);
+    expect(splitSnippet(`${MARK_END}stray${MARK_START}`)).toEqual([{ text: "stray", hit: false }]);
+    expect(splitSnippet("")).toEqual([]);
+  });
+
+  test("people are found by name, Polish without diacritics", () => {
+    expect(foldText("Łukasz Żółw-Ćma")).toBe("lukasz zolw-cma");
+    const people = [{ name: "Łucja Wróbel" }, { name: "Jan Zając" }, { name: "Anna" }];
+    expect(matchPeople(people, "luc").map((p) => p.name)).toEqual(["Łucja Wróbel"]);
+    expect(matchPeople(people, "zajac jan").map((p) => p.name)).toEqual(["Jan Zając"]);
+    expect(matchPeople(people, "wrobel").map((p) => p.name)).toEqual(["Łucja Wróbel"]);
+    expect(matchPeople(people, "nna")).toEqual([]);
+    expect(matchPeople(people, "  ")).toEqual([]);
+  });
+
+  test("the FilterBar's conditions and the link agree both ways", () => {
+    const params = { from: "u1", in: "c1", file: "1" as const, date: "7d" as const };
+    const conditions = conditionsFromParams(params);
+    expect(conditions.map((c) => c.dimension)).toEqual(["from", "in", "file", "date"]);
+    expect(paramsFromConditions(conditions)).toEqual(params);
+    expect(paramsFromConditions([])).toEqual({});
+    expect(
+      paramsFromConditions([{ dimension: "date", operator: "is", values: ["forever"] }]),
+    ).toEqual({});
+  });
+
+  test("the server call carries the words and every filter", () => {
+    const now = new Date("2026-10-16T12:00:00Z");
+    expect(
+      searchQuery("w", { q: "  zolw ", in: "c1", from: "u1", file: "1", date: "7d" }, now),
+    ).toEqual({
+      workspaceId: "w",
+      query: "zolw",
+      channelId: "c1",
+      fromId: "u1",
+      after: "2026-10-09T12:00:00.000Z",
+      hasFile: true,
+    });
+    expect(searchQuery("w", {}, now)).toMatchObject({
+      query: "",
+      channelId: null,
+      hasFile: false,
+      after: null,
+    });
+    const today = new Date(dateRangeStart("today", now));
+    expect(today.getHours()).toBe(0);
+    expect(today.getMinutes()).toBe(0);
+  });
+
+  test("pages append older hits without repeats, from the last row's key", () => {
+    const a = [hit("1", "2026-10-16T10:00:00Z"), hit("2", "2026-10-16T09:00:00Z")];
+    const b = [hit("2", "2026-10-16T09:00:00Z"), hit("3", "2026-10-16T08:00:00Z")];
+    expect(appendPage(a, b).map((h) => h.messageId)).toEqual(["1", "2", "3"]);
+    expect(pageCursor(a)).toEqual({ createdAt: "2026-10-16T09:00:00Z", messageId: "2" });
+    expect(pageCursor([])).toBeNull();
+  });
+
+  test("the find bar steps newest to oldest and says where it is", () => {
+    expect(stepFind(-1, 3, "older")).toBe(0);
+    expect(stepFind(0, 3, "older")).toBe(1);
+    expect(stepFind(2, 3, "older")).toBe(2);
+    expect(stepFind(1, 3, "newer")).toBe(0);
+    expect(stepFind(0, 0, "older")).toBe(-1);
+    expect(findPosition(1, 3, false)).toBe("2 of 3");
+    expect(findPosition(0, 50, true)).toBe("1 of 50+");
+    expect(findPosition(-1, 0, false)).toBe("No matches");
+  });
+});

@@ -79,6 +79,7 @@ $$;
 -- Paging: the next page passes the last row's (created_at, message_id) as
 -- (p_before, p_before_id). The snippet marks matches with U+E000 … U+E001 and is
 -- plain text: the client splits on them and draws text, never HTML.
+-- It names each hit's conversation (kind and name: it is one the caller reads).
 -- The function returns no count: nothing it says depends on a row the caller can't
 -- read. The statement_timeout below bounds a call through the API (PostgREST
 -- applies a function's statement_timeout); the input caps above keep it cheap.
@@ -97,6 +98,8 @@ CREATE OR REPLACE FUNCTION public.chat_search(
   RETURNS TABLE (
     message_id uuid,
     channel_id uuid,
+    channel_kind text,
+    channel_name text,
     parent_id uuid,
     reply_to_id uuid,
     author_id uuid,
@@ -130,7 +133,7 @@ BEGIN
     RETURN;
   END IF;
   RETURN QUERY
-    SELECT h.id, h.channel_id, h.parent_id, h.reply_to_id, h.author_id, h.author_kind,
+    SELECT h.id, h.channel_id, c.kind, c.name, h.parent_id, h.reply_to_id, h.author_id, h.author_kind,
            h.author_label, h.created_at,
            pg_catalog.ts_headline('public.chat_headline'::regconfig, h.body_text, v_q,
              'StartSel=' || pg_catalog.chr(57344) || ', StopSel=' || pg_catalog.chr(57345)
@@ -157,6 +160,7 @@ BEGIN
          ORDER BY m.created_at DESC, m.id DESC
          LIMIT v_limit
       ) h
+      JOIN public.chat_channels c ON c.id = h.channel_id
      ORDER BY h.created_at DESC, h.id DESC;
 END;
 $$;

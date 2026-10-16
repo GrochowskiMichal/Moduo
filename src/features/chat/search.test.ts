@@ -16,4 +16,16 @@ describe("validateChatSearch", () => {
     expect(validateChatSearch({ c: ID, view: "browse" })).toEqual({ c: ID, view: "browse" });
     expect(validateChatSearch({ view: "other" })).toEqual({});
   });
+  it("keeps Chat's Search with its words and filters (CV-19)", () => {
+    expect(
+      validateChatSearch({ view: "search", q: "żółw", from: ID, in: ID, file: "1", date: "7d" }),
+    ).toEqual({ view: "search", q: "żółw", from: ID, in: ID, file: "1", date: "7d" });
+    expect(validateChatSearch({ view: "search", q: "x".repeat(300) }).q).toHaveLength(256);
+    expect(
+      validateChatSearch({ view: "search", from: "nope", date: "forever", file: "0" }),
+    ).toEqual({
+      view: "search",
+    });
+    expect(validateChatSearch({ q: "zolw", from: ID })).toEqual({});
+  });
 });

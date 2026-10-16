@@ -14,8 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "@/components/app/create-events";
 import { FeaturePanelsShell } from "@/components/app/feature-panels-shell";
-import { dispatchOpenPalette } from "@/components/app/global-command-palette";
 import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/right-panel";
+import { onSearchRequest } from "@/components/app/search-events";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layout/panel-events";
@@ -42,8 +42,17 @@ import {
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
+import { ChatSearchView } from "../find/chat-search-view";
+import { FindBar } from "../find/find-bar";
+import type { SearchParams } from "../find/model";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
-import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import type {
+  ChatChannel,
+  ChatMessage,
+  ChatNotifyLevel,
+  ChatPerson,
+  ChatSearchHit,
+} from "../model";
 import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
@@ -146,6 +155,10 @@ export type ChatScreenProps = {
   browsing?: boolean;
   /** Open Browse channels. */
   onBrowse?: () => void;
+  /** The centre shows Chat's Search with these words and filters (`view=search`, CV-19). */
+  search?: SearchParams | null;
+  /** Open Chat's Search, or change its words and filters (`replace` while typing). */
+  onSearch?: (params: SearchParams, opts?: { replace?: boolean }) => void;
   /** Open a conversation (null: none named, so Chat lands on General). */
   onOpen: (
     conversationId: string | null,
@@ -169,6 +182,8 @@ export function ChatScreen({
   browsing = false,
   onOpen,
   onBrowse,
+  search = null,
+  onSearch,
 }: ChatScreenProps) {
   const selfId = userId ?? "";
   const store = useChatStore(runtime, userId, workspaceId);
@@ -216,6 +231,45 @@ export function ChatScreen({
     [snap.channels, snap.mine, snap.unread, selfId, personOf],
   );
   const [collapsed, toggleSection] = useCollapsedSections();
+
+  // ── search (CV-19) ──────────────────────────────────────────────────────────
+  // The bottom bar's Search opens Chat's Search while Chat is open (⌘K stays ⌘K).
+  useEffect(() => {
+    if (!onSearch) return;
+    return onSearchRequest(() => {
+      onSearch({});
+      return true;
+    });
+  }, [onSearch]);
+  const searchConversations = useMemo(
+    () =>
+      [...model.channels, ...model.dms, ...model.archived].map((r) => ({
+        id: r.channel.id,
+        label: r.title,
+      })),
+    [model],
+  );
+  const hitConversation = useCallback(
+    (hit: ChatSearchHit) => {
+      const known = snap.channels[hit.channelId];
+      if (known) return conversationTitle(known, selfId, personOf);
+      return hit.channelName ?? "Direct message";
+    },
+    [snap.channels, selfId, personOf],
+  );
+  const openHit = useCallback(
+    (hit: ChatSearchHit, replace = false) =>
+      onOpen(hit.channelId, {
+        messageId: hit.messageId,
+        ...(hit.parentId ? { chainId: hit.parentId } : {}),
+        replace,
+      }),
+    [onOpen],
+  );
+  // A conversation's own Search: the find bar under its toolbar (frame 2 "find").
+  const [finding, setFinding] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new conversation closes it
+  useEffect(() => setFinding(false), [conversationId]);
   const ordered = useMemo(() => sidebarOrder(model, collapsed), [model, collapsed]);
 
   const channel = conversationId ? snap.channels[conversationId] : undefined;
@@ -746,7 +800,23 @@ export function ChatScreen({
   const canWrapUp = (root: ChatMessage) => !!channel && mayWrap(root, channel, chainRights);
 
   let center: React.ReactNode;
-  if (browsing) {
+  if (search && onSearch) {
+    center = (
+      <ChatSearchView
+        chat={runtime?.chat ?? null}
+        workspaceId={workspaceId}
+        params={search}
+        onParamsChange={(next) => onSearch(next, { replace: true })}
+        people={members}
+        conversations={searchConversations}
+        personOf={personOf}
+        conversationLabel={hitConversation}
+        onOpenHit={(hit) => openHit(hit)}
+        onOpenPerson={(uid) => openDmWith([uid])}
+        selfId={selfId}
+      />
+    );
+  } else if (browsing) {
     center = (
       <BrowseChannels
         chat={runtime?.chat ?? null}
@@ -814,7 +884,7 @@ export function ChatScreen({
           peopleCount={peopleCount}
           canManage={canManage}
           paused={snap.paused}
-          onSearch={() => dispatchOpenPalette()}
+          onSearch={() => setFinding((v) => !v)}
           onPin={(starred) =>
             guarded(
               () => store?.setPrefs(channel.id, { starred }) ?? Promise.resolve(),
@@ -841,6 +911,16 @@ export function ChatScreen({
             )
           }
         />
+        {finding && workspaceId ? (
+          <FindBar
+            chat={runtime?.chat ?? null}
+            workspaceId={workspaceId}
+            channelId={channel.id}
+            onJump={(hit) => openHit(hit, true)}
+            onClose={() => setFinding(false)}
+            onSeeAll={(q) => onSearch?.({ q, in: channel.id })}
+          />
+        ) : null}
         <MadeFromScope value={madeFrom}>
           <MessageStream
             key={channel.id}

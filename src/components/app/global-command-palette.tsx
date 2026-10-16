@@ -7,14 +7,18 @@ import {
   FileText,
   House,
   Inbox,
+  MessageCircle,
   MessagesSquare,
   Paperclip,
+  Search,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filesLabel } from "../../features/attachments/files";
+import { Snippet } from "../../features/chat/find/snippet";
+import type { ChatSearchHit } from "../../features/chat/model";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import type { EntityRecord } from "../../lib/entity-links";
@@ -73,12 +77,19 @@ export function dispatchOpenPalette() {
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
   const { runtime } = useAuth();
-  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  const { selectedWorkspaceId, modulePermissions, members } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<EntityRecord[]>([]);
   const [searching, setSearching] = useState(false);
   const reqRef = useRef(0);
+  // Chat (CV-19): Messages from the server search, Conversations from the
+  // registry, the top five each, then "See all in Chat".
+  const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
+  const [chatConversations, setChatConversations] = useState<EntityRecord[]>([]);
+  const [chatFailed, setChatFailed] = useState(false);
+  const chatReqRef = useRef(0);
+  const chatOn = modulePermissions.chat !== "none";
   const trimmed = query.trim();
 
   useEffect(() => onShortcut("palette", () => setOpen((prev) => !prev)), []);
@@ -103,8 +114,54 @@ export function GlobalCommandPalette() {
       setQuery("");
       setResults([]);
       setSearching(false);
+      setChatHits([]);
+      setChatConversations([]);
+      setChatFailed(false);
     }
   }, [open]);
+
+  // Chat's half of the search: its own request counter, so a slow chat answer
+  // never overwrites a newer query's and the other modules never wait for it.
+  // A failed message search says so ("Search isn't available"), never "no results".
+  useEffect(() => {
+    if (!open) return;
+    const reqId = ++chatReqRef.current;
+    if (!trimmed || !runtime || !selectedWorkspaceId || !chatOn) {
+      setChatHits([]);
+      setChatConversations([]);
+      setChatFailed(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void runtime.chat
+        .search({ workspaceId: selectedWorkspaceId, query: trimmed, limit: 5 })
+        .then((res) => {
+          if (reqId !== chatReqRef.current) return;
+          setChatFailed(res.error !== null);
+          setChatHits(res.error ? [] : res.data);
+        });
+      void runtime.spine
+        .searchEntities({
+          workspaceId: selectedWorkspaceId,
+          query: trimmed,
+          types: ["chat_channel"],
+          limit: 5,
+        })
+        .then((records) => {
+          if (reqId === chatReqRef.current) setChatConversations(records.slice(0, 5));
+        })
+        .catch(() => {
+          if (reqId === chatReqRef.current) setChatConversations([]);
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [open, trimmed, runtime, selectedWorkspaceId, chatOn]);
+
+  const memberName = useMemo(() => {
+    const names = new Map(members.map((m) => [m.userId, m.displayName?.trim() || "Member"]));
+    return (hit: ChatSearchHit) =>
+      hit.authorLabel ?? (hit.authorId ? names.get(hit.authorId) : null) ?? "Former member";
+  }, [members]);
 
   // Debounced registry search — last-write-wins via a request counter so a slow
   // response can't overwrite a newer query's results. Only navigable kinds are
@@ -178,6 +235,29 @@ export function GlobalCommandPalette() {
       new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: record.type, id: record.id } }),
     );
   }, []);
+
+  // A message lands in its conversation, on it (and its chain when it is a reply).
+  const openChatHit = useCallback(
+    (hit: ChatSearchHit) => {
+      setOpen(false);
+      void navigate({
+        to: "/chat",
+        search: {
+          c: hit.channelId,
+          m: hit.messageId,
+          ...(hit.parentId ? { t: hit.parentId } : {}),
+        } as Record<string, string>,
+      });
+    },
+    [navigate],
+  );
+  const seeAllInChat = useCallback(() => {
+    setOpen(false);
+    void navigate({
+      to: "/chat",
+      search: { view: "search", q: trimmed } as Record<string, string>,
+    });
+  }, [navigate, trimmed]);
 
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
@@ -279,8 +359,15 @@ export function GlobalCommandPalette() {
   const actionCount =
     visibleNav.length + visibleNotes.length + visibleContacts.length + visibleSettings.length;
 
+  const showChat = chatOn && trimmed.length > 0;
+  const chatFound = chatHits.length + chatConversations.length;
   const showNoResults =
-    trimmed.length > 0 && !searching && resultGroups.length === 0 && actionCount === 0;
+    trimmed.length > 0 &&
+    !searching &&
+    resultGroups.length === 0 &&
+    actionCount === 0 &&
+    chatFound === 0 &&
+    !chatFailed;
 
   const renderAction = ({ id, label, icon: Icon, shortcut, run }: Action) => (
     <CommandItem key={id} value={`action:${id}`} onSelect={run}>
@@ -300,7 +387,7 @@ export function GlobalCommandPalette() {
       <CommandInput
         value={query}
         onValueChange={setQuery}
-        placeholder="Search tasks, notes, contacts… or jump to a page"
+        placeholder="Search messages, tasks, notes, contacts… or jump to a page"
       />
       <CommandList>
         {visibleNav.length > 0 ? (
@@ -314,6 +401,57 @@ export function GlobalCommandPalette() {
         ) : null}
         {visibleSettings.length > 0 ? (
           <CommandGroup heading="Workspace">{visibleSettings.map(renderAction)}</CommandGroup>
+        ) : null}
+
+        {showChat && (chatHits.length > 0 || chatFailed) ? (
+          <CommandGroup heading="Messages">
+            {chatFailed ? (
+              <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
+                Search isn't available
+              </div>
+            ) : (
+              chatHits.map((hit) => (
+                <CommandItem
+                  key={`chat_message:${hit.messageId}`}
+                  value={`chat_message:${hit.messageId}`}
+                  onSelect={() => openChatHit(hit)}
+                >
+                  <MessageCircle />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <Snippet text={hit.snippet} className="block truncate" />
+                    <span className="truncate text-xs text-muted-foreground">
+                      {memberName(hit)} · {hit.channelName ?? "Direct message"}
+                    </span>
+                  </span>
+                </CommandItem>
+              ))
+            )}
+          </CommandGroup>
+        ) : null}
+        {showChat && chatConversations.length > 0 ? (
+          <CommandGroup heading="Conversations">
+            {chatConversations.map((record) => {
+              const Icon = resolveEntityIcon(record.type, record.icon);
+              return (
+                <CommandItem
+                  key={`chat_channel:${record.id}`}
+                  value={`entity:chat_channel:${record.id}`}
+                  onSelect={() => openEntityResult(record)}
+                >
+                  <Icon />
+                  <span className="min-w-0 flex-1 truncate">{record.label || "Conversation"}</span>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        ) : null}
+        {showChat ? (
+          <CommandGroup>
+            <CommandItem value="action:see-all-in-chat" onSelect={seeAllInChat}>
+              <Search />
+              <span>See all in Chat</span>
+            </CommandItem>
+          </CommandGroup>
         ) : null}
 
         {/* Keep prior results on screen while a newer query debounces (like the

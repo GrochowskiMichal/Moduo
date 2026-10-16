@@ -30,6 +30,7 @@ import {
   mapMessage,
   mapPerson,
   mapRows,
+  mapSearchHit,
   mapSyncRow,
   mapUnread,
   mapUserChatPrefs,
@@ -58,11 +59,6 @@ function single<T>(data: unknown, mapper: (r: unknown) => T | null, what: string
 
 function fail(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
-}
-
-/** Escape LIKE wildcards so a search for "50%" matches literally. */
-function likeLiteral(q: string): string {
-  return q.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 // ── Results (the store's transport never throws) ────────────────────────────
@@ -192,6 +188,23 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         });
         if (error) return bad(chatError(error));
         return ok(mapRows(data, mapPerson));
+      }),
+
+    search: ({ workspaceId, query, channelId, fromId, after, hasFile, before, limit }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_search", {
+          p_workspace_id: workspaceId,
+          p_query: query,
+          p_channel_id: channelId ?? null,
+          p_before: before?.createdAt ?? null,
+          p_before_id: before?.messageId ?? null,
+          p_limit: limit ?? 50,
+          p_from: fromId ?? null,
+          p_after: after ?? null,
+          p_has_file: hasFile ?? false,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapSearchHit));
       }),
 
     counts: (workspaceId) =>
@@ -479,22 +492,6 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         }
       }
       return out;
-    },
-
-    async search({ workspaceId, query, limit = 40 }) {
-      const term = query.trim();
-      if (!term) return [];
-      const { data, error } = await db()
-        .from("chat_messages")
-        .select(MESSAGE_COLUMNS)
-        .eq("workspace_id", workspaceId)
-        .eq("kind", "message")
-        .is("deleted_at", null)
-        .ilike("body", `%${likeLiteral(term)}%`)
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      fail(error);
-      return mapRows(data, mapMessage);
     },
 
     async createChannel({ workspaceId, name, topic, isPrivate, memberIds, announcement }) {

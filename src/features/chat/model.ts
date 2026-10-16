@@ -191,6 +191,39 @@ export type ChatError = { code: string | null; message: string };
 /** A store read or write: its data, or the error (supabase-js reports on `error`). */
 export type ChatResult<T> = { data: T; error: null } | { data: null; error: ChatError };
 
+/** One hit of `chat_search` (CV-19): a message you can read now, newest first. */
+export type ChatSearchHit = {
+  messageId: string;
+  channelId: string;
+  channelKind: ChatChannelKind;
+  /** The channel's name; null for a direct message (name it from its people). */
+  channelName: string | null;
+  /** The chain's root when the hit is a reply in a chain. */
+  parentId: string | null;
+  replyToId: string | null;
+  authorId: string | null;
+  /** An app's post names the app (`author_kind` "api_key"). */
+  authorLabel: string | null;
+  createdAt: string;
+  /** Plain text; matches sit between U+E000 and U+E001 (`splitSnippet`). */
+  snippet: string;
+};
+
+/** What Chat's Search asks for: the words, and the FilterBar's from · in · has a file · date. */
+export type ChatSearchQuery = {
+  workspaceId: string;
+  query: string;
+  channelId?: string | null;
+  fromId?: string | null;
+  /** Only messages at or after this instant (the date filter). */
+  after?: string | null;
+  hasFile?: boolean;
+  /** The last hit of the previous page: the next page is strictly older. */
+  before?: { createdAt: string; messageId: string } | null;
+  /** At most 50 (the server caps it). */
+  limit?: number;
+};
+
 /** One row of `chat_sync_ids` (CV-2b): what the access check reads. */
 export type ChatSyncRow = {
   kind: "conversation" | "member" | "moved_away" | "checked";
@@ -228,6 +261,8 @@ export type ChatRuntime = {
   /** The access check: what this person may read now (CV-2b). */
   syncIds(workspaceId: string, since: string | null): Promise<ChatResult<ChatSyncRow[]>>;
   people(workspaceId: string): Promise<ChatResult<ChatPerson[]>>;
+  /** Server search over the messages you can read now (CV-19: ⌘K, Chat's Search, find in a conversation). */
+  search(args: ChatSearchQuery): Promise<ChatResult<ChatSearchHit[]>>;
   counts(workspaceId: string): Promise<ChatResult<ChatUnread[]>>;
   /** Send under a client-minted id: a resend returns the stored row. */
   send(args: {
@@ -286,8 +321,6 @@ export type ChatRuntime = {
   }): Promise<ChatHistoryEntry[]>;
   /** How many people are in each of these conversations (Browse channels). */
   memberCounts(channelIds: readonly string[]): Promise<Record<string, number>>;
-  /** Full-text-ish search across messages the user can read (v1; search is its own block). */
-  search(args: { workspaceId: string; query: string; limit?: number }): Promise<ChatMessage[]>;
 
   createChannel(args: {
     workspaceId: string;

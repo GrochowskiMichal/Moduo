@@ -7,6 +7,7 @@
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
+import type { SearchParams } from "../../features/chat/find/model";
 import type { ChatPerson } from "../../features/chat/model";
 import type { ChatSearch } from "../../features/chat/search";
 import { ChatScreen } from "../../features/chat/shell/chat-screen";
@@ -57,6 +58,28 @@ export function ChatPage() {
     void navigate({ to: "/chat", search: next as Record<string, string> });
   }, [navigate, search.c]);
 
+  // Chat's Search keeps the open conversation too; typing replaces the entry.
+  const onSearch = useCallback(
+    (params: SearchParams, opts: { replace?: boolean } = {}) => {
+      const next: ChatSearch = { ...(search.c ? { c: search.c } : {}), view: "search", ...params };
+      void navigate({ to: "/chat", search: next as Record<string, string>, replace: opts.replace });
+    },
+    [navigate, search.c],
+  );
+  const searchParams = useMemo<SearchParams | null>(
+    () =>
+      search.view === "search"
+        ? {
+            ...(search.q ? { q: search.q } : {}),
+            ...(search.from ? { from: search.from } : {}),
+            ...(search.in ? { in: search.in } : {}),
+            ...(search.file ? { file: search.file } : {}),
+            ...(search.date ? { date: search.date } : {}),
+          }
+        : null,
+    [search.view, search.q, search.from, search.in, search.file, search.date],
+  );
+
   return (
     <ChatScreen
       key={selectedWorkspaceId ?? "none"}
@@ -75,6 +98,8 @@ export function ChatPage() {
       browsing={search.view === "browse"}
       onOpen={onOpen}
       onBrowse={onBrowse}
+      search={searchParams}
+      onSearch={onSearch}
     />
   );
 }
