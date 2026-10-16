@@ -294,11 +294,11 @@ export function ChatScreen({
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
   useEffect(() => {
-    if (!ready || conversationId || browsing) return;
+    if (!ready || conversationId || browsing || search) return;
     const general = Object.values(snap.channels).find((c) => c.isDefault && !c.archivedAt);
     const first = general ?? ordered[0]?.channel;
     if (first) onOpen(first.id, { replace: true });
-  }, [ready, conversationId, browsing, snap.channels, ordered, onOpen]);
+  }, [ready, conversationId, browsing, search, snap.channels, ordered, onOpen]);
 
   // Open once per conversation (re-opening would drop a window around a linked message).
   const known = !!conversationId && !!snap.channels[conversationId];
@@ -749,7 +749,7 @@ export function ChatScreen({
   const left = (
     <ChatSidebar
       model={model}
-      activeId={browsing ? null : conversationId}
+      activeId={browsing || search ? null : conversationId}
       personOf={personOf}
       online={online}
       collapsed={collapsed}

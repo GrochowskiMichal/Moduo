@@ -178,10 +178,7 @@ test("a conversation's own Search, the bottom bar's Search, and ⌘J retired", a
   expect(page.url()).toBe(before);
 
   // The bottom bar's Search opens Chat's Search while Chat is open.
-  await page
-    .getByRole("toolbar", { name: "Global actions" })
-    .getByRole("button", { name: "Search", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Search \(/ }).click();
   await expect(page).toHaveURL(/view=search/);
   await expect(view(page)).toBeVisible();
 });

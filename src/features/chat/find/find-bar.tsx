@@ -69,7 +69,7 @@ export function FindBar({ chat, workspaceId, channelId, onJump, onClose, onSeeAl
       <input
         // biome-ignore lint/a11y/noAutofocus: opening the bar is asking to type
         autoFocus
-        type="search"
+        type="text"
         aria-label="Search in this conversation"
         placeholder="Search in this conversation"
         maxLength={256}
