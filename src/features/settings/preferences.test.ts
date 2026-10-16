@@ -47,6 +47,7 @@ describe("DEFAULT_PREFERENCES", () => {
         chatAnnouncements: true,
         chatEvery: true,
       },
+      chatKeyReplies: {},
       confirmBeforeQuit: false,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
@@ -107,6 +108,7 @@ describe("sanitizePreferences", () => {
         chatAnnouncements: true,
         chatEvery: true,
       },
+      chatKeyReplies: {},
       confirmBeforeQuit: true,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {} },
@@ -562,5 +564,17 @@ describe("consumeLandingRedirect", () => {
     signIn();
     localStorage.setItem("moduo.preferences", JSON.stringify({ landingView: "home" }));
     expect(consumeLandingRedirect("/", "")).toBeNull();
+  });
+});
+
+describe("chatKeyReplies (CV-21): a reply switch per key", () => {
+  it("keeps key ids with a boolean, drops the rest, and defaults to none", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(sanitizePreferences({}).chatKeyReplies).toEqual({});
+    expect(
+      sanitizePreferences({ chatKeyReplies: { [id]: false, "not-a-key": true, [id.replace("1", "2")]: "yes" } })
+        .chatKeyReplies,
+    ).toEqual({ [id]: false });
+    expect(sanitizePreferences({ chatKeyReplies: "nope" }).chatKeyReplies).toEqual({});
   });
 });

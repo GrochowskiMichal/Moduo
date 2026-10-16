@@ -32,8 +32,10 @@ import {
   type NotificationType,
   usePreferences,
 } from "../../../lib/preferences";
-import { isTauriRuntime } from "../../../lib/runtime";
+import { isTauriRuntime, type WorkspaceApiKey } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { keysWithReplySwitch } from "../api-keys";
 
 import { QuietHoursGroup } from "./quiet-hours-group";
 import { SettingsSectionShell } from "./section-shell";
@@ -122,8 +124,8 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
  *  rows and turns off the notification and the email for its messages (the
  *  server reads them since CV-18). Catch up keeps every item.
  *  Prototype frame 9 (Settings · Notifications · Chat) draws one switch for
- *  all of them; the spec's table names four (a key's own switch arrives with
- *  CV-21). */
+ *  all of them; the spec's table names four, plus one per key of yours
+ *  (CV-21, ChatKeyReplyRows). */
 const CHAT_NOTIFICATION_ROWS: ReadonlyArray<{
   type: NotificationType;
   title: string;
@@ -374,6 +376,7 @@ function ChatNotificationsGroup() {
           />
         </PrefRow>
       ))}
+      <ChatKeyReplyRows />
       <PrefRow
         title="Show message text in notifications"
         description="Turn off if you share your screen: a notification then says who and where, not what."
@@ -405,6 +408,53 @@ function ChatNotificationsGroup() {
       </PrefRow>
     </PrefGroup>
   );
+}
+
+/** One switch per live key of yours that reads chat here (CV-21, §11): a reply
+ *  to a post made through that key reaches you only while it's on, unless the
+ *  reply mentions you. Keys are listed to key managers (who make keys). */
+function ChatKeyReplyRows() {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspace, can } = useWorkspace();
+  const { preferences, setPreferences } = usePreferences();
+  const [keys, setKeys] = useState<WorkspaceApiKey[]>([]);
+  const workspaceId = selectedWorkspace?.id ?? null;
+  const canList = can("ws.api_keys");
+
+  useEffect(() => {
+    if (!runtime || !workspaceId || !userId || !canList) {
+      setKeys([]);
+      return;
+    }
+    let cancelled = false;
+    runtime.workspace.listApiKeys(workspaceId).then(
+      (list) => {
+        if (!cancelled) setKeys(keysWithReplySwitch(list, userId));
+      },
+      () => {
+        if (!cancelled) setKeys([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, workspaceId, userId, canList]);
+
+  return keys.map((key) => (
+    <PrefRow
+      key={key.id}
+      title={`Replies to posts by ${key.name}`}
+      description="When someone replies to a post made through this key. A reply that mentions you always reaches you."
+    >
+      <Switch
+        checked={preferences.chatKeyReplies[key.id] ?? true}
+        onCheckedChange={(v) =>
+          setPreferences({ chatKeyReplies: { ...preferences.chatKeyReplies, [key.id]: v } })
+        }
+        aria-label={`Replies to posts by ${key.name}`}
+      />
+    </PrefRow>
+  ));
 }
 
 /** Where reminders reach you (REPLAN 73): your bell always, plus the desktop

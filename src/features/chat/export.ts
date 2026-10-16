@@ -371,7 +371,11 @@ export function conversationMarkdown(
   const byId = new Map(messages.map((m) => [m.id, m]));
   for (const m of messages) {
     if (m.kind === "event") continue;
-    const who = m.authorId ? nameOf(m.authorId) : `${m.authorLabel ?? "An app"} (app)`;
+    const who = !m.authorId
+      ? `${m.authorLabel ?? "An app"} (app)`
+      : m.authorKind === "api_key"
+        ? `${nameOf(m.authorId)} · via ${m.authorLabel ?? "an app"}`
+        : nameOf(m.authorId);
     const parent = m.parentId ? byId.get(m.parentId) : null;
     const reply = m.parentId
       ? ` · reply to ${parent?.authorId ? nameOf(parent.authorId) : "a message"} (${m.parentId})`

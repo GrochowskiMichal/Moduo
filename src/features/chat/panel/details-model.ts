@@ -137,3 +137,21 @@ export function detailsStamp(rows: readonly ChatMessage[] | undefined): string {
   }
   return out;
 }
+
+/**
+ * CV-21 (§14): Details' line under People when a key reads this private
+ * channel: "An app of Alex's can read this", "An app of yours …", "Apps of
+ * Alex's and Sam's …". Null when no key does.
+ */
+export function keyReadersLine(
+  readers: ReadonlyArray<{ userId: string; name: string }> | null | undefined,
+  selfId: string | null,
+): string | null {
+  if (!readers || readers.length === 0) return null;
+  const owners = readers.map((r) => (r.userId === selfId ? "yours" : `${r.name}'s`));
+  // Yours first: it's the one you can turn off.
+  owners.sort((a, b) => (a === "yours" ? -1 : b === "yours" ? 1 : 0));
+  if (owners.length === 1) return `An app of ${owners[0]} can read this`;
+  const list = `${owners.slice(0, -1).join(", ")} and ${owners[owners.length - 1]}`;
+  return `Apps of ${list} can read this`;
+}

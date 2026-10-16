@@ -11,6 +11,7 @@ import {
   detailsPeople,
   detailsStamp,
   dmIntent,
+  keyReadersLine,
   pickable,
 } from "./details-model";
 import { readInContext } from "./message-in-context";
@@ -171,5 +172,24 @@ describe("when Details reads again", () => {
     expect(detailsStamp([...base, row("c", { kind: "event" })])).not.toBe(detailsStamp(base));
     // CV-14: a decision marked in the window reads Details again.
     expect(detailsStamp([...base, row("c", { decisionAt: "t" })])).not.toBe(detailsStamp(base));
+  });
+});
+
+describe("keyReadersLine (CV-21): who has an app that reads this private channel", () => {
+  it("names the people whose keys read it, yours first", () => {
+    expect(keyReadersLine([], "me")).toBeNull();
+    expect(keyReadersLine(null, "me")).toBeNull();
+    expect(keyReadersLine([{ userId: "a", name: "Alex" }], "me")).toBe("An app of Alex's can read this");
+    expect(keyReadersLine([{ userId: "me", name: "Me" }], "me")).toBe("An app of yours can read this");
+    expect(
+      keyReadersLine(
+        [
+          { userId: "a", name: "Alex" },
+          { userId: "me", name: "Me" },
+          { userId: "s", name: "Sam" },
+        ],
+        "me",
+      ),
+    ).toBe("Apps of yours, Alex's and Sam's can read this");
   });
 });

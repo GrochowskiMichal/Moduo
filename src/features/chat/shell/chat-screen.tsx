@@ -1644,6 +1644,7 @@ export function ChatScreen({
             members={details.members}
             pinned={details.pinned}
             decisions={details.decisions}
+            keyReaders={details.keyReaders}
             history={details.history}
             canArchive={
               channel.kind === "channel" &&

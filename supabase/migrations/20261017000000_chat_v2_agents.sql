@@ -35,8 +35,8 @@
 --      chat__sender_label): a key's post reaches its creator like anyone's
 --      (mentions, Every message); a reply to a key's post reaches its creator
 --      only while that key's notification switch is on
---      (user_preferences.preferences.notifications.chatKeys.<key id>, on when
---      unset), unless it mentions them; the bell, notices and emails say
+--      (user_preferences.preferences.chatKeyReplies.<key id>, on when unset),
+--      unless it mentions them; the bell, notices and emails say
 --      "<person> · via <key>".
 --   5. Counts (chat_unread_counts, chat_catchup_open): a key's posts count as
 --      unread for their creator; replies to them count only through the switch.
@@ -187,7 +187,7 @@ AS $$
   SELECT p_key IS NULL OR coalesce((
     SELECT CASE WHEN jsonb_typeof(v.val) = 'boolean' THEN (v.val #>> '{}')::boolean END
       FROM public.user_preferences up
-     CROSS JOIN LATERAL (SELECT up.preferences -> 'notifications' -> 'chatKeys' -> (p_key::text) AS val) v
+     CROSS JOIN LATERAL (SELECT up.preferences -> 'chatKeyReplies' -> (p_key::text) AS val) v
      WHERE up.user_id = p_user), true)
 $$;
 

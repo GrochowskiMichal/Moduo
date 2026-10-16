@@ -114,7 +114,7 @@ export type ChatMessage = {
   /** 1: v1 markup, 2: the v2 stored form. */
   formatVersion: number;
   authorId: string | null;
-  /** "api_key" = posted by an app/agent over MCP (authorId is null). */
+  /** "api_key" = posted through an API key: since CV-21 authorId is the key's creator ("Alex · via <key>"); v1 rows have a null authorId. */
   authorKind: ContentAuthorKind;
   /** The app's name at post time, for api_key authors. */
   authorLabel: string | null;
@@ -465,6 +465,11 @@ export type ChatRuntime = {
   listPinned(channelId: string): Promise<ChatMessage[]>;
   /** The conversation's decisions (Details), newest marked first. */
   listDecisions(channelId: string): Promise<ChatMessage[]>;
+  /**
+   * CV-21: whose API keys read this private channel ("An app of Alex's can
+   * read this"); empty for a public channel or one you can't read.
+   */
+  listKeyReaders(channelId: string): Promise<Array<{ userId: string; name: string }>>;
   /** A conversation's quiet history (Details, AC15.5): its logged changes, newest first. */
   history(args: {
     workspaceId: string;

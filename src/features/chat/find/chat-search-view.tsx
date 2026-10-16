@@ -216,8 +216,10 @@ export function ChatSearchView({
 }
 
 export function authorOf(hit: ChatSearchHit, personOf: (id: string) => ChatPerson | undefined) {
-  if (hit.authorLabel) return hit.authorLabel;
-  return (hit.authorId ? personOf(hit.authorId)?.name : null) ?? "Former member";
+  const person = (hit.authorId ? personOf(hit.authorId)?.name : null) ?? "Former member";
+  // A post through a key is its creator's (CV-21); v1's app posts name the app alone.
+  if (hit.authorLabel) return hit.authorId ? `${person} · via ${hit.authorLabel}` : hit.authorLabel;
+  return person;
 }
 
 function HitRow({

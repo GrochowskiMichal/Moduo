@@ -7,6 +7,7 @@ import { normalizeMcpKeyScope, type PermissionKey } from "@contracts/vocabularie
 import { describe, expect, it } from "@rstest/core";
 
 import { moduleManifests } from "../../lib/module-registry";
+import type { WorkspaceApiKey } from "../../lib/runtime.types";
 import {
   ceilingHint,
   clampScopes,
@@ -22,6 +23,7 @@ import {
   type KeyActor,
   keyLifecycle,
   keyScopeCap,
+  keysWithReplySwitch,
   MCP_KEY_MODULES,
   MCP_KEY_SCOPES,
   type McpKeyScopes,
@@ -573,5 +575,27 @@ describe("key expiry", () => {
     expect(fresh.staleNote).toBeNull();
     const used = keyLifecycle({ createdAt: day(-200), lastUsedAt: day(-59), expiresAt: null }, NOW);
     expect(used.staleNote).toBeNull();
+  });
+});
+
+describe("keysWithReplySwitch: a reply switch per key of yours that reads chat (CV-21)", () => {
+  const base = {
+    workspaceId: "w1",
+    keyPrefix: "moduo_sk_000000",
+    createdAt: "2026-10-01T00:00:00Z",
+    lastUsedAt: null,
+    expiresAt: null,
+    includePrivateChat: false,
+  };
+  const now = Date.parse("2026-10-16T00:00:00Z");
+  it("lists your live chat keys only", () => {
+    const keys: WorkspaceApiKey[] = [
+      { ...base, id: "a", name: "CI", scopes: { chat: "edit" }, createdBy: "me" },
+      { ...base, id: "b", name: "Reader", scopes: { chat: "view" }, createdBy: "me" },
+      { ...base, id: "c", name: "Tasks", scopes: { tasks: "edit" }, createdBy: "me" },
+      { ...base, id: "d", name: "Theirs", scopes: { chat: "edit" }, createdBy: "anna" },
+      { ...base, id: "e", name: "Old", scopes: { chat: "edit" }, createdBy: "me", expiresAt: "2026-10-01T00:00:00Z" },
+    ];
+    expect(keysWithReplySwitch(keys, "me", now).map((k) => k.id)).toEqual(["a", "b"]);
   });
 });

@@ -93,12 +93,10 @@ CREATE FUNCTION test.items(p_who text, p_msg text) RETURNS text LANGUAGE sql AS 
 $$;
 CREATE FUNCTION test.set_key_replies(p_who text, p_key text, p_on boolean) RETURNS void LANGUAGE sql AS $$
   INSERT INTO public.user_preferences (user_id, preferences)
-  VALUES (test.id(p_who), jsonb_build_object('notifications', jsonb_build_object('chatKeys',
-          jsonb_build_object(test.id(p_key)::text, p_on))))
+  VALUES (test.id(p_who), jsonb_build_object('chatKeyReplies', jsonb_build_object(test.id(p_key)::text, p_on)))
   ON CONFLICT (user_id) DO UPDATE
-    SET preferences = jsonb_set(coalesce(public.user_preferences.preferences, '{}'), '{notifications}',
-          coalesce(public.user_preferences.preferences -> 'notifications', '{}')
-          || jsonb_build_object('chatKeys', jsonb_build_object(test.id(p_key)::text, p_on)))
+    SET preferences = coalesce(public.user_preferences.preferences, '{}')
+          || jsonb_build_object('chatKeyReplies', jsonb_build_object(test.id(p_key)::text, p_on))
 $$;
 
 -- ── Setup ───────────────────────────────────────────────────────────────────
@@ -308,6 +306,13 @@ BEGIN
     'read: a chain is its root and its replies', v);
   v := test.key_value('KV', format($q$SELECT count(*)::text FROM public.chat_agent_messages(%L, NULL, NULL, NULL, 1)$q$, test.ref('Q')));
   PERFORM test.ok(v = '1', 'read: pages are capped by the limit', v);
+  v := test.key_value('KV', format($q$SELECT string_agg(id::text, ',') FROM public.chat_agent_messages(%L, %L, NULL, %L, 100)$q$,
+    test.ref('Q'), test.ref('k1'), test.ref('k4')));
+  PERFORM test.ok(v IS NOT NULL AND v NOT LIKE '%' || test.ref('k4')::text || '%',
+    'read: a page starts before a message id alone', v);
+  v := test.key_value('KV', format($q$SELECT count(*)::text FROM public.chat_agent_messages(%L, NULL, NULL, %L)$q$,
+    test.ref('Q'), test.ref('dm1')));
+  PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'read: a page can''t start from another conversation''s message', v);
 
   v := test.key_value('KV', format($q$SELECT string_agg(channel_name, ',' ORDER BY channel_name) FROM public.chat_agent_search(%L, 'zebra')$q$, test.id('W')));
   PERFORM test.ok(v = 'builds', 'search: finds the public channel''s message, never the DM, P (switch off) or R', v);

@@ -208,6 +208,8 @@ export type WorkspaceApiKey = {
   lastUsedAt: string | null;
   /** When the key stops working; null = never. An expired key stays listed until revoked. */
   expiresAt: string | null;
+  /** Chat (CV-21): the key also reads the private channels its creator is in. Off by default. */
+  includePrivateChat: boolean;
 };
 
 /**
@@ -478,6 +480,11 @@ export type ModuoRuntime = {
      * from `scopes` keep their level. Only the key's creator can raise a level.
      */
     setApiKeyScopes(keyId: string, scopes: Record<string, string>): Promise<Record<string, string>>;
+    /**
+     * Chat (CV-21): "Include private channels I'm in". Only the key's creator
+     * turns it on; any key manager turns it off. Resolves to the new value.
+     */
+    setApiKeyPrivateChat(keyId: string, on: boolean): Promise<boolean>;
     revokeApiKey(keyId: string): Promise<void>;
     /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
     getMcpEndpoint(): string;

@@ -14,9 +14,17 @@ export type ConversationDetails = {
   /** Marked decisions (CV-14). */
   decisions: ChatMessage[] | null;
   history: ChatHistoryEntry[] | null;
+  /** CV-21: whose keys read this private channel. */
+  keyReaders: Array<{ userId: string; name: string }> | null;
 };
 
-const NONE: ConversationDetails = { members: null, pinned: null, decisions: null, history: null };
+const NONE: ConversationDetails = {
+  members: null,
+  pinned: null,
+  decisions: null,
+  history: null,
+  keyReaders: null,
+};
 
 export function useConversationDetails(
   chat: ChatRuntime | null,
@@ -53,6 +61,10 @@ export function useConversationDetails(
       .listDecisions(channelId)
       .then((rows) => settle("decisions", rows))
       .catch(() => settle("decisions", []));
+    void chat
+      .listKeyReaders(channelId)
+      .then((rows) => settle("keyReaders", rows))
+      .catch(() => settle("keyReaders", []));
     void chat
       .history({ workspaceId, channelId })
       .then((rows) => settle("history", rows))

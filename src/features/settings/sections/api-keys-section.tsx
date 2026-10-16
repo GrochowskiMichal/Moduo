@@ -16,6 +16,7 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { Switch } from "../../../components/ui/switch";
 import type { WorkspaceApiKey } from "../../../lib/runtime";
 import { formatFullDate } from "../../../lib/time-format";
 import { useAuth } from "../../../providers/auth-provider";
@@ -187,6 +188,8 @@ function ApiKeyRow({
   onToggleEdit,
   onSave,
   onRevoke,
+  privateBusy,
+  onSetPrivateChat,
 }: {
   apiKey: WorkspaceApiKey;
   owner: KeyOwner;
@@ -199,8 +202,11 @@ function ApiKeyRow({
   onToggleEdit: () => void;
   onSave: () => void;
   onRevoke: () => void;
+  privateBusy: boolean;
+  onSetPrivateChat: (on: boolean) => void;
 }) {
   const scopes = toKeyScopes(apiKey.scopes);
+  const privateId = useId();
   // What it can do today: its scopes, capped by its creator's access (or just
   // its scopes while that access isn't known).
   const effective = owner.known ? effectiveScopes(scopes, owner.actor) : scopes;
@@ -318,6 +324,28 @@ function ApiKeyRow({
               extraNotes={extraNotes}
               disabled={saving}
             />
+            {/* CV-21: its own switch, saved at once (not a scope: KEYS-1's map stays as it is). */}
+            {draft.chat !== "none" || apiKey.includePrivateChat ? (
+              <div className="flex items-center justify-between gap-4 border-t border-border pt-3">
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <Label htmlFor={privateId} className="text-sm text-foreground">
+                    Include private channels I'm in
+                  </Label>
+                  <span id={`${privateId}-hint`} className="text-xs text-muted-foreground">
+                    {owner.isMine
+                      ? "Off: it reads public channels only. Direct messages stay out of reach of every key."
+                      : `Only ${owner.name} can turn this on. You can turn it off.`}
+                  </span>
+                </div>
+                <Switch
+                  id={privateId}
+                  aria-describedby={`${privateId}-hint`}
+                  checked={apiKey.includePrivateChat}
+                  disabled={privateBusy || saving || (!owner.isMine && !apiKey.includePrivateChat)}
+                  onCheckedChange={(on) => onSetPrivateChat(on === true)}
+                />
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">
@@ -379,6 +407,7 @@ export function ApiKeysSection() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editScopes, setEditScopes] = useState<McpKeyScopes>(() => ({ ...DEFAULT_KEY_SCOPES }));
   const [saving, setSaving] = useState(false);
+  const [privateBusyId, setPrivateBusyId] = useState<string | null>(null);
   // Revoke is instant + irreversible (the secret can't be re-shown), so it
   // confirms first — the confirm-not-undo half of the DF-5 grammar.
   const [revokeTarget, setRevokeTarget] = useState<WorkspaceApiKey | null>(null);
@@ -593,6 +622,22 @@ export function ApiKeysSection() {
     }
   };
 
+  const handleSetPrivateChat = async (key: WorkspaceApiKey, on: boolean) => {
+    if (!runtime || privateBusyId) return;
+    setPrivateBusyId(key.id);
+    try {
+      const next = await runtime.workspace.setApiKeyPrivateChat(key.id, on);
+      setKeys((prev) => prev?.map((k) => (k.id === key.id ? { ...k, includePrivateChat: next } : k)) ?? prev);
+      toast.success(
+        next ? `${key.name} can read your private channels.` : `${key.name} reads public channels only.`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't change the key.");
+    } finally {
+      setPrivateBusyId(null);
+    }
+  };
+
   const handleRevoke = async (key: WorkspaceApiKey) => {
     if (!runtime) return;
     try {
@@ -760,6 +805,8 @@ export function ApiKeysSection() {
                       onToggleEdit={() => toggleEdit(key)}
                       onSave={() => void handleSave(key)}
                       onRevoke={() => setRevokeTarget(key)}
+                      privateBusy={privateBusyId === key.id}
+                      onSetPrivateChat={(on) => void handleSetPrivateChat(key, on)}
                     />
                   );
                 })}
