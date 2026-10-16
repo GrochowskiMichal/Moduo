@@ -2,8 +2,8 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { readChatExport } from "@/features/chat/export";
-import { listMyClients } from "@/lib/notices/clients";
+import { readChatExport, signedFileBytes } from "@/features/chat/export";
+import { listMyClients, listMyNoticePauses } from "@/lib/notices/clients";
 import { listSavedStatuses, readMyStatus } from "@/lib/statuses/api";
 import {
   closeUploadsDb,
@@ -124,7 +124,22 @@ async function gatherExport(
     (async (): Promise<ModuleReadResult> => {
       try {
         if (!userId) throw new Error("Sign in to export chat.");
-        const chat = await readChatExport(runtime.chat, workspaceId, userId);
+        const c = runtime.chat;
+        const chat = await readChatExport(
+          {
+            listChannels: (ws) => c.listChannels(ws),
+            page: (args) => c.page(args),
+            chain: (rootId) => c.chain(rootId),
+            people: (ws) => c.people(ws),
+            // CV-9: each conversation's files, then their bytes through signed links.
+            files: c.files ? (args) => c.files!(args) : undefined,
+            fileBytes: signedFileBytes((paths, ttl) =>
+              runtime.attachments.signedUrls(paths, ttl),
+            ),
+          },
+          workspaceId,
+          userId,
+        );
         return { module: "chat", ok: true, data: chat.data, files: chat.files };
       } catch (err) {
         return {
@@ -134,8 +149,12 @@ async function gatherExport(
         };
       }
     })(),
-    // CV-22: your own apps and tabs (nobody else's).
-    read("devices", async () => ({ devices: userId ? await listMyClients(userId) : [] })),
+    // CV-22: your own apps and tabs, and the workspaces whose notices you
+    // paused (CV-18), nobody else's.
+    read("devices", async () => ({
+      devices: userId ? await listMyClients(userId) : [],
+      noticePauses: userId ? await listMyNoticePauses(userId) : [],
+    })),
   ]);
 }
 

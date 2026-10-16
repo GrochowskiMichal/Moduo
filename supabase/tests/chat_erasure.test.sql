@@ -1,6 +1,7 @@
 -- Chat v2 account erasure (AC12.8, its tables). CV-1 adds chat_catchup and
 -- chat_chain_mutes to account_erase_workspace_data (preview counts and deletes);
--- CV-22 adds user_clients, user_statuses and user_saved_statuses, and checks that
+-- CV-22 adds user_clients, user_statuses, user_saved_statuses and CV-18's
+-- user_notice_pauses and user_status_changes, and checks that
 -- no published table is keyed by a person.
 --
 -- Cast: O owns workspace W; E and F are members; E also owns W2. Rows are written
@@ -70,6 +71,14 @@ INSERT INTO public.user_saved_statuses (user_id, text, clear_after, position) VA
   (test.id('E'), 'Sleeping', 'never', 0),
   (test.id('E'), 'Deep work', 'never', 1),
   (test.id('F'), 'Lunch', 'never', 0);
+-- CV-18: paused workspaces and the status-change counter.
+INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES
+  (test.id('E'), test.id('W')),
+  (test.id('E'), test.id('W2')),
+  (test.id('F'), test.id('W'));
+INSERT INTO public.user_status_changes (user_id, window_start, n) VALUES
+  (test.id('E'), now(), 3),
+  (test.id('F'), now(), 1);
 
 DO $$
 DECLARE
@@ -84,6 +93,8 @@ BEGIN
   PERFORM test.ok((v ->> 'user_clients_deleted')::int = 2 AND (v ->> 'user_statuses_deleted')::int = 1
                   AND (v ->> 'saved_statuses_deleted')::int = 2,
     'preview: counts E''s devices, status and saved statuses', v::text);
+  PERFORM test.ok((v ->> 'notice_pauses_deleted')::int = 2 AND (v ->> 'status_changes_deleted')::int = 1,
+    'preview: counts E''s paused workspaces and status-change counter', v::text);
   PERFORM test.ok((SELECT count(*) FROM public.chat_catchup WHERE user_id = test.id('E')) = 3
                   AND (SELECT count(*) FROM public.user_clients WHERE user_id = test.id('E')) = 2
                   AND (SELECT count(*) FROM public.user_statuses WHERE user_id = test.id('E')) = 1,
@@ -109,6 +120,12 @@ BEGIN
     AND (SELECT count(*) FROM public.user_saved_statuses WHERE user_id = test.id('F')) = 1,
     'erase: F''s devices and statuses are untouched');
   PERFORM test.ok(
+    NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('E'))
+    AND NOT EXISTS (SELECT 1 FROM public.user_status_changes WHERE user_id = test.id('E'))
+    AND EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('F'))
+    AND EXISTS (SELECT 1 FROM public.user_status_changes WHERE user_id = test.id('F')),
+    'erase: E''s pauses and status-change counter are gone; F''s stay');
+  PERFORM test.ok(
     NOT EXISTS (SELECT 1 FROM public.chat_channels WHERE id = test.id('c:left'))
     AND EXISTS (SELECT 1 FROM public.chat_channels WHERE id = test.id('c:kept')),
     'erase: the channel only a former member shared with E goes; the one G is in stays');
@@ -130,8 +147,10 @@ BEGIN
     NOT EXISTS (SELECT 1 FROM public.user_clients WHERE user_id = test.id('F'))
     AND NOT EXISTS (SELECT 1 FROM public.user_statuses WHERE user_id = test.id('F'))
     AND NOT EXISTS (SELECT 1 FROM public.user_saved_statuses WHERE user_id = test.id('F'))
-    AND NOT EXISTS (SELECT 1 FROM public.chat_members WHERE user_id = test.id('F')),
-    'cascade: and its devices, statuses and memberships');
+    AND NOT EXISTS (SELECT 1 FROM public.chat_members WHERE user_id = test.id('F'))
+    AND NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('F'))
+    AND NOT EXISTS (SELECT 1 FROM public.user_status_changes WHERE user_id = test.id('F')),
+    'cascade: and its devices, statuses, memberships and pauses');
 END;
 $$;
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { buildExportBundle, type ModuleReadResult } from "../settings/advanced";
-import { type ChatExportReads, readChatExport, shapeChatExport } from "./export";
-import type { ChatChannel, ChatKey, ChatMessage, ChatPerson } from "./model";
+import { type ChatExportReads, readChatExport, shapeChatExport, signedFileBytes } from "./export";
+import type { ChatChannel, ChatFile, ChatKey, ChatMessage, ChatPerson } from "./model";
 
 const ME = "me-0000-0000";
 const ANA = "ana-0000-0000";
@@ -74,13 +74,57 @@ const PEOPLE: ChatPerson[] = [
 
 const at = (n: number) => new Date(Date.UTC(2026, 9, 10, 0, 0, n)).toISOString();
 
+function file(id: string, messageId: string, sentAt: string, extra: Partial<ChatFile> = {}): ChatFile {
+  return {
+    id,
+    messageId,
+    authorId: ANA,
+    fileName: `${id}.png`,
+    mime: "image/png",
+    sizeBytes: 4,
+    width: null,
+    height: null,
+    objectPath: `w/chat/${id}`,
+    previewPath: null,
+    previewMime: null,
+    sentAt,
+    ...extra,
+  };
+}
+
+/** `chat_files`: newest message first, at most 2 a page (so paging is exercised). */
+function fakeFiles(byChannel: Record<string, ChatFile[]>): NonNullable<ChatExportReads["files"]> {
+  return async ({ channelId, before }) => {
+    if (byChannel[channelId] === undefined) {
+      return { data: null, error: { code: "42501", message: "Not yours." } };
+    }
+    const all = [...byChannel[channelId]!].sort((a, b) =>
+      a.sentAt === b.sentAt ? (a.id < b.id ? 1 : -1) : a.sentAt < b.sentAt ? 1 : -1,
+    );
+    const older = before
+      ? all.filter((f) => f.sentAt < before.sentAt || (f.sentAt === before.sentAt && f.id < before.id))
+      : all;
+    return { data: older.slice(0, 2), error: null };
+  };
+}
+
+function fakeBytes(byPath: Record<string, Uint8Array>): NonNullable<ChatExportReads["fileBytes"]> {
+  return async (paths) => {
+    const out = new Map<string, Uint8Array>();
+    for (const p of paths) if (byPath[p]) out.set(p, byPath[p]!);
+    return out;
+  };
+}
+
 /** A fake of the app's reads: pages newest-first on the wire, returned oldest first. */
 function fakeReads(
   streams: Record<string, ChatMessage[]>,
   opts: {
     chains?: Record<string, ChatMessage[]>;
     refused?: string[];
-    files?: ChatExportReads["files"];
+    extraFiles?: ChatExportReads["extraFiles"];
+    chatFiles?: Record<string, ChatFile[]>;
+    bytes?: Record<string, Uint8Array>;
     /** The server answers at most this many, whatever is asked. */
     cap?: number;
   } = {},
@@ -125,7 +169,9 @@ function fakeReads(
     async people() {
       return { data: PEOPLE, error: null };
     },
-    files: opts.files,
+    extraFiles: opts.extraFiles,
+    files: opts.chatFiles ? fakeFiles(opts.chatFiles) : undefined,
+    fileBytes: opts.bytes ? fakeBytes(opts.bytes) : undefined,
   };
   return { reads, calls };
 }
@@ -222,7 +268,7 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
     const { reads } = fakeReads(
       { general: [] },
       {
-        files: async () => [
+        extraFiles: async () => [
           { path: "attachments/m1/photo.png", bytes: png },
           { path: "../../etc/passwd", bytes: new Uint8Array([1]) },
           { path: "emoji/party:parrot.gif", bytes: new Uint8Array([2]) },
@@ -239,7 +285,7 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
   it("goes into the zip as chat.json plus chat/<conversation>.md and chat/files/…", async () => {
     const { reads } = fakeReads(
       { general: [msg("g1", "general", at(1))], "dm-ana": [] },
-      { files: async () => [{ path: "a/b.txt", bytes: new Uint8Array([3]) }] },
+      { extraFiles: async () => [{ path: "a/b.txt", bytes: new Uint8Array([3]) }] },
     );
     const chat = await readChatExport(reads, "w", ME);
     const results: ModuleReadResult[] = [
@@ -258,5 +304,91 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
     expect(names.filter((n) => n.startsWith("chat/") && n.endsWith(".md"))).toHaveLength(2);
     expect(bundle.entries["chat/files/a/b.txt"]).toBeInstanceOf(Uint8Array);
     expect(JSON.parse(bundle.entries["chat.json"] as string).conversations).toHaveLength(2);
+  });
+
+  it("writes every message's files you can read as bytes, listed in chat.json and linked from the Markdown", async () => {
+    const m1 = msg("m1", "general", at(1));
+    const m2 = msg("m2", "general", at(2));
+    const files = [
+      file("f1", "m1", at(1), { fileName: "photo.png" }),
+      file("f2", "m1", at(1), { fileName: "photo.png" }),
+      file("f3", "m2", at(2), { fileName: "notes.txt", mime: "text/plain" }),
+      file("f4", "m2", at(2), { fileName: "gone.pdf" }),
+      // A file whose message the export doesn't hold is left out.
+      file("f5", "elsewhere", at(3)),
+    ];
+    const bytes = {
+      "w/chat/f1": new Uint8Array([1]),
+      "w/chat/f2": new Uint8Array([2]),
+      "w/chat/f3": new Uint8Array([3]),
+      "w/chat/f5": new Uint8Array([5]),
+    };
+    const { reads } = fakeReads({ general: [m1, m2] }, { chatFiles: { general: files }, bytes });
+    const out = await readChatExport(reads, "w", ME);
+    expect(out.files["files/attachments/m1/photo.png"]).toEqual(new Uint8Array([1]));
+    expect(out.files["files/attachments/m1/photo (2).png"]).toEqual(new Uint8Array([2]));
+    expect(out.files["files/attachments/m2/notes.txt"]).toEqual(new Uint8Array([3]));
+    expect(Object.values(out.files)).not.toContainEqual(new Uint8Array([5]));
+    const listed = out.data.conversations[0]!.files;
+    expect(listed.map((f) => f.id).sort()).toEqual(["f1", "f2", "f3", "f4"]);
+    expect(listed.find((f) => f.id === "f4")).toMatchObject({
+      path: null,
+      missing: "Couldn't be read.",
+    });
+    expect(listed.find((f) => f.id === "f2")!.path).toBe("files/attachments/m1/photo (2).png");
+    const md = Object.entries(out.files).find(([k]) => k.endsWith(".md"))![1] as string;
+    expect(md).toContain("Files: [photo.png](files/attachments/m1/photo.png)");
+    expect(md).toContain("gone.pdf (Couldn't be read.)");
+    expect(JSON.stringify(out.data)).not.toContain("w/chat/");
+  });
+
+  it("files of a conversation the server refuses aren't read; a refused file list is incomplete", async () => {
+    const { reads } = fakeReads(
+      { general: [msg("g1", "general", at(1))], secret: [msg("s1", "secret", at(1))] },
+      {
+        refused: ["secret"],
+        chatFiles: { secret: [file("s", "s1", at(1))] },
+        bytes: { "w/chat/s": new Uint8Array([9]) },
+      },
+    );
+    const out = await readChatExport(reads, "w", ME);
+    expect(Object.keys(out.files).some((k) => k.startsWith("files/"))).toBe(false);
+    expect(out.data.incomplete).toEqual([
+      { channelId: "general", error: "Files: Not yours." },
+      { channelId: "secret", error: "You can't read this conversation." },
+    ]);
+  });
+
+  it("stops writing bytes at the size budget and says so", async () => {
+    const m1 = msg("m1", "general", at(1));
+    const files = [
+      file("a", "m1", at(1), { sizeBytes: 6 }),
+      file("b", "m1", at(1), { sizeBytes: 6 }),
+    ];
+    const { reads } = fakeReads(
+      { general: [m1] },
+      {
+        chatFiles: { general: files },
+        bytes: { "w/chat/a": new Uint8Array(6), "w/chat/b": new Uint8Array(6) },
+      },
+    );
+    const out = await readChatExport(reads, "w", ME, { fileBudget: 10 });
+    const listed = out.data.conversations[0]!.files;
+    expect(listed.filter((f) => f.path)).toHaveLength(1);
+    expect(listed.filter((f) => f.missing === "Over the export's size limit.")).toHaveLength(1);
+  });
+
+  it("reads bytes through signed links only; a failed fetch is left out", async () => {
+    const fetchImpl = (async (url: string) =>
+      url === "https://signed/a"
+        ? new Response(new Uint8Array([7]))
+        : new Response("no", { status: 403 })) as unknown as typeof fetch;
+    const read = signedFileBytes(
+      async (paths) => new Map(paths.map((p) => [p, `https://signed/${p}`])),
+      fetchImpl,
+    );
+    const got = await read(["a", "b"]);
+    expect([...got.keys()]).toEqual(["a"]);
+    expect(got.get("a")).toEqual(new Uint8Array([7]));
   });
 });

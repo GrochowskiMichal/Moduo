@@ -111,3 +111,24 @@ export async function listMyClients(userId: string): Promise<MyClient[]> {
     lastActiveAt: r.last_active_at == null ? null : String(r.last_active_at),
   }));
 }
+
+/** A workspace whose notices you paused (CV-18), as the export lists it (CV-22). */
+export type MyNoticePause = { workspaceId: string; pausedAt: string };
+
+/** Your own paused workspaces (the table's rule shows each person only their own). */
+export async function listMyNoticePauses(userId: string): Promise<MyNoticePause[]> {
+  const { data, error } = await supabaseClient
+    .from("user_notice_pauses")
+    .select("workspace_id, paused_at")
+    .eq("user_id", userId)
+    .order("paused_at", { ascending: true });
+  if (error) {
+    // Before CV-18's migration the table doesn't exist: nothing paused.
+    if (error.code === "42P01" || error.code === "PGRST205") return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((r) => ({
+    workspaceId: String(r.workspace_id),
+    pausedAt: String(r.paused_at),
+  }));
+}
