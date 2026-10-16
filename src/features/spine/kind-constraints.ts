@@ -11,7 +11,12 @@
 // deliberately permissive on the generic kinds (`references`, `mentions`) and
 // narrow only where a kind carries a hard endpoint requirement.
 
-import { DEFAULT_RELATION_KIND, RELATION_KINDS, type RelationKind } from "../../lib/entity-links";
+import {
+  DEFAULT_RELATION_KIND,
+  isChatEnd,
+  RELATION_KINDS,
+  type RelationKind,
+} from "../../lib/entity-links";
 
 // A project is linked as its `bucket` (RF-1: the registry checks it per item).
 const WORK_TYPES = new Set(["task", "project", "bucket"]);
@@ -30,7 +35,8 @@ const isAttachable = (t: string) => ATTACHABLE_TYPES.has(t);
  * {@link RELATION_KINDS} order. Symmetric: `allowedKinds(a, b)` === `allowedKinds(b, a)`.
  *
  * - `references` — always (the generic default; any pair may just be "related").
- * - `mentions`   — always (a prose @mention can point at anything).
+ * - `mentions`   — always (a prose @mention can point at anything), except with a
+ *                  conversation or a message at either end: those lines are Chat's.
  * - `works-at`   — only contact↔company.
  * - `paid-by`    — only when one end is a payment/invoice and the other is a party.
  * - `attachment` — only when one end is attachable (file/email/receipt); never person↔person.
@@ -41,7 +47,8 @@ const isAttachable = (t: string) => ATTACHABLE_TYPES.has(t);
 export function allowedKinds(a: string, b: string): RelationKind[] {
   const pairIs = (x: string, y: string) => (a === x && b === y) || (a === y && b === x);
 
-  const allowed = new Set<RelationKind>([DEFAULT_RELATION_KIND, "mentions"]);
+  const allowed = new Set<RelationKind>([DEFAULT_RELATION_KIND]);
+  if (!isChatEnd(a) && !isChatEnd(b)) allowed.add("mentions");
   if (pairIs("contact", "company")) allowed.add("works-at");
   if ((isMoney(a) && isParty(b)) || (isMoney(b) && isParty(a))) allowed.add("paid-by");
   if (isAttachable(a) || isAttachable(b)) allowed.add("attachment");

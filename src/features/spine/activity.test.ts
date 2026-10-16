@@ -148,6 +148,24 @@ describe("spineActivityLine", () => {
     );
   });
 
+  it("renders a channel's lifecycle, naming no one (CV-15)", () => {
+    expect(spineActivityLine(entry("chat.manager_add", { user_id: "u1" }))).toBe(
+      "made someone a manager",
+    );
+    expect(spineActivityLine(entry("chat.manager_remove", { user_id: "u1" }))).toBe(
+      "removed a manager",
+    );
+    expect(spineActivityLine(entry("chat.announcement_switch", { on: true }))).toBe(
+      "made this an announcement channel",
+    );
+    expect(spineActivityLine(entry("chat.announcement_switch", { on: false }))).toBe(
+      "let everyone post again",
+    );
+    expect(spineActivityLine(entry("chat.channel_private"))).toBe("made this channel private");
+    expect(spineActivityLine(entry("chat.channel_delete"))).toBe("deleted this channel");
+    expect(spineActivityLine(entry("chat.channel_restore"))).toBe("restored this channel");
+  });
+
   it("renders a reply chain's wrap-up, reopen and undo (CV-12)", () => {
     const m = { message_id: "m1" };
     expect(spineActivityLine(entry("chat.wrap_up", { ...m, settled_id: "m2" }))).toBe(

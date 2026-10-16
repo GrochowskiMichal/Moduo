@@ -54,7 +54,8 @@ async function publicChannel(ctx: ToolContext, channel: string): Promise<Row> {
     .select("id, name, topic, archived_at, last_message_at, created_at")
     .eq("workspace_id", ctx.key.workspaceId)
     .eq("kind", "channel")
-    .eq("is_private", false);
+    .eq("is_private", false)
+    .is("deleted_at", null);
   q = byName ? q.eq("name", channel.replace(/^#/, "").toLowerCase()) : q.eq("id", channel);
   const found = await rows(q.limit(1));
   const c = found[0];
@@ -123,6 +124,7 @@ export const chatConnectorModule: ConnectorModule = {
             .eq("kind", "channel")
             .eq("is_private", false)
             .is("archived_at", null)
+            .is("deleted_at", null)
             .order("name"),
         );
         return data.map((c) => ({ id: c.id, name: `#${c.name}`, topic: c.topic || null, last_message_at: c.last_message_at }));
@@ -182,7 +184,8 @@ export const chatConnectorModule: ConnectorModule = {
             .select("id, name")
             .eq("workspace_id", ctx.key.workspaceId)
             .eq("kind", "channel")
-            .eq("is_private", false),
+            .eq("is_private", false)
+            .is("deleted_at", null),
         );
         if (channels.length === 0) return [];
         const byId = new Map(channels.map((c) => [c.id as string, c.name as string]));

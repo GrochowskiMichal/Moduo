@@ -890,6 +890,7 @@ export function ContactHub(props: ContactHubProps) {
         {/* Linked work — one fixed section per module relation, always present */}
         {!editing ? (
           <LinkedSections
+            focus={{ type: "contact", id: contact.id }}
             status={hubStatus}
             sections={sections}
             canEdit={canEdit}

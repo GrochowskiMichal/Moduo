@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
 import { excerptOf } from "../chains";
 import type { ChatMessage, ChatPerson } from "../model";
+import { MadeFromLine } from "./made-from";
 import { type BodyContext, MessageBody } from "./message-body";
 
 export function authorName(m: ChatMessage, person: ChatPerson | undefined): string {
@@ -486,6 +487,7 @@ export function MessageRow({
               onOpenChain={() => handlers.onOpenChain?.(message)}
             />
           )}
+          {editor ? null : <MadeFromLine messageId={message.id} />}
         </div>
         {toolbar}
       </div>

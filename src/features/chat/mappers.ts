@@ -12,6 +12,7 @@ import {
 import type {
   ChatCatchupItem,
   ChatChannel,
+  ChatDeletedChannel,
   ChatHistoryEntry,
   ChatMember,
   ChatMessage,
@@ -55,6 +56,23 @@ export function mapChannel(raw: unknown): ChatChannel | null {
     lastMessageAt: str(r.last_message_at),
     isDefault: r.is_default === true,
     managersOnly: r.managers_only === true,
+    rosterAt: str(r.roster_at),
+  };
+}
+
+/** A Recently deleted row (`chat_recently_deleted`, CV-15). */
+export function mapDeletedChannel(raw: unknown): ChatDeletedChannel | null {
+  const r = asRow(raw);
+  const id = str(r?.id);
+  const deletedAt = str(r?.deleted_at);
+  if (!r || !id || !deletedAt) return null;
+  return {
+    id,
+    name: str(r.name) ?? "",
+    isPrivate: r.is_private === true,
+    deletedAt,
+    deletedBy: str(r.deleted_by),
+    purgeAt: str(r.purge_at) ?? deletedAt,
   };
 }
 
@@ -80,6 +98,7 @@ export function mapMember(raw: unknown): ChatMember | null {
     lastReadAt: str(r.last_read_at) ?? EPOCH,
     lastReadId: str(r.last_read_id),
     joinedAt: str(r.joined_at) ?? EPOCH,
+    accessAt: str(r.access_at),
   };
 }
 

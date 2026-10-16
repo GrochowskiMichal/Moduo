@@ -78,6 +78,7 @@ import {
   peopleFor,
   remindMatches,
 } from "./grammar";
+import { HandleChipPlugin } from "./handle-chip";
 import {
   CHAT_TRANSFORMERS,
   CleanPastePlugin,
@@ -742,6 +743,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         </div>
         <EditorHandle onEditor={setEditor} />
         <HistoryPlugin />
+        <HandleChipPlugin />
         <ListPlugin />
         <MarkdownShortcutPlugin transformers={CHAT_TRANSFORMERS} />
         <CleanPastePlugin origins={origins} />

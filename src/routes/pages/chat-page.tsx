@@ -15,7 +15,8 @@ import { useWorkspace } from "../../providers/workspace-provider";
 
 export function ChatPage() {
   const { runtime, userId } = useAuth();
-  const { selectedWorkspaceId, selectedWorkspace, members, modulePermissions } = useWorkspace();
+  const { selectedWorkspaceId, selectedWorkspace, members, roles, modulePermissions } =
+    useWorkspace();
   const search = useSearch({ strict: false }) as ChatSearch;
   const navigate = useNavigate();
 
@@ -28,10 +29,12 @@ export function ChatPage() {
           name: m.displayName?.trim() || "Member",
           avatarUrl: m.avatarUrl,
           role: m.role,
+          // A read-only custom role reads chat as a viewer (the server's chat_has_cap).
+          readOnly: roles.find((r) => r.id === m.roleId)?.readOnly ?? false,
           // In the workspace now: never a former member.
           former: false,
         })),
-    [members],
+    [members, roles],
   );
   const ownerName = members.find((m) => m.role === "owner")?.displayName?.trim() || null;
 

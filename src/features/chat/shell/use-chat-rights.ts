@@ -61,12 +61,8 @@ export function rightsFrom(
   };
 }
 
-export function useChatRights(
-  workspaceId: string | null,
-  role: WorkspaceRole | null,
-  /** Chat is view-only for your role (a read-only custom role). */
-  readOnly: boolean,
-): ChatRights {
+/** The workspace's chat rights rows (null while they load or can't be read). */
+export function useChatCapsRows(workspaceId: string | null): CapsRow[] | null {
   const [rows, setRows] = useState<CapsRow[] | null>(null);
   useEffect(() => {
     setRows(null);
@@ -79,14 +75,65 @@ export function useChatRights(
       live = false;
     };
   }, [workspaceId]);
-  return rightsFrom(rows, role, readOnly);
+  return rows;
 }
 
-/** The open channel's managers (empty for a direct message; null while they load). */
-export function useChannelManagers(channelId: string | null, kind: string | null): string[] | null {
-  const [ids, setIds] = useState<string[] | null>(null);
+export function useChatRights(
+  workspaceId: string | null,
+  role: WorkspaceRole | null,
+  /** Chat is view-only for your role (a read-only custom role). */
+  readOnly: boolean,
+): ChatRights {
+  return rightsFrom(useChatCapsRows(workspaceId), role, readOnly);
+}
+
+/**
+ * Whether someone else's role posts (the server's `chat_has_cap(…, 'post')`):
+ * only they can be made a manager. Unknown people read as members.
+ */
+export function personPosts(
+  rows: readonly CapsRow[] | null,
+  person: { role: string | null; readOnly?: boolean } | undefined,
+): boolean {
+  const role = (person?.role ?? null) as WorkspaceRole | null;
+  return rightsFrom(rows, role, !!person?.readOnly).canPost;
+}
+
+/**
+ * Who manages a channel in effect (§12, #13): a manager row counts only while
+ * its holder is in the channel and their role posts (the server's
+ * `chat__is_manager`); "Manage any channel" makes an admin one without a row.
+ * Someone demoted (their row removed, or their role now a viewer's) loses the
+ * controls at once.
+ */
+export function managesChannel(args: {
+  selfId: string;
+  managers: readonly string[] | null;
+  inChannel: boolean;
+  rights: Pick<ChatRights, "canPost" | "manageAny">;
+}): { canManage: boolean; isManager: boolean } {
+  const isManager =
+    args.rights.canPost && args.inChannel && (args.managers ?? []).includes(args.selfId);
+  return { isManager, canManage: args.rights.manageAny || isManager };
+}
+
+/**
+ * The open channel's managers (empty for a direct message; null while they
+ * load). Read again when its roster stamp moves (someone made or unmade a
+ * manager, joined, left or was removed), never on a message.
+ */
+export function useChannelManagers(
+  channelId: string | null,
+  kind: string | null,
+  rosterAt: string | null = null,
+): string[] | null {
+  // Held with the channel they belong to: another channel's never show for a moment.
+  const [held, setHeld] = useState<{ channelId: string | null; ids: string[] | null }>({
+    channelId: null,
+    ids: null,
+  });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the roster stamp is the trigger
   useEffect(() => {
-    setIds(kind === "channel" ? null : []);
     if (!channelId || kind !== "channel") return;
     let live = true;
     void supabaseClient
@@ -95,19 +142,35 @@ export function useChannelManagers(channelId: string | null, kind: string | null
       .eq("channel_id", channelId)
       .then(({ data }) => {
         if (!live) return;
-        if (!Array.isArray(data)) {
-          setIds([]);
-          return;
-        }
-        setIds(
-          data
-            .map((r) => (r as { user_id?: unknown }).user_id)
-            .filter((v): v is string => typeof v === "string"),
-        );
+        const ids = Array.isArray(data)
+          ? data
+              .map((r) => (r as { user_id?: unknown }).user_id)
+              .filter((v): v is string => typeof v === "string")
+          : [];
+        setHeld({ channelId, ids });
       });
     return () => {
       live = false;
     };
-  }, [channelId, kind]);
-  return ids;
+  }, [channelId, kind, rosterAt]);
+  if (kind !== "channel") return [];
+  return held.channelId === channelId ? held.ids : null;
+}
+
+/**
+ * The workspace's people under chat's own read of them. Chat's read knows no
+ * roles: the workspace's role and read-only flag stay (they decide who can be
+ * made a manager).
+ */
+export function mergePeople<P extends { userId: string; role: string | null; readOnly?: boolean }>(
+  members: readonly P[],
+  chatPeople: readonly P[],
+): Record<string, P> {
+  const out: Record<string, P> = {};
+  for (const p of members) out[p.userId] = p;
+  for (const p of chatPeople) {
+    const ws = out[p.userId];
+    out[p.userId] = { ...ws, ...p, role: p.role ?? ws?.role ?? null, readOnly: ws?.readOnly };
+  }
+  return out;
 }

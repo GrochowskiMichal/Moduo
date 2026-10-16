@@ -140,6 +140,8 @@ export type MessageStreamProps = {
   onTask: (m: ChatMessage) => void;
   /** ⋯ → Remind me… and H (CV-11): absent, no item. */
   onRemind?: (m: ChatMessage) => void;
+  /** Announcement channels you can't post in: Reply privately to the author (CV-15). */
+  onReplyPrivately?: (m: ChatMessage) => void;
   onCopyLink: (m: ChatMessage) => void;
   onMarkUnread: (m: ChatMessage) => void;
   onOpenChain: (m: ChatMessage) => void;
@@ -544,6 +546,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onReply: () => p.onReply(m),
         onReplyTo: p.replyToFor?.(m),
         onWrapUp: p.wrapUpFor?.(m),
+        onReplyPrivately:
+          p.onReplyPrivately && m.authorId && m.authorKind === "user" && !own(m)
+            ? () => p.onReplyPrivately?.(m)
+            : undefined,
         onTask: () => p.onTask(m),
         onRemind: p.onRemind && !m.sendState ? () => p.onRemind?.(m) : undefined,
         onEdit: canWrite && own(m) ? () => p.onStartEdit(m) : undefined,
