@@ -133,8 +133,9 @@ type Story = StoryObj<typeof meta>;
  *  hidden cards (MOD-148); a column's "+" says "Pick a project first". */
 export const ByStatus: Story = {};
 
-/** Display → Completed: 7 days — recent done cards show, faded; the older
- *  ones wait behind the column's own "N completed · show" line. */
+/** Display → Completed: 7 days — recent done cards show, faded; no column has
+ *  a line of its own: the older ones wait behind the board's one "1 older
+ *  completed · Show" at its end (MOD-148 follow-up). */
 export const RecentCompleted: Story = {
   args: { completed: "week" },
 };

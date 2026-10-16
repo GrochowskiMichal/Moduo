@@ -1,11 +1,12 @@
-// MOD-148 on the real List and Board: while Display → Completed is Hidden,
-// no group or column ends with its own "N completed · show" line (the
-// dogfood project showed 11 lines for two open tasks). One quiet
-// "N completed · Show" line ends the whole view, counts every completed task
-// Display hides there, and shows them in place, in their groups, until
-// "Hide" (or the scope, grouping or Completed changes). It never saves
-// Display. "7 days" keeps each group's line for the older ones; Backlog keeps
-// its folded line per group; a section that shows nothing keeps its header.
+// MOD-148 on the real List and Board: no group, column or lane cell ends
+// with its own "N completed · show" line, in any mode (the dogfood project
+// showed 11 lines for two open tasks). One quiet line ends the whole view,
+// counts every completed task Display hides there, and shows them in place,
+// in their groups, until "Hide" (or the scope, grouping or Completed
+// changes). It never saves Display. While Hidden it reads "N completed ·
+// Show"; in "7 days" the last week's show in their groups and it reads
+// "N older completed · Show" (the follow-up, 2026-10-16). Backlog keeps its
+// folded line per group; a section that shows nothing keeps its header.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -198,7 +199,10 @@ function renderList(over: ListProps = {}, tasks: Task[] = DOGFOOD) {
 }
 
 const row = (title: string) => screen.queryByRole("button", { name: title });
-const groupLines = () => document.querySelectorAll('[data-slot="completed-line"]');
+/** Every "N completed" or "N older completed" button in the view: a group's,
+ *  a column's, a cell's or the end's. One at most, the end's. */
+const completedButtons = () =>
+  screen.queryAllByRole("button", { name: /^\d+ (older )?completed, (show|hide)$/ });
 const endLines = () => [
   ...document.querySelectorAll<HTMLElement>('[data-slot="completed-end-line"]'),
 ];
@@ -210,7 +214,7 @@ const endButton = () => {
 describe("the List while Completed is Hidden (MOD-148)", () => {
   it("draws no per-group lines and one line at the end, counting every hidden completed task", () => {
     renderList();
-    expect(groupLines()).toHaveLength(0);
+    expect(completedButtons()).toHaveLength(1);
     expect(endLines()).toHaveLength(1);
     expect(endButton().textContent).toBe("6 completed · Show");
     expect(endButton().getAttribute("aria-label")).toBe("6 completed, show");
@@ -252,7 +256,7 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(triage.compareDocumentPosition(d2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(d2.compareDocumentPosition(visual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Still no per-group lines, and Backlog stays folded.
-    expect(groupLines()).toHaveLength(0);
+    expect(completedButtons()).toHaveLength(1);
     expect(row("Task x")).toBeNull();
 
     fireEvent.click(endButton());
@@ -313,7 +317,7 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
 
   it("an ungrouped list ends with the same one line", () => {
     renderList({ groupBy: "none", onAddSection: undefined });
-    expect(groupLines()).toHaveLength(0);
+    expect(completedButtons()).toHaveLength(1);
     expect(endButton().textContent).toBe("6 completed · Show");
   });
 
@@ -333,7 +337,7 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
       addState: () => ({ kind: "none" }),
     };
     renderList({ selection: "upcoming", grouping, onAddSection: undefined });
-    expect(groupLines()).toHaveLength(0);
+    expect(completedButtons()).toHaveLength(1);
     expect(endButton().textContent).toBe("6 completed · Show");
     fireEvent.click(endButton());
     expect(row("Task d4")).toBeTruthy();
@@ -345,25 +349,89 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
   });
 });
 
-describe("the List in 7 days and All (unchanged)", () => {
-  it('"7 days" keeps each group\'s own line for the older ones, and no end line', () => {
-    renderList({ completed: "week" as CompletedMode });
-    expect(endLines()).toHaveLength(0);
-    const lines = [...groupLines()].map((l) => l.textContent);
-    // No section: d1 · Triage: d2, d3 · Visual: d4, d5 (d6 is recent and listed).
-    expect(lines).toEqual(["1 completed · show", "2 completed · show", "2 completed · show"]);
+describe('the List in "7 days" (MOD-148 follow-up)', () => {
+  const week = { completed: "week" as CompletedMode };
+
+  it("lists the last week's in their groups and ends with one line for the older ones", () => {
+    renderList(week);
+    // d6 was finished today: listed in Visual, as before.
     expect(row("Task d6")).toBeTruthy();
-    // Each opens on its own, as before.
-    const visual = groupLines()[2] as HTMLElement;
-    fireEvent.click(within(visual).getByRole("button"));
-    expect(row("Task d4")).toBeTruthy();
-    expect(row("Task d2")).toBeNull();
+    for (const id of ["d1", "d2", "d3", "d4", "d5"]) expect(row(`Task ${id}`)).toBeNull();
+    // No group has a line of its own; one ends the list, after + Add section.
+    expect(endLines()).toHaveLength(1);
+    expect(completedButtons()).toHaveLength(1);
+    expect(endButton().textContent).toBe("5 older completed · Show");
+    expect(endButton().getAttribute("aria-label")).toBe("5 older completed, show");
+    expect(endButton().getAttribute("aria-expanded")).toBe("false");
+    const add = screen.getByText("Add section");
+    const line = endLines()[0] as HTMLElement;
+    expect(add.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A real button inside the grid: Tab reaches it.
+    expect(screen.getByRole("grid").contains(endButton())).toBe(true);
+    expect(endButton().tagName).toBe("BUTTON");
+    // Backlog keeps its folded line.
+    expect(screen.getAllByRole("button", { name: /^Backlog, / })).toHaveLength(1);
   });
 
-  it('"All" lists every one with no line at all', () => {
+  it("Show lists the older ones in place, in their groups, then Hide", () => {
+    renderList(week);
+    fireEvent.click(endButton());
+    for (const id of ["d1", "d2", "d3", "d4", "d5", "d6"]) expect(row(`Task ${id}`)).toBeTruthy();
+    expect(endButton().textContent).toBe("5 older completed · Hide");
+    expect(endButton().getAttribute("aria-expanded")).toBe("true");
+    expect(completedButtons()).toHaveLength(1);
+    // In their groups: d4 sits under Visual's header, beside the recent d6.
+    const visual = screen.getByRole("button", { name: /^Visual/ });
+    const d4 = row("Task d4") as HTMLElement;
+    expect(visual.compareDocumentPosition(d4) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(endButton());
+    expect(row("Task d4")).toBeNull();
+    expect(row("Task d6")).toBeTruthy();
+    expect(endButton().textContent).toBe("5 older completed · Show");
+  });
+
+  it("its count holds still while the cursor walks onto an older finished task", () => {
+    const { onSelectTask } = renderList(week);
+    const grid = screen.getByRole("grid");
+    fireEvent.click(endButton());
+    // a (No section) → d1 (older, shown now).
+    fireEvent.keyDown(grid, { key: "j", code: "KeyJ" });
+    expect(onSelectTask).toHaveBeenLastCalledWith("d1");
+    expect(endButton().textContent).toBe("5 older completed · Hide");
+    fireEvent.click(endButton());
+    // d1 is selected: it stays listed, and still counts.
+    expect(row("Task d1")).toBeTruthy();
+    expect(row("Task d2")).toBeNull();
+    expect(endButton().textContent).toBe("5 older completed · Show");
+  });
+
+  it("Show ends when Completed switches to Hidden, whose line reads without older", () => {
+    const { rerender } = renderList(week);
+    fireEvent.click(endButton());
+    expect(row("Task d1")).toBeTruthy();
+    rerender({});
+    expect(row("Task d1")).toBeNull();
+    expect(row("Task d6")).toBeNull();
+    expect(endButton().textContent).toBe("6 completed · Show");
+    rerender(week);
+    expect(row("Task d1")).toBeNull();
+    expect(endButton().textContent).toBe("5 older completed · Show");
+  });
+
+  it("with nothing older than a week there is no line", () => {
+    const recent = new Date().toISOString();
+    renderList(week, [task("a"), done("d6", { sectionId: "s2", updatedAt: recent })]);
+    expect(row("Task d6")).toBeTruthy();
+    expect(endLines()).toHaveLength(0);
+    expect(completedButtons()).toHaveLength(0);
+  });
+});
+
+describe('the List in "All" (unchanged)', () => {
+  it("lists every one with no line at all", () => {
     renderList({ completed: "all" });
     expect(endLines()).toHaveLength(0);
-    expect(groupLines()).toHaveLength(0);
+    expect(completedButtons()).toHaveLength(0);
     expect(row("Task d1")).toBeTruthy();
   });
 });
@@ -402,9 +470,6 @@ function boardOf(over: BoardProps, tasks: Task[]) {
 const card = (title: string) => screen.queryByText(title)?.closest("[data-task-id]") ?? null;
 const column = (name: string) =>
   document.querySelector(`section[data-board-column="${name}"]`) as HTMLElement;
-/** Every "N completed" button on the board: a column's, a cell's or the end's. */
-const completedButtons = () =>
-  screen.queryAllByRole("button", { name: /^\d+ completed, (show|hide)$/ });
 /** The board's end line: the one completed button outside every column. */
 const boardEnd = () => {
   const outside = completedButtons().filter((b) => !b.closest("section[data-board-column]"));
@@ -415,7 +480,6 @@ const boardEnd = () => {
 describe("the Board while Completed is Hidden (MOD-148)", () => {
   it("no column has its own line; one at the board's end counts every column's", () => {
     renderBoard();
-    expect(groupLines()).toHaveLength(0);
     expect(completedButtons()).toHaveLength(1);
     expect(boardEnd().textContent).toBe("6 completed · Show");
     expect(boardEnd().getAttribute("aria-expanded")).toBe("false");
@@ -458,18 +522,46 @@ describe("the Board while Completed is Hidden (MOD-148)", () => {
 
   it("with lanes, no cell has its own line either", () => {
     renderBoard({ boardGroupBy: "status", lanes: "assignee" });
-    expect(groupLines()).toHaveLength(0);
     expect(completedButtons()).toHaveLength(1);
     expect(boardEnd().textContent).toBe("6 completed · Show");
   });
+});
 
-  it('"7 days" keeps each column\'s own line, and no end line', () => {
+describe('the Board in "7 days" (MOD-148 follow-up)', () => {
+  it("lists the last week's in their columns; one line at the board's end for the older", () => {
     renderBoard({ completed: "week" });
-    expect(completedButtons().every((b) => b.closest("section[data-board-column]"))).toBe(true);
-    expect([...groupLines()].map((l) => l.textContent)).toEqual([
-      "1 completed · show",
-      "2 completed · show",
-      "2 completed · show",
-    ]);
+    expect(column("Visual").contains(card("Task d6"))).toBe(true);
+    expect(card("Task d4")).toBeNull();
+    // No column has its own line: the one button sits outside every column.
+    expect(completedButtons()).toHaveLength(1);
+    expect(boardEnd().textContent).toBe("5 older completed · Show");
+    expect(boardEnd().getAttribute("aria-label")).toBe("5 older completed, show");
+    fireEvent.click(boardEnd());
+    expect(column("Visual").contains(card("Task d4"))).toBe(true);
+    expect(column("Triage").contains(card("Task d2"))).toBe(true);
+    expect(boardEnd().textContent).toBe("5 older completed · Hide");
+    expect(boardEnd().getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(boardEnd());
+    expect(card("Task d4")).toBeNull();
+    expect(card("Task d6")).toBeTruthy();
+  });
+
+  it("its count holds still with an older finished card selected", () => {
+    renderBoard({ completed: "week", selectedTaskId: "d2" });
+    expect(card("Task d2")).toBeTruthy();
+    expect(card("Task d3")).toBeNull();
+    expect(boardEnd().textContent).toBe("5 older completed · Show");
+  });
+
+  it("with lanes, no cell has its own line either", () => {
+    renderBoard({ completed: "week", boardGroupBy: "status", lanes: "assignee" });
+    expect(completedButtons()).toHaveLength(1);
+    expect(boardEnd().textContent).toBe("5 older completed · Show");
+  });
+
+  it("a Done column whose older cards are hidden still takes drops", () => {
+    renderBoard({ completed: "week", boardGroupBy: "status" }, [task("a"), done("d1")]);
+    expect(within(column("Done")).getByText("Drop tasks here")).toBeTruthy();
+    expect(boardEnd().textContent).toBe("1 older completed · Show");
   });
 });

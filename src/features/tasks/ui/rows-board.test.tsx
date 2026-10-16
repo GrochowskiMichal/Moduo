@@ -560,10 +560,16 @@ describe("Done and completed (U1-3)", () => {
     );
   });
 
-  it('"7 days" lists the recent ones; "All" lists every one', () => {
+  it('"7 days" lists the recent ones, the older behind the end line; "All" lists every one', () => {
     renderList(tasks(), { completed: "week" });
     expect(screen.getAllByRole("row")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "1 completed, show" })).toBeTruthy();
+    // The list's one end line, for the older ones (MOD-148 follow-up).
+    expect(
+      screen
+        .getByRole("button", { name: "1 older completed, show" })
+        .closest("[data-slot]")
+        ?.getAttribute("data-slot"),
+    ).toBe("completed-end-line");
     cleanup();
     renderList(tasks(), { completed: "all" });
     expect(screen.getAllByRole("row")).toHaveLength(3);

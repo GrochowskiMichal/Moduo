@@ -20,7 +20,7 @@ import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { filesLabel } from "../../attachments/files";
-import { completedLabel } from "../completed";
+import { type CompletedMode, completedLabel } from "../completed";
 import type { Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
 import type { RowDate } from "../row-layout";
@@ -238,30 +238,31 @@ export function DateMark({ date, className }: { date: RowDate; className?: strin
 }
 
 /**
- * The quiet line for completed tasks Display hides: under a group or column
- * in "7 days" (the older ones), "5 completed · show", then "hide". With
- * `end` it is the one line that ends a whole list while Completed is Hidden
- * (MOD-148): "12 completed · Show", then "Hide".
+ * The one quiet line that ends a whole list for the completed tasks Display
+ * hides (MOD-148; no group has its own in any mode, the follow-up): "12
+ * completed · Show" while Completed is Hidden, "5 older completed · Show" in
+ * "7 days", then "Hide".
  */
 export function CompletedLine({
   count,
   shown,
   onToggle,
-  end = false,
+  mode,
   className,
 }: {
   count: number;
   shown: boolean;
   onToggle: () => void;
-  end?: boolean;
+  /** Display → Completed, for the words. */
+  mode: CompletedMode;
   className?: string;
 }) {
   if (count <= 0) return null;
-  const label = completedLabel(count);
+  const label = completedLabel(count, mode);
   const verb = shown ? "hide" : "show";
   return (
     <div
-      data-slot={end ? "completed-end-line" : "completed-line"}
+      data-slot="completed-end-line"
       className={cn(
         "flex min-h-(--row-h-sm) items-center gap-2 px-2.5 font-sans text-xs text-muted-foreground",
         className,
@@ -278,7 +279,7 @@ export function CompletedLine({
         }}
         className="rounded-sm tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
-        {label} · {end ? (shown ? "Hide" : "Show") : verb}
+        {label} · {shown ? "Hide" : "Show"}
       </button>
     </div>
   );

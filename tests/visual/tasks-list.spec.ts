@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 /**
  * Tasks List rows — visual regression (TV-U1: U1-1, U1-2, U1-3, U1-5). The row
  * anatomy (fixed columns, quiet counts, the priority glyph, done rows, the
- * list's one "N completed · Show" line and, in "7 days", each group's, MOD-148)
+ * list's one "N completed · Show" line, "N older completed · Show" in "7 days", MOD-148)
  * under every density and radius, every dark shade, and a spread of accents.
  *
  * Baselines are captured by a human, never by an agent (DESIGN_SYSTEM §5):

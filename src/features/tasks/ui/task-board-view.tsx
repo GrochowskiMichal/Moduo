@@ -87,7 +87,6 @@ import {
 import { CardBody, type CardTeam, TaskCard } from "./task-card";
 import { activateTask, type TaskCommand } from "./task-context-menu";
 import type { GroupMarkContext } from "./task-list-parts";
-import { CompletedLine } from "./task-meta";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 import { registerBoardDropNames, useBoardFolds } from "./use-board-folds";
 import type { MultiSelect } from "./use-task-selection";
@@ -188,10 +187,10 @@ const LANE_CELL_CARDS = 20;
 
 /** One column as the board draws it: completed cards split out. */
 type ViewColumn = BoardColumn & {
-  /** The cards it lists (completed ones only while revealed or kept). */
+  /** The cards it lists (completed ones only while shown or kept). */
   shown: Task[];
-  /** Completed cards Display hides: behind the board's end line while
-   *  Completed is Hidden (MOD-148), the column's own line in "7 days". */
+  /** Completed cards Display hides, behind the board's one end line in
+   *  Hidden and "7 days" alike (MOD-148 and its follow-up). */
   hidden: Task[];
   /** What the column adds to the end line's count: its hidden completed
    *  cards, the selected one included, so the count holds still. */
@@ -253,28 +252,22 @@ export function TaskBoardView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [command, setCommand] = useState<{ taskId: string; kind: TaskCommand } | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
-  // Columns whose hidden completed cards were asked for in "7 days" ("· show"),
-  // and lane cells opened past their first 20; forgotten when the scope
-  // changes (the sets belong to the scope they were made in).
-  const [reveal, setReveal] = useState<{ scope: string; ids: ReadonlySet<string> }>({
-    scope: selection,
-    ids: NO_IDS,
-  });
-  const revealed = reveal.scope === selection ? reveal.ids : NO_IDS;
+  // Lane cells opened past their first 20; forgotten when the scope changes
+  // (the set belongs to the scope it was made in).
   const [more, setMore] = useState<{ scope: string; ids: ReadonlySet<string> }>({
     scope: selection,
     ids: NO_IDS,
   });
   const moreOpen = more.scope === selection ? more.ids : NO_IDS;
-  // While Completed is Hidden no column has a line of its own: one at the
-  // board's end, beside "+ Add status" and "n hidden · Show", lists every
-  // column's completed cards in place until the scope, grouping or Completed
-  // changes (MOD-148, as the List does). It never saves Display.
-  const endLine = completed === "hidden";
+  // No column or lane cell has a completed line of its own, in any mode: one
+  // at the board's end, beside "+ Add status" and "n hidden · Show", lists
+  // what Display hides (every completed card while Hidden, the older ones in
+  // "7 days") in place until the scope, grouping or Completed changes
+  // (MOD-148 and its follow-up, as the List does). It never saves Display.
   const doneKey = `${selection}:${boardGroupBy}:${completed}`;
   const [doneShownIn, setDoneShownIn] = useState<string | null>(null);
   if (doneShownIn !== null && doneShownIn !== doneKey) setDoneShownIn(null);
-  const doneShown = endLine && doneShownIn === doneKey;
+  const doneShown = doneShownIn === doneKey;
 
   const inboxId = inbox?.id ?? null;
   const today = useToday();
@@ -370,18 +363,17 @@ export function TaskBoardView({
       stayingIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     return allColumns.map((c) => {
       const { shown, hidden } = partitionCompleted(c.tasks, { mode: completed, now, keep });
-      const doneCount = endLine
-        ? c.tasks.filter((t) => isCompletedHidden(t, { mode: completed, now, keep: keepUncounted }))
-            .length
-        : 0;
+      const doneCount = c.tasks.filter((t) =>
+        isCompletedHidden(t, { mode: completed, now, keep: keepUncounted }),
+      ).length;
       // A folded column opens for the card you select in it (a deep link,
       // the panel), without changing what you chose (53b).
       const holdsSelection = !!selectedTaskId && c.tasks.some((t) => t.id === selectedTaskId);
-      // While revealed, the column lists its completed cards too; its line
-      // still counts them (and hides them again).
+      // While the end line shows them, the column lists its completed cards
+      // too; the line still counts them (and hides them again).
       return {
         ...c,
-        shown: (endLine ? doneShown : revealed.has(c.id)) ? c.tasks : shown,
+        shown: doneShown ? c.tasks : shown,
         hidden,
         doneCount,
         folded: (folds.get(c.id) ?? c.startsFolded) && !holdsSelection,
@@ -392,8 +384,6 @@ export function TaskBoardView({
     completed,
     stayingIds,
     selectedTaskId,
-    revealed,
-    endLine,
     doneShown,
     taskById,
     api.subtasksByParent,
@@ -408,10 +398,7 @@ export function TaskBoardView({
   const visibleColumns = emptyShown ? columns : keptColumns;
   // The end line counts every completed card Display hides on the board,
   // folded columns' and the selected one too.
-  const hiddenDone = useMemo(
-    () => (endLine ? columns.reduce((n, c) => n + c.doneCount, 0) : 0),
-    [endLine, columns],
-  );
+  const hiddenDone = useMemo(() => columns.reduce((n, c) => n + c.doneCount, 0), [columns]);
 
   const laneList = useMemo(
     () => (laneBy === "none" ? null : buildBoardLanes(boardTasks, laneBy, boardCtx)),
@@ -1016,6 +1003,7 @@ export function TaskBoardView({
       count={hiddenDone}
       shown={doneShown}
       onToggle={() => setDoneShownIn(doneShown ? null : doneKey)}
+      mode={completed}
     />
   );
 
@@ -1037,9 +1025,6 @@ export function TaskBoardView({
       drawnIn={drawnIn}
       moreOpen={moreOpen}
       onMore={(id) => toggleIn(setMore, moreOpen, id)}
-      revealed={revealed}
-      onToggleReveal={(id) => toggleIn(setReveal, revealed, id)}
-      columnLines={!endLine}
       markCtx={markCtx}
       canEdit={canEdit}
       activeTask={activeTask}
@@ -1072,9 +1057,6 @@ export function TaskBoardView({
             cell={cell}
             header={header_(column)}
             canEdit={canEdit}
-            revealed={revealed.has(column.id)}
-            onToggleReveal={() => toggleIn(setReveal, revealed, column.id)}
-            columnLine={!endLine}
             activeTask={activeTask}
             activeCell={activeCell}
             reorderable={dragOrder === "manual"}
@@ -1221,9 +1203,6 @@ function BoardColumnView({
   cell,
   header,
   canEdit,
-  revealed,
-  onToggleReveal,
-  columnLine,
   activeTask,
   activeCell,
   reorderable,
@@ -1235,10 +1214,6 @@ function BoardColumnView({
   cell: Cell;
   header: React.ReactNode;
   canEdit: boolean;
-  revealed: boolean;
-  onToggleReveal: () => void;
-  /** "7 days": the column ends with its own "N completed" line (MOD-148). */
-  columnLine: boolean;
   activeTask: Task | null;
   activeCell: Cell | null;
   reorderable: boolean;
@@ -1297,10 +1272,9 @@ function BoardColumnView({
         >
           {/* Nothing to list: "Drop tasks here", or "Empty" when it holds
               nothing at all. A column whose cards are all completed and
-              hidden (Done, MOD-148) never says "Empty"; in "7 days" its own
-              line stands there instead. */}
+              hidden (Done, MOD-148) never says "Empty". */}
           {cell.shown.length === 0 &&
-          (cell.hidden.length === 0 || (!columnLine && canEdit && !!cell.column.target)) ? (
+          (cell.hidden.length === 0 || (canEdit && !!cell.column.target)) ? (
             <EmptyState
               size="inline"
               title={canEdit && cell.column.target ? "Drop tasks here" : "Empty"}
@@ -1320,14 +1294,6 @@ function BoardColumnView({
             />
           )}
         </SortableContext>
-        {columnLine ? (
-          <CompletedLine
-            count={cell.hidden.length}
-            shown={revealed}
-            onToggle={onToggleReveal}
-            className="px-1"
-          />
-        ) : null}
       </div>
     </section>
   );
@@ -1348,9 +1314,6 @@ function LaneBoard({
   drawnIn,
   moreOpen,
   onMore,
-  revealed,
-  onToggleReveal,
-  columnLines,
   markCtx,
   canEdit,
   activeTask,
@@ -1369,10 +1332,6 @@ function LaneBoard({
   drawnIn: (cell: Cell) => Task[];
   moreOpen: ReadonlySet<string>;
   onMore: (cellId: string) => void;
-  revealed: ReadonlySet<string>;
-  onToggleReveal: (columnId: string) => void;
-  /** "7 days": each cell ends with its own "N completed" line (MOD-148). */
-  columnLines: boolean;
   markCtx: GroupMarkContext;
   canEdit: boolean;
   activeTask: Task | null;
@@ -1424,9 +1383,6 @@ function LaneBoard({
                         drawn={drawnIn(cell)}
                         moreShown={moreOpen.has(cell.id)}
                         onMore={() => onMore(cell.id)}
-                        revealed={revealed.has(column.id)}
-                        onToggleReveal={() => onToggleReveal(column.id)}
-                        columnLine={columnLines}
                         canEdit={canEdit}
                         activeTask={activeTask}
                         activeCell={activeCell}
@@ -1451,9 +1407,6 @@ function LaneCell({
   drawn,
   moreShown,
   onMore,
-  revealed,
-  onToggleReveal,
-  columnLine,
   canEdit,
   activeTask,
   activeCell,
@@ -1465,9 +1418,6 @@ function LaneCell({
   drawn: Task[];
   moreShown: boolean;
   onMore: () => void;
-  revealed: boolean;
-  onToggleReveal: () => void;
-  columnLine: boolean;
   canEdit: boolean;
   activeTask: Task | null;
   activeCell: Cell | null;
@@ -1502,14 +1452,6 @@ function LaneCell({
         >
           {moreShown ? "Show fewer" : `+ ${rest} more`}
         </button>
-      ) : null}
-      {columnLine ? (
-        <CompletedLine
-          count={cell.hidden.length}
-          shown={revealed}
-          onToggle={onToggleReveal}
-          className="px-1"
-        />
       ) : null}
     </div>
   );
