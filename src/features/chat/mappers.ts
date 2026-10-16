@@ -5,6 +5,7 @@
 import {
   isChatChannelKind,
   normalizeChatCatchupReason,
+  normalizeChatLinkTarget,
   normalizeChatMessageKind,
   normalizeChatNotifyLevel,
   normalizeContentAuthorKind,
@@ -56,6 +57,7 @@ export function mapChannel(raw: unknown): ChatChannel | null {
     lastMessageAt: str(r.last_message_at),
     isDefault: r.is_default === true,
     managersOnly: r.managers_only === true,
+    link: mapLink(r.linked_type, r.linked_id),
     rosterAt: str(r.roster_at),
   };
 }
@@ -74,6 +76,13 @@ export function mapDeletedChannel(raw: unknown): ChatDeletedChannel | null {
     deletedBy: str(r.deleted_by),
     purgeAt: str(r.purge_at) ?? deletedAt,
   };
+}
+
+/** A channel's link (CV-13): both halves or nothing. */
+function mapLink(type: unknown, id: unknown): ChatChannel["link"] {
+  const t = normalizeChatLinkTarget(type);
+  const i = str(id);
+  return t && i ? { type: t, id: i } : null;
 }
 
 /** A membership row stamped by leaving or a removal (CV-2b): no membership. */

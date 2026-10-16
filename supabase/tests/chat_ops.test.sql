@@ -1450,7 +1450,7 @@ BEGIN
     FROM pg_proc p
    WHERE p.oid IN (
            'public.chat_op_bootstrap(uuid)'::regprocedure,
-           'public.chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean)'::regprocedure,
+           'public.chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean, text, uuid)'::regprocedure,
            'public.chat_op_open_dm(uuid, uuid[])'::regprocedure,
            'public.chat_op_update_channel(uuid, text, text)'::regprocedure,
            'public.chat_op_archive_channel(uuid, boolean)'::regprocedure,

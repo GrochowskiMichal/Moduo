@@ -45,6 +45,7 @@ import type {
   ChatDeletedChannel,
   ChatError,
   ChatKey,
+  ChatLink,
   ChatMember,
   ChatMessage,
   ChatNotifyLevel,
@@ -1904,6 +1905,7 @@ export class ChatStore {
     isPrivate?: boolean;
     memberIds?: string[];
     announcement?: boolean;
+    link?: ChatLink | null;
   }): Promise<ChatChannel> {
     const channel = await this.transport.createChannel({ workspaceId: this.workspaceId, ...args });
     this.channels.set(channel.id, channel);
@@ -1941,6 +1943,14 @@ export class ChatStore {
     const channel = await this.transport.updateChannel({ channelId, ...patch });
     this.channels.set(channel.id, channel);
     this.notify();
+  }
+
+  /** Links the channel to one item, or unlinks it (CV-13). */
+  async linkChannel(channelId: string, link: ChatLink | null): Promise<ChatChannel> {
+    const channel = await this.transport.linkChannel({ channelId, link });
+    this.channels.set(channel.id, channel);
+    this.notify();
+    return channel;
   }
 
   async archiveChannel(channelId: string, archived: boolean): Promise<void> {

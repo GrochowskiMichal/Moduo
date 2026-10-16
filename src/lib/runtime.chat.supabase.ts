@@ -548,7 +548,7 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       return mapRows(data, mapMessage);
     },
 
-    async createChannel({ workspaceId, name, topic, isPrivate, memberIds, announcement }) {
+    async createChannel({ workspaceId, name, topic, isPrivate, memberIds, announcement, link }) {
       const { data, error } = await db().rpc("chat_op_create_channel", {
         p_workspace_id: workspaceId,
         p_name: name,
@@ -556,9 +556,37 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         p_is_private: isPrivate ?? false,
         p_member_ids: memberIds ?? [],
         p_announcement: announcement ?? false,
+        // Only with a link (CV-13), so a plain create keeps its arguments.
+        ...(link ? { p_link_type: link.type, p_link_id: link.id } : {}),
       });
       fail(error);
       return single<ChatChannel>(data, mapChannel, "create channel");
+    },
+
+    async startConversation({ workspaceId, type, id }) {
+      const { data, error } = await db().rpc("chat_op_start_conversation", {
+        p_workspace_id: workspaceId,
+        p_type: type,
+        p_id: id,
+      });
+      fail(error);
+      return single<ChatChannel>(data, mapChannel, "start conversation");
+    },
+
+    async linkChannel({ channelId, link }) {
+      const { data, error } = await db().rpc("chat_op_link_channel", {
+        p_channel_id: channelId,
+        p_type: link?.type ?? null,
+        p_id: link?.id ?? null,
+      });
+      fail(error);
+      return single<ChatChannel>(data, mapChannel, "link channel");
+    },
+
+    async linkFilesHere(channelId) {
+      const { data, error } = await db().rpc("chat_link_files_here", { p_channel_id: channelId });
+      fail(error);
+      return data === true;
     },
 
     async openDm({ workspaceId, userIds }) {
@@ -716,8 +744,11 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         channelKind: r.channel_kind === "dm" ? "dm" : "channel",
         channelName: typeof r.channel_name === "string" ? r.channel_name : null,
         channelPrivate: r.channel_private === true,
-        relation: "mentions" as const,
+        relation:
+          r.relation === "conversation-of" ? ("conversation-of" as const) : ("mentions" as const),
         since: String(r.since),
+        unread: typeof r.unread === "number" && r.unread > 0 ? r.unread : 0,
+        archived: r.archived === true,
       }));
     },
 

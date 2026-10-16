@@ -1,6 +1,6 @@
 // Details: the right panel's first view (spec §12, prototype round 5 frame 4,
 // "As a member"). Top to bottom as frame 4 draws it: About (the topic) ·
-// Linked to (CV-13's chip; empty until then) · People (with presence; the
+// Linked to (the linked item and "Link to…", CV-13) · People (with presence; the
 // status line is CV-17's) · Your notifications (Notify me, Pin to sidebar) ·
 // Reply chains (CV-12) · Decisions (CV-14) · Pinned · then the quiet History
 // of every change (AC15.5) and the conversation's own actions (Leave).
@@ -89,6 +89,8 @@ export type DetailsViewProps = {
   /** The conversation's reply chains, open then wrapped (null while they load). */
   chains: { open: ChainEntry[]; wrapped: ChainEntry[] } | null;
   onOpenChain: (root: ChatMessage) => void;
+  /** "Linked to"'s body (CV-13's ChannelLinkSection); its empty line without one. */
+  linkSection?: React.ReactNode;
 };
 
 export function DetailsView({
@@ -122,6 +124,7 @@ export function DetailsView({
   onOpenMessage,
   chains,
   onOpenChain,
+  linkSection,
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
   const people = members ? detailsPeople(members, selfId, personOf, online, stateOf) : null;
@@ -145,9 +148,11 @@ export function DetailsView({
       ) : null}
 
       {isChannel ? (
-        // The link's chip and "Link to…" are CV-13's: the section's frame and its empty line.
+        // The linked item, "Link to…" and the team offer (CV-13, link-section.tsx).
         <Section title="Linked to">
-          <Quiet data-slot="details-link">Not linked to a project or task yet.</Quiet>
+          {linkSection ?? (
+            <Quiet data-slot="details-link">Not linked to a project, client or team yet.</Quiet>
+          )}
         </Section>
       ) : null}
 
