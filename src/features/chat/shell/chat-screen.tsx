@@ -35,11 +35,13 @@ import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
+import { captureDestination, useLinkFilesHere } from "../linking";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
+import { ChannelLinkSection, LinkChip } from "../panel/link-section";
 import { MessageInContext } from "../panel/message-in-context";
 import { PersonCard } from "../panel/person-card";
 import { ReplyChainsView } from "../panel/reply-chains-view";
@@ -537,6 +539,8 @@ export function ChatScreen({
   }, [streamWin?.rows, snap.chains, conversationId]);
   const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
   const addMadeFrom = madeFrom.add;
+  // A linked project you may add to is capture's destination (CV-13), else the Inbox.
+  const filesHere = useLinkFilesHere(runtime?.chat ?? null, channel ?? null);
   const makeTaskFrom = useCallback(
     (m: ChatMessage) => {
       const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
@@ -544,9 +548,11 @@ export function ChatScreen({
         .trim()
         .slice(0, 200);
       const chat = runtime?.chat;
+      const from = snap.channels[m.channelId];
       dispatchOpenCapture({
         type: "task",
         draft: text,
+        destination: captureDestination(from, filesHere && from?.id === channel?.id),
         source:
           chat && !m.sendState
             ? {
@@ -562,7 +568,7 @@ export function ChatScreen({
         },
       });
     },
-    [runtime, snap.channels, selfId, personOf, addMadeFrom],
+    [runtime, snap.channels, selfId, personOf, addMadeFrom, filesHere, channel?.id],
   );
 
   const copyLink = useCallback((m: ChatMessage) => {
@@ -755,6 +761,7 @@ export function ChatScreen({
           peopleCount={peopleCount}
           canManage={canManage}
           paused={snap.paused}
+          linked={channel.link ? <LinkChip channel={channel} runtime={runtime} /> : undefined}
           onSearch={() => dispatchOpenPalette()}
           onPin={(starred) =>
             guarded(
@@ -1163,6 +1170,27 @@ export function ChatScreen({
             onOpenMessage={openMessageInPanel}
             chains={chainList}
             onOpenChain={(root) => openChain(root.id)}
+            linkSection={
+              <ChannelLinkSection
+                channel={channel}
+                runtime={runtime}
+                canLink={
+                  !!member &&
+                  rights.canPost &&
+                  (!channel.managersOnly || canManage) &&
+                  !channel.archivedAt &&
+                  !snap.paused
+                }
+                canAddPeople={
+                  !channel.archivedAt &&
+                  !snap.paused &&
+                  (channel.isPrivate ? canManage : rights.canPost)
+                }
+                memberIds={new Set((details.members ?? []).map((m) => m.userId))}
+                onLink={(link) => store?.linkChannel(channel.id, link) ?? Promise.resolve()}
+                onAddPeople={(ids) => store?.addMembers(channel.id, ids) ?? Promise.resolve()}
+              />
+            }
           />
         ),
         chains: () => (
@@ -1250,6 +1278,8 @@ export function ChatScreen({
         }}
         onCaptureNote={() => dispatchOpenCapture({ type: "note" })}
         onBrowse={() => onBrowse?.()}
+        runtime={runtime}
+        workspaceId={workspaceId}
       />
     </>
   );

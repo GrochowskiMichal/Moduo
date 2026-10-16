@@ -1,11 +1,14 @@
 // New conversation (spec §12, prototype round 5 frame 3, "New channel" and
 // "New direct message"; ⌘N, the bottom bar's +, the left panel's "+ New
 // conversation"). One dialog, two tabs: a channel (name as typed, topic,
-// people, private, the announcement switch; the optional link is CV-13's) or
+// people, private, the announcement switch, and an optional link to a project,
+// client or team between Name and People, CV-13; picking an item names an
+// unnamed channel after it) or
 // a direct message (up to nine people with you; opens the one you already
 // have). Picking only yourself offers "Capture a note" instead (§1: no
 // notes-to-self conversations). The server decides; its refusal shows inline.
 
+import { Link2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 
 import { PersonAvatar } from "@/components/ui/avatar";
@@ -23,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
-import type { ChatPerson } from "../model";
+import type { ModuoRuntime } from "@/lib/runtime.types";
+import type { ChatLink, ChatPerson } from "../model";
 import {
   CHANNEL_NAME_MAX,
   channelNameProblem,
@@ -31,6 +35,7 @@ import {
   dmIntent,
   pickable,
 } from "../panel/details-model";
+import { ChatLinkPicker } from "../panel/link-section";
 
 export type NewConversationTab = "channel" | "dm";
 
@@ -40,6 +45,8 @@ export type NewChannelInput = {
   isPrivate: boolean;
   announcement: boolean;
   memberIds: string[];
+  /** The optional link (CV-13). */
+  link: ChatLink | null;
 };
 
 export type NewConversationDialogProps = {
@@ -56,6 +63,9 @@ export type NewConversationDialogProps = {
   onOpenDm: (userIds: string[]) => Promise<void>;
   onCaptureNote: () => void;
   onBrowse: () => void;
+  /** For the optional link's picker (CV-13); no link field without them. */
+  runtime?: ModuoRuntime | null;
+  workspaceId?: string | null;
 };
 
 const errorText = (err: unknown) =>
@@ -84,6 +94,8 @@ function NewConversationForm({
   onOpenDm,
   onCaptureNote,
   onBrowse,
+  runtime = null,
+  workspaceId = null,
 }: NewConversationDialogProps) {
   const canChannel = canCreatePublic || canCreatePrivate;
   const [tab, setTab] = useState<NewConversationTab>(canChannel ? (initialTab ?? "channel") : "dm");
@@ -92,6 +104,7 @@ function NewConversationForm({
   // A role that may only create private channels starts (and stays) private.
   const [isPrivate, setPrivate] = useState(!canCreatePublic);
   const [announcement, setAnnouncement] = useState(false);
+  const [link, setLink] = useState<{ link: ChatLink; label: string } | null>(null);
   const [channelPeople, setChannelPeople] = useState<string[]>([]);
   const [dmPeople, setDmPeople] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -123,6 +136,7 @@ function NewConversationForm({
           isPrivate,
           announcement,
           memberIds: channelPeople.filter((id) => id !== selfId),
+          link: link?.link ?? null,
         }),
       );
       return;
@@ -182,6 +196,38 @@ function NewConversationForm({
               </p>
             ) : null}
           </div>
+          {runtime && workspaceId ? (
+            <div className="flex flex-col gap-1.5" data-slot="new-channel-link">
+              <Label>Link to (optional)</Label>
+              <div className="flex min-w-0 items-center gap-2">
+                {link ? (
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    {link.label}
+                  </span>
+                ) : null}
+                <ChatLinkPicker
+                  runtime={runtime}
+                  workspaceId={workspaceId}
+                  onPick={(next, label) => {
+                    setLink({ link: next, label: label || "Linked item" });
+                    if (!name.trim() && label) setName(label.slice(0, CHANNEL_NAME_MAX));
+                    setError(null);
+                  }}
+                  trigger={
+                    <Button type="button" variant="outline" size="sm">
+                      <Link2 className="size-icon-sm" aria-hidden />
+                      {link ? "Change" : "A project, client or team"}
+                    </Button>
+                  }
+                />
+                {link ? (
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setLink(null)}>
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-channel-topic">Topic (optional)</Label>
             <Input

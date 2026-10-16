@@ -33,6 +33,9 @@
 --   6. chat_conversations_for_item(type, id) gains the link half (relation
 --      `conversation-of`, read from the column) and each line's unread count
 --      for the caller and whether the conversation is archived.
+--   7. chat_link_files_here(channel): whether capture from the channel files
+--      into its linked project for the caller (live, not archived, editable
+--      by them); otherwise the app files into the Inbox.
 --   Nothing here takes a person from the caller; an API key reads no chat row.
 
 SET LOCAL lock_timeout = '5s';
@@ -403,6 +406,26 @@ BEGIN
 END;
 $function$;
 
+-- Capture from a linked channel files into its project when the caller may
+-- add to it (CV-10's destination): true only for a reader of the channel
+-- whose linked project is live, not archived, and editable by them.
+CREATE OR REPLACE FUNCTION public.chat_link_files_here(p_channel_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1
+      FROM public.chat_channels c
+      JOIN public.buckets b ON b.id = c.linked_id AND b.workspace_id = c.workspace_id
+     WHERE c.id = p_channel_id AND c.deleted_at IS NULL AND c.linked_type = 'bucket'
+       AND b.deleted_at IS NULL AND b.archived_at IS NULL AND NOT b.is_system
+       AND auth.uid() IS NOT NULL
+       AND public.chat_can_read_channel(c.id)
+       AND public.perm_can_edit_entity(c.workspace_id, 'bucket', b.id))
+$function$;
+
 -- ── 6. The item's conversations: mentions half (CV-10) + link half ──────────
 DROP FUNCTION IF EXISTS public.chat_conversations_for_item(text, uuid);
 CREATE OR REPLACE FUNCTION public.chat_conversations_for_item(p_type text, p_id uuid)
@@ -473,7 +496,8 @@ BEGIN
     'chat_op_link_channel(uuid, text, uuid)',
     'chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean, text, uuid)',
     'chat_op_start_conversation(uuid, text, uuid)',
-    'chat_conversations_for_item(text, uuid)'
+    'chat_conversations_for_item(text, uuid)',
+    'chat_link_files_here(uuid)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO authenticated, service_role', fn);

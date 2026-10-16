@@ -7,12 +7,22 @@
 
 import type {
   ChatChannelKind,
+  ChatLinkTarget,
   ChatMessageKind,
   ChatNotifyLevel,
   ContentAuthorKind,
 } from "@contracts/vocabularies";
 
-export type { ChatChannelKind, ChatMessageKind, ChatNotifyLevel, ContentAuthorKind };
+export type {
+  ChatChannelKind,
+  ChatLinkTarget,
+  ChatMessageKind,
+  ChatNotifyLevel,
+  ContentAuthorKind,
+};
+
+/** A channel's link (CV-13): a project (`bucket`), a client or a team. */
+export type ChatLink = { type: ChatLinkTarget; id: string };
 
 export type ChatChannel = {
   id: string;
@@ -33,6 +43,8 @@ export type ChatChannel = {
   isDefault?: boolean;
   /** An announcement channel: only its managers post (CH23a). */
   managersOnly?: boolean;
+  /** What the channel links to (CV-13), null when nothing. */
+  link?: ChatLink | null;
 };
 
 /** The current user's own state in a channel (or another member's row). */
@@ -141,6 +153,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.leave",
   "chat.member_add",
   "chat.member_remove",
+  "chat.channel_link",
   "chat.pin",
   "chat.message_edit",
   "chat.message_delete",
@@ -275,7 +288,19 @@ export type ChatRuntime = {
     memberIds?: string[];
     /** Only managers post (CH23a); the creator is the first manager. */
     announcement?: boolean;
+    /** The optional link (CV-13): needs edit rights on the item. */
+    link?: ChatLink | null;
   }): Promise<ChatChannel>;
+  /** "Start a conversation for X" (CH56): named after X, public or private by who sees X. */
+  startConversation(args: {
+    workspaceId: string;
+    type: "bucket" | "company" | "contact";
+    id: string;
+  }): Promise<ChatChannel>;
+  /** Links the channel to one item, or unlinks it (null). */
+  linkChannel(args: { channelId: string; link: ChatLink | null }): Promise<ChatChannel>;
+  /** Whether capture from the channel files into its linked project for you (else the Inbox). */
+  linkFilesHere(channelId: string): Promise<boolean>;
   openDm(args: { workspaceId: string; userIds: string[] }): Promise<ChatChannel>;
   updateChannel(args: { channelId: string; name?: string; topic?: string }): Promise<ChatChannel>;
   archiveChannel(args: { channelId: string; archived: boolean }): Promise<ChatChannel>;
@@ -325,15 +350,19 @@ export type ChatMessageRef = {
   excerpt: string | null;
 };
 
-/** One "Mentioned in" line (chat_conversations_for_item). */
+/** One line of an item's conversations (chat_conversations_for_item): a
+ *  "Mentioned in" line, or a conversation linked to it (CV-13). */
 export type ChatItemConversation = {
   channelId: string;
   workspaceId: string;
   channelKind: ChatChannelKind;
   channelName: string | null;
   channelPrivate: boolean;
-  relation: "mentions";
+  relation: "mentions" | "conversation-of";
   since: string;
+  /** Your unread messages in a linked conversation (0 when you aren't in it). */
+  unread: number;
+  archived: boolean;
 };
 
 /** An item made from a message (a `spawned-from` link to it). */

@@ -31,7 +31,7 @@ describe("relation kinds (AC1)", () => {
     expect(isRelationKind(42)).toBe(false);
   });
 
-  it("locks the exact alpha set of eight kinds", () => {
+  it("locks the exact set of nine kinds (conversation-of is chat's, CV-13)", () => {
     expect([...RELATION_KINDS]).toEqual([
       "references",
       "spawned-from",
@@ -41,6 +41,7 @@ describe("relation kinds (AC1)", () => {
       "works-at",
       "follow-up",
       "paid-by",
+      "conversation-of",
     ]);
     expect(DEFAULT_RELATION_KIND).toBe("references");
   });

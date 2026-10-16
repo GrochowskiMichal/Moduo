@@ -146,6 +146,18 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("chat.member_remove", { user_id: "u1" }))).toBe(
       "removed someone",
     );
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: "bucket", linked_id: "b" })),
+    ).toBe("linked this channel to a project");
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: "company", linked_id: "c" })),
+    ).toBe("linked this channel to a client");
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: "team", linked_id: "t" })),
+    ).toBe("linked this channel to a team");
+    expect(
+      spineActivityLine(entry("chat.channel_link", { linked_type: null, linked_id: null })),
+    ).toBe("unlinked this channel");
   });
 
   it("renders a reply chain's wrap-up, reopen and undo (CV-12)", () => {

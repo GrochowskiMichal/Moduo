@@ -296,6 +296,13 @@ export function spineActivityLine(
     }
     case "chat.member_remove":
       return "removed someone";
+    // CV-13: ids only, so the line names the kind, not the item.
+    case "chat.channel_link": {
+      const t = str(p.linked_type);
+      if (!t) return "unlinked this channel";
+      const what = t === "bucket" ? "a project" : t === "team" ? "a team" : "a client";
+      return `linked this channel to ${what}`;
+    }
     // A conversation's message changes (CV-8b, Details' history): ids only.
     case "chat.pin":
       return p.pinned === false ? "unpinned a message" : "pinned a message";

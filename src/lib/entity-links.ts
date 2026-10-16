@@ -15,10 +15,11 @@ import {
   type LinkOrigin,
   RELATION_KINDS,
   type RelationKind,
+  USER_RELATION_KINDS,
 } from "@contracts/vocabularies";
 
 export type { LinkOrigin, RelationKind };
-export { LINK_ORIGINS, RELATION_KINDS };
+export { LINK_ORIGINS, RELATION_KINDS, USER_RELATION_KINDS };
 
 /** The default kind when a gesture implies no stronger relationship. */
 export const DEFAULT_RELATION_KIND: RelationKind = "references";
@@ -33,6 +34,7 @@ export const RELATION_KIND_LABELS: Record<RelationKind, string> = {
   "works-at": "Works at",
   "follow-up": "Follow-up",
   "paid-by": "Paid by",
+  "conversation-of": "Conversation",
 };
 
 /**

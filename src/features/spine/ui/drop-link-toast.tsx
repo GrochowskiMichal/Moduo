@@ -28,8 +28,8 @@ import {
   type EntityLink,
   type LinkOrigin,
   RELATION_KIND_LABELS,
-  RELATION_KINDS,
   type RelationKind,
+  USER_RELATION_KINDS,
 } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { UNDO_TOAST_MS } from "@/lib/undo-toast";
@@ -102,7 +102,7 @@ function DropLinkToastCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {RELATION_KINDS.map((k) => (
+          {USER_RELATION_KINDS.map((k) => (
             <DropdownMenuItem key={k} disabled={k === kind} onSelect={() => void changeKind(k)}>
               {RELATION_KIND_LABELS[k]}
             </DropdownMenuItem>

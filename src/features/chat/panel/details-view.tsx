@@ -64,6 +64,8 @@ export type DetailsViewProps = {
   /** The conversation's reply chains, open then wrapped (null while they load). */
   chains: { open: ChainEntry[]; wrapped: ChainEntry[] } | null;
   onOpenChain: (root: ChatMessage) => void;
+  /** "Linked to"'s body (CV-13's ChannelLinkSection); its empty line without one. */
+  linkSection?: React.ReactNode;
 };
 
 export function DetailsView({
@@ -84,6 +86,7 @@ export function DetailsView({
   onOpenMessage,
   chains,
   onOpenChain,
+  linkSection,
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
   const people = members ? detailsPeople(members, selfId, personOf, online) : null;
@@ -103,9 +106,11 @@ export function DetailsView({
       ) : null}
 
       {isChannel ? (
-        // The link's chip and "Link to…" are CV-13's: the section's frame and its empty line.
+        // The linked item, "Link to…" and the team offer (CV-13, link-section.tsx).
         <Section title="Linked to">
-          <Quiet data-slot="details-link">Not linked to a project or task yet.</Quiet>
+          {linkSection ?? (
+            <Quiet data-slot="details-link">Not linked to a project, client or team yet.</Quiet>
+          )}
         </Section>
       ) : null}
 

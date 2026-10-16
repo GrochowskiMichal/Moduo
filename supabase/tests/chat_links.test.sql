@@ -545,10 +545,25 @@ BEGIN
 END;
 $$;
 
+-- ── Capture's destination: the linked project, for whoever may add to it ───
+CREATE FUNCTION test.files_here(p_who text, p_channel_name text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format($q$SELECT public.chat_link_files_here(%L::uuid)::text$q$,
+    (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = p_channel_name)))
+$$;
+SELECT test.ok(test.files_here('A', 'Shared') = 'true', 'A, who edits Shared, files into it from its channel');
+SELECT test.ok(test.files_here('A', 'Website') = 'true', 'and into Website from its private channel');
+SELECT test.ok(test.files_here('O', 'Website') = 'true', 'O, its owner, too');
+SELECT test.ok(test.files_here('N', 'Website') = 'false', 'N (can''t read the channel): no');
+SELECT test.ok(test.files_here('A', 'kickoff') = 'false', 'a channel linked to a client: the Inbox');
+SELECT test.ok(test.as_key('K', format($q$SELECT 1 WHERE public.chat_link_files_here(%L)$q$,
+  (SELECT id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Shared'))) = 'ok 0',
+  'an API key: no');
+
 -- ── The linked project is deleted: the channel stays ───────────────────────
 DO $$
 BEGIN
   UPDATE public.buckets SET deleted_at = now() WHERE id = test.id('PB2');
+  PERFORM test.ok(test.files_here('A', 'Website') = 'false', 'a deleted project: capture falls back to the Inbox');
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_channels WHERE name = 'Website' AND deleted_at IS NULL
     AND linked_id = test.id('PB2')), 'the channel stays, still pointing at it (the chip shows the tombstone)');
 END;
@@ -567,6 +582,7 @@ INSERT INTO test.fn_grants_13 VALUES
   ('public.chat_op_start_conversation(uuid, text, uuid)', true),
   ('public.chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean, text, uuid)', true),
   ('public.chat_conversations_for_item(text, uuid)', true),
+  ('public.chat_link_files_here(uuid)', true),
   ('public.chat__links_to(uuid, text, uuid)', false),
   ('public.chat__link_type(text)', false),
   ('public.chat__check_link_target(uuid, text, uuid, uuid)', false),
