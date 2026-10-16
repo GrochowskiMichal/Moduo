@@ -10,6 +10,8 @@ import { GridCanvas } from "./grid-canvas";
 const WHEEL_THRESHOLD = 60;
 /** Ignore further wheel this long after a turn, so trackpad momentum can't skip pages (assumption 11). */
 const WHEEL_LOCKOUT_MS = 350;
+/** Computed `overflow-x` values that let a box scroll sideways under a wheel. */
+const SCROLLS_X = new Set(["auto", "scroll", "overlay"]);
 /** What can take focus inside a page (its widgets' controls). */
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -23,8 +25,27 @@ export interface DashboardPagerProps {
   onWidgetPointerDown: (id: string, event: React.PointerEvent) => void;
   onRemove: (id: string) => void;
   onResize: (id: string, size: WidgetSize) => void;
-  /** A horizontal trackpad swipe over the grid background asked to turn the page. */
+  /** A sideways swipe over the grid (anything but a sideways scroller) asked to turn the page. */
   onPage: (dir: -1 | 1) => void;
+}
+
+/**
+ * Whether the wheel's target sits in a box that scrolls sideways (MOD-163): a
+ * computed `overflow-x` of auto / scroll and content wider than the box, between
+ * the target and the pager's viewport. Such a box takes the swipe whether or
+ * not it is at its end, so its overflow never turns the page.
+ */
+function scrollsSideways(target: Node, boundary: Element): boolean {
+  for (
+    let el: Element | null = target instanceof Element ? target : target.parentElement;
+    el && el !== boundary;
+    el = el.parentElement
+  ) {
+    if (el.scrollWidth > el.clientWidth && SCROLLS_X.has(getComputedStyle(el).overflowX)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -38,9 +59,12 @@ export interface DashboardPagerProps {
  * left two half pages under the first page's dot). The viewport clips rather
  * than hides, so it is no scroll container and nothing can shift it. Paging
  * with ←/→ while a widget has focus hands focus to the new page's first control
- * (else it would fall out of the now inert page to the body). A
- * widget's own wheel is swallowed in GridCanvas, so this viewport's handler only
- * sees grid-background travel — deltaX-dominant, threshold + lockout — and pages.
+ * (else it would fall out of the now inert page to the body). A sideways swipe
+ * pages over the gaps and over any widget (MOD-163) — deltaX-dominant, threshold
+ * + lockout — except over a box that scrolls sideways itself: that box keeps the
+ * whole swipe, and what runs past its end is swallowed, never turned into a page
+ * (one gesture never does two things). A mostly vertical wheel never pages, so a
+ * widget's own vertical list scrolls as before.
  */
 export function DashboardPager({
   layout,
@@ -73,9 +97,18 @@ export function DashboardPager({
   }, [activeIndex]);
 
   const handleWheel = (e: React.WheelEvent) => {
-    // Vertical-dominant wheel is left alone (the grid never scrolls); only a
-    // horizontal-dominant swipe pages.
+    const viewport = viewportRef.current;
+    // A wheel over a widget's portalled popover bubbles here through React;
+    // only one over the pages themselves may turn them.
+    if (!viewport || !(e.target instanceof Node) || !viewport.contains(e.target)) return;
+    // Vertical-dominant wheel is left alone (a widget's list scrolls; the grid
+    // never does); only a horizontal-dominant swipe pages.
     if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) {
+      accum.current = 0;
+      return;
+    }
+    // A widget that scrolls sideways keeps the swipe, to its end and past it.
+    if (scrollsSideways(e.target, viewport)) {
       accum.current = 0;
       return;
     }

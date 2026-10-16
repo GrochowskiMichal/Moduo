@@ -187,6 +187,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Dashboard (Home) → [decisions/dashboard.md](decisions/dashboard.md)
 
+- 2026-10-16 · A sideways swipe over any widget turns Home's page, and Home's widgets sit 8 px apart, the panels' `--panel-gap` (Maciej, MOD-163) · a widget that scrolls sideways keeps the swipe and swallows its overflow (agent's choice, revisitable) · rejected: overflow turning the page, a fresh swipe at a scroller's end paging → decisions/dashboard.md
 - 2026-07-09 · Dashboard DB-8 (gallery + config popovers) landed — Wave 6 (Dashboard rebuild, DB-1…DB-8) COMPLETE
 - 2026-07-09 · Dashboard DB-6 (6 utility widgets + config-write mechanism) + DB-7 (habits) landed
 - 2026-07-09 · Dashboard DB-5 (registry + 9 module widgets) landed — NO migration
