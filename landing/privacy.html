@@ -729,7 +729,7 @@
           <p class="eyebrow">Privacy</p>
           <h1 id="page-title">Privacy policy</h1>
           <p class="lede">What Moduo collects, why, who helps us run it, and what you can ask of us. This covers our website at moduo.app, the waitlist, and the Moduo apps.</p>
-          <p class="updated">Last updated <time datetime="2026-10-10">10 October 2026</time></p>
+          <p class="updated">Last updated <time datetime="2026-10-17">17 October 2026</time></p>
 
           <section class="brief" aria-labelledby="brief-title">
             <h2 class="label" id="brief-title">The short version</h2>
@@ -845,7 +845,8 @@
           <p>Your email address, name, profile picture and settings. We use them to sign you in with emailed codes and to run your account. Legal basis: our contract with you, the <a href="/terms">terms</a> (Article 6(1)(b)).</p>
 
           <h3>Your workspaces</h3>
-          <p>Everything you put into Moduo: tasks, notes, calendar events, contacts, chat messages, and the links between them. We also store who belongs to each workspace and what they can see. We keep all this so Moduo works on all your devices and for the people you share a workspace with. Legal basis: our contract with you.</p>
+          <p>Everything you put into Moduo: tasks, notes, calendar events, contacts, chat messages and the files and custom emoji in them, and the links between them. In chat we also keep your status (like “In a meeting” or do not disturb), whether you’re online or focusing, the reminders you set on messages, and a record of your devices so we notify only one of them. Your status and whether you’re online are visible to people who share a workspace with you; your reminders are only yours. We also store who belongs to each workspace and what they can see. We keep all this so Moduo works on all your devices and for the people you share a workspace with. Legal basis: our contract with you.</p>
+          <p>If a direct message or a mention waits for you for an hour and none of your devices has been active, we email you once about it (one email per conversation an hour). Turn this off in Settings → Preferences (“Email when away”).</p>
           <p>Profile pictures and workspace logos are public files, so anyone with the exact link can see them. If you publish a note, anyone with its link can read it and the pages inside it until you unpublish it.</p>
 
           <h3>Email</h3>
@@ -887,7 +888,7 @@
           <p>Moduo users can share a booking page at moduo.app/book. If you book a meeting through one:</p>
           <ul>
             <li>We collect your name and email, the time you choose, your time zone, your note, your answers to the host’s questions, and the emails of any guests you add.</li>
-            <li>We use them to create the meeting for the host and to email you a confirmation with a link to cancel.</li>
+            <li>We use them to create the meeting for the host and to email you and your guests: a confirmation with a link to cancel, a reminder before the meeting (a day or an hour before, unless the host turns reminders off), and a note if the host cancels it. To send these later, we keep the details the emails show with the booking: the host’s name, the meeting link, the time zone and the links in it.</li>
             <li>If the host uses Google Calendar, the meeting goes into their Google calendar, and Google sends you and your guests an invitation. If the host uses Zoom, we create a Zoom meeting on their account with your details in its description.</li>
             <li>You’re added as a contact in the host’s workspace.</li>
           </ul>
@@ -912,7 +913,7 @@
             </div>
             <div>
               <dt>Resend</dt>
-              <dd>Sends our emails, like workspace invites and booking confirmations.<br /><span class="where">USA</span></dd>
+              <dd>Sends our emails, like workspace invites, booking confirmations and reminders, and a note when a chat message addressed to you has waited an hour while you were away.<br /><span class="where">USA</span></dd>
             </div>
             <div>
               <dt>Stripe</dt>
@@ -957,6 +958,18 @@
             <div>
               <dt>Your account and workspaces</dt>
               <dd>As long as you have an account. When you delete it, we delete your account, your workspaces and everything only you could see, and we close your billing record at Stripe. Things you shared with people in their workspaces stay with them, and your messages and comments there stay without your name. Copies in backups expire within 30 days.</dd>
+            </div>
+            <div>
+              <dt>Deleted chat messages and conversations</dt>
+              <dd>A deleted message’s text is gone within seconds, once its Undo has passed. A deleted conversation can be restored for 30 days, then its messages and files are erased.</dd>
+            </div>
+            <div>
+              <dt>Device records</dt>
+              <dd>The devices you use Moduo on, so we notify only one. One we haven’t seen for 30 days is deleted.</dd>
+            </div>
+            <div>
+              <dt>Who has a note open</dt>
+              <dd>While you have a shared note open, the people who can read it see that you’re there. The short messages that tell them (your account ID and the note’s ID, never its content) are deleted by Supabase within 3 days.</dd>
             </div>
             <div>
               <dt>Invoices and payments</dt>
@@ -1031,7 +1044,7 @@
           </dl>
 
           <h3>In the Moduo app</h3>
-          <p>The web app uses no cookies. It keeps your sign-in session, your settings and a copy of your notes in your browser’s local storage and IndexedDB, so you stay signed in and pages load fast. Signing out ends the session. The desktop app keeps its data on your computer and in its keychain.</p>
+          <p>The web app uses no cookies. It keeps your sign-in session, your settings and a copy of your tasks, notes and chat messages in your browser’s local storage and IndexedDB, so you stay signed in and pages load fast. Signing out ends the session. The desktop app keeps its data on your computer and in its keychain.</p>
           <dl class="specs is-stacked">
             <div>
               <dt><code>moduo:consent:&lt;your account ID&gt;</code></dt>
