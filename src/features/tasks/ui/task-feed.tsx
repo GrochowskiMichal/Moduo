@@ -41,6 +41,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
 import { cn } from "@/lib/utils";
+import { isAppActor } from "../../spine/activity";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { type CommentThread, useCommentThread } from "../../spine/hooks/use-comment-thread";
@@ -324,9 +325,11 @@ function TrailLine({ item, currentUserId }: { item: FeedItem; currentUserId: str
     );
   }
   if (item.kind === "activity") {
+    const app = isAppActor(item.entry);
     return (
       <FeedEvent
-        person={item.entry.actorId ? people.personOf(item.entry.actorId) : null}
+        app={app}
+        person={!app && item.entry.actorId ? people.personOf(item.entry.actorId) : null}
         time={feedTime(item.at)}
         title={formatTimestamp(item.at)}
       >
@@ -369,9 +372,12 @@ function MergedLine({
       </>
     );
   }
+  // One actor per merged run (`feed.ts` keys runs on the actor), so the first speaks for all.
+  const app = isAppActor(first);
   return (
     <FeedEvent
-      person={first.actorId ? people.personOf(first.actorId) : null}
+      app={app}
+      person={!app && first.actorId ? people.personOf(first.actorId) : null}
       time={feedTime(at)}
       title={formatTimestamp(at)}
     >
@@ -388,20 +394,26 @@ function MergedLine({
   );
 }
 
-/** One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem). */
+/**
+ * One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem).
+ * A change made over an API key or by an agent (`app`) shows the plug mark,
+ * not the "?" a former member gets (MOD-149).
+ */
 function FeedEvent({
   person,
+  app = false,
   time,
   title,
   children,
 }: {
   person: { id?: string; name: string; avatarUrl: string | null } | null;
+  app?: boolean;
   time: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <FeedLine avatar={<PersonAvatar person={person} />} time={time} timeTitle={title}>
+    <FeedLine avatar={<PersonAvatar person={person} app={app} />} time={time} timeTitle={title}>
       {children}
     </FeedLine>
   );
@@ -502,6 +514,7 @@ function CommentItem({
   return (
     <CommentCard
       author={author}
+      app={comment.authorKind === "api_key"}
       authorName={commentAuthorName(comment, currentUserId, people.nameOf)}
       time={feedTime(comment.createdAt)}
       timeTitle={formatTimestamp(comment.createdAt)}

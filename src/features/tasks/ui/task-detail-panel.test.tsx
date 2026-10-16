@@ -51,7 +51,7 @@ import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/w
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Tag, Task } from "../model";
+import type { ActivityEntry, Bucket, Tag, Task } from "../model";
 import { BulkPanel } from "./bulk-panel";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskFullPage } from "./task-full-page";
@@ -1115,6 +1115,99 @@ describe("reordering subtasks (TV-U10)", () => {
     renderPanel(parent, a, null, false);
     moveUp("Second step");
     expect(dropTask).not.toHaveBeenCalled();
+  });
+});
+
+describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", () => {
+  const change = (over: Partial<ActivityEntry>): ActivityEntry => ({
+    id: "a1",
+    workspaceId: "w",
+    module: "tasks",
+    entityType: "task",
+    entityId: "t1",
+    op: "tasks.update",
+    actorType: "user",
+    actorId: "u2",
+    actorLabel: "Mike",
+    payload: { fields: ["priority"] },
+    createdAt: "2026-10-07T09:00:00Z",
+    ...over,
+  });
+  const feed = () => screen.getByRole("region", { name: "Comments and activity" });
+  /** The avatar on the feed line or card that says `text`. */
+  const avatarBy = (text: string) => {
+    let el: HTMLElement | null = within(feed()).getAllByText(text)[0] ?? null;
+    while (el && !el.querySelector("[data-slot=avatar]")) el = el.parentElement;
+    return el?.querySelector("[data-slot=avatar]") as HTMLElement;
+  };
+
+  it("in the trail: a key's change and an agent's show the plug; someone gone shows ?", async () => {
+    pickAll();
+    const activity = [
+      // The key's id, never a member's: no person to find for it.
+      change({
+        id: "a1",
+        actorType: "api_key",
+        actorId: "k1",
+        actorLabel: "Mike · via Claude Code",
+      }),
+      change({
+        id: "a2",
+        op: "tasks.set_status",
+        actorType: "agent",
+        actorId: null,
+        actorLabel: "Moduo",
+        createdAt: "2026-10-07T10:00:00Z",
+      }),
+      change({ id: "a3", actorId: "u9", actorLabel: "Ola", createdAt: "2026-10-07T11:00:00Z" }),
+    ];
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task(), { loadActivity: async () => activity }), runtime);
+    await waitFor(() => expect(within(feed()).getByText("Ola")).toBeTruthy());
+    for (const who of ["Mike · via Claude Code", "Moduo"]) {
+      const mark = avatarBy(who);
+      expect(mark.getAttribute("data-kind")).toBe("app");
+      expect(mark.querySelector("svg.lucide-plug")).toBeTruthy();
+      expect(mark.textContent).toBe("");
+    }
+    const gone = avatarBy("Ola");
+    expect(gone.hasAttribute("data-kind")).toBe(false);
+    expect(gone.getAttribute("data-label")).toBe("gray");
+    expect(gone.textContent).toBe("?");
+  });
+
+  it("on a comment: an app's shows the plug beside its name, a person's their initials", async () => {
+    const byKey: SpineComment = {
+      id: "c1",
+      workspaceId: "w",
+      entityType: "task",
+      entityId: "t1",
+      body: "Filed from the connector",
+      // A key's comment belongs to its creator but reads as the app.
+      createdBy: "u2",
+      authorKind: "api_key",
+      authorLabel: "Claude Code",
+      createdAt: "2026-10-07T20:02:00Z",
+      updatedAt: "2026-10-07T20:02:00Z",
+      deletedAt: null,
+      editedAt: null,
+      reactions: [],
+    };
+    const byMike: SpineComment = {
+      ...byKey,
+      id: "c2",
+      body: "Thanks",
+      authorKind: "user",
+      authorLabel: null,
+      createdAt: "2026-10-07T20:05:00Z",
+    };
+    const { runtime } = fakeRuntime({ comments: [byKey, byMike] });
+    renderPanel(task(), api(task()), runtime);
+    await waitFor(() => expect(within(feed()).getByText("Claude Code (app)")).toBeTruthy());
+    expect(avatarBy("Claude Code (app)").getAttribute("data-kind")).toBe("app");
+    const mike = avatarBy("Mike");
+    expect(mike.hasAttribute("data-kind")).toBe(false);
+    expect(mike.textContent).toBe("MI");
   });
 });
 
