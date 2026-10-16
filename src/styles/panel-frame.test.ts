@@ -79,8 +79,10 @@ describe("a wrapping row's first line (MOD-153)", () => {
       "calc((var(--ctrl-h-sm) - 1lh) / 2)",
     );
 
-    // The overview's rows set 14 px text on a 21 px line: 1lh + 2 × pad is
-    // the rung (26 / 24 / 22), the height a one-line row had before.
+    // Worked out from the density blocks, as above (jsdom resolves neither
+    // var() nor lh; measured live in the MOD-153 report): the overview's rows
+    // set 14 px text on a 21 px line, so 1lh + 2 × pad is the rung (26 / 24 /
+    // 22), the height a one-line row had before.
     const pads = DENSITIES.map((density) => {
       const block = blocksWithSelectors(
         blocks,

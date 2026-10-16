@@ -101,9 +101,9 @@ const NO_COMPLETIONS: readonly TaskCompletion[] = [];
 const NO_WAITING: readonly TaskWaitingEntry[] = [];
 
 /**
- * The quiet optional fields, hidden until set and revealed from the task
- * details' own "+" line and its menu (MOD-151), in panel order, with the
- * icons their values show.
+ * The quiet optional fields, hidden until set and revealed from the shared
+ * `AddPropertyLine` (the task details' "+" line and its menu, MOD-151), in
+ * panel order, with the icons their values show.
  */
 type Optional = "start" | "lead" | "client";
 const OPTIONAL_FIELDS: readonly AddPropertyItem<Optional>[] = [

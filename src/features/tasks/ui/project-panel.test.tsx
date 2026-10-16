@@ -5,12 +5,23 @@
 // actions at its foot stack (MOD-154).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 rs.mock("../assignees", () => ({
   useAssignees: () => ({ assignees: [], currentUserId: "u1", byId: () => null }),
   previewAssign: async () => null,
   initialsOf: () => "?",
+}));
+
+// No runtime by default (the project's own edit check then answers yes); a
+// test sets one to answer the check itself. One object, so it keeps its
+// identity across renders (gotchas/ui.md).
+const runtime = rs.hoisted(() => ({ current: null as unknown }));
+rs.mock("../../../lib/runtime", () => ({
+  getRuntime: () => runtime.current,
+  initRuntime: async () => runtime.current,
+  isTauriRuntime: () => false,
+  runtimeConfigError: null,
 }));
 
 import { TitleActionsScope } from "../../../components/app/title-actions";
@@ -26,7 +37,10 @@ beforeAll(() => {
     disconnect() {}
   } as never;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  runtime.current = null;
+});
 
 const PROJECT: Bucket = {
   id: "p1",
@@ -108,6 +122,35 @@ describe("Statuses… in the title row's ⋯ (MOD-150)", () => {
     slot.remove();
   });
 
+  it("shows no ⋯ on a project shared with you view-only, though you edit the workspace", async () => {
+    let asked = false;
+    runtime.current = {
+      tasks: {
+        canCopyTemplateSource: async () => {
+          asked = true;
+          return false;
+        },
+        timeReport: async () => ({ rows: [] }),
+      },
+    };
+    render(
+      <TooltipProvider>
+        <ProjectPanel
+          project={PROJECT}
+          tasks={[TASK]}
+          sections={[]}
+          canEdit
+          onEdit={() => {}}
+          onEditStatuses={() => {}}
+        />
+      </TooltipProvider>,
+    );
+    await act(async () => {});
+    expect(asked).toBe(true);
+    expect(screen.queryByRole("button", { name: "Project actions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Add a property/ })).toBeNull();
+  });
+
   it("shows no ⋯ to someone who can't edit the project, or to an archived one", () => {
     const { rerender } = render(
       <TooltipProvider>
@@ -156,6 +199,13 @@ describe("the optional fields' + line (MOD-151)", () => {
       await screen.findByRole("button", { name: "Add a property: Lead, Client", hidden: true }),
     ).toBeTruthy();
     expect(rowLabels()).toEqual(["Status", "Start", "Target"]);
+    // Its editor is open, and stays open once the menu has closed: the menu
+    // hands focus to no one, or the calendar would close at once.
+    await act(async () => {});
+    expect(screen.queryByRole("menu")).toBeNull();
+    const start = screen.getByRole("button", { name: "Start date: Set a start", hidden: true });
+    expect(start.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).not.toBe(line);
   });
 
   it("keeps a revealed field while another is revealed, as the task details do", async () => {
@@ -173,6 +223,9 @@ describe("the optional fields' + line (MOD-151)", () => {
     };
     await pick("Start");
     await pick("Lead");
+    // Lead's picker opened with it.
+    await act(async () => {});
+    expect(screen.getByPlaceholderText("Lead…")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Add a property: Client", hidden: true }),
     ).toBeTruthy();
