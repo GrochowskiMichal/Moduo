@@ -498,7 +498,12 @@ function CommentItem({
       }
       footer={reactions.chips}
     >
-      <CommentBody text={comment.body} mentionNames={mentionNames} selfName={selfName} />
+      <CommentBody
+        text={comment.body}
+        mentionNames={mentionNames}
+        selfName={selfName}
+        workspaceId={comment.workspaceId}
+      />
     </CommentCard>
   );
 }

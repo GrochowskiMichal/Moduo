@@ -105,21 +105,40 @@ async function sign(ws: string, rows: readonly CustomEmoji[], all = false) {
   }
 }
 
+/** Rows our ops or Realtime merged in while a read was in flight (the read's older answer mustn't drop them). */
+const touched = new Map<string, CustomEmoji[]>();
+
+/**
+ * Read the workspace's emoji (first time, or when the links are getting old),
+ * or else sign links for any live emoji still without one (a signing that
+ * failed earlier is tried again here).
+ */
 function load(ws: string) {
   if (loading.has(ws)) return;
   const chat = deps.runtime();
   if (!chat) return;
-  const stale = get(ws).signedAt > 0 && deps.now() - get(ws).signedAt > URL_REFRESH_MS;
-  if (get(ws).loaded && !stale) return;
+  const cur = get(ws);
+  const stale = cur.signedAt > 0 && deps.now() - cur.signedAt > URL_REFRESH_MS;
+  if (cur.loaded && !stale) {
+    const run = sign(ws, cur.rows).finally(() => loading.delete(ws));
+    loading.set(ws, run);
+    return;
+  }
+  touched.set(ws, []);
   const run = chat
     .customEmoji(ws)
-    .then(async (rows) => {
+    .then(async (read) => {
+      let rows = read;
+      for (const e of touched.get(ws) ?? []) rows = mergeEmoji(rows, e);
       put(ws, { ...get(ws), rows, loaded: true });
       await sign(ws, rows, stale);
     })
-    // Unreachable: nothing custom shows (names read as text); the next mount tries again.
+    // Unreachable: nothing custom shows (names read as text); the next check tries again.
     .catch(() => {})
-    .finally(() => loading.delete(ws));
+    .finally(() => {
+      touched.delete(ws);
+      loading.delete(ws);
+    });
   loading.set(ws, run);
 }
 
@@ -132,14 +151,28 @@ export function applyEmojiRow(row: unknown) {
 /** An emoji our own op answered with: shown at once, before Realtime. */
 export function applyEmoji(e: CustomEmoji) {
   const cur = get(e.workspaceId);
+  touched.get(e.workspaceId)?.push(e);
   put(e.workspaceId, { ...cur, rows: mergeEmoji(cur.rows, e) });
   if (!e.deletedAt) void sign(e.workspaceId, [e]);
 }
 
+/** How often an open workspace checks its links (re-signed past URL_REFRESH_MS, missing ones retried). */
+const CHECK_MS = 10 * 60 * 1000;
+
 function hold(ws: string): () => void {
   const h = holders.get(ws);
   if (h) h.count += 1;
-  else holders.set(ws, { count: 1, stop: deps.live(ws, applyEmojiRow) });
+  else {
+    const stopLive = deps.live(ws, applyEmojiRow);
+    const timer = setInterval(() => load(ws), CHECK_MS);
+    holders.set(ws, {
+      count: 1,
+      stop: () => {
+        clearInterval(timer);
+        stopLive();
+      },
+    });
+  }
   return () => {
     const cur = holders.get(ws);
     if (!cur) return;
@@ -207,6 +240,7 @@ export function setEmojiStoreDepsForTest(next: Partial<EmojiStoreDeps> | null) {
   deps = next ? { ...defaultDeps, ...next } : defaultDeps;
   states.clear();
   loading.clear();
+  touched.clear();
   for (const h of holders.values()) h.stop();
   holders.clear();
 }

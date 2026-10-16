@@ -47,13 +47,14 @@ export function CustomEmojiGlyph({
   className?: string;
 }) {
   const [hover, setHover] = useState(false);
-  const [broken, setBroken] = useState(false);
+  // The link that failed to load (a re-signed link draws again).
+  const [brokenSrc, setBrokenSrc] = useState<string | null>(null);
   const poster = emoji ? urlOf(emoji.posterPath) : null;
-  if (!emoji || !poster || broken) {
+  const playing = !!emoji?.animated && hover && !motionReduced();
+  const src = emoji && playing ? (urlOf(emoji.storagePath) ?? poster) : poster;
+  if (!emoji || !src || src === brokenSrc) {
     return <span className={className}>{`:${name}:`}</span>;
   }
-  const playing = emoji.animated && hover && !motionReduced();
-  const src = playing ? (urlOf(emoji.storagePath) ?? poster) : poster;
   return (
     <img
       src={src}
@@ -65,7 +66,7 @@ export function CustomEmojiGlyph({
       referrerPolicy="no-referrer"
       onMouseEnter={emoji.animated ? () => setHover(true) : undefined}
       onMouseLeave={emoji.animated ? () => setHover(false) : undefined}
-      onError={() => setBroken(true)}
+      onError={() => setBrokenSrc(src)}
       data-custom-emoji={emoji.name}
       data-playing={playing ? "" : undefined}
       className={cn("inline-block object-contain", SIZES[size], className)}

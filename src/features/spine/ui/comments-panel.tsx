@@ -87,6 +87,7 @@ export function CommentBody({
   text,
   mentionNames,
   selfName,
+  workspaceId,
   className,
 }: {
   text: string;
@@ -94,12 +95,14 @@ export function CommentBody({
   mentionNames: string[];
   /** My name: a mention of me gets the accent tint, others stay neutral. */
   selfName?: string | null;
+  /** The comment's workspace (its custom emoji); the selected one when not given. */
+  workspaceId?: string | null;
   className?: string;
 }) {
   const workspace = useContext(WorkspaceContext);
   const taskKey = workspace?.selectedWorkspace?.taskKey ?? null;
   // CV-20: `:name:` draws the workspace's custom emoji (its text once removed).
-  const emoji = useWorkspaceEmoji(workspace?.selectedWorkspaceId ?? null);
+  const emoji = useWorkspaceEmoji(workspaceId ?? workspace?.selectedWorkspaceId ?? null);
   return (
     <p
       className={cn(

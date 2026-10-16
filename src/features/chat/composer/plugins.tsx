@@ -413,12 +413,22 @@ class EmojiOption extends MenuOption {
  * ("at 10:30") or a smiley (":)") never opens it. The workspace's own emoji
  * come first (CV-20).
  */
+/**
+ * Lexical's default punctuation without `_` and `-`: emoji names hold them
+ * (`:party_parrot:`, `:x-ray:`), so the menu stays open through them.
+ */
+const EMOJI_NAME_PUNCTUATION = "\\.,\\+\\*\\?\\$\\@\\|#{}\\(\\)\\^\\[\\]\\\\/!%'\"~=<>:;";
+
 export function EmojiTypeaheadPlugin({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const [editor] = useLexicalComposerContext();
   const [query, setQuery] = useState<string | null>(null);
   const [list, setList] = useState<ChatEmoji[] | null>(null);
   const customEmoji = useCustomEmoji();
-  const match = useBasicTypeaheadTriggerMatch(":", { minLength: 2, maxLength: 32 });
+  const match = useBasicTypeaheadTriggerMatch(":", {
+    minLength: 2,
+    maxLength: 32,
+    punctuation: EMOJI_NAME_PUNCTUATION,
+  });
 
   useEffect(() => {
     if (query === null || list) return;

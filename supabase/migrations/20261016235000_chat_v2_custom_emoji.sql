@@ -12,7 +12,8 @@
 --      takes `:name:` (reactions__custom_key_pattern(), the same name rule as
 --      the table), and reactions__key_canonical leaves a `:name:` as it is.
 --      The key check stays a shape check (it backs a CHECK); whether a
---      `:name:` is live in a workspace is the ops' question (step 7).
+--      `:name:` is live in a workspace is the ops' question (step 7). A
+--      status's emoji (user_statuses__parts) stays a standard one.
 --   3. chat_custom_emoji: id, workspace, name, the image and its still frame,
 --      type, size, pixels, animated, who added it, soft delete. Names are 2–32
 --      of a–z, 0–9, - and _ with at least one letter, unique per workspace
@@ -143,6 +144,14 @@ $function$$old$,
   UNION ALL
   SELECT p_key WHERE p_key ~ public.reactions__custom_key_pattern()
 $function$$new$);
+
+-- A status shows in every workspace, so its emoji stays a standard one (the
+-- key check above now also takes `:name:`).
+SELECT pg_temp.recut(
+  'public.user_statuses__parts(jsonb, boolean)'::regprocedure,
+  $old$(char_length(s_emoji) > 16 OR NOT public.reactions__key_ok(s_emoji))$old$,
+  $new$(char_length(s_emoji) > 16 OR NOT public.reactions__key_ok(s_emoji)
+                                OR s_emoji ~ public.reactions__custom_key_pattern())$new$);
 
 -- ── 3. chat_custom_emoji ───────────────────────────────────────────────────
 

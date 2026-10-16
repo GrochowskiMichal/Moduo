@@ -253,6 +253,71 @@ describe("the shared store", () => {
     await emojiLoadForTest(WS);
     expect(emojiViewForTest(WS).list).toEqual([]);
   });
+
+  it("keeps an add that lands while the read is in flight", async () => {
+    let answer: (rows: CustomEmoji[]) => void = () => {};
+    setEmojiStoreDepsForTest({
+      runtime: () =>
+        ({
+          customEmoji: () =>
+            new Promise<CustomEmoji[]>((resolve) => {
+              answer = resolve;
+            }),
+          emojiUrls: async (paths: readonly string[]) => new Map(paths.map((p) => [p, `u:${p}`])),
+        }) as never,
+      live: () => () => {},
+    });
+    const done = emojiLoadForTest(WS);
+    applyEmojiRow(row({ id: "e2", name: "lgtm", created_at: "2026-10-10T00:00:00Z" }));
+    answer([emoji()]);
+    await done;
+    expect(
+      emojiViewForTest(WS)
+        .list.map((e) => e.name)
+        .sort(),
+    ).toEqual(["lgtm", "shipit"]);
+  });
+
+  it("signs again on the next check when signing failed", async () => {
+    let fail = true;
+    setEmojiStoreDepsForTest({
+      runtime: () =>
+        ({
+          customEmoji: async () => [emoji()],
+          emojiUrls: async (paths: readonly string[]) => {
+            if (fail) throw new Error("storage down");
+            return new Map(paths.map((p) => [p, `u:${p}`]));
+          },
+        }) as never,
+      live: () => () => {},
+    });
+    await emojiLoadForTest(WS);
+    expect(emojiViewForTest(WS).urlOf(emoji().posterPath)).toBeNull();
+    fail = false;
+    await emojiLoadForTest(WS);
+    expect(emojiViewForTest(WS).urlOf(emoji().posterPath)).toBe(`u:${emoji().posterPath}`);
+  });
+
+  it("signs every link again once they're getting old", async () => {
+    let now = 1_000;
+    let round = 0;
+    setEmojiStoreDepsForTest({
+      now: () => now,
+      runtime: () =>
+        ({
+          customEmoji: async () => [emoji()],
+          emojiUrls: async (paths: readonly string[]) => {
+            round += 1;
+            return new Map(paths.map((p) => [p, `u${round}:${p}`]));
+          },
+        }) as never,
+      live: () => () => {},
+    });
+    await emojiLoadForTest(WS);
+    now += 6 * 60 * 60 * 1000;
+    await emojiLoadForTest(WS);
+    expect(emojiViewForTest(WS).urlOf(emoji().posterPath)).toBe(`u2:${emoji().posterPath}`);
+  });
 });
 
 describe("custom emoji in the account export", () => {
