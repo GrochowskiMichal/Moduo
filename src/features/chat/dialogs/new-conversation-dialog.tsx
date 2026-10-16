@@ -104,7 +104,12 @@ function NewConversationForm({
   // A role that may only create private channels starts (and stays) private.
   const [isPrivate, setPrivate] = useState(!canCreatePublic);
   const [announcement, setAnnouncement] = useState(false);
-  const [link, setLink] = useState<{ link: ChatLink; label: string } | null>(null);
+  /** The optional link; `autoName` is the name it filled in, if it did. */
+  const [link, setLink] = useState<{
+    link: ChatLink;
+    label: string;
+    autoName: string | null;
+  } | null>(null);
   const [channelPeople, setChannelPeople] = useState<string[]>([]);
   const [dmPeople, setDmPeople] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -209,8 +214,12 @@ function NewConversationForm({
                   runtime={runtime}
                   workspaceId={workspaceId}
                   onPick={(next, label) => {
-                    setLink({ link: next, label: label || "Linked item" });
-                    if (!name.trim() && label) setName(label.slice(0, CHANNEL_NAME_MAX));
+                    // An empty name, or the one the last pick filled in, follows the pick.
+                    const filled =
+                      !name.trim() || (link?.autoName != null && name === link.autoName);
+                    const autoName = filled && label ? label.slice(0, CHANNEL_NAME_MAX) : null;
+                    if (autoName) setName(autoName);
+                    setLink({ link: next, label: label || "Linked item", autoName });
                     setError(null);
                   }}
                   trigger={
@@ -221,7 +230,16 @@ function NewConversationForm({
                   }
                 />
                 {link ? (
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setLink(null)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      // Remove takes back the name it filled in, not one you typed.
+                      if (link.autoName != null && name === link.autoName) setName("");
+                      setLink(null);
+                    }}
+                  >
                     Remove
                   </Button>
                 ) : null}

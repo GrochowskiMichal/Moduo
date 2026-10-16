@@ -111,7 +111,9 @@ function serverRead(bodies: string[]): Read[] {
 }
 
 const state = stackState();
-const run = state === "ready" ? it : it.skip;
+// MODUO_REQUIRE_DB=1 (a run that must check the server) fails instead of skipping.
+const required = process.env.MODUO_REQUIRE_DB === "1";
+const run = state === "ready" || required ? it : it.skip;
 if (state !== "ready") console.warn(`chat reference parity: not checked here — ${state}`);
 
 describe("references: the server reads them with the client's grammar", () => {

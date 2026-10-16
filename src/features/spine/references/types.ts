@@ -94,7 +94,9 @@ export type ReferenceResolution =
   /** The reader can't open it (or it doesn't exist): no title, no type, no preview. */
   | { status: "private" }
   /** It was deleted: "Deleted task", with no title. */
-  | { status: "deleted" };
+  | { status: "deleted" }
+  /** It was archived (a project): its tombstone, still named for whoever may open it. */
+  | { status: "archived"; title: string };
 
 /** What a reference shows right now. */
 export type ReferenceState =
@@ -102,4 +104,5 @@ export type ReferenceState =
   | { status: "ready"; facts: ReferenceFacts }
   | { status: "private" }
   | { status: "deleted"; kind: ReferenceKind }
+  | { status: "archived"; kind: ReferenceKind; title: string }
   | { status: "error" };

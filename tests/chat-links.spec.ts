@@ -137,3 +137,56 @@ test("a team link offers its people once", async ({ page }) => {
     )
     .toBe(1);
 });
+
+test("from the project's ⋯ and the company's hub: Start a conversation, then the item's line", async ({
+  page,
+}) => {
+  const launchId = crypto.randomUUID();
+  const launch = `Launch ${tag}`;
+  await rest("service", "buckets", {
+    method: "POST",
+    body: {
+      id: launchId,
+      workspace_id: room.ws,
+      owner_id: room.owner.user.id,
+      name: launch,
+      is_system: false,
+      position: "0002",
+    },
+  });
+  const companyId = crypto.randomUUID();
+  const company = `Acme ${tag}`;
+  await rest("service", "companies", {
+    method: "POST",
+    body: { id: companyId, workspace_id: room.ws, owner_id: room.owner.user.id, name: company },
+  });
+
+  // The project's ⋯ → Start a conversation opens the new channel, linked.
+  await signInPage(page, room.owner, room.ws);
+  await page.goto(`/tasks?id=${launchId}`);
+  await page.getByRole("button", { name: "Project actions" }).first().click();
+  await page.getByRole("menuitem", { name: "Start a conversation" }).click();
+  await expect(page).toHaveURL(/\/chat/, { timeout: 20_000 });
+  await expect(page.locator("[data-slot='link-chip']")).toContainText(launch);
+
+  // Back on the project: its overview shows "Conversation: Launch …".
+  await page.goto(`/tasks?id=${launchId}`);
+  await page.getByRole("button", { name: "Project actions" }).first().click();
+  await page.getByRole("menuitem", { name: "Project details" }).click();
+  await expect(page.locator("[data-slot='item-conversation']").first()).toContainText(
+    `Conversation: ${launch}`,
+    { timeout: 20_000 },
+  );
+
+  // The company's hub: ⋯ → Start a conversation, then its Linked shows the line.
+  await page.goto(`/contacts?type=company&id=${companyId}`);
+  await page.getByRole("button", { name: "More actions" }).first().click();
+  await page.getByRole("menuitem", { name: "Start a conversation" }).click();
+  await expect(page).toHaveURL(/\/chat/, { timeout: 20_000 });
+  await expect(page.locator("[data-slot='link-chip']")).toContainText(company);
+  await page.goto(`/contacts?type=company&id=${companyId}`);
+  await expect(page.locator("[data-slot='item-conversation']").first()).toContainText(
+    `Conversation: ${company}`,
+    { timeout: 20_000 },
+  );
+});
