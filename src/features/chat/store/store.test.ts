@@ -8,6 +8,7 @@
 
 import { afterEach, describe, expect, it } from "@rstest/core";
 
+import { inFilterConversations } from "../find/model";
 import type { ChatMessage, ChatRuntime } from "../model";
 import { emptyMeta, memoryChatCopy, ownerKey } from "./device-copy";
 import { compareKeys, keyOf } from "./keys";
@@ -695,5 +696,29 @@ describe("Move to… (CV-16)", () => {
     live.emit({ type: "message", row: out, insert: false });
     live.emit({ type: "message", row: back, insert: false });
     expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(a.id);
+  });
+});
+
+describe("Chat's Search · the In filter (CV-19)", () => {
+  it("offers a starred conversation, a public channel you haven't joined and an archived one; never one you can't read", async () => {
+    const { server, store } = setup();
+    const STARRED = uuid(9101);
+    const UNJOINED = uuid(9102);
+    const ARCHIVED = uuid(9103);
+    const HIDDEN = uuid(9104);
+    server.addChannel(STARRED, { name: "starred" });
+    server.memberOf.set(STARRED, member(STARRED, { starred: true }));
+    server.addChannel(UNJOINED, { name: "unjoined", member: false });
+    server.addChannel(ARCHIVED, { name: "archived", archivedAt: server.now() });
+    server.addChannel(HIDDEN, { name: "hidden", member: false, readable: false, isPrivate: true });
+
+    store.acquire();
+    await settle();
+    const snap = store.getSnapshot();
+    expect(snap.mine[STARRED]?.starred).toBe(true);
+    expect(snap.mine[UNJOINED]).toBeUndefined();
+    // The path chat-screen.tsx takes: every conversation the store holds.
+    const offered = inFilterConversations(snap.channels, (id) => snap.channels[id]?.name ?? "");
+    expect(offered.map((c) => c.label)).toEqual(["archived", "starred", "unjoined"]);
   });
 });

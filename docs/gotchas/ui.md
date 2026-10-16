@@ -294,3 +294,17 @@ Read before working in `src/components/`, `src/routes/`, `.storybook/`, dashboar
 - **The push worker used to drop every push while any Moduo window was focused:** a chat notice must ring there, since the tab may be on Tasks. (CV-6b)
 - **A web build aliases `@tauri-apps/plugin-notification` to `src/lib/tauri-plugin-notification-stub.ts`;** the stub now does what the plugin's JS does (`window.Notification`), so the desktop simulation can record notifications. Only code behind `isTauriRuntime()` reaches it. (CV-6b)
 - **Headless Chromium answers `Notification.permission === "denied"` before anyone asks:** the ask's e2e stubs the permission and needs a VAPID public key in the build (`PUBLIC_VAPID_PUBLIC_KEY`, any valid P-256 key; the spec skips the ask without one). (CV-6b)
+
+## The chat shell and panel (CV-8a, CV-8b)
+
+- **A chat person from the workspace list carries `former: false`;** `composerLine` treats someone missing from both lists as a former member (a deleted account). (CV-8a)
+- **`NavRow` spreads extra props onto its outer `div`, not the button:** an `aria-label` there names nothing. Put words for screen readers inside the button (the kit's sr-only spans). (CV-8a)
+- **`getByLabel` also matches `aria-label`:** a suggestion list labelled "People" under a field labelled "People" made the locator ambiguous; the list is "Suggestions". (CV-8b)
+- **`scrollIntoView` in the panel can scroll every scrolling ancestor:** the message in context scrolls only its own list (`offsetTop` on a `relative` list). (CV-8b)
+
+## Chat Catch up, statuses and files (CV-11, CV-17, CV-9)
+
+- **Sonner hands focus back when its last toast leaves:** an e2e that checks focus right after a toast's Undo waits for the toasts to go. (CV-11)
+- **Computed colours come back as `oklch(...)`:** the visual spec converts through a 1×1 canvas before measuring contrast. (CV-17)
+- **With the React Compiler on, a hook returns what `useSyncExternalStore` hands it (RF-1):** `useComposerFiles` read the store beside a version token and the chips never showed; only the e2e caught it. It returns `store.view(channel)`, and `useMessageFiles` returns the cached files as its snapshot. (CV-9)
+- **The attachment viewer looks a preview up by path** (`previews.get(rec.previewPath)`), not by file id. (CV-9)
