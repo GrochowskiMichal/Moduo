@@ -35,6 +35,7 @@ import { cn } from "../../../../lib/utils";
 import { resolveEntityIcon } from "../../icon-map";
 import { useCanEditTasks, useReference, useReferenceHost, useReferenceStore } from "../context";
 import {
+  archivedLabel,
   canShowAsCard,
   deletedLabel,
   PRIVATE_ITEM_LABEL,
@@ -80,6 +81,16 @@ export function Reference({
   if (state.status === "private") return <PrivateReference display={shown} className={className} />;
   if (state.status === "deleted") {
     return <DeletedReference kind={state.kind} display={shown} className={className} />;
+  }
+  if (state.status === "archived") {
+    return (
+      <DeletedReference
+        kind={state.kind}
+        label={archivedLabel(state.kind, state.title)}
+        display={shown}
+        className={className}
+      />
+    );
   }
   if (state.status === "error")
     return <UnavailableReference display={shown} className={className} />;
@@ -258,6 +269,15 @@ function ReferencePreview({
   if (state?.status === "private") return <PrivateReference display="card" bare />;
   if (state?.status === "deleted")
     return <DeletedReference kind={state.kind} display="card" bare />;
+  if (state?.status === "archived")
+    return (
+      <DeletedReference
+        kind={state.kind}
+        label={archivedLabel(state.kind, state.title)}
+        display="card"
+        bare
+      />
+    );
   const facts = state?.status === "ready" ? state.facts : fallback;
   return (
     <ReferenceCardBody
@@ -427,11 +447,14 @@ export function PrivateReference({
 /** "Deleted task": tertiary words, no title (call 55; default u: never struck through). */
 export function DeletedReference({
   kind,
+  label,
   display,
   bare = false,
   className,
 }: {
   kind: ReferenceKind;
+  /** The tombstone's words (an archived item's); "Deleted <kind>" when absent. */
+  label?: string;
   display: ReferenceDisplay;
   bare?: boolean;
   className?: string;
@@ -439,7 +462,7 @@ export function DeletedReference({
   if (display === "card" && !bare) {
     return (
       <CardFrame className={cn("text-subtle-foreground", className)}>
-        <span data-slot="reference-deleted">{deletedLabel(kind)}</span>
+        <span data-slot="reference-deleted">{label ?? deletedLabel(kind)}</span>
       </CardFrame>
     );
   }
@@ -452,7 +475,7 @@ export function DeletedReference({
         className,
       )}
     >
-      {deletedLabel(kind)}
+      {label ?? deletedLabel(kind)}
     </span>
   );
 }

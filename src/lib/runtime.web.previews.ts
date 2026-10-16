@@ -124,7 +124,7 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
       if (!ids.length) return [];
       const { data, error } = await client
         .from("buckets")
-        .select("id, name, is_system, deleted_at")
+        .select("id, name, is_system, deleted_at, archived_at")
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
@@ -133,6 +133,7 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         name: str(r.name) ?? "",
         isSystem: r.is_system === true,
         deletedAt: str(r.deleted_at),
+        archivedAt: str(r.archived_at),
       }));
       if (!card) return rows;
       // Two counts per project (head requests: no rows travel).
@@ -150,7 +151,7 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
       };
       return Promise.all(
         rows.map(async (r) => {
-          if (r.deletedAt) return r;
+          if (r.deletedAt || r.archivedAt) return r;
           const [done, total] = await Promise.all([count(r.id, ["done"]), count(r.id, COUNTED)]);
           return { ...r, progress: { done, total } };
         }),

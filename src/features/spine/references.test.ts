@@ -379,3 +379,42 @@ describe("the facts behind the forms", () => {
     expect(referenceTextToPlain("short mod", () => "x")).toBe("short mod");
   });
 });
+
+describe("an archived project (CV-13: a linked conversation's chip)", () => {
+  it("reads as its tombstone, 'Website · archived', and opens nothing", async () => {
+    const id = "55555555-5555-4555-8555-555555555555";
+    const { previews } = fakePreviews({});
+    previews.projects = (async ({ ids }: { ids: string[] }) =>
+      ids.map((x) => ({
+        id: x,
+        name: "Website",
+        isSystem: false,
+        deletedAt: null,
+        archivedAt: "2026-10-14T00:00:00Z",
+      }))) as ReferencePreviewApi["projects"];
+    const context: ResolveContext = {
+      workspaceId: "w1",
+      previews,
+      taskKey: "MOD",
+      personOf: () => null,
+      now: () => NOW,
+    };
+    const store = new ReferenceStore({
+      context: () => context,
+      schedule: (fn) => queueMicrotask(fn),
+    });
+    for (const display of ["chip", "card"] as const) {
+      const { container, unmount } = withStore(
+        store,
+        createElement(Reference, { type: "project", id, display }),
+      );
+      await screen.findByText("Website · archived");
+      expect(container.querySelector('[data-slot="reference-deleted"]')).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Website/ })).toBeNull();
+      unmount();
+    }
+    expect(plainReferenceName({ type: "project", id }, store.read({ type: "project", id }))).toBe(
+      "Website · archived",
+    );
+  });
+});

@@ -300,6 +300,13 @@ export function spineActivityLine(
     }
     case "chat.member_remove":
       return "removed someone";
+    // CV-13: ids only, so the line names the kind, not the item.
+    case "chat.channel_link": {
+      const t = str(p.linked_type);
+      if (!t) return "unlinked this channel";
+      const what = t === "bucket" ? "a project" : t === "team" ? "a team" : "a client";
+      return `linked this channel to ${what}`;
+    }
     // Lifecycle (CV-15): ids only.
     case "chat.manager_add":
       return "made someone a manager";
@@ -327,6 +334,12 @@ export function spineActivityLine(
       return "wrapped up a reply chain";
     case "chat.reopen":
       return p.undo === true ? "undid a wrap-up" : "reopened a reply chain";
+    // Move to… (CV-16): logged on the conversation the messages left.
+    case "chat.move": {
+      if (p.undo === true) return "undid a move";
+      const n = typeof p.count === "number" ? p.count : 1;
+      return n === 1 ? "moved a message out" : `moved ${n} messages out`;
+    }
     case "chat.react":
       return p.on === false ? "took back a reaction" : "reacted to a message";
     default:

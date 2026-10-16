@@ -269,3 +269,45 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 
 - **The shared local stack was reset twice on 2026-10-15 from a fresh prod snapshot newer than every repo migration, so no repo migration replays, and `anon` / `authenticated` keep the EXECUTE and table grants Supabase's default privileges give at load** (prod's dump grants many only to `service_role`). About 19 non-chat `db:test` files fail locally for that reason alone (for example `comments.test.sql`'s grant checks on functions CV-7c doesn't touch). Judge a failure by whether the file touches your block; a migration that re-states its own grants by name passes its own checks.
 - **Tests that count rows across the whole database (typing rows, the blank-deleted job) flake on a shared stack.** Scope every count to the test's own rows (`chat_privacy` counts only its conversations' typing rows; `chat_ops` blanks older deletions before counting its own).
+- **After a snapshot reload the local stack's function and table ACLs are not prod's:** `proacl` locally shows `anon` / `authenticated` EXECUTE (and table grants) that prod doesn't have. Take a migration's grants from `~/.cache/moduo/supabase-snapshot/public.sql` or the repo's last migration for that object, never from the local `proacl`. (CV-10; Checkpoint 4)
+
+## Chat reply chains (CV-12)
+
+- **Db tests run in one transaction, so every `now()` is the same:** chain-order tests stamp `created_at` themselves (`chat_chains.test.sql`'s `test.post`). (CV-12)
+- **`chat__enter` (rejoin) closes items through `chat__close_read`:** items of replies hidden in a wrapped chain stay open after a rejoin too. (CV-12)
+
+## Chat channel lifecycle (CV-15)
+
+- **A Realtime update on `chat_channels` reaches only those who can read the row afterwards:** deleting a channel or making it private reaches nobody that way. Stamp each member's own row (`access_at`) so their copy checks access. (CV-15)
+- **`module_activity` op `chat.announcement` is the bell's:** the announcement switch's history op is `chat.announcement_switch`. (CV-15)
+- **`entities_op_tombstone` checks links edit access, which a chat manager may lack:** ops update `entities` directly. (CV-15)
+
+## Chat Catch up and Later (CV-11)
+
+- **Your own send reads the conversation through (closes your items there), and so does opening it:** an e2e that seeds Catch up posts the other person's messages and doesn't open the conversation before checking the list. (CV-11)
+- **`chat_unread_counts` compares `later_until` with `now()`:** a test that fires `chat__fire_later` with a future `p_now` sees the item back in the list but not in the count; move `later_until` back instead (`test.elapse`). (CV-11)
+
+## Chat statuses and presence (CV-17)
+
+- **`pg_policies.qual` prints `auth.uid()` as `uid()`:** match on `uid()`. (CV-17)
+- **A `pg_temp.recut` whose new text contains the old (an append) checks for the new text first,** or a re-run cuts twice. (CV-17)
+- **An API key's `chat_now` call sets the `request.*` claims before `SET LOCAL ROLE service_role`** (the test schema isn't readable as `service_role`). (CV-17)
+- **`focus_runs.test.sql` fails 11 grant and publication checks on the local stack,** before CV-17 too: local grants drift, not a block's fault. (CV-17)
+
+## Chat linked channels (CV-13)
+
+- **`workspace_members.perms` is resolved from the role by a trigger:** to make an admin in a SQL test insert `role = 'admin'`, not `perms`. (CV-13)
+- **A direct `INSERT INTO buckets` in a SQL test doesn't register the project in `entities`:** the link op registers its target itself (the mirror row needs the foreign key). (CV-13)
+- **`refs-parity.test.ts` skips without psql or the stack:** set `MODUO_REQUIRE_DB=1` on a run that must check the server, and it fails instead (nothing sets it yet; `chat_links.test.sql` pins the grammar's edges). (CV-13)
+
+## Chat files (CV-9)
+
+- **The Storage policies read `public.attachments` through its own row policy:** a pending chat row must be visible to its uploader in `attachments_select`, or the upload's INSERT policy can't see it. (CV-9)
+- **`can_access('chat_message', …)` is false:** chat files have their own policy branch. (CV-9)
+- **`attachments_largest` and `attachments_op_restore` handle task files only;** `storage__unsettled_bytes` and `attachments_op_abandon` already cover chat uploads. (CV-9)
+
+## Chat search (CV-19)
+
+- **Under `SET LOCAL ROLE authenticated` a test loses the `test` schema:** build ids and names before switching role, map returned ids to names after. (CV-19)
+- **`SET LOCAL session_replication_role = replica` loads a 100,000-row fixture into `chat_messages` without the ops' triggers,** with no `ALTER TABLE … DISABLE TRIGGER` (which would lock the shared stack's table for the whole test). (CV-19)
+- **A `statement_timeout` in a function's `SET` clause doesn't bound the statement that calls it in psql;** PostgREST applies it per call. (CV-19)

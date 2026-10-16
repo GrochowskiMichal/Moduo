@@ -8,18 +8,27 @@
 import type {
   ChatCatchupReason,
   ChatChannelKind,
+  ChatLinkTarget,
   ChatMessageKind,
   ChatNotifyLevel,
   ContentAuthorKind,
+  RelationKind,
 } from "@contracts/vocabularies";
 
 export type {
   ChatCatchupReason,
   ChatChannelKind,
+  ChatLinkTarget,
   ChatMessageKind,
   ChatNotifyLevel,
   ContentAuthorKind,
 };
+
+/** A channel's link (CV-13): a project (`bucket`), a client or a team. */
+export type ChatLink = { type: ChatLinkTarget; id: string };
+
+/** What "Start a conversation for X" takes: a project or a client, never a team. */
+export type ChatStartableTarget = Exclude<ChatLinkTarget, "team">;
 
 export type ChatChannel = {
   id: string;
@@ -40,6 +49,8 @@ export type ChatChannel = {
   isDefault?: boolean;
   /** An announcement channel: only its managers post (CH23a). */
   managersOnly?: boolean;
+  /** What the channel links to (CV-13), null when nothing. */
+  link?: ChatLink | null;
   /** When its people or managers last changed (CV-15): People and managers are re-read on it. */
   rosterAt?: string | null;
 };
@@ -117,10 +128,14 @@ export type ChatMessage = {
   createdAt: string;
   /** The server's stamp of the row's last change (the delta cursor and the live merge). */
   updatedAt: string;
+  /** CV-9: how many files it holds (absent on rows written before CV-9's columns). */
+  fileCount?: number;
   /** Client-only (the store): an unconfirmed send of yours. */
   sendState?: ChatSendState;
   /** Client-only: why the server refused it ("Not sent · Retry"). */
   sendError?: string;
+  /** Client-only (CV-9): false when Retry can't help (a message of files only whose files all stopped). */
+  sendRetry?: false;
   /** Client-only, v1's screens: an optimistic send that hasn't been confirmed yet. */
   pending?: boolean;
   /** Client-only, v1's screens: an optimistic send the server refused — offer retry. */
@@ -188,6 +203,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.leave",
   "chat.member_add",
   "chat.member_remove",
+  "chat.channel_link",
   "chat.manager_add",
   "chat.manager_remove",
   "chat.announcement_switch",
@@ -200,6 +216,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.message_restore",
   "chat.wrap_up",
   "chat.reopen",
+  "chat.move",
 ] as const;
 
 /** One line of a conversation's history (a `module_activity` row). */
@@ -216,11 +233,80 @@ export type ChatHistoryEntry = {
 /** A position in a conversation's stream: pages key on (created_at, id). */
 export type ChatKey = { at: string; id: string };
 
+/** One file on a sent message (CV-9): readable by whoever reads its conversation. */
+export type ChatFile = {
+  id: string;
+  messageId: string;
+  /** The message's author (also the uploader); null once their account is deleted. */
+  authorId: string | null;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  /** Paths in the private `attachments` bucket: signed links only. */
+  objectPath: string;
+  previewPath: string | null;
+  previewMime: string | null;
+  /** When its message was sent (the Files view's order). */
+  sentAt: string;
+};
+
 /** What the server said when it didn't answer with data. Never thrown. */
 export type ChatError = { code: string | null; message: string };
 
 /** A store read or write: its data, or the error (supabase-js reports on `error`). */
 export type ChatResult<T> = { data: T; error: null } | { data: null; error: ChatError };
+
+/** What `chat_op_move_messages` answers (CV-16). */
+export type ChatMoveAnswer =
+  | { status: "confirm"; newly: number }
+  | { status: "moved" | "undone"; ids: string[]; from: string; to: string };
+
+/** One hit of `chat_search` (CV-19): a message you can read now, newest first. */
+export type ChatSearchHit = {
+  messageId: string;
+  channelId: string;
+  channelKind: ChatChannelKind;
+  /** The channel's name; null for a direct message (name it from its people). */
+  channelName: string | null;
+  /** The chain's root when the hit is a reply in a chain. */
+  parentId: string | null;
+  replyToId: string | null;
+  authorId: string | null;
+  /** An app's post names the app (`author_kind` "api_key"). */
+  authorLabel: string | null;
+  createdAt: string;
+  /** Plain text; matches sit between U+E000 and U+E001 (`splitSnippet`). */
+  snippet: string;
+};
+
+/** One of ⌘K's Conversations (`chat_find_conversations`, CV-19): a conversation you can read now. */
+export type ChatConversationFound = {
+  channelId: string;
+  kind: ChatChannelKind;
+  /** The channel's name; null for a direct message (name it from `people`). */
+  name: string | null;
+  /** A direct message's people besides you: everyone it was opened with (its key), so one
+   *  someone left keeps their name; empty for a note-to-self. */
+  people: string[];
+  archived: boolean;
+};
+
+/** What Chat's Search asks for: the words, and the FilterBar's from · in · has a file · date. */
+export type ChatSearchQuery = {
+  workspaceId: string;
+  query: string;
+  channelId?: string | null;
+  fromId?: string | null;
+  /** Only messages at or after this instant (the date filter). */
+  after?: string | null;
+  hasFile?: boolean;
+  /** The last hit of the previous page: the next page is strictly older. */
+  before?: { createdAt: string; messageId: string } | null;
+  /** At most 50 (the server caps it). */
+  limit?: number;
+};
 
 /** One row of `chat_sync_ids` (CV-2b): what the access check reads. */
 export type ChatSyncRow = {
@@ -259,6 +345,14 @@ export type ChatRuntime = {
   /** The access check: what this person may read now (CV-2b). */
   syncIds(workspaceId: string, since: string | null): Promise<ChatResult<ChatSyncRow[]>>;
   people(workspaceId: string): Promise<ChatResult<ChatPerson[]>>;
+  /** Server search over the messages you can read now (CV-19: ⌘K, Chat's Search, find in a conversation). */
+  search(args: ChatSearchQuery): Promise<ChatResult<ChatSearchHit[]>>;
+  /** ⌘K's Conversations: readable conversations by name, without diacritics (CV-19). */
+  findConversations(args: {
+    workspaceId: string;
+    query: string;
+    limit?: number;
+  }): Promise<ChatResult<ChatConversationFound[]>>;
   counts(workspaceId: string): Promise<ChatResult<ChatUnread[]>>;
   /** Send under a client-minted id: a resend returns the stored row. */
   send(args: {
@@ -286,6 +380,19 @@ export type ChatRuntime = {
   reopen(rootId: string): Promise<ChatResult<ChatMessage>>;
   /** "Reply to…": the message joins the chain of an earlier message. */
   attachToChain(args: { messageId: string; replyToId: string }): Promise<ChatResult<ChatMessage>>;
+  /**
+   * "Move to…" (CV-16): the messages (a root brings its chain) go to `targetId`.
+   * Into a wider audience your own messages first answer `confirm` with how
+   * many people would newly see them. With `undo`, the moved ids and the
+   * source as the target, by you within 10 s: the Undo (answers `undone`, or
+   * refuses when it's too late; never a fresh move).
+   */
+  moveMessages(args: {
+    ids: string[];
+    targetId: string;
+    confirm: boolean;
+    undo?: boolean;
+  }): Promise<ChatResult<ChatMoveAnswer>>;
   /** Several messages by id (what you can read of them). */
   messages(ids: readonly string[]): Promise<ChatResult<ChatMessage[]>>;
   /** Catch up's open items in this workspace (CV-11). */
@@ -308,6 +415,14 @@ export type ChatRuntime = {
   chainRead(rootId: string): Promise<ChatResult<null>>;
   /** A conversation's reply chains (roots with replies), newest activity first. */
   chains(channelId: string): Promise<ChatResult<ChatMessage[]>>;
+  /** CV-9: a conversation's files, newest message first; `before` = the last file of the previous page. */
+  files?(args: {
+    channelId: string;
+    before?: { sentAt: string; id: string } | null;
+    limit?: number;
+  }): Promise<ChatResult<ChatFile[]>>;
+  /** CV-9: the files of these sent messages that you may read. */
+  messageFiles?(messageIds: readonly string[]): Promise<ChatResult<ChatFile[]>>;
   /** Whether you follow a chain (no mute row = following). */
   chainFollowing(rootId: string): Promise<boolean>;
   followChain(rootId: string, following: boolean): Promise<ChatResult<null>>;
@@ -335,8 +450,6 @@ export type ChatRuntime = {
   }): Promise<ChatHistoryEntry[]>;
   /** How many people are in each of these conversations (Browse channels). */
   memberCounts(channelIds: readonly string[]): Promise<Record<string, number>>;
-  /** Full-text-ish search across messages the user can read (v1; search is its own block). */
-  search(args: { workspaceId: string; query: string; limit?: number }): Promise<ChatMessage[]>;
 
   createChannel(args: {
     workspaceId: string;
@@ -346,7 +459,19 @@ export type ChatRuntime = {
     memberIds?: string[];
     /** Only managers post (CH23a); the creator is the first manager. */
     announcement?: boolean;
+    /** The optional link (CV-13): needs edit rights on the item. */
+    link?: ChatLink | null;
   }): Promise<ChatChannel>;
+  /** "Start a conversation for X" (CH56): named after X, public or private by who sees X. */
+  startConversation(args: {
+    workspaceId: string;
+    type: ChatStartableTarget;
+    id: string;
+  }): Promise<ChatChannel>;
+  /** Links the channel to one item, or unlinks it (null). */
+  linkChannel(args: { channelId: string; link: ChatLink | null }): Promise<ChatChannel>;
+  /** Whether capture from the channel files into its linked project for you (else the Inbox). */
+  linkFilesHere(channelId: string): Promise<boolean>;
   openDm(args: { workspaceId: string; userIds: string[] }): Promise<ChatChannel>;
   updateChannel(args: { channelId: string; name?: string; topic?: string }): Promise<ChatChannel>;
   archiveChannel(args: { channelId: string; archived: boolean }): Promise<ChatChannel>;
@@ -407,15 +532,19 @@ export type ChatMessageRef = {
   excerpt: string | null;
 };
 
-/** One "Mentioned in" line (chat_conversations_for_item). */
+/** One line of an item's conversations (chat_conversations_for_item): a
+ *  "Mentioned in" line, or a conversation linked to it (CV-13). */
 export type ChatItemConversation = {
   channelId: string;
   workspaceId: string;
   channelKind: ChatChannelKind;
   channelName: string | null;
   channelPrivate: boolean;
-  relation: "mentions";
+  relation: Extract<RelationKind, "mentions" | "conversation-of">;
   since: string;
+  /** Your unread messages in a linked conversation (0 when you aren't in it). */
+  unread: number;
+  archived: boolean;
 };
 
 /** An item made from a message (a `spawned-from` link to it). */

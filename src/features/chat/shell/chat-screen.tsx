@@ -14,10 +14,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "@/components/app/create-events";
 import { FeaturePanelsShell } from "@/components/app/feature-panels-shell";
-import { dispatchOpenPalette } from "@/components/app/global-command-palette";
 import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/right-panel";
+import { onSearchRequest } from "@/components/app/search-events";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { dragHasFiles, filesFromDataTransfer } from "@/features/attachments/files";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layout/panel-events";
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
@@ -53,12 +54,29 @@ import {
   makePrivateCopy,
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
+import { type MoveStep, MoveToDialog, moveTargets } from "../dialogs/move-dialog";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
+import { useComposerFiles } from "../files/composer-files";
+import { FilesView } from "../files/files-view";
+import { MessageFiles } from "../files/message-files";
+import { hasSendableFiles } from "../files/model";
+import { ChatSearchView } from "../find/chat-search-view";
+import { FindBar } from "../find/find-bar";
+import type { SearchParams } from "../find/model";
+import { inFilterConversations, rememberSearch, reopenSearch } from "../find/model";
+import { captureDestination, useLinkFilesHere } from "../linking";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
-import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import type {
+  ChatChannel,
+  ChatMessage,
+  ChatNotifyLevel,
+  ChatPerson,
+  ChatSearchHit,
+} from "../model";
 import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
+import { ChannelLinkSection, LinkChip } from "../panel/link-section";
 import { MessageInContext } from "../panel/message-in-context";
 import { PersonCard } from "../panel/person-card";
 import { ReplyChainsView } from "../panel/reply-chains-view";
@@ -127,6 +145,16 @@ function webOrigin(): string {
   return configured || window.location.origin;
 }
 
+/** A message's words on one line (a task's title from it). */
+function wordsOf(m: ChatMessage): string {
+  return toBodyText(messageTree(m.id, m.updatedAt, m.body))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** How long "Moved to …" offers Undo (the op accepts it for 10 s). */
+const MOVE_UNDO_MS = 8_000;
+
 function failed(res: ChatWriteResult, fallback: string): boolean {
   if (res.ok) return false;
   toast(res.offline ? "Offline" : res.message || fallback);
@@ -164,6 +192,10 @@ export type ChatScreenProps = {
   onLeaveCatchup?: () => void;
   /** Open Browse channels. */
   onBrowse?: () => void;
+  /** The centre shows Chat's Search with these words and filters (`view=search`, CV-19). */
+  search?: SearchParams | null;
+  /** Open Chat's Search, or change its words and filters (`replace` while typing). */
+  onSearch?: (params: SearchParams, opts?: { replace?: boolean }) => void;
   /** Open a conversation (null: none named, so Chat lands on General). */
   onOpen: (
     conversationId: string | null,
@@ -188,6 +220,8 @@ export function ChatScreen({
   catchup = false,
   onOpen,
   onBrowse,
+  search = null,
+  onSearch,
   onOpenCatchup,
   onLeaveCatchup,
 }: ChatScreenProps) {
@@ -256,6 +290,53 @@ export function ChatScreen({
     [snap.channels, snap.mine, snap.unread, selfId, personOf],
   );
   const [collapsed, toggleSection] = useCollapsedSections();
+
+  // ── search (CV-19) ──────────────────────────────────────────────────────────
+  // The bottom bar's Search opens Chat's Search while Chat is open (⌘K stays ⌘K),
+  // with the words and filters it last had.
+  const searchNow = useRef(search);
+  searchNow.current = search;
+  useEffect(() => {
+    if (userId && workspaceId && search) rememberSearch(userId, workspaceId, search);
+  }, [userId, workspaceId, search]);
+  useEffect(() => {
+    if (!onSearch) return;
+    return onSearchRequest(() => {
+      onSearch(reopenSearch(userId, workspaceId, searchNow.current));
+      return true;
+    });
+  }, [onSearch, userId, workspaceId]);
+  // "In": every conversation you can read (the store holds only those), starred,
+  // unjoined public and archived ones included.
+  const searchConversations = useMemo(
+    () =>
+      inFilterConversations(snap.channels, (id) => {
+        const c = snap.channels[id];
+        return c ? conversationTitle(c, selfId, personOf) : "";
+      }),
+    [snap.channels, selfId, personOf],
+  );
+  const hitConversation = useCallback(
+    (hit: ChatSearchHit) => {
+      const known = snap.channels[hit.channelId];
+      if (known) return conversationTitle(known, selfId, personOf);
+      return hit.channelName ?? "Direct message";
+    },
+    [snap.channels, selfId, personOf],
+  );
+  const openHit = useCallback(
+    (hit: ChatSearchHit, replace = false) =>
+      onOpen(hit.channelId, {
+        messageId: hit.messageId,
+        ...(hit.parentId ? { chainId: hit.parentId } : {}),
+        replace,
+      }),
+    [onOpen],
+  );
+  // A conversation's own Search: the find bar under its toolbar (frame 2 "find").
+  const [finding, setFinding] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new conversation closes it
+  useEffect(() => setFinding(false), [conversationId]);
   const ordered = useMemo(() => sidebarOrder(model, collapsed), [model, collapsed]);
 
   const channel = conversationId ? snap.channels[conversationId] : undefined;
@@ -280,11 +361,11 @@ export function ChatScreen({
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
   useEffect(() => {
-    if (!ready || conversationId || browsing || catchup) return;
+    if (!ready || conversationId || browsing || catchup || search) return;
     const general = Object.values(snap.channels).find((c) => c.isDefault && !c.archivedAt);
     const first = general ?? ordered[0]?.channel;
     if (first) onOpen(first.id, { replace: true });
-  }, [ready, conversationId, browsing, catchup, snap.channels, ordered, onOpen]);
+  }, [ready, conversationId, browsing, catchup, search, snap.channels, ordered, onOpen]);
 
   // Open once per conversation (re-opening would drop a window around a linked message).
   const known = !!conversationId && !!snap.channels[conversationId];
@@ -444,6 +525,21 @@ export function ChatScreen({
 
   const streamRef = useRef<MessageStreamHandle | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
+  // CV-9: the files going with the next message, and a message's files in the stream.
+  const composerFiles = useComposerFiles({
+    runtime,
+    workspaceId,
+    userId: selfId,
+    channelId: conversationId ?? "",
+  });
+  const renderFiles = useCallback(
+    (m: ChatMessage) => <MessageFiles message={m} runtime={runtime} />,
+    [runtime],
+  );
+  const filesStamp = (streamWin?.rows ?? [])
+    .filter((r) => (r.fileCount ?? 0) > 0 && !r.deletedAt && !r.sendState)
+    .map((r) => r.id)
+    .join(",");
   const returnToComposer = useCallback((typed?: string) => {
     if (typed) composerRef.current?.insertText(typed);
     else composerRef.current?.focus();
@@ -545,6 +641,106 @@ export function ChatScreen({
     [store, unhide],
   );
 
+  // The multi-select's Delete (CV-16): one toast and one Undo for them all;
+  // each is sent when the toast goes, like a single delete.
+  const deleteManyWithUndo = useCallback(
+    (ms: ChatMessage[]) => {
+      const fresh = ms.filter((m) => !m.sendState && !pendingDeletes.current.has(m.id));
+      if (fresh.length === 0) return;
+      if (fresh.length === 1 && fresh[0]) {
+        deleteWithUndo(fresh[0]);
+        return;
+      }
+      setHidden((prev) => {
+        const next = new Set(prev);
+        for (const m of fresh) next.add(m.id);
+        return next;
+      });
+      for (const m of fresh) pendingDeletes.current.set(m.id, m);
+      const commitAll = () => {
+        for (const m of fresh) commitRef.current(m.id);
+      };
+      toast(`Deleted ${fresh.length} messages`, {
+        id: `chat-delete-many-${fresh[0]?.id}`,
+        duration: DELETE_UNDO_MS,
+        onAutoClose: commitAll,
+        onDismiss: commitAll,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            for (const m of fresh) {
+              pendingDeletes.current.delete(m.id);
+              unhide(m.id);
+            }
+          },
+        },
+      });
+    },
+    [deleteWithUndo, unhide],
+  );
+
+  // Move to… (CV-16): pick a conversation; the audience warning first when
+  // people there couldn't read this one; then "Moved to …" with Undo for 8 s.
+  const [moveFor, setMoveFor] = useState<ChatMessage[] | null>(null);
+  const [moveStep, setMoveStep] = useState<MoveStep>({ step: "pick" });
+  const [moveBusy, setMoveBusy] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  useEffect(() => setMoveFor(null), [conversationId]);
+  const moveTargetsFor = useCallback(
+    (query: string) =>
+      moveTargets(
+        Object.values(snap.channels),
+        people,
+        selfId,
+        conversationId ?? "",
+        new Set(Object.keys(snap.mine)),
+        query,
+      ),
+    [snap.channels, snap.mine, people, selfId, conversationId],
+  );
+  const askMove = useCallback((ms: ChatMessage[]) => {
+    if (ms.length === 0) return;
+    setMoveStep({ step: "pick" });
+    setMoveFor(ms);
+  }, []);
+  const runMove = useCallback(
+    async (target: ChatChannel, title: string, confirm: boolean) => {
+      const ms = moveFor;
+      if (!store || !ms || moveBusy) return;
+      setMoveBusy(true);
+      const res = await store.moveMessages(
+        ms.map((m) => m.id),
+        target.id,
+        confirm,
+      );
+      setMoveBusy(false);
+      if (!res.ok) {
+        toast(res.offline ? "Offline" : res.message || "Couldn't move the messages.");
+        return;
+      }
+      const answer = res.answer;
+      if (answer.status === "confirm") {
+        setMoveStep({ step: "confirm", target, targetTitle: title, newly: answer.newly });
+        return;
+      }
+      setMoveFor(null);
+      if (answer.status !== "moved") return;
+      toast(`Moved to ${title}`, {
+        id: `chat-move-${answer.ids[0]}`,
+        duration: MOVE_UNDO_MS,
+        action: {
+          label: "Undo",
+          onClick: () =>
+            void store.moveMessages(answer.ids, answer.from, false, true).then((r) => {
+              if (!r.ok) toast(r.offline ? "Offline" : r.message || "Couldn't undo the move.");
+              else if (r.answer.status !== "undone") toast("Couldn't undo the move.");
+            }),
+        },
+      });
+    },
+    [store, moveFor, moveBusy],
+  );
+
   // Wrapped-up chains: their replies leave the stream (a drawing rule, CV-12),
   // on the same path as the deletes inside their Undo.
   const streamHidden = useMemo(
@@ -614,16 +810,17 @@ export function ChatScreen({
   }, [streamWin?.rows, snap.chains, conversationId]);
   const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
   const addMadeFrom = madeFrom.add;
-  const makeTaskFrom = useCallback(
-    (m: ChatMessage) => {
-      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 200);
+  // A linked project you may add to is capture's destination (CV-13), else the Inbox.
+  const filesHere = useLinkFilesHere(runtime?.chat ?? null, channel ?? null);
+  const makeTaskWith = useCallback(
+    (m: ChatMessage, words: string) => {
+      const text = words.slice(0, 200);
       const chat = runtime?.chat;
+      const from = snap.channels[m.channelId];
       dispatchOpenCapture({
         type: "task",
         draft: text,
+        destination: captureDestination(from, filesHere && from?.id === channel?.id),
         source:
           chat && !m.sendState
             ? {
@@ -639,7 +836,17 @@ export function ChatScreen({
         },
       });
     },
-    [runtime, snap.channels, selfId, personOf, addMadeFrom],
+    [runtime, snap.channels, selfId, personOf, addMadeFrom, filesHere, channel?.id],
+  );
+  const makeTaskFrom = useCallback((m: ChatMessage) => makeTaskWith(m, wordsOf(m)), [makeTaskWith]);
+  // T on a multi-select (CV-16): one task with the picked messages' words in
+  // order, From the first of them.
+  const makeTaskFromMany = useCallback(
+    (ms: ChatMessage[]) => {
+      const first = ms[0];
+      if (first) makeTaskWith(first, ms.map(wordsOf).filter(Boolean).join(" · "));
+    },
+    [makeTaskWith],
   );
 
   // ── Remind me (CV-11): a message's ⋯ / H, and `/remind` for the conversation ──
@@ -832,7 +1039,7 @@ export function ChatScreen({
   const left = (
     <ChatSidebar
       model={model}
-      activeId={browsing || catchup ? null : conversationId}
+      activeId={browsing || catchup || search ? null : conversationId}
       personOf={personOf}
       online={stateOf}
       collapsed={collapsed}
@@ -879,7 +1086,23 @@ export function ChatScreen({
   const canWrapUp = (root: ChatMessage) => !!channel && mayWrap(root, channel, chainRights);
 
   let center: React.ReactNode;
-  if (catchup) {
+  if (search && onSearch) {
+    center = (
+      <ChatSearchView
+        chat={runtime?.chat ?? null}
+        workspaceId={workspaceId}
+        params={search}
+        onParamsChange={(next) => onSearch(next, { replace: true })}
+        people={members}
+        conversations={searchConversations}
+        personOf={personOf}
+        conversationLabel={hitConversation}
+        onOpenHit={(hit) => openHit(hit)}
+        onOpenPerson={(uid) => openDmWith([uid])}
+        selfId={selfId}
+      />
+    );
+  } else if (catchup) {
     center = catchupUi.center;
   } else if (browsing) {
     center = (
@@ -944,8 +1167,24 @@ export function ChatScreen({
       channel.kind === "dm"
         ? others.length + 1
         : (details.members?.length ?? (channel.isDefault ? members.length || null : null));
+    // CV-9: files dropped anywhere on the conversation go to the composer.
+    const takesDrop = !line && !managersPending && !!composerFiles;
     center = (
-      <div className="flex h-full min-h-0 flex-col" data-conversation={channel.id}>
+      <div
+        className="flex h-full min-h-0 flex-col"
+        data-conversation={channel.id}
+        onDragOver={(e) => {
+          if (!takesDrop || !dragHasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(e) => {
+          if (!takesDrop || !dragHasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          composerFiles?.add(filesFromDataTransfer(e.dataTransfer));
+          composerRef.current?.focus();
+        }}
+      >
         <ConversationToolbar
           row={{ channel, people: others, title }}
           member={member}
@@ -959,7 +1198,8 @@ export function ChatScreen({
           peopleCount={peopleCount}
           canManage={canManage}
           paused={snap.paused}
-          onSearch={() => dispatchOpenPalette()}
+          linked={channel.link ? <LinkChip channel={channel} runtime={runtime} /> : undefined}
+          onSearch={() => setFinding((v) => !v)}
           onPin={(starred) =>
             guarded(
               () => store?.setPrefs(channel.id, { starred }) ?? Promise.resolve(),
@@ -986,6 +1226,16 @@ export function ChatScreen({
             )
           }
         />
+        {finding && workspaceId ? (
+          <FindBar
+            chat={runtime?.chat ?? null}
+            workspaceId={workspaceId}
+            channelId={channel.id}
+            onJump={(hit) => openHit(hit, true)}
+            onClose={() => setFinding(false)}
+            onSeeAll={(q) => onSearch?.({ q, in: channel.id })}
+          />
+        ) : null}
         <MadeFromScope value={madeFrom}>
           <MessageStream
             key={channel.id}
@@ -1102,6 +1352,10 @@ export function ChatScreen({
             }
             onRetry={(m) => store?.retry(m.id)}
             onDiscard={(m) => store?.discard(m.id)}
+            onMoveMany={channel.archivedAt ? undefined : askMove}
+            canMoveOthers={canManage}
+            onTaskMany={makeTaskFromMany}
+            onDeleteMany={deleteManyWithUndo}
             onPersonClick={openPerson}
             personPreview={(id) => (
               <PersonCard
@@ -1116,6 +1370,7 @@ export function ChatScreen({
               />
             )}
             onReturnToComposer={returnToComposer}
+            renderFiles={renderFiles}
           />
         </MadeFromScope>
         <div data-chat-composer className="shrink-0 px-3 pb-3">
@@ -1193,14 +1448,23 @@ export function ChatScreen({
                 initial={store?.draft(channel.id) ?? ""}
                 autoFocus
                 note={channelNote?.note ?? null}
+                files={composerFiles}
                 onSend={(body) => {
-                  if (!store || !body.trim()) return false;
+                  if (!store) return false;
+                  // CV-9: upload first, send after: the files went up under this id.
+                  // Files that waited past the server's day are taken out first, with a line.
+                  if (composerFiles?.dropStale()) return false;
+                  const going = hasSendableFiles(composerFiles?.files);
+                  if (!body.trim() && !going) return false;
+                  const withFiles = composerFiles?.take() ?? null;
+                  if (!body.trim() && !withFiles) return false;
                   const replyRoot = replyingTo ? (replyingTo.parentId ?? replyingTo.id) : null;
                   const id = store.send({
                     channelId: channel.id,
                     body,
                     replyToId: replyingTo?.id ?? null,
                     format: "v2",
+                    ...(withFiles ? { id: withFiles.id, files: withFiles.files } : {}),
                   });
                   setReplyingTo(null);
                   typingStore?.send(channel.id, replyRoot, true);
@@ -1415,6 +1679,28 @@ export function ChatScreen({
             onOpenMessage={openMessageInPanel}
             chains={chainList}
             onOpenChain={(root) => openChain(root.id)}
+            linkSection={
+              <ChannelLinkSection
+                key={channel.id}
+                channel={channel}
+                runtime={runtime}
+                canLink={
+                  !!member &&
+                  rights.canPost &&
+                  (!channel.managersOnly || canManage) &&
+                  !channel.archivedAt &&
+                  !snap.paused
+                }
+                canAddPeople={
+                  !channel.archivedAt &&
+                  !snap.paused &&
+                  (channel.isPrivate ? canManage : rights.canPost)
+                }
+                memberIds={new Set((details.members ?? []).map((m) => m.userId))}
+                onLink={(link) => store?.linkChannel(channel.id, link) ?? Promise.resolve()}
+                onAddPeople={(ids) => store?.addMembers(channel.id, ids) ?? Promise.resolve()}
+              />
+            }
           />
         ),
         chains: () => (
@@ -1424,6 +1710,15 @@ export function ChatScreen({
             personOf={personOf}
             rowById={rowById}
             onOpen={(root) => openChain(root.id)}
+          />
+        ),
+        files: () => (
+          <FilesView
+            runtime={runtime}
+            channelId={channel.id}
+            selfId={selfId}
+            personOf={personOf}
+            refreshKey={filesStamp}
           />
         ),
       }}
@@ -1483,6 +1778,23 @@ export function ChatScreen({
           });
         }}
       />
+      <MoveToDialog
+        open={!!moveFor}
+        onOpenChange={(open) => {
+          if (!open) setMoveFor(null);
+        }}
+        count={moveFor?.length ?? 0}
+        sourceTitle={channel ? conversationTitle(channel, selfId, personOf) : ""}
+        targets={moveTargetsFor}
+        step={moveStep}
+        busy={moveBusy}
+        onPick={(target, title) => void runMove(target, title, false)}
+        onConfirm={() => {
+          if (moveStep.step === "confirm") {
+            void runMove(moveStep.target, moveStep.targetTitle, true);
+          }
+        }}
+      />
       <NewConversationDialog
         open={newOpen}
         onOpenChange={setNewOpen}
@@ -1502,6 +1814,8 @@ export function ChatScreen({
         }}
         onCaptureNote={() => dispatchOpenCapture({ type: "note" })}
         onBrowse={() => onBrowse?.()}
+        runtime={runtime}
+        workspaceId={workspaceId}
       />
       {catchupUi.dialogs}
       <LaterDialog

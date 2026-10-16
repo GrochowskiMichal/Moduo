@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, render, waitFor } from "@testing-library/react";
 
+import { rememberSearch, reopenSearch } from "../features/chat/find/model";
 import { EMPTY_FIELDS, loadDraft, saveDraft } from "../features/tasks/capture/capture-draft";
 import { type AuthContextValue, AuthProvider, useAuth } from "./auth-provider";
 
@@ -103,6 +104,30 @@ describe("AuthProvider — signing out forgets kept capture drafts (TV-U14)", ()
     await act(() => auth().signOut());
 
     expect(loadDraft("u1", "w1")).toBeNull();
+  });
+});
+
+describe("AuthProvider — signing out forgets Chat's remembered searches (CV-19)", () => {
+  it("auth-js signing out on its own: the next person to sign in reopens nothing", async () => {
+    await renderAuth();
+    await settle();
+    rememberSearch("u1", "w1", { q: "salary", from: "u3" });
+    expect(reopenSearch("u1", "w1", null)).toEqual({ q: "salary", from: "u3" });
+
+    act(() => fake.state.emit?.("SIGNED_OUT", null));
+
+    expect(reopenSearch("u2", "w1", null)).toEqual({});
+    expect(reopenSearch("u1", "w1", null)).toEqual({});
+  });
+
+  it("the person signing out forgets them too", async () => {
+    const auth = await renderAuth();
+    await settle();
+    rememberSearch("u1", "w1", { q: "salary" });
+
+    await act(() => auth().signOut());
+
+    expect(reopenSearch("u1", "w1", null)).toEqual({});
   });
 });
 

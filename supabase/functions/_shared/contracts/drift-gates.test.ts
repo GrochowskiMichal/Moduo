@@ -21,6 +21,7 @@ import {
   CHAT_CATCHUP_DONE_HOW,
   CHAT_CATCHUP_REASONS,
   CHAT_EVENT_TYPES,
+  CHAT_LINK_TARGETS,
   CHAT_MENTION_REASONS,
   CHAT_MESSAGE_KINDS,
   CLIENT_SURFACES,
@@ -51,6 +52,7 @@ import {
   PLAN_TIERS,
   PROJECT_STATES,
   RECURRENCE_MODES,
+  RELATION_KINDS,
   STARTER_TEMPLATES,
   SYNC_TOMBSTONE_TABLES,
   TASK_CLOSED_CATEGORIES,
@@ -146,6 +148,16 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`(event ->> 'type') IN (${inList(CHAT_EVENT_TYPES)})`);
     expect(sql).toContain(`CHECK (reason IN (${inList(CHAT_CATCHUP_REASONS)}))`);
     expect(sql).toContain(`done_how IN (${inList(CHAT_CATCHUP_DONE_HOW)})`);
+  });
+
+  it("CHAT_LINK_TARGETS and RELATION_KINDS match the …_chat_v2_linked_channels CHECKs (CV-13)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_linked_channels.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`linked_type IN (${inList(CHAT_LINK_TARGETS)})`);
+    const kinds = RELATION_KINDS.map((k) => `'${k}'::text`).join(", ");
+    expect(sql.replace(/\s+/g, " ")).toContain(`relation_kind = ANY (ARRAY[${kinds}])`);
   });
 
   it("statuses vocabularies match the …_chat_v2_statuses CHECKs (CV-17)", () => {
@@ -276,7 +288,9 @@ describe("cross-runtime drift guards", () => {
     );
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`status IN (${inList(ATTACHMENT_STATUSES)})`);
-    expect(sql).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
+    // CV-9 re-cut the deleted-reason CHECK (chat_message).
+    const recut = readFileSync(resolve(MIGRATIONS_DIR, "20261016170000_chat_v2_files.sql"), "utf8");
+    expect(recut).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
     expect(sql).toContain(`preview_mime IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`p_preview_mime NOT IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`bucket_id = '${ATTACHMENTS_BUCKET}'`);
