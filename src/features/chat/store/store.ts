@@ -1865,12 +1865,11 @@ export class ChatStore {
       () => this.transport.attachToChain({ messageId, replyToId }),
     );
     if (!res.ok) return res;
-    const roots = new Set([oldRoot, this.rowById(messageId)?.parentId ?? null]);
-    for (const id of roots) {
-      if (!id) continue;
-      const root = await this.transport.message(id);
-      if (root.data) this.landRow(root.data);
-    }
+    const roots = [...new Set([oldRoot, this.rowById(messageId)?.parentId ?? null])].filter(
+      (id): id is string => !!id,
+    );
+    const read = await Promise.all(roots.map((id) => this.transport.message(id)));
+    for (const root of read) if (root.data) this.landRow(root.data);
     this.chainCache.clear();
     this.notify();
     return res;

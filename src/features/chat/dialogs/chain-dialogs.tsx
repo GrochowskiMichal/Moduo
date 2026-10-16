@@ -31,6 +31,7 @@ export function WrapUpDialog({
   open,
   onOpenChange,
   replies,
+  loaded,
   personOf,
   onConfirm,
 }: Named & {
@@ -38,6 +39,8 @@ export function WrapUpDialog({
   onOpenChange: (open: boolean) => void;
   /** The chain's replies, oldest first (deleted and unsent ones left out). */
   replies: readonly ChatMessage[];
+  /** The chain's read finished (with or without replies to pick). */
+  loaded: boolean;
   onConfirm: (settledId: string) => void;
 }) {
   return (
@@ -46,7 +49,9 @@ export function WrapUpDialog({
         {open && replies.length === 0 ? (
           <DialogHeader>
             <DialogTitle>Which reply settled it?</DialogTitle>
-            <DialogDescription>Loading the replies…</DialogDescription>
+            <DialogDescription>
+              {loaded ? "There's no reply here to pick." : "Loading the replies…"}
+            </DialogDescription>
           </DialogHeader>
         ) : open ? (
           <WrapUpForm

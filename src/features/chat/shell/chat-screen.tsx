@@ -1156,6 +1156,7 @@ export function ChatScreen({
           if (!open) setWrapFor(null);
         }}
         replies={wrapReplies ?? []}
+        loaded={!!wrapFor && !!snap.chains[wrapFor]?.loaded}
         personOf={personOf}
         onConfirm={(settledId) => wrapFor && wrapUp(wrapFor, settledId)}
       />
