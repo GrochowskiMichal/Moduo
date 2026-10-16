@@ -194,7 +194,7 @@ describe("a message reference", () => {
     window.addEventListener("moduo:entity:open", seen as EventListener);
     openReferenceFull({ type: "chat_message", id: MSG });
     window.removeEventListener("moduo:entity:open", seen as EventListener);
-    expect((seen.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({
+    expect((seen.mock.calls[0]?.[0] as CustomEvent | undefined)?.detail).toEqual({
       type: "chat_channel",
       id: ACME,
       messageId: MSG,

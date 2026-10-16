@@ -5,13 +5,13 @@
 // conversation. The rows behind them (`mentions` links from a conversation)
 // stay out of the item's link cards (spine/rollup.ts).
 
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import { formatDate } from "@/lib/time-format";
 import { useAuth } from "@/providers/auth-provider";
 import { resolveEntityIcon } from "../spine/icon-map";
-import { useWorkspace } from "../workspaces/workspace-context";
+import { WorkspaceContext } from "../workspaces/workspace-context";
 import type { ChatItemConversation } from "./model";
 
 /** What a line reads after "Mentioned in": the channel's name, or "a direct message". */
@@ -34,9 +34,11 @@ export function MentionedInLines({
   entityId: string;
 }) {
   const { runtime } = useAuth();
-  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  // Optional: a host without a workspace (a story, a test) shows no lines.
+  const workspace = useContext(WorkspaceContext);
+  const selectedWorkspaceId = workspace?.selectedWorkspaceId ?? null;
   const [rows, setRows] = useState<ChatItemConversation[]>([]);
-  const canChat = modulePermissions.chat !== "none";
+  const canChat = !!workspace && workspace.modulePermissions.chat !== "none";
 
   useEffect(() => {
     setRows([]);
