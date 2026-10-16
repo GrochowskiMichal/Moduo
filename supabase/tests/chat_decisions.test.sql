@@ -273,6 +273,33 @@ BEGIN
 END;
 $$;
 
+-- ── Move to… (CV-16): the decision follows the message ──────────────────────
+-- The move changes the row's conversation and leaves decision_at / _by alone,
+-- so who sees it follows the conversation it now lives in.
+DO $$
+DECLARE
+  v text;
+  v_by uuid := (SELECT decision_by FROM public.chat_messages WHERE id = test.mid('q1'));
+BEGIN
+  PERFORM test.ok(test.on_item('N', 'project', test.id('SB')) = 'q1,r2', 'setup: N sees q1 on the project');
+  v := test.as_user('B', format($q$SELECT public.chat_op_move_messages(ARRAY[%L]::uuid[], %L::uuid, true, false)$q$,
+    test.mid('q1'), test.ref('P')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: B moves q1 into the private channel P', v);
+  PERFORM test.ok(test.is_decision('q1')
+                  AND (SELECT decision_by FROM public.chat_messages WHERE id = test.mid('q1')) = v_by,
+    'a moved message keeps its decision and who marked it');
+  PERFORM test.ok(test.on_item('N', 'project', test.id('SB')) = 'r2',
+    'moved out of the linked channel, it leaves the project for someone who can''t read where it went');
+  PERFORM test.ok(test.on_item('A', 'project', test.id('SB')) = 'r2',
+    'and for its readers too: P isn''t linked and q1 doesn''t name the project');
+  v := test.as_user('B', format($q$SELECT public.chat_op_move_messages(ARRAY[%L]::uuid[], %L::uuid, false, true)$q$,
+    test.mid('q1'), test.ref('Q')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: B undoes the move', v);
+  PERFORM test.ok(test.is_decision('q1') AND test.on_item('N', 'project', test.id('SB')) = 'q1,r2',
+    'Undo brings it back with its decision');
+END;
+$$;
+
 -- ── The plan, an archived channel ───────────────────────────────────────────
 DO $$
 DECLARE
@@ -302,3 +329,19 @@ SELECT test.ok(NOT EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
                             WHERE p.oid = 'public.chat_op_mark_decision(uuid, boolean)'::regprocedure
                               AND a.grantee = 0),
   'grants: chat_op_mark_decision is not executable by PUBLIC');
+
+-- ── Erasure: whoever marked it goes, the decision stays ─────────────────────
+-- decision_by refers to the account (ON DELETE SET NULL, like pinned_by and
+-- wrapped_by): deleting the account clears it.
+DO $$
+BEGIN
+  PERFORM test.ok((SELECT decision_by FROM public.chat_messages WHERE id = test.mid('q1')) = test.id('B'),
+    'setup: B marked q1');
+  DELETE FROM auth.users WHERE id = test.id('B');
+  PERFORM test.ok(test.is_decision('q1')
+                  AND (SELECT decision_by FROM public.chat_messages WHERE id = test.mid('q1')) IS NULL,
+    'deleting the account clears who marked it; the decision stays');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.chat_messages WHERE decision_by = test.id('B')),
+    'no decision names the deleted account');
+END;
+$$;

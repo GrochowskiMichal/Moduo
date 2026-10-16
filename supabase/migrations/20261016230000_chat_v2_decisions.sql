@@ -26,6 +26,13 @@
 --      can open. Works from direct messages too, for their readers only.
 --   Nothing here takes a person from the caller; an API key reads no chat row
 --   through it.
+--
+-- Left as they are (checked against their live bodies after CV-16, CV-18 and
+-- CV-22): chat_op_move_messages moves the row and never touches the two
+-- columns, so a moved message keeps its decision (and Undo brings it back);
+-- erasure keeps chat messages, and deleting the account clears decision_by
+-- through its foreign key, like pinned_by and wrapped_by; CV-22's row-id keys
+-- don't reach chat_members.user_id, which item reads join on.
 
 SET LOCAL lock_timeout = '5s';
 
