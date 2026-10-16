@@ -23,6 +23,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import {
+  mapCatchupItem,
   mapChannel,
   mapDeletedChannel,
   mapHistory,
@@ -291,6 +292,56 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
           .rpc("chat_op_attach_to_chain", { p_message_id: messageId, p_reply_to_id: replyToId })
           .select(MESSAGE_COLUMNS);
         return rowResult(data, error, "reply to");
+      }),
+
+    messages: (ids) =>
+      attempt(async () => {
+        // PostgREST puts the ids in the URL: 100 at a time, side by side.
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+        const results = await Promise.all(
+          chunks.map((chunk) => db().from("chat_messages").select(MESSAGE_COLUMNS).in("id", chunk)),
+        );
+        const out: ChatMessage[] = [];
+        for (const { data, error } of results) {
+          if (error) return bad(chatError(error));
+          out.push(...mapRows(data, mapMessage));
+        }
+        return ok(out);
+      }),
+
+    catchupOpen: (workspaceId) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_catchup_open", {
+          p_workspace_id: workspaceId,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapCatchupItem));
+      }),
+
+    catchupDone: (ids) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_op_catchup_done", { p_item_ids: [...ids] });
+        return error ? bad(chatError(error)) : ok(Number(data) || 0);
+      }),
+
+    catchupReopen: (ids) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_op_catchup_reopen", {
+          p_item_ids: [...ids],
+        });
+        return error ? bad(chatError(error)) : ok(Number(data) || 0);
+      }),
+
+    remind: ({ messageId, channelId, itemIds, at }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_op_remind", {
+          p_message_id: itemIds ? null : (messageId ?? null),
+          p_channel_id: itemIds || messageId ? null : (channelId ?? null),
+          p_at: at,
+          p_item_ids: itemIds ? [...itemIds] : null,
+        });
+        return error ? bad(chatError(error)) : ok(Number(data) || 0);
       }),
 
     chainRead: (rootId) =>
