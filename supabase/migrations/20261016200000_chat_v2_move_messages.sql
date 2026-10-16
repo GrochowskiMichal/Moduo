@@ -25,8 +25,9 @@
 --      At most five moves per person in 10 s (PT429, the sending limit's code).
 --   4. Grants, by name.
 --
--- "Mentioned in" links are not written here: only the send/edit path writes
--- chat 'mentions' link rows.
+-- "Mentioned in" lines follow the messages through chat__link_mentions (the
+-- chat path's only writer of those rows), with each message's author; a
+-- source line nothing left there refers to is retired.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -102,6 +103,48 @@ AS $function$
     FROM items i
    WHERE k.id = i.id AND i.done_at IS NULL
      AND NOT EXISTS (SELECT 1 FROM readers r WHERE r.user_id = i.user_id)
+$function$;
+
+-- "Mentioned in" follows moved messages: the chat path's own writer
+-- (chat__link_mentions, as send and edit call it, with each message's author)
+-- leaves the lines for where they are now; a source line that no message left
+-- there refers to any more is retired. Called by the move and by its Undo.
+CREATE OR REPLACE FUNCTION public.chat__move_relink(p_ids uuid[], p_from uuid, p_to uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  r public.chat_messages;
+BEGIN
+  FOR r IN SELECT * FROM public.chat_messages m
+            WHERE m.id = ANY (p_ids) AND m.channel_id = p_to AND m.kind = 'message'
+              AND m.deleted_at IS NULL AND m.author_kind = 'user' AND m.author_id IS NOT NULL
+              AND position('moduo://' IN m.body) > 0 LOOP
+    PERFORM public.chat__link_mentions(r, r.author_id);
+  END LOOP;
+  WITH moved_refs AS (
+    SELECT DISTINCT
+           CASE b.ref_type WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread' ELSE b.ref_type END AS t,
+           b.ref_id AS id
+      FROM public.chat_messages m, public.chat__body_refs(m.body) b
+     WHERE m.id = ANY (p_ids) AND position('moduo://' IN m.body) > 0
+  )
+  UPDATE public.entity_links l
+     SET deleted_at = clock_timestamp()
+    FROM moved_refs x
+   WHERE l.source_type = 'chat_channel' AND l.source_id = p_from
+     AND l.relation_kind = 'mentions' AND l.origin = 'ref' AND l.deleted_at IS NULL
+     AND l.target_type = x.t AND l.target_id = x.id
+     -- what stays behind (deleted messages too: a delete keeps its line)
+     AND NOT EXISTS (
+       SELECT 1 FROM public.chat_messages m, public.chat__body_refs(m.body) b
+        WHERE m.channel_id = p_from AND m.kind = 'message'
+          AND position(l.target_id::text IN m.body) > 0
+          AND b.ref_id = l.target_id
+          AND CASE b.ref_type WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread' ELSE b.ref_type END
+              = l.target_type);
+END
 $function$;
 
 -- ── 3. The op ───────────────────────────────────────────────────────────────
@@ -235,6 +278,7 @@ BEGIN
        SET deleted_at = v_now, deleted_by = v_me
      WHERE e.id IN (v_in.id, v_out.id) AND e.deleted_at IS NULL;
     PERFORM public.chat__move_refile_items(v_all, v_target.id);
+    PERFORM public.chat__move_relink(v_all, v_source.id, v_target.id);
     PERFORM public.module_activity_log(v_source.workspace_id, 'chat', 'chat_channel', v_target.id,
       'chat.move', jsonb_build_object('undo', true, 'count', cardinality(v_all),
                                       'from_id', v_source.id, 'to_id', v_target.id));
@@ -330,6 +374,7 @@ BEGIN
   RETURNING * INTO v_in;
 
   PERFORM public.chat__move_refile_items(v_all, v_target.id);
+  PERFORM public.chat__move_relink(v_all, v_source.id, v_target.id);
   PERFORM public.module_activity_log(v_source.workspace_id, 'chat', 'chat_channel', v_source.id,
     'chat.move', jsonb_build_object('count', cardinality(v_all), 'from_id', v_source.id,
                                     'to_id', v_target.id, 'newly', v_newly));
@@ -345,7 +390,8 @@ DECLARE
 BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'chat__channel_readers(uuid)',
-    'chat__move_refile_items(uuid[], uuid)'
+    'chat__move_refile_items(uuid[], uuid)',
+    'chat__move_relink(uuid[], uuid, uuid)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);

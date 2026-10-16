@@ -318,6 +318,70 @@ BEGIN
 END;
 $$;
 
+-- ── "Mentioned in" follows the message (CV-10's writer, the author's rights) ─
+INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position) VALUES
+  (test.id('SB'), test.id('W'), test.id('O'), 'Shared', false, '0001'),
+  (test.id('PB'), test.id('W'), test.id('O'), 'O private', false, '0002');
+DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id = test.id('PB');
+CREATE FUNCTION test.uri(p_type text, p_name text) RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT 'moduo://' || p_type || '/' || test.id(p_name)
+$$;
+CREATE FUNCTION test.mentions(p_channel text, p_task text) RETURNS bigint LANGUAGE sql VOLATILE AS $$
+  SELECT count(*) FROM public.entity_links l
+   WHERE l.workspace_id = test.id('W') AND l.deleted_at IS NULL AND l.relation_kind = 'mentions'
+     AND l.pair_key = public.spine_pair_key('chat_channel', test.ref(p_channel), 'task', test.id(p_task))
+$$;
+CREATE FUNCTION test.lines(p_who text, p_task text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format(
+    $q$SELECT coalesce(string_agg(coalesce(channel_name, channel_kind), ',' ORDER BY channel_name), '')
+         FROM public.chat_conversations_for_item('task', %L::uuid)$q$, test.id(p_task)))
+$$;
+CREATE FUNCTION test.say(p_who text, p_conv text, p_name text, p_body text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.as_user(p_who, format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, %L::text, NULL::uuid)$q$,
+    test.mid(p_name), test.ref(p_conv), p_body))
+$$;
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('T'), 'title', 'Get logo SVGs', 'bucket_id', test.id('SB'))));
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('TP'), 'title', 'Secret plan', 'bucket_id', test.id('PB'))));
+  PERFORM test.ok((SELECT count(*) FROM public.entities WHERE workspace_id = test.id('W') AND entity_type = 'task'
+                    AND entity_id IN (test.id('T'), test.id('TP'))) = 2, 'setup: the tasks are in the registry');
+
+  v := test.say('A', 'Q', 'lk', 'Can someone take ' || test.uri('task', 'T'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mentions('Q', 'T') = 1, 'setup: A mentions T in Q', v);
+  PERFORM test.ok(test.lines('B', 'T') LIKE '%questions%', 'setup: T reads "Mentioned in questions"');
+  v := test.mv('A', ARRAY['lk'], 'F');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'A moves it to F', v);
+  PERFORM test.ok(test.mentions('F', 'T') = 1 AND test.mentions('Q', 'T') = 0,
+    'the "Mentioned in" line follows it to F and leaves Q (nothing left there refers to T)');
+  PERFORM test.ok(test.lines('B', 'T') = 'founders', 'T now reads "Mentioned in founders" only', test.lines('B', 'T'));
+  PERFORM test.ok(test.lines('X', 'T') = '', 'X, outside F, sees no line for it');
+  v := test.mv('A', ARRAY['lk'], 'Q');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone' AND test.mentions('Q', 'T') = 1 AND test.mentions('F', 'T') = 0,
+    'Undo puts the line back in Q and retires F''s', v);
+
+  -- A line stays where another message still refers to the item.
+  PERFORM test.ok(test.say('A', 'Q', 'lk3', 'Also ' || test.uri('task', 'T')) LIKE 'ok %', 'A mentions T again in Q');
+  v := test.mv('A', ARRAY['lk3'], 'F');
+  PERFORM test.ok(test.mentions('Q', 'T') = 1 AND test.mentions('F', 'T') = 1,
+    'moving one of two mentions keeps Q''s line and adds F''s', v);
+
+  -- The author's rights, not the mover's: B can't open TP, so no line, even moved by O who can.
+  v := test.say('B', 'Q', 'lk2', 'What is ' || test.uri('task', 'TP') || '?');
+  PERFORM test.ok(v LIKE 'ok %' AND test.mentions('Q', 'TP') = 0, 'B''s mention of TP (which B can''t open) leaves no line', v);
+  v := test.mv('O', ARRAY['lk2'], 'F');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'the admin O, who can open TP, moves it into F', v);
+  PERFORM test.ok(test.mentions('F', 'TP') = 0, 'still no line: a move never adds what the author''s mention couldn''t');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.entity_links WHERE workspace_id = test.id('W')
+                                AND relation_kind = 'mentions' AND created_by = test.id('O')),
+    'no line is written in the mover''s name');
+END;
+$$;
+
 -- ── The pace: at most five moves in 10 s ────────────────────────────────────
 DO $$
 DECLARE
@@ -345,7 +409,8 @@ DECLARE
 BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'chat__channel_readers(uuid)',
-    'chat__move_refile_items(uuid[], uuid)'
+    'chat__move_refile_items(uuid[], uuid)',
+    'chat__move_relink(uuid[], uuid, uuid)'
   ] LOOP
     PERFORM test.ok(NOT has_function_privilege('anon', 'public.' || fn, 'EXECUTE')
                     AND NOT has_function_privilege('authenticated', 'public.' || fn, 'EXECUTE')
