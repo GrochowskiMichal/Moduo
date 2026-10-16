@@ -94,10 +94,25 @@ const presenceSelves = new PresenceSelfRegistry(
   {
     get: (userId) => currentChatServerPrefs(userId)?.showOnline ?? null,
     subscribe: subscribeChatServerPrefs,
-    load: () => void readChatServerPrefs().catch(() => undefined),
+    load: (userId) => loadShowOnline(userId, 0),
   },
   { onInput: windowInput },
 );
+
+/** Read the switch; a failed read tries again (2 s, 4 s, … at most a minute
+ *  apart) while this tab still holds the person and the switch is unknown. */
+function loadShowOnline(userId: string, attempt: number): void {
+  void readChatServerPrefs().catch(() => {
+    setTimeout(
+      () => {
+        if (presenceSelves.userId === userId && currentChatServerPrefs(userId) === null) {
+          loadShowOnline(userId, attempt + 1);
+        }
+      },
+      Math.min(60_000, 2_000 * 2 ** attempt),
+    );
+  });
+}
 
 function tabPresenceSelf(userId: string) {
   return presenceSelves.for(userId);

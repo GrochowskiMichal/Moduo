@@ -91,4 +91,21 @@ describe("PeopleNowStore", () => {
     expect(t.store.getSnapshot().people.size).toBe(0);
     expect(t.store.getSnapshot().loaded).toBe(false);
   });
+
+  it("keeps the snapshot when a read says the same, so readers don't re-render", async () => {
+    const t = setup();
+    const stop = t.store.acquire();
+    t.reads.shift()?.(new Map([["a", person("a")]]));
+    await settle();
+    const first = t.store.getSnapshot();
+    t.tick();
+    t.reads.shift()?.(new Map([["a", person("a")]]));
+    await settle();
+    expect(t.store.getSnapshot()).toBe(first);
+    t.tick();
+    t.reads.shift()?.(new Map([["a", { ...person("a"), focusing: false }]]));
+    await settle();
+    expect(t.store.getSnapshot()).not.toBe(first);
+    stop();
+  });
 });

@@ -133,4 +133,22 @@ describe("clear after", () => {
     expect(clearAtFor("date", NOW)).toBeNull();
     expect(clearAtFor("never", NOW)).toBeNull();
   });
+
+  it("ends the day in your saved zone, not the device's", () => {
+    // 2026-10-16 20:00 UTC is 22:00 in Warsaw (CEST) and 16:00 in New York.
+    const at = new Date(Date.UTC(2026, 9, 16, 20, 0));
+    expect(clearAtFor("today", at, { timeZone: "Europe/Warsaw" })).toBe("2026-10-16T21:59:59.999Z");
+    expect(clearAtFor("today", at, { timeZone: "America/New_York" })).toBe(
+      "2026-10-17T03:59:59.999Z",
+    );
+    // 23:30 UTC is already Saturday the 17th in Warsaw; a Monday week ends Sunday the 18th.
+    const late = new Date(Date.UTC(2026, 9, 16, 23, 30));
+    expect(clearAtFor("this_week", late, { weekStart: 1, timeZone: "Europe/Warsaw" })).toBe(
+      "2026-10-18T21:59:59.999Z",
+    );
+    // A daylight-saving change that week: Warsaw goes back to CET on Oct 25.
+    expect(clearAtFor("date", at, { date: new Date(2026, 9, 25), timeZone: "Europe/Warsaw" })).toBe(
+      "2026-10-25T22:59:59.999Z",
+    );
+  });
 });

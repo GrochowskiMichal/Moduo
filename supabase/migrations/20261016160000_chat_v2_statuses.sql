@@ -52,10 +52,11 @@ AS $$
 DECLARE
   v_def text := pg_get_functiondef(p_fn);
 BEGIN
+  -- Already cut (a re-run): the new text may contain the old, so look for it first.
+  IF position(p_new IN v_def) > 0 THEN
+    RETURN;
+  END IF;
   IF position(p_old IN v_def) = 0 THEN
-    IF position(p_new IN v_def) > 0 THEN
-      RETURN; -- re-run
-    END IF;
     RAISE EXCEPTION '% isn''t the body this migration expects; redefine it by hand.', p_fn;
   END IF;
   EXECUTE replace(v_def, p_old, p_new);
@@ -342,6 +343,13 @@ BEGIN
   IF (SELECT count(*) FROM public.user_saved_statuses x WHERE x.user_id = v_user) >= 20 THEN
     RAISE EXCEPTION 'You can save up to 20 statuses.' USING ERRCODE = '54000';
   END IF;
+  -- Positions only grow; close the gaps before they reach the cap.
+  IF (SELECT max(x.position) FROM public.user_saved_statuses x WHERE x.user_id = v_user) >= 999 THEN
+    UPDATE public.user_saved_statuses x SET position = r.rn - 1
+      FROM (SELECT y.id, row_number() OVER (ORDER BY y.position, y.created_at, y.id) AS rn
+              FROM public.user_saved_statuses y WHERE y.user_id = v_user) r
+     WHERE x.id = r.id;
+  END IF;
   INSERT INTO public.user_saved_statuses (user_id, emoji, text, dnd, clear_after, position)
   VALUES (v_user, p.s_emoji, p.s_text, p.s_dnd, p.s_clear_after,
           coalesce((SELECT max(x.position) + 1 FROM public.user_saved_statuses x WHERE x.user_id = v_user), 0))
@@ -425,6 +433,7 @@ AS $function$
            CASE WHEN r.run_id IS NOT NULL AND r.show_task AND r.now_task_id IS NOT NULL THEN
              (SELECT t.id FROM public.tasks t
                WHERE t.id = r.now_task_id AND t.workspace_id = p_workspace_id
+                 AND t.deleted_at IS NULL
                  AND public.tasks__visible_to(t.id, (SELECT uid FROM me)))
            END AS task_id
       FROM rows r

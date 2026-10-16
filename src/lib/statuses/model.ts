@@ -234,33 +234,89 @@ export function pickerSuffix(person: PersonNow | undefined, now: Date = new Date
 export function clearAtFor(
   choice: StatusClearAfter,
   now: Date = new Date(),
-  opts: { date?: Date | null; weekStart?: number } = {},
+  opts: { date?: Date | null; weekStart?: number; timeZone?: string | null } = {},
 ): string | null {
-  const endOfDay = (d: Date) => {
-    const e = new Date(d);
-    e.setHours(23, 59, 59, 999);
-    return e;
-  };
+  const tz = opts.timeZone ?? null;
   switch (choice) {
     case "30m":
       return new Date(now.getTime() + 30 * 60_000).toISOString();
     case "1h":
       return new Date(now.getTime() + 60 * 60_000).toISOString();
-    case "today":
-      return endOfDay(now).toISOString();
+    case "today": {
+      const t = dayIn(now, tz);
+      return endOfDayIn(t.y, t.m, t.d, tz).toISOString();
+    }
     case "this_week": {
       const start = opts.weekStart ?? 1;
       const lastDay = (start + 6) % 7;
-      const ahead = (lastDay - now.getDay() + 7) % 7;
-      const e = endOfDay(now);
-      e.setDate(e.getDate() + ahead);
-      return e.toISOString();
+      const t = dayIn(now, tz);
+      const ahead = (lastDay - t.weekday + 7) % 7;
+      return endOfDayIn(t.y, t.m, t.d + ahead, tz).toISOString();
     }
     case "date":
-      return opts.date ? endOfDay(opts.date).toISOString() : null;
+      // A picked date is a calendar day (the picker's own), ended in your zone.
+      return opts.date
+        ? endOfDayIn(
+            opts.date.getFullYear(),
+            opts.date.getMonth() + 1,
+            opts.date.getDate(),
+            tz,
+          ).toISOString()
+        : null;
     default:
       return null;
   }
+}
+
+/** The calendar day (and weekday, 0 = Sunday) of an instant in a zone; the
+ *  device's own without one. */
+function dayIn(at: Date, tz: string | null): { y: number; m: number; d: number; weekday: number } {
+  if (!tz) {
+    return { y: at.getFullYear(), m: at.getMonth() + 1, d: at.getDate(), weekday: at.getDay() };
+  }
+  const w = wallIn(at.getTime(), tz);
+  return { y: w.y, m: w.m, d: w.d, weekday: new Date(Date.UTC(w.y, w.m - 1, w.d)).getUTCDay() };
+}
+
+/** 23:59:59.999 on a calendar day (the day may run into the next month) in a
+ *  zone; the device's own without one. */
+function endOfDayIn(y: number, m: number, d: number, tz: string | null): Date {
+  if (!tz) return new Date(y, m - 1, d, 23, 59, 59, 999);
+  const target = Date.UTC(y, m - 1, d, 23, 59, 59, 999);
+  // Shift by the zone's offset twice, so a daylight-saving change that day settles.
+  let at = target - offsetIn(target, tz);
+  at = target - offsetIn(at, tz);
+  return new Date(at);
+}
+
+/** An instant's wall clock in a zone. */
+function wallIn(ms: number, tz: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(new Date(ms));
+  const n = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((x) => x.type === type)?.value ?? 0);
+  return {
+    y: n("year"),
+    m: n("month"),
+    d: n("day"),
+    h: n("hour"),
+    mi: n("minute"),
+    s: n("second"),
+  };
+}
+
+/** The zone's offset from UTC at an instant, in ms. */
+function offsetIn(ms: number, tz: string): number {
+  const w = wallIn(ms, tz);
+  return Date.UTC(w.y, w.m - 1, w.d, w.h, w.mi, w.s) - Math.floor(ms / 1000) * 1000;
 }
 
 /** "clears in 1 h", "do not disturb · today": a saved status's or preset's hint. */

@@ -105,6 +105,14 @@ export function StatusMenu({
   const now = usePeopleNow(userId, workspaceId);
   const mine: PersonStatus | null = userId ? (now.people.get(userId)?.status ?? null) : null;
 
+  // Saved statuses are private: another person on this tab starts empty.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on a new person only
+  useEffect(() => {
+    setSaved(null);
+    setEditor(null);
+    setOpen(false);
+  }, [userId]);
+
   const loadSaved = useCallback(() => {
     void listSavedStatuses().then(setSaved, () => setSaved([]));
   }, []);
@@ -128,7 +136,11 @@ export function StatusMenu({
   };
 
   const clearAt = (choice: StatusClearAfter, date: Date | null) =>
-    clearAtFor(choice, new Date(), { date, weekStart: region.weekStartsOn });
+    clearAtFor(choice, new Date(), {
+      date,
+      weekStart: region.weekStartsOn,
+      timeZone: region.timeZone,
+    });
 
   const apply = async (draft: StatusDraft) => {
     if (await run(() => setMyStatus(draft), "Couldn't set your status — try again.")) {
@@ -260,13 +272,25 @@ export function StatusMenu({
               type="button"
               className={ROW}
               disabled={busy}
-              onClick={() =>
-                dnd
-                  ? void run(clearMyStatus, "Couldn't clear your status.").then(() =>
-                      setOpen(false),
-                    )
-                  : setOpen(false)
-              }
+              onClick={() => {
+                if (!dnd || !mine) {
+                  setOpen(false);
+                  return;
+                }
+                // Back to active: a status with words keeps them, only do not
+                // disturb goes; do not disturb by hand (no words) clears.
+                if (mine.emoji || mine.text) {
+                  void apply({
+                    emoji: mine.emoji,
+                    text: mine.text,
+                    dnd: false,
+                    clearAt: mine.clearAt,
+                    preset: mine.preset,
+                  });
+                  return;
+                }
+                void run(clearMyStatus, "Couldn't clear your status.").then(() => setOpen(false));
+              }}
             >
               <PresenceBadge state="reachable" inline />
               <span className="flex-1">Active</span>
@@ -279,6 +303,7 @@ export function StatusMenu({
                 <button
                   type="button"
                   className="rounded-sm px-1 text-muted-foreground hover:bg-state-hover hover:text-foreground"
+                  disabled={busy}
                   onClick={() => void dndFor("1h")}
                 >
                   1 h
@@ -286,6 +311,7 @@ export function StatusMenu({
                 <button
                   type="button"
                   className="rounded-sm px-1 text-muted-foreground hover:bg-state-hover hover:text-foreground"
+                  disabled={busy}
                   onClick={() => void dndFor("today")}
                 >
                   today
@@ -293,6 +319,7 @@ export function StatusMenu({
                 <button
                   type="button"
                   className="rounded-sm px-1 text-muted-foreground hover:bg-state-hover hover:text-foreground"
+                  disabled={busy}
                   onClick={() => setEditor({ ...BLANK, dnd: true, clearAfter: "date" })}
                 >
                   until…

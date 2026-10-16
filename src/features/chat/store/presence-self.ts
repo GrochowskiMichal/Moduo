@@ -105,7 +105,7 @@ export type ShowOnlineSource = {
   get: (userId: string) => boolean | null;
   subscribe: (fn: () => void) => () => void;
   /** Ask for it (once per person). */
-  load: () => void;
+  load: (userId: string) => void;
 };
 
 /**
@@ -132,7 +132,7 @@ export class PresenceSelfRegistry {
       // Someone else's prefs (or none yet) never turn tracking on.
       self.setShowOnline(on ?? false);
     });
-    if (known === null) this.source.load();
+    if (known === null) this.source.load(userId);
     this.held = { userId, self, stop };
     return self;
   }

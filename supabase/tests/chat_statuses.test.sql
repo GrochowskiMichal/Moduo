@@ -251,6 +251,12 @@ BEGIN
     'saved: twenty at most', v);
   v := test.as_user('A', format($q$SELECT public.user_op_forget_status(%L)$q$, v_id));
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.user_saved_statuses WHERE id = v_id), 'saved: A forgets one', v);
+  -- Positions only grow; near the cap a save closes the gaps instead of failing.
+  UPDATE public.user_saved_statuses SET position = position + 980 WHERE user_id = test.id('A');
+  v := test.as_user('A', $q$SELECT public.user_op_save_status('{"text": "after a long while"}')$q$);
+  PERFORM test.ok(v = 'ok 1' AND (SELECT max(position) FROM public.user_saved_statuses WHERE user_id = test.id('A')) = 19,
+    'saved: saving near the position cap renumbers and still saves', v);
+  DELETE FROM public.user_saved_statuses WHERE user_id = test.id('A') AND text = 'after a long while';
 END;
 $$;
 
@@ -291,6 +297,12 @@ BEGIN
               AND test.now_field('C', 'W', 'A', 'focus_task_id') IS NULL
               AND test.now_field('C', 'W', 'A', 'focus_task_title') IS NULL,
     'focus: C, who can''t see the task, sees Focusing and no task');
+  UPDATE public.tasks SET deleted_at = now() WHERE id = test.id('TA');
+  PERFORM test.ok(test.now_field('B', 'W', 'A', 'focusing') = 'true'
+              AND test.now_field('B', 'W', 'A', 'focus_task_id') IS NULL
+              AND test.now_field('B', 'W', 'A', 'focus_task_title') IS NULL,
+    'focus: a trashed task is never shown');
+  UPDATE public.tasks SET deleted_at = NULL WHERE id = test.id('TA');
   -- A run in another workspace: Focusing everywhere, the task nowhere else.
   PERFORM test.focus('A', 'W2', 'per_task', 'work', interval '0', 'T2');
   PERFORM test.ok(test.now_field('B', 'W', 'A', 'focusing') = 'true' AND test.now_field('B', 'W', 'A', 'focus_task_id') IS NULL,

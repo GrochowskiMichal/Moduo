@@ -12,11 +12,13 @@ setDefaultPeopleNowDeps(() => ({
   read: readPeopleNow,
   live: (onChange) => {
     seq += 1;
+    // Inserts and updates only: clearing and expiry update the row, and a
+    // delete (account erasure) passes no read rule, so it isn't asked for.
+    const changes = { schema: "public", table: "user_statuses" } as const;
     const channel = supabaseClient
       .channel(`user-statuses:${seq}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "user_statuses" }, () =>
-        onChange(),
-      )
+      .on("postgres_changes", { event: "INSERT", ...changes }, () => onChange())
+      .on("postgres_changes", { event: "UPDATE", ...changes }, () => onChange())
       .subscribe();
     return () => {
       void supabaseClient.removeChannel(channel);

@@ -79,6 +79,8 @@ export class PeopleNowStore {
       .then(
         (people) => {
           if (gen !== this.gen) return;
+          // Nothing changed: keep the snapshot, so readers don't re-render.
+          if (this.snapshot.loaded && samePeople(this.snapshot.people, people)) return;
           this.snapshot = { people, loaded: true };
           for (const fn of this.listeners) fn();
         },
@@ -179,3 +181,13 @@ export function usePeopleNow(userId: string | null, workspaceId: string | null):
 }
 
 export { readPeopleNow };
+
+/** Whether two reads say the same thing (the server's order is stable). */
+function samePeople(a: PeopleNowSnapshot["people"], b: PeopleNowSnapshot["people"]): boolean {
+  if (a.size !== b.size) return false;
+  for (const [id, now] of a) {
+    const other = b.get(id);
+    if (!other || JSON.stringify(other) !== JSON.stringify(now)) return false;
+  }
+  return true;
+}
