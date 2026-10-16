@@ -122,7 +122,9 @@ export function NotesShell() {
   const { viewers } = useNoteRealtime({
     notes: runtime?.notesV2 ?? null,
     engine: engine ?? null,
-    noteId: liveNote?.id ?? null,
+    // A draft isn't on the server yet: nobody can view it, and you aren't
+    // viewing the note you had open before it.
+    noteId: liveNoteId,
     enabled: canRender,
     selfUserId: userId,
     personOf: people.personOf,

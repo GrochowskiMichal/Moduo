@@ -19,10 +19,12 @@
 --     argument. It answers with who else is there.
 --   • When updates are saved (`note_updates` insert: people and agents
 --     alike), one message per note per transaction goes, at commit, to the
---     people who have that note open, re-checking each one's access then. Someone whose share was
+--     people who have that note open, re-checking each one's access then.
+--     It says only "this note changed": they pull the update through the
+--     normal, access-checked read. Someone whose share was
 --     taken away hears nothing more, from the next save on.
---   • Agent (MCP) rows go out content-free: clients pull them, so the stored
---     row stays the only source of "an agent wrote this" (gotchas §NR-6).
+--   • So agent (MCP) rows are pulled like everything else, and the stored row
+--     stays the only source of "an agent wrote this" (gotchas §NR-6).
 
 -- The first cut of this block (a per-note topic with a send policy) ran on
 -- local and test databases only; take it away wherever it did.
@@ -135,17 +137,19 @@ $$;
 -- ── Saved updates reach the people who have the note open ──────────────────
 --
 -- `notes_op_apply_updates` inserts one row per statement, so a statement
--- trigger would still fire per keystroke-sized update. Instead each inserted
--- row of a watched note is noted for this transaction, and a deferred
+-- trigger would still fire per keystroke-sized update. Instead a note that
+-- someone has open is noted once per transaction, and a deferred
 -- trigger sends ONE message per note at commit (a rolled-back save sends
--- nothing). Small updates travel inline (applied at once); agent rows and
--- big batches are announced and pulled. Sending never fails the save.
+-- nothing). The message carries no note content, only "pull": Realtime keeps
+-- every message in realtime.messages for days, out of reach of account
+-- erasure and note purge, so content must never travel through it. Sending
+-- never fails the save.
 
 CREATE TABLE IF NOT EXISTS public.note_live_pending (
   tx        bigint NOT NULL DEFAULT txid_current(),
   note_id   uuid   NOT NULL,
-  update_id bigint NOT NULL,
-  PRIMARY KEY (tx, note_id, update_id)
+  -- One row per note per transaction, however many updates it saved.
+  PRIMARY KEY (tx, note_id)
 );
 ALTER TABLE public.note_live_pending ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.note_live_pending FROM PUBLIC, anon, authenticated;
@@ -160,7 +164,7 @@ BEGIN
   -- writing to closed notes).
   IF EXISTS (SELECT 1 FROM public.note_live_viewers v
              WHERE v.note_id = NEW.note_id AND v.seen_at > now() - public.notes_live__fresh()) THEN
-    INSERT INTO public.note_live_pending (note_id, update_id) VALUES (NEW.note_id, NEW.id)
+    INSERT INTO public.note_live_pending (note_id) VALUES (NEW.note_id)
     ON CONFLICT DO NOTHING;
   END IF;
   RETURN NULL;
@@ -178,22 +182,12 @@ BEGIN
   BEGIN
     FOR r IN
       WITH mine AS (
-        DELETE FROM public.note_live_pending p WHERE p.tx = txid_current() RETURNING p.note_id, p.update_id
+        DELETE FROM public.note_live_pending p WHERE p.tx = txid_current() RETURNING p.note_id
       )
-      SELECT m.note_id,
-             coalesce(bool_or(u.origin = 'api_key'), false) AS agent,
-             coalesce(sum(length(u.update_b64)), 0) AS bytes,
-             array_agg(u.id ORDER BY u.id) AS ids
-      FROM mine m JOIN public.note_updates u ON u.id = m.update_id
-      GROUP BY m.note_id
+      SELECT DISTINCT m.note_id FROM mine m
     LOOP
       BEGIN
-        IF r.agent OR r.bytes > 60000 THEN
-          PERFORM public.notes_live__tell(r.note_id, 'changed', '{"pull": true}'::jsonb);
-        ELSE
-          PERFORM public.notes_live__tell(r.note_id, 'changed', jsonb_build_object('updates',
-            (SELECT jsonb_agg(u.update_b64 ORDER BY u.id) FROM public.note_updates u WHERE u.id = ANY (r.ids))));
-        END IF;
+        PERFORM public.notes_live__tell(r.note_id, 'changed', '{"pull": true}'::jsonb);
       EXCEPTION WHEN OTHERS THEN
         RAISE WARNING 'notes_live__send_pending: % (note %)', SQLERRM, r.note_id;
       END;

@@ -117,6 +117,8 @@ type NoteSession = {
   persistence: IndexeddbPersistence;
   provider: NoteProviderStub;
   state: NoteSyncState;
+  /** The snapshot version merged this session (null until the first pull). */
+  docVersion: number | null;
   /** The local IndexedDB copy has loaded: safe to mount the editor. */
   cacheReady: Promise<void>;
   /** Cache loaded, first pull settled, first flush done. */
@@ -290,6 +292,7 @@ export class NotesSyncEngineV2 {
       persistence,
       provider,
       state: emptyNoteState(noteId),
+      docVersion: null,
       cacheReady: Promise.resolve(),
       booted: Promise.resolve(),
       synced: false,
@@ -379,6 +382,7 @@ export class NotesSyncEngineV2 {
         workspaceId: this.workspaceId,
         noteId: s.noteId,
         sinceUpdateId: s.state.lastPulledUpdateId,
+        knownDocVersion: s.docVersion,
       });
       if (res.snapshotB64) {
         try {
@@ -397,15 +401,8 @@ export class NotesSyncEngineV2 {
           // that is what the session's Undo tracks (NR-6). The first pull's
           // rows are history (possibly days old and built upon), so they
           // apply as plain remote and are never offered for Undo.
-          // NR-7: a peer's live update that builds on this agent row may be
-          // waiting in the doc already; applying the row would integrate it
-          // inside the agent's transaction and Undo would take that person's
-          // text too. Then it is plain history: no Undo offered.
-          const waiting = s.doc.store.pendingStructs !== null || s.doc.store.pendingDs !== null;
           const origin =
-            u.origin === "api_key" && s.synced && !waiting
-              ? new AgentOrigin(u.actorKeyId)
-              : "remote";
+            u.origin === "api_key" && s.synced ? new AgentOrigin(u.actorKeyId) : "remote";
           Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), origin);
           ids.push(u.id);
         } catch (e) {
@@ -418,6 +415,7 @@ export class NotesSyncEngineV2 {
         }
       }
       s.state = advanceCursor(s.state, ids);
+      s.docVersion = res.docVersion;
       await writeNoteState(s.state);
       s.synced = true;
       this.recoveredFromOffline(s);

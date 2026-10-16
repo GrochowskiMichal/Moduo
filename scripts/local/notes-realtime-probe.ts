@@ -149,15 +149,13 @@ try {
   save();
   await wait(1000);
   check(
-    changed(v.heard).some((x) => JSON.stringify(x.payload.updates) === '["AQ=="]'),
-    "a saved update reaches V inline",
+    changed(v.heard).some((x) => x.payload.pull === true) &&
+      !v.heard.some((x) => JSON.stringify(x.payload).includes("AQ==")),
+    "V is told the note changed, with no note content in the message",
   );
   save("api_key");
   await wait(1000);
-  check(
-    changed(v.heard).some((x) => x.payload.pull === true && !("updates" in x.payload)),
-    "an agent write reaches V content-free (pull)",
-  );
+  check(changed(v.heard).length === 2, "an agent write is announced the same way");
   check(changed(spy.heard).length === 0, "M hears nothing");
 
   // ── Revoke while V stays connected ──
@@ -171,10 +169,7 @@ try {
     changed(v.heard).length === before,
     "after the share is taken away, V (still connected) hears nothing",
   );
-  check(
-    changed(o.heard).some((x) => JSON.stringify(x.payload.updates) === '["Ag=="]'),
-    "while O still gets it",
-  );
+  check(changed(o.heard).length === 3, "while O still is");
   const vAgain = await here(V.client, "v1");
   check(vAgain.data === null, "V's next heartbeat is refused");
   await wait(1000);

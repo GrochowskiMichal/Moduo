@@ -2,12 +2,11 @@
  * Notes realtime (Wave-3 NO-6, AC7; secured in NR-7, AC12): following the
  * open note live, through the runtime (`notesV2.joinLive`).
  *
- * - Edits reach peers when they are SAVED: the server hands each save to the
- *   people who have the note open, re-checking their access every time. This
- *   hook applies them to the live doc with origin `"remote"`, so the engine
- *   never re-pushes an echo. Nothing is relayed peer-to-peer.
- * - An MCP write is announced, never relayed: the editor pulls, so the stored
- *   row says who wrote it (gotchas §Agent writes).
+ * - Edits reach peers when they are SAVED: the server tells the people who
+ *   have the note open (re-checking their access every time) that it
+ *   changed, and the editor pulls through the normal access-checked read.
+ *   No note content travels over Realtime, and nothing peer-to-peer. Agent
+ *   (MCP) writes arrive the same way, so the stored row says who wrote them.
  * - Presence: the server says who has the note open (from each person's
  *   session); names and photos come from the workspace's member list.
  *
@@ -17,15 +16,11 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import * as Y from "yjs";
 import type { ModuoRuntime } from "@/lib/runtime";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { type NoteViewer, type PresencePerson, presenceViewers } from "../sync/notes-realtime";
-import { decodeBase64ToUint8 } from "../utils/base64";
 
 const NOBODY: string[] = [];
-/** A short wait before fetching a gap, so a burst of held-back updates is one pull. */
-const HEAL_DELAY_MS = 300;
 
 type Args = {
   /** The runtime's notes surface; null until the runtime is ready. */
@@ -49,36 +44,38 @@ export function useNoteRealtime({ notes, engine, noteId, enabled, selfUserId, pe
     setViewerIds(NOBODY);
     if (!notes || !engine || !noteId || !enabled || !selfUserId) return;
 
-    const doc = engine.getOrCreateSession(noteId).doc;
-    let healTimer: ReturnType<typeof setTimeout> | null = null;
-    const healSoon = () => {
-      if (healTimer) return;
-      healTimer = setTimeout(() => {
-        healTimer = null;
-        void engine.pullNote(noteId);
-      }, HEAL_DELAY_MS);
+    engine.getOrCreateSession(noteId);
+    // One pull at a time: saves that land meanwhile ask for one more, after.
+    let pulling = false;
+    let again = false;
+    const pull = () => {
+      if (pulling) {
+        again = true;
+        return;
+      }
+      pulling = true;
+      void engine.pullNote(noteId).finally(() => {
+        pulling = false;
+        if (again) {
+          again = false;
+          pull();
+        }
+      });
     };
     const live = notes.joinLive({
       noteId,
       selfUserId,
-      onUpdates: (updates) => {
-        for (const b64 of updates) {
-          try {
-            Y.applyUpdate(doc, decodeBase64ToUint8(b64), "remote");
-          } catch {
-            // A malformed update can't wedge us; the next pull reconciles.
-          }
-        }
-        // An update that builds on one we never got waits in the doc and
-        // holds back everything after it: fetch the gap.
-        if (doc.store.pendingStructs !== null || doc.store.pendingDs !== null) healSoon();
-      },
-      onPull: () => void engine.pullNote(noteId),
+      onPull: pull,
       onViewers: setViewerIds,
     });
 
+    // Closing the tab: say goodbye if the request still gets out (best
+    // effort; otherwise the server forgets the tab after a minute).
+    const onPageHide = () => live.close();
+    window.addEventListener("pagehide", onPageHide);
+
     return () => {
-      if (healTimer) clearTimeout(healTimer);
+      window.removeEventListener("pagehide", onPageHide);
       live.close();
       setViewerIds(NOBODY);
     };

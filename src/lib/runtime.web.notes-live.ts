@@ -6,8 +6,8 @@
  * topic of their own, `notes-live:<uid>` (only they may read it, nobody may
  * write it), and the server talks on it (migration
  * 20261016120000_notes_live_channel):
- *   • `changed`: an update to an open note was saved — small ones inline,
- *     agent writes and big ones as "pull";
+ *   • `changed`: something was saved to an open note: pull it (the message
+ *     never carries note content, which would linger in realtime.messages);
  *   • `viewers`: who has the note open, stamped from each caller's session.
  * Being "here" is the `notes_live_here` heartbeat, which checks view access
  * every time; the server re-checks each listener's access on every save, so a
@@ -31,7 +31,7 @@ const EARLY_RETRY_MS = 1500;
 
 type Listener = {
   noteId: string;
-  onChanged(payload: Record<string, unknown>): void;
+  onChanged(): void;
   onViewers(userIds: string[]): void;
   onRejoin(): void;
 };
@@ -67,9 +67,7 @@ function acquire(client: LiveClient, userId: string, listener: Listener): () => 
       for (const l of made.listeners) if (l.noteId === body.noteId) run(l, body);
     };
     channel
-      .on("broadcast", { event: "changed" }, (msg) =>
-        forNote(msg.payload, (l, b) => l.onChanged(b)),
-      )
+      .on("broadcast", { event: "changed" }, (msg) => forNote(msg.payload, (l) => l.onChanged()))
       .on("broadcast", { event: "viewers" }, (msg) =>
         forNote(msg.payload, (l, b) => l.onViewers(stringList(b.viewers))),
       )
@@ -95,7 +93,7 @@ function acquire(client: LiveClient, userId: string, listener: Listener): () => 
 
 export function joinNoteLive(
   client: LiveClient,
-  { noteId, selfUserId, onUpdates, onPull, onViewers }: NoteLiveJoin,
+  { noteId, selfUserId, onPull, onViewers }: NoteLiveJoin,
   {
     earlyRetryMs = EARLY_RETRY_MS,
     heartbeatMs = HEARTBEAT_MS,
@@ -134,11 +132,8 @@ export function joinNoteLive(
 
   const release = acquire(client, selfUserId, {
     noteId,
-    onChanged(body) {
-      if (closed) return;
-      const updates = stringList(body.updates);
-      if (body.pull === true || updates.length === 0) onPull();
-      else onUpdates(updates);
+    onChanged() {
+      if (!closed) onPull();
     },
     onViewers(ids) {
       if (!closed) onViewers(ids);

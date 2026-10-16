@@ -62,11 +62,10 @@ function fakeClient(here: Array<string[] | null> | string[] | null = ["me"]) {
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 const handlers = () => {
-  const got = { updates: [] as string[][], pulls: 0, viewers: [] as string[][] };
+  const got = { pulls: 0, viewers: [] as string[][] };
   return {
     got,
     join: {
-      onUpdates: (u: string[]) => got.updates.push(u),
       onPull: () => {
         got.pulls += 1;
       },
@@ -119,19 +118,18 @@ describe("joinNoteLive", () => {
     live.close();
   });
 
-  it("applies inline updates for its note, pulls on an announced one, ignores other notes", async () => {
+  it("pulls when its note changed, ignores other notes, takes viewers from the server", async () => {
     const { client, opened } = fakeClient();
     const { got, join } = handlers();
     const live = joinNoteLive(client, { noteId: NOTE, selfUserId: "me", ...join });
     await flush();
     const ch = opened[0].channel;
-    ch.emit("changed", { noteId: NOTE, updates: ["QQ=="] });
+    expect(got.pulls).toBe(1); // the catch-up when let in
     ch.emit("changed", { noteId: NOTE, pull: true });
-    ch.emit("changed", { noteId: OTHER, updates: ["Qg=="] });
+    ch.emit("changed", { noteId: OTHER, pull: true });
     ch.emit("viewers", { noteId: NOTE, viewers: ["me", "ada"] });
     ch.emit("viewers", { noteId: OTHER, viewers: ["bob"] });
-    expect(got.updates).toEqual([["QQ=="]]);
-    expect(got.pulls).toBe(2); // the catch-up when let in, then the announced one
+    expect(got.pulls).toBe(2);
     expect(got.viewers.at(-1)).toEqual(["me", "ada"]);
     live.close();
   });
@@ -174,14 +172,15 @@ describe("joinNoteLive", () => {
     await flush();
     const ch = opened[0].channel;
     live.close();
-    ch.emit("changed", { noteId: NOTE, updates: ["QQ=="] });
+    const pullsAtClose = got.pulls;
+    ch.emit("changed", { noteId: NOTE, pull: true });
     ch.emit("viewers", { noteId: NOTE, viewers: ["ada"] });
     await flush();
     expect(rpcCalls.at(-1)).toEqual({
       fn: "notes_live_here",
       args: { p_note_id: NOTE, p_session_id: "s1", p_leaving: true },
     });
-    expect(got.updates).toEqual([]);
+    expect(got.pulls).toBe(pullsAtClose);
     expect(got.viewers).toEqual([["me"]]);
   });
 

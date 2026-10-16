@@ -307,7 +307,7 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
 18. **confident** · **Secure channel** (revised while building NR-7: a per-note private topic can't cut off a revoked listener or stop forged presence, because Realtime checks policies only at join and can't see what is sent).
     - Clients send nothing over Realtime. Each person listens on one private, read-only topic of their own (`notes-live:<uid>`).
     - Presence is a server heartbeat (`notes_live_here`) that checks view access from the session; names and avatars come from workspace member profiles.
-    - Saved updates go out at commit, one message per note per save, to the people with the note open, re-checked with `can_access(view)` at that moment. Agent writes and big saves go out as "pull".
+    - At commit, each save sends one content-free "pull" message per note to the people with the note open, re-checked with `can_access(view)` at that moment; they fetch the update through the normal read. No note content is ever stored in `realtime.messages`.
     - The client goes through `getRuntime()` (`notesV2.joinLive`), with no direct `supabaseClient` import.
 19. **low-confidence** · **Agent writes.**
     - `note_updates` gains `origin text NOT NULL DEFAULT 'user'` (`'user' | 'agent'`, a closed vocabulary in `vocabularies.ts` with a matching CHECK) plus `actor_key_id uuid NULL`.

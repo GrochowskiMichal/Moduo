@@ -146,10 +146,8 @@ export type CommentReactionMark = { userId: string; reaction: CommentReaction };
 export type NoteLiveJoin = {
   noteId: string;
   selfUserId: string;
-  /** Saved updates from another tab or person, to apply as remote. */
-  onUpdates(updatesB64: string[]): void;
-  /** Something was saved that must be pulled (an agent write, a big update,
-   * or anything missed while the socket was down). */
+  /** Something was saved (by anyone, agents included), or the socket
+   * rejoined: pull. Messages never carry note content. */
   onPull(): void;
   /** Who has the note open right now (user ids, self included), as the
    * server stamped them; [] when this person may not view it. */
@@ -525,6 +523,10 @@ export type ModuoRuntime = {
       workspaceId: string;
       noteId: string;
       sinceUpdateId?: number | null;
+      /** NR-7: the snapshot version this session already holds. When the
+       * server's is the same the snapshot isn't sent again (`snapshotB64`
+       * null): live pulls after every save stay small. */
+      knownDocVersion?: number | null;
     }): Promise<NoteDocPull>;
     create(input: {
       workspaceId: string;
