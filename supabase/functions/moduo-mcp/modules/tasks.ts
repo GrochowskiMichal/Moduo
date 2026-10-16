@@ -38,7 +38,9 @@ import {
 } from "../../_shared/contracts/vocabularies.ts";
 import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
 import {
-  DESCRIPTION_LINK,
+  dateMarkdown,
+  defuseReferences,
+  descriptionTokens,
   escapeMarkdownText,
   guardMarkdownStart,
   htmlToMarkdown,
@@ -102,11 +104,11 @@ const DEPRECATED = "Deprecated (kept until TV-D7):";
  * as. References keep no title (RF-1), only the item's kind.
  */
 const DESCRIPTION_MARKDOWN =
-  'Markdown: **bold**, *italic*, `code`, ``` fenced code ```, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes (HTML is converted). Reference an item as [task](moduo://task/<uuid or handle, e.g. MOD-12>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it, an item you can't reach stays as its words, and each one is linked from the task), a date as [Oct 17](moduo://date/2026-10-17).';
+  'Markdown: **bold**, *italic*, `code`, ``` fenced code ```, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes (HTML is converted). Reference an item as [task](moduo://task/<uuid or handle, e.g. MOD-12>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it, an item you cannot reach stays as its words, and with Links at Edit each one is linked from the task), a date as [Oct 17](moduo://date/2026-10-17).';
 
 /** How many different items one description written through the connector may reference. */
 const MAX_DESCRIPTION_REFERENCES = 50;
-const REF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A description reference's type as the reach check knows it (the app also says project and email). */
 function reachType(type: string): string {
@@ -115,64 +117,87 @@ function reachType(type: string): string {
 
 /**
  * A description written through the connector, as the app stores it (call
- * #15): HTML sent by an agent is read as Markdown (the converter the reads
- * use); words that would read as HTML keep their first `<` escaped; and each
- * `moduo://` reference is resolved for the key: a task's handle
- * (`moduo://task/MOD-12`) becomes its uuid, an item the key can't reach goes
- * back to its label as plain words, and no title is kept (RF-1). Answers the
- * items to link once the task is written.
+ * #15). HTML sent by an agent is read as Markdown first (the converter the
+ * reads use), so whatever it can turn into a reference is checked like the
+ * rest. Then the Markdown is read for references once (`descriptionTokens`,
+ * the pattern the editor reads them with) and written back from that one
+ * reading:
+ * - a reference is resolved and checked for the key (`assertReach`: the key's
+ *   scope, the item live in this workspace, its person able to see it); a
+ *   task's handle (`moduo://task/MOD-12`) becomes its uuid; only a reference
+ *   that passed is written as one (labelled with its kind, RF-1), and only
+ *   those are answered as the items to link;
+ * - anything else (an item the key can't reach or that isn't there, a kind
+ *   agents can't point at, a tag, past MAX_DESCRIPTION_REFERENCES) goes back
+ *   to its label as plain words;
+ * - every word between them passes through `defuseReferences`, so no word,
+ *   label or join of the two reads as a reference later;
+ * - words that would read as HTML keep their first `<` escaped.
  */
 async function describeForWrite(
   ctx: ToolContext,
   value: string,
 ): Promise<{ markdown: string; refs: Array<{ type: string; id: string }> }> {
-  const markdown = isHtmlDescription(value) ? htmlToMarkdown(value) : guardMarkdownStart(value);
-  const pattern = new RegExp(DESCRIPTION_LINK.source, "g");
-  const resolved = new Map<string, string | null>();
-  for (const m of markdown.matchAll(pattern)) {
-    const [, , type = "", id = ""] = m;
-    const key = `${type}\u0000${id}`;
-    if (type === "date" || resolved.has(key)) continue;
-    if (type === "tag") {
-      // A tag is text in a description (never a link): kept when it's an id.
-      resolved.set(key, REF_UUID.test(id) ? id : null);
-      continue;
-    }
-    if (resolved.size >= MAX_DESCRIPTION_REFERENCES) {
-      resolved.set(key, null);
+  const tokens = descriptionTokens(isHtmlDescription(value) ? htmlToMarkdown(value) : value);
+  const checked = new Map<string, string | null>();
+  for (const token of tokens) {
+    if (token.kind !== "link" || token.type === "date") continue;
+    const key = `${token.type}\u0000${token.id}`;
+    if (checked.has(key)) continue;
+    if (checked.size >= MAX_DESCRIPTION_REFERENCES) {
+      checked.set(key, null);
       continue;
     }
     try {
-      resolved.set(key, await assertReach(ctx, reachType(type), id));
+      checked.set(key, await assertReach(ctx, reachType(token.type), token.id));
     } catch {
-      resolved.set(key, null);
+      checked.set(key, null);
     }
   }
   const refs: Array<{ type: string; id: string }> = [];
   const linked = new Set<string>();
-  const out = markdown.replace(pattern, (whole, label: string, type: string, id: string, display?: string) => {
-    if (type === "date") return whole;
-    const uuid = resolved.get(`${type}\u0000${id}`) ?? null;
-    if (!uuid) return escapeMarkdownText(label);
-    if (type !== "tag" && !linked.has(`${type}:${uuid}`)) {
-      linked.add(`${type}:${uuid}`);
-      refs.push({ type, id: uuid });
+  let out = "";
+  let words = "";
+  const live = (markdown: string) => {
+    out += defuseReferences(words) + markdown;
+    words = "";
+  };
+  for (const token of tokens) {
+    if (token.kind === "text") {
+      words += token.text;
+    } else if (token.type === "date") {
+      if (ISO_DAY.test(token.id)) live(dateMarkdown(token.id, token.label));
+      else words += escapeMarkdownText(token.label);
+    } else {
+      const uuid = checked.get(`${token.type}\u0000${token.id}`) ?? null;
+      if (!uuid) {
+        words += escapeMarkdownText(token.label);
+        continue;
+      }
+      live(referenceMarkdown(token.type, uuid, token.display));
+      const target = reachType(token.type);
+      if (!linked.has(`${target}:${uuid}`)) {
+        linked.add(`${target}:${uuid}`);
+        refs.push({ type: target, id: uuid });
+      }
     }
-    return referenceMarkdown(type, uuid, display);
-  });
-  return { markdown: out, refs };
+  }
+  live("");
+  return { markdown: guardMarkdownStart(out), refs };
 }
 
 /**
  * Link a task to what its description references, as quick capture does
- * (`mentions`, origin `mention`). Quiet: the reference is in the text either
- * way, and a key without Links access just makes no link.
+ * (`mentions`, origin `mention`), through the links op. Only a key with Links
+ * at Edit makes links; the references were checked by `describeForWrite`.
+ * Quiet: the reference is in the text either way.
  */
 async function linkDescribed(
   ctx: ToolContext,
   taskId: string,
   refs: ReadonlyArray<{ type: string; id: string }>,
 ): Promise<void> {
+  if (!keyScopeAllows(ctx.key.scopes, "links", "edit")) return;
   for (const ref of refs) {
     if (ref.type === "task" && ref.id === taskId) continue;
     try {

@@ -8,6 +8,8 @@ import { describe, expect, it } from "@rstest/core";
 import {
   CONVERT_LIMIT,
   dateMarkdown,
+  defuseReferences,
+  descriptionTokens,
   escapeBlockStarts,
   escapeMarkdownText,
   descriptionPlainText,
@@ -183,6 +185,35 @@ describe("the reference syntax", () => {
     ]);
     const html = `${P}<span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${TASK}" data-ref-v="2">task</span></p>`;
     expect(descriptionReferences(html)).toEqual([{ type: "task", id: TASK }]);
+  });
+
+  it("cuts Markdown into words and links once, in order, every character kept", () => {
+    const md = `a [x](moduo://task/${TASK}) b [Oct 1](moduo://date/2026-10-01)`;
+    const tokens = descriptionTokens(md);
+    expect(tokens).toEqual([
+      { kind: "text", text: "a " },
+      { kind: "link", label: "x", type: "task", id: TASK, display: undefined },
+      { kind: "text", text: " b " },
+      { kind: "link", label: "Oct 1", type: "date", id: "2026-10-01", display: undefined },
+    ]);
+    // Nested brackets: the inner link is the one read, the rest is words.
+    expect(descriptionTokens(`[[x](moduo://task/${TASK})](moduo://task/${NOTE})`).map((t) => t.kind)).toEqual([
+      "text",
+      "link",
+      "text",
+    ]);
+  });
+
+  it("defuses words that would read as a moduo:// link, in any case, and nothing else", () => {
+    expect(defuseReferences(`[x](moduo://task/${TASK})`)).toBe(`[x]&#40;moduo://task/${TASK})`);
+    expect(defuseReferences("[x](MODUO:a) [y]( moduo:b) [z](<moduo:c>)")).toBe(
+      "[x]&#40;MODUO:a) [y]&#40; moduo:b) [z]&#40;<moduo:c>)",
+    );
+    expect(defuseReferences("[docs](https://example.com) (moduo://x) moduo:// ]moduo:")).toBe(
+      "[docs](https://example.com) (moduo://x) moduo:// ]moduo:",
+    );
+    // Defused, nothing matches the reference pattern.
+    expect(descriptionReferences(defuseReferences(`[x](moduo://task/${TASK})`))).toEqual([]);
   });
 });
 

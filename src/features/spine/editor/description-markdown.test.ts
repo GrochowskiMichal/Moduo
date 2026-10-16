@@ -6,9 +6,9 @@
 
 import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes } from "@lexical/html";
-import { $isLinkNode, LinkNode } from "@lexical/link";
-import { $isListItemNode, $isListNode, ListItemNode, ListNode } from "@lexical/list";
-import { $isQuoteNode, QuoteNode } from "@lexical/rich-text";
+import { $isLinkNode } from "@lexical/link";
+import { $isListItemNode, $isListNode } from "@lexical/list";
+import { $isQuoteNode } from "@lexical/rich-text";
 import { describe, expect, it } from "@rstest/core";
 import {
   $createLineBreakNode,
@@ -362,6 +362,54 @@ describe("words are escaped only where Markdown would read them (call #15's revi
         .every((n) => reread.getEditorState().read(() => n.getFormat() === 0)),
     ).toBe(true);
     expect(save(reread)).toBe(saved);
+  });
+});
+
+describe("words never save as a reference", () => {
+  const refs = (editor: ReturnType<typeof markdownEditor>) =>
+    editor.getEditorState().read(() => all(editor).filter($isReferenceNode).length);
+  const moduoLinks = (editor: ReturnType<typeof markdownEditor>) =>
+    editor
+      .getEditorState()
+      .read(() => all(editor).filter((n) => $isLinkNode(n) && /moduo:/i.test(n.getURL())).length);
+
+  it("words shaped like a reference save with their ( spelled out, read back as the same words", () => {
+    const words = `see [x](moduo://task/${TASK}) here`;
+    for (const format of [0, 1]) {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          $getRoot().clear();
+          $getRoot().append(
+            $createParagraphNode().append($createTextNode(words).setFormat(format)),
+          );
+        },
+        { discrete: true },
+      );
+      const saved = save(editor);
+      expect(saved).toContain(`[x]&#40;moduo://task/${TASK})`);
+      const reread = load(saved);
+      expect(reread.getEditorState().read(() => $getRoot().getTextContent())).toBe(words);
+      expect(refs(reread)).toBe(0);
+      expect(save(reread)).toBe(saved);
+    }
+  });
+
+  it("stored words that read back as a reference's shape stay words, however often they're saved", () => {
+    for (const stored of [
+      `[x]&#40;moduo://task/${TASK})`,
+      `[x]\\(moduo://task/${TASK})`,
+      `**[x]&#40;moduo://task/${TASK})**`,
+      `[[a]&#40;moduo://task/${TASK})](https://example.com)`,
+    ]) {
+      let value = stored;
+      for (let round = 0; round < 3; round++) {
+        const editor = load(value);
+        expect(refs(editor), `${stored} (round ${round})`).toBe(0);
+        expect(moduoLinks(editor), `${stored} (round ${round})`).toBe(0);
+        value = save(editor);
+      }
+    }
   });
 });
 

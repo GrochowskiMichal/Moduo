@@ -57,6 +57,7 @@ import {
 import {
   DESCRIPTION_LINK,
   dateMarkdown,
+  defuseReferences,
   descriptionToMarkdown,
   escapeBlockStarts,
   escapeMarkdownText,
@@ -169,19 +170,29 @@ function $onlyBacktickInBlock(node: TextNode): boolean {
  * `file_name` as `file\_name` where the server's search can't find it. Raw
  * text goes out exactly as it is. Formatted words, words inside a link and
  * words right after one keep Lexical's own export (it closes the formats
- * there).
+ * there). Words that read back as a `moduo://` link (`[a](moduo://…)` typed,
+ * or read in as `[a]&#40;moduo://…)`) keep that `(` spelled out
+ * (`defuseReferences`), so saving never turns words into a reference; inline
+ * code is never read for references and stays as it is.
  */
 export const DESCRIPTION_TEXT: TextMatchTransformer = {
   dependencies: [RawTextNode],
-  export: (node) => {
+  export: (node, _exportChildren, exportFormat) => {
     if ($isRawTextNode(node)) return node.getTextContent();
-    if (!$isTextNode(node) || node.getType() !== "text" || node.getFormat() !== 0) return null;
+    if (!$isTextNode(node) || node.getType() !== "text" || node.hasFormat("code")) return null;
+    const text = node.getTextContent();
     const previous = node.getPreviousSibling();
-    if (previous && $isElementNode(previous)) return null;
-    if ($isLinkNode(node.getParent())) return null;
-    return escapeMarkdownText(node.getTextContent(), {
-      lonelyBacktick: $onlyBacktickInBlock(node),
-    });
+    if (
+      node.getFormat() !== 0 ||
+      (previous && $isElementNode(previous)) ||
+      $isLinkNode(node.getParent())
+    ) {
+      const defused = defuseReferences(text);
+      return defused !== text && exportFormat ? exportFormat(node, defused) : null;
+    }
+    return defuseReferences(
+      escapeMarkdownText(text, { lonelyBacktick: $onlyBacktickInBlock(node) }),
+    );
   },
   importRegExp: NEVER,
   regExp: NEVER,

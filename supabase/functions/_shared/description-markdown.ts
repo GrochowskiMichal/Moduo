@@ -71,17 +71,56 @@ export function referenceMarkdown(type: string, id: string, display?: string | n
   return `[${referenceWord(type)}](moduo://${type}/${id}${shown ? ` "${display}"` : ""})`;
 }
 
+/** A piece of a description's Markdown: words, or a link DESCRIPTION_LINK reads (a reference or a date chip). */
+export type DescriptionToken =
+  | { kind: "text"; text: string }
+  | { kind: "link"; label: string; type: string; id: string; display: string | undefined };
+
+/**
+ * A description's Markdown cut into words and the `moduo://` links in it, in
+ * order: the one reading of references every reader shares (the editor's
+ * import matches the same pattern, leftmost first). Whatever writes a
+ * description on someone's behalf checks these links, writes back only the
+ * ones that passed as links, and passes every other word through
+ * `defuseReferences`.
+ */
+export function descriptionTokens(markdown: string): DescriptionToken[] {
+  const out: DescriptionToken[] = [];
+  let at = 0;
+  for (const m of markdown.matchAll(new RegExp(DESCRIPTION_LINK.source, "g"))) {
+    const start = m.index ?? 0;
+    if (start > at) out.push({ kind: "text", text: markdown.slice(at, start) });
+    out.push({ kind: "link", label: m[1] ?? "", type: m[2] ?? "", id: m[3] ?? "", display: m[4] });
+    at = start + m[0].length;
+  }
+  if (at < markdown.length) out.push({ kind: "text", text: markdown.slice(at) });
+  return out;
+}
+
 /** The items a description references, each once, in order (date chips aren't items). */
 export function descriptionReferences(value: string | null | undefined): Array<{ type: string; id: string }> {
   const seen = new Set<string>();
   const out: Array<{ type: string; id: string }> = [];
-  for (const m of descriptionToMarkdown(value).matchAll(new RegExp(DESCRIPTION_LINK.source, "g"))) {
-    const [, , type, id] = m;
+  for (const token of descriptionTokens(descriptionToMarkdown(value))) {
+    if (token.kind !== "link") continue;
+    const { type, id } = token;
     if (!type || !id || type === "date" || seen.has(`${type}:${id}`)) continue;
     seen.add(`${type}:${id}`);
     out.push({ type, id });
   }
   return out;
+}
+
+/**
+ * Words that would read as a `moduo://` link, now or once read back (`](`,
+ * then spaces or `<`, then `moduo:` in any case), keep that `(` as `&#40;`:
+ * Markdown's own spelling of "(", which the editor reads back as "(" in plain
+ * words, while no reference or link pattern matches it. So words never turn
+ * into a reference: not when they are stored, and not when the editor saves
+ * them again.
+ */
+export function defuseReferences(text: string): string {
+  return text.replace(/\]\((?=[\s<]*moduo:)/gi, "]&#40;");
 }
 
 /** A date chip as the description stores it; the label is for people reading the raw text. */
