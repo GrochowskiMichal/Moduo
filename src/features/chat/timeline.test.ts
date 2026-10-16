@@ -378,6 +378,9 @@ describe("read mark, New pill, page boundaries", () => {
     expect(readThroughHidden(rows, "b", new Set(["c"]))).toBe("b");
     expect(readThroughHidden(rows, "b", new Set())).toBe("b");
     expect(readThroughHidden(rows, "x", new Set(["c"]))).toBe("x");
+    // An event line after the hidden replies doesn't hold the mark back.
+    const withEvent = [...rows, msg("e", T(4), { kind: "event" })];
+    expect(readThroughHidden(withEvent, "b", new Set(["c", "d"]))).toBe("d");
   });
 
   it("emoji-only messages draw large", () => {

@@ -272,7 +272,8 @@ export function readThroughHidden(
   let out = seenId;
   for (let i = at + 1; i < rows.length; i += 1) {
     const m = rows[i]!;
-    if (m.sendState) continue;
+    // Unsent sends and event lines are never the mark; they don't stop it either.
+    if (m.sendState || m.kind === "event") continue;
     if (!hidden.has(m.id)) return seenId;
     out = m.id;
   }
