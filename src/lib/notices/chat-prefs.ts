@@ -115,7 +115,9 @@ export async function setChatServerPrefs(
   const userId = await sessionUserId();
   const { data, error } = await supabaseClient.rpc("user_op_set_chat_prefs", { p_patch: body });
   if (error) throw new Error(error.message);
-  const prefs = keep(userId, chatServerPrefsFromRow(data), since);
+  // And any read that was in flight across the save is dropped too.
+  const saved = since === generation ? ++generation : -1;
+  const prefs = keep(userId, chatServerPrefsFromRow(data), saved);
   listenToOtherTabs();
   tabs?.postMessage("changed");
   return prefs;

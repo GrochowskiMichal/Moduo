@@ -92,7 +92,7 @@ export function useChatPresence(
 /** This tab's "me" on presence (CV-17), for the signed-in person only: it
  *  tracks nothing until their own "Show me as online" is read (a failed read
  *  tries again), follows it (another tab's change at once, another device's
- *  within a minute while in view), and is away after 10 minutes without input. */
+ *  within a minute), and is away after 10 minutes without input. */
 const presenceSelves = new PresenceSelfRegistry(
   {
     get: (userId) => currentChatServerPrefs(userId)?.showOnline ?? null,

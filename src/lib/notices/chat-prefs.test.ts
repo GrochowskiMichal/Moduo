@@ -89,4 +89,21 @@ describe("chat prefs across a sign-out", () => {
     h.pending.length = 0;
     expect(prefs.currentChatServerPrefs("ana")?.showOnline).toBe(false);
   });
+
+  it("a read in flight across a save is dropped when it lands after the save", async () => {
+    prefs.forgetChatServerPrefs();
+    h.userId = "ana";
+    const save = prefs.setChatServerPrefs({ showOnline: false });
+    await flush();
+    // A re-read starts after the save was sent, answered before it committed.
+    const read = prefs.readChatServerPrefs();
+    await flush();
+    expect(h.pending).toHaveLength(2);
+    h.pending[0]!.resolve({ data: { show_online: false }, error: null });
+    await save;
+    h.pending[1]!.resolve({ data: { show_online: true }, error: null });
+    await read;
+    h.pending.length = 0;
+    expect(prefs.currentChatServerPrefs("ana")?.showOnline).toBe(false);
+  });
 });

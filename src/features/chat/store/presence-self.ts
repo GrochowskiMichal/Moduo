@@ -203,9 +203,11 @@ export class PresenceSelfRegistry {
   /** The first read; a failure tries again while this tab still holds the
    *  person and their switch is still unknown. */
   private load(userId: string, attempt: number): void {
+    const held = this.held;
+    if (held?.userId !== userId) return;
     void this.source.read().catch(() => {
-      const held = this.held;
-      if (held?.userId !== userId) return;
+      // Only the holding that asked retries (not a later one for the same person).
+      if (this.held !== held) return;
       held.retry = this.setTimer(
         () => {
           held.retry = null;
