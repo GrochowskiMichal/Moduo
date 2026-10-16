@@ -237,6 +237,9 @@ type NavRowInputProps = Omit<React.ComponentProps<"input">, "type"> & {
   kind?: keyof typeof FIELD_TEXT;
 };
 
+// Not `Input variant="bare"`: that sets its own inline --ctrl-h height and the
+// bare field's ring, and this one must be the row's height with the ring on
+// the row.
 function NavRowInput({ kind = "row", className, ...props }: NavRowInputProps) {
   return (
     <input

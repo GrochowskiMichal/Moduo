@@ -21,7 +21,7 @@ type ResizablePanelGroupProps = Omit<GroupProps, "orientation"> & {
 // MOD-162), but it stays a 16 px drag target: the library hit-tests by
 // geometry, growing each separator's box to this minimum (half over each
 // panel's edge, its border and padding), so a pseudo-element would not widen it.
-const RESIZE_TARGET = { fine: 16, coarse: 24 } as const;
+const RESIZE_TARGET = { fine: 16, coarse: 20 } as const;
 
 function ResizablePanelGroup({
   className,

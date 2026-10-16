@@ -7,7 +7,7 @@
 // "scrollLeft = 300 is a no-op" check ran live.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 
 rs.mock("./grid-canvas", () => ({
   GridCanvas: ({ widgets }: { widgets: { id: string }[] }) => (
@@ -67,6 +67,27 @@ describe("DashboardPager (MOD-161)", () => {
     );
     expect(first.hasAttribute("inert")).toBe(true);
     expect(second.hasAttribute("inert")).toBe(false);
+  });
+
+  it("hands focus to the new page when it pages from a focused widget", () => {
+    const { rerender } = renderPager(0);
+    const first = screen.getByRole("button", { name: "a" });
+    first.focus();
+    expect(document.activeElement).toBe(first);
+    rerender(
+      <DashboardPager
+        layout={layout}
+        activeIndex={1}
+        editing={false}
+        drag={null}
+        gridRef={() => {}}
+        onWidgetPointerDown={() => {}}
+        onRemove={() => {}}
+        onResize={() => {}}
+        onPage={() => {}}
+      />,
+    );
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "b" }));
   });
 
   it("clips the viewport instead of hiding it, so it is no scroll container", () => {

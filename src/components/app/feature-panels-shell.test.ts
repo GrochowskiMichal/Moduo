@@ -70,7 +70,7 @@ describe("the space between panels (MOD-162)", () => {
 
   it("keeps a 16 px drag target on every group", async () => {
     const source = await resizable();
-    expect(source).toMatch(/const RESIZE_TARGET = \{ fine: 16, coarse: 24 \} as const;/);
+    expect(source).toMatch(/const RESIZE_TARGET = \{ fine: 16, coarse: 20 \} as const;/);
     expect(source).toMatch(/resizeTargetMinimumSize=\{RESIZE_TARGET\}/);
   });
 
