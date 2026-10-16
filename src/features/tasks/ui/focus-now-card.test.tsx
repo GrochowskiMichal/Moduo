@@ -33,7 +33,9 @@ describe("the Now card's folded description", () => {
     };
     const view = render(<FoldedDescription description="First" runtime={null} workspaceId="ws" />);
     await settle();
-    view.rerender(<FoldedDescription description="Second, longer" runtime={null} workspaceId="ws" />);
+    view.rerender(
+      <FoldedDescription description="Second, longer" runtime={null} workspaceId="ws" />,
+    );
     await settle();
     expect(observed.length).toBeGreaterThan(1);
     // The last element measured is the one on screen, not the replaced editor's.

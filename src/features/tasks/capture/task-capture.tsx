@@ -293,8 +293,8 @@ export function TaskCaptureBody({
    * someone without one); an older draft's id-only entry reads its name off
    * the member list at create.
    */
-  const [mentioned, setMentioned] = useState<Array<{ id: string; label: string | null }>>(() =>
-    initial.draft.mentions ?? [],
+  const [mentioned, setMentioned] = useState<Array<{ id: string; label: string | null }>>(
+    () => initial.draft.mentions ?? [],
   );
   const onDescriptionTyped = (value: string) => {
     descriptionNow.current = value;
