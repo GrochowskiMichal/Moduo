@@ -4,7 +4,7 @@
 -- text and link, tag, push_after and the gate's answer; nobody outside the
 -- conversation, the workspace or chat ever gets one. "The email after an hour"
 -- (AC3.2, AC7.9). user_clients, acknowledgements, prefs and their erasure
--- (AC12.8, its table). CV-18 adds "holds and the gate" here.
+-- (AC12.8, its table). "Holds and the gate" (CV-18): section 7.
 --
 -- Cast: O owns workspace W ("Acme", Duo); A, B, C and Z are members, Z without
 -- chat access; X is in no workspace; K is A's API key with Chat at Edit. A
@@ -425,7 +425,366 @@ BEGIN
 END;
 $$;
 
--- ── 7. The gate's answers reach the rows (rules: CV-18) ─────────────────────
+-- ── 7. Holds and the gate (CV-18: AC7.5, AC3.5, AC6.4, AC11.5) ──────────────
+-- Quiet hours, do not disturb, a vacation and a paused workspace drop the
+-- device notice and keep the bell row and the Catch up item (stamped held,
+-- never emailed); Focus holds chat's notices and its end writes one summary;
+-- Tasks' reminder pushes pass the same gate. Chat's switches hold server-side.
+CREATE FUNCTION test.region(p_who text, p_patch jsonb) RETURNS text LANGUAGE sql AS $$
+  SELECT test.as_user(p_who, format($q$SELECT public.user_op_set_time_region(%L::jsonb)$q$, p_patch))
+$$;
+CREATE FUNCTION test.quiet(p_who text, p_at timestamptz) RETURNS text LANGUAGE sql STABLE AS $$
+  SELECT q.quiet || '|' || coalesce(to_char(q.back_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI'), '∅')
+    FROM public.time_region__quiet_now(test.id(p_who), p_at) q
+$$;
+-- A quiet range around now (UTC), so the gate's answer doesn't depend on the clock.
+CREATE FUNCTION test.quiet_now_range(p_who text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.region(p_who, jsonb_build_object('time_zone', 'UTC', 'quiet_hours', jsonb_build_object(
+    'on', true, 'from', to_char(now() AT TIME ZONE 'UTC' - interval '30 minutes', 'HH24:MI'),
+    'to', to_char(now() AT TIME ZONE 'UTC' + interval '30 minutes', 'HH24:MI'))))
+$$;
+CREATE FUNCTION test.held(p_who text, p_msg text) RETURNS boolean LANGUAGE sql VOLATILE AS $$
+  SELECT EXISTS (SELECT 1 FROM public.chat_catchup k WHERE k.user_id = test.id(p_who)
+                   AND k.message_id = test.mid(p_msg) AND k.held_at IS NOT NULL AND k.emailed_at IS NULL)
+$$;
+
+DO $$
+DECLARE
+  v text;
+  i int;
+  v_emails int;
+  v_b4 int;
+BEGIN
+  UPDATE public.chat_members SET notify_level = 'mentions'
+   WHERE channel_id IN (test.ref('D'), test.ref('L')) AND user_id = test.id('B');
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W2'), test.id('O'), 'Client');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W2'), test.id('B'), 'member')
+  ON CONFLICT (workspace_id, user_id) DO NOTHING;
+
+  -- Quiet hours in Time & region: the op, its checks, the guard, the read.
+  v := test.region('B', '{"time_zone": "Europe/Warsaw", "quiet_hours": {"on": true, "from": "19:00", "to": "09:00"}}');
+  PERFORM test.ok(v = 'ok 1'
+                  AND test.value_as('B', $q$SELECT public.user_time_region() ->> 'quiet_hours'$q$)::jsonb
+                      = '{"on": true, "from": "19:00", "to": "09:00"}'::jsonb,
+    'quiet hours: saved through the Time & region op and read back', v);
+  PERFORM test.ok(test.region('B', '{"quiet_hours": {"on": true, "from": "09:00", "to": "09:00"}}') LIKE '22023%'
+                  AND test.region('B', '{"quiet_hours": {"on": true, "from": "25:00", "to": "09:00"}}') LIKE '22023%'
+                  AND test.region('B', '{"quiet_hours": {"on": "yes"}}') LIKE '22023%'
+                  AND test.region('B', '{"quiet_hours": {"on": true, "from": "19:00", "to": "09:00", "days": 5}}') LIKE '22023%'
+                  AND test.region('A', '{"quiet_hours": {"on": true}}') LIKE '22023%',
+    'quiet hours: a range that ends where it starts, a time that isn''t one, an unknown key and no range are refused');
+  PERFORM test.ok(test.region('B', '{"quiet_hours": {"on": false}}') = 'ok 1'
+                  AND test.value_as('B', $q$SELECT public.user_time_region() ->> 'quiet_hours'$q$)::jsonb
+                      = '{"on": false, "from": "19:00", "to": "09:00"}'::jsonb,
+    'quiet hours: turning them off keeps the range');
+  v := test.as_user('B', $q$UPDATE public.user_preferences SET quiet_hours_on = true, quiet_from = '00:00', quiet_to = '23:59'$q$);
+  PERFORM test.ok((SELECT NOT quiet_hours_on AND quiet_from = '19:00' FROM public.user_preferences WHERE user_id = test.id('B')),
+    'quiet hours: only the op writes them (a direct write keeps what was there)', v);
+  PERFORM test.region('B', '{"quiet_hours": {"on": true}}');
+  -- 19:00 → 9:00 in Warsaw (UTC+2 in October): crosses midnight, follows the zone.
+  PERFORM test.ok(test.quiet('B', '2026-10-16 20:00+02') = 'true|2026-10-17 07:00'
+                  AND test.quiet('B', '2026-10-17 08:59+02') = 'true|2026-10-17 07:00'
+                  AND test.quiet('B', '2026-10-17 09:00+02') = 'false|∅'
+                  AND test.quiet('B', '2026-10-16 18:59+02') = 'false|∅'
+                  AND test.quiet('B', '2026-10-16 17:30+00') = 'true|2026-10-17 07:00',
+    'quiet hours: 19:00–9:00 in the person''s zone, across midnight, back at 9:00',
+    test.quiet('B', '2026-10-16 20:00+02'));
+  PERFORM test.region('B', '{"time_zone": "UTC", "quiet_hours": {"on": true, "from": "13:00", "to": "14:00"}}');
+  PERFORM test.ok(test.quiet('B', '2026-10-16 13:30+00') = 'true|2026-10-16 14:00'
+                  AND test.quiet('B', '2026-10-16 14:00+00') = 'false|∅'
+                  AND test.quiet('A', '2026-10-16 13:30+00') = 'false|∅',
+    'quiet hours: a range inside one day; someone without quiet hours is never quiet');
+
+  -- Quiet hours now: the device notice is dropped, the bell row and item stay.
+  PERFORM test.ok(test.quiet_now_range('B') = 'ok 1', 'setup: B''s quiet hours are now');
+  PERFORM test.ok(public.notice__gate(test.id('B'), test.id('W'), 'chat_message', now()) = 'drop'
+                  AND public.notice__gate(test.id('B'), test.id('W2'), 'reminder', now()) = 'drop'
+                  AND public.notice__gate(test.id('C'), test.id('W'), 'chat_message', now()) = 'send',
+    'gate: quiet hours drop every kind, in every workspace; others are sent');
+  PERFORM test.ok(test.send('A', 'D', 'q1', 'late question') = 'ok 1', 'sent: ' || 'q1');
+  PERFORM test.ok(test.send('A', 'L', 'q2', format('%s quiet?', test.uri('person', test.id('B')))) = 'ok 1', 'sent: ' || 'q2');
+  PERFORM test.ok(test.notice('B', 'q1') = 'none' AND test.notice('B', 'q2') = 'none'
+                  AND test.held('B', 'q1') AND test.held('B', 'q2')
+                  AND (SELECT k.activity_id IS NOT NULL FROM public.chat_catchup k
+                        WHERE k.user_id = test.id('B') AND k.message_id = test.mid('q2'))
+                  AND NOT EXISTS (SELECT 1 FROM public.notification_state ns JOIN public.chat_catchup k
+                                    ON k.activity_id = ns.activity_id AND k.user_id = ns.user_id
+                                   WHERE k.user_id = test.id('B') AND k.message_id = test.mid('q2')
+                                     AND ns.dismissed_at IS NOT NULL),
+    'quiet hours: no notice; the DM and the @mention wait in Catch up, held, and the mention keeps its bell row');
+  INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title)
+  VALUES (test.id('B'), test.id('W'), 'reminder', 'Reminder: during quiet hours');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries WHERE user_id = test.id('B') AND title = 'Reminder: during quiet hours'),
+    'quiet hours: a Tasks reminder push is dropped too');
+  -- The email job at the same time tomorrow (still quiet): nothing, and the
+  -- waiting items are held for good (nothing pings when quiet hours end).
+  PERFORM test.as_user('B', $q$SELECT public.user_op_set_chat_prefs('{"email_when_away": true}')$q$);
+  UPDATE public.chat_catchup SET held_at = NULL WHERE user_id = test.id('B') AND message_id = test.mid('q1');
+  v_emails := test.emails('B');
+  PERFORM public.chat__queue_waiting_emails(now() + interval '24 hours');
+  PERFORM test.ok(test.emails('B') = v_emails AND test.held('B', 'q1'),
+    'email: none during quiet hours; what waited then is held, never emailed');
+  PERFORM test.region('B', '{"quiet_hours": {"on": false}}');
+  PERFORM public.chat__queue_waiting_emails(now() + interval '26 hours');
+  PERFORM test.ok(test.emails('B') = v_emails AND test.held('B', 'q1') AND test.held('B', 'q2'),
+    'email: nothing when quiet hours end (AC3.5)');
+  INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title)
+  VALUES (test.id('B'), test.id('W'), 'reminder', 'Reminder: outside quiet hours');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.notice_deliveries WHERE user_id = test.id('B') AND title = 'Reminder: outside quiet hours'),
+    'outside quiet hours a Tasks reminder push is written as before');
+
+  -- On vacation (do not disturb): dropped the same way.
+  v := test.as_user('B', format($q$SELECT public.user_op_set_status(%L::jsonb)$q$,
+    jsonb_build_object('emoji', '🌴', 'text', 'On vacation', 'preset', 'vacation', 'dnd', true, 'clear_at', now() + interval '3 days')));
+  PERFORM test.ok(test.send('A', 'D', 'v1', 'see you after') = 'ok 1', 'sent: ' || 'v1');
+  PERFORM test.ok(test.notice('B', 'v1') = 'none' AND test.held('B', 'v1'),
+    'on vacation: no notice; the message waits in Catch up, held', v);
+  PERFORM test.as_user('B', $q$SELECT public.user_op_clear_status()$q$);
+
+  -- A paused workspace: its notices and emails stop, another workspace keeps ringing (AC6.4).
+  v := test.as_user('B', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W')));
+  PERFORM test.ok(v = 'ok 1'
+                  AND public.notice__gate(test.id('B'), test.id('W'), 'chat_mention', now()) = 'drop'
+                  AND public.notice__gate(test.id('B'), test.id('W2'), 'chat_mention', now()) = 'send'
+                  AND public.notice__gate(test.id('C'), test.id('W'), 'chat_mention', now()) = 'send'
+                  AND test.value_as('B', 'SELECT public.workspace_notice_pauses()::text')::jsonb = jsonb_build_array(test.id('W')),
+    'pause: Acme drops B''s notices; Client and C''s keep ringing', v);
+  PERFORM test.ok(test.send('A', 'L', 'p1', format('%s paused?', test.uri('person', test.id('B')))) = 'ok 1', 'sent: ' || 'p1');
+  PERFORM test.ok(test.notice('B', 'p1') = 'none' AND test.held('B', 'p1'),
+    'pause: no notice; the item waits in Catch up, held');
+  -- A person's pause is their own: nobody else reads it, directly or with
+  -- the workspace's member list (listMembers reads workspace_members' rows).
+  PERFORM test.ok(test.value_as('B', 'SELECT count(*)::text FROM public.user_notice_pauses') = '1'
+                  AND test.value_as('A', 'SELECT count(*)::text FROM public.user_notice_pauses') = '0'
+                  AND test.value_as('O', 'SELECT count(*)::text FROM public.user_notice_pauses') = '0'
+                  AND test.value_as('A', format($q$SELECT to_jsonb(m)::text FROM public.workspace_members m
+                                                   WHERE m.workspace_id = %L AND m.user_id = %L$q$,
+                                                 test.id('W'), test.id('B'))) NOT LIKE '%pause%'
+                  AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_schema = 'public' AND table_name = 'workspace_members'
+                                     AND column_name LIKE '%pause%'),
+    'pause: only B reads B''s pause; teammates (and the owner) see nothing of it, nor in the member list');
+  PERFORM test.ok(test.try('B', format($q$INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (%L, %L)$q$,
+                                       test.id('B'), test.id('W2'))) LIKE '42501%'
+                  AND test.try('B', 'DELETE FROM public.user_notice_pauses') LIKE '42501%'
+                  AND test.try('A', format($q$INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (%L, %L)$q$,
+                                       test.id('B'), test.id('W2'))) LIKE '42501%',
+    'pause: only the op writes pauses (direct writes are refused)');
+  v := test.as_user('A', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W')));
+  PERFORM test.ok((SELECT count(*) FROM public.user_notice_pauses WHERE workspace_id = test.id('W')) = 2
+                  AND EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE workspace_id = test.id('W') AND user_id = test.id('A'))
+                  AND test.try('X', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W'))) LIKE '42501%'
+                  AND test.as_key('K', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W'))) LIKE '42501%',
+    'pause: the op changes only the caller''s own pause; a non-member and an API key are refused', v);
+  PERFORM test.as_user('A', format($q$SELECT public.workspace_op_pause_notices(%L, false)$q$, test.id('W')));
+  -- The owner pauses too, even without a member row (P owns workspace W3).
+  PERFORM test.person('P');
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W3'), test.id('P'), 'Own');
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W3') AND user_id = test.id('P');
+  v := test.as_user('P', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W3')));
+  PERFORM test.ok(v = 'ok 1' AND public.notice__gate(test.id('P'), test.id('W3'), 'chat_mention', now()) = 'drop',
+    'pause: the workspace''s owner pauses it without a member row', v);
+  -- Leaving a workspace forgets its pause.
+  PERFORM test.as_user('B', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W2')));
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W2') AND user_id = test.id('B');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W2')),
+    'pause: leaving a workspace forgets its pause');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W2'), test.id('B'), 'member');
+  v := test.as_user('B', format($q$SELECT public.workspace_op_pause_notices(%L, false)$q$, test.id('W')));
+  PERFORM test.ok(public.notice__gate(test.id('B'), test.id('W'), 'chat_mention', now()) = 'send'
+                  AND NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('B')),
+    'pause: resuming sends again', v);
+
+  -- Chat's switches hold server-side: no notice, no email (CV-6b's switches).
+  UPDATE public.user_preferences SET preferences = jsonb_set(coalesce(preferences, '{}'::jsonb), '{notifications}',
+           coalesce(preferences -> 'notifications', '{}'::jsonb) || '{"chatDirect": false, "chatMentions": false}'::jsonb)
+   WHERE user_id = test.id('B');
+  PERFORM test.ok(test.send('A', 'D', 's1', 'switched off') = 'ok 1', 'sent: ' || 's1');
+  PERFORM test.ok(test.send('A', 'L', 's2', format('%s switched?', test.uri('person', test.id('B')))) = 'ok 1', 'sent: ' || 's2');
+  PERFORM test.ok(test.notice('B', 's1') = 'none' AND test.notice('B', 's2') = 'none'
+                  AND test.held('B', 's1') AND test.held('B', 's2'),
+    'switches: Direct messages and Mentions off write no notice; the items wait, held (never emailed)');
+  UPDATE public.user_preferences SET preferences = jsonb_set(preferences, '{notifications}',
+           (preferences -> 'notifications') || '{"chatDirect": true, "chatMentions": true}'::jsonb)
+   WHERE user_id = test.id('B');
+
+  -- Focus holds chat's notices; its end closes them into one summary (AC11.5).
+  DELETE FROM public.focus_runs WHERE user_id = test.id('B');
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id)
+  VALUES (test.id('run:B'), test.id('W2'), test.id('B'), 'running', 'per_task', 'db-test-device');
+  PERFORM test.ok(test.send('A', 'D', 'f1', 'while you focus') = 'ok 1', 'sent: ' || 'f1');
+  PERFORM test.ok(test.send('A', 'L', 'f2', format('%s focus?', test.uri('person', test.id('B')))) = 'ok 1', 'sent: ' || 'f2');
+  INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title)
+  VALUES (test.id('B'), test.id('W'), 'reminder', 'Reminder: during Focus');
+  PERFORM test.ok(test.notice('B', 'f1') LIKE 'chat_message|%|t' AND test.notice('B', 'f2') LIKE 'chat_mention|%|t'
+                  AND (SELECT NOT held_for_focus FROM public.notice_deliveries WHERE user_id = test.id('B') AND title = 'Reminder: during Focus')
+                  AND NOT EXISTS (SELECT 1 FROM public.chat_catchup k WHERE k.user_id = test.id('B')
+                                    AND k.message_id IN (test.mid('f1'), test.mid('f2')) AND k.held_at IS NOT NULL),
+    'focus: chat''s notices are held (in any workspace), a Tasks reminder isn''t; the items aren''t held from email',
+    test.notice('B', 'f1'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary') = 1
+                  AND (SELECT d.title = '2 messages while you focused' AND d.url = '/chat?view=catchup' AND NOT d.held_for_focus
+                         AND d.workspace_id = test.id('W')
+                         FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary'),
+    'focus: ending closes the held notices and writes one summary, "2 messages while you focused", in the messages'' workspace (Focus ran in W2)');
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id)
+  VALUES (test.id('run:B2'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device');
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B2');
+  PERFORM test.ok((SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary') = 1,
+    'focus: a run that held nothing writes no summary');
+
+  -- Nothing stops Focus from ending: a release that fails leaves the run ended.
+  CREATE FUNCTION test.boom() RETURNS trigger LANGUAGE plpgsql AS $b$
+  BEGIN
+    RAISE EXCEPTION 'forced failure';
+  END;
+  $b$;
+  CREATE TRIGGER test_boom BEFORE UPDATE ON public.notice_deliveries
+    FOR EACH ROW WHEN (OLD.held_for_focus AND NEW.acked_at IS NOT NULL) EXECUTE FUNCTION test.boom();
+  -- (Runs in one transaction share now(): their starts are set apart by hand.)
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B3'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '1 minute');
+  PERFORM test.ok(test.send('A', 'D', 'f3', 'held, then a failure') = 'ok 1', 'sent: ' || 'f3');
+  v := test.as_op('B', format($q$UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = %L$q$, test.id('run:B3')));
+  PERFORM test.ok(v = 'ok 1'
+                  AND (SELECT status FROM public.focus_runs WHERE id = test.id('run:B3')) = 'ended'
+                  AND test.notice('B', 'f3') LIKE 'chat_message|%|t'
+                  AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary') = 1,
+    'focus: a failing release never stops Focus from ending (the rows stay held)', v);
+  DROP TRIGGER test_boom ON public.notice_deliveries;
+
+  -- A Focus that never ended: released once no running run was seen for 10 minutes.
+  i := public.focus_runs__release_stale(now());
+  PERFORM test.ok(i >= 1
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B3') || ':stale') = '1 message while you focused',
+    'focus: held rows of a Focus that is over are released by the sweep, with one summary', i::text);
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B4'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '2 minutes');
+  PERFORM test.ok(test.send('A', 'D', 'f4', 'app closed mid-Focus') = 'ok 1', 'sent: ' || 'f4');
+  PERFORM public.focus_runs__release_stale(now());
+  PERFORM test.ok(test.notice('B', 'f4') LIKE 'chat_message|%|t',
+    'focus: a Focus seen recently keeps holding (the sweep leaves it)');
+  UPDATE public.focus_runs SET seen_at = now() - interval '20 minutes' WHERE id = test.id('run:B4');
+  i := public.focus_runs__release_stale(now());
+  PERFORM test.ok(i >= 1
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND test.value_as('B', $q$SELECT count(*)::text FROM public.notice_deliveries WHERE held_for_focus AND acked_at IS NULL$q$) = '0',
+    'focus: a running Focus not seen for 10 minutes (the app closed) is released; "held until Focus ends" clears');
+  -- The next Focus start ends a run still running, which releases what it held.
+  UPDATE public.focus_runs SET seen_at = now() WHERE id = test.id('run:B4');
+  PERFORM test.ok(test.send('A', 'D', 'f5', 'before the next Focus') = 'ok 1', 'sent: ' || 'f5');
+  PERFORM test.ok(test.notice('B', 'f5') LIKE 'chat_message|%|t',
+    'focus: the last Focus still running holds f5', test.notice('B', 'f5'));
+  -- The sweep's summary above has its own tag (…:stale); count the run's own.
+  SELECT count(*) INTO v_b4 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+     AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4');
+  v := test.as_user('B', format($q$SELECT public.focus_op_run_start(%L, 'db-test-device-2', 'per_task')$q$, test.id('W')));
+  PERFORM test.ok(v = 'ok 1'
+                  AND (SELECT status FROM public.focus_runs WHERE id = test.id('run:B4')) = 'ended'
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')) = 1
+                  AND v_b4 = 0
+                  AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')
+                       ORDER BY d.created_at DESC, d.id LIMIT 1) = '1 message while you focused',
+    'focus: starting the next Focus releases what the last one held (one more summary for that run)', v);
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE user_id = test.id('B') AND status <> 'ended';
+
+  -- A summary that comes while the gate drops (here a pause; quiet hours and
+  -- do not disturb alike) is dropped too: the holds still close and the items
+  -- wait in Catch up (agent's choice, CV-18).
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B6'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '4 minutes');
+  PERFORM test.ok(test.send('A', 'D', 'f6', 'held, then paused') = 'ok 1', 'sent: ' || 'f6');
+  PERFORM test.ok(test.notice('B', 'f6') LIKE 'chat_message|%|t', 'focus: f6 is held before the pause', test.notice('B', 'f6'));
+  INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (test.id('B'), test.id('W'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B6');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B6'))
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND EXISTS (SELECT 1 FROM public.chat_catchup k WHERE k.user_id = test.id('B')
+                                AND k.message_id = test.mid('f6') AND k.done_at IS NULL),
+    'focus: a summary the gate drops writes nothing; the holds close and the item waits in Catch up');
+  DELETE FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W');
+
+  -- Focus started in one workspace, paused by the end, holding messages from
+  -- another: those still ring, in their own workspace (AC6.4).
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B6b'), test.id('W2'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '4 minutes 30 seconds');
+  PERFORM test.ok(test.send('A', 'D', 'f6b', 'from the client') = 'ok 1', 'sent: ' || 'f6b');
+  PERFORM test.ok(test.notice('B', 'f6b') LIKE 'chat_message|%|t', 'focus: f6b is held', test.notice('B', 'f6b'));
+  INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (test.id('B'), test.id('W2'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B6b');
+  PERFORM test.ok((SELECT d.workspace_id = test.id('W') AND d.title = '1 message while you focused'
+                     FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                      AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B6b')),
+    'focus: the run''s workspace paused, the summary rings in the held messages'' unpaused workspace');
+  DELETE FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W2');
+
+  -- A Pomodoro break rings again, so the work phase's holds close at the break.
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, phase, phase_seconds, device_id, started_at)
+  VALUES (test.id('run:B7'), test.id('W'), test.id('B'), 'running', 'pomodoro', 'work', 1500, 'db-test-device', now() + interval '5 minutes');
+  PERFORM test.ok(test.send('A', 'D', 'f7', 'during a work phase') = 'ok 1', 'sent: ' || 'f7');
+  PERFORM test.ok(test.notice('B', 'f7') LIKE 'chat_message|%|t', 'focus: a Pomodoro work phase holds', test.notice('B', 'f7'));
+  UPDATE public.focus_runs SET phase = 'break' WHERE id = test.id('run:B7');
+  PERFORM test.ok(test.send('A', 'D', 'f8', 'during the break') = 'ok 1', 'sent: ' || 'f8');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B7')) = '1 message while you focused'
+                  AND test.notice('B', 'f8') LIKE 'chat_message|%|f',
+    'focus: a break releases what the work phase held (one summary) and rings what comes in it', test.notice('B', 'f8'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B7');
+  PERFORM test.ok((SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                     AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B7')) = 1,
+    'focus: ending in a break, with nothing held since, writes no second summary');
+
+  -- Statuses: at most 30 changes in 10 minutes.
+  FOR i IN 1..30 LOOP
+    v := test.as_user('C', format($q$SELECT public.user_op_set_status('{"emoji": "☕", "text": "Break %s"}')$q$, i));
+  END LOOP;
+  PERFORM test.ok(v = 'ok 1' AND test.as_user('C', $q$SELECT public.user_op_clear_status()$q$) LIKE 'PT429%',
+    'status: the 31st change in 10 minutes is refused', v);
+  DELETE FROM public.user_status_changes WHERE user_id = test.id('C');
+  PERFORM test.as_user('C', $q$SELECT public.user_op_clear_status()$q$);
+
+  -- Grants.
+  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.notice__gate(uuid, uuid, text, timestamptz)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.time_region__quiet_now(uuid, timestamptz)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.chat__notice_switch_on(uuid, text)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.notice_deliveries__gate()', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.focus_runs__release_held()', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.workspace_members__forget_pause()', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.focus__release_held(uuid, uuid, text, boolean)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.focus_runs__release_stale(timestamptz)', 'EXECUTE')
+                  AND NOT has_table_privilege('authenticated', 'public.user_notice_pauses', 'INSERT')
+                  AND NOT has_table_privilege('authenticated', 'public.user_notice_pauses', 'UPDATE')
+                  AND NOT has_table_privilege('authenticated', 'public.user_notice_pauses', 'DELETE')
+                  AND NOT has_table_privilege('anon', 'public.user_notice_pauses', 'SELECT')
+                  AND EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'focus-release-stale-holds' AND schedule = '*/5 * * * *')
+                  AND NOT has_function_privilege('authenticated', 'public.user_statuses__rate(uuid)', 'EXECUTE')
+                  AND NOT has_function_privilege('anon', 'public.workspace_op_pause_notices(uuid, boolean)', 'EXECUTE')
+                  AND NOT has_function_privilege('anon', 'public.workspace_notice_pauses()', 'EXECUTE')
+                  AND NOT has_function_privilege('anon', 'public.user_op_set_time_region(jsonb)', 'EXECUTE')
+                  AND has_function_privilege('authenticated', 'public.workspace_op_pause_notices(uuid, boolean)', 'EXECUTE')
+                  AND has_function_privilege('authenticated', 'public.workspace_notice_pauses()', 'EXECUTE')
+                  AND NOT has_table_privilege('authenticated', 'public.user_status_changes', 'SELECT')
+                  AND NOT has_table_privilege('anon', 'public.user_status_changes', 'SELECT'),
+    'grants: the gate and its helpers are server-only; people call only their own ops');
+END;
+$$;
+
+-- ── 8. The gate's answers reach the rows (a stub gate) ──────────────────────
 CREATE OR REPLACE FUNCTION public.notice__gate(p_user uuid, p_workspace_id uuid, p_kind text, p_at timestamptz)
 RETURNS text LANGUAGE sql STABLE SET search_path TO '' AS $$
   SELECT CASE WHEN p_user = md5('db-test:C')::uuid THEN 'drop' ELSE 'hold' END
@@ -444,7 +803,7 @@ BEGIN
 END;
 $$;
 
--- ── 8. Erasure and grants (AC12.8, its table) ───────────────────────────────
+-- ── 9. Erasure and grants (AC12.8, its table) ───────────────────────────────
 DO $$
 DECLARE
   v jsonb;

@@ -45,6 +45,9 @@ export type PersonNow = {
   /** Only with their "Show what I'm focusing on" and a task you can see. */
   focusTaskId: string | null;
   focusTaskTitle: string | null;
+  /** In their quiet hours now (CV-18), and when they end. */
+  quietNow?: boolean;
+  backAt?: string | null;
 };
 
 /** The shapes (AC11.1): green = reachable now; grey outline = away; grey bar
@@ -103,6 +106,8 @@ export function peopleNowFromRows(raw: unknown, now: number = Date.now()): Map<s
       focusUntil: str(r.focus_until),
       focusTaskId: str(r.focus_task_id),
       focusTaskTitle: str(r.focus_task_title),
+      quietNow: r.quiet_now === true,
+      backAt: str(r.back_at),
     });
   }
   return out;
@@ -197,7 +202,7 @@ export function composerHoldLine(
   now: Date = new Date(),
 ): string | null {
   const status = person?.status;
-  if (!status?.dnd) return null;
+  if (!status?.dnd) return quietHoursLine(firstName, person, now);
   const until = untilText(status.clearAt, now);
   const what = status.preset
     ? PRESET_PHRASES[status.preset]
@@ -206,6 +211,24 @@ export function composerHoldLine(
       : "on do not disturb";
   const tail = "They won't be notified; your message waits in their Catch up.";
   return `${firstName} is ${what}${until ? ` ${until}` : ""}. ${tail}`;
+}
+
+/**
+ * During someone's quiet hours (CV-18, CH7): "Sofia's quiet hours · back
+ * 9:00" (their end, on your clock). Null outside them.
+ */
+export function quietHoursLine(
+  firstName: string,
+  person: PersonNow | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (!person?.quietNow) return null;
+  const back = person.backAt ? new Date(person.backAt) : null;
+  if (back && !Number.isNaN(back.getTime()) && back.getTime() <= now.getTime()) return null;
+  const owner = `${firstName}'s`;
+  return back && !Number.isNaN(back.getTime())
+    ? `${owner} quiet hours · back ${formatTime(back)}`
+    : `${owner} quiet hours`;
 }
 
 const PRESET_PHRASES: Record<StatusPreset, string> = {

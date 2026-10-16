@@ -30,6 +30,11 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import {
+  type BottomBarAction,
+  type BottomBarMode,
+  useBottomBarModeOwner,
+} from "@/components/app/bottom-bar-mode";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
@@ -170,6 +175,16 @@ export type MessageStreamProps = {
    * composer, so typing anywhere types there (§16).
    */
   onReturnToComposer: (typed?: string) => void;
+  /**
+   * The multi-select's verbs (CV-16): ⇧↑↓, ⌘-click and ⌘A pick messages and
+   * the bottom bar shows Move `M` · Task `T` · Delete `⌫`. Absent: no item.
+   */
+  onMoveMany?: (ms: ChatMessage[]) => void;
+  /** Managers and admins may move other people's messages too (else your own only). */
+  canMoveOthers?: boolean;
+  onTaskMany?: (ms: ChatMessage[]) => void;
+  /** Your own picked messages only (absent: Delete isn't offered). */
+  onDeleteMany?: (ms: ChatMessage[]) => void;
 };
 
 export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>(
@@ -543,6 +558,124 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
 
     const own = (m: ChatMessage) => !!selfId && m.authorId === selfId && m.authorKind === "user";
 
+    // ── the multi-select (CV-16, §16: ⇧↑↓ · ⌘-click · ⌘A) ──────────────────
+    const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+    const anchor = useRef<string | null>(null);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+    useEffect(() => {
+      setPicked(new Set());
+      anchor.current = null;
+    }, [conversationId]);
+    // Messages that leave the window (moved, deleted) leave the selection.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the drawn rows are the trigger
+    useEffect(() => {
+      setPicked((prev) => {
+        if (prev.size === 0) return prev;
+        const next = new Set([...prev].filter((k) => pickable(messageOf(k))));
+        return next.size === prev.size ? prev : next;
+      });
+    }, [rows]);
+    const pickable = (m: ChatMessage | null): m is ChatMessage =>
+      !!m && m.kind === "message" && !m.sendState && !m.deletedAt;
+    const pickedMessages = (): ChatMessage[] =>
+      messageKeys()
+        .filter((k) => picked.has(k))
+        .map((k) => messageOf(k))
+        .filter(pickable);
+    const clearPicked = () => {
+      setPicked(new Set());
+      anchor.current = null;
+    };
+    /** ⇧↑↓: from the anchor to `to`, every drawn message between. */
+    const pickRange = (to: string) => {
+      const keys = messageKeys();
+      const from = anchor.current ?? selected ?? to;
+      anchor.current = from;
+      const a = keys.indexOf(from);
+      const b = keys.indexOf(to);
+      if (a < 0 || b < 0) return;
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      setPicked(new Set(keys.slice(lo, hi + 1).filter((k) => pickable(messageOf(k)))));
+    };
+    const togglePicked = (key: string) => {
+      if (!pickable(messageOf(key))) return;
+      setPicked((prev) => {
+        const next = new Set(prev);
+        // The first ⌘-click also takes the message the cursor is on.
+        if (next.size === 0 && selected && selected !== key && pickable(messageOf(selected))) {
+          next.add(selected);
+        }
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+      anchor.current = key;
+    };
+
+    const manyVerbs = () => {
+      const p = live.current;
+      const ms = pickedMessages();
+      const allOwn = ms.length > 0 && ms.every(own);
+      return {
+        move:
+          p.onMoveMany && canWrite && (allOwn || p.canMoveOthers)
+            ? () => p.onMoveMany?.(ms)
+            : undefined,
+        task: p.onTaskMany && canUseTools ? () => p.onTaskMany?.(ms) : undefined,
+        remove: p.onDeleteMany && canWrite && allOwn ? () => p.onDeleteMany?.(ms) : undefined,
+      };
+    };
+    const pickedKey = [...picked].sort().join(",");
+    // The bottom bar's mode row while something is picked: Move M · Task T · Delete ⌫.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the selection (by its ids) and the rights are the triggers
+    const mode = useMemo<BottomBarMode | null>(() => {
+      if (picked.size === 0) return null;
+      const v = manyVerbs();
+      const after = () => {
+        clearPicked();
+        scrollRef.current?.focus({ preventScroll: true });
+      };
+      // Each action reads the picked messages and the verbs when it runs, so
+      // an edit or a new callback since the pick isn't frozen in.
+      const actions: BottomBarAction[] = [];
+      if (v.move)
+        actions.push({ id: "move", label: "Move", keyHint: "M", run: () => manyVerbs().move?.() });
+      if (v.task)
+        actions.push({
+          id: "task",
+          label: "Task",
+          keyHint: "T",
+          run: () => {
+            manyVerbs().task?.();
+            after();
+          },
+        });
+      actions.push({
+        id: "delete",
+        label: "Delete",
+        keyHint: "⌫",
+        disabled: !v.remove,
+        run: () => {
+          manyVerbs().remove?.();
+          after();
+        },
+      });
+      return {
+        id: `chat-select-${conversationId}`,
+        label: "Selected messages",
+        actions,
+        note: `${picked.size} selected · Esc`,
+      };
+    }, [
+      pickedKey,
+      canWrite,
+      canUseTools,
+      conversationId,
+      !!props.onMoveMany,
+      !!props.canMoveOthers,
+    ]);
+    useBottomBarModeOwner(mode);
+
     const verbsFor = (m: ChatMessage): MessageVerbs => {
       const p = live.current;
       return {
@@ -554,6 +687,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onReply: () => p.onReply(m),
         onReplyTo: p.replyToFor?.(m),
         onWrapUp: p.wrapUpFor?.(m),
+        onMoveTo:
+          p.onMoveMany && canWrite && !m.sendState && (own(m) || p.canMoveOthers)
+            ? () => p.onMoveMany?.([m])
+            : undefined,
         onReplyPrivately:
           p.onReplyPrivately && m.authorId && m.authorKind === "user" && !own(m)
             ? () => p.onReplyPrivately?.(m)
@@ -575,6 +712,53 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       const keys = messageKeys();
       const p = live.current;
       const m = messageOf(selected);
+      const mod = e.metaKey || e.ctrlKey;
+      // ── the multi-select's keys (CV-16) ──
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.shiftKey && !mod && !e.altKey) {
+        e.preventDefault();
+        const i = selected ? keys.indexOf(selected) : keys.length;
+        const next =
+          keys[Math.max(0, Math.min(keys.length - 1, e.key === "ArrowUp" ? i - 1 : i + 1))];
+        if (!next) return;
+        if (!anchor.current && selected && pickable(messageOf(selected))) anchor.current = selected;
+        select(next);
+        pickRange(next);
+        return;
+      }
+      if (mod && !e.altKey && !e.shiftKey && (e.key === "a" || e.key === "A")) {
+        e.preventDefault();
+        setPicked(new Set(keys.filter((k) => pickable(messageOf(k)))));
+        anchor.current = selected;
+        return;
+      }
+      if (picked.size > 0) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          clearPicked();
+          return;
+        }
+        const v = manyVerbs();
+        // Keymap rule 9: a bare ⌫ deletes only with two or more picked; ⌘⌫ any.
+        if (e.key === "Backspace" && !e.altKey && (mod || picked.size >= 2)) {
+          e.preventDefault();
+          if (v.remove) {
+            v.remove();
+            clearPicked();
+          }
+          return;
+        }
+        if (!mod && !e.altKey && (e.key === "m" || e.key === "M") && v.move) {
+          e.preventDefault();
+          v.move();
+          return;
+        }
+        if (!mod && !e.altKey && (e.key === "t" || e.key === "T") && v.task) {
+          e.preventDefault();
+          v.task();
+          clearPicked();
+          return;
+        }
+      }
       if (e.key === "ArrowUp" || e.key === "ArrowDown") {
         if (e.altKey || e.metaKey || e.ctrlKey) return; // ⌥↑↓ walk conversations (the page)
         e.preventDefault();
@@ -599,7 +783,6 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         return;
       }
       const verbs = verbsFor(m);
-      const mod = e.metaKey || e.ctrlKey;
       if (mod && e.key === "Backspace") {
         if (verbs.onDelete) {
           e.preventDefault();
@@ -640,6 +823,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "P":
           e.preventDefault();
           verbs.onPin?.();
+          return;
+        case "m":
+        case "M":
+          if (verbs.onMoveTo) {
+            e.preventDefault();
+            verbs.onMoveTo();
+          } else if (canWrite) typeIntoComposer(e);
           return;
         case "t":
         case "T":
@@ -689,7 +879,19 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "new":
           return <NewPill />;
         case "event":
-          return <EventLine message={row.message} />;
+          return (
+            <EventLine
+              message={row.message}
+              actor={
+                row.message.authorId === selfId
+                  ? "You"
+                  : authorName(
+                      row.message,
+                      row.message.authorId ? personOf(row.message.authorId) : undefined,
+                    )
+              }
+            />
+          );
         case "deleted":
           return (
             <DeletedRow
@@ -721,6 +923,18 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
               settled={settled}
               ctx={ctx}
               selected={selected === row.key}
+              picked={picked.has(row.key)}
+              onClick={(e) => {
+                if (!(e.metaKey || e.ctrlKey) || m.sendState) return;
+                // ⌘-click on a link, chip or button inside keeps its own meaning.
+                const inner = (e.target as Element).closest(
+                  'a, button, [role="button"], [contenteditable="true"]',
+                );
+                if (inner && e.currentTarget.contains(inner)) return;
+                e.preventDefault();
+                togglePicked(row.key);
+                scrollRef.current?.focus({ preventScroll: true });
+              }}
               target={lit === row.key}
               domId={`chat-msg-${row.key}`}
               position={positions.get(row.key)}

@@ -422,6 +422,14 @@ export const timeRegionRowSchema = z.object({
   hour_cycle: z.union([hourCycleSchema, z.null()]).optional(),
   date_order: z.union([dateOrderSchema, z.null()]).optional(),
   share_time_with_owner: z.boolean().optional(),
+  // CV-18: quiet hours, "HH:MM" in the person's zone (the range may cross midnight).
+  quiet_hours: z
+    .object({
+      on: z.boolean(),
+      from: z.union([z.string(), z.null()]).optional(),
+      to: z.union([z.string(), z.null()]).optional(),
+    })
+    .optional(),
 });
 
 export const activityRowSchema = z.object({

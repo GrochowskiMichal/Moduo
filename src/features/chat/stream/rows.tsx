@@ -20,6 +20,7 @@ import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Reactions } from "@/components/ui/reactions";
+import { Reference } from "@/features/spine/references/ui/reference";
 import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
@@ -71,30 +72,61 @@ export function NewPill() {
  * words per type. Moves are CV-16's; a call's line (Calls) is a new entry in
  * this table, never a new row design.
  */
-const EVENT_LINES: Record<string, { icon: typeof ArrowRightLeft; text: (n: number) => string }> = {
+const messages = (n: number) => (n === 1 ? "a message" : `${n} messages`);
+
+const EVENT_LINES: Record<
+  string,
+  { icon: typeof ArrowRightLeft; text: (who: string, n: number) => string; refKey: string }
+> = {
+  // CV-16's two lines: who moved how many, and where to / from (a reference:
+  // "Private item" for whoever can't read that conversation).
   moved_out: {
     icon: ArrowRightLeft,
-    text: (n) => (n === 1 ? "A message was moved out" : `${n} messages were moved out`),
+    text: (who, n) => `${who} moved ${messages(n)} to`,
+    refKey: "to",
   },
   moved_in: {
     icon: ArrowRightLeft,
-    text: (n) => (n === 1 ? "A message was moved here" : `${n} messages were moved here`),
+    text: (who, n) => `${who} moved ${messages(n)} here from`,
+    refKey: "from",
   },
 };
 
-export function EventLine({ message }: { message: ChatMessage }) {
+/** The conversation a move line names, from its `moduo://chat_channel/<id>`. */
+export function eventConversationId(event: ChatMessage["event"], key: string): string | null {
+  const ref = event?.[key];
+  if (typeof ref !== "string") return null;
+  const m = /^moduo:\/\/chat_channel\/([0-9a-f-]{36})$/i.exec(ref);
+  return m?.[1] ?? null;
+}
+
+/** The words of an event line, without its reference (also its accessible name). */
+export function eventLineText(message: ChatMessage, actor: string): string | null {
   const type = typeof message.event?.type === "string" ? message.event.type : "";
-  const ids = message.event?.message_ids;
-  const n = Array.isArray(ids) ? ids.length : 1;
+  const line = EVENT_LINES[type];
+  if (!line) return null;
+  const count = message.event?.count;
+  const ids = message.event?.ids;
+  const n = typeof count === "number" ? count : Array.isArray(ids) ? ids.length : 1;
+  return line.text(actor, n);
+}
+
+export function EventLine({ message, actor }: { message: ChatMessage; actor?: string }) {
+  const type = typeof message.event?.type === "string" ? message.event.type : "";
   const line = EVENT_LINES[type];
   const Icon = line?.icon ?? Clock;
+  const text = eventLineText(message, actor ?? "Someone");
+  const where = line ? eventConversationId(message.event, line.refKey) : null;
   return (
     <div
       role="note"
       className="flex min-h-(--ctrl-h-xs) items-center gap-2 py-0.75 pl-[calc(var(--pad-x-sm)*2+var(--avatar-feed))] text-xs text-muted-foreground"
     >
       <Icon aria-hidden className="size-icon-xs shrink-0" />
-      <span>{line ? line.text(n) : "Something changed in this conversation"}</span>
+      <span className="flex min-w-0 items-center gap-1">
+        <span>{text ?? "Something changed in this conversation"}</span>
+        {where ? <Reference type="chat_channel" id={where} display="chip" /> : null}
+      </span>
       <time className="text-subtle-foreground tabular-nums" dateTime={message.createdAt}>
         · {formatTime(message.createdAt)}
       </time>
@@ -378,6 +410,8 @@ export function MessageRow({
   editor,
   onPointerEnter,
   onContextMenu,
+  onClick,
+  picked = false,
   hideChainLine = false,
 }: {
   message: ChatMessage;
@@ -402,6 +436,10 @@ export function MessageRow({
   editor?: ReactNode;
   onPointerEnter?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  /** A click on the row (⌘-click picks it for the mode row, CV-16). */
+  onClick?: (e: React.MouseEvent) => void;
+  /** In the multi-select (CV-16): drawn as selected. */
+  picked?: boolean;
   /** The chain item draws its root without "N replies ›". */
   hideChainLine?: boolean;
 }) {
@@ -410,6 +448,7 @@ export function MessageRow({
   return (
     <div className={first ? "pt-(--feed-person-gap)" : undefined}>
       {/* biome-ignore lint/a11y/useSemanticElements: the feed pattern's rows are articles */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: ⌘-click picks a row; the feed's ⇧↑↓ and ⌘A are its keys */}
       <div
         role="article"
         id={domId}
@@ -417,10 +456,12 @@ export function MessageRow({
         aria-setsize={setSize}
         aria-label={`${name}, ${formatTime(message.createdAt)}`}
         data-message-id={message.id}
-        data-selected={selected ? "" : undefined}
+        data-selected={selected || picked ? "" : undefined}
+        data-picked={picked ? "" : undefined}
         data-target={target ? "" : undefined}
         onPointerEnter={onPointerEnter}
         onContextMenu={onContextMenu}
+        onClick={onClick}
         className={cn(
           "group/msg relative grid grid-cols-[var(--avatar-feed)_minmax(0,1fr)] gap-x-(--pad-x-sm) rounded-md px-(--pad-x-sm) py-0.75",
           "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",

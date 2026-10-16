@@ -49,6 +49,7 @@ import type {
   ChatLink,
   ChatMember,
   ChatMessage,
+  ChatMoveAnswer,
   ChatNotifyLevel,
   ChatPerson,
   ChatResult,
@@ -227,8 +228,15 @@ const ZERO = (channelId: string): ChatUnread => ({
 
 const micros = (at: string | null | undefined) => timestampMicros(at) ?? 0;
 
+/**
+ * A line that takes ids away from the conversation it's in: a live moved_out
+ * line (CV-16), or a moved_in line its Undo deleted (the messages went back).
+ */
 const isMoveLine = (row: ChatMessage) =>
-  row.kind === "event" && row.event?.type === "moved_out" && Array.isArray(row.event?.ids);
+  row.kind === "event" &&
+  Array.isArray(row.event?.ids) &&
+  ((row.event?.type === "moved_out" && !row.deletedAt) ||
+    (row.event?.type === "moved_in" && !!row.deletedAt));
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -1059,12 +1067,16 @@ export class ChatStore {
       const ids = Array.isArray(moved)
         ? moved.filter((v): v is string => typeof v === "string")
         : [];
-      // Still filed here, or not in memory (then only the device has it): a
-      // row re-filed somewhere this store holds landed before its line.
+      // Only a copy still filed here and older than the line: a row re-filed
+      // elsewhere landed before its line, and one that came back here later
+      // (a move back, a second move) was changed after it. A row only the
+      // device holds is left to the sync's moved_away answer.
+      const lineAt = micros(row.updatedAt);
       this.forgetIds(
         ids.filter((id) => {
-          const filed = this.where.get(id);
-          return filed === undefined || filed === channelId;
+          if (this.where.get(id) !== channelId) return false;
+          const held = this.convs.get(channelId)?.rows.get(id);
+          return !held || micros(held.updatedAt) < lineAt;
         }),
       );
     }
@@ -1955,6 +1967,37 @@ export class ChatStore {
     this.chainCache.clear();
     this.notify();
     return res;
+  }
+
+  /**
+   * "Move to…" (CV-16). `confirm` answers the audience warning; `undo` with
+   * the moved ids and the source as the target (within 10 s) is the Undo.
+   * The moved rows leave this conversation at once; the delta re-files them
+   * where they went (when this copy holds it).
+   */
+  async moveMessages(
+    ids: readonly string[],
+    targetId: string,
+    confirm = false,
+    undo = false,
+  ): Promise<
+    { ok: true; answer: ChatMoveAnswer } | { ok: false; offline: boolean; message: string }
+  > {
+    if (browserOffline()) return { ok: false, offline: true, message: "Offline" };
+    const res = await this.transport.moveMessages({ ids: [...ids], targetId, confirm, undo });
+    if (res.error) {
+      const failed = this.failed(res.error);
+      return failed.ok ? { ok: false, offline: false, message: res.error.message } : failed;
+    }
+    this.wentOnline();
+    const answer = res.data;
+    if (answer.status !== "confirm") {
+      this.forgetIds(answer.ids.filter((id) => this.where.get(id) === answer.from));
+      this.chainCache.clear();
+      this.notify();
+      void this.sync("interval");
+    }
+    return { ok: true, answer };
   }
 
   // ── Conversation ops (they throw; the screens say why) ────────────────────

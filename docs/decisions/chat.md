@@ -2,6 +2,369 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index. Earlier chat lines (v1 ships as the 7th tab, 2026-10-06; chat + calls become a planned module, 2026-10-02) stay under Billing and Product in the index.
 
+## 2026-10-16 · Notice pauses live in an owner-only table (CV-18) — supersedes the spec's C2-27 column
+
+- **CV18-0 · A person's pause on notices is a row in `user_notice_pauses`, readable and writable only by its owner, not a column on `workspace_members`** → CV-18
+  - Who: orchestrator (Chat v2 build), deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+  - Decision: a person's pause on notices is stored in `user_notice_pauses`, which only that person reads and writes. The spec's column on `workspace_members` (C2-27) is superseded.
+  - Why: a pause is a personal setting; membership rows are read by the other members of the workspace, so a personal table keeps it with its owner as a rule.
+  - Rejected: the column on `workspace_members` (C2-27).
+
+## 2026-10-16 · CV-19 (search in ⌘K and Chat's Search) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016190000_chat_v2_search.sql`; see [the record](../build/chat-v2/CV-19.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
+
+- **CV19-1 · The toolbar's Search opens the find bar; the bar's "See all" opens Chat's Search** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: the toolbar's Search is round 5 frame 2's "find" bar under the toolbar (n of m, ↑/↓, Esc), and its "See all" opens Chat's Search scoped to the conversation. The brief lists the toolbar among Chat's Search openers.
+  - Why: the frame draws the bar, and both entry points exist this way.
+  - Rejected: the toolbar opening Chat's Search directly (the bar would have no entry).
+- **CV19-2 · Search reads one rule: the live `chat__readable_channel_ids(ws, person)`, for people only** → CV-21
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_search` and `chat_find_conversations` return only conversations the caller can read right now, newest first, at most 50, granted to signed-in people and not to the service role. An app's key gets nothing until CV-21 gives the key path its own rule.
+  - Why: one read rule, not a parallel one; reading as the key's creator would include their direct messages.
+  - Rejected: the spike's one-argument overload; the draft's creator fallback.
+- **CV19-3 · Words match word-starts, accents are ignored, input is bounded** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: websearch syntax over unaccented text, each word of 3+ letters a prefix ("zolw" finds "żółw"); at most 256 characters, 32 words, 50 rows; a query with no word it needs (negated words only) finds nothing; conversation names match anywhere in the name.
+  - Why: Polish text without diacritics, and a bounded cost per call.
+  - Rejected: a promised timeout alone (it binds only through the API).
+- **CV19-4 · ⌘K's Conversations come from a chat function, not the registry** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_find_conversations` reads names unaccented and shows a direct message by its people's names, archived last.
+  - Why: the registry's label search has no unaccent and direct messages have no label.
+  - Rejected: unaccenting the shared `searchEntities` (every module's search would change).
+- **CV19-5 · The bottom bar's Search opens Chat's Search while Chat is open, ⌘K elsewhere; it remembers words and filters per workspace for the tab's life** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a module claims the press through `components/app/search-events.ts`; ⌘K itself is unchanged; ⌘J is bound to nothing.
+  - Why: the spec names the bottom bar as an opener; a reload starts clean like ⌘K.
+  - Rejected: changing ⌘K inside Chat.
+- **CV19-6 · Not built from frame 2: the palette's filter chips and painted matches inside the stream** → polish
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the FilterBar (from · in · has a file · date, one value each) lives in Chat's Search, one hop from "See all"; the find bar lights the landed message, not the matches in bodies.
+  - Why: painting needs the stream's renderer to take a query.
+  - Rejected: building both here.
+
+## 2026-10-16 · CV-13 (linked channels) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016180000_chat_v2_linked_channels.sql`; see [the record](../build/chat-v2/CV-13.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16, unless marked.
+
+- **CV13-1 · Linking needs being in the conversation, able to post in it and edit rights on the item; unlinking needs only being a poster** → CV-14
+  - Who: orchestrator's rule over the brief's "see", deferred to by Maciej, 2026-10-16.
+  - Decision: a link writes onto the item's page, so linking asks for edit rights on it (a team: being in it, its creator, the owner or an admin); removing the conversation's own setting asks only for posting there.
+  - Why: a link changes another module's page; unlinking must work when the item is gone.
+  - Rejected: any reader may link; edit rights on the old item to unlink.
+- **CV13-2 · The column is the truth; the `conversation-of` row mirrors it** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_channels.linked_type/_id/_at` decide; a trigger keeps the mirror row in step and refuses a row that doesn't match; the row is changed only from the conversation; relinking to an earlier item brings its row back with no second history line.
+  - Why: a team has no registry row and item deletes soft-delete links.
+  - Rejected: a session flag.
+- **CV13-3 · A public conversation may link to an item only some people can see** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: people who can't open the item see "Private item" on the chip and card, get no "Conversation:" line on it, and capture never files into it for them.
+  - Why: the common agency case (a client record only its owner sees, the client's channel open to the team).
+  - Rejected: refusing the link and asking for a private conversation.
+- **CV13-4 · An archived project reads "Website · archived" in RF-1's tombstone look, app-wide** → ❓ Maciej (a spine decision to keep app-wide)
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: whoever could open the project keeps its name; a deleted one stays "Deleted project". Because it is RF-1's shared resolver, every project reference (notes, comments, task text, chat) reads this way, matching Tasks hiding archived projects; an archived project can't be linked.
+  - Why: a chip that opens an archived project would mislead.
+  - Rejected: "Archived project" with no name.
+- **CV13-5 · "Start a conversation for X" is its own op; capture's destination comes from the server** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_op_start_conversation` (project's ⋯, company and contact hubs; not for teams) calls create with the link; a " 2" suffix counts channels the creator can see plus every public one; Make a task files into the linked project only when `chat_link_files_here` says so, else the Inbox.
+  - Why: the dialog's explicit fields and the ⋯'s derived ones are different contracts; the client has no edit level per project.
+  - Rejected: a "no name means derive" mode inside create.
+- **CV13-6 · The team offer appears once, right after linking a team, for someone who may add people** → polish
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: "Add the team's N people?" with Add / Not now; linking a team adds nobody by itself. Frame 7's "new linked channel" start block isn't built.
+  - Why: "offers once".
+  - Rejected: adding the people at link time.
+
+## 2026-10-16 · CV-9 (files) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016170000_chat_v2_files.sql`; see [the record](../build/chat-v2/CV-9.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16, unless marked.
+
+- **CV9-1 · A PDF is a document card, not a rendered page** → ❓ Maciej (deviates from the drawn frame)
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: a PDF draws as a card the size of the media box and opens in the app's viewer.
+  - Why: bytes of an uploaded file are not drawn inside a frame in the app, and browsers won't draw a PDF in a locked-down frame.
+  - Rejected: an embedded PDF frame. A first-page picture made at upload would give a real preview later.
+- **CV9-2 · Chat files don't show in Settings → Storage's largest files** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: chat files count in the owner's pool but `attachments_largest` lists task files only.
+  - Why: there is no way from that list to open their conversation.
+  - Rejected: listing them without a way to open them.
+- **CV9-3 · Upload first, send after; only PNG, JPEG, GIF and WebP draw inline** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16 (upload-first is round 3 §2.25 g).
+  - Decision: files upload under the next message's id and the send waits for them; up to 10 files a message; only those four types, and only when the name agrees with the type, draw inline (360 × 240); anything else is a chip that downloads. A message with an upload still moving waits alone; a stopped upload makes it "Not sent" with Retry.
+  - Why: safety rests on drawing only four picture types, and a big file shouldn't hold the conversation.
+  - Rejected: anything `image/*`; strict order.
+- **CV9-4 · A file in a sent message leaves with its message, on the trash clock** → CV-23
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: access ends at once when the message is deleted; bytes and names go with the daily purge (04:23 UTC) after the 10 s Undo, as do files whose message never came (a day later). × takes a file out only before sending.
+  - Why: one clock for chat and tasks; no frame draws a per-file delete on messages.
+  - Rejected: per-file delete on sent messages.
+- **CV9-5 · Chat file links live shorter than task links** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: previews 10 minutes, originals 3 (`CHAT_FILE_LINK_TTL_SECONDS`); the stream re-signs its previews two minutes before they die.
+  - Why: access to a conversation's files should end soon after it ends.
+  - Rejected: tasks' 1 h previews.
+- **CV9-6 · Files only in the main composer; Details has no Files section** → CV-12
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the reply-chain composer and edit take no files yet; the Files view (⌥3) is the one place for them.
+  - Why: keep this block's surface small.
+  - Rejected: an empty duplicate section in Details.
+
+## 2026-10-16 · CV-17 (statuses, presence and Focus) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016160000_chat_v2_statuses.sql`; see [the record](../build/chat-v2/CV-17.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. Two designer calls stay open: Focusing and do not disturb still show while "Show me as online" is off, and "until" from a counted estimate (AC11.3) isn't built.
+
+- **CV17-1 · One status for every workspace; "no status" is an empty row** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `user_statuses` is read by the person and anyone who shares a live workspace; clearing and expiry update the row to empty instead of deleting, so every change reaches a listener through the read rule. Written only through the ops (an API key is refused); the app turns "clear after" into a time, the server checks it is ahead and within a year.
+  - Why: only the app knows your midnight and week start; deletes carry no read rule.
+  - Rejected: deleting on clear; a server-side "clear after".
+- **CV17-2 · Shape precedence: do not disturb › in a call › Focusing › reachable / away › offline** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: do not disturb and Focusing show even when the person is offline; a Pomodoro break or a paused run isn't "Focusing"; "until" comes only from the run itself, never from a task's estimate.
+  - Why: they are server facts about whether a message pings, and a task's numbers must not reach people who can't see it.
+  - Rejected: hiding them when offline; the Now task's estimate as an end time.
+- **CV17-3 · Do not disturb holds pings now; Out sick and On vacation hold by default** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `notice__gate` answers `hold` while your status has dnd on, in every workspace; the message waits in the person's Catch up and the sender sees "<name> is on vacation until Oct 20. They won't be notified…". Pause, quiet hours and Focus are CV-18's.
+  - Why: AC6.6.
+  - Rejected: a separate gate for statuses.
+- **CV17-4 · Presence needs membership of a live workspace, not the plan; "Show me as online" off means the tab never tracks itself** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16 (CV-8a's deferral).
+  - Decision: presence keeps working on a paused plan; away after 10 minutes without input; a person is away only when every tab is; the switch from another device reaches a tab within a minute.
+  - Why: spec §1; `user_preferences` isn't published.
+  - Rejected: publishing preferences for one switch; pausing while hidden.
+- **CV17-5 · `chat_now` returns only people with something to say; the avatar opens the status menu** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: members only (others, keys and signed-out callers get nothing), never the run; Settings moved into the avatar's menu; DM rows show the shape only; "In a call" is drawn ready for Calls; a new token `--presence-reachable` keeps green at 3:1 on light.
+  - Why: smaller reads; spec §15 puts status and Do not disturb on the avatar.
+  - Rejected: every member with nulls; a second avatar control.
+
+## 2026-10-16 · CV-11 (Catch up, Later and Remind me) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016150000_chat_v2_later.sql`; see [the record](../build/chat-v2/CV-11.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+
+- **CV11-1 · Catch up's list is a server read (`chat_catchup_open`), and Nothing still lists** → CV-23
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: items show only for conversations the person can still read, wherever the message is now; a conversation set to Nothing keeps @you in Catch up silently (listed, not counted); "X removed you from Q" lists even for a private channel you can no longer read, by the stored name.
+  - Why: AC7.4 wins over hiding what the count hides; own-row rules can't say "still readable".
+  - Rejected: client reads of `chat_catchup` plus messages; hiding Nothing items.
+- **CV11-2 · Later and Remind me share one op; times are refused when past or beyond a year** → CV-18
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_op_remind` takes exactly one of a message, a conversation or Catch up items by id; Later puts items off until the time, and they come back on top with one notice; a reminder rings even on a conversation set to Nothing and isn't counted there; clearing a reminder marks it Done.
+  - Why: AC3.4, AC5.4; you asked for the reminder.
+  - Rejected: firing a past time at the next minute; a separate "Returned" section.
+- **CV11-3 · Later's times: In 1 hour · This evening (before 18:00 only) · Tomorrow (9:00) · Pick a time** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: computed in the person's saved time zone (Time & region); the same dialog serves H in Catch up, the message ⋯ "Remind me…" and `/remind`.
+  - Why: one meaning per option.
+  - Rejected: tomorrow evening in place of "This evening" (a fourth meaning).
+- **CV11-4 · The mode row has six actions; ⏎ opens the message in context; R replies in the message's chain** → CV-22
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: Reply · Done · Task · Later · Open · Go to conversation, with "Done all in this conversation" under More ▾ (also in the group's ⋯); Space and Done all show an Undo toast; Display order is kept per browser.
+  - Why: the bar's cap is six; frame 1 draws five then More.
+  - Rejected: five actions and an empty sixth; a server pref for the order.
+- **CV11-5 · Catch up's counts and list rules are kept together** → CV-23
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_catchup_open` repeats `chat_unread_counts`' rules (minus Nothing and quiet lines); the header count counts every listed row.
+  - Why: they must change together.
+  - Rejected: a shared function now (a re-cut of the count belongs to CV-23).
+
+## 2026-10-16 · CV-10-fix ("Mentioned in" rows are Chat's) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016145000_chat_v2_mention_rows.sql`; see [the record](../build/chat-v2/CV-10-fix.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. One call is open.
+
+- **CV10fix-1 · Only Chat's send and edit write a "Mentioned in" row; the rows are history** → CV-13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: link creation, contact and email linking refuse relation `mentions` or origin `ref` when either end is a conversation or message; delete, unlink and set-kind refuse to change them; "Mark as duplicate" leaves Chat's rows on the duplicate. The rule also covers `links_op_set_kind`, `contacts_op_link`, `contacts_op_unlink` and `email_op_link`, since the pair key ignores direction. One shared helper (`isChatEnd` / `isChatOwnedLink`, `src/lib/entity-links.ts`) decides it in the app.
+  - Why: the line itself is the signal and must only ever come from a chat send.
+  - Rejected: guarding `links_op_*` only; a table trigger (Chat's own server paths, like CV-13's "conversation of" link, must still write).
+- **CV10fix-2 · A conversation picked with `@` in a note or task stays a chip with no link** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: the server refuses the mention, so the picker leaves a chip and writes nothing. Open: should `@conversation` write a plain reference link instead?
+  - Why: the choice is a product call.
+  - Rejected: quietly writing a plain reference.
+- **CV10fix-3 · Older rows of the wrong shape become plain references, not deleted** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a live mention row with a chat end in any other shape becomes a plain `references` / `manual` link (closed when the pair already has a reference); other live chat-end rows lose origin `ref`; no activity row for this one-time step; registry labels: messages carry none, conversations their channel's name.
+  - Why: they were links people made on purpose.
+  - Rejected: soft-deleting them all.
+
+## 2026-10-16 · CV-15 (channel lifecycle and permissions) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016140000_chat_v2_channel_lifecycle.sql`, Tier 2; see [the record](../build/chat-v2/CV-15.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+
+- **CV15-1 · A removal from a public channel sticks** → CV-23
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: they can't join or post again until a manager or admin adds them back; the removal is recorded whether they were in it, had left, or had only read it, and their open items close with a quiet "removed" line.
+  - Why: one rule for public and private; a removal a click on Join undoes would mean nothing.
+  - Rejected: a public removal that only ends the current membership.
+- **CV15-2 · The purge erases content but keeps tombstones** → CV-9
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: deleted channels are restorable for 30 days; then messages, Catch up items, managers, notices, history and links go, the channel row stays with no name or topic, and membership rows stay stamped as left. The hourly job takes 25 at a time; General and direct messages are never deleted or purged.
+  - Why: membership rows are only ever stamped, never deleted, so each person hears only about their own row.
+  - Rejected: a hard delete of the channel row; a daily run of 500.
+- **CV15-3 · Manager actions live on a ⋯ on a person's row in Details; the last manager can't step down** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: Make manager / Remove as manager / Stop managing / Remove from channel, shown to managers and admins; only someone in a role that posts can be made a manager; a manager row that manages nothing can be removed. Archive moved into Channel settings beside Delete.
+  - Why: frame 4 draws the labels but no control for them; the row is where the person already is.
+  - Rejected: the person card (its actions are the person's, not the channel's).
+- **CV15-4 · Reply privately puts the post's link in the direct message's draft** → CV-10
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the line answers the newest top-level post in view by someone else, as a draft to its author; with none in view, a direct message to one of the managers. The announcement line follows the channel's managers, not "Manage any channel".
+  - Why: the reply is theirs to write, and a sent link with nothing after it would ping the author for nothing.
+  - Rejected: open-then-send; CV-8a's group message with every manager.
+- **CV15-5 · Recently deleted lists only what the person may restore; a restored name that was taken returns as "<name> (restored)"** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: admins see only channels they could have read; restoring never fails on a name; deleted channels are hidden from the connector.
+  - Why: "Manage any channel" never reveals a private channel.
+  - Rejected: every deleted channel; refusing until another is renamed.
+- **CV15-6 · The role editor's chat rows save one at a time, on the three built-in roles** → CV-20
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: they follow `workspace_chat_caps` per built-in role and not the role's permission draft; "Add custom emoji" appears by itself once CV-20 adds the column.
+  - Why: the switches are per built-in role.
+  - Rejected: a draft shared with the permission matrix.
+
+## 2026-10-16 · CV-10 (links in messages and "make a task") — the agent's choices (deferred to by Maciej)
+
+Migration `20261016130000_chat_v2_references.sql`; see [the record](../build/chat-v2/CV-10.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+
+- **CV10-1 · "Mentioned in" counts only items in the registry the sender can open** → CV-13
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a send or edit leaves one `mentions` row (origin `ref`) per conversation and item; people, teams, days, tags, conversations and messages leave none; references inside code don't count; the line's date is the first mention; mention rows write no activity row and stay out of link cards and Recently linked.
+  - Why: a line must never point at something the sender couldn't see; the line is the signal.
+  - Rejected: registering unknown ids; `links_op_create` (needs links edit, logs activity).
+- **CV10-2 · "Became a task" reads `spawned-from` links; a just-made item shows at once** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: read for the messages on screen (and the open conversation's loaded chains), again 1.5 s and 6.5 s after a capture made here and on focus; others see it on load or focus. A local item goes after 6 s if the server never shows the link. Only tasks are added locally.
+  - Why: no realtime on `entity_links` (publishing it is workspace-wide).
+  - Rejected: publishing `entity_links`.
+- **CV10-3 · A message chip reads "author · first words"; a deleted message reads "Deleted message"; one you can't read "Private item"** → CV-19
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_message_refs` returns chip and card facts only for readable messages; a DM's name in a card reads "Direct message".
+  - Why: nothing for a reader who can't read it reaches the DOM.
+  - Rejected: a member list read per card.
+- **CV10-4 · Message capture (⌘7) sends to DMs and channels you're in; Undo keeps the "Mentioned in" line** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: no default destination, the picker focused; people already in a 1:1 DM appear as that DM; the page's "From:" item is appended alone on a line; "Sent to … · Open · Undo" for 8 s.
+  - Why: public channels you never joined aren't destinations; the line is history like any delete.
+  - Rejected: deleting links on Undo.
+- **CV10-5 · Esc undoes a typed handle chip only if nothing changed since** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `MOD-142` plus a boundary makes a live task chip; Esc right after puts the text back (⌘Z too).
+  - Why: it must never discard later typing.
+  - Rejected: Esc always replacing the chip.
+
+## 2026-10-16 · CV-12 (replies and Wrap up) — the agent's choices (deferred to by Maciej)
+
+Migration `20261016120000_chat_v2_chains.sql`; see [the record](../build/chat-v2/CV-12.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+
+- **CV12-1 · Reply shows "Replying to Name · excerpt" above the main box until sent or Esc; "N replies ›" opens the chain** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the reply posts at the bottom with one muted quote line; nothing folds automatically; replies of a wrapped root leave the stream.
+  - Why: rounds 2–3 drew it and §16's Esc order names "reply quote".
+  - Rejected: Reply opening the chain.
+- **CV12-2 · Unread replies a wrap-up hides stay in Catch up until the chain is read** → CV-11
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a new `chat_op_chain_read` closes them when the chain opens on the right; the read mark passes hidden replies at the end of the stream, but their Catch up items stay open.
+  - Why: the read mark is what was on screen (§6 #17), and the edge case says they stay.
+  - Rejected: letting the stream's read mark close them (they'd vanish unseen).
+- **CV12-3 · Who may wrap up or reopen: the root's author (who can post), managers, admins, anyone who can post in a direct message; never a viewer or in an archived channel** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: a reply arriving at a wrapped chain reopens it ("Reopened by …"); the toast's Undo leaves no "Reopened by" line; the menu mirrors the server's rule so it never offers what the op refuses.
+  - Why: CH54; the ops decide.
+  - Rejected: "Reopened by you" after every Undo.
+- **CV12-4 · Reply to… lists only earlier messages; a message with replies can't join another chain; joining a wrapped chain reopens it** → CV-16
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: moving a settling reply out reopens the chain it left; a new quote inside the same chain doesn't.
+  - Why: one level (#23); the settling reply always belongs to its chain.
+  - Rejected: re-parenting whole chains (that's Move to…, CV-16); refusing.
+- **CV12-5 · A deleted root with replies may be wrapped; a deleted settling reply keeps the wrap-up** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the wrap-up then reads "Deleted message".
+  - Why: delete has an Undo and shouldn't silently reopen a chain.
+  - Rejected: reopening on delete.
+- **CV12-6 · No "Also mark as decision" box yet** → CV-14
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `p_mark_decision` is accepted and logged; CV-14 stores the decision and adds the tick.
+  - Why: a box that does nothing is worse than none.
+  - Rejected: a dead checkbox.
+
+## 2026-10-16 · CV-8b (the panel and the dialogs) — the agent's choices (deferred to by Maciej)
+
+Client-only; see [the record](../build/chat-v2/CV-8b.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+
+- **CV8b-1 · Browse channels is a centre surface at `/chat?view=browse`, not a dialog** → CV-19
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: frame 3 draws it in the centre with its own toolbar; `view=browse` keeps the open conversation so Details stays on the right.
+  - Why: a list of channels with Join reads better as a page, and the frame wins.
+  - Rejected: a dialog.
+- **CV8b-2 · Details' History lists changes, not reactions or bell rows; six lines, then "Show all N"** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: create, rename, topic, archive, join, leave, member add / remove, pin, message edit / delete / restore.
+  - Why: "a quiet history of every change"; a mirror, never a wall.
+  - Rejected: every logged op; the full 50.
+- **CV8b-3 · A person's name in the stream opens their card; hover previews it** → CV-17
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: Message on the card starts the DM (hidden for a viewer, on a paused plan, for yourself and a former member); the preview sits on authors' names only, to keep the 10k-message budget.
+  - Why: the brief's "Person card (item, also on hover anywhere)".
+  - Rejected: the instant DM.
+- **CV8b-4 · Viewers keep Notify me, Pin to sidebar and Leave; they get no New conversation, Archive or Message** → CV-15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: those are the viewer's own settings, not the conversation's (§12).
+  - Why: viewers receive and may leave.
+  - Rejected: hiding them all.
+- **CV8b-5 · Linked to and Files show nothing built yet** → CV-13, CV-9
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: Linked to shows its empty line (no disabled "Link to…"); Details has no Files section (Files is its own view); presence reads "Online" or nothing.
+  - Why: a control that does nothing is worse than none.
+  - Rejected: disabled controls.
+- **CV8b-6 · New conversation: Private is locked when the role may make only one kind; a DM with only yourself offers "Capture a note"** → CV-15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the tabs follow `create_public` / `create_private`; the announcement switch says "You're its manager"; Capture a note opens the app's capture as a note.
+  - Why: the server's checks; §1 has no notes-to-self conversations.
+  - Rejected: a note-to-self conversation.
+
+## 2026-10-16 · CV-8a (sidebar, toolbar and states; v1's screens retired) — the agent's choices (deferred to by Maciej)
+
+Client-only; see [the record](../build/chat-v2/CV-8a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16.
+
+- **CV8a-1 · A paused plan keeps the store running** → CV-17
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the store no longer stops at "locked": it loads the sidebar, counts, windows and live rows and sets `snapshot.paused`; readers of a live conversation keep react, mark unread, copy link, make a task and reply; only posting, edit, delete, pinning and typing need the right to post. An archived conversation draws no tools.
+  - Why: the spec's paused state reads every conversation.
+  - Rejected: a separate read-only loader for paused workspaces.
+- **CV8a-2 · Rights come from `chat_caps_get` and `chat_channel_managers`, only to choose a line over a box** → CV-15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the server still decides every write; the viewer line is chosen on the client from the role and chat's level (the UI errs strict).
+  - Why: the same rows `chat_has_cap` reads; v1's guess about managers was wrong.
+  - Rejected: a new RPC (a migration for UI hints).
+- **CV8a-3 · "Reply privately" opens a DM with the channel's managers; "You're not in this channel · Join" sits in the composer's place** → CV-15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: up to eight managers; an announcement channel's composer area stays empty until its managers load.
+  - Why: the line has to lead somewhere; the server refuses a post from a non-member.
+  - Rejected: a DM with the last poster; posting to join implicitly.
+- **CV8a-4 · The welcome copy is the spec's line** → none
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: "Reply to keep answers together · @ links anything in Moduo", not frame 7's longer sentence.
+  - Why: the spec quote is binding.
+  - Rejected: frame 7's sentence.
+- **CV8a-5 · Archived channels live in the hairline ⋯ as a submenu; ⌘J and Esc-closes-panel are gone** → CV-15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: ⌥↑/⌥↓ and ⌥⇧↑/⌥⇧↓ step through the open sections; the toolbar's Search opens ⌘K until CV-19; a chain link keeps `t=` until CV-12.
+  - Why: "never as permanent rows"; v1's dialogs and panels are retired.
+  - Rejected: a dialog for archived channels.
+- **CV8a-6 · v1's screens, hooks, parity harness and the Settings › Access "Chat" entry are deleted** → CV-15
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `src/features/chat/ui/*`, the v1 hooks, `emoji.ts`, `markup.ts` (with its v1 parity harness) and the chat-caps panel are gone; CV-15 builds the role editor's chat rows.
+  - Why: the brief deletes `markup.ts`; the conversion ran and its SQL tests stay.
+  - Rejected: keeping v1's dialogs alive; copying the v1 parser in.
+
 ## 2026-10-15 · CV-7b (the composer) — the agent's choices (deferred to by Maciej)
 
 Client-only; see [the record](../build/chat-v2/CV-7b.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15. The record holds the rest (`@channel` offered to everyone and decided by the server, the UTF-16 limit, tool buttons, emoji up to version 15).

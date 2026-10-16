@@ -3,7 +3,7 @@
 -- chat_now" (AC11.1, AC11.3, AC11.4, AC6.6): one status for every workspace;
 -- presets and saved ones; expiry clears it; chat_now shows "Focusing", "until"
 -- only with a Pomodoro phase (never from a task), the task only with the opt-in and
--- visibility; a do-not-disturb status holds pings. Erasure and grants too.
+-- visibility; a do-not-disturb status drops pings (CV-18). Erasure and grants too.
 --
 -- Cast: O owns W ("Acme", Duo); A, B and C are members. X owns W2, where A is
 -- a member too; X shares no workspace with B or C. K is an API key in W. SB is
@@ -342,24 +342,25 @@ BEGIN
     'gate: with no status, pings are sent');
   v := test.set('A', jsonb_build_object('emoji', '🤒', 'text', 'Out sick', 'preset', 'sick', 'dnd', true,
                                          'clear_at', now() + interval '2 days'));
-  PERFORM test.ok(public.notice__gate(test.id('A'), test.id('W'), 'chat_message', now()) = 'hold'
-              AND public.notice__gate(test.id('A'), test.id('W2'), 'chat_mention', now()) = 'hold',
-    'gate: Out sick with do not disturb holds pings, in every workspace', v);
+  PERFORM test.ok(public.notice__gate(test.id('A'), test.id('W'), 'chat_message', now()) = 'drop'
+              AND public.notice__gate(test.id('A'), test.id('W2'), 'chat_mention', now()) = 'drop',
+    'gate: Out sick with do not disturb drops pings, in every workspace (CV-18)', v);
   PERFORM test.ok(public.notice__gate(test.id('A'), test.id('W'), 'chat_message', now() + interval '3 days') = 'send',
     'gate: once the status has passed, pings are sent again');
   PERFORM test.ok(test.now_field('B', 'W', 'A', 'dnd') = 'true', 'chat_now: teammates see do not disturb');
 
-  -- A real direct message: the notice is written, held.
+  -- A real direct message: no notice; the item waits in Catch up, held.
   PERFORM test.as_user('B', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W')));
   v := test.as_user('B', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])$q$, test.id('W'), test.id('A')));
   SELECT c.id INTO v_dm FROM public.chat_channels c WHERE c.workspace_id = test.id('W') AND c.kind = 'dm';
   v := test.as_user('B', format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, 'are you around?', NULL::uuid)$q$,
                                  test.id('msg:sick'), v_dm));
-  PERFORM test.ok(v LIKE 'ok %' AND (SELECT d.held_for_focus FROM public.notice_deliveries d
-                                      WHERE d.user_id = test.id('A') AND d.message_id = test.id('msg:sick')),
-    'gate: B''s message to A, who is out sick, is held (it waits in Catch up)', v);
-  PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_catchup x WHERE x.user_id = test.id('A') AND x.message_id = test.id('msg:sick')),
-    'gate: the held message is in A''s Catch up');
+  PERFORM test.ok(v LIKE 'ok %' AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d
+                                                 WHERE d.user_id = test.id('A') AND d.message_id = test.id('msg:sick')),
+    'gate: B''s message to A, who is out sick, pings nothing', v);
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.chat_catchup x WHERE x.user_id = test.id('A')
+                            AND x.message_id = test.id('msg:sick') AND x.held_at IS NOT NULL),
+    'gate: the message waits in A''s Catch up, held (never emailed)');
   PERFORM test.as_user('A', $q$SELECT public.user_op_clear_status()$q$);
   PERFORM test.ok(public.notice__gate(test.id('A'), test.id('W'), 'chat_message', now()) = 'send',
     'gate: clearing the status sends pings again');

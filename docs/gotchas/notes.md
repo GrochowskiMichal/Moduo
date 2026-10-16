@@ -106,3 +106,7 @@ Read before working in `src/features/notes/`, Lexical surfaces, import. Index of
 
 - **Lexical command priorities decide who gets ⏎.** The shared menus take ⏎ / Tab at HIGH with no IME check; a chat-only CRITICAL ⏎ handler must swallow the composing ⏎ first, or an IME commit picks a menu item. (CV-7b)
 - **An edit's "unchanged" check compares with the re-exported body, not the stored string:** a non-canonical body would save a phantom "(edited)" (DF-23's trap again). (CV-7b)
+
+## Chat references (CV-10)
+
+- **A reference inline needs a real uuid:** `serializeBlocks` drops a `{t:'ref'}` with a malformed id, and two paragraphs serialize with one newline. (CV-10)

@@ -112,7 +112,7 @@ export function ConversationToolbar({
       </div>
       <Toolbar gap="tight" aria-label="Conversation">
         {huddle ? <span data-slot="huddle">{huddle}</span> : null}
-        <IconButton icon={Search} label="Search" onClick={onSearch} />
+        <IconButton icon={Search} label="Search in this conversation" onClick={onSearch} />
         {member || (isChannel && canManage && !paused) ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
