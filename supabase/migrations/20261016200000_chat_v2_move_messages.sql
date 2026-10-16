@@ -52,6 +52,9 @@ CREATE INDEX IF NOT EXISTS chat_messages_moved_by_idx
   ON public.chat_messages (moved_by) WHERE moved_by IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chat_messages_moved_from_idx
   ON public.chat_messages (moved_from_channel_id) WHERE moved_from_channel_id IS NOT NULL;
+-- The move locks the messages quoting what it moves (one index lookup each).
+CREATE INDEX IF NOT EXISTS chat_messages_reply_to_idx
+  ON public.chat_messages (reply_to_id) WHERE reply_to_id IS NOT NULL;
 
 COMMENT ON COLUMN public.chat_messages.moved_at IS
   'When the message last moved to this conversation (chat_op_move_messages); NULL if never or undone.';
@@ -274,12 +277,17 @@ BEGIN
 
   -- The messages, their chains and the roots of picked replies, locked in id
   -- order (send and attach-to-chain lock the same rows), then read again.
+  -- (One UNION of index lookups: an OR of them reads the whole table.)
   PERFORM 1 FROM public.chat_messages m
-   WHERE m.id = ANY (v_sel) OR m.parent_id = ANY (v_sel)
-      OR m.id IN (SELECT p.parent_id FROM public.chat_messages p WHERE p.id = ANY (v_sel))
-      -- and the messages that quote them (a move drops those quotes)
-      OR m.reply_to_id = ANY (v_sel)
-      OR m.reply_to_id IN (SELECT c.id FROM public.chat_messages c WHERE c.parent_id = ANY (v_sel))
+   WHERE m.id IN (
+           SELECT unnest(v_sel)
+           UNION SELECT c.id FROM public.chat_messages c WHERE c.parent_id = ANY (v_sel)
+           UNION SELECT p.parent_id FROM public.chat_messages p WHERE p.id = ANY (v_sel)
+           -- and the messages that quote them (a move drops those quotes)
+           UNION SELECT q.id FROM public.chat_messages q WHERE q.reply_to_id = ANY (v_sel)
+           UNION SELECT q.id FROM public.chat_messages q
+                  WHERE q.reply_to_id = ANY (ARRAY(SELECT c.id FROM public.chat_messages c
+                                                    WHERE c.parent_id = ANY (v_sel))))
    ORDER BY m.id FOR UPDATE;
   -- (A deleted reply rides along with its picked root: an Undo names it.)
   IF EXISTS (SELECT 1 FROM public.chat_messages m
