@@ -464,15 +464,29 @@ SELECT pg_temp.recut(
 
 -- ── 7. Presence needs membership, not the plan ──────────────────────────────
 
+-- Whether the caller is a member of a live workspace (the presence topic).
+CREATE OR REPLACE FUNCTION public.user_statuses__member(p_workspace_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT auth.uid() IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.workspace_members m
+      JOIN public.workspaces w ON w.id = m.workspace_id AND w.deleted_at IS NULL
+     WHERE m.workspace_id = p_workspace_id AND m.user_id = auth.uid())
+$function$;
+
+
 SELECT pg_temp.recut(
   'public.chat_realtime_topic_allowed(text)'::regprocedure,
   $old$THEN public.chat_can_access_workspace(substring(p_topic from 6)::uuid)$old$,
-  $new$THEN auth.uid() IS NOT NULL AND public.chat_is_workspace_member(substring(p_topic from 6)::uuid, auth.uid())$new$);
+  $new$THEN auth.uid() IS NOT NULL AND public.user_statuses__member(substring(p_topic from 6)::uuid)$new$);
 
 SELECT pg_temp.recut(
   'public.chat_realtime_topic_writable(text)'::regprocedure,
   $old$AND public.chat_can_access_workspace(substring(p_topic from 6)::uuid)$old$,
-  $new$AND auth.uid() IS NOT NULL AND public.chat_is_workspace_member(substring(p_topic from 6)::uuid, auth.uid())$new$);
+  $new$AND auth.uid() IS NOT NULL AND public.user_statuses__member(substring(p_topic from 6)::uuid)$new$);
 
 -- ── 8. Account erasure ──────────────────────────────────────────────────────
 
@@ -550,6 +564,7 @@ BEGIN
     'chat_now(uuid)',
     -- The read rule's check and the realtime topic policies (about the caller only).
     'user_statuses__shares_workspace(uuid)',
+    'user_statuses__member(uuid)',
     'chat_realtime_topic_allowed(text)',
     'chat_realtime_topic_writable(text)'
   ] LOOP

@@ -93,7 +93,7 @@ BEGIN
   SELECT string_agg(f, ', ') INTO v_bad FROM unnest(ARRAY[
     'public.user_op_set_status(jsonb)', 'public.user_op_clear_status()', 'public.user_op_save_status(jsonb, uuid)',
     'public.user_op_forget_status(uuid)', 'public.chat_now(uuid)', 'public.user_statuses__shares_workspace(uuid)',
-    'public.chat_realtime_topic_allowed(text)', 'public.chat_realtime_topic_writable(text)']) f
+    'public.user_statuses__member(uuid)', 'public.chat_realtime_topic_allowed(text)', 'public.chat_realtime_topic_writable(text)']) f
    WHERE NOT has_function_privilege('authenticated', f, 'EXECUTE')
       OR has_function_privilege('anon', f, 'EXECUTE')
       OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
@@ -116,12 +116,13 @@ BEGIN
      AND (p.proname LIKE 'user_statuses%' OR p.proname LIKE 'user_op_%status%' OR p.proname = 'chat_now')
      AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
      AND p.proname NOT IN ('user_op_set_status', 'user_op_clear_status', 'user_op_save_status',
-                           'user_op_forget_status', 'chat_now', 'user_statuses__shares_workspace');
+                           'user_op_forget_status', 'chat_now', 'user_statuses__shares_workspace',
+                           'user_statuses__member');
   PERFORM test.ok(v_bad IS NULL, 'grants: no other statuses function is reachable', v_bad);
 
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO v_bad
     FROM pg_proc p
-   WHERE p.oid IN ('public.user_op_set_status(jsonb)'::regprocedure, 'public.user_op_clear_status()'::regprocedure,
+   WHERE p.oid IN ('public.user_statuses__member(uuid)'::regprocedure, 'public.user_op_set_status(jsonb)'::regprocedure, 'public.user_op_clear_status()'::regprocedure,
                    'public.user_op_save_status(jsonb, uuid)'::regprocedure, 'public.user_op_forget_status(uuid)'::regprocedure,
                    'public.chat_now(uuid)'::regprocedure, 'public.user_statuses__shares_workspace(uuid)'::regprocedure)
      AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c = 'search_path=""'));
@@ -360,6 +361,35 @@ BEGIN
               AND test.value_as('X', format($q$SELECT public.chat_realtime_topic_writable('chat:%s')::text$q$, test.id('W'))) = 'false',
     'presence: X, not a member, is refused');
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
+END;
+$$;
+
+-- ── Leaving and a deleted workspace end it ──────────────────────────────────
+DO $$
+DECLARE
+  v_read text := format($q$SELECT count(*)::text FROM public.user_statuses WHERE user_id = %L$q$, test.id('A'));
+BEGIN
+  PERFORM test.set('A', '{"text": "Heads down"}');
+  PERFORM test.ok(test.value_as('C', v_read) = '1', 'leaving: C reads A''s status while they share W');
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W') AND user_id = test.id('C');
+  PERFORM test.ok(test.value_as('C', v_read) = '0'
+              AND test.value_as('C', format($q$SELECT public.chat_now(%L)::text$q$, test.id('W'))) = '[]'
+              AND test.value_as('C', format($q$SELECT public.chat_realtime_topic_allowed('chat:%s')::text$q$, test.id('W'))) = 'false',
+    'leaving: removed from W, C reads no status, no "now" and no presence (and learns nothing about who has one)');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W'), test.id('C'), 'member');
+  PERFORM test.ok(test.value_as('X', v_read) = '1', 'deleted: X reads A''s status through W2');
+  UPDATE public.workspaces SET deleted_at = now() WHERE id = test.id('W2');
+  PERFORM test.ok(test.value_as('X', v_read) = '0'
+              AND test.value_as('X', format($q$SELECT public.chat_now(%L)::text$q$, test.id('W2'))) = '[]'
+              AND test.value_as('A', format($q$SELECT public.chat_realtime_topic_allowed('chat:%s')::text$q$, test.id('W2'))) = 'false',
+    'deleted: once W2 is deleted, X no longer reads A''s status, its "now" or its presence');
+  UPDATE public.workspaces SET deleted_at = NULL WHERE id = test.id('W2');
+  -- The live feed reads under the same rule: the read policy names only the caller.
+  PERFORM test.ok((SELECT qual FROM pg_policies WHERE schemaname = 'public' AND tablename = 'user_statuses'
+                    AND policyname = 'user_statuses_read') LIKE '%uid()%shares_workspace(user_id)%'
+              AND (SELECT count(*) FROM pg_policies WHERE schemaname = 'public'
+                    AND tablename IN ('user_statuses', 'user_saved_statuses') AND cmd <> 'SELECT') = 0,
+    'rules: one read rule each, about the caller; no write rules (the ops write)');
 END;
 $$;
 
