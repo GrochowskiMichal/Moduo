@@ -218,7 +218,7 @@ export function RightPanel({
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
       {/* One row tall, like the left panel's first row, so the first lines
-          share a centre (MOD-121). The chip's fill sits at the panel's edge
+          share a centre (MOD-121). The chip's fill starts at the panel's edge
           padding and its text 8 in; the body's 4 plus a view's own 4 put the
           body's text on that same 16 px column. */}
       <div ref={titleRowRef} className="flex min-h-(--row-h) shrink-0 items-center gap-1">
@@ -293,7 +293,10 @@ function ViewMenu({
               : `Panel view: ${active.label}, ${title}`
           }
           className="gap-1 px-2 font-medium"
-          style={{ height: "var(--row-h)" }}
+          // A small row tall, not a full one: 2 px over the 26 px buttons
+          // beside it, as round-2b frame 7 draws it (.vpick 28). Button sets
+          // its height inline, so the override is inline too.
+          style={{ height: "var(--row-h-sm)" }}
         >
           {title}
           <ChevronDown className="text-muted-foreground" aria-hidden />
