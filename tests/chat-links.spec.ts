@@ -84,7 +84,10 @@ test("Start a conversation for a project: linked channel, its chip, Details, the
   await expect(details).toContainText("Not linked to a project, client or team yet.");
   await details.getByRole("button", { name: "Link to…" }).click();
   await page.keyboard.type(projectName);
-  await page.getByRole("option", { name: new RegExp(projectName) }).first().click();
+  await page
+    .getByRole("option", { name: new RegExp(projectName) })
+    .first()
+    .click();
   await expect(details).toContainText(projectName);
   await expect(page.locator("[data-slot='link-chip']")).toContainText(projectName);
 });
@@ -114,19 +117,23 @@ test("a team link offers its people once", async ({ page }) => {
   const details = page.locator("[data-slot='details-link']");
   await details.getByRole("button", { name: "Link to…" }).click();
   await page.keyboard.type(`Design ${tag}`);
-  await page.getByRole("option", { name: new RegExp(`Design ${tag}`) }).first().click();
+  await page
+    .getByRole("option", { name: new RegExp(`Design ${tag}`) })
+    .first()
+    .click();
   const offer = page.locator("[data-slot='team-offer']");
   await expect(offer).toContainText("Add the team's 1 person?");
   await offer.getByRole("button", { name: "Add" }).click();
   await expect(offer).toHaveCount(0);
   await expect
-    .poll(async () =>
-      (
-        await rest<Array<{ user_id: string }>>(
-          "service",
-          `chat_members?channel_id=eq.${channel.id}&user_id=eq.${room.member.user.id}&left_at=is.null&select=user_id`,
-        )
-      ).length,
+    .poll(
+      async () =>
+        (
+          await rest<Array<{ user_id: string }>>(
+            "service",
+            `chat_members?channel_id=eq.${channel.id}&user_id=eq.${room.member.user.id}&left_at=is.null&select=user_id`,
+          )
+        ).length,
     )
     .toBe(1);
 });
