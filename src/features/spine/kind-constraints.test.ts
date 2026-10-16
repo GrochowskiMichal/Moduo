@@ -18,6 +18,18 @@ describe("allowedKinds", () => {
     }
   });
 
+  it("never offers mentions with a conversation or a message at either end", () => {
+    for (const [a, b] of [
+      ["task", "chat_channel"],
+      ["chat_message", "task"],
+      ["note", "chat_message"],
+    ]) {
+      expect(allowedKinds(a, b)).toContain("references");
+      expect(allowedKinds(a, b)).not.toContain("mentions");
+    }
+    expect(coerceKindForPair("mentions", "note", "chat_channel")).toBe("references");
+  });
+
   it("excludes attachment / paid-by / works-at between two people (the Attachment bug)", () => {
     const kinds = allowedKinds("contact", "contact");
     expect(kinds).not.toContain("attachment");

@@ -26,6 +26,7 @@ import {
 } from "@/lib/drag-payload";
 import {
   type EntityLink,
+  isChatEnd,
   type LinkOrigin,
   RELATION_KIND_LABELS,
   RELATION_KINDS,
@@ -102,7 +103,10 @@ function DropLinkToastCard({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {RELATION_KINDS.map((k) => (
+          {RELATION_KINDS.filter(
+            // "Mentioned in" with a conversation or a message is Chat's alone.
+            (k) => k !== "mentions" || (!isChatEnd(link.sourceType) && !isChatEnd(link.targetType)),
+          ).map((k) => (
             <DropdownMenuItem key={k} disabled={k === kind} onSelect={() => void changeKind(k)}>
               {RELATION_KIND_LABELS[k]}
             </DropdownMenuItem>
