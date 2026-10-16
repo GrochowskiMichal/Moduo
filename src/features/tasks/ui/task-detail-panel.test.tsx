@@ -65,10 +65,16 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
   Element.prototype.hasPointerCapture ??= () => false;
 });
+/** Where the feed remembers your All · Comments pick (u1 is "you" here). */
+const FEED_FILTER_KEY = "moduo:task-feed-filter:u1";
+/** The feed opens on Comments (MOD-157); a test about the trail picks All first. */
+const pickAll = () => localStorage.setItem(FEED_FILTER_KEY, "all");
+
 afterEach(() => {
   cleanup();
   clearTaskTimeShares();
   setRunClaims(null, new Map());
+  localStorage.removeItem(FEED_FILTER_KEY);
 });
 
 const INBOX: Bucket = {
@@ -710,6 +716,7 @@ describe("comments on a task (U3-2)", () => {
         },
       ],
     });
+    pickAll();
     renderPanel(task(), api(task()), runtime);
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     await waitFor(() => expect(within(feed).getByText("Mike")).toBeTruthy());
@@ -854,6 +861,7 @@ describe("the activity reads like a thread, its box always in reach (MOD-129)", 
 
   it('drops the "Created by · Updated" line: the trail already says both', async () => {
     const { runtime } = fakeRuntime();
+    pickAll();
     renderPanel(task(), api(task()), runtime);
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     await waitFor(() => expect(within(feed).getByText(/created this/)).toBeTruthy());
@@ -867,6 +875,71 @@ describe("the activity reads like a thread, its box always in reach (MOD-129)", 
     const slot = document.querySelector('[data-slot="task-composer"]') as HTMLElement;
     expect(slot.childElementCount).toBe(0);
     expect(slot.className).toContain("empty:hidden");
+  });
+});
+
+describe("the feed opens on Comments, its switch at the title's size (MOD-157)", () => {
+  const COMMENT: SpineComment = {
+    id: "c1",
+    workspaceId: "w",
+    entityType: "task",
+    entityId: "t1",
+    body: "Rail counts first",
+    createdBy: "u2",
+    authorKind: "user",
+    authorLabel: null,
+    createdAt: "2026-10-07T20:02:00Z",
+    updatedAt: "2026-10-07T20:02:00Z",
+    deletedAt: null,
+    editedAt: null,
+    reactions: [],
+  };
+  const feed = () => screen.getByRole("region", { name: "Comments and activity" });
+  const shown = (name: "All" | "Comments") =>
+    within(feed()).getByRole("radio", { name }).getAttribute("aria-checked");
+
+  it("shows only the talk until you pick All", async () => {
+    const { runtime } = fakeRuntime({ comments: [COMMENT] });
+    renderPanel(task(), api(task()), runtime);
+    await waitFor(() => expect(within(feed()).getByText("Rail counts first")).toBeTruthy());
+    expect(shown("Comments")).toBe("true");
+    expect(shown("All")).toBe("false");
+    // The trail's lines (its creation line here) wait behind All.
+    expect(within(feed()).queryByText(/created this/)).toBeNull();
+  });
+
+  it("a task with changes but no comments says so in one quiet line, and keeps its box", async () => {
+    const { runtime } = fakeRuntime();
+    const t = task();
+    renderPanel(t, api(t, { loadActivity: async () => [] }), runtime);
+    await waitFor(() => expect(within(feed()).getByText("No comments yet.")).toBeTruthy());
+    expect(screen.getByRole("textbox", { name: "Comment on this task" })).toBeTruthy();
+  });
+
+  it("All brings the changes back, and stays picked on this device", async () => {
+    const { runtime } = fakeRuntime({ comments: [COMMENT] });
+    renderPanel(task(), api(task()), runtime);
+    fireEvent.click(within(feed()).getByRole("radio", { name: "All" }));
+    await waitFor(() => expect(within(feed()).getByText(/created this/)).toBeTruthy());
+    expect(localStorage.getItem(FEED_FILTER_KEY)).toBe("all");
+    cleanup();
+    renderPanel(task(), api(task()), runtime);
+    expect(shown("All")).toBe("true");
+  });
+
+  it("an earlier Comments pick still reads as Comments", () => {
+    localStorage.setItem(FEED_FILTER_KEY, "comments");
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task()), runtime);
+    expect(shown("Comments")).toBe("true");
+  });
+
+  it("draws the switch on the quiet header size, not the control rung", () => {
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task()), runtime);
+    const sw = within(feed()).getByRole("radiogroup", { name: "Show" });
+    expect(sw.getAttribute("data-size")).toBe("xs");
+    expect(within(sw).getByRole("radio", { name: "All" }).className).toContain("text-sm");
   });
 });
 
