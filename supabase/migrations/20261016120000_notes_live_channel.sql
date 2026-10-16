@@ -174,27 +174,33 @@ DECLARE
 BEGIN
   -- The first deferred firing of the transaction sends everything; the rest
   -- find nothing left.
-  FOR r IN
-    WITH mine AS (
-      DELETE FROM public.note_live_pending p WHERE p.tx = txid_current() RETURNING p.note_id, p.update_id
-    )
-    SELECT m.note_id,
-           jsonb_agg(u.update_b64 ORDER BY u.id) FILTER (WHERE u.origin IS DISTINCT FROM 'api_key') AS updates,
-           coalesce(sum(length(u.update_b64)), 0) AS bytes,
-           coalesce(bool_or(u.origin = 'api_key'), false) AS agent
-    FROM mine m JOIN public.note_updates u ON u.id = m.update_id
-    GROUP BY m.note_id
-  LOOP
-    BEGIN
-      IF r.agent OR r.bytes > 60000 THEN
-        PERFORM public.notes_live__tell(r.note_id, 'changed', '{"pull": true}'::jsonb);
-      ELSE
-        PERFORM public.notes_live__tell(r.note_id, 'changed', jsonb_build_object('updates', r.updates));
-      END IF;
-    EXCEPTION WHEN OTHERS THEN
-      RAISE WARNING 'notes_live__send_pending: % (note %)', SQLERRM, r.note_id;
-    END;
-  END LOOP;
+  -- Nothing here may fail the save at commit: the whole send is guarded.
+  BEGIN
+    FOR r IN
+      WITH mine AS (
+        DELETE FROM public.note_live_pending p WHERE p.tx = txid_current() RETURNING p.note_id, p.update_id
+      )
+      SELECT m.note_id,
+             coalesce(bool_or(u.origin = 'api_key'), false) AS agent,
+             coalesce(sum(length(u.update_b64)), 0) AS bytes,
+             array_agg(u.id ORDER BY u.id) AS ids
+      FROM mine m JOIN public.note_updates u ON u.id = m.update_id
+      GROUP BY m.note_id
+    LOOP
+      BEGIN
+        IF r.agent OR r.bytes > 60000 THEN
+          PERFORM public.notes_live__tell(r.note_id, 'changed', '{"pull": true}'::jsonb);
+        ELSE
+          PERFORM public.notes_live__tell(r.note_id, 'changed', jsonb_build_object('updates',
+            (SELECT jsonb_agg(u.update_b64 ORDER BY u.id) FROM public.note_updates u WHERE u.id = ANY (r.ids))));
+        END IF;
+      EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'notes_live__send_pending: % (note %)', SQLERRM, r.note_id;
+      END;
+    END LOOP;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'notes_live__send_pending: %', SQLERRM;
+  END;
   RETURN NULL;
 END;
 $$;

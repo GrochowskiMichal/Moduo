@@ -136,17 +136,18 @@ describe("joinNoteLive", () => {
     live.close();
   });
 
-  it("catches up with a pull after the socket rejoins", async () => {
+  it("catches up with a pull on every join, the first one included", async () => {
     const { client, opened } = fakeClient();
     const { got, join } = handlers();
     const live = joinNoteLive(client, { noteId: NOTE, selfUserId: "me", ...join });
     await flush();
     const ch = opened[0].channel;
+    expect(got.pulls).toBe(1); // let in by the heartbeat
     ch.status?.("SUBSCRIBED");
-    expect(got.pulls).toBe(1); // the catch-up when let in
+    expect(got.pulls).toBe(2); // joined after that: saves in between are caught up
     ch.status?.("CHANNEL_ERROR");
     ch.status?.("SUBSCRIBED");
-    expect(got.pulls).toBe(2);
+    expect(got.pulls).toBe(3);
     live.close();
   });
 

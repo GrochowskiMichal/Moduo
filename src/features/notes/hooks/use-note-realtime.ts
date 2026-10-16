@@ -24,6 +24,8 @@ import { type NoteViewer, type PresencePerson, presenceViewers } from "../sync/n
 import { decodeBase64ToUint8 } from "../utils/base64";
 
 const NOBODY: string[] = [];
+/** A short wait before fetching a gap, so a burst of held-back updates is one pull. */
+const HEAL_DELAY_MS = 300;
 
 type Args = {
   /** The runtime's notes surface; null until the runtime is ready. */
@@ -48,6 +50,14 @@ export function useNoteRealtime({ notes, engine, noteId, enabled, selfUserId, pe
     if (!notes || !engine || !noteId || !enabled || !selfUserId) return;
 
     const doc = engine.getOrCreateSession(noteId).doc;
+    let healTimer: ReturnType<typeof setTimeout> | null = null;
+    const healSoon = () => {
+      if (healTimer) return;
+      healTimer = setTimeout(() => {
+        healTimer = null;
+        void engine.pullNote(noteId);
+      }, HEAL_DELAY_MS);
+    };
     const live = notes.joinLive({
       noteId,
       selfUserId,
@@ -59,12 +69,16 @@ export function useNoteRealtime({ notes, engine, noteId, enabled, selfUserId, pe
             // A malformed update can't wedge us; the next pull reconciles.
           }
         }
+        // An update that builds on one we never got waits in the doc and
+        // holds back everything after it: fetch the gap.
+        if (doc.store.pendingStructs !== null || doc.store.pendingDs !== null) healSoon();
       },
       onPull: () => void engine.pullNote(noteId),
       onViewers: setViewerIds,
     });
 
     return () => {
+      if (healTimer) clearTimeout(healTimer);
       live.close();
       setViewerIds(NOBODY);
     };

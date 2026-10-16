@@ -37,7 +37,7 @@ type Listener = {
 };
 
 /** One topic per person per client, shared by every open note. */
-type Personal = { channel: RealtimeChannel; listeners: Set<Listener>; joinedOnce: boolean };
+type Personal = { channel: RealtimeChannel; listeners: Set<Listener> };
 const personal = new WeakMap<LiveClient, Map<string, Personal>>();
 
 export function liveTopic(userId: string): string {
@@ -58,7 +58,7 @@ function acquire(client: LiveClient, userId: string, listener: Listener): () => 
   let entry = users.get(userId);
   if (!entry) {
     const channel = client.channel(liveTopic(userId), { config: { private: true } });
-    const made: Personal = { channel, listeners: new Set(), joinedOnce: false };
+    const made: Personal = { channel, listeners: new Set() };
     const forNote = (
       payload: unknown,
       run: (l: Listener, body: Record<string, unknown>) => void,
@@ -74,11 +74,12 @@ function acquire(client: LiveClient, userId: string, listener: Listener): () => 
         forNote(msg.payload, (l, b) => l.onViewers(stringList(b.viewers))),
       )
       .subscribe((status) => {
-        // Anything said while the socket was down is caught up by a pull.
+        // Anything said before (or while) this topic was joined went to
+        // nobody: every join catches up with a pull.
         if (status !== "SUBSCRIBED") return;
-        if (made.joinedOnce) for (const l of made.listeners) l.onRejoin();
-        made.joinedOnce = true;
+        for (const l of made.listeners) l.onRejoin();
       });
+
     entry = made;
     users.set(userId, made);
   }
