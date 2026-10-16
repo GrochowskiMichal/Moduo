@@ -1,13 +1,28 @@
 // The emoji picker (#18): Frimousse over Emojibase's bundled data, native
 // emoji, a search on top, skin tone at the bottom. Picking hands the emoji to
 // the caller (the composer inserts it at the caret). The personal quick row is
-// CV-7c's; the workspace's own emoji CV-20's.
+// CV-7c's. The workspace's own emoji come first (CV-20; round-2.html frame
+// 6 · picker): a section named after the workspace with "Add emoji…" for
+// whoever may add one, filtered by the same search; picking one hands `:name:`.
 
 import { EmojiPicker } from "frimousse";
+import { useContext, useState } from "react";
 
+import { dispatchOpenSettings } from "../../settings/settings-events";
+import { WorkspaceContext } from "../../workspaces/workspace-context";
+import { useCustomEmoji } from "../emoji/context";
+import { CustomEmojiGlyph } from "../emoji/custom-emoji";
+import { emojiKey, matchCustomEmoji } from "../emoji/model";
 import { resolveChatEmoji } from "./emoji-data";
 
 export function ChatEmojiPicker({ onPick }: { onPick: (emoji: string) => void }) {
+  const [query, setQuery] = useState("");
+  const custom = useCustomEmoji();
+  // "Add emoji…" opens Settings → Chat's Custom emoji (the add lives there).
+  const onAddEmoji = custom.canAdd ? () => dispatchOpenSettings({ section: "chat" }) : undefined;
+  const workspaceName = useContext(WorkspaceContext)?.selectedWorkspace?.name ?? "This workspace";
+  const shown = query.trim() ? matchCustomEmoji(custom.list, query.trim(), 64) : custom.list;
+  const section = custom.list.length > 0 || onAddEmoji;
   return (
     <EmojiPicker.Root
       className="isolate flex h-80 w-80 flex-col"
@@ -19,14 +34,47 @@ export function ChatEmojiPicker({ onPick }: { onPick: (emoji: string) => void })
         autoFocus
         aria-label="Search emoji"
         placeholder="Search emoji"
+        onChange={(e) => setQuery(e.target.value)}
         className="m-1.5 h-(--ctrl-h-sm) appearance-none rounded-md bg-state-hover px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
       />
+      {section && (shown.length > 0 || !query.trim()) ? (
+        <section aria-label={`${workspaceName} emoji`} className="border-b border-border pb-1.5">
+          <div className="flex h-6 items-center justify-between px-3 text-xs text-muted-foreground">
+            <span className="truncate font-medium">{workspaceName}</span>
+            {onAddEmoji ? (
+              <button
+                type="button"
+                onClick={onAddEmoji}
+                className="rounded-sm px-1 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                Add emoji…
+              </button>
+            ) : null}
+          </div>
+          {shown.length > 0 ? (
+            <div className="grid max-h-24 grid-cols-9 overflow-y-auto px-1.5">
+              {shown.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  aria-label={emojiKey(e.name)}
+                  title={emojiKey(e.name)}
+                  onClick={() => onPick(emojiKey(e.name))}
+                  className="grid size-8 place-items-center rounded-md outline-none hover:bg-state-active focus-visible:bg-state-active"
+                >
+                  <CustomEmojiGlyph name={e.name} emoji={e} urlOf={custom.urlOf} size="picker" />
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       <EmojiPicker.Viewport className="relative flex-1 outline-none">
         <EmojiPicker.Loading className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
           Loading…
         </EmojiPicker.Loading>
         <EmojiPicker.Empty className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
-          No emoji found.
+          {shown.length > 0 ? null : "No emoji found."}
         </EmojiPicker.Empty>
         <EmojiPicker.List
           className="select-none pb-1.5"

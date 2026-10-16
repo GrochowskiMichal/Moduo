@@ -107,3 +107,25 @@ export const Densities: Story = {
     </AtThreeDensities>
   ),
 };
+
+/**
+ * A key that isn't a standard emoji (a workspace's `:shipit:`): the caller
+ * draws it through `glyph`; one it can't draw (removed) stays its text.
+ */
+export const CustomKeys: Story = {
+  render: () => (
+    <Reactions
+      items={[
+        ...START,
+        { key: ":shipit:", count: 2, mine: true, label: ":shipit:", who: "You and Anna" },
+        { key: ":gone:", count: 1, mine: false, label: ":gone:", who: "Mike" },
+      ]}
+      onToggle={() => {}}
+      glyph={(key) =>
+        key === ":shipit:" ? (
+          <span aria-hidden className="inline-block size-4 rounded-sm bg-primary" />
+        ) : null
+      }
+    />
+  ),
+};

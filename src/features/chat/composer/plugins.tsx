@@ -53,6 +53,9 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
+import { useCustomEmoji } from "../emoji/context";
+import { CustomEmojiGlyph } from "../emoji/custom-emoji";
+import { type CustomEmoji, emojiKey, matchCustomEmoji } from "../emoji/model";
 import { enterIntent } from "../markup-v2/enter";
 import { $blocksToNodes, $exportStored } from "../markup-v2/lexical";
 import { pastedBlocks } from "../markup-v2/paste";
@@ -394,20 +397,27 @@ export function SelectionFormatPlugin() {
 // ── `:` emoji ───────────────────────────────────────────────────────────────
 
 class EmojiOption extends MenuOption {
-  constructor(readonly item: ChatEmoji) {
-    super(item.emoji + item.label);
+  constructor(
+    /** What goes in the text: the emoji, or a custom one's `:name:`. */
+    readonly insert: string,
+    /** The name shown (`:thumbsup:`). */
+    readonly label: string,
+    readonly custom: CustomEmoji | null,
+  ) {
+    super(custom ? `custom:${custom.id}` : insert + label);
   }
 }
 
 /**
  * `:` opens emoji by name (`:thu` → 👍). Two letters at least, so a time
  * ("at 10:30") or a smiley (":)") never opens it. The workspace's own emoji
- * come first once CV-20 adds them.
+ * come first (CV-20).
  */
 export function EmojiTypeaheadPlugin({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
   const [editor] = useLexicalComposerContext();
   const [query, setQuery] = useState<string | null>(null);
   const [list, setList] = useState<ChatEmoji[] | null>(null);
+  const customEmoji = useCustomEmoji();
   const match = useBasicTypeaheadTriggerMatch(":", { minLength: 2, maxLength: 32 });
 
   useEffect(() => {
@@ -419,7 +429,18 @@ export function EmojiTypeaheadPlugin({ onOpenChange }: { onOpenChange?: (open: b
       });
   }, [query, list]);
 
-  const options = query && list ? matchEmoji(list, query).map((e) => new EmojiOption(e)) : [];
+  const customs = query
+    ? matchCustomEmoji(customEmoji.list, query).map(
+        (e) => new EmojiOption(emojiKey(e.name), emojiKey(e.name), e),
+      )
+    : [];
+  const standard =
+    query && list
+      ? matchEmoji(list, query, Math.max(0, 8 - customs.length)).map(
+          (e) => new EmojiOption(e.emoji, `:${e.codes[0] ?? e.label.replace(/\s+/g, "_")}:`, null),
+        )
+      : [];
+  const options = [...customs, ...standard];
 
   return (
     <LexicalTypeaheadMenuPlugin<EmojiOption>
@@ -437,7 +458,7 @@ export function EmojiTypeaheadPlugin({ onOpenChange }: { onOpenChange?: (open: b
       onSelectOption={(option, textNode: TextNode | null, closeMenu) => {
         editor.update(() => {
           if (textNode) {
-            const emoji = $createTextNode(option.item.emoji);
+            const emoji = $createTextNode(option.insert);
             textNode.replace(emoji);
             emoji.select();
           }
@@ -469,10 +490,19 @@ export function EmojiTypeaheadPlugin({ onOpenChange }: { onOpenChange?: (open: b
                       selectedIndex === i ? "bg-accent" : "hover:bg-accent",
                     )}
                   >
-                    <span className="text-base leading-none">{option.item.emoji}</span>
-                    <span className="truncate">
-                      :{option.item.codes[0] ?? option.item.label.replace(/\s+/g, "_")}:
+                    <span className="inline-flex text-base leading-none">
+                      {option.custom ? (
+                        <CustomEmojiGlyph
+                          name={option.custom.name}
+                          emoji={option.custom}
+                          urlOf={customEmoji.urlOf}
+                          size="reaction"
+                        />
+                      ) : (
+                        option.insert
+                      )}
                     </span>
+                    <span className="truncate">{option.label}</span>
                   </button>
                 ))}
               </div>,

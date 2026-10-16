@@ -37,6 +37,8 @@ import { formatPastDay } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { useQuickReactions } from "../../spine/hooks/use-quick-reactions";
+import { useCustomEmoji } from "../emoji/context";
+import { quickRowUsable } from "../emoji/model";
 import type { ChatMessage, ChatPerson } from "../model";
 import type { ChatWindow } from "../store/store";
 import { buildStream, countNewSince, lastSeenMessage, type StreamItem } from "../timeline";
@@ -480,7 +482,9 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     const [selected, setSelected] = useState<string | null>(null);
     const [menu, setMenu] = useState<{ key: string; reactions: boolean } | null>(null);
     // Your quick row (CV-7c): the hover shows its first three, the menu all six.
-    const { row: quickRow } = useQuickReactions(selfId);
+    // A custom `:name:` in it shows only while it's live here (CV-20).
+    const customEmoji = useCustomEmoji();
+    const { row: quickRow } = useQuickReactions(selfId, quickRowUsable(customEmoji.byName));
 
     const messageKeys = (): string[] =>
       rowsRef.current.flatMap((r) => (r.type === "message" ? [r.key] : []));

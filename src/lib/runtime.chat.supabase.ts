@@ -20,8 +20,16 @@
  * (`CHAT_MESSAGE_COLUMNS`): `search_tsv` and `body_text` stay off the wire.
  */
 
+import { CUSTOM_EMOJI_PER_WORKSPACE } from "@contracts/vocabularies";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
+import { mapCustomEmoji } from "../features/chat/emoji/model";
+
+/** The private bucket custom emoji images live in (CV-20). */
+const CHAT_EMOJI_BUCKET = "chat-emoji";
+const CUSTOM_EMOJI_COLUMNS =
+  "id, workspace_id, name, storage_path, poster_path, mime, width, height, bytes, animated, created_by, created_at, deleted_at";
+
 import {
   mapCatchupItem,
   mapChannel,
@@ -751,6 +759,66 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       const { data, error } = await db().rpc("user_op_set_chat_prefs", { p_patch: body });
       fail(error);
       return mapUserChatPrefs(data);
+    },
+
+    async customEmoji(workspaceId) {
+      const { data, error } = await db()
+        .from("chat_custom_emoji")
+        .select(CUSTOM_EMOJI_COLUMNS)
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(CUSTOM_EMOJI_PER_WORKSPACE);
+      fail(error);
+      return (Array.isArray(data) ? data : [])
+        .map(mapCustomEmoji)
+        .filter((e): e is NonNullable<typeof e> => e !== null);
+    },
+
+    async uploadEmojiImage(path, image, mime) {
+      const { error } = await db()
+        .storage.from(CHAT_EMOJI_BUCKET)
+        .upload(path, image, { contentType: mime, upsert: false, cacheControl: "31536000" });
+      // The same picture uploaded before (by anyone here) is already there.
+      if (!error) return;
+      const status = String((error as { statusCode?: unknown; status?: unknown }).statusCode ?? "");
+      if (status === "409" || /already exists|duplicate/i.test(error.message)) return;
+      throw new Error(error.message);
+    },
+
+    async addCustomEmoji(input) {
+      const { data, error } = await db().rpc("chat_op_custom_emoji_add", {
+        p_workspace_id: input.workspaceId,
+        p_name: input.name,
+        p_path: input.path,
+        p_poster_path: input.posterPath,
+        p_mime: input.mime,
+        p_width: input.width,
+        p_height: input.height,
+        p_bytes: input.bytes,
+        p_animated: input.animated,
+      });
+      fail(error);
+      return single(data, mapCustomEmoji, "add emoji");
+    },
+
+    async removeCustomEmoji(id) {
+      const { data, error } = await db().rpc("chat_op_custom_emoji_remove", { p_id: id });
+      fail(error);
+      return single(data, mapCustomEmoji, "remove emoji");
+    },
+
+    async emojiUrls(paths, ttlSeconds) {
+      const out = new Map<string, string>();
+      if (paths.length === 0) return out;
+      const { data, error } = await db()
+        .storage.from(CHAT_EMOJI_BUCKET)
+        .createSignedUrls([...paths], ttlSeconds);
+      fail(error);
+      for (const item of data ?? []) {
+        if (item.path && item.signedUrl && !item.error) out.set(item.path, item.signedUrl);
+      }
+      return out;
     },
 
     async registerMessage(messageId) {

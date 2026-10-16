@@ -1,4 +1,4 @@
-import { canonicalReactionKey, isReactionKey } from "@contracts/vocabularies";
+import { canonicalReactionKey, customEmojiNameOf, isReactionKey } from "@contracts/vocabularies";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -15,8 +15,12 @@ import {
 } from "../../../lib/notices/chat-prefs";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
+import { customGlyph } from "../../chat/emoji/context";
+import { CustomEmojiGroup } from "../../chat/emoji/custom-emoji-section";
+import { useWorkspaceEmoji, type WorkspaceEmoji } from "../../chat/emoji/store";
 import { saveQuickRow, useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import { reactionName } from "../../spine/reactions";
+import { useWorkspace } from "../../workspaces/workspace-context";
 
 import { PrefGroup, PrefRow } from "./preferences-section";
 import { SettingsSectionShell } from "./section-shell";
@@ -31,7 +35,10 @@ import { SettingsSectionShell } from "./section-shell";
  */
 export function ChatSection() {
   const { userId } = useAuth();
+  // Your row is for every workspace: a `:name:` stays in it even where it
+  // isn't live (it's skipped there); this workspace's emoji draw as images.
   const { row, saved } = useQuickReactions(userId);
+  const emoji = useWorkspaceEmoji(useWorkspace().selectedWorkspaceId);
 
   const save = (next: string[] | null) => {
     void saveQuickRow(next).catch((e: unknown) => {
@@ -69,6 +76,7 @@ export function ChatSection() {
             {row.map((key, at) => (
               <div role="listitem" key={key}>
                 <SlotEditor
+                  emoji={emoji}
                   value={key}
                   position={at}
                   count={row.length}
@@ -90,6 +98,7 @@ export function ChatSection() {
           </div>
         </div>
       </PrefGroup>
+      <CustomEmojiGroup userId={userId} />
       <PresenceGroup />
     </SettingsSectionShell>
   );
@@ -160,12 +169,14 @@ function PresenceGroup() {
 }
 
 function SlotEditor({
+  emoji,
   value,
   position,
   count,
   onPlace,
   onMove,
 }: {
+  emoji: WorkspaceEmoji;
   value: string;
   position: number;
   count: number;
@@ -175,7 +186,9 @@ function SlotEditor({
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const trimmed = draft.trim();
-  const valid = isReactionKey(trimmed);
+  // A custom one (`:name:`) only when this workspace has it.
+  const custom = customEmojiNameOf(trimmed);
+  const valid = isReactionKey(trimmed) && (custom === null || emoji.byName.has(custom));
 
   const submit = () => {
     if (!valid) return;
@@ -202,7 +215,9 @@ function SlotEditor({
             open && "ring-border bg-state-active",
           )}
         >
-          <span aria-hidden>{value}</span>
+          <span aria-hidden className="inline-flex">
+            {customGlyph(emoji)(value) ?? value}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="flex w-64 flex-col gap-2 p-2">
@@ -223,7 +238,9 @@ function SlotEditor({
           />
           <p className="text-xs text-muted-foreground">
             {trimmed.length > 0 && !valid
-              ? "That isn’t an emoji."
+              ? custom !== null && isReactionKey(trimmed)
+                ? `There’s no ${trimmed} in this workspace.`
+                : "That isn’t an emoji."
               : "Tip: ⌃⌘Space opens the emoji keyboard."}
           </p>
           <div className="flex items-center gap-1">

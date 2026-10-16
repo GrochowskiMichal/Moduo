@@ -10,6 +10,9 @@ import { toast } from "sonner";
 import { ReactionButton, Reactions } from "@/components/ui/reactions";
 import type { SpineComment } from "@/lib/runtime.types";
 
+import { customGlyph } from "../../chat/emoji/context";
+import { quickRowUsable } from "../../chat/emoji/model";
+import { useWorkspaceEmoji } from "../../chat/emoji/store";
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import type { CommentThread } from "../hooks/use-comment-thread";
 import { useQuickReactions } from "../hooks/use-quick-reactions";
@@ -32,7 +35,11 @@ export function useCommentReactions({
   /** The full picker (CV-7b's seam): opens it for this comment. */
   onAnyEmoji?: () => void;
 }): { button: ReactNode; chips: ReactNode } {
-  const { row } = useQuickReactions(currentUserId);
+  // CV-20: the comment's workspace's custom emoji draw as their images; a
+  // `:name:` in your row shows only where it's live.
+  const emoji = useWorkspaceEmoji(comment.workspaceId);
+  const { row } = useQuickReactions(currentUserId, quickRowUsable(emoji.byName));
+  const glyph = customGlyph(emoji);
   const groups = groupReactions(comment.reactions, currentUserId, nameOf);
   const mine = new Set(groups.filter((g) => g.mine).map((g) => g.key));
 
@@ -48,6 +55,7 @@ export function useCommentReactions({
       keys={row}
       mine={mine}
       labelOf={reactionName}
+      glyph={glyph}
       onPick={react}
       onCustomize={() => dispatchOpenSettings({ section: "chat" })}
       onAnyEmoji={onAnyEmoji}
@@ -60,6 +68,7 @@ export function useCommentReactions({
         className="mt-1.5"
         disabled={!canReact}
         onToggle={react}
+        glyph={glyph}
         items={groups.map((g) => ({
           key: g.key,
           count: g.count,

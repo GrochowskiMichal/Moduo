@@ -119,12 +119,13 @@ BEGIN
     'typing: reading a conversation''s typing doesn''t need the plan (reading never does)');
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
 
-  -- The publication: the three chat tables and Catch up; not the chain mutes.
+  -- The publication: the three chat tables, Catch up and the workspace's
+  -- custom emoji (CV-20); not the chain mutes.
   PERFORM test.ok(
     (SELECT array_agg(tablename::text ORDER BY tablename) FROM pg_publication_tables
       WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename LIKE 'chat%')
-      = ARRAY['chat_catchup', 'chat_channels', 'chat_members', 'chat_messages'],
-    'publication: chat_catchup, chat_channels, chat_members and chat_messages are published');
+      = ARRAY['chat_catchup', 'chat_channels', 'chat_custom_emoji', 'chat_members', 'chat_messages'],
+    'publication: chat_catchup, chat_channels, chat_custom_emoji, chat_members and chat_messages are published');
   PERFORM test.ok(
     NOT has_function_privilege('anon', 'public.chat_realtime_topic_allowed(text)', 'EXECUTE')
     AND has_function_privilege('authenticated', 'public.chat_realtime_topic_allowed(text)', 'EXECUTE')

@@ -24,6 +24,7 @@ import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
 import { excerptOf } from "../chains";
+import { customGlyph, useCustomEmoji } from "../emoji/context";
 import type { ChatMessage, ChatPerson } from "../model";
 import { MadeFromLine } from "./made-from";
 import { type BodyContext, MessageBody } from "./message-body";
@@ -164,11 +165,13 @@ function MessageReactions({
     selfId,
     (id) => personOf(id)?.name ?? null,
   );
+  const emoji = useCustomEmoji();
   if (groups.length === 0) return null;
   return (
     <Reactions
       className="mt-1.5"
       onToggle={onReact}
+      glyph={customGlyph(emoji)}
       items={groups.map((g) => ({
         key: g.key,
         count: g.count,
