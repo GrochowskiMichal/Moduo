@@ -127,7 +127,7 @@ Agents are delegates: through the one Moduo connector they create projects, sect
 | --- | --- | --- | --- | --- |
 | A reminder you set | You | OS notification (desktop), browser notification (web, opt-in), bell | At its time, on its own, in any workspace | The reminder |
 | A check-back on a hand-off | You | OS / browser, bell | At its time, on its own | The check-back |
-| Assigned to you (one task) | You | Bell | Grouped with others from the same hour | Settings → Notifications → Assigned to me |
+| Assigned to you (one task) | You | Bell | Grouped with others from the same hour | Settings → Notifications → Assigned to you |
 | Assigned to you, many at once (template, import, bulk, agent) | You | Bell | One notice: "Maciej assigned you 12 tasks in Acme" | Same |
 | Handed into your Inbox from someone's Inbox (20a) | You | Bell | Grouped | Same |
 | A task routed to your team | Team members | Bell | Once, grouped by the hour; after 3 days unclaimed, or the day before due, the creator gets one check-back | Your team's mute |
@@ -153,11 +153,11 @@ Tracked time is a log of dated entries (TV-D3); Focus adds a closed stretch per 
 
 ### 16. Onboarding and welcome (34)
 
-One role question per person ("What will you run in Moduo?") sets defaults only: preset, first view, seeded views, three teaching tasks, a starter template. Tasks' welcome shows once per person: step 1 the basics with "Learn more" / "Explore on my own"; up to three steps with a looping clip recorded from the real app: (1) above the line is yours, below it is shared; (2) line things up in Focus and work through them; (3) `@` assigns, files and links · `#` tags · `/` runs commands, the same everywhere. Reopen from ⋯ → "What's in Tasks". No forced steps, no app-wide tours.
+One role question per person ("What will you run in Moduo?") sets defaults only: preset, first view, seeded views, three teaching tasks, a starter template. Tasks' welcome shows once per person: step 1 the basics with "Learn more" / "Explore on your own" (MOD-137); up to three steps with a looping clip recorded from the real app: (1) above the line is yours, below it is shared; (2) line things up in Focus and work through them; (3) `@` assigns, files and links · `#` tags · `/` runs commands, the same everywhere. Reopen from ⋯ → "What's in Tasks". No forced steps, no app-wide tours.
 
 ### 17. Settings → Tasks
 
-Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along the way · usual pace on/off), Show my agent work to teammates, Share my tracked time with the workspace owner, Time & region (General), Notifications (the table's switches), Members → Teams (any member creates and adds people; creator/owner/admin renames, takes people out and deletes).
+Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along the way · usual pace on/off), Show your agent work to teammates, Share your tracked time with the workspace owner (MOD-137: "your", never "my"), Time & region (General), Notifications (the table's switches), Members → Teams (any member creates and adds people; creator/owner/admin renames, takes people out and deletes).
 
 ### 18. Calendar, Home and the top bar: the contracts (26, 12, 96, default r, re-plan §4)
 
@@ -167,7 +167,7 @@ Statuses (workspace default), Templates, Focus (Timer · Offer quick tasks along
 
 ### 19. The visual rules every module inherits (38–46a, 48b, 81, re-plan §5)
 
-Three readable text levels plus one decorative; hover = fill, one selection tint, one focus ring, one drop target, one drag preview; never capitalise people's words; one sentence-case header style for every grouping (small caps only for fixed chrome); one date/time/duration grammar (Today · Tomorrow · Mon · Oct 16 · Oct 16, 2027 · 3:00 PM · 45m · 1h 30m · 4h) with dates, times and counts never truncated; titles give way first, meta drops whole items behind "+n"; avatars show the person's profile photo when they have one, and two initials with a stable colour when they don't, while it loads or when it fails (amended 2026-10-14 by dogfood MOD-96, superseding call 43's initials only; decisions/tasks.md); density applies to cards, menus, tabs and pills, as row and control heights, and never moves the panel frame (fills 8 px from a panel's edge, text 16 px in, the centre's title line on the side panels' first-row centre; MOD-121, call 28; modules with their own extra insets line up when rebuilt); one chip and one count language; an accent budget selection > today/now > done check > queued; text is never rotated; the 3×3 layout (top bar global · left overview · centre surface · right context · bottom bar module tools and panel toggles) with no rails or extra columns. Motion foundations: fast ~100 ms (hover, press), base ~180 ms (menus, popovers), slow ~280 ms (panels, view switches), ease-out in / quicker ease-in out, four patterns (panel slide-fade, popover grows from its origin, row height+opacity on add/remove, view crossfade), reduced motion → opacity only, no blur.
+Three readable text levels plus one decorative; hover = fill, one selection tint, one focus ring, one drop target, one drag preview; never capitalise people's words; one sentence-case header style for every grouping (small caps only for fixed chrome); one date/time/duration grammar (Today · Tomorrow · Mon · Oct 16 · Oct 16, 2027 · 3:00 PM · 45m · 1h 30m · 4h) with dates, times and counts never truncated; titles give way first, meta drops whole items behind "+n"; avatars show the person's profile photo when they have one, and two initials with a stable colour when they don't, while it loads or when it fails (amended 2026-10-14 by dogfood MOD-96, superseding call 43's initials only; decisions/tasks.md); density applies to cards, menus, tabs and pills, as row and control heights, and never moves the panel frame (fills 8 px from a panel's edge, text 16 px in, the centre's title line on the side panels' first-row centre; MOD-121, call 28; modules with their own extra insets line up when rebuilt); one chip and one count language; one way to name the reader (call #27, MOD-137): "You" as a value on its own, "Maciej Grzywacz (you)" in a people list, "you" in a sentence, "your" for "my", never "Me" ("My tasks" and a typed `@me` stay); an accent budget selection > today/now > done check > queued; text is never rotated; the 3×3 layout (top bar global · left overview · centre surface · right context · bottom bar module tools and panel toggles) with no rails or extra columns. Motion foundations: fast ~100 ms (hover, press), base ~180 ms (menus, popovers), slow ~280 ms (panels, view switches), ease-out in / quicker ease-in out, four patterns (panel slide-fade, popover grows from its origin, row height+opacity on add/remove, view crossfade), reduced motion → opacity only, no blur.
 
 ## Edge cases
 
@@ -193,9 +193,9 @@ Each becomes a test (next sections). Grouped by what fails.
 - Deleting a section → its tasks go to "No section" in the same project; nothing is deleted.
 - Deleting an area → its projects become area-less; nothing else changes.
 - Deleting a project → open tasks to assignees' Inboxes (unassigned → the deleter's) with one notice each; done/won't-do tasks go with the project to Recently deleted; Restore within 30 days brings the batch back, tasks included, and returns moved tasks only if they haven't been edited since.
-- Assigning an unfiled Inbox task to someone → the picker asks for a project; "Keep unfiled" moves it to their Inbox; the creator still finds it under "Created by me".
+- Assigning an unfiled Inbox task to someone → the picker asks for a project; "Keep unfiled" moves it to their Inbox; the creator still finds it under Filter → Creator is You.
 - Dragging a task onto the Inbox sidebar row → nothing happens (a shared task never turns private by a drop).
-- A task routed to a team the creator isn't in → allowed; the creator keeps "Created by me" sight; a routed task with no project → capture refuses ⏎ until a project is picked or the team's default fills in.
+- A task routed to a team the creator isn't in → allowed; the creator keeps sight of it (Creator is You); a routed task with no project → capture refuses ⏎ until a project is picked or the team's default fills in.
 - A member leaves a team → their claimed team tasks stay assigned to them; unclaimed ones stay with the team.
 
 **Focus**
@@ -253,7 +253,7 @@ Each becomes a test (next sections). Grouped by what fails.
 **Agents**
 - An agent reports "working" then goes silent → "No update for 40m" computed after 30 minutes, no notification.
 - An agent's key is revoked mid-session → the session line reads "Stopped (key revoked)"; the trail keeps "via <key name>".
-- "Show my agent work to teammates" switched off mid-session → teammates stop seeing the line at once; the trail stays.
+- "Show your agent work to teammates" switched off mid-session → teammates stop seeing the line at once; the trail stays.
 - An agent tries to hard-delete, re-own a project or write outside its scopes → refused by the op; nothing partial is written.
 
 ## Acceptance criteria
@@ -331,7 +331,7 @@ Layers: **unit** (Rstest, `src/**/*.test.ts`), **SQL** (rolled-back probes on th
 | `tests/offline.spec.ts` · "read-only copy and queued captures" | AC12.2 | Offline opens read-only; a capture and a check-off queue and flush in order on reconnect without duplicates. |
 | `src/lib/min-build.test.ts` · "old builds are told, never drop rows" | AC12.6 | A build below the minimum sees the update notice; an unknown status row still renders as its category. |
 | `tests/visual/sidebar.spec.ts` · "decided sidebar" | AC11.1, AC11.10 | Order, hairline, no glyphs, collapsible groups, Pinned only when used, Archived and Recently deleted in the footer (MOD-140). |
-| `tests/onboarding.spec.ts` · "role question and welcome once" | AC2–AC7 defaults | The role sets preset/first view/seeds; the welcome shows once per person with Learn more / Explore on my own and reopens from ⋯. |
+| `tests/onboarding.spec.ts` · "role question and welcome once" | AC2–AC7 defaults | The role sets preset/first view/seeds; the welcome shows once per person with Learn more / Explore on your own and reopens from ⋯. |
 | `tests/visual/kit.spec.ts` + `bun run lint:tw lint:css lint:controls` · "north-star kit and guards" | AC14 | Every kit primitive has a story at three densities; the lint guards fail on raw hex, arbitrary values, `rotate(90deg)` text and small-caps user words. |
 | `tests/visual/motion.spec.ts` · "tokens and reduced motion" | AC14.2 | The four patterns use the three durations; `prefers-reduced-motion` yields opacity-only transitions. |
 | `tests/trust-pass.spec.ts` · "P0, item by item" | AC1.4–1.6, 1.8–1.14 | Won't do tasks reopen; skeletons not "Nothing here yet"; a Focus stretch saved while on Notes; a parent moves with its subtasks; New in Focus lands in Up next; the private-project deep link opens the task; no "Rescheduled"; a date popover writes once and the trail shows it; MCP lists page past 1,000; a "blocks" link blocks. |

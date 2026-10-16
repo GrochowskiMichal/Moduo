@@ -243,7 +243,7 @@ export function AccessSection() {
                     <span className="truncate">
                       {memberLabel(member)}
                       {member.userId === userId ? (
-                        <span className="text-muted-foreground"> · You</span>
+                        <span className="text-muted-foreground"> (you)</span>
                       ) : null}
                     </span>
                   </RailItem>

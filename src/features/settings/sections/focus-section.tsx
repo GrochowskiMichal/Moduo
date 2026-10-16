@@ -72,13 +72,13 @@ export function FocusSection() {
           />
         </FocusRow>
         <FocusRow
-          title="Show my usual pace"
+          title="Show your usual pace"
           description="After about ten timed tasks, Up next says how long it takes at your own pace. Only you see it."
         >
           <Switch
             checked={prefs.usualPace}
             onCheckedChange={(v) => setPrefs({ usualPace: v })}
-            aria-label="Show my usual pace"
+            aria-label="Show your usual pace"
           />
         </FocusRow>
       </PrefGroup>

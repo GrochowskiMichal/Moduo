@@ -196,7 +196,7 @@ const ThreadRow = forwardRef<
         />
         <IconButton
           icon={CornerUpLeft}
-          label="Remind me to follow up"
+          label="Follow up if no reply"
           onClick={(e) => {
             e.stopPropagation();
             onFollowUp();

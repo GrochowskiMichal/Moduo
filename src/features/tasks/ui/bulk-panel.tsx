@@ -101,7 +101,8 @@ export function BulkPanel({
           {value("assign", assignee, (id) => {
             if (!id) return null;
             const person = byId(id);
-            return person ? person.fullName || person.name : "A former member";
+            // "You" as the value (MOD-137).
+            return person ? person.name : "A former member";
           })}
         </PropertyRow>
         <PropertyRow label="Priority">

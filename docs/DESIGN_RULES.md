@@ -58,6 +58,8 @@ Quiet and quick, **no blur** (tasks-v3 call 81, SH-1, 2026-10-10; blur may retur
 ## R8 — Casing  [review]
 **Sentence case** everywhere ("New task", "Mark done", "Add description"). Standalone status words and proper nouns stay capitalized (Done, Today, Inbox, Skip, CRM). Counts read like "2 / 2 Done".
 
+**The reader is "you"** (call #27, MOD-137; the voice rule is in [BRAND_BRIEF §11](../.design/brand/BRAND_BRIEF.md)): standalone as a value, **"You"** ("Assignee is You"); in a people list, **"Maciej Grzywacz (you)"**; inside a sentence, lowercase **"you"** ("Assigned to you"). Never "Me" or "my" in copy ("My tasks", the view's name, is the one exception). In Tasks the three forms are `Assignee.name`, `assigneeListName` and `assigneeInSentence` (`src/features/tasks/assignee-options.ts`); a filter option's `chipLabel` carries the value form when its picker shows the list form.
+
 ## R9 — One font, one picker  [review]
 A single `data-font` axis (default **Geist**) drives the whole UI — `--font-ui` feeds **both** `--font-display` and `--font-body`. No second family axis, no per-component font. Hierarchy comes from weight and size. The display/body *role* split (R4) is kept so a distinct display face can return later without touching component code.
 

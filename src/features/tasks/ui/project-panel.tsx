@@ -24,6 +24,7 @@ import { PropertyRow } from "../../../components/ui/property-row";
 import { formatDate, formatDay, formatDurationSeconds } from "../../../lib/time-format";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
+import { assigneeInSentence, assigneeListName } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { projectOverviewText } from "../list-export";
 import type { Bucket, Section, Task, TaskCompletion, TaskWaitingEntry } from "../model";
@@ -225,9 +226,19 @@ function ProjectOverview({
   const files = useProjectFiles(project.workspaceId, taskIds);
   const taskById = useMemo(() => new Map(mine.map((t) => [t.id, t])), [mine]);
 
+  // You read "You" leading a line, "you" inside one and "Name (you)" in
+  // People (MOD-137).
   const nameOf = (id: string | null | undefined) => {
     const person = id ? byId(id) : null;
-    return person ? person.fullName || person.name : id ? "Former member" : "Someone";
+    return person ? person.name : id ? "Former member" : "Someone";
+  };
+  const sentenceNameOf = (id: string | null | undefined) => {
+    const person = id ? byId(id) : null;
+    return person ? assigneeInSentence(person) : id ? "a former member" : "someone";
+  };
+  const listNameOf = (id: string | null | undefined) => {
+    const person = id ? byId(id) : null;
+    return person ? assigneeListName(person) : id ? "Former member" : "Someone";
   };
   const doneLine = `Done this month · ${doneThisMonth}${
     monthSeconds && monthSeconds > 0 ? ` · ${formatDurationSeconds(monthSeconds)}` : ""
@@ -449,7 +460,7 @@ function ProjectOverview({
                 className="flex min-h-(--ctrl-h-sm) items-center gap-2 px-1 font-sans text-base"
               >
                 <AssigneeAvatar assignee={byId(p.userId)} assigneeId={p.userId} size="icon" />
-                <span className="min-w-0 flex-1 break-words">{nameOf(p.userId)}</span>
+                <span className="min-w-0 flex-1 break-words">{listNameOf(p.userId)}</span>
                 {p.lead ? (
                   <span className="shrink-0 text-xs text-muted-foreground">Lead</span>
                 ) : null}
@@ -472,7 +483,7 @@ function ProjectOverview({
               <li key={w.task.id}>
                 <OverviewTaskButton task={w.task} onOpen={onOpenTask}>
                   <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                    {waitingWho(w.entries[0], nameOf)}
+                    {waitingWho(w.entries[0], sentenceNameOf)}
                     {w.entries.length > 1 ? ` +${w.entries.length - 1}` : ""} · {formatDay(w.since)}
                   </span>
                 </OverviewTaskButton>

@@ -26,6 +26,7 @@ import {
 } from "../../../../components/ui/select";
 import { Textarea } from "../../../../components/ui/textarea";
 import { cn } from "../../../../lib/utils";
+import { assigneeInSentence } from "../../assignee-options";
 import { useAssignees } from "../../assignees";
 import type { Bucket, PriorityLevel } from "../../model";
 import {
@@ -176,11 +177,12 @@ function TaskLine({
       />
       {person ? (
         <span className="flex shrink-0 items-center gap-0.5 font-sans text-xs text-muted-foreground">
-          {person.fullName || person.name}
+          {/* "You" as the value, "Unassign you" (MOD-137). */}
+          {person.name}
           {!disabled ? (
             <IconButton
               icon={X}
-              label={`Unassign ${person.fullName || person.name}`}
+              label={`Unassign ${assigneeInSentence(person)}`}
               tooltip={null}
               onClick={() => onPatch({ assignee: null })}
             />

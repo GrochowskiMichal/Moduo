@@ -6,7 +6,7 @@ import { rest, runTag, type Session, signIn, signInPage, stackKeys } from "./sup
  * Tasks v3 TV-U17 · "role question and welcome once" (AC2–AC7 defaults,
  * AC11.1), on the real app against the local stack: a new person who owns an
  * empty workspace gets the role question, then Tasks' welcome with Learn more
- * / Explore on my own; the role sets the first view and the rows; their Inbox
+ * / Explore on your own; the role sets the first view and the rows; their Inbox
  * holds three teaching tasks; the welcome shows once per person, not per
  * device, and reopens from the sidebar's ⋯ and from Help. A PM's answer adds
  * the Project kickoff starter. Run it like the other Tasks specs:
@@ -115,7 +115,7 @@ test("a new person: the role question, the welcome once, teaching tasks, reopen"
   });
   await page.getByRole("button", { name: /^Software/ }).click();
   await expect(page.getByRole("heading", { name: "Welcome to Tasks" })).toBeVisible();
-  await expect(welcome(page).getByRole("button", { name: "Explore on my own" })).toBeVisible();
+  await expect(welcome(page).getByRole("button", { name: "Explore on your own" })).toBeVisible();
 
   // ── Learn more: three steps, Back / Next, dots ───────────────────────────
   await welcome(page).getByRole("button", { name: "Learn more" }).click();
@@ -165,7 +165,7 @@ test("a new person: the role question, the welcome once, teaching tasks, reopen"
   await page.getByRole("button", { name: "Help" }).click();
   await page.getByRole("menuitem", { name: "What’s in Tasks" }).click();
   await expect(page.getByRole("heading", { name: "Welcome to Tasks" })).toBeVisible();
-  await welcome(page).getByRole("button", { name: "Explore on my own" }).click();
+  await welcome(page).getByRole("button", { name: "Explore on your own" }).click();
   await expect(welcome(page)).toHaveCount(0);
 });
 
@@ -186,7 +186,7 @@ test("a PM's answer opens All (no project yet) and adds the Project kickoff star
     `project_templates?workspace_id=eq.${ws}&owner_id=eq.${newbie.user.id}&select=name,shared`,
   );
   expect(rows).toEqual([{ name: "Project kickoff", shared: false }]);
-  await welcome(page).getByRole("button", { name: "Explore on my own" }).click();
+  await welcome(page).getByRole("button", { name: "Explore on your own" }).click();
   // All, with no projects yet, says how to make one.
   await expect(page.getByText("No projects yet")).toBeVisible();
 });
