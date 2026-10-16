@@ -33,6 +33,18 @@ export type ChatChannel = {
   isDefault?: boolean;
   /** An announcement channel: only its managers post (CH23a). */
   managersOnly?: boolean;
+  /** When its people or managers last changed (CV-15): People and managers are re-read on it. */
+  rosterAt?: string | null;
+};
+
+/** A channel in Recently deleted (CV-15): restorable until `purgeAt`. */
+export type ChatDeletedChannel = {
+  id: string;
+  name: string;
+  isPrivate: boolean;
+  deletedAt: string;
+  deletedBy: string | null;
+  purgeAt: string;
 };
 
 /** The current user's own state in a channel (or another member's row). */
@@ -46,6 +58,8 @@ export type ChatMember = {
   /** The read mark: the last message that was on screen (v2; null before conversion). */
   lastReadId: string | null;
   joinedAt: string;
+  /** The server's stamp when the conversation's readers changed (deleted, restored; CV-15). */
+  accessAt?: string | null;
 };
 
 export type ChatReactions = Record<string, string[]>;
@@ -121,6 +135,8 @@ export type ChatPerson = {
   name: string;
   avatarUrl: string | null;
   role: string | null;
+  /** Their role is read-only (a custom read-only role): chat is view-only for them. */
+  readOnly?: boolean;
   /** No longer in the workspace (`chat_people.former`): their messages stay. */
   former?: boolean;
 };
@@ -141,6 +157,12 @@ export const CHAT_HISTORY_OPS = [
   "chat.leave",
   "chat.member_add",
   "chat.member_remove",
+  "chat.manager_add",
+  "chat.manager_remove",
+  "chat.announcement_switch",
+  "chat.channel_private",
+  "chat.channel_delete",
+  "chat.channel_restore",
   "chat.pin",
   "chat.message_edit",
   "chat.message_delete",
@@ -283,6 +305,17 @@ export type ChatRuntime = {
   leave(channelId: string): Promise<void>;
   addMembers(args: { channelId: string; userIds: string[] }): Promise<number>;
   removeMember(args: { channelId: string; userId: string }): Promise<void>;
+  /** Make someone in the channel a manager, or not (the last manager stays). */
+  setManager(args: { channelId: string; userId: string; on: boolean }): Promise<void>;
+  /** The announcement switch: only managers post (CH23a). */
+  setAnnouncement(args: { channelId: string; on: boolean }): Promise<ChatChannel>;
+  /** Public → private, one way (CH59). */
+  makePrivate(channelId: string): Promise<ChatChannel>;
+  /** To Recently deleted for 30 days (CH62). */
+  deleteChannel(channelId: string): Promise<void>;
+  restoreChannel(channelId: string): Promise<ChatChannel>;
+  /** The deleted channels you may restore, newest first. */
+  recentlyDeleted(workspaceId: string): Promise<ChatDeletedChannel[]>;
   setPrefs(args: {
     channelId: string;
     notifyLevel?: ChatNotifyLevel;

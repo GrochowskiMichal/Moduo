@@ -96,6 +96,7 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_message_refs",
   // CV-3: the chat store's access check and its people.
   "chat_people",
+  "chat_recently_deleted",
   "chat_sync_ids",
   "chat_unread_counts",
   "chat_workspace_enabled",
