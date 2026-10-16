@@ -324,7 +324,7 @@ function Toggle({
 }
 
 /** Chips for who's picked, and a field that finds people by name (↵ adds the first). */
-function PeoplePicker({
+export function PeoplePicker({
   id,
   label,
   people,

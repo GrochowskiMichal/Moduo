@@ -3,10 +3,13 @@
 // Linked to (CV-13's chip; empty until then) · People (with presence; the
 // status line is CV-17's) · Your notifications (Notify me, Pin to sidebar) ·
 // Reply chains (CV-12) · Decisions (CV-14) · Pinned · then the quiet History
-// of every change (AC15.5) and the conversation's own actions (Archive for
-// managers, Leave). A viewer gets the same view without what they can't do.
+// of every change (AC15.5) and the conversation's own actions (Leave).
+// "As a manager" (CV-15) adds Manager labels and + in People, each person's
+// manager / remove actions, and the Channel settings block (the announcement
+// switch, Private one way, Name and topic, Archive, Delete). A viewer gets the
+// same view without what they can't do.
 
-import { Pin } from "lucide-react";
+import { MoreHorizontal, Pin, Plus } from "lucide-react";
 import type * as React from "react";
 import { useState } from "react";
 
@@ -14,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -53,6 +57,21 @@ export type DetailsViewProps = {
   history: readonly ChatHistoryEntry[] | null;
   /** Archive and unarchive (a manager or an admin, while the plan allows writing). */
   canArchive: boolean;
+  /** The channel's manager rows (null while they load). */
+  managers?: readonly string[] | null;
+  /** You manage it in effect (a manager or an admin) and may write: the manager's controls. */
+  canManage?: boolean;
+  /** + in People: managers for a private channel, anyone who posts for a public one. */
+  canAddPeople?: boolean;
+  onAddPeople?: () => void;
+  onRemovePerson?: (userId: string) => void;
+  onSetManager?: (userId: string, on: boolean) => void;
+  onSetAnnouncement?: (on: boolean) => void;
+  /** Opens the one confirm (#33); it never goes back. */
+  onMakePrivate?: () => void;
+  onEditChannel?: () => void;
+  /** Opens the delete confirm (to Recently deleted). */
+  onDelete?: () => void;
   onNotify: (level: ChatNotifyLevel) => void;
   onPinToSidebar: (starred: boolean) => void;
   onArchive: (archived: boolean) => void;
@@ -71,6 +90,16 @@ export function DetailsView({
   pinned,
   history,
   canArchive,
+  managers = null,
+  canManage = false,
+  canAddPeople = false,
+  onAddPeople,
+  onRemovePerson,
+  onSetManager,
+  onSetAnnouncement,
+  onMakePrivate,
+  onEditChannel,
+  onDelete,
   onNotify,
   onPinToSidebar,
   onArchive,
@@ -81,6 +110,10 @@ export function DetailsView({
   const isChannel = channel.kind === "channel";
   const people = members ? detailsPeople(members, selfId, personOf, online) : null;
   const canLeave = isChannel && !!member && !channel.isDefault;
+  const managerSet = new Set(managers ?? []);
+  // Archive sits in Channel settings (frame 4); an archived channel shows no
+  // settings, so Unarchive stays in the footer.
+  const settingsShown = isChannel && canManage && !channel.archivedAt;
 
   return (
     <div
@@ -102,13 +135,30 @@ export function DetailsView({
         </Section>
       ) : null}
 
-      <Section title="People" count={people?.length}>
+      <Section
+        title="People"
+        count={people?.length}
+        action={
+          isChannel && canAddPeople && !channel.archivedAt && onAddPeople ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-(--ctrl-h-xs)"
+              aria-label="Add people"
+              onClick={onAddPeople}
+              data-slot="details-add-people"
+            >
+              <Plus aria-hidden className="size-icon-sm" />
+            </Button>
+          ) : null
+        }
+      >
         {people === null ? (
           <Quiet>Loading…</Quiet>
         ) : (
           <ul className="flex flex-col gap-px" data-slot="details-people">
             {people.map((p) => (
-              <li key={p.userId}>
+              <li key={p.userId} className="group/person relative">
                 <button
                   type="button"
                   onClick={() => onOpenPerson(p.userId)}
@@ -122,6 +172,14 @@ export function DetailsView({
                     online={p.online && !p.former}
                   />
                   <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
+                  {isChannel && managerSet.has(p.userId) ? (
+                    <span
+                      data-slot="person-manager"
+                      className="shrink-0 rounded-sm bg-muted px-1.5 text-2xs text-muted-foreground"
+                    >
+                      Manager
+                    </span>
+                  ) : null}
                   {/* The status line (presets, "clear after") arrives with CV-17. */}
                   <span
                     data-slot="person-status"
@@ -129,7 +187,19 @@ export function DetailsView({
                   >
                     {p.self ? "you" : p.former ? "former member" : null}
                   </span>
+                  {settingsShown && !p.former ? (
+                    <span aria-hidden className="w-5 shrink-0" />
+                  ) : null}
                 </button>
+                {settingsShown && !p.former ? (
+                  <PersonActions
+                    name={p.name}
+                    self={p.self}
+                    manager={managerSet.has(p.userId)}
+                    onSetManager={(on) => onSetManager?.(p.userId, on)}
+                    onRemove={p.self ? undefined : () => onRemovePerson?.(p.userId)}
+                  />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -168,6 +238,63 @@ export function DetailsView({
                 onCheckedChange={(on) => onPinToSidebar(on)}
               />
             </PropertyRow>
+          </div>
+        </Section>
+      ) : null}
+
+      {settingsShown ? (
+        <Section title="Channel settings" note="managers">
+          <div className="flex flex-col px-2" data-slot="details-channel-settings">
+            <SettingRow
+              id={`announce-${channel.id}`}
+              label="Only managers can post"
+              hint="For announcements; everyone else reads and reacts"
+            >
+              <Switch
+                id={`announce-${channel.id}`}
+                size="sm"
+                checked={!!channel.managersOnly}
+                onCheckedChange={(on) => onSetAnnouncement?.(on)}
+              />
+            </SettingRow>
+            <SettingRow
+              id={`private-${channel.id}`}
+              label="Private"
+              hint="Can only go from public to private, never back"
+            >
+              <Switch
+                id={`private-${channel.id}`}
+                size="sm"
+                checked={channel.isPrivate}
+                // One way: on stays on; General stays public.
+                disabled={channel.isPrivate || !!channel.isDefault}
+                onCheckedChange={(on) => {
+                  if (on) onMakePrivate?.();
+                }}
+              />
+            </SettingRow>
+            <PropertyRow label="Name and topic">
+              <Button variant="outline" size="sm" onClick={onEditChannel}>
+                Edit
+              </Button>
+            </PropertyRow>
+            {!channel.isDefault ? (
+              <div className="flex flex-wrap gap-2 pt-1.5" data-slot="details-danger">
+                <Button variant="outline" size="sm" onClick={() => onArchive(true)}>
+                  Archive channel
+                </Button>
+                {onDelete ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onDelete}
+                    className="text-destructive"
+                  >
+                    Delete channel
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </Section>
       ) : null}
@@ -211,9 +338,9 @@ export function DetailsView({
 
       <HistorySection history={history} selfId={selfId} personOf={personOf} />
 
-      {canArchive || canLeave ? (
+      {(canArchive && !settingsShown) || canLeave ? (
         <div className="flex flex-wrap gap-2 px-2">
-          {canArchive ? (
+          {canArchive && !settingsShown ? (
             <Button variant="outline" size="sm" onClick={() => onArchive(!channel.archivedAt)}>
               {channel.archivedAt ? "Unarchive channel" : "Archive channel"}
             </Button>
@@ -246,17 +373,88 @@ function excerpt(m: ChatMessage): string {
 function Section({
   title,
   count,
+  note,
+  action,
   children,
 }: {
   title: string;
   count?: number;
+  /** A quiet word after the title (frame 4: "Channel settings · managers"). */
+  note?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-0.5" aria-label={title}>
-      <GroupHeader as="h3" label={title} count={count} />
+      <GroupHeader as="h3" label={title} count={count} sub={note} persistentActions={action} />
       {children}
     </section>
+  );
+}
+
+/** A switch row with its explanation under the label (frame 4's setrow). */
+function SettingRow({
+  id,
+  label,
+  hint,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-(--row-h) items-center justify-between gap-2.5 py-1">
+      <label htmlFor={id} className="flex min-w-0 flex-col text-sm text-foreground">
+        {label}
+        <span className="text-xs text-subtle-foreground">{hint}</span>
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/** A person's actions for a manager: make or unmake a manager, remove them. */
+function PersonActions({
+  name,
+  self,
+  manager,
+  onSetManager,
+  onRemove,
+}: {
+  name: string;
+  self: boolean;
+  manager: boolean;
+  onSetManager: (on: boolean) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${name}: options`}
+          className={cn(
+            "absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground opacity-0 outline-none",
+            "transition-opacity duration-(--motion-fade) ease-(--ease-out)",
+            "group-hover/person:opacity-100 hover:bg-state-active hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:opacity-100",
+          )}
+        >
+          <MoreHorizontal className="size-icon-sm" aria-hidden />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-48">
+        <DropdownMenuItem onSelect={() => onSetManager(!manager)}>
+          {manager ? (self ? "Stop managing" : "Remove as manager") : "Make manager"}
+        </DropdownMenuItem>
+        {onRemove ? (
+          <DropdownMenuItem variant="destructive" onSelect={onRemove}>
+            Remove from channel
+          </DropdownMenuItem>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

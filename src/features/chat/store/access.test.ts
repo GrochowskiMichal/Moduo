@@ -147,6 +147,27 @@ describe("losing access without an event", () => {
     expect(store.rowById(uuid(99_999))).toBeUndefined();
   });
 
+  it("a membership row the server touched when the conversation was deleted runs the check (CV-15)", async () => {
+    const { server, store, live } = await world();
+    const before = store.getSnapshot().mine[DEL];
+    expect(before).toBeDefined();
+    server.readable.delete(DEL);
+    live.emit({ type: "member", member: { ...before!, accessAt: "2026-10-16T10:00:00.000Z" } });
+    await settle(30);
+    expect(store.holds(DEL)).toBe(false);
+    expect(store.getSnapshot().channels[DEL]).toBeUndefined();
+  });
+
+  it("a membership echo that changes nothing about access runs no check", async () => {
+    const { server, store, live } = await world();
+    const before = store.getSnapshot().mine[DEL];
+    server.readable.delete(DEL);
+    live.emit({ type: "member", member: { ...before!, starred: true } });
+    await settle(30);
+    // Still held: nothing said its readers changed (the 10-minute check would catch it).
+    expect(store.holds(DEL)).toBe(true);
+  });
+
   it("drops nothing on an answer that isn't whole", () => {
     expect(planAccess([PUB], [])).toBeNull();
     expect(

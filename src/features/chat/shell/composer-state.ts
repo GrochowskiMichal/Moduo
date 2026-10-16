@@ -26,8 +26,14 @@ export function composerLine(input: {
   ownerName: string | null;
   /** Your role may post in chat (a viewer may not). */
   canPost: boolean;
-  /** You manage this channel (announcements, unarchive). */
+  /** You manage this channel (unarchive): a manager in effect or an admin. */
   canManage: boolean;
+  /**
+   * You're one of its managers (in it, in a role that posts). An announcement
+   * channel takes posts only from them, not from an admin who isn't one
+   * (§12 footnote 1: an admin can make themselves one). Defaults to canManage.
+   */
+  isManager?: boolean;
 }): ComposerLine | null {
   const { channel, member, paused, canPost, canManage } = input;
   if (channel.archivedAt) return { kind: "archived", canUnarchive: canManage && !paused };
@@ -44,7 +50,7 @@ export function composerLine(input: {
     }
   }
   if (!member) return { kind: "join" };
-  if (channel.managersOnly && !canManage) return { kind: "announcement" };
+  if (channel.managersOnly && !(input.isManager ?? canManage)) return { kind: "announcement" };
   return null;
 }
 

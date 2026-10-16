@@ -11,6 +11,7 @@
 import {
   CheckSquare,
   Link2,
+  MessageSquareLock,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -37,6 +38,8 @@ export type MessageVerbs = {
   /** The full picker (CV-7b's seam). Absent: no ☺ button. */
   onAnyEmoji?: () => void;
   onReply: () => void;
+  /** An announcement channel you can't post in: a direct message to the author (CH50). */
+  onReplyPrivately?: () => void;
   onTask: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -102,6 +105,12 @@ function ActionsMenu({
           Reply
           <DropdownMenuShortcut>R</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {verbs.onReplyPrivately ? (
+          <DropdownMenuItem onSelect={verbs.onReplyPrivately}>
+            <MessageSquareLock aria-hidden />
+            Reply privately
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onSelect={verbs.onTask}>
           <CheckSquare aria-hidden />
           Make a task

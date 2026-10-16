@@ -42,6 +42,7 @@ import { timestampMicros } from "../../tasks/live";
 import type {
   ChatBodyFormat,
   ChatChannel,
+  ChatDeletedChannel,
   ChatError,
   ChatKey,
   ChatMember,
@@ -1464,6 +1465,9 @@ export class ChatStore {
         }
         // Your mark moved (another tab or device): the server recounts.
         if (before && before.lastReadId !== event.member.lastReadId) this.countsSoon();
+        // The conversation's readers changed (deleted, restored): check access.
+        if (before && (event.member.accessAt ?? null) !== (before.accessAt ?? null))
+          void this.checkAccess();
         return;
       }
       case "member-left":
@@ -1884,6 +1888,57 @@ export class ChatStore {
     this.channels.set(channel.id, channel);
     this.notify();
     this.countsSoon();
+  }
+
+  // ── Lifecycle (CV-15): every rule is the server's; these keep the copy in step ──
+
+  async addMembers(channelId: string, userIds: string[]): Promise<number> {
+    return this.transport.addMembers({ channelId, userIds });
+  }
+
+  async removeMember(channelId: string, userId: string): Promise<void> {
+    await this.transport.removeMember({ channelId, userId });
+  }
+
+  async setManager(channelId: string, userId: string, on: boolean): Promise<void> {
+    await this.transport.setManager({ channelId, userId, on });
+  }
+
+  async setAnnouncement(channelId: string, on: boolean): Promise<void> {
+    const channel = await this.transport.setAnnouncement({ channelId, on });
+    this.channels.set(channel.id, channel);
+    this.notify();
+  }
+
+  async makePrivate(channelId: string): Promise<void> {
+    const channel = await this.transport.makePrivate(channelId);
+    this.channels.set(channel.id, channel);
+    this.notify();
+  }
+
+  /** To Recently deleted: it leaves this copy at once (the server no longer lets anyone read it). */
+  async deleteChannel(channelId: string): Promise<void> {
+    await this.transport.deleteChannel(channelId);
+    this.forgetConversations([channelId]);
+    this.channels.delete(channelId);
+    this.mine.delete(channelId);
+    this.unread.delete(channelId);
+    this.metaDirty = true;
+    this.schedulePersist();
+    this.notify();
+  }
+
+  async restoreChannel(channelId: string): Promise<ChatChannel> {
+    const channel = await this.transport.restoreChannel(channelId);
+    this.channels.set(channel.id, channel);
+    await this.readSidebar();
+    this.notify();
+    void this.checkAccess();
+    return channel;
+  }
+
+  recentlyDeleted(): Promise<ChatDeletedChannel[]> {
+    return this.transport.recentlyDeleted(this.workspaceId);
   }
 
   async setPrefs(

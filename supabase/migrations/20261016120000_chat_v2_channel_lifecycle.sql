@@ -2,7 +2,8 @@
 -- Assumptions #13, #15, #25, #33). Provisional stamp: re-cut on apply day,
 -- chat's order kept (after CV-12 and CV-10).
 --
---   1. Columns: chat_channels.roster_at (who is in it or manages it changed;
+--   1. Columns: chat_members.access_at (the conversation's readers changed:
+--      the member's own row tells their copy to check access), chat_channels.roster_at (who is in it or manages it changed;
 --      readers re-read People and managers on it, not on every message),
 --      chat_channels.purged_at (the purge ran), chat_catchup.channel_name (an
 --      added / removed line names the channel even when you can no longer read it).
@@ -31,6 +32,10 @@ SET LOCAL lock_timeout = '5s';
 ALTER TABLE public.chat_channels ADD COLUMN IF NOT EXISTS roster_at timestamptz;
 ALTER TABLE public.chat_channels ADD COLUMN IF NOT EXISTS purged_at timestamptz;
 ALTER TABLE public.chat_catchup ADD COLUMN IF NOT EXISTS channel_name text;
+ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS access_at timestamptz;
+
+COMMENT ON COLUMN public.chat_members.access_at IS
+  'When the conversation''s readers changed under this member (deleted, restored, made private; CV-15): their copy checks access.';
 
 COMMENT ON COLUMN public.chat_channels.roster_at IS
   'When its people or its managers last changed (CV-15): readers re-read People and the managers on it.';
@@ -283,7 +288,7 @@ BEGIN
     PERFORM public.chat__close_channel_items(p_channel_id, v_outside);
   END IF;
   -- Those who left it hear about it on their own row (their copy checks access).
-  UPDATE public.chat_members SET updated_at = clock_timestamp()
+  UPDATE public.chat_members SET access_at = clock_timestamp()
    WHERE channel_id = p_channel_id AND left_at IS NOT NULL;
 
   PERFORM public.module_activity_log(v_channel.workspace_id, 'chat', 'chat_channel', p_channel_id,
@@ -323,7 +328,7 @@ BEGIN
    WHERE workspace_id = v_channel.workspace_id AND entity_type = 'chat_channel' AND entity_id = p_channel_id;
   -- The channel row no longer reaches its members (they can't read it): their
   -- own membership rows do, and their copies check access.
-  UPDATE public.chat_members SET updated_at = clock_timestamp()
+  UPDATE public.chat_members SET access_at = clock_timestamp()
    WHERE channel_id = p_channel_id AND left_at IS NULL;
 END;
 $function$;
@@ -372,7 +377,7 @@ BEGIN
   END;
   UPDATE public.entities SET deleted_at = NULL, label = v_name, updated_at = now()
    WHERE workspace_id = v_channel.workspace_id AND entity_type = 'chat_channel' AND entity_id = p_channel_id;
-  UPDATE public.chat_members SET updated_at = clock_timestamp()
+  UPDATE public.chat_members SET access_at = clock_timestamp()
    WHERE channel_id = p_channel_id AND left_at IS NULL;
   PERFORM public.module_activity_log(v_channel.workspace_id, 'chat', 'chat_channel', p_channel_id,
     'chat.channel_restore', '{}'::jsonb);
