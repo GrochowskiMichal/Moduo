@@ -27,6 +27,17 @@ SET LOCAL lock_timeout = '5s';
 ALTER TABLE public.user_statuses ADD COLUMN IF NOT EXISTS id uuid NOT NULL DEFAULT gen_random_uuid();
 ALTER TABLE public.chat_members ADD COLUMN IF NOT EXISTS id uuid NOT NULL DEFAULT gen_random_uuid();
 
+-- The default filled every existing row with its own id (a volatile default
+-- is evaluated per row); check before the ids become the keys.
+DO $$
+BEGIN
+  IF (SELECT count(*) <> count(DISTINCT id) FROM public.chat_members)
+     OR (SELECT count(*) <> count(DISTINCT id) FROM public.user_statuses) THEN
+    RAISE EXCEPTION 'CV-22: a row id repeats';
+  END IF;
+END;
+$$;
+
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint

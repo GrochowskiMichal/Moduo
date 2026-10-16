@@ -224,3 +224,32 @@ test("the key map: anywhere in Chat and the chain panel", async ({ page }) => {
   await chainBox.press("Escape");
   await expect(chain).toHaveCount(0);
 });
+
+// CV-22: a removed membership is an update of your own row (left_at,
+// removed_at), read under the table's rule; deletes carry only a row id. The
+// removed person's open Chat drops the conversation without a reload.
+test("your own removal arrives live", async ({ page }) => {
+  const made = await rpc<{ id: string } | Array<{ id: string }>>(
+    room.owner,
+    "chat_op_create_channel",
+    {
+      p_workspace_id: room.ws,
+      p_name: `Removal ${tag}`,
+      p_topic: "",
+      p_is_private: true,
+      p_member_ids: [room.member.user.id],
+      p_announcement: false,
+    },
+  );
+  const channelId = (Array.isArray(made) ? made[0] : made)?.id ?? "";
+  expect(channelId).toBeTruthy();
+  await signInPage(page, room.member, room.ws);
+  await page.goto(`/chat?c=${room.general}`);
+  const entry = page.getByRole("button", { name: new RegExp(`Removal ${tag}`) });
+  await expect(entry).toBeVisible({ timeout: 20_000 });
+  await rpc(room.owner, "chat_op_remove_member", {
+    p_channel_id: channelId,
+    p_user_id: room.member.user.id,
+  });
+  await expect(entry).toHaveCount(0, { timeout: 15_000 });
+});
