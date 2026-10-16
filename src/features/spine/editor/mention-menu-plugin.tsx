@@ -29,12 +29,6 @@ import {
   $isRangeSelection,
   $isTextNode,
   $setSelection,
-  COMMAND_PRIORITY_HIGH,
-  KEY_ARROW_DOWN_COMMAND,
-  KEY_ARROW_UP_COMMAND,
-  KEY_ENTER_COMMAND,
-  KEY_ESCAPE_COMMAND,
-  KEY_TAB_COMMAND,
   type LexicalEditor,
   type LexicalNode,
   type NodeKey,
@@ -60,6 +54,7 @@ import { canShowAsCard, referenceKind } from "../references/kinds";
 import { $createReferenceNode, markJustInserted } from "../references/reference-node";
 import type { ReferenceDisplay } from "../references/types";
 import { mentionCandidateKey } from "../ui/mention-picker";
+import { closeOnOutsidePointer, registerMenuKeys } from "./menu-keys";
 
 type MentionMenuState = {
   query: string;
@@ -556,65 +551,29 @@ export function MentionMenuPlugin({
     setSelectedIndex(0);
   }, [menu?.query]);
 
-  // ── keyboard ────────────────────────────────────────────────────────────────
+  // ── keyboard + dismissal: the one caret-menu regime (spine/editor/menu-keys) ─
+  useEffect(
+    () =>
+      registerMenuKeys(editor, {
+        isOpen: () => menuRef.current !== null && !hiddenRef.current,
+        count: () => candidatesRef.current.length,
+        index: () => selectedIndexRef.current,
+        setIndex: setSelectedIndex,
+        pick: (index) => {
+          const candidate = candidatesRef.current[index];
+          if (candidate) commitRef.current(candidate);
+        },
+        close: () => setMenu(null),
+      }),
+    [editor],
+  );
   useEffect(() => {
-    return editor.registerCommand(
-      KEY_ARROW_DOWN_COMMAND,
-      (event) => {
-        if (!menuRef.current || candidatesRef.current.length === 0) return false;
-        event?.preventDefault();
-        const next = (selectedIndexRef.current + 1) % candidatesRef.current.length;
-        setSelectedIndex(next);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
+    if (hidden) return;
+    return closeOnOutsidePointer(
+      (target) => menuBoxRef.current?.contains(target) ?? false,
+      () => setMenu(null),
     );
-  }, [editor]);
-
-  useEffect(() => {
-    return editor.registerCommand(
-      KEY_ARROW_UP_COMMAND,
-      (event) => {
-        if (!menuRef.current || candidatesRef.current.length === 0) return false;
-        event?.preventDefault();
-        const len = candidatesRef.current.length;
-        setSelectedIndex((selectedIndexRef.current - 1 + len) % len);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
-    );
-  }, [editor]);
-
-  useEffect(() => {
-    return editor.registerCommand(
-      KEY_ESCAPE_COMMAND,
-      (event) => {
-        if (!menuRef.current || hiddenRef.current) return false;
-        event?.preventDefault();
-        setMenu(null);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
-    );
-  }, [editor]);
-
-  // Enter and Tab pick (the grammar's research: "↵ or Tab picks, Esc keeps the text").
-  useEffect(() => {
-    const pick = (event: KeyboardEvent | null) => {
-      const active = candidatesRef.current;
-      if (!menuRef.current || active.length === 0) return false;
-      event?.preventDefault();
-      const candidate = active[selectedIndexRef.current] ?? active[0];
-      if (candidate) commitRef.current(candidate);
-      return true;
-    };
-    const offEnter = editor.registerCommand(KEY_ENTER_COMMAND, pick, COMMAND_PRIORITY_HIGH);
-    const offTab = editor.registerCommand(KEY_TAB_COMMAND, pick, COMMAND_PRIORITY_HIGH);
-    return () => {
-      offEnter();
-      offTab();
-    };
-  }, [editor]);
+  }, [hidden]);
 
   // `/date`'s calendar: the Popover primitive (the one floating surface, Esc
   // and outside clicks close it), anchored where the menu was.
