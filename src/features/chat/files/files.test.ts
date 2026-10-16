@@ -10,7 +10,7 @@ import { memoryChatCopy } from "../store/device-copy";
 import { ChatStore } from "../store/store";
 import { FakeChatServer, fakeLive, ME, settle, uuid, WS } from "../store/testing";
 import { ComposerFilesStore } from "./composer-files";
-import { type ChatFileGate, type ChatFilesState, filesState } from "./gate";
+import { type ChatFileGate, type ChatFilesState, filesState, uploadQueueGate } from "./gate";
 import { asAttachmentRecord } from "./message-files";
 import { capNotice, FEED_MEDIA, fileShape, fitMedia, takeFiles } from "./model";
 
@@ -233,6 +233,81 @@ describe("the composer's files", () => {
     expect(q.dismissed).toEqual(["q1"]);
     expect(store.take("c")).toBeNull();
   });
+
+  it("takes a finished file back out: the send waits until it's gone from the server", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("a.png")] });
+    q.finish("q1");
+    let done: () => void = () => {};
+    const removed: string[] = [];
+    const runtime = {
+      attachments: {
+        remove: (id: string) => {
+          removed.push(id);
+          return new Promise<void>((r) => {
+            done = r;
+          });
+        },
+      },
+    };
+    store.remove("c", "q1", runtime as never);
+    // The id came from the queue as begin answered, though the file finished.
+    expect(removed).toEqual(["a-q1"]);
+    expect(store.busy("c")).toBe(true);
+    done();
+    await settle();
+    expect(store.busy("c")).toBe(false);
+  });
+
+  it("doesn't count a stopped file against the 10", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const ten = Array.from({ length: 10 }, (_, i) => file(`f${i}.png`));
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: ten });
+    q.fail("q1");
+    q.fail("q2");
+    await store.add({
+      channelId: "c",
+      workspaceId: WS,
+      userId: ME,
+      files: [file("x.png"), file("y.png"), file("z.png")],
+    });
+    expect(q.added[1]!.names).toEqual(["x.png", "y.png"]);
+    expect(store.notice("c")).toBe("A message holds up to 10 files: 1 wasn't added");
+  });
+
+  it("Retry lets go of the stopped uploads only; Discard of all", () => {
+    const target = (id: string) => ({
+      workspaceId: WS,
+      entityType: "chat_message" as const,
+      entityId: id,
+      channelId: "c",
+    });
+    const items = [
+      { id: "u1", target: target("m"), state: "rejected" },
+      { id: "u2", target: target("m"), state: "uploading" },
+      { id: "u3", target: target("other"), state: "failed" },
+    ] as unknown as UploadView[];
+    const dismissed: string[] = [];
+    const gate = uploadQueueGate({
+      getSnapshot: () => ({ items, almostFull: {} }) as never,
+      subscribe: () => () => {},
+      onUploaded: () => () => {},
+      dismiss: (id: string) => dismissed.push(id),
+      hasRestored: () => true,
+    } as never);
+    gate.release("m", "stopped");
+    expect(dismissed).toEqual(["u1"]);
+    gate.release("m");
+    expect(dismissed).toEqual(["u1", "u1", "u2"]);
+  });
 });
 
 describe("a send with files waits for them (upload first, send after)", () => {
@@ -252,7 +327,11 @@ describe("a send with files waits for them (upload first, send after)", () => {
         listeners.add(fn);
         return () => listeners.delete(fn);
       },
-      release: (id) => released.push(id),
+      // The stopped uploads go; with nothing else moving, the message is ready.
+      release: (id) => {
+        released.push(id);
+        state.set(id, "ready");
+      },
     };
     const ping = () => {
       for (const fn of listeners) fn();

@@ -569,7 +569,13 @@ export class ChatStore {
       document.addEventListener("visibilitychange", this.onVisibility);
     }
     // CV-9: a send waiting on its files goes once they're up.
-    this.stopFiles = this.files?.subscribe(() => void this.drain()) ?? null;
+    // Only while such a send waits, and never past the offline backoff: the
+    // queue repaints many times a second while anything uploads.
+    this.stopFiles =
+      this.files?.subscribe(() => {
+        if (this.offline || !this.outbox.some((e) => e.files && !e.failed)) return;
+        void this.drain();
+      }) ?? null;
     this.booting = this.boot();
   }
 
@@ -1657,9 +1663,9 @@ export class ChatStore {
     if (!entry?.failed) return;
     delete entry.failed;
     if (entry.files && this.files?.state(entry.id) === "failed") {
-      // A file stopped: it goes with the files that made it.
-      this.files.release(entry.id);
-      delete entry.files;
+      // A file stopped: it goes with the files that made it (and waits for
+      // any still on their way).
+      this.files.release(entry.id, "stopped");
     }
     this.touch(entry.channelId);
     this.metaDirty = true;

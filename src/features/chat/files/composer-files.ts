@@ -75,19 +75,28 @@ export class ComposerFilesStore {
       if (!rec || target.entityType !== "chat_message") return;
       for (const d of this.drafts.values()) {
         if (d.messageId !== target.entityId) continue;
-        const e = d.entries.find((x) => !x.attachmentId && x.fileName === rec.fileName);
+        // The queue announces each id as begin answers (captured above); this
+        // is a fallback, and only for a name no other file here shares.
+        const open = d.entries.filter((x) => !x.attachmentId && x.fileName === rec.fileName);
+        const e = open.length === 1 ? open[0] : undefined;
         if (e) e.attachmentId = rec.id;
       }
     });
   }
 
+  /** Queue key → server id, for chat uploads, kept even before the composer
+   *  holds the key (a batch's first file can finish while the rest prepare). */
+  private known = new Map<string, string>();
+
   private capture() {
-    const items = this.queue().getSnapshot().items;
+    for (const item of this.queue().getSnapshot().items) {
+      if (item.target.entityType === "chat_message" && item.attachmentId) {
+        this.known.set(item.id, item.attachmentId);
+      }
+    }
     for (const d of this.drafts.values()) {
       for (const e of d.entries) {
-        if (e.attachmentId) continue;
-        const item = items.find((i) => i.id === e.key);
-        if (item?.attachmentId) e.attachmentId = item.attachmentId;
+        if (!e.attachmentId) e.attachmentId = this.known.get(e.key) ?? null;
       }
     }
   }
@@ -193,7 +202,9 @@ export class ComposerFilesStore {
   }): Promise<void> {
     this.watch();
     const d = this.draft(args.channelId);
-    const current = this.files(args.channelId).length + d.adding;
+    // A file that stopped never goes: it doesn't take a place.
+    const current =
+      this.files(args.channelId).filter((f) => f.state !== "failed").length + d.adding;
     const { take, refused } = takeFiles(current, args.files.length);
     d.notice = capNotice(refused);
     const picked = args.files.slice(0, take);
@@ -228,7 +239,7 @@ export class ComposerFilesStore {
             URL.createObjectURL
               ? URL.createObjectURL(file)
               : null,
-          attachmentId: null,
+          attachmentId: this.known.get(key) ?? null,
         });
       });
     } finally {
@@ -244,12 +255,24 @@ export class ComposerFilesStore {
     if (!d || i < 0) return;
     const [entry] = d.entries.splice(i, 1);
     if (!entry) return;
+    this.capture();
+    entry.attachmentId ??= this.known.get(key) ?? null;
+    this.known.delete(key);
     const inQueue = this.queue()
       .getSnapshot()
       .items.some((item) => item.id === key);
     if (inQueue) this.queue().dismiss(key);
-    else if (entry.attachmentId)
-      void runtime?.attachments.remove(entry.attachmentId).catch(() => {});
+    else if (entry.attachmentId && runtime) {
+      // The send waits until the file is out (else it would still go).
+      d.adding += 1;
+      void runtime.attachments
+        .remove(entry.attachmentId)
+        .catch(() => {})
+        .finally(() => {
+          d.adding -= 1;
+          this.emit();
+        });
+    }
     release(entry);
     d.notice = null;
     this.emit();
@@ -267,7 +290,10 @@ export class ComposerFilesStore {
     const going = files.filter((f) => f.state !== "failed");
     for (const f of files) if (f.state === "failed") this.queue().dismiss(f.key);
     const out = going.length > 0 ? { id: d.messageId, files: going.length } : null;
-    for (const e of d.entries) release(e);
+    for (const e of d.entries) {
+      release(e);
+      this.known.delete(e.key);
+    }
     this.drafts.delete(channelId);
     this.emit();
     return out;

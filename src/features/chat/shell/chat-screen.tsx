@@ -1085,6 +1085,8 @@ export function ChatScreen({
                 onSend={(body) => {
                   if (!store) return false;
                   // CV-9: upload first, send after: the files went up under this id.
+                  const going = composerFiles?.files.some((f) => f.state !== "failed");
+                  if (!body.trim() && !going) return false;
                   const withFiles = composerFiles?.take() ?? null;
                   if (!body.trim() && !withFiles) return false;
                   const replyRoot = replyingTo ? (replyingTo.parentId ?? replyingTo.id) : null;

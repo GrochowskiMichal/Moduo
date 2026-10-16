@@ -22,6 +22,8 @@ import { fileShape, fitMedia } from "./model";
 
 // ── Reading: one request per burst of rows, cached by message ───────────────
 
+const RETRY_MS = 5_000;
+
 type Cache = {
   files: Map<string, ChatFile[]>;
   wanted: Set<string>;
@@ -50,7 +52,14 @@ function request(chat: ChatRuntime, messageId: string) {
     const ids = [...c.wanted];
     c.wanted.clear();
     void chat.messageFiles?.(ids).then((res) => {
-      if (res.error) return; // asked again when the row shows next
+      if (res.error) {
+        // Ask again in a moment while a row still shows them.
+        setTimeout(() => {
+          if (c.listeners.size === 0) return;
+          for (const id of ids) request(chat, id);
+        }, RETRY_MS);
+        return;
+      }
       const byMessage = new Map<string, ChatFile[]>(ids.map((id) => [id, []]));
       for (const f of res.data) byMessage.get(f.messageId)?.push(f);
       for (const [id, files] of byMessage) c.files.set(id, files);
@@ -92,21 +101,31 @@ export function useSignedLinks(
   ttlSeconds: number,
 ): ReadonlyMap<string, string> | null {
   const key = paths.join("\n");
-  const [links, setLinks] = useState<{ key: string; map: ReadonlyMap<string, string> } | null>(
-    null,
-  );
+  const [links, setLinks] = useState<{
+    key: string;
+    map: ReadonlyMap<string, string>;
+    round: number;
+  } | null>(null);
+  // Re-signed a minute before the links expire (signed-urls.ts reuses them
+  // until then), so a conversation left open keeps loading its pictures.
+  const [round, setRound] = useState(0);
   useEffect(() => {
     if (!runtime || !key) return;
     let live = true;
     void signPaths(runtime, key.split("\n"), ttlSeconds)
       .then((map) => {
-        if (live) setLinks({ key, map });
+        if (live) setLinks({ key, map, round });
       })
       .catch(() => {});
+    const again = setTimeout(
+      () => setRound((r) => r + 1),
+      Math.max(30_000, ttlSeconds * 1000 - 60_000),
+    );
     return () => {
       live = false;
+      clearTimeout(again);
     };
-  }, [runtime, key, ttlSeconds]);
+  }, [runtime, key, ttlSeconds, round]);
   return links?.key === key ? links.map : null;
 }
 
@@ -214,6 +233,7 @@ function SentFiles({ message, runtime }: { message: ChatMessage; runtime: ModuoR
           onIndexChange={setOpen}
           canEdit={false}
           onDelete={() => {}}
+          originalTtlSeconds={CHAT_FILE_LINK_TTL_SECONDS.original}
         />
       ) : null}
     </div>

@@ -654,6 +654,9 @@ export class UploadQueue {
         // The task is on the server: from here "gone" means gone.
         delete item.awaitTask;
         await this.save(item);
+        // Say so at once (not on the next progress repaint): a chat composer
+        // keeps this id to take the file back out after it finished (CV-9).
+        this.emit();
       }
       if (ctrl.signal.aborted) throw new DOMException("aborted", "AbortError");
       if (!item.originalSent) {

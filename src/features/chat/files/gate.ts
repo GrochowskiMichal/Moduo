@@ -17,8 +17,11 @@ export type ChatFileGate = {
   state(messageId: string): ChatFilesState;
   /** Something about the uploads changed: ask again. */
   subscribe(fn: () => void): () => void;
-  /** The message goes without what's left of its uploads (Retry after a failed file, or Discard). */
-  release(messageId: string): void;
+  /**
+   * Let go of a message's uploads: the stopped ones only (Retry after a failed
+   * file: the rest keep going and the message waits for them), or all (Discard).
+   */
+  release(messageId: string, only?: "stopped"): void;
 };
 
 /** The state of one message's uploads, from the queue's items. */
@@ -53,11 +56,13 @@ export function uploadQueueGate(queue: QueueLike): ChatFileGate {
         b();
       };
     },
-    release(messageId) {
+    release(messageId, only) {
       for (const item of queue.getSnapshot().items) {
-        if (item.target.entityType === "chat_message" && item.target.entityId === messageId) {
-          queue.dismiss(item.id);
+        if (item.target.entityType !== "chat_message" || item.target.entityId !== messageId) {
+          continue;
         }
+        if (only === "stopped" && item.state !== "failed" && item.state !== "rejected") continue;
+        queue.dismiss(item.id);
       }
     },
   };

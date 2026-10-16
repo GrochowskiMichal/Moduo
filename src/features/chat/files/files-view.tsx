@@ -139,6 +139,7 @@ export function FilesView({
           onIndexChange={setOpen}
           canEdit={false}
           onDelete={() => {}}
+          originalTtlSeconds={CHAT_FILE_LINK_TTL_SECONDS.original}
         />
       ) : null}
     </div>
