@@ -245,9 +245,17 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
         const needs = [...lanes].filter((lane) => lane !== id && lane !== `${id}@view`).sort();
         expect(needs, `${file}: ${tool.name}`).toEqual([...mcpToolNeeds(tool.name)].sort());
       }
-      // Helpers above the tools (chat's plan check) must not hit a key lane.
+      // Helpers above the tools (chat's plan check) must not hit a key lane,
+      // unless the helper checks that lane itself and skips the call without
+      // it: a best-effort extra, like the op-side BEST_EFFORT above (tasks'
+      // linkDescribed links a description's references only with Links at
+      // Edit, call #15). Without that lane the key just gets less.
       for (const m of preamble.matchAll(RPC_CALL)) {
-        expect([...keyLanes(m[1], bodies)], `${file}: helper call to ${m[1]}`).toEqual([]);
+        const ungated = [...keyLanes(m[1], bodies)].filter((lane) => {
+          const [module, level = "edit"] = lane.split("@");
+          return !preamble.includes(`keyScopeAllows(ctx.key.scopes, "${module}", "${level}")`);
+        });
+        expect(ungated, `${file}: helper call to ${m[1]}`).toEqual([]);
       }
     }
   });
