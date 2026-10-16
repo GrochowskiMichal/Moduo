@@ -91,7 +91,6 @@ describe("global.css scrollbars (DS-1)", () => {
       "src/features/notes/ui/note-editor.tsx",
       "src/features/email/ui/email-thread-list.tsx",
       "src/features/contacts/ui/contact-hub.tsx",
-      "src/features/chat/ui/message-list.tsx",
     ]) {
       expect({ rel, gutter: (await read(rel)).includes("pane-scroll") }).toEqual({
         rel,

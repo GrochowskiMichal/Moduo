@@ -13,14 +13,14 @@ function Avatar({
 }: React.ComponentProps<typeof AvatarPrimitive.Root> & {
   /** `icon` sits on the icon rung (`--icon`, density-scaled): an avatar
    * inline with 16 px icons, e.g. a task row's assignee. */
-  size?: "default" | "sm" | "lg" | "icon";
+  size?: "default" | "sm" | "lg" | "icon" | "feed";
 }) {
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
       data-size={size}
       className={cn(
-        "group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-avatar select-none data-[size=lg]:size-10 data-[size=sm]:size-6 data-[size=icon]:size-icon",
+        "group/avatar relative flex size-8 shrink-0 overflow-hidden rounded-avatar select-none data-[size=lg]:size-10 data-[size=sm]:size-6 data-[size=icon]:size-icon data-[size=feed]:size-(--avatar-feed)",
         className,
       )}
       {...props}
@@ -68,6 +68,68 @@ function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
       )}
       {...props}
     />
+  );
+}
+
+/** The presence shapes (chat v2 §10, AC11.1): one neutral badge for every
+ *  state, a sixth ("In a call") ready for Calls (§18). */
+type PresenceShape = "reachable" | "away" | "dnd" | "focusing" | "in_call" | "offline";
+
+const PRESENCE_WORDS: Record<PresenceShape, string> = {
+  reachable: "Online",
+  away: "Away",
+  dnd: "Do not disturb",
+  focusing: "Focusing",
+  in_call: "In a call",
+  offline: "",
+};
+
+/**
+ * Where you'd message someone, this says whether they're reachable now. Only
+ * green means one thing (reachable); everything else is grey and told apart
+ * by shape: an outline (away), a thick bar (do not disturb), a target
+ * (Focusing), a dot (in a call), nothing (offline). Sits on an avatar's
+ * corner inside a `relative` wrapper; `inline` draws it in a row of text.
+ * The state's words are its accessible name.
+ */
+function PresenceBadge({
+  state,
+  size = "sm",
+  inline = false,
+  className,
+  ...props
+}: Omit<React.ComponentProps<"span">, "children"> & {
+  state: PresenceShape;
+  /** `sm` beside an icon-rung avatar, `lg` on a large one. */
+  size?: "sm" | "lg";
+  inline?: boolean;
+}) {
+  if (state === "offline") return null;
+  return (
+    <span
+      data-slot="presence"
+      data-state={state}
+      role="img"
+      aria-label={PRESENCE_WORDS[state]}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full ring-2 ring-card",
+        inline ? "relative" : "absolute -right-0.5 -bottom-0.5",
+        size === "lg" ? "size-3" : "size-2.5",
+        state === "reachable" && "bg-presence-reachable",
+        (state === "dnd" || state === "in_call") && "bg-muted-foreground",
+        (state === "away" || state === "focusing") && "border-2 border-muted-foreground bg-card",
+        className,
+      )}
+      {...props}
+    >
+      {state === "dnd" ? (
+        <span className="h-0.5 w-3/5 rounded-full bg-card" aria-hidden />
+      ) : state === "focusing" ? (
+        <span className="size-1 rounded-full bg-muted-foreground" aria-hidden />
+      ) : state === "in_call" ? (
+        <span className="size-1 rounded-full bg-card" aria-hidden />
+      ) : null}
+    </span>
   );
 }
 
@@ -130,6 +192,8 @@ const personFill = cva(
         sm: "group-data-[size=sm]/avatar:text-2xs",
         default: "text-xs",
         lg: "text-sm",
+        // A feed's person (`--avatar-feed`: 32 / 28 / 24 by density).
+        feed: "group-data-[size=feed]/avatar:text-xs",
       },
     },
     defaultVariants: { size: "default" },
@@ -152,6 +216,8 @@ const identityFill = cva(
 );
 
 type IdentitySize = "icon" | "sm" | "default" | "lg";
+/** A person also has the feed rung: density-scaled, beside a message. */
+type PersonSize = IdentitySize | "feed";
 
 type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>, "children"> & {
   /** The person's name; `null` draws the empty "unassigned" ring. */
@@ -161,7 +227,7 @@ type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>,
   /** Their profile photo, when they have one. The initials show while it
    *  loads, and stay when it fails (Radix mounts the img only once loaded). */
   src?: string | null;
-  size?: IdentitySize;
+  size?: PersonSize;
 };
 
 /**
@@ -296,7 +362,7 @@ function TeamMark({
   );
 }
 
-export type { AvatarHue, PersonAvatarProps, TeamMarkProps };
+export type { AvatarHue, PersonAvatarProps, PresenceShape, TeamMarkProps };
 export {
   AppAvatar,
   AVATAR_HUES,
@@ -309,6 +375,7 @@ export {
   avatarHue,
   initialsOf,
   PersonAvatar,
+  PresenceBadge,
   TeamMark,
   teamLettersOf,
 };

@@ -16,8 +16,6 @@ const ROOT = process.cwd();
 const BAR_ALLOWLIST: Record<string, string> = {
   "src/features/calendar/ui/task-block-chip.tsx":
     "calendar focus edge: the leading progress edge of the block being focused",
-  "src/features/chat/ui/message-item.tsx":
-    "chat attention bar: marks a message that mentions you (status)",
 };
 
 async function sourceFiles(dir: string): Promise<string[]> {

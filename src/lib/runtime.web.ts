@@ -39,8 +39,8 @@ import {
   isOpenTask,
   normalizeAccessChangeResource,
   normalizeAttachmentStatus,
-  normalizeCommentReaction,
   normalizeContentAuthorKind,
+  normalizeReactionKey,
   normalizeTaskStatusCategory,
 } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -1015,9 +1015,13 @@ export const webRuntime: ModuoRuntime = {
           .eq("workspace_id", workspaceId)
           .is("revoked_at", null)
           .order("created_at", { ascending: false });
-      let { data, error } = await list(`${columns}, expires_at`);
-      // 42703 = expires_at isn't on this backend yet (migration 20261009210000
-      // not applied): list the keys without it rather than lose the whole list.
+      let { data, error } = await list(`${columns}, expires_at, include_private_chat`);
+      // 42703 = a newer column isn't on this backend yet (expires_at:
+      // 20261009210000; include_private_chat: CV-21's 20261017123000): list the
+      // keys without them rather than lose the whole list.
+      // 42501: the column is there but not yet readable by clients.
+      if (error?.code === "42703" || error?.code === "42501")
+        ({ data, error } = await list(`${columns}, expires_at`));
       if (error?.code === "42703") ({ data, error } = await list(columns));
       if (error) throw new Error(error.message);
       return ((data ?? []) as unknown as Array<Record<string, any>>).map((row) => ({
@@ -1030,6 +1034,7 @@ export const webRuntime: ModuoRuntime = {
         createdAt: row.created_at,
         lastUsedAt: row.last_used_at ?? null,
         expiresAt: row.expires_at ?? null,
+        includePrivateChat: row.include_private_chat === true,
       }));
     },
     async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
@@ -1052,8 +1057,33 @@ export const webRuntime: ModuoRuntime = {
         createdAt: row.created_at,
         lastUsedAt: null,
         expiresAt: row.expires_at ?? null,
+        includePrivateChat: false,
         secret: row.secret,
       };
+    },
+    async listMyChatKeys(workspaceId) {
+      const { data, error } = await supabaseClient.rpc("chat_my_keys", {
+        p_workspace_id: workspaceId,
+      });
+      // Not on this server yet (CV-21's migration): no switches to show.
+      if (error?.code === "PGRST202") return [];
+      if (error) throw new Error(error.message);
+      return ((data ?? []) as Array<{ id?: unknown; name?: unknown }>)
+        .filter((r) => typeof r.id === "string")
+        .map((r) => ({ id: r.id as string, name: typeof r.name === "string" ? r.name : "A key" }));
+    },
+    async setApiKeyPrivateChat(keyId, on) {
+      const { data, error } = await supabaseClient.rpc("workspace_api_keys_set_private_chat", {
+        p_key_id: keyId,
+        p_on: on,
+      });
+      if (error) {
+        if (error.code === "PGRST202") {
+          throw new Error("Private channels for keys aren't available on this server yet.");
+        }
+        throw new Error(error.message);
+      }
+      return data === true;
     },
     async setApiKeyScopes(keyId, scopes) {
       const { data, error } = await supabaseClient.rpc("workspace_api_keys_set_scopes", {
@@ -1764,7 +1794,9 @@ export const webRuntime: ModuoRuntime = {
           supabaseClient
             .from("attachments")
             .select(ATTACHMENT_COLUMNS, opts)
-            .eq("workspace_id", workspaceId),
+            .eq("workspace_id", workspaceId)
+            // Task files: a chat file is read with its conversation (CV-9).
+            .eq("entity_type", "task"),
         order: (q) => q.order("created_at").order("id"),
       });
       if (res.error) {
@@ -1807,6 +1839,8 @@ export const webRuntime: ModuoRuntime = {
         p_preview_mime: input.previewMime,
         p_width: input.width,
         p_height: input.height,
+        // CV-9: a chat file names its conversation (a task's call stays as it was).
+        ...(input.channelId ? { p_channel_id: input.channelId } : {}),
       });
       return attachmentOpResult(data, error);
     },
@@ -5096,7 +5130,7 @@ function reactionMarks(rows: readonly unknown[]): CommentReactionMark[] {
   for (const raw of rows) {
     if (!raw || typeof raw !== "object") continue;
     const row = raw as { user_id?: unknown; reaction?: unknown };
-    const reaction = normalizeCommentReaction(row.reaction);
+    const reaction = normalizeReactionKey(row.reaction);
     if (typeof row.user_id === "string" && reaction) out.push({ userId: row.user_id, reaction });
   }
   return out;

@@ -21,6 +21,7 @@ import {
 import { dispatchOpenCapture } from "./capture-shell";
 import { dispatchCreateNew } from "./create-events";
 import { dispatchOpenPalette } from "./global-command-palette";
+import { requestModuleSearch } from "./search-events";
 
 function BarButton({
   onClick,
@@ -148,7 +149,13 @@ function GlobalTools() {
       role="toolbar"
       aria-label="Global actions"
     >
-      <BarButton onClick={() => dispatchOpenPalette()} label="Search" hint={searchHint}>
+      <BarButton
+        onClick={() => {
+          if (!requestModuleSearch()) dispatchOpenPalette();
+        }}
+        label="Search"
+        hint={searchHint}
+      >
         <Search className="size-4" aria-hidden />
       </BarButton>
       <BarButton onClick={() => dispatchOpenCapture()} label="Quick capture" hint={captureHint}>

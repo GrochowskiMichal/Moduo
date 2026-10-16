@@ -6,6 +6,8 @@ import {
   deriveLinkKey,
   deriveLinkUniquenessKey,
   type EntityRef,
+  isChatEnd,
+  isChatOwnedLink,
   isLinkOrigin,
   isRelationKind,
   isSelfLink,
@@ -31,7 +33,7 @@ describe("relation kinds (AC1)", () => {
     expect(isRelationKind(42)).toBe(false);
   });
 
-  it("locks the exact alpha set of eight kinds", () => {
+  it("locks the exact set of nine kinds (conversation-of is chat's, CV-13)", () => {
     expect([...RELATION_KINDS]).toEqual([
       "references",
       "spawned-from",
@@ -41,6 +43,7 @@ describe("relation kinds (AC1)", () => {
       "works-at",
       "follow-up",
       "paid-by",
+      "conversation-of",
     ]);
     expect(DEFAULT_RELATION_KIND).toBe("references");
   });
@@ -49,6 +52,25 @@ describe("relation kinds (AC1)", () => {
     expect(coerceRelationKind("not-a-kind")).toBe("references");
     expect(coerceRelationKind(null)).toBe("references");
     expect(coerceRelationKind("blocks")).toBe("blocks");
+  });
+});
+
+describe("Chat's own links", () => {
+  it("a conversation and a message are chat ends; nothing else is", () => {
+    expect(isChatEnd("chat_channel")).toBe(true);
+    expect(isChatEnd("chat_message")).toBe(true);
+    expect(isChatEnd("task")).toBe(false);
+  });
+
+  it("a mention or an inline reference with a chat end is Chat's; other links aren't", () => {
+    const at = (sourceType: string, targetType: string, relationKind: string, origin: string) =>
+      isChatOwnedLink({ sourceType, targetType, relationKind, origin });
+    expect(at("chat_channel", "task", "mentions", "ref")).toBe(true);
+    expect(at("task", "chat_message", "mentions", "mention")).toBe(true);
+    expect(at("note", "chat_channel", "references", "ref")).toBe(true);
+    expect(at("task", "chat_message", "spawned-from", "manual")).toBe(false);
+    expect(at("task", "note", "mentions", "ref")).toBe(false);
+    expect(at("chat_channel", "bucket", "conversation-of", "manual")).toBe(true);
   });
 });
 

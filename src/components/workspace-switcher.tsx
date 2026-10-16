@@ -2,7 +2,10 @@ import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { WorkspaceMark } from "../features/workspaces/ui/workspace-mark";
 import { useEntitlement } from "../hooks/use-entitlement";
+import { useChatCounts } from "../lib/notices/chat-counts";
+import { setWorkspacePaused, usePausedWorkspaces } from "../lib/notices/pauses";
 import { formatShortcut, SHORTCUTS, useShortcut } from "../lib/shortcuts";
+import { useAuth } from "../providers/auth-provider";
 import { useWorkspace } from "../providers/workspace-provider";
 import { Button } from "./ui/button";
 import {
@@ -35,6 +38,11 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
     joinWorkspace,
   } = useWorkspace();
   const { allowed: canAddWorkspace } = useEntitlement("unlimited_workspaces");
+  const { userId } = useAuth();
+  // Each workspace's open Catch up items (CV-6b, spec §11 "Count").
+  const { byWorkspace: chatCounts } = useChatCounts();
+  // Your paused workspaces (CV-18).
+  const paused = usePausedWorkspaces(userId);
   const [open, setOpen] = useState(false);
   // The shortcut hook must mount before the early return so React's hook
   // order rule is respected. It becomes a no-op when the trigger is hidden
@@ -334,7 +342,22 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
                     >
                       {nameLabel}
                     </span>
+                    {(chatCounts[workspace.id] ?? 0) > 0 ? (
+                      <span
+                        className="shrink-0 text-xs tabular-nums text-muted-foreground"
+                        title="Waiting in Catch up"
+                      >
+                        {chatCounts[workspace.id]}
+                        <span className="sr-only"> waiting in Catch up</span>
+                      </span>
+                    ) : null}
                     <span className="flex shrink-0 items-center gap-1">
+                      <PauseToggle
+                        paused={paused.has(workspace.id)}
+                        onToggle={() =>
+                          void setWorkspacePaused(workspace.id, !paused.has(workspace.id))
+                        }
+                      />
                       <span
                         role="button"
                         tabIndex={0}
@@ -457,5 +480,44 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
         onClose={() => setUpgradeModalOpen(false)}
       />
     </>
+  );
+}
+
+/**
+ * "Pause notifications from this workspace" (CV-18, spec §15, CH46): a paused
+ * workspace sends you no notification or email; its bell, Catch up and counts
+ * keep filling. No frame draws it: the row's icon buttons are the precedent.
+ */
+function PauseToggle({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
+  const label = paused
+    ? "Resume notifications from this workspace"
+    : "Pause notifications from this workspace";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="button"
+          tabIndex={0}
+          aria-pressed={paused}
+          aria-label={label}
+          className={`flex h-7 w-7 items-center justify-center rounded-md hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${paused ? "text-foreground" : "text-muted-foreground"}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle();
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            event.stopPropagation();
+            onToggle();
+          }}
+        >
+          <Icon name={paused ? "bell-off" : "bell"} size={13} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {paused ? "Notifications paused · Catch up still fills. Resume" : label}
+      </TooltipContent>
+    </Tooltip>
   );
 }

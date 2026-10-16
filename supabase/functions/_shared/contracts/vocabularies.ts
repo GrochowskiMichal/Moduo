@@ -369,7 +369,19 @@ export function normalizeRecurrenceMode(input: unknown): RecurrenceMode | undefi
 
 /** What a notice to a person's devices is about (TV-D12, `notice_deliveries.kind`):
  *  a reminder, or an agent's needs you · ready for review · failed (TV-D16). */
-export const NOTICE_DELIVERY_KINDS = ["reminder", "agent"] as const;
+export const NOTICE_DELIVERY_KINDS = [
+  "reminder",
+  "agent",
+  // Chat (CV-6a, specs/chat-v2.md §11): a direct message or an Every-message
+  // burst; @you / @Team / @channel; a reply in your chain; an announcement;
+  // Remind me coming due (CV-11); the summary after Focus (CV-18).
+  "chat_message",
+  "chat_mention",
+  "chat_reply",
+  "chat_announcement",
+  "chat_reminder",
+  "chat_focus_summary",
+] as const;
 export type NoticeDeliveryKind = (typeof NOTICE_DELIVERY_KINDS)[number];
 export const noticeDeliveryKindSchema = z.enum(NOTICE_DELIVERY_KINDS);
 export function isNoticeDeliveryKind(value: unknown): value is NoticeDeliveryKind {
@@ -381,6 +393,22 @@ export function parseNoticeDeliveryKind(input: unknown): SafeParseResult<NoticeD
 /** Lax read: an unknown kind reads as a reminder (a plain notice about a task). */
 export function normalizeNoticeDeliveryKind(input: unknown): NoticeDeliveryKind {
   return isNoticeDeliveryKind(input) ? input : "reminder";
+}
+
+/** Which kind of app a `user_clients` row is (CV-6a, "one device rings").
+ *  Postgres: `user_clients.surface` CHECK and `user_op_client_seen`. */
+export const CLIENT_SURFACES = ["desktop", "web"] as const;
+export type ClientSurface = (typeof CLIENT_SURFACES)[number];
+export const clientSurfaceSchema = z.enum(CLIENT_SURFACES);
+export function isClientSurface(value: unknown): value is ClientSurface {
+  return typeof value === "string" && (CLIENT_SURFACES as readonly string[]).includes(value);
+}
+export function parseClientSurface(input: unknown): SafeParseResult<ClientSurface> {
+  return parseOrError(clientSurfaceSchema, input);
+}
+/** Lax read: an unknown surface reads as the web app. */
+export function normalizeClientSurface(input: unknown): ClientSurface {
+  return isClientSurface(input) ? input : "web";
 }
 
 /** An agent session's state (TV-D16, spec §12, §Assumptions #15): working,
@@ -518,7 +546,16 @@ export const RELATION_KINDS = [
   "works-at", // person → company
   "follow-up", // a follow-up owed on an entity
   "paid-by", // an invoice/payment → the contact who paid it
+  // a chat channel → the project or client it is linked to (CV-13). Written only
+  // by chat_op_link_channel / _create_channel / _start_conversation; the link
+  // ops refuse it, and the mirror always matches chat_channels.linked_type/id.
+  "conversation-of",
 ] as const;
+/** The kinds a person (or the link ops) may set on a link: all but the ones a
+ *  module writes itself (`conversation-of`, chat's). */
+export const USER_RELATION_KINDS = RELATION_KINDS.filter(
+  (k): k is Exclude<RelationKind, "conversation-of"> => k !== "conversation-of",
+);
 export type RelationKind = (typeof RELATION_KINDS)[number];
 export const relationKindSchema = z.enum(RELATION_KINDS);
 export function isRelationKind(value: unknown): value is RelationKind {
@@ -679,6 +716,8 @@ export const CHAT_CAPABILITIES = [
   "mention_everyone",
   "post",
   "start_calls",
+  // CV-20: add a custom emoji (admins and members by default).
+  "add_emoji",
 ] as const;
 export type ChatCapability = (typeof CHAT_CAPABILITIES)[number];
 
@@ -789,7 +828,8 @@ export const waitlistStatusSchema = z.enum(WAITLIST_STATUSES);
 // ---------------------------------------------------------------------------
 // Transactional email — every kind of email Moduo sends (specs/transactional-
 // email.md T11). Defined in full up front so the TX blocks don't collide on
-// this file; the email_outbox CHECK is in 20261008160000_email_outbox.sql (TX-2). The order
+// this file; the email_outbox CHECK is in 20261008160000_email_outbox.sql (TX-2),
+// re-stated with chat_waiting by …_chat_v2_device_notices.sql (CV-6a). The order
 // follows the catalog (A1…E2), then the internal ops alert.
 // ---------------------------------------------------------------------------
 
@@ -816,6 +856,8 @@ export const EMAIL_KINDS = [
   "announcement",
   "build_update",
   "ops_alert",
+  // Chat (CV-6a): unread messages waiting after an hour away.
+  "chat_waiting",
 ] as const;
 export type EmailKind = (typeof EMAIL_KINDS)[number];
 export const emailKindSchema = z.enum(EMAIL_KINDS);
@@ -1030,6 +1072,24 @@ export function isChatChannelKind(value: unknown): value is ChatChannelKind {
   return typeof value === "string" && (CHAT_CHANNEL_KINDS as readonly string[]).includes(value);
 }
 
+/** What a channel links to (chat_channels.linked_type, CV-13; CHECK
+ *  chat_channels_linked_type_check in …_chat_v2_linked_channels). `bucket` is a
+ *  project; a client is a `company` or a `contact`. */
+export const CHAT_LINK_TARGETS = ["bucket", "company", "contact", "team"] as const;
+export type ChatLinkTarget = (typeof CHAT_LINK_TARGETS)[number];
+export const chatLinkTargetSchema = z.enum(CHAT_LINK_TARGETS);
+export function isChatLinkTarget(value: unknown): value is ChatLinkTarget {
+  return typeof value === "string" && (CHAT_LINK_TARGETS as readonly string[]).includes(value);
+}
+/** Read-side: anything unknown reads as no link. */
+export function normalizeChatLinkTarget(input: unknown): ChatLinkTarget | null {
+  return isChatLinkTarget(input) ? input : null;
+}
+/** Strict parse for write paths. */
+export function parseChatLinkTarget(input: unknown): SafeParseResult<ChatLinkTarget> {
+  return parseOrError(chatLinkTargetSchema, input);
+}
+
 export const CHAT_NOTIFY_LEVELS = ["all", "mentions", "none"] as const;
 export type ChatNotifyLevel = (typeof CHAT_NOTIFY_LEVELS)[number];
 export const chatNotifyLevelSchema = z.enum(CHAT_NOTIFY_LEVELS);
@@ -1045,10 +1105,119 @@ export function parseChatNotifyLevel(input: unknown): SafeParseResult<ChatNotify
   return parseOrError(chatNotifyLevelSchema, input);
 }
 
-/** Plans whose workspaces get chat (mirrors public.chat_workspace_enabled: rank ≥ duo). */
+/**
+ * The plan tiers that include chat: rank ≥ duo in public.plan_tier_rank (drift-gated).
+ * public.chat_workspace_enabled turns chat on for a workspace when its owner's tier is
+ * one of these OR a dated grant gives it one (TX-9b's plan_grant_effective_tier, CV-4).
+ * A grant is not a tier of its own and the client never sees it: `planHasChat` answers
+ * for one tier (a person's own plan); whether a workspace has chat is the server's
+ * answer (`ChatRuntime.isEnabled`).
+ */
 export const CHAT_PLAN_TIERS = ["duo", "team", "founder"] as const satisfies readonly PlanTier[];
 export function planHasChat(tier: unknown): boolean {
   return (CHAT_PLAN_TIERS as readonly string[]).includes(normalizePlanTier(tier));
+}
+
+// ---------------------------------------------------------------------------
+// Chat v2 (CV-1) — mirrors the CHECKs in …_chat_v2_foundation
+// (chat_messages.kind, chat_messages.event->>'type', chat_catchup.reason,
+// chat_catchup.done_how). Huddle event types join CHAT_EVENT_TYPES through the
+// Calls blocks' own expand migrations (spec Assumption #37).
+// ---------------------------------------------------------------------------
+
+/** A row of the stream: a message, or a quiet event line ("moved", CH30c). */
+export const CHAT_MESSAGE_KINDS = ["message", "event"] as const;
+export type ChatMessageKind = (typeof CHAT_MESSAGE_KINDS)[number];
+export const chatMessageKindSchema = z.enum(CHAT_MESSAGE_KINDS);
+export function isChatMessageKind(value: unknown): value is ChatMessageKind {
+  return typeof value === "string" && (CHAT_MESSAGE_KINDS as readonly string[]).includes(value);
+}
+/**
+ * Read-side: a row read without the column (an older cached copy) is a message;
+ * a kind this build doesn't know is skipped (null), never drawn as a message.
+ */
+export function normalizeChatMessageKind(input: unknown): ChatMessageKind | null {
+  if (input === undefined || input === null) return "message";
+  return isChatMessageKind(input) ? input : null;
+}
+export function parseChatMessageKind(input: unknown): SafeParseResult<ChatMessageKind> {
+  return parseOrError(chatMessageKindSchema, input);
+}
+
+/** What an event line says (`chat_messages.event.type`). */
+export const CHAT_EVENT_TYPES = ["moved_out", "moved_in"] as const;
+export type ChatEventType = (typeof CHAT_EVENT_TYPES)[number];
+export const chatEventTypeSchema = z.enum(CHAT_EVENT_TYPES);
+export function isChatEventType(value: unknown): value is ChatEventType {
+  return typeof value === "string" && (CHAT_EVENT_TYPES as readonly string[]).includes(value);
+}
+/** Read-side: an event this build doesn't know is skipped (null), never drawn as another. */
+export function normalizeChatEventType(input: unknown): ChatEventType | null {
+  return isChatEventType(input) ? input : null;
+}
+export function parseChatEventType(input: unknown): SafeParseResult<ChatEventType> {
+  return parseOrError(chatEventTypeSchema, input);
+}
+
+/** Why a Catch up item is addressed to you (`chat_catchup.reason`, CH8, CH38). */
+export const CHAT_CATCHUP_REASONS = [
+  "dm",
+  "mention",
+  "team_mention",
+  "everyone",
+  "reply",
+  "announcement",
+  "every_message",
+  "reminder",
+  "added",
+  "removed",
+  "level_reset",
+] as const;
+export type ChatCatchupReason = (typeof CHAT_CATCHUP_REASONS)[number];
+export const chatCatchupReasonSchema = z.enum(CHAT_CATCHUP_REASONS);
+export function isChatCatchupReason(value: unknown): value is ChatCatchupReason {
+  return typeof value === "string" && (CHAT_CATCHUP_REASONS as readonly string[]).includes(value);
+}
+/** Read-side: an item with a reason this build doesn't know is skipped (null). */
+export function normalizeChatCatchupReason(input: unknown): ChatCatchupReason | null {
+  return isChatCatchupReason(input) ? input : null;
+}
+export function parseChatCatchupReason(input: unknown): SafeParseResult<ChatCatchupReason> {
+  return parseOrError(chatCatchupReasonSchema, input);
+}
+
+/** How a Catch up item was done (`chat_catchup.done_how`). */
+export const CHAT_CATCHUP_DONE_HOW = ["done", "read", "bell", "closed"] as const;
+export type ChatCatchupDoneHow = (typeof CHAT_CATCHUP_DONE_HOW)[number];
+export const chatCatchupDoneHowSchema = z.enum(CHAT_CATCHUP_DONE_HOW);
+export function isChatCatchupDoneHow(value: unknown): value is ChatCatchupDoneHow {
+  return typeof value === "string" && (CHAT_CATCHUP_DONE_HOW as readonly string[]).includes(value);
+}
+/** Read-side: an item marked done in a way this build doesn't know is still done ("done"). */
+export function normalizeChatCatchupDoneHow(input: unknown): ChatCatchupDoneHow | null {
+  if (input === null || input === undefined) return null;
+  return isChatCatchupDoneHow(input) ? input : "done";
+}
+export function parseChatCatchupDoneHow(input: unknown): SafeParseResult<ChatCatchupDoneHow> {
+  return parseOrError(chatCatchupDoneHowSchema, input);
+}
+
+/** Why a `chat.mention` bell row reached you (its `payload.reason`, written by
+ *  chat__fan_out in …_chat_v2_catchup, CV-5): named in person, through a team
+ *  of yours, or `@channel`. No column holds it, so no CHECK; the drift gate
+ *  reads the fan-out instead. */
+export const CHAT_MENTION_REASONS = ["person", "team", "everyone"] as const;
+export type ChatMentionReason = (typeof CHAT_MENTION_REASONS)[number];
+export const chatMentionReasonSchema = z.enum(CHAT_MENTION_REASONS);
+export function isChatMentionReason(value: unknown): value is ChatMentionReason {
+  return typeof value === "string" && (CHAT_MENTION_REASONS as readonly string[]).includes(value);
+}
+/** Read-side: a v1 row has no reason, and an unknown one reads as an @you ("person"). */
+export function normalizeChatMentionReason(input: unknown): ChatMentionReason {
+  return isChatMentionReason(input) ? input : "person";
+}
+export function parseChatMentionReason(input: unknown): SafeParseResult<ChatMentionReason> {
+  return parseOrError(chatMentionReasonSchema, input);
 }
 
 // ---------------------------------------------------------------------------
@@ -1072,24 +1241,203 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 }
 
 // ---------------------------------------------------------------------------
-// Comment reactions (TV-U13, REPLAN 88) — mirrors comment_reactions.reaction's
-// CHECK and comments_op_react in 20261013100000_comment_reactions_edits. Six,
-// fixed, in this order: 👍 ✅ 👀 🙏 ❤️ 😄. Nobody adds their own, and a
-// reaction never notifies anyone.
+// Reactions (CV-7c; round-3 §2.8, Assumptions #18, #29) — one key for chat
+// messages, task and note comments and your quick row. Mirrors
+// public.reactions__key_ok(text) in 20261017108000_chat_v2_reactions: exactly
+// one standard emoji, 1–32 code points (≤ 128 bytes): a flag (two regional
+// indicators), a #/*/digit keycap, or one pictograph with an optional
+// variation selector, skin tone and tag sequence, joined to more of the same
+// only by U+200D. Every code point comes from REACTION_KEY_SET (the same
+// numbers as reactions__key_pattern(); the drift gate compares them), so no
+// letters, spaces, controls, invisible or direction marks, lone surrogates,
+// and never two emoji side by side. Or a custom emoji's `:name:` (CV-20,
+// CUSTOM_EMOJI_KEY_PATTERN = reactions__custom_key_pattern()): the key check
+// is the shape only; the ops take one only while it names a live emoji of
+// that workspace. A reaction never notifies.
 // ---------------------------------------------------------------------------
 
-export const COMMENT_REACTIONS = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"] as const;
-export type CommentReaction = (typeof COMMENT_REACTIONS)[number];
-export const commentReactionSchema = z.enum(COMMENT_REACTIONS);
-export function isCommentReaction(value: unknown): value is CommentReaction {
-  return typeof value === "string" && (COMMENT_REACTIONS as readonly string[]).includes(value);
+type CodeRange = number | readonly [number, number];
+
+/** The code points a key is built from, in decimal (as the SQL's chr()). */
+export const REACTION_KEY_SET = {
+  base: [
+    169, 174, 8252, 8265, 8482, 8505, [8596, 8618], [8986, 9215], 9410, [9642, 9726],
+    [9728, 10175], 10548, 10549, [11013, 11093], 12336, 12349, 12951, 12953,
+    [126976, 127461], [127488, 127994], [128000, 129791],
+  ],
+  vs: [65038, 65039],
+  skin: [[127995, 127999]],
+  tag: [[917536, 917630]],
+  tagEnd: 917631,
+  zwj: 8205,
+  keycap: 8419,
+  ri: [[127462, 127487]],
+  /** #, * and 0–9: a keycap's first code point. */
+  keycapBase: [35, 42, [48, 57]],
+  /**
+   * The pictographs that show as text unless U+FE0F follows (Unicode's
+   * Emoji_Presentation=No, read from emoji-test.txt 18.0: each code point
+   * written "x FE0F" in a fully-qualified sequence), less the keycap bases.
+   * Emojibase writes these with U+FE0F and every other pictograph without.
+   */
+  textDefault: [
+    169, 174, 8252, 8265, 8482, 8505, [8596, 8601], [8617, 8618], 9000, 9167, [9197, 9199],
+    [9201, 9202], [9208, 9210], 9410, [9642, 9643], 9654, 9664, [9723, 9724], [9728, 9732],
+    9742, 9745, 9752, 9757, 9760, [9762, 9763], 9766, 9770, [9774, 9775], [9784, 9786], 9792,
+    9794, [9823, 9824], 9827, [9829, 9830], 9832, 9851, 9854, 9874, [9876, 9879], 9881,
+    [9883, 9884], 9888, 9895, [9904, 9905], 9928, 9935, 9937, 9939, 9961, [9968, 9969], 9972,
+    [9975, 9977], 9986, [9992, 9993], [9996, 9997], 9999, 10002, 10004, 10006, 10013, 10017,
+    [10035, 10036], 10052, 10055, [10083, 10084], 10145, [10548, 10549], [11013, 11015], 12336,
+    12349, 12951, 12953, [127344, 127345], [127358, 127359], 127490, 127543, 127777,
+    [127780, 127788], 127798, 127869, [127894, 127895], [127897, 127899], [127902, 127903],
+    [127947, 127950], [127956, 127967], 127987, 127989, 127991, 128063, 128065, 128253,
+    [128329, 128330], [128367, 128368], [128371, 128377], 128391, [128394, 128397], 128400,
+    128421, 128424, [128433, 128434], 128444, [128450, 128452], [128465, 128467],
+    [128476, 128478], 128481, 128483, 128488, 128495, 128499, 128506, 128715, [128717, 128719],
+    [128736, 128741], 128745, 128752, 128755,
+  ],
+} as const satisfies Record<string, CodeRange | readonly CodeRange[]>;
+
+const inRanges = (n: number, ranges: CodeRange | readonly CodeRange[]): boolean =>
+  (Array.isArray(ranges) ? ranges : [ranges]).some((r: CodeRange) =>
+    typeof r === "number" ? n === r : n >= r[0] && n <= r[1],
+  );
+
+/**
+ * Each code point as one ASCII letter, checked numerically (JavaScriptCore
+ * and V8 agree on numbers; astral character classes they don't always).
+ */
+function reactionClass(n: number): string {
+  const s = REACTION_KEY_SET;
+  if (inRanges(n, s.ri)) return "R";
+  if (inRanges(n, s.base)) return "B";
+  if (n === 65039) return "F";
+  if (n === 65038) return "V";
+  if (inRanges(n, s.skin)) return "S";
+  if (inRanges(n, s.tag)) return "T";
+  if (n === s.tagEnd) return "E";
+  if (n === s.zwj) return "Z";
+  if (n === s.keycap) return "K";
+  if (inRanges(n, s.keycapBase)) return "H";
+  return "?";
 }
-export function parseCommentReaction(input: unknown): SafeParseResult<CommentReaction> {
-  return parseOrError(commentReactionSchema, input);
+/** The grammar of reactions__key_pattern(), over reactionClass letters. */
+const ONE = "B[VF]?S?F?(?:T+E)?";
+const REACTION_KEY_GRAMMAR = new RegExp(`^(?:RR|HF?K|${ONE}(?:Z${ONE})*)$`);
+
+const needsVs16 = (n: number) =>
+  inRanges(n, REACTION_KEY_SET.textDefault) || inRanges(n, REACTION_KEY_SET.keycapBase);
+const isSkin = (n: number | undefined) => n !== undefined && inRanges(n, REACTION_KEY_SET.skin);
+
+/**
+ * One spelling per emoji, as Emojibase writes it (the same steps as the
+ * server's reactions__key_canonical): the text selector U+FE0E goes, a run of
+ * U+FE0F becomes one; U+FE0F goes before a skin tone and unless it follows a
+ * text-default code point; a
+ * text-default pictograph or keycap base gets U+FE0F unless one or a skin
+ * tone follows. So ❤ and ❤️ are one key, ✅ stays ✅, and ✅️ becomes ✅.
+ */
+export function canonicalReactionKey(key: string): string {
+  // A custom emoji's key is already its one spelling (its digits aren't keycaps).
+  if (CUSTOM_EMOJI_KEY_RE.test(key)) return key;
+  const cps = [...key]
+    .map((c) => c.codePointAt(0) ?? 0)
+    .filter((n) => n !== 65038)
+    .filter((n, i, all) => n !== 65039 || all[i - 1] !== 65039);
+  const out: number[] = [];
+  for (let i = 0; i < cps.length; i++) {
+    const n = cps[i];
+    const next = cps[i + 1];
+    if (n === 65039) {
+      const prev = i > 0 ? cps[i - 1] : undefined;
+      if (prev === undefined || !needsVs16(prev) || isSkin(next)) continue;
+      out.push(n);
+      continue;
+    }
+    out.push(n);
+    if (needsVs16(n) && next !== 65039 && !isSkin(next)) out.push(65039);
+  }
+  return String.fromCodePoint(...out);
 }
-/** Lax read: a reaction this build doesn't know is left out (null), never shown wrong. */
-export function normalizeCommentReaction(input: unknown): CommentReaction | null {
-  return isCommentReaction(input) ? input : null;
+
+/** Moduo's six quick reactions, in order (CH16a): your row when you set none. */
+export const DEFAULT_QUICK_REACTIONS = ["👍", "✅", "👀", "🙏", "❤️", "😄"] as const;
+/** At most this many kinds on one message or comment. */
+export const MAX_REACTION_KINDS = 20;
+/** At most this many in your quick row. */
+export const MAX_QUICK_REACTIONS = 6;
+const REACTION_KEY_MAX = 32;
+
+export type ReactionKey = string;
+
+// ---------------------------------------------------------------------------
+// Custom emoji (CV-20; spec §6, CH16b) — mirrors chat_custom_emoji's CHECKs,
+// the chat-emoji bucket and chat_op_custom_emoji_add in
+// 20261017122000_chat_v2_custom_emoji.sql. A name is 2–32 of a–z, 0–9, - and
+// _ with at least one letter (so every name also reads as `:name:` in text,
+// markup-v2's EMOJI_NAME_RE), unique per workspace among live emoji, never a
+// standard emoji's shortcode (the server's chat__emoji_name_reserved).
+// ---------------------------------------------------------------------------
+
+/** The name rule, as the SQL spells it (the drift gate compares them). */
+export const CUSTOM_EMOJI_NAME_PATTERN = "(?=[a-z0-9_-]*[a-z])[a-z0-9_-]{2,32}";
+const CUSTOM_EMOJI_NAME_RE = new RegExp(`^${CUSTOM_EMOJI_NAME_PATTERN}$`);
+/** A custom emoji's reaction key: its name between colons. */
+export const CUSTOM_EMOJI_KEY_PATTERN = `^:${CUSTOM_EMOJI_NAME_PATTERN}:$`;
+const CUSTOM_EMOJI_KEY_RE = new RegExp(CUSTOM_EMOJI_KEY_PATTERN);
+/** At most this many bytes per image (and per still frame). */
+export const CUSTOM_EMOJI_MAX_BYTES = 262_144;
+/** Shown and stored at most this many pixels a side. */
+export const CUSTOM_EMOJI_MAX_PX = 128;
+/** At most this many live custom emoji per workspace. */
+export const CUSTOM_EMOJI_PER_WORKSPACE = 500;
+/** What is stored (a still JPEG becomes a PNG before upload). Never SVG. */
+export const CUSTOM_EMOJI_MIMES = ["image/png", "image/gif", "image/webp"] as const;
+export type CustomEmojiMime = (typeof CUSTOM_EMOJI_MIMES)[number];
+export const customEmojiMimeSchema = z.enum(CUSTOM_EMOJI_MIMES);
+export function isCustomEmojiMime(value: unknown): value is CustomEmojiMime {
+  return typeof value === "string" && (CUSTOM_EMOJI_MIMES as readonly string[]).includes(value);
+}
+export function parseCustomEmojiMime(input: unknown): SafeParseResult<CustomEmojiMime> {
+  return parseOrError(customEmojiMimeSchema, input);
+}
+/** Lax read: a type this build doesn't know isn't drawn (null). */
+export function normalizeCustomEmojiMime(input: unknown): CustomEmojiMime | null {
+  return isCustomEmojiMime(input) ? input : null;
+}
+/** The extension each stored type is saved under (`<workspace>/<slot>.<ext>`). */
+export const CUSTOM_EMOJI_EXT: Record<CustomEmojiMime, string> = {
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+export function isCustomEmojiName(value: unknown): value is string {
+  return typeof value === "string" && CUSTOM_EMOJI_NAME_RE.test(value);
+}
+/** `:name:` → `name`, or null when the key isn't a custom emoji's. */
+export function customEmojiNameOf(key: string): string | null {
+  return CUSTOM_EMOJI_KEY_RE.test(key) ? key.slice(1, -1) : null;
+}
+
+/** The key check for writes; the server runs the same rule (it decides). */
+export function isReactionKey(value: unknown): value is ReactionKey {
+  if (typeof value !== "string") return false;
+  if (CUSTOM_EMOJI_KEY_RE.test(value)) return true;
+  const length = [...value].length; // code points, as Postgres counts them
+  if (length < 1 || length > REACTION_KEY_MAX) return false;
+  let classes = "";
+  for (const c of value) classes += reactionClass(c.codePointAt(0) ?? 0);
+  return REACTION_KEY_GRAMMAR.test(classes);
+}
+export const REACTION_KEY = z.string().refine(isReactionKey, { message: "A reaction is an emoji." });
+export function parseReactionKey(input: unknown): SafeParseResult<ReactionKey> {
+  return parseOrError(REACTION_KEY, input);
+}
+/** Read: a stored key shows only when it is a key (null otherwise), so nothing
+ *  else stored there is ever drawn as a reaction. The two checks accept the
+ *  same set, so a key the server took is never hidden. */
+export function normalizeReactionKey(input: unknown): ReactionKey | null {
+  return isReactionKey(input) ? input : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,8 +1581,10 @@ export type TaskViewFilterDimension =
 // bytes not confirmed yet; `ready` = finalize checked the stored size;
 // `failed` = finalize refused it (size mismatch, over the limit) and the daily
 // purge removes it. A deleted reason says what put the file in the trash:
-// the person (`user`), its task (`task`), or a bucket deleted with its tasks
-// (`bucket`, reserved for TV-U6). Previews are only ever these three formats.
+// the person (`user`), its task (`task`), a bucket deleted with its tasks
+// (`bucket`, reserved for TV-U6), or its chat message (`chat_message`, CV-9:
+// deleted with the message, or taken out of an unsent one; CHECK re-cut in
+// 20261017115000_chat_v2_files). Previews are only ever these three formats.
 // ---------------------------------------------------------------------------
 
 export const ATTACHMENT_STATUSES = ["pending", "ready", "failed"] as const;
@@ -1248,7 +1598,7 @@ export function normalizeAttachmentStatus(input: unknown): AttachmentStatus {
   return isAttachmentStatus(input) ? input : "pending";
 }
 
-export const ATTACHMENT_DELETED_REASONS = ["user", "task", "bucket"] as const;
+export const ATTACHMENT_DELETED_REASONS = ["user", "task", "bucket", "chat_message"] as const;
 export type AttachmentDeletedReason = (typeof ATTACHMENT_DELETED_REASONS)[number];
 export const attachmentDeletedReasonSchema = z.enum(ATTACHMENT_DELETED_REASONS);
 export function isAttachmentDeletedReason(value: unknown): value is AttachmentDeletedReason {
@@ -1265,6 +1615,59 @@ export function isAttachmentPreviewMime(value: unknown): value is AttachmentPrev
     typeof value === "string" && (ATTACHMENT_PREVIEW_MIMES as readonly string[]).includes(value)
   );
 }
+
+// ---------------------------------------------------------------------------
+// Statuses (Chat v2 CV-17, specs/chat-v2.md §10, CH28d, CH45) — mirror the
+// CHECKs on public.user_statuses (preset) and public.user_saved_statuses
+// (clear_after) in …_chat_v2_statuses. Presets are Moduo's and live here, not
+// as rows: the row keeps the key with the words and emoji it was set with.
+// "Clear after" is what a saved status remembers; the app turns it into a
+// time (clear_at) when the status is set, because only it knows your midnight.
+// ---------------------------------------------------------------------------
+
+export const STATUS_PRESETS = ["meeting", "sick", "vacation", "commuting"] as const;
+export type StatusPreset = (typeof STATUS_PRESETS)[number];
+export const statusPresetSchema = z.enum(STATUS_PRESETS);
+export function isStatusPreset(value: unknown): value is StatusPreset {
+  return typeof value === "string" && (STATUS_PRESETS as readonly string[]).includes(value);
+}
+/** Read-side normalization: an unknown preset reads as your own status. */
+export function normalizeStatusPreset(input: unknown): StatusPreset | null {
+  return isStatusPreset(input) ? input : null;
+}
+export function parseStatusPreset(input: unknown): SafeParseResult<StatusPreset> {
+  return parseOrError(statusPresetSchema, input);
+}
+
+export const STATUS_CLEAR_AFTER = ["30m", "1h", "today", "this_week", "date", "never"] as const;
+export type StatusClearAfter = (typeof STATUS_CLEAR_AFTER)[number];
+export const statusClearAfterSchema = z.enum(STATUS_CLEAR_AFTER);
+export function isStatusClearAfter(value: unknown): value is StatusClearAfter {
+  return typeof value === "string" && (STATUS_CLEAR_AFTER as readonly string[]).includes(value);
+}
+/** Read-side normalization: an unknown choice reads as "never". */
+export function normalizeStatusClearAfter(input: unknown): StatusClearAfter {
+  return isStatusClearAfter(input) ? input : "never";
+}
+export function parseStatusClearAfter(input: unknown): SafeParseResult<StatusClearAfter> {
+  return parseOrError(statusClearAfterSchema, input);
+}
+
+/** Moduo's presets as the picker offers them (CH45): emoji, words, whether
+ *  they hold pings, and the "clear after" they start with. */
+export const STATUS_PRESET_DEFAULTS: Readonly<
+  Record<StatusPreset, { emoji: string; text: string; dnd: boolean; clearAfter: StatusClearAfter }>
+> = {
+  meeting: { emoji: "📅", text: "In a meeting", dnd: false, clearAfter: "1h" },
+  sick: { emoji: "🤒", text: "Out sick", dnd: true, clearAfter: "today" },
+  vacation: { emoji: "🌴", text: "On vacation", dnd: true, clearAfter: "date" },
+  commuting: { emoji: "🚆", text: "Commuting", dnd: false, clearAfter: "30m" },
+};
+
+/** A status's limits (the CHECKs on both tables; the ops trim first). */
+export const STATUS_TEXT_MAX = 100;
+export const STATUS_EMOJI_MAX = 16;
+export const SAVED_STATUSES_MAX = 20;
 
 // ---------------------------------------------------------------------------
 // Label hues — the shared palette for workspace tags (and the hue a calendar

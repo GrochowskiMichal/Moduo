@@ -56,6 +56,8 @@ import { useWorkspaceStore } from "../../../lib/sync/react";
 import { taskLinkId } from "../../../lib/task-handle";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
+import { useItemChatSlots } from "../../chat/mentioned-in";
+import { useStartConversation } from "../../chat/start-conversation";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
@@ -641,6 +643,8 @@ export function TasksPlanView({
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
   }, [selection, buckets, inboxId, api.archivedBuckets, openViewId, openView, api.reachedServer]);
+  /** Chat's "Start a conversation for X" (CV-13), null when chat is off for you. */
+  const startConversation = useStartConversation();
   /** The archived project open now (read-only), if any. */
   const archivedProject = useMemo(
     () => api.archivedBuckets.find((b) => b.id === place) ?? null,
@@ -2488,6 +2492,27 @@ export function TasksPlanView({
         api.archivedBuckets.find((b) => b.id === panelTask.bucketId) ??
         null)
       : scopeProject);
+  // The panel remembers its view; the title's ask shows Project only while
+  // it stands (MOD-131). Nothing selected inside a project (or every List
+  // group folded, MOD-123), or a task in the centre, shows Project too; the
+  // Timeline's No date stays open while you work the canvas (TV-TL2). The
+  // rule: `activePanelView`. Worked out before the Project view itself, so the
+  // overview's chat lines read only while it shows (CV-13).
+  const panelActive = activePanelView({
+    asked: askedProject !== null,
+    multi: multiSelect.multi,
+    remembered: panelView,
+    noDateShown: timelineShown && !fullPageTask,
+    projectInstead: Boolean(
+      panelProject && (fullPageTask || (!panelTask && !privateLinkId && scopeProject)),
+    ),
+  });
+  // The overview's conversation and decision lines, from one read (CV-13, CV-14),
+  // only while the Project view shows.
+  const projectChat = useItemChatSlots(
+    "project",
+    panelActive === "project" && panelProject ? panelProject.id : "",
+  );
   const projectView = panelProject ? (
     <ProjectPanel
       project={panelProject}
@@ -2504,6 +2529,7 @@ export function TasksPlanView({
       }}
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
+      chat={projectChat}
       // The title row's ⋯ → Statuses… (MOD-150, from the plan header's ⋯);
       // an archived project is read-only (TV-U6).
       onEditStatuses={
@@ -2511,23 +2537,15 @@ export function TasksPlanView({
           ? (p) => setStatusesEditor({ projectId: p.id })
           : undefined
       }
+      // Chat's "Start a conversation for X" (CV-13), moved with Statuses… into
+      // this ⋯ (MOD-150); the server checks edit rights.
+      onStartConversation={
+        startConversation && canEdit && !panelProject.archivedAt
+          ? (p) => startConversation("bucket", p.id)
+          : undefined
+      }
     />
   ) : null;
-  // The panel remembers its view; the title's ask shows Project only while
-  // it stands (MOD-131). Nothing selected inside a project (or every List
-  // group folded, MOD-123), or a task in the centre, shows Project too; the
-  // Timeline's No date stays open while you work the canvas (TV-TL2). The
-  // rule: `activePanelView`.
-  const panelActive = activePanelView({
-    asked: askedProject !== null,
-    multi: multiSelect.multi,
-    remembered: panelView,
-    noDateShown: timelineShown && !fullPageTask,
-    projectInstead: Boolean(
-      projectView && (fullPageTask || (!panelTask && !privateLinkId && scopeProject)),
-    ),
-  });
-
   // The right panel's title row names and switches its views (SH-1): Details
   // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
   const right = (

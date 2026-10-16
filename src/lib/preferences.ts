@@ -58,7 +58,11 @@ export type NotificationType =
   | "agents"
   | "overdueTasks"
   | "storage"
-  | "bookings";
+  | "bookings"
+  | "chatDirect"
+  | "chatMentions"
+  | "chatAnnouncements"
+  | "chatEvery";
 export type NotificationPrefs = Record<NotificationType, boolean>;
 
 const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
@@ -73,6 +77,10 @@ const NOTIFICATION_TYPES: ReadonlyArray<NotificationType> = [
   "overdueTasks",
   "storage",
   "bookings",
+  "chatDirect",
+  "chatMentions",
+  "chatAnnouncements",
+  "chatEvery",
 ];
 
 export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
@@ -91,6 +99,15 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   storage: true,
   // Someone booked or canceled on one of your booking links (TX-5).
   bookings: true,
+  // Chat (CV-6b, spec §11 "The switches"): direct messages · mentions and
+  // replies · announcements · Every message. Each one turns off the bell row
+  // and the device notice for its rows; Catch up's item is always written.
+  // The server reads them at `user_preferences.preferences.notifications.<key>`
+  // to hold the push and the email (CV-18's gate).
+  chatDirect: true,
+  chatMentions: true,
+  chatAnnouncements: true,
+  chatEvery: true,
 };
 
 /** module_activity `op` → the quiet-set toggle that governs it. An op absent from
@@ -125,6 +142,11 @@ const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "attachments.storage_95": "storage",
   "calendar.booking_create": "bookings",
   "calendar.booking_cancel": "bookings",
+  // Chat (CV-6b): @you and @channel, a reply in your chain, an announcement.
+  // A direct message rings no bell (CV-5); `@Team` follows "Your teams" below.
+  "chat.mention": "chatMentions",
+  "chat.reply": "chatMentions",
+  "chat.announcement": "chatAnnouncements",
 };
 
 /** The switch that governs a feed row. A comment that names you is a
@@ -138,6 +160,8 @@ export function notificationTypeForOp(
     const named = payload.mentioned_user_ids;
     if (Array.isArray(named) && named.includes(userId)) return "mention";
   }
+  // A chat row that reached you through a team (CV-5) follows "Your teams".
+  if (op === "chat.mention" && payload?.reason === "team") return "teams";
   return OP_TO_NOTIFICATION_TYPE[op] ?? null;
 }
 
@@ -219,10 +243,18 @@ export interface Preferences {
   reopenLastWorkspace: boolean;
   /** Master switch for app sound effects (today: the Focus interval chime). */
   soundEnabled: boolean;
+  /** Chat's one soft sound for direct messages and `@you` (CV-6b, CH34): off by default. */
+  chatSound: boolean;
   /** Reduce-motion override, layered on the OS setting. */
   motion: MotionPref;
   /** Per-type notification mutes (read-side filter over the bell feed). */
   notifications: NotificationPrefs;
+  /**
+   * Chat (CV-21, §11): per API key of yours, whether a reply to a post made
+   * through it reaches you (key id → on; on when absent). The server reads it
+   * at `user_preferences.preferences.chatKeyReplies.<key id>`.
+   */
+  chatKeyReplies: Record<string, boolean>;
   /** Desktop-only: confirm before quitting. Both quit gestures (⌘Q via a custom Quit
    *  menu item, and window close via `CloseRequested`) are intercepted natively in Rust,
    *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
@@ -251,8 +283,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   landingView: "home",
   reopenLastWorkspace: true,
   soundEnabled: true,
+  chatSound: false,
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
+  chatKeyReplies: {},
   confirmBeforeQuit: false,
   keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {}, projectOrder: {} },
@@ -293,6 +327,10 @@ const notificationPrefsSchema = z
       overdueTasks: z.boolean().catch(false),
       storage: z.boolean().catch(true),
       bookings: z.boolean().catch(true),
+      chatDirect: z.boolean().catch(true),
+      chatMentions: z.boolean().catch(true),
+      chatAnnouncements: z.boolean().catch(true),
+      chatEvery: z.boolean().catch(true),
     }),
   )
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
@@ -414,12 +452,26 @@ const tasksFoldsSchema = z
     entries.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
     return Object.fromEntries(entries.slice(0, TASKS_FOLDS_KEEP));
   });
+// Key id → on. A bad entry drops alone; at most 100 keys.
+const KEY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const chatKeyRepliesSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byKey) =>
+    Object.fromEntries(
+      Object.entries(byKey)
+        .filter((e): e is [string, boolean] => KEY_ID.test(e[0]) && typeof e[1] === "boolean")
+        .slice(0, 100),
+    ),
+  );
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
   soundEnabled: z.boolean().catch(DEFAULT_PREFERENCES.soundEnabled),
+  chatSound: z.boolean().catch(DEFAULT_PREFERENCES.chatSound),
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
+  chatKeyReplies: chatKeyRepliesSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
   keepInMenuBar: z.boolean().catch(DEFAULT_PREFERENCES.keepInMenuBar),
   tasksSidebar: tasksSidebarSchema,

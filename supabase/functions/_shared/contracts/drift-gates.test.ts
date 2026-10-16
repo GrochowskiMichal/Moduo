@@ -18,8 +18,24 @@ import {
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
-  COMMENT_REACTIONS,
+  CHAT_CATCHUP_DONE_HOW,
+  CHAT_CATCHUP_REASONS,
+  CHAT_EVENT_TYPES,
+  CHAT_LINK_TARGETS,
+  CHAT_MENTION_REASONS,
+  CHAT_MESSAGE_KINDS,
+  CLIENT_SURFACES,
+  CHAT_PLAN_TIERS,
   CONTENT_AUTHOR_KINDS,
+  DEFAULT_QUICK_REACTIONS,
+  REACTION_KEY_SET,
+  CHAT_CAPABILITIES,
+  CUSTOM_EMOJI_KEY_PATTERN,
+  CUSTOM_EMOJI_MAX_BYTES,
+  CUSTOM_EMOJI_MAX_PX,
+  CUSTOM_EMOJI_MIMES,
+  CUSTOM_EMOJI_NAME_PATTERN,
+  CUSTOM_EMOJI_PER_WORKSPACE,
   DATE_ORDERS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
@@ -43,6 +59,7 @@ import {
   PLAN_TIERS,
   PROJECT_STATES,
   RECURRENCE_MODES,
+  RELATION_KINDS,
   STARTER_TEMPLATES,
   SYNC_TOMBSTONE_TABLES,
   TASK_CLOSED_CATEGORIES,
@@ -61,6 +78,8 @@ import {
   TEMPLATE_LINK_TYPES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
+  STATUS_CLEAR_AFTER,
+  STATUS_PRESETS,
   WAITLIST_STATUSES,
 } from "./vocabularies.ts";
 
@@ -112,7 +131,11 @@ describe("cross-runtime drift guards", () => {
   it("email_outbox CHECKs list the canonical email vocabularies", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261008160000_email_outbox.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    expect(sql).toContain(`kind IN (${inList(EMAIL_KINDS)})`);
+    // The kind list was last re-stated by CV-6a (chat_waiting).
+    const notices = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_device_notices.sql"));
+    expect(notices).toBeDefined();
+    const kinds = readFileSync(resolve(MIGRATIONS_DIR, notices ?? ""), "utf8");
+    expect(kinds).toContain(`CHECK (kind IN (${inList(EMAIL_KINDS)}))`);
     expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
   });
@@ -121,6 +144,94 @@ describe("cross-runtime drift guards", () => {
     const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261008233000_email_outbox_worker.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`reason IN (${inList(EMAIL_SUPPRESSION_REASONS)})`);
+  });
+
+  it("chat v2 vocabularies match the …_chat_v2_foundation CHECKs (CV-1)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_foundation.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (kind IN (${inList(CHAT_MESSAGE_KINDS)}))`);
+    expect(sql).toContain(`(event ->> 'type') IN (${inList(CHAT_EVENT_TYPES)})`);
+    expect(sql).toContain(`CHECK (reason IN (${inList(CHAT_CATCHUP_REASONS)}))`);
+    expect(sql).toContain(`done_how IN (${inList(CHAT_CATCHUP_DONE_HOW)})`);
+  });
+
+  it("CHAT_LINK_TARGETS and RELATION_KINDS match the …_chat_v2_linked_channels CHECKs (CV-13)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_linked_channels.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`linked_type IN (${inList(CHAT_LINK_TARGETS)})`);
+    const kinds = RELATION_KINDS.map((k) => `'${k}'::text`).join(", ");
+    expect(sql.replace(/\s+/g, " ")).toContain(`relation_kind = ANY (ARRAY[${kinds}])`);
+  });
+
+  it("statuses vocabularies match the …_chat_v2_statuses CHECKs (CV-17)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_statuses.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    const spaced = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`preset IN (${inList(STATUS_PRESETS)})`);
+    expect(sql).toContain(`clear_after IN (${inList(STATUS_CLEAR_AFTER)})`);
+    // The ops check the same lists.
+    expect(sql).toContain(`preset NOT IN (${spaced(STATUS_PRESETS)})`);
+    expect(sql).toContain(`clear_after NOT IN (${spaced(STATUS_CLEAR_AFTER)})`);
+  });
+
+  it("CHAT_MENTION_REASONS are the reasons the fan-out writes on chat.mention rows (CV-5)", () => {
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_catchup.sql"));
+    expect(file).toBeDefined();
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, file ?? ""), "utf8");
+    // chat__fan_out maps each Catch up reason to the bell row's reason.
+    expect(sql).toContain(
+      `CASE v_reason WHEN 'mention' THEN '${CHAT_MENTION_REASONS[0]}' WHEN 'team_mention' THEN '${CHAT_MENTION_REASONS[1]}'`,
+    );
+    expect(sql).toContain(`WHEN 'everyone' THEN '${CHAT_MENTION_REASONS[2]}' END`);
+  });
+
+  it("CHAT_PLAN_TIERS are plan_tier_rank's tiers at Duo or above; the plan source reads TX-9b's grant (CV-4)", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const migrations = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+    // The newest body of plan_tier_rank (a later migration may redefine it).
+    const defines = /create\s+(?:or\s+replace\s+)?function\s+public\.plan_tier_rank\s*\(/i;
+    const rankFile = migrations.filter((f) => defines.test(read(f))).at(-1);
+    expect(rankFile).toBeDefined();
+    const rankSql = read(rankFile ?? "");
+    const body = rankSql.slice(rankSql.search(defines));
+    const rank = new Map(
+      [...body.slice(0, body.indexOf("$$;")).matchAll(/when '(\w+)' then (\d+)/g)].map(
+        (m) => [m[1], Number(m[2])] as const,
+      ),
+    );
+    const duo = rank.get("duo");
+    expect(duo).toBeDefined();
+    const atLeastDuo = PLAN_TIERS.filter((t) => (rank.get(t) ?? 0) >= (duo ?? Number.NaN));
+    expect([...atLeastDuo].sort()).toEqual([...CHAT_PLAN_TIERS].sort());
+
+    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_plan_source.sql"));
+    expect(file).toBeDefined();
+    const sql = read(file ?? "");
+    expect(sql).toContain("to_regprocedure('public.plan_grant_effective_tier(uuid)')");
+    expect(sql).toContain(">= public.plan_tier_rank('duo')");
+
+    // TX-9b's grant function, once a migration defines it, must keep the signature
+    // chat_workspace_enabled looks up, or handed-out workspaces silently lose chat.
+    const grantDefs = migrations.flatMap((f) =>
+      [
+        ...read(f).matchAll(/create\s+(?:or\s+replace\s+)?function\s+([\w."]*plan_grant_effective_tier)\s*\(([^)]*)\)/gi),
+      ].map((m) => ({ file: f, name: m[1], args: m[2].trim() })),
+    );
+    for (const def of grantDefs) {
+      expect({ file: def.file, name: def.name, uuidOnly: /^(\w+\s+)?uuid$/i.test(def.args) }).toEqual({
+        file: def.file,
+        name: "public.plan_grant_effective_tier",
+        uuidOnly: true,
+      });
+    }
   });
 
   it("content author kinds match the chat_messages and comments CHECKs", () => {
@@ -193,7 +304,9 @@ describe("cross-runtime drift guards", () => {
     );
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`status IN (${inList(ATTACHMENT_STATUSES)})`);
-    expect(sql).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
+    // CV-9 re-cut the deleted-reason CHECK (chat_message).
+    const recut = readFileSync(resolve(MIGRATIONS_DIR, "20261017115000_chat_v2_files.sql"), "utf8");
+    expect(recut).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
     expect(sql).toContain(`preview_mime IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`p_preview_mime NOT IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`bucket_id = '${ATTACHMENTS_BUCKET}'`);
@@ -252,15 +365,91 @@ describe("cross-runtime drift guards", () => {
     }
   });
 
-  it("the six comment reactions match TV-U13's CHECK and op", () => {
+  it("one reaction key: CV-7c's check, used by comments, chat and the quick row", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261017108000_chat_v2_reactions.sql"), "utf8");
+    // The same rule as isReactionKey: the length, and the pattern spelled with
+    // the same code points as REACTION_KEY_SET, in the same order.
+    expect(sql).toContain("char_length(p_key) BETWEEN 1 AND 32");
+    expect(sql).toContain("AND p_key ~ public.reactions__key_pattern()");
+    const fnBody = (name: string) => {
+      const at = sql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
+      expect(at, name).toBeGreaterThan(-1);
+      return sql.slice(at, sql.indexOf("$function$;", at)).replace(/\s+/g, " ");
+    };
+    // Each list spelled as the SQL spells it: chr(n) for one code point,
+    // chr(a) || '-' || chr(b) for a range, so the range ends are checked too.
+    type R = number | readonly [number, number];
+    const spell = (ranges: readonly R[]) =>
+      ranges
+        .map((r) => (typeof r === "number" ? `chr(${r})` : `chr(${r[0]}) || '-' || chr(${r[1]})`))
+        .join(" || ");
+    const s = REACTION_KEY_SET;
+    const pattern = fnBody("reactions__key_pattern");
+    expect(pattern).toContain(`'[' || ${spell(s.base)} || ']' AS base`);
+    expect(pattern).toContain(`'[' || ${spell(s.vs)} || ']' AS vs`);
+    expect(pattern).toContain(`'[' || ${spell(s.skin)} || ']' AS skin`);
+    expect(pattern).toContain(`'[' || ${spell(s.tag)} || ']' AS tag`);
+    expect(pattern).toContain(`chr(${s.tagEnd}) AS tag_end`);
+    expect(pattern).toContain(`chr(${s.zwj}) AS zwj`);
+    expect(pattern).toContain(`chr(${s.keycap}) AS keycap`);
+    expect(pattern).toContain(`'[' || ${spell(s.ri)} || ']' AS ri`);
+    const keycapBases = s.keycapBase
+      .map((r) => (typeof r === "number" ? String.fromCodePoint(r) : `${String.fromCodePoint(r[0])}-${String.fromCodePoint(r[1])}`))
+      .join("");
+    expect(pattern).toContain(`'|[${keycapBases}]'`);
+    // The one spelling: the keycap bases, then the text-default pictographs.
+    const canonical = fnBody("reactions__key_canonical");
+    expect(canonical).toContain(`SELECT '[${keycapBases}' || ${spell(s.textDefault)} || ']' AS td`);
+    expect(sql).toContain("CHECK (public.reactions__key_ok(reaction))");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(p_reaction) THEN");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(p_key) THEN");
+    expect(sql).toContain("IF NOT public.reactions__key_ok(v_item) THEN");
+    // The six TV-U13 words became the six defaults, in order.
+    const words = ["thumbs_up", "check", "eyes", "pray", "heart", "smile"];
+    const mapping = words.map((w, i) => `('${w}', '${DEFAULT_QUICK_REACTIONS[i]}')`);
+    let at = 0;
+    for (const pair of mapping) {
+      const next = sql.indexOf(pair, at);
+      expect(next, pair).toBeGreaterThan(-1);
+      at = next;
+    }
+  });
+
+  it("custom emoji: CV-20's names, key, types, sizes, the switch and the reserved names", async () => {
     const sql = readFileSync(
-      resolve(MIGRATIONS_DIR, "20261013100000_comment_reactions_edits.sql"),
+      resolve(MIGRATIONS_DIR, "20261017122000_chat_v2_custom_emoji.sql"),
       "utf8",
     );
-    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
-    const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    expect(sql).toContain(`CHECK (reaction IN (${inList(COMMENT_REACTIONS)}))`);
-    expect(sql).toContain(`p_reaction NOT IN (${opList(COMMENT_REACTIONS)})`);
+    // One name rule: the table's CHECK, the op and the reaction key.
+    expect(sql).toContain(`CHECK (name ~ '^${CUSTOM_EMOJI_NAME_PATTERN}$')`);
+    expect(sql).toContain(`IF v_name !~ '^${CUSTOM_EMOJI_NAME_PATTERN}$' THEN`);
+    expect(sql).toContain(`SELECT '${CUSTOM_EMOJI_KEY_PATTERN}'::text`);
+    expect(sql).toContain("OR p_key ~ public.reactions__custom_key_pattern())");
+    // Types, sizes and the per-workspace limit.
+    const mimes = CUSTOM_EMOJI_MIMES.map((m) => `'${m}'`).join(", ");
+    expect(sql).toContain(`CHECK (mime IN (${mimes}))`);
+    expect(sql).toContain(`ARRAY[${mimes}], 'STANDARD')`);
+    expect(sql).toContain(`VALUES ('chat-emoji', 'chat-emoji', false, ${CUSTOM_EMOJI_MAX_BYTES},`);
+    expect(sql).toContain(`CHECK (bytes BETWEEN 1 AND ${CUSTOM_EMOJI_MAX_BYTES})`);
+    expect(sql).toContain(`CHECK (width BETWEEN 1 AND ${CUSTOM_EMOJI_MAX_PX})`);
+    expect(sql).toContain(`AND e.deleted_at IS NULL) >= ${CUSTOM_EMOJI_PER_WORKSPACE} THEN`);
+    // The switch is a capability the server knows.
+    expect(CHAT_CAPABILITIES).toContain("add_emoji");
+    expect(sql).toContain("WHEN 'add_emoji' THEN v_row.add_emoji");
+    // The reserved names: Emojibase's GitHub shortcodes that fit the name rule.
+    const github = (await import("emojibase-data/en/shortcodes/github.json")) as unknown as {
+      default?: Record<string, string | string[]>;
+    } & Record<string, string | string[]>;
+    const codes = (github.default ?? github) as Record<string, string | string[]>;
+    const nameRe = new RegExp(`^${CUSTOM_EMOJI_NAME_PATTERN}$`);
+    const want = [...new Set(Object.values(codes).flat())].filter((n) => nameRe.test(n)).sort();
+    const block = sql.slice(sql.indexOf("-- reserved:begin"), sql.indexOf("-- reserved:end"));
+    const listed = block
+      .slice(block.indexOf("'{") + 2, block.indexOf("}'"))
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    expect(listed).toEqual(want);
   });
 
   it("template kinds and link types match TV-D15's op guards", () => {
@@ -318,11 +507,15 @@ describe("cross-runtime drift guards", () => {
     expect(RECURRENCE_MODES).toEqual(["after_completion"]);
     expect(ops).toContain(`p_rec ->> 'mode' <> '${RECURRENCE_MODES[0]}'`);
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-    // TV-D16 re-states the CHECK with the agent's kind.
-    const agents = read("20261013220000_agents_imports_mcp.sql");
-    expect(agents).toContain(
+    // CV-6a re-states the CHECK with chat's kinds (TV-D16 added the agent's).
+    const notices = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_device_notices.sql"));
+    expect(notices).toBeDefined();
+    const sql = read(notices ?? "");
+    expect(sql).toContain(
       `ADD CONSTRAINT notice_deliveries_kind_check CHECK (kind IN (${inList(NOTICE_DELIVERY_KINDS)}))`,
     );
+    expect(sql).toContain(`surface text NOT NULL CHECK (surface IN (${inList(CLIENT_SURFACES)}))`);
+    expect(sql).toContain(`p_surface NOT IN (${inList(CLIENT_SURFACES)})`);
   });
 
   it("agent session states and import rows match the server's checks (TV-D16)", () => {

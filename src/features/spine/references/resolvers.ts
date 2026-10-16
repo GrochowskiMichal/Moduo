@@ -14,6 +14,7 @@ import { isOpenTaskStatus, normalizeTaskStatus } from "@contracts/vocabularies";
 import type { EntityRecord, EntityRef } from "../../../lib/entity-links";
 import { taskHandle } from "../../../lib/task-handle";
 import { dayOffset, formatDate, formatDay, formatTime } from "../../../lib/time-format";
+import { type ChatReferenceApi, resolveChatConversations, resolveChatMessages } from "./chat";
 import type {
   ContactPreviewRow,
   EmailPreviewRow,
@@ -46,6 +47,10 @@ export type ResolveContext = {
   getEntities?: (refs: EntityRef[]) => Promise<EntityRecord[]>;
   /** Complete or reopen a task (a card's one action), when the reader can edit tasks. */
   setTaskStatus?: (taskId: string, done: boolean) => Promise<void>;
+  /** Chat's reads, for messages and conversations (CV-10); none = private. */
+  chat?: ChatReferenceApi;
+  /** The reader (a direct message is named by the other people in it). */
+  userId?: string | null;
   now: () => Date;
 };
 
@@ -58,7 +63,7 @@ export type Resolver = (
 ) => Promise<Map<string, ReferenceResolution>>;
 
 /** Answer every id: rows that came back by their state, the rest private. */
-function answer<R extends { id: string; deletedAt: string | null }>(
+function answer<R extends { id: string; deletedAt: string | null; archivedAt?: string | null }>(
   ids: readonly string[],
   rows: readonly R[],
   facts: (row: R) => ReferenceFacts,
@@ -69,6 +74,7 @@ function answer<R extends { id: string; deletedAt: string | null }>(
     const row = byId.get(id);
     if (!row) out.set(id, { status: "private" });
     else if (row.deletedAt) out.set(id, { status: "deleted" });
+    else if (row.archivedAt) out.set(id, { status: "archived", title: facts(row).title });
     else out.set(id, { status: "ready", facts: facts(row) });
   }
   return out;
@@ -374,6 +380,8 @@ const RESOLVERS = new Map<ReferenceKind, Resolver>([
   ["company", contactResolver("company")],
   ["email", resolveEmails],
   ["tag", resolveTags],
+  ["message", resolveChatMessages],
+  ["conversation", resolveChatConversations],
   ["other", resolveOther],
 ]);
 

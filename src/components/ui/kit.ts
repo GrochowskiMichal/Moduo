@@ -21,6 +21,7 @@ const KIT: readonly KitEntry[] = [
   { name: "PropertyRow / PropertyValue", file: "property-row", story: "Densities" },
   { name: "CollectionHeader", file: "collection-header", story: "Densities" },
   { name: "NavRow", file: "nav-row", story: "Densities" },
+  { name: "NavRow unread", file: "nav-row", story: "UnreadDensities" },
   { name: "Toolbar", file: "toolbar", story: "Densities" },
   { name: "FilterBar", file: "filter-bar", story: "Densities" },
   { name: "DisplayMenu", file: "display-menu", story: "Densities" },
@@ -28,9 +29,11 @@ const KIT: readonly KitEntry[] = [
   { name: "Picker pill", file: "chip", story: "PickerPillDensities" },
   { name: "EmptyState", file: "empty-state", story: "Densities" },
   { name: "Feed", file: "feed", story: "Densities" },
+  { name: "Filled composer", file: "feed", story: "FilledComposerDensities" },
   { name: "DateField", file: "date-field", story: "Densities" },
   { name: "Progress", file: "progress", story: "Densities" },
   { name: "Avatar", file: "avatar", story: "Densities" },
+  { name: "Reactions", file: "reactions", story: "Densities" },
 ];
 
 /** Storybook's id for an export: "PickerPillDensities" → "picker-pill-densities". */

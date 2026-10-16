@@ -446,6 +446,9 @@ function AssigneeValue({
                     <AssigneeAvatar assignee={a} size="icon" />
                     <span className="min-w-0 flex-1 break-words">
                       {a.canTakeTasks ? assigneeListName(a) : `${assigneeListName(a)} (view only)`}
+                      {a.statusNote ? (
+                        <span className="text-muted-foreground">{` · ${a.statusNote}`}</span>
+                      ) : null}
                     </span>
                   </CommandItem>
                 ))}

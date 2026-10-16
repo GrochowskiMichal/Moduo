@@ -22,6 +22,8 @@ import {
   deviceDateOrder,
   EMPTY_TIME_REGION,
   getResolvedTimeRegion,
+  getTimeRegion,
+  isQuietNow,
   onTravelPrompt,
   resetTimeRegionForTests,
   resolveTimeRegion,
@@ -160,6 +162,7 @@ describe("the server's copy", () => {
       hourCycle: "h23",
       dateOrder: null,
       shareTimeWithOwner: true,
+      quietHours: { on: false, from: null, to: null },
     });
     expect(timeRegionPatchToRow({ weekStart: null, shareTimeWithOwner: false })).toEqual({
       week_start: null,
@@ -257,5 +260,72 @@ describe("travelling: a device zone change asks once", () => {
     const { runtime, oldWrites } = fakeRuntime(null);
     await syncTimeRegion(runtime, "u1");
     expect(oldWrites).toEqual([device]);
+  });
+});
+
+// CV-18 · "quiet hours in the one store" (AC3.5, AC7.5): quiet hours are a
+// Time & region setting, saved through its op, read in the person's zone.
+// The server's gate (`notice__gate` → `time_region__quiet_now`) reads the same
+// columns for every kind: supabase/tests/chat_notices.test.sql §7.
+describe("quiet hours in the one store", () => {
+  it("save through the Time & region op and read back from its answer", async () => {
+    applyTimeRegion(region({ timeZone: "Europe/Warsaw" }), "u1");
+    expect(timeRegionPatchToRow({ quietHours: { on: true, from: "19:00", to: "09:00" } })).toEqual({
+      quiet_hours: { on: true, from: "19:00", to: "09:00" },
+    });
+    const sent: TimeRegionPatch[] = [];
+    await saveTimeRegion(
+      {
+        setTimeRegion: async (patch) => {
+          sent.push(patch);
+          return timeRegionRowToModel({
+            time_zone: "Europe/Warsaw",
+            quiet_hours: { on: true, from: "19:00", to: "09:00" },
+          });
+        },
+      },
+      { quietHours: { on: true, from: "19:00", to: "09:00" } },
+    );
+    expect(sent).toEqual([{ quietHours: { on: true, from: "19:00", to: "09:00" } }]);
+    expect(getTimeRegion().quietHours).toEqual({ on: true, from: "19:00", to: "09:00" });
+  });
+
+  it("an unreadable answer is off, with no range", () => {
+    expect(
+      timeRegionRowToModel({ quiet_hours: { on: true, from: "7pm", to: null } }).quietHours,
+    ).toEqual({ on: true, from: null, to: null });
+    expect(isQuietNow(region({ quietHours: { on: true, from: "7pm", to: null } }))).toBe(false);
+  });
+
+  it("follow the person's zone and cross midnight", () => {
+    const warsaw = region({
+      timeZone: "Europe/Warsaw",
+      quietHours: { on: true, from: "19:00", to: "09:00" },
+    });
+    // 18:30 UTC = 20:30 in Warsaw (UTC+2 in October): quiet.
+    expect(isQuietNow(warsaw, new Date("2026-10-16T18:30:00Z"))).toBe(true);
+    // 06:59 UTC = 8:59 the next morning: still quiet; 07:00 UTC = 9:00: back.
+    expect(isQuietNow(warsaw, new Date("2026-10-17T06:59:00Z"))).toBe(true);
+    expect(isQuietNow(warsaw, new Date("2026-10-17T07:00:00Z"))).toBe(false);
+    // 16:59 UTC = 18:59 in Warsaw: not yet.
+    expect(isQuietNow(warsaw, new Date("2026-10-16T16:59:00Z"))).toBe(false);
+    // The same instant in UTC reads 18:30: not quiet there.
+    expect(isQuietNow({ ...warsaw, timeZone: "UTC" }, new Date("2026-10-16T18:30:00Z"))).toBe(
+      false,
+    );
+    // No zone saved: UTC, as the server reads it.
+    expect(isQuietNow({ ...warsaw, timeZone: null }, new Date("2026-10-16T20:00:00Z"))).toBe(true);
+  });
+
+  it("a range inside one day; off means never", () => {
+    const lunch = region({ timeZone: "UTC", quietHours: { on: true, from: "13:00", to: "14:00" } });
+    expect(isQuietNow(lunch, new Date("2026-10-16T13:30:00Z"))).toBe(true);
+    expect(isQuietNow(lunch, new Date("2026-10-16T14:00:00Z"))).toBe(false);
+    expect(
+      isQuietNow(
+        { ...lunch, quietHours: { ...lunch.quietHours, on: false } },
+        new Date("2026-10-16T13:30:00Z"),
+      ),
+    ).toBe(false);
   });
 });

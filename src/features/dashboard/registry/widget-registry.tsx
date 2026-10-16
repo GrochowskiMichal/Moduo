@@ -3,10 +3,12 @@
 // 9 module widgets ship real bodies; the other 7 render ComingSoonWidget until
 // DB-6/DB-7 replace their entries.
 
+import { ChatNowLine } from "@/features/chat/home/now-line";
 import type { WidgetType } from "../engine/types";
+import { registerTeamNowLine } from "../team-now";
 import { ActivityFeedWidget } from "../ui/widgets/activity-feed-widget";
 import { CalendarTodayWidget } from "../ui/widgets/calendar-today-widget";
-import { ChatWidget } from "../ui/widgets/chat-widget";
+import { CatchupWidget } from "../ui/widgets/catchup-widget";
 import { ClockWidget } from "../ui/widgets/clock-widget";
 import { CountdownWidget } from "../ui/widgets/countdown-widget";
 import { EmailInboxWidget } from "../ui/widgets/email-inbox-widget";
@@ -44,11 +46,15 @@ const WIDGET_COMPONENTS: Record<WidgetType, WidgetComponent> = {
   "quick-capture": QuickCaptureWidget,
   habits: HabitsWidget,
   pinned: PinnedWidget,
-  chat: ChatWidget,
+  // Chat v2 CV-22: Catch up keeps v1's type id, so saved dashboards keep it.
+  chat: CatchupWidget,
   // TV-H1:
   team: TeamWidget,
   upcoming: UpcomingWidget,
 };
+
+// Chat's "now" line in the Team widget (CV-22, CH70).
+registerTeamNowLine(ChatNowLine);
 
 export function getWidgetComponent(type: WidgetType): WidgetComponent {
   return WIDGET_COMPONENTS[type];

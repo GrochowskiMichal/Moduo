@@ -5,7 +5,7 @@
 // dropped (request counter), and so is one that lands after unmount
 // (gotchas/ui.md "reqRef … bump it in the cleanup").
 
-import type { CommentReaction } from "@contracts/vocabularies";
+import type { ReactionKey } from "@contracts/vocabularies";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -40,14 +40,14 @@ export type CommentThread = {
   /** Undo a delete; throws on failure. */
   restore: (commentId: string) => Promise<void>;
   /** Add or take back one of my reactions; shown at once. Throws on failure. */
-  react: (commentId: string, reaction: CommentReaction, on: boolean) => Promise<void>;
+  react: (commentId: string, reaction: ReactionKey, on: boolean) => Promise<void>;
 };
 
 /** A comment's reactions with mine toggled. Pure. */
 export function toggledReactions(
   reactions: readonly CommentReactionMark[],
   userId: string,
-  reaction: CommentReaction,
+  reaction: ReactionKey,
   on: boolean,
 ): CommentReactionMark[] {
   const rest = reactions.filter((r) => !(r.userId === userId && r.reaction === reaction));
@@ -216,7 +216,7 @@ export function useCommentThread({
   );
 
   const react = useCallback(
-    async (commentId: string, reaction: CommentReaction, on: boolean) => {
+    async (commentId: string, reaction: ReactionKey, on: boolean) => {
       if (!runtime) throw new Error("Not signed in.");
       const before = commentsRef.current.find((c) => c.id === commentId);
       if (currentUserId) {

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   DEV,
   devWorkspace,
+  removeRun,
   rest,
   rpc,
   runTag,
@@ -36,6 +37,15 @@ test.beforeAll(async () => {
   tag = runTag();
 });
 
+/** The projects this run made, soft-deleted at the end (with their tasks and the
+ *  Inbox ones tagged with this run) so the shared dev workspace stays under
+ *  the app's 500-project first-load read. */
+const created: string[] = [];
+
+test.afterAll(async () => {
+  await removeRun(ws.id, tag, created);
+});
+
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -59,6 +69,7 @@ test("the overview orients a newcomer, edits the description, and asks before Do
       description: "Build something with the API.\nJudging on Sunday.",
     },
   });
+  created.push(project.id);
   const done = await createTask(project.id, `Read the docs ${tag}`);
   await createTask(project.id, `Pick a problem ${tag}`);
   await rpc(dev, "tasks_op_set_status", {
@@ -79,9 +90,13 @@ test("the overview orients a newcomer, edits the description, and asks before Do
   await page.getByRole("button", { name: /^Panel view:/ }).click({ timeout: 20_000 });
   await page.getByRole("menuitemradio", { name: /Project/ }).click();
 
-  // What it is, how far it is (AC6.6) and what's next.
+  // What it is, how far it is (AC6.6) and what's next. The first line waits for
+  // the store: until it has loaded the page is the Inbox's "Loading tasks"
+  // skeleton and the panel says "No project here".
   const nextUp = page.getByRole("button", { name: `To do Pick a problem ${tag}`, exact: true });
-  await expect(page.getByText("Judging on Sunday.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Judging on Sunday.", { exact: false })).toBeVisible({
+    timeout: 20_000,
+  });
   await expect(page.getByText("Done this month · 1 · 45m")).toBeVisible();
   await expect(nextUp).toBeVisible();
 
