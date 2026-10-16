@@ -592,6 +592,9 @@ export class NotesSyncEngineV2 {
     try {
       await this.pull(s);
       if (s.compactVeto) return; // the pull we just did may have tripped it
+      // No known version means the pull failed: an unconditional fold could
+      // overwrite a snapshot we never absorbed.
+      if (s.docVersion == null) return;
       const snapshot = encodeUint8ToBase64(Y.encodeStateAsUpdate(s.doc));
       const body = tryDeriveNoteBody(s.doc);
       const saved = await this.runtime.notesV2.saveSnapshot({
@@ -601,7 +604,15 @@ export class NotesSyncEngineV2 {
         uptoUpdateId: s.state.lastPulledUpdateId,
         bodyText: body?.text ?? null,
         bodyMd: body?.md ?? null,
+        expectedDocVersion: s.docVersion,
       });
+      if (saved?.refused) {
+        // Another client folded since our pull; its snapshot may hold rows
+        // it deleted from the log. Absorb it now; the counter stays up, so
+        // the next flush folds again on top of it.
+        await this.pull(s);
+        return;
+      }
       s.state = { ...s.state, updatesSinceCompact: 0 };
       // Our own fold: exact under the server's row lock, so the next live
       // pull doesn't download the snapshot we just wrote.
