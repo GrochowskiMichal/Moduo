@@ -795,9 +795,7 @@ export function ChatScreen({
             label: "Undo",
             onClick: () =>
               // One op: the server takes back the decision this wrap-up made with it.
-              void store
-                .reopen(rootId, newDecision ? settledId : undefined)
-                .then((r) => failed(r, "Couldn't undo the wrap-up.")),
+              void store.reopen(rootId).then((r) => failed(r, "Couldn't undo the wrap-up.")),
           },
         });
       });

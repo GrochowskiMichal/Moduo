@@ -2301,8 +2301,23 @@ export function TasksPlanView({
         api.archivedBuckets.find((b) => b.id === selectedTask.bucketId) ??
         null)
       : scopeProject);
-  // The overview's conversation and decision lines, from one read (CV-13, CV-14).
-  const projectChat = useItemChatSlots("project", panelProject?.id ?? "");
+  // Nothing selected inside a project, or a task in the centre: the panel
+  // shows Project (the one exception to "the panel remembers its view").
+  // The Timeline's No date stays open while you work the canvas (TV-TL2).
+  const panelActive =
+    multiSelect.multi && !(askedProject && panelView === "project")
+      ? "details"
+      : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
+        ? NO_DATE_PANEL_VIEW
+        : panelProject && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
+          ? "project"
+          : panelView;
+  // The overview's conversation and decision lines, from one read (CV-13, CV-14),
+  // only while the Project view shows.
+  const projectChat = useItemChatSlots(
+    "project",
+    panelActive === "project" && panelProject ? panelProject.id : "",
+  );
   const projectView = panelProject ? (
     <ProjectPanel
       project={panelProject}
@@ -2322,18 +2337,6 @@ export function TasksPlanView({
       chat={projectChat}
     />
   ) : null;
-  // Nothing selected inside a project, or a task in the centre: the panel
-  // shows Project (the one exception to "the panel remembers its view").
-  // The Timeline's No date stays open while you work the canvas (TV-TL2).
-  const panelActive =
-    multiSelect.multi && !(askedProject && panelView === "project")
-      ? "details"
-      : panelView === NO_DATE_PANEL_VIEW && timelineShown && !fullPageTask
-        ? NO_DATE_PANEL_VIEW
-        : projectView && (fullPageTask || (!selectedTask && !privateLinkId && scopeProject))
-          ? "project"
-          : panelView;
-
   // The right panel's title row names and switches its views (SH-1): Details
   // and Project (TV-U13), In flight (TV-F8), No date beside the Timeline (TV-TL2).
   const right = (

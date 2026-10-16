@@ -1963,9 +1963,10 @@ export class ChatStore {
   /**
    * Reopen a wrapped chain (also the wrap-up toast's Undo). The server's Undo
    * also takes back the decision that wrap-up made (CV-14), in the same op:
-   * with `settledId`, the settling reply is read back once it answers.
+   * the settling reply is read back once it answers.
    */
-  async reopen(rootId: string, settledId?: string): Promise<ChatWriteResult> {
+  async reopen(rootId: string): Promise<ChatWriteResult> {
+    const settledId = this.rowById(rootId)?.settledId ?? null;
     const res = await this.write(
       rootId,
       (row) => ({ ...row, wrappedAt: null, wrappedBy: null, settledId: null }),

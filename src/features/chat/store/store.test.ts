@@ -644,7 +644,7 @@ describe("decisions (CV-14)", () => {
     expect(await store.wrapUp(root.id, r1.id, true)).toEqual({ ok: true });
     expect(store.rowById(r1.id)?.decisionAt).not.toBeNull();
     const before = calls();
-    expect(await store.reopen(root.id, r1.id)).toEqual({ ok: true });
+    expect(await store.reopen(root.id)).toEqual({ ok: true });
     expect(calls() - before).toBe(1);
     expect(store.rowById(root.id)?.wrappedAt ?? null).toBeNull();
     expect(store.rowById(r1.id)?.decisionAt ?? null).toBeNull();
@@ -652,14 +652,14 @@ describe("decisions (CV-14)", () => {
     // A decision marked before the wrap-up stays.
     expect(await store.markDecision(r2.id, true)).toEqual({ ok: true });
     expect(await store.wrapUp(root.id, r2.id, true)).toEqual({ ok: true });
-    expect(await store.reopen(root.id, r2.id)).toEqual({ ok: true });
+    expect(await store.reopen(root.id)).toEqual({ ok: true });
     expect(store.rowById(r2.id)?.decisionAt).not.toBeNull();
 
     // A refused Undo changes neither.
     expect(await store.markDecision(r2.id, false)).toEqual({ ok: true });
     expect(await store.wrapUp(root.id, r1.id, true)).toEqual({ ok: true });
     server.refuse.set("reopen", { code: "42501", message: "No." });
-    expect((await store.reopen(root.id, r1.id)).ok).toBe(false);
+    expect((await store.reopen(root.id)).ok).toBe(false);
     expect(store.rowById(root.id)?.wrappedAt).not.toBeNull();
     expect(store.rowById(r1.id)?.decisionAt).not.toBeNull();
   });

@@ -294,6 +294,13 @@ BEGIN
   v := test.as_user('A', format($q$SELECT id FROM public.chat_op_reopen(%L::uuid)$q$, test.mid('u')));
   PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u2'), 'Undo leaves a decision marked before the wrap-up', v);
 
+  -- The wrapper's own earlier mark stays too (it isn't the wrap-up's).
+  v := test.mark('B', 'u2', false);
+  v := test.mark('A', 'u2');
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('u'), test.mid('u2')));
+  v := test.as_user('A', format($q$SELECT id FROM public.chat_op_reopen(%L::uuid)$q$, test.mid('u')));
+  PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u2'), 'Undo leaves the wrapper''s own earlier mark', v);
+
   -- Someone else's reopen is no Undo: the decision stays.
   v := test.as_user('A', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('u'), test.mid('u1')));
   PERFORM test.ok(v LIKE 'ok %' AND test.is_decision('u1'), 'setup: wrapped and marked again', v);
