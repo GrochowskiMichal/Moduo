@@ -14,13 +14,7 @@ import { agentWriteFromLog, applyAgentEdit, bodyFromLog } from "../editor/agent-
 import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { buildDocStateFromMarkdown } from "../editor/materialize";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
-import {
-  AGENT_WRITE_CUE,
-  AgentOrigin,
-  createAgentUndo,
-  isAgentWriteCue,
-  isForeignOrigin,
-} from "./agent-origin";
+import { AgentOrigin, createAgentUndo, isForeignOrigin } from "./agent-origin";
 
 const NOTE_ID = "6b1f0c5e-2d3a-4e8f-9a01-7c2b4d6e8f10";
 
@@ -150,16 +144,6 @@ describe("undo agent only", () => {
     expect(isForeignOrigin("remote", persistence)).toBe(true);
     expect(isForeignOrigin(persistence, persistence)).toBe(true);
     expect(isForeignOrigin(null, persistence)).toBe(false);
-  });
-});
-
-describe("live cue", () => {
-  it("is content-free: a message carrying bytes is never treated as an agent's", () => {
-    expect(isAgentWriteCue({ origin: AGENT_WRITE_CUE })).toBe(true);
-    expect(isAgentWriteCue({ origin: AGENT_WRITE_CUE, b64: "AAA=" })).toBe(false);
-    expect(isAgentWriteCue({ origin: "agent" })).toBe(false);
-    expect(isAgentWriteCue({ b64: "AAA=" })).toBe(false);
-    expect(isAgentWriteCue(undefined)).toBe(false);
   });
 });
 

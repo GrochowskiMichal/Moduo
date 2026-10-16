@@ -4261,6 +4261,7 @@ export type Database = {
         Args: {
           p_body_md?: string
           p_body_text?: string
+          p_expected_doc_version?: number
           p_note_id: string
           p_snapshot_b64: string
           p_upto_update_id: number

@@ -7,15 +7,12 @@
  * Two stages: the COMMAND menu (filtered by the `/query` token), then — for
  * entity nouns — a PICKER (shadcn Command) searching that entity type, with
  * create-and-link for contact/company. `/page` creates a real child note and
- * mirrors it as a page-row block; `/mindmap` inserts the legacy embed.
+ * mirrors it as a page-row block. Where `[[` links are on (the new Notes),
+ * `/note` is its alias: it leaves `[[` at the caret and the note picker opens.
  */
 
-import { $createCodeNode } from "@lexical/code";
 import { $createHorizontalRuleNode } from "@lexical/extension";
-import { $insertList } from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
-import { $setBlocksType } from "@lexical/selection";
 import { $createTableNodeWithDimensions } from "@lexical/table";
 import {
   $createParagraphNode,
@@ -25,11 +22,6 @@ import {
   $insertNodes,
   $isRangeSelection,
   $isTextNode,
-  COMMAND_PRIORITY_HIGH,
-  KEY_ARROW_DOWN_COMMAND,
-  KEY_ARROW_UP_COMMAND,
-  KEY_ENTER_COMMAND,
-  KEY_ESCAPE_COMMAND,
   type LexicalEditor,
   type NodeKey,
 } from "lexical";
@@ -48,7 +40,6 @@ import {
   ListChecks,
   ListOrdered,
   Minus,
-  Network,
   Quote,
   Table,
   Type,
@@ -58,6 +49,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
+import { closeOnOutsidePointer, registerMenuKeys } from "@/features/spine/editor/menu-keys";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
 import { type MentionCandidate, resolveMention } from "@/features/spine/mention";
 import { executeMention, type MentionContext } from "@/features/spine/mention-actions";
@@ -66,8 +58,8 @@ import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
 import { displayTitle } from "../../title";
+import { $runBlockCommand } from "../block-actions";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
-import { $createEmbedNode } from "../schema/embed-node";
 import { $createPageRowNode } from "../schema/page-row-node";
 import { $createTaskLineNode } from "../schema/task-line-node";
 import { filterSlashCommands, type SlashCommandDef, type SlashCommandId } from "../slash-commands";
@@ -84,7 +76,7 @@ type SlashMenuState = {
 
 type PickerState = {
   /** The entity noun that opened it. */
-  command: Extract<SlashCommandId, "note" | "task" | "contact" | "company" | "event" | "mindmap">;
+  command: Extract<SlashCommandId, "note" | "task" | "contact" | "company" | "event">;
   top: number;
   left: number;
 };
@@ -95,6 +87,8 @@ export type SlashMenuPluginProps = {
   /** The note (the link's source end). */
   source: EntityRef;
   sourceLabel?: string;
+  /** `[[` note links are on: `/note` hands over to the `[[` picker. */
+  noteLinks?: boolean;
 };
 
 const MENU_MIN_WIDTH = 264;
@@ -118,7 +112,6 @@ const COMMAND_ICONS: Record<SlashCommandId, typeof Type> = {
   contact: ContactIcon,
   company: Building2,
   event: Calendar,
-  mindmap: Network,
 };
 
 const PICKER_TYPES: Record<PickerState["command"], string> = {
@@ -127,7 +120,6 @@ const PICKER_TYPES: Record<PickerState["command"], string> = {
   contact: "contact",
   company: "company",
   event: "event",
-  mindmap: "mindmap",
 };
 
 function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
@@ -181,32 +173,7 @@ function removeSlashToken(menu: SlashMenuState): void {
 }
 
 function runBasicCommand(id: SlashCommandId): void {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return;
   switch (id) {
-    case "text":
-      $setBlocksType(selection, () => $createParagraphNode());
-      break;
-    case "h1":
-    case "h2":
-    case "h3":
-      $setBlocksType(selection, () => $createHeadingNode(id));
-      break;
-    case "bullet":
-      $insertList("bullet");
-      break;
-    case "number":
-      $insertList("number");
-      break;
-    case "todo":
-      $insertList("check");
-      break;
-    case "quote":
-      $setBlocksType(selection, () => $createQuoteNode());
-      break;
-    case "code":
-      $setBlocksType(selection, () => $createCodeNode());
-      break;
     case "divider":
       $insertNodes([$createHorizontalRuleNode(), $createParagraphNode()]);
       break;
@@ -215,6 +182,17 @@ function runBasicCommand(id: SlashCommandId): void {
       $insertNodes([table, $createParagraphNode()]);
       break;
     }
+    case "text":
+    case "h1":
+    case "h2":
+    case "h3":
+    case "bullet":
+    case "number":
+    case "todo":
+    case "quote":
+    case "code":
+      $runBlockCommand(id);
+      break;
     default:
       break;
   }
@@ -225,6 +203,7 @@ export function SlashMenuPlugin({
   runtime,
   source,
   sourceLabel,
+  noteLinks = false,
 }: SlashMenuPluginProps) {
   const [editor] = useLexicalComposerContext();
   const bridge = useNotesEditorBridge();
@@ -233,6 +212,7 @@ export function SlashMenuPlugin({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [pickerQuery, setPickerQuery] = useState("");
   const pickerPortalRef = useRef<HTMLDivElement | null>(null);
+  const menuBoxRef = useRef<HTMLDivElement | null>(null);
 
   const commands = filterSlashCommands(menu?.query ?? "");
 
@@ -249,7 +229,7 @@ export function SlashMenuPlugin({
 
   // Entity search for the picker stage. Create-and-link only where a creator
   // exists (contact/company — DESIGN_BRIEF §3c: event no at v1; /page creates
-  // notes). `/task` and `/mindmap` bypass the registry search below.
+  // notes). `/task` bypasses the registry search below.
   const pickerType = picker ? PICKER_TYPES[picker.command] : null;
   const canCreate = picker?.command === "contact" || picker?.command === "company";
   const search = useMentionSearch({
@@ -260,7 +240,7 @@ export function SlashMenuPlugin({
     createType: canCreate ? pickerType : null,
     canCreate,
     includePeople: false,
-    enabled: picker !== null && picker.command !== "mindmap" && picker.command !== "task",
+    enabled: picker !== null && picker.command !== "task",
   });
 
   // `/task` candidates come from the loaded tasks bundle, not the registry
@@ -287,42 +267,7 @@ export function SlashMenuPlugin({
         })()
       : [];
 
-  // Mindmaps never registered into the entities registry — their candidates
-  // come from the module's own store (the legacy plugin's source), filtered
-  // client-side. "Kept working, no new investment" (§3c).
-  const [mindmapCandidates, setMindmapCandidates] = useState<MentionCandidate[]>([]);
-  useEffect(() => {
-    if (picker?.command !== "mindmap" || !runtime || !workspaceId) return;
-    let cancelled = false;
-    void import("@/features/mindmap/ui/mindmap-storage")
-      .then(async ({ listMindmaps }) => {
-        const maps = await listMindmaps(runtime, workspaceId);
-        if (cancelled) return;
-        setMindmapCandidates(
-          maps.map((m) => ({
-            kind: "entity" as const,
-            ref: { type: "mindmap", id: m.id },
-            label: m.name,
-            icon: null,
-          })),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setMindmapCandidates([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [picker?.command, runtime, workspaceId]);
-
-  const pickerCandidates =
-    picker?.command === "mindmap"
-      ? mindmapCandidates.filter((c) =>
-          c.label.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
-        )
-      : picker?.command === "task"
-        ? taskCandidates
-        : search.candidates;
+  const pickerCandidates = picker?.command === "task" ? taskCandidates : search.candidates;
 
   useEffect(() => {
     search.setQuery(pickerQuery);
@@ -396,15 +341,6 @@ export function SlashMenuPlugin({
   const commitPick = (candidate: MentionCandidate) => {
     const active = pickerRef.current;
     if (!active || !runtime || !workspaceId) return;
-
-    if (active.command === "mindmap") {
-      if (candidate.kind !== "entity") return;
-      closeAll(true);
-      editor.update(() => {
-        $insertNodes([$createEmbedNode("mindmap", candidate.ref.id), $createParagraphNode()]);
-      });
-      return;
-    }
 
     // `/task` — the great moment (NO-5): both picks insert a task LINE block.
     // Create inserts PENDING and stamps the REAL id when the mint resolves
@@ -537,6 +473,16 @@ export function SlashMenuPlugin({
       return;
     }
 
+    if (command.id === "note" && noteLinks) {
+      editor.update(() => {
+        removeSlashToken(activeMenu);
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) selection.insertText("[[");
+      });
+      closeAll();
+      return;
+    }
+
     // Entity nouns → stage 2 picker at the same anchor.
     editor.update(() => {
       removeSlashToken(activeMenu);
@@ -564,61 +510,33 @@ export function SlashMenuPlugin({
     });
   }, [editor]);
 
-  // ── keyboard (command stage only — the picker's Command owns its own) ──────
-  useEffect(() => {
-    return editor.registerCommand(
-      KEY_ARROW_DOWN_COMMAND,
-      (event) => {
-        if (!menuRef.current || commandsRef.current.length === 0) return false;
-        event?.preventDefault();
-        setSelectedIndex((selectedIndexRef.current + 1) % commandsRef.current.length);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
-    );
-  }, [editor]);
-
-  useEffect(() => {
-    return editor.registerCommand(
-      KEY_ARROW_UP_COMMAND,
-      (event) => {
-        if (!menuRef.current || commandsRef.current.length === 0) return false;
-        event?.preventDefault();
-        const len = commandsRef.current.length;
-        setSelectedIndex((selectedIndexRef.current - 1 + len) % len);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
-    );
-  }, [editor]);
-
-  useEffect(() => {
-    return editor.registerCommand(
-      KEY_ESCAPE_COMMAND,
-      (event) => {
-        if (!menuRef.current && !pickerRef.current) return false;
-        event?.preventDefault();
-        closeAll();
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
-    );
+  // ── keyboard + dismissal (command stage): the one caret-menu regime shared
+  // with `@` and `[[` (spine/editor/menu-keys). The picker's Command owns its
+  // own keys.
+  useEffect(
+    () =>
+      registerMenuKeys(editor, {
+        isOpen: () => menuRef.current !== null || pickerRef.current !== null,
+        count: () => (menuRef.current ? commandsRef.current.length : 0),
+        index: () => selectedIndexRef.current,
+        setIndex: setSelectedIndex,
+        pick: (index) => {
+          const command = commandsRef.current[index];
+          if (command) runCommandRef.current(command);
+        },
+        close: () => closeAll(),
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor]);
-
+    [editor],
+  );
+  const menuOpen = menu !== null && commands.length > 0;
   useEffect(() => {
-    return editor.registerCommand(
-      KEY_ENTER_COMMAND,
-      (event) => {
-        if (!menuRef.current || commandsRef.current.length === 0) return false;
-        event?.preventDefault();
-        const command = commandsRef.current[selectedIndexRef.current] ?? commandsRef.current[0];
-        if (command) runCommandRef.current(command);
-        return true;
-      },
-      COMMAND_PRIORITY_HIGH,
+    if (!menuOpen) return;
+    return closeOnOutsidePointer(
+      (target) => menuBoxRef.current?.contains(target) ?? false,
+      () => setMenu(null),
     );
-  }, [editor]);
+  }, [menuOpen]);
 
   // ── render ──────────────────────────────────────────────────────────────────
   if (picker) {
@@ -642,7 +560,7 @@ export function SlashMenuPlugin({
           query={pickerQuery}
           onQueryChange={setPickerQuery}
           onSelect={commitPick}
-          loading={picker.command === "mindmap" ? false : search.loading}
+          loading={search.loading}
           placeholder={`Search ${picker.command}s…`}
           emptyLabel={`No ${picker.command} found.`}
           autoFocusInput
@@ -657,6 +575,7 @@ export function SlashMenuPlugin({
   let lastGroup: string | null = null;
   return createPortal(
     <div
+      ref={menuBoxRef}
       className="fixed z-50 max-h-80 w-72 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg scrollbar-thin"
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
