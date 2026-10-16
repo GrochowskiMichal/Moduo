@@ -347,6 +347,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
 
   // ── the bottom bar's mode row ─────────────────────────────────────────────
   const count = rows.length;
+  const selectedOpens = !selected || canOpen(channels, selected.item);
   const mode = useMemo<BottomBarMode | null>(
     () =>
       active && count > 0
@@ -359,7 +360,9 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
               { id: "task", label: "Task", keyHint: "T", run: () => run("task") },
               { id: "later", label: "Later", keyHint: "H", run: () => run("later") },
               { id: "open", label: "Open", keyHint: "⏎", run: () => run("open") },
-              { id: "go", label: "Go to conversation", run: () => run("go") },
+              ...(selectedOpens
+                ? [{ id: "go", label: "Go to conversation", run: () => run("go") }]
+                : []),
               {
                 id: "done-all",
                 label: "Done all in this conversation",
@@ -369,7 +372,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
             note: `${count} left · Esc`,
           }
         : null,
-    [active, count, run],
+    [active, count, run, selectedOpens],
   );
   useBottomBarModeOwner(mode);
 
@@ -485,9 +488,11 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
             <DropdownMenuItem onSelect={() => doneAll(g.channelId)}>
               Done all in this conversation
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onOpenConversation(g.channelId, null)}>
-              Go to conversation
-            </DropdownMenuItem>
+            {channels[g.channelId] || g.rows.some((r) => r.item.reason !== "removed") ? (
+              <DropdownMenuItem onSelect={() => onOpenConversation(g.channelId, null)}>
+                Go to conversation
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

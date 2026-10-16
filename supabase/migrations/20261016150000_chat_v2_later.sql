@@ -50,7 +50,7 @@ BEGIN
     RAISE EXCEPTION 'Name a message or a conversation.' USING ERRCODE = '22023';
   END IF;
   IF cardinality(p_item_ids) > 1000 THEN
-    RAISE EXCEPTION 'Too many items at once.' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Up to 1,000 items at a time.' USING ERRCODE = '22023';
   END IF;
   IF p_at IS NOT NULL AND p_at > now() + interval '1 year' THEN
     RAISE EXCEPTION 'Pick a time within a year.' USING ERRCODE = '22023';
