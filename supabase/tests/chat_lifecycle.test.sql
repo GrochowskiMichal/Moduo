@@ -359,6 +359,12 @@ BEGIN
   v := test.key_op($q$SELECT public.chat_op_delete_channel(%L)$q$, 'R');
   PERFORM test.ok(v NOT LIKE 'ok%', 'delete: a key can''t', v);
 
+  -- A public channel deleted, for the app's case below.
+  PERFORM test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'gone', '', false, '{}'::uuid[])$q$, test.id('W')));
+  INSERT INTO test.ids SELECT 'S0', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'gone';
+  PERFORM test.ok(test.as_key('K', format($q$SELECT public.chat_op_agent_post(%L, %L, 'hello', NULL)$q$, test.id('W'), test.ref('S0'))) LIKE 'ok%',
+    'setup: an app posts in a live public channel');
+  PERFORM test.op('A', $q$SELECT public.chat_op_delete_channel(%L)$q$, 'S0');
   v := test.op('A', $q$SELECT public.chat_op_delete_channel(%L)$q$, 'R');
   PERFORM test.ok(v LIKE 'ok%' AND (test.chan('R')).deleted_at IS NOT NULL AND (test.chan('R')).deleted_by = test.id('A'),
     'delete: its manager deletes R (private)', v);
@@ -367,13 +373,15 @@ BEGIN
     'delete: each member''s own row is stamped (it reaches them live), still a membership');
   PERFORM test.ok((SELECT deleted_at FROM public.entities WHERE entity_type = 'chat_channel' AND entity_id = test.ref('R')) IS NOT NULL,
     'delete: its registry row is a tombstone');
-  PERFORM test.ok(test.value_as('A', format(q_list, test.id('W'))) = '1', 'Recently deleted: its manager sees R');
+  PERFORM test.ok(test.value_as('A', format(q_list, test.id('W'))) = '2', 'Recently deleted: its manager sees R (and the public one)');
   PERFORM test.ok(test.value_as('B', format(q_list, test.id('W'))) = '0', 'Recently deleted: a member doesn''t');
-  PERFORM test.ok(test.value_as('D', format(q_list, test.id('W'))) = '0',
-    'Recently deleted: an admin not in the private channel doesn''t');
+  PERFORM test.ok(test.value_as('D', format(q_list, test.id('W'))) = '1',
+    'Recently deleted: an admin sees the public one, not the private channel they aren''t in');
   PERFORM test.ok(test.value_as('X', format(q_list, test.id('W'))) = '0', 'Recently deleted: an outsider doesn''t');
   v := test.as_key('K', format($q$SELECT 1 FROM public.chat_recently_deleted(%L)$q$, test.id('W')));
   PERFORM test.ok(v = 'ok 0' OR v NOT LIKE 'ok%', 'Recently deleted: a key gets nothing', v);
+  v := test.as_key('K', format($q$SELECT public.chat_op_agent_post(%L, %L, 'still here?', NULL)$q$, test.id('W'), test.ref('S0')));
+  PERFORM test.ok(v NOT LIKE 'ok%', 'delete: an app can''t post into a deleted public channel', v);
   PERFORM test.ok(public.perm_can_see_entity(test.id('W'), 'chat_channel', test.ref('Q')) IS NOT TRUE,
     'spine: without a session (as a key would) no chat row is seen');
 
@@ -394,7 +402,7 @@ BEGIN
   INSERT INTO test.ids SELECT 'S', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'alpha';
   PERFORM test.op('A', $q$SELECT public.chat_op_delete_channel(%L)$q$, 'S');
   PERFORM test.as_user('B', format($q$SELECT public.chat_op_create_channel(%L, 'Alpha', '', false, '{}'::uuid[])$q$, test.id('W')));
-  PERFORM test.ok(test.value_as('D', format(q_list, test.id('W'))) = '1', 'Recently deleted: an admin sees a deleted public channel');
+  PERFORM test.ok(test.value_as('D', format(q_list, test.id('W'))) = '2', 'Recently deleted: an admin sees deleted public channels');
   v := test.op('D', $q$SELECT public.chat_op_restore_channel(%L)$q$, 'S');
   PERFORM test.ok(v LIKE 'ok%' AND (test.chan('S')).name = 'alpha (restored)',
     'restore: an admin restores it; the taken name becomes "alpha (restored)"', v);
@@ -453,6 +461,10 @@ DO $$
 DECLARE
   fn text;
 BEGIN
+  PERFORM test.ok(NOT has_function_privilege('anon', 'public.chat_op_agent_post(uuid, uuid, text, uuid)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.chat_op_agent_post(uuid, uuid, text, uuid)', 'EXECUTE')
+                  AND has_function_privilege('service_role', 'public.chat_op_agent_post(uuid, uuid, text, uuid)', 'EXECUTE'),
+    'grants: chat_op_agent_post is the connector''s alone');
   FOREACH fn IN ARRAY ARRAY[
     'chat__touch_roster(uuid)',
     'chat__quiet_line(public.chat_channels, uuid, text, uuid)',

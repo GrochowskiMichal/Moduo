@@ -51,7 +51,7 @@ import { MessageStream, type MessageStreamHandle } from "../stream/message-strea
 import { authorName } from "../stream/rows";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
-import { composerLine } from "./composer-state";
+import { composerLine, newestPost } from "./composer-state";
 import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
 import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
@@ -772,9 +772,13 @@ export function ChatScreen({
                 )
               }
               onChoosePlan={() => dispatchOpenSettings({ section: "billing" })}
-              onReplyPrivately={
-                managers?.some((id) => id !== selfId) ? () => openDmWith(managers) : undefined
-              }
+              onReplyPrivately={(() => {
+                // The newest post in view: Reply privately goes to its author with it in the draft (CH50).
+                const post = newestPost(streamWin?.rows, selfId);
+                if (post) return () => replyPrivately(post);
+                const manager = managers?.find((id) => id !== selfId);
+                return manager ? () => openDmWith([manager]) : undefined;
+              })()}
               onJoin={() =>
                 guarded(
                   () => store?.join(channel.id) ?? Promise.resolve(),
@@ -1000,7 +1004,15 @@ export function ChatScreen({
               (p) => !(details.members ?? []).some((m) => m.userId === p.userId),
             )}
             onAdd={async (ids) => {
-              await store?.addMembers(channel.id, ids);
+              const added = (await store?.addMembers(channel.id, ids)) ?? 0;
+              // The server skips anyone a manager removed (only a manager adds them back).
+              if (added < ids.length) {
+                toast(
+                  added === 0
+                    ? "Nobody was added: only a manager can add back someone who was removed."
+                    : `Added ${added} of ${ids.length}: only a manager can add back someone who was removed.`,
+                );
+              }
             }}
           />
           <EditChannelDialog

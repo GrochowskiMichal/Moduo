@@ -18,7 +18,8 @@
 --   8. Redefined from their live bodies: chat_op_remove_member (a removal is
 --      recorded whether or not they were still in it; the quiet line; their
 --      items close), chat_op_add_members (the quiet line), chat_op_join and
---      chat_op_leave (the roster stamp), chat_op_archive_channel (its items close).
+--      chat_op_leave (the roster stamp), chat_op_archive_channel (its items close),
+--      chat_op_agent_post (a deleted channel refuses an app's post).
 --   9. Grants, by name.
 --
 -- Membership rows are only ever stamped (left_at / removed_at), never deleted
@@ -345,13 +346,12 @@ DECLARE
   v_name text;
 BEGIN
   SELECT * INTO v_channel FROM public.chat_channels WHERE id = p_channel_id FOR UPDATE;
-  IF v_channel.id IS NULL OR v_channel.kind <> 'channel' OR v_channel.deleted_at IS NULL THEN
+  -- One answer for "no such channel", "not deleted" and "not yours to restore".
+  IF v_channel.id IS NULL OR v_channel.kind <> 'channel' OR v_channel.deleted_at IS NULL
+     OR NOT public.chat__may_restore(v_channel, v_me) THEN
     RAISE EXCEPTION 'That channel isn''t in Recently deleted.' USING ERRCODE = 'P0002';
   END IF;
   PERFORM public.chat_op__guard(v_channel.workspace_id);
-  IF NOT public.chat__may_restore(v_channel, v_me) THEN
-    RAISE EXCEPTION 'That channel isn''t in Recently deleted.' USING ERRCODE = 'P0002';
-  END IF;
   IF v_channel.purged_at IS NOT NULL OR v_channel.deleted_at < now() - interval '30 days' THEN
     RAISE EXCEPTION 'That channel was deleted for good.' USING ERRCODE = 'P0002';
   END IF;
@@ -512,6 +512,17 @@ BEGIN
     INSERT INTO public.chat_members (channel_id, user_id, workspace_id, left_at, removed_at, removed_by)
     VALUES (p_channel_id, p_user_id, v_channel.workspace_id, now(), now(), v_me)
     ON CONFLICT (channel_id, user_id) DO NOTHING;
+    IF NOT FOUND THEN
+      -- They joined (by posting) in the meantime: remove that membership instead.
+      SELECT * INTO v_member FROM public.chat_members
+       WHERE channel_id = p_channel_id AND user_id = p_user_id FOR UPDATE;
+      IF v_member.removed_at IS NOT NULL THEN
+        RETURN;
+      END IF;
+      UPDATE public.chat_members
+         SET left_at = coalesce(left_at, now()), removed_at = now(), removed_by = v_me
+       WHERE channel_id = p_channel_id AND user_id = p_user_id;
+    END IF;
   ELSIF v_member.removed_at IS NOT NULL THEN
     RETURN;
   ELSE
@@ -566,6 +577,8 @@ BEGIN
     RAISE EXCEPTION 'Your role can''t add people to channels.' USING ERRCODE = '42501';
   END IF;
 
+  -- The channel row first, as remove and leave take it (one order, no deadlock).
+  PERFORM 1 FROM public.chat_channels WHERE id = p_channel_id FOR UPDATE;
   FOR v_uid IN SELECT DISTINCT u FROM unnest(coalesce(p_user_ids, '{}'::uuid[])) u WHERE u IS NOT NULL LOOP
     CONTINUE WHEN NOT public.chat_is_workspace_member(v_channel.workspace_id, v_uid);
     CONTINUE WHEN NOT v_manage AND public.chat__was_removed(p_channel_id, v_uid);
@@ -608,6 +621,11 @@ BEGIN
   IF v_channel.archived_at IS NOT NULL THEN
     RAISE EXCEPTION 'This channel is archived.' USING ERRCODE = '42501';
   END IF;
+  IF public.chat__was_removed(p_channel_id, v_me) THEN
+    RAISE EXCEPTION 'You were removed from this channel. A manager can add you back.' USING ERRCODE = '42501';
+  END IF;
+  -- The channel row first, as remove and leave take it; then the removal is re-read under it.
+  PERFORM 1 FROM public.chat_channels WHERE id = p_channel_id FOR UPDATE;
   IF public.chat__was_removed(p_channel_id, v_me) THEN
     RAISE EXCEPTION 'You were removed from this channel. A manager can add you back.' USING ERRCODE = '42501';
   END IF;
@@ -696,6 +714,92 @@ BEGIN
 END;
 $function$;
 
+-- An app's post (live body, 20261015170000): a deleted channel refuses it too.
+CREATE OR REPLACE FUNCTION public.chat_op_agent_post(p_workspace_id uuid, p_channel_id uuid, p_body text, p_parent_id uuid DEFAULT NULL::uuid)
+ RETURNS chat_messages
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_key uuid := public.module_api_key_id();
+  v_label text;
+  v_channel public.chat_channels;
+  v_parent public.chat_messages;
+  v_msg public.chat_messages;
+  v_body text := coalesce(p_body, '');
+  v_stored text;
+  v_mentions uuid[];
+begin
+  if v_key is null then
+    raise exception 'Only an API key can post as an app.';
+  end if;
+  if public.chat_key_scope(p_workspace_id) <> 'edit' then
+    raise exception 'This API key can''t post to chat — give it Chat: Edit in Workspace settings → API keys.';
+  end if;
+  if not public.chat_workspace_enabled(p_workspace_id) then
+    raise exception 'Chat is available on the Duo and Team plans.';
+  end if;
+
+  select * into v_channel from public.chat_channels
+   where id = p_channel_id and workspace_id = p_workspace_id;
+  -- A deleted channel (Recently deleted, or purged to a tombstone) is gone for apps too (CV-15).
+  if v_channel.id is null or v_channel.kind <> 'channel' or v_channel.is_private
+     or v_channel.deleted_at is not null then
+    raise exception 'Apps can only post in public channels.';
+  end if;
+  if v_channel.archived_at is not null then
+    raise exception 'This channel is archived.';
+  end if;
+  if btrim(v_body, E' \n\t') = '' then
+    raise exception 'A message can''t be empty.';
+  end if;
+  if char_length(v_body) > 8000 then
+    raise exception 'That message is too long (8,000 characters max).';
+  end if;
+  v_stored := public.chat__v1_to_v2(v_body);
+  if char_length(v_stored) > 8000 then
+    raise exception 'That message is too long (8,000 characters max).';
+  end if;
+
+  if p_parent_id is not null then
+    select * into v_parent from public.chat_messages where id = p_parent_id for update;
+    if v_parent.id is null or v_parent.channel_id <> p_channel_id or v_parent.parent_id is not null
+       or v_parent.deleted_at is not null then
+      raise exception 'That thread no longer exists.';
+    end if;
+  end if;
+
+  select k.name into v_label from public.workspace_api_keys k where k.id = v_key;
+
+  select coalesce(array_agg(distinct m[1]::uuid), '{}') into v_mentions
+    from regexp_matches(v_body, '<@([0-9a-fA-F-]{36})>', 'g') m
+   where public.chat_is_workspace_member(p_workspace_id, m[1]::uuid);
+
+  insert into public.chat_messages
+    (workspace_id, channel_id, parent_id, reply_to_id, author_id, author_kind, author_label, body,
+     format_version, mentioned_user_ids)
+  values
+    (p_workspace_id, p_channel_id, p_parent_id, p_parent_id, null, 'api_key', coalesce(v_label, 'App'), v_stored,
+     2, v_mentions)
+  returning * into v_msg;
+
+  if v_parent.id is not null then
+    update public.chat_messages
+       set reply_count = reply_count + 1, last_reply_at = v_msg.created_at
+     where id = v_parent.id;
+  end if;
+  -- Replies post at the bottom too (as a person's send); it also orders this
+  -- post's Catch up writes after a concurrent send's in the channel (CV-5).
+  update public.chat_channels set last_message_at = v_msg.created_at
+   where id = p_channel_id and (last_message_at is null or last_message_at < v_msg.created_at);
+
+  -- CV-5: Catch up items and the bell, among people who can read the channel.
+  perform public.chat__fan_out(v_msg, v_channel, null);
+  return v_msg;
+end;
+$function$;
+
 -- ── 9. Grants ────────────────────────────────────────────────────────────────
 
 DO $$
@@ -717,6 +821,9 @@ BEGIN
       RAISE EXCEPTION 'public.% must not be callable by clients.', fn;
     END IF;
   END LOOP;
+  -- The app's post: the service role only (the connector), as on prod.
+  REVOKE ALL ON FUNCTION public.chat_op_agent_post(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+  GRANT EXECUTE ON FUNCTION public.chat_op_agent_post(uuid, uuid, text, uuid) TO service_role;
   -- The ops and the read: signed-in people and the service role, never anon
   -- (as prod's grants on the redefined ones already are; the local stack's
   -- ACLs aren't prod's, so each is re-stated from nothing).

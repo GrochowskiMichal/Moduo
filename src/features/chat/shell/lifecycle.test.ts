@@ -7,9 +7,9 @@ import { describe, expect, it } from "@rstest/core";
 
 import { chatCapsKey, visibleRights } from "../../settings/access/chat-rights-section";
 import { daysLeft, makePrivateCopy } from "../dialogs/channel-dialogs";
-import { mapChannel, mapDeletedChannel, mapMember } from "../mappers";
-import type { ChatChannel, ChatMember } from "../model";
-import { composerLine } from "./composer-state";
+import { mapChannel, mapDeletedChannel, mapMember, mapMessage } from "../mappers";
+import type { ChatChannel, ChatMember, ChatMessage } from "../model";
+import { composerLine, newestPost } from "./composer-state";
 import { managesChannel } from "./use-chat-rights";
 
 const ME = "me";
@@ -178,5 +178,38 @@ describe("the lifecycle's rows", () => {
       purgeAt: "2026-10-31T00:00:00Z",
     });
     expect(mapDeletedChannel({ id: "c" })).toBeNull();
+  });
+});
+
+describe("Reply privately from the announcement line (CH50, AC5.5)", () => {
+  const msg = (id: string, patch: Record<string, unknown> = {}): ChatMessage => {
+    const m = mapMessage({
+      id,
+      workspace_id: "w",
+      channel_id: "news",
+      author_id: "so",
+      author_kind: "user",
+      kind: "message",
+      body: "Launch is Thursday",
+      created_at: "2026-10-01T10:00:00.000Z",
+      updated_at: "2026-10-01T10:00:00.000Z",
+      ...patch,
+    });
+    if (!m) throw new Error("bad row");
+    return m;
+  };
+
+  it("answers the newest post by someone else, never a reply, an app's post, a deleted one or your own", () => {
+    const rows = [
+      msg("a"),
+      msg("b", { author_id: "mi" }),
+      msg("reply", { parent_id: "b" }),
+      msg("app", { author_kind: "api_key", author_id: null }),
+      msg("gone", { deleted_at: "2026-10-01T11:00:00.000Z" }),
+      msg("mine", { author_id: ME }),
+    ];
+    expect(newestPost(rows, ME)?.id).toBe("b");
+    expect(newestPost([msg("mine", { author_id: ME })], ME)).toBeNull();
+    expect(newestPost(undefined, ME)).toBeNull();
   });
 });

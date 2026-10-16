@@ -151,6 +151,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.manager_remove",
   "chat.announcement_switch",
   "chat.channel_private",
+  "chat.channel_delete",
   "chat.channel_restore",
   "chat.pin",
   "chat.message_edit",

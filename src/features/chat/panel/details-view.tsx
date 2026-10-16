@@ -196,6 +196,8 @@ export function DetailsView({
                     name={p.name}
                     self={p.self}
                     manager={managerSet.has(p.userId)}
+                    // A viewer reads and reacts: never a manager (§12).
+                    canBeManager={personOf(p.userId)?.role !== "viewer"}
                     onSetManager={(on) => onSetManager?.(p.userId, on)}
                     onRemove={p.self ? undefined : () => onRemovePerson?.(p.userId)}
                   />
@@ -420,12 +422,14 @@ function PersonActions({
   name,
   self,
   manager,
+  canBeManager,
   onSetManager,
   onRemove,
 }: {
   name: string;
   self: boolean;
   manager: boolean;
+  canBeManager: boolean;
   onSetManager: (on: boolean) => void;
   onRemove?: () => void;
 }) {
@@ -445,9 +449,11 @@ function PersonActions({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-48">
-        <DropdownMenuItem onSelect={() => onSetManager(!manager)}>
-          {manager ? (self ? "Stop managing" : "Remove as manager") : "Make manager"}
-        </DropdownMenuItem>
+        {manager || canBeManager ? (
+          <DropdownMenuItem onSelect={() => onSetManager(!manager)}>
+            {manager ? (self ? "Stop managing" : "Remove as manager") : "Make manager"}
+          </DropdownMenuItem>
+        ) : null}
         {onRemove ? (
           <DropdownMenuItem variant="destructive" onSelect={onRemove}>
             Remove from channel

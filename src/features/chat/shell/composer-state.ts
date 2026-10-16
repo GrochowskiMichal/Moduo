@@ -3,7 +3,7 @@
 // replaces the box; never a disabled box (AC1.8). The server decides every
 // write; this only keeps the screen honest about what it will refuse.
 
-import type { ChatChannel, ChatMember, ChatPerson } from "../model";
+import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../model";
 import { dmPeople } from "./sidebar-model";
 
 export type ComposerLine =
@@ -51,6 +51,24 @@ export function composerLine(input: {
   }
   if (!member) return { kind: "join" };
   if (channel.managersOnly && !(input.isManager ?? canManage)) return { kind: "announcement" };
+  return null;
+}
+
+/**
+ * The post "Reply privately" answers from the announcement line (CH50): the
+ * newest top-level message in view by someone else (a person, not an app).
+ */
+export function newestPost(
+  rows: readonly ChatMessage[] | undefined,
+  selfId: string,
+): ChatMessage | null {
+  if (!rows) return null;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const m = rows[i];
+    if (!m || m.kind !== "message" || m.parentId || m.deletedAt || m.sendState) continue;
+    if (m.authorKind !== "user" || !m.authorId || m.authorId === selfId) continue;
+    return m;
+  }
   return null;
 }
 
