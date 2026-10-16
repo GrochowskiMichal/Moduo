@@ -2,6 +2,12 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-16 · GitHub on tasks: a read-only GitHub App per workspace; PRs and issues as live chips and cards; auto-linking by task ID; status suggested by default, automatic as a workspace setting** → [specs/github.md](../../specs/github.md)
+  - Who: Maciej, 2026-10-16 (MOD-156, grilling G1–G51: "g39. c, all ok"). The technical layer (GitHub App, tables, `integration` actor, webhook pipeline) is the agent's choice, deferred to it: confirmed for building, revisitable.
+  - Decision: an admin connects a GitHub account or organisation with chosen repos; every member sees those repos' PR and issue titles and state. A PR links to a task when its branch, title or description names the task's ID (any case; "skip MOD-142" opts out, "part of / ref / related to" links without moving status). Chips in text, cards on their own line and in a new "Pull requests" group; a PR glyph on rows and cards. A PR opening or merging into the default branch suggests Start / Mark done; "Move tasks automatically" (off by default) applies it, attributed to GitHub (app). Forks and outside authors link but never move anything. Moduo never writes to GitHub.
+  - Why: Moduo is built with agents that open PRs all day; linking must be a side effect of work (PRODUCT_BRIEF), and Mike's rule "signals only suggest, never auto-complete" (`.design/tasks-v3/research/along-the-way-mike.md`) stays the default while teams can opt into Linear-style automation.
+  - Rejected: automatic moves by default (Mike's rule); an OAuth App (read+write to every repo); public-repo previews without an install (GitHub's unauthenticated limit); branch and commit chips in v1 (they need read access to code); linkback comments on PRs; per-person GitHub accounts in v1.
+
 - **2026-10-08 · One reference grammar: `@` mentions anything, `#` is tags, `/` is commands; `#tag` inside text is a link and never applies the tag** (Maciej + Mike).
   - **`@`** mentions people first, then tasks, notes, contacts and channels. Chat channels lose their `#` prefix.
   - **`#tag` inside a note, a task description or a chat message** links to the tag page. It doesn't change the item's tags, which live in its Tags field: rewriting a sentence never drops an item out of a filter or saved view, a typo never creates a tag, and a chat message stays a message.

@@ -212,6 +212,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
+- 2026-10-16 · GitHub on tasks (Maciej, MOD-156, G1–G51) · a read-only GitHub App per workspace; PRs and issues as live chips and cards, auto-linked by task ID; Start / Mark done suggested by default, automatic as an opt-in workspace setting; forks and outsiders never move a task · agents open PRs all day and linking should be a side effect of work · rejected: automatic by default, an OAuth App, unauthenticated public previews → decisions/spine.md
 - 2026-10-08 · One reference grammar: `@` mentions anything, `#` is tags, `/` is commands; `#tag` inside text is a link and never applies the tag.
 - 2026-07-13 · DF-21 (Universal Inbox — spine lane) /s1 PLANNED — spec DoR-ready, 6 sub-blocks, no code yet.
 - 2026-07-13 · DF-9 notification-generation trigger APPLIED TO PROD
