@@ -21,7 +21,8 @@
 --      level: the root of the quoted message); the chain it left and the one
 --      it joins recount. Own messages for anyone who can post; anyone's for
 --      managers and admins. A message with replies of its own stays a root.
---      Joining a wrapped chain reopens it, as a new reply does (CH54).
+--      Joining a wrapped chain reopens it, as a new reply does (CH54); the
+--      chain a settling reply leaves is reopened too.
 --   4. chat_op_send (from its live body): a reply to a wrapped chain reopens
 --      it ("Reopened by <sender>"). Nothing else in it changes.
 --   5. Reading the stream past a reply it no longer draws (its chain is
@@ -276,13 +277,21 @@ BEGIN
   UPDATE public.chat_messages SET parent_id = v_root.id, reply_to_id = v_quoted.id
    WHERE id = v_msg.id
   RETURNING * INTO v_msg;
-  IF v_old IS NOT NULL AND v_old <> v_root.id THEN
-    PERFORM public.chat__chain_refresh(v_old);
-  END IF;
   PERFORM public.chat__chain_refresh(v_root.id);
-  -- Joining a wrapped chain reopens it, as a new reply does (CH54).
-  SELECT * INTO v_root FROM public.chat_messages WHERE id = v_root.id;
-  PERFORM public.chat__reopen_chain(v_root, v_me, clock_timestamp());
+  IF v_old IS DISTINCT FROM v_root.id THEN
+    IF v_old IS NOT NULL THEN
+      PERFORM public.chat__chain_refresh(v_old);
+      -- The reply that settled the chain it leaves: that chain is open again.
+      SELECT * INTO v_quoted FROM public.chat_messages WHERE id = v_old;
+      IF v_quoted.settled_id = v_msg.id THEN
+        PERFORM public.chat__reopen_chain(v_quoted, v_me, clock_timestamp());
+      END IF;
+    END IF;
+    -- Joining a wrapped chain reopens it, as a new reply does (CH54); a new
+    -- quote inside the same chain doesn't.
+    SELECT * INTO v_root FROM public.chat_messages WHERE id = v_root.id;
+    PERFORM public.chat__reopen_chain(v_root, v_me, clock_timestamp());
+  END IF;
   RETURN v_msg;
 END;
 $$;

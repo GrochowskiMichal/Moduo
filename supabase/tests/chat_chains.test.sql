@@ -232,6 +232,19 @@ BEGIN
   v := test.attach('C', 'tail', 'c');
   PERFORM test.ok(v LIKE 'ok %' AND (test.msg('c')).wrapped_at IS NULL AND (test.msg('c')).reopened_by = test.id('C'),
     'a message joining a wrapped chain reopens it', v);
+  -- Moving the reply that settled a chain opens that chain again.
+  PERFORM test.ok(test.post('B', 'Q', 'y') LIKE 'ok %', 'B asks y');
+  PERFORM test.ok(test.post('C', 'Q', 'y1', 'y') LIKE 'ok %', 'C answers y1');
+  PERFORM test.ok(test.wrap('B', 'y', 'y1') LIKE 'ok %', 'B wraps up y with y1');
+  v := test.attach('A', 'y1', 'early');
+  PERFORM test.ok(v LIKE 'ok %' AND (test.msg('y')).wrapped_at IS NULL AND (test.msg('y')).settled_id IS NULL
+              AND (test.msg('y')).reply_count = 0,
+    'moving the settling reply elsewhere reopens the chain it left', v);
+  -- A new quote inside the same wrapped chain leaves it wrapped.
+  PERFORM test.ok(test.wrap('C', 'c', 'tail') LIKE 'ok %', 'C wraps up c with tail');
+  v := test.attach('C', 'tail', 'c1');
+  PERFORM test.ok(v LIKE 'ok %' AND (test.msg('tail')).reply_to_id = test.mid('c1') AND (test.msg('c')).wrapped_at IS NOT NULL,
+    'quoting another reply of the same wrapped chain doesn''t reopen it', v);
   v := test.as_user('V', format($q$SELECT id FROM public.chat_op_attach_to_chain(%L::uuid, %L::uuid)$q$,
     test.mid('later'), test.mid('r')));
   PERFORM test.ok(v NOT LIKE 'ok %', 'a viewer moves nothing', v);
