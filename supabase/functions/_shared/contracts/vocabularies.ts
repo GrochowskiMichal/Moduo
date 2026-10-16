@@ -1474,3 +1474,56 @@ export function isAttachmentPreviewMime(value: unknown): value is AttachmentPrev
     typeof value === "string" && (ATTACHMENT_PREVIEW_MIMES as readonly string[]).includes(value)
   );
 }
+
+// ---------------------------------------------------------------------------
+// Statuses (Chat v2 CV-17, specs/chat-v2.md §10, CH28d, CH45) — mirror the
+// CHECKs on public.user_statuses (preset) and public.user_saved_statuses
+// (clear_after) in …_chat_v2_statuses. Presets are Moduo's and live here, not
+// as rows: the row keeps the key with the words and emoji it was set with.
+// "Clear after" is what a saved status remembers; the app turns it into a
+// time (clear_at) when the status is set, because only it knows your midnight.
+// ---------------------------------------------------------------------------
+
+export const STATUS_PRESETS = ["meeting", "sick", "vacation", "commuting"] as const;
+export type StatusPreset = (typeof STATUS_PRESETS)[number];
+export const statusPresetSchema = z.enum(STATUS_PRESETS);
+export function isStatusPreset(value: unknown): value is StatusPreset {
+  return typeof value === "string" && (STATUS_PRESETS as readonly string[]).includes(value);
+}
+/** Read-side normalization: an unknown preset reads as your own status. */
+export function normalizeStatusPreset(input: unknown): StatusPreset | null {
+  return isStatusPreset(input) ? input : null;
+}
+export function parseStatusPreset(input: unknown): SafeParseResult<StatusPreset> {
+  return parseOrError(statusPresetSchema, input);
+}
+
+export const STATUS_CLEAR_AFTER = ["30m", "1h", "today", "this_week", "date", "never"] as const;
+export type StatusClearAfter = (typeof STATUS_CLEAR_AFTER)[number];
+export const statusClearAfterSchema = z.enum(STATUS_CLEAR_AFTER);
+export function isStatusClearAfter(value: unknown): value is StatusClearAfter {
+  return typeof value === "string" && (STATUS_CLEAR_AFTER as readonly string[]).includes(value);
+}
+/** Read-side normalization: an unknown choice reads as "never". */
+export function normalizeStatusClearAfter(input: unknown): StatusClearAfter {
+  return isStatusClearAfter(input) ? input : "never";
+}
+export function parseStatusClearAfter(input: unknown): SafeParseResult<StatusClearAfter> {
+  return parseOrError(statusClearAfterSchema, input);
+}
+
+/** Moduo's presets as the picker offers them (CH45): emoji, words, whether
+ *  they hold pings, and the "clear after" they start with. */
+export const STATUS_PRESET_DEFAULTS: Readonly<
+  Record<StatusPreset, { emoji: string; text: string; dnd: boolean; clearAfter: StatusClearAfter }>
+> = {
+  meeting: { emoji: "📅", text: "In a meeting", dnd: false, clearAfter: "1h" },
+  sick: { emoji: "🤒", text: "Out sick", dnd: true, clearAfter: "today" },
+  vacation: { emoji: "🌴", text: "On vacation", dnd: true, clearAfter: "date" },
+  commuting: { emoji: "🚆", text: "Commuting", dnd: false, clearAfter: "30m" },
+};
+
+/** A status's limits (the CHECKs on both tables; the ops trim first). */
+export const STATUS_TEXT_MAX = 100;
+export const STATUS_EMOJI_MAX = 16;
+export const SAVED_STATUSES_MAX = 20;
