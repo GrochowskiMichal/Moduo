@@ -51,7 +51,7 @@ import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/w
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task } from "../model";
+import type { Bucket, Tag, Task } from "../model";
 import { BulkPanel } from "./bulk-panel";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskFullPage } from "./task-full-page";
@@ -1115,5 +1115,47 @@ describe("reordering subtasks (TV-U10)", () => {
     renderPanel(parent, a, null, false);
     moveUp("Second step");
     expect(dropTask).not.toHaveBeenCalled();
+  });
+});
+
+describe("the tags' + ends the chips, at their height (MOD-158)", () => {
+  const tag = (id: string, name: string): Tag => ({
+    id,
+    workspaceId: "w",
+    ownerId: "u1",
+    name,
+    color: "pink",
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  });
+  const TAGS = [tag("g1", "shell"), tag("g2", "visual")];
+  const withTags = (tags: Tag[]) =>
+    api(task(), { tags: TAGS, tagsByTask: new Map([["t1", tags]]) });
+
+  it("rides with the last chip as the round 22 px +, never the 26 px value square", () => {
+    renderPanel(task(), withTags(TAGS));
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("data-slot")).toBe("tag-add");
+    expect(add.className).toContain("size-5.5");
+    // In one group with the last chip, so it can't wrap onto a line alone.
+    const group = add.parentElement as HTMLElement;
+    const chips = group.querySelectorAll('[data-slot="tag-chip"]');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe("visual");
+    expect(group.lastElementChild).toBe(add);
+  });
+
+  it("with no tags yet, the value still reads Add tag", () => {
+    renderPanel(task(), withTags([]));
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("data-slot")).toBe("property-value");
+    expect(add.textContent).toContain("Add tag");
+  });
+
+  it("read-only: the chips and no +", () => {
+    renderPanel(task(), withTags(TAGS), null, false);
+    expect(screen.queryByRole("button", { name: "Add tag" })).toBeNull();
+    expect(document.querySelectorAll('[data-slot="tag-chip"]')).toHaveLength(2);
   });
 });
