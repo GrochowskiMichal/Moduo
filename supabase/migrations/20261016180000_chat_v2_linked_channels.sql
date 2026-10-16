@@ -65,9 +65,7 @@ ALTER TABLE public.entity_links DROP CONSTRAINT IF EXISTS entity_links_relation_
 ALTER TABLE public.entity_links ADD CONSTRAINT entity_links_relation_kind_check
   CHECK (relation_kind = ANY (ARRAY['references'::text, 'spawned-from'::text, 'blocks'::text,
     'attachment'::text, 'mentions'::text, 'works-at'::text, 'follow-up'::text, 'paid-by'::text,
-    'conversation-of'::text])) NOT VALID;
--- Checked apart from the ALTER, so the table isn't held for the whole scan.
-ALTER TABLE public.entity_links VALIDATE CONSTRAINT entity_links_relation_kind_check;
+    'conversation-of'::text]));
 
 -- Does conversation p_channel link to (p_type, p_id) right now?
 CREATE OR REPLACE FUNCTION public.chat__links_to(p_channel_id uuid, p_type text, p_id uuid)
@@ -299,13 +297,25 @@ BEGIN
   END IF;
 
   v_type := public.chat__link_type(p_type);
-  -- Already linked there: nothing to do, unless its row went (an item's
-  -- delete and restore can leave it gone), which relinking brings back.
-  IF v_channel.linked_type = v_type AND v_channel.linked_id = p_id
-     AND (v_type = 'team' OR EXISTS (SELECT 1 FROM public.entity_links l
-                                       WHERE l.workspace_id = v_channel.workspace_id
-                                         AND l.source_type = 'chat_channel' AND l.source_id = v_channel.id
-                                         AND l.relation_kind = 'conversation-of' AND l.deleted_at IS NULL)) THEN
+  -- Already linked there: nothing changes, except that a row gone while the
+  -- link held (an item's delete and restore can do this) comes back, with no
+  -- new history line and the link's date kept.
+  IF v_channel.linked_type = v_type AND v_channel.linked_id = p_id THEN
+    IF v_type <> 'team' AND NOT EXISTS (SELECT 1 FROM public.entity_links l
+                                          WHERE l.workspace_id = v_channel.workspace_id
+                                            AND l.source_type = 'chat_channel' AND l.source_id = v_channel.id
+                                            AND l.relation_kind = 'conversation-of' AND l.deleted_at IS NULL) THEN
+      PERFORM public.chat__check_link_target(v_channel.workspace_id, v_type, p_id, v_me);
+      UPDATE public.entity_links l
+         SET deleted_at = NULL
+       WHERE l.id = (SELECT x.id FROM public.entity_links x
+                      WHERE x.workspace_id = v_channel.workspace_id
+                        AND x.source_type = 'chat_channel' AND x.source_id = v_channel.id
+                        AND x.target_type = v_type AND x.target_id = p_id
+                        AND x.relation_kind = 'conversation-of' AND x.deleted_at IS NOT NULL
+                      ORDER BY x.deleted_at DESC, x.created_at DESC
+                      LIMIT 1);
+    END IF;
     RETURN v_channel;
   END IF;
   PERFORM public.chat__check_link_target(v_channel.workspace_id, v_type, p_id, v_me);

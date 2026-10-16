@@ -733,8 +733,19 @@ BEGIN
   UPDATE public.entity_links SET deleted_at = now()
    WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL;
   PERFORM test.ok(test.mirrors('RL') = 'none', 'setup: the row is gone, the link holds');
+  SELECT count(*) INTO n FROM public.module_activity WHERE entity_id = test.ref('RL') AND op = 'chat.channel_link';
   v := test.link('A', 'RL', 'project', test.id('SB'));
   PERFORM test.ok(v LIKE 'ok %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'linking it there again restores the row', v);
+  PERFORM test.ok((SELECT count(*) FROM public.module_activity WHERE entity_id = test.ref('RL') AND op = 'chat.channel_link') = n,
+    'with no second history line');
+
+  -- The row is changed only from the conversation.
+  v := test.as_user('A', format($q$SELECT public.links_op_delete(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.entity_links WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL)));
+  PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'the link op can''t remove it', v);
+  v := test.as_op('A', format($q$UPDATE public.entity_links SET target_id = %L
+    WHERE source_id = %L AND relation_kind = 'conversation-of' AND deleted_at IS NULL$q$, test.id('PB2'), test.ref('RL')));
+  PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'nor can it move to another item', v);
 END;
 $$;
 SELECT test.ok(test.convo('A', 'project', test.id('SB')) LIKE '%founders/0%'
@@ -767,7 +778,15 @@ BEGIN
   v := test.link('A', 'RL', 'contact', test.id('CT'));
   PERFORM test.ok(v LIKE 'ok %' AND test.linked('RL') = 'contact:' || test.id('CT')
                   AND test.mirrors('RL') = 'contact:' || test.id('CT'), 'A links "relink" to the contact', v);
-  PERFORM test.ok(test.link('B', 'RL', 'contact', test.id('CT')) NOT LIKE 'ok %', 'B (not in it, can''t edit the contact): refused');
+  v := test.as_user('A', format($q$SELECT public.contacts_op_unlink(%L, %L)$q$, test.id('W'),
+    (SELECT id FROM public.entity_links WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of' AND deleted_at IS NULL)));
+  PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'contact:' || test.id('CT'), 'Contacts'' unlink can''t remove it', v);
+  PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_join(%L)$q$, test.ref('RL'))) LIKE 'ok %', 'setup: B joins "relink"');
+  PERFORM test.ok(test.link('B', 'RL', 'company', test.id('C1')) LIKE '42501 %', 'B (in it) can''t edit the company: refused');
+  v := test.link('A', 'RL', 'project', test.id('SB'));
+  v := test.link('B', 'RL', 'contact', test.id('CT'));
+  PERFORM test.ok(v LIKE '42501 %' AND test.linked('RL') = 'bucket:' || test.id('SB'), 'B (in it) can''t edit A''s contact: refused', v);
+  v := test.link('A', 'RL', 'contact', test.id('CT'));
   v := test.as_user('A', format($q$SELECT public.chat_op_start_conversation(%L, 'contact', %L)$q$, test.id('W'), test.id('CT')));
   PERFORM test.ok(v LIKE 'ok %', 'A starts a conversation for the contact', v);
   SELECT * INTO r FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'Jane Roe';
