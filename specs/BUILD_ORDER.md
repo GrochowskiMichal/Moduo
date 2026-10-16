@@ -378,6 +378,19 @@ _Finished blocks of this section (and the v2 blocks that landed): [BUILD_LOG.md]
 
 _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
+## GitHub on tasks · [`specs/github.md`](./github.md)
+
+> Planned 2026-10-16 (MOD-156, Maciej's answers G1–G51). GH-D and GH-1 can run in parallel. **Maciej's step before GH-2's live check:** create the "moduo" GitHub organisation and register the app (GH-1 ships `docs/github-app-setup.md`). Tier 2: GH-1, GH-2, GH-6 and GH-7 touch migrations, Edge Functions or `moduo-mcp`.
+
+- [ ] **GH-D — Chip, card and suggestion frames** · deps: — · prototype `.design/github/prototypes/github.html`; **Maciej approves before GH-3, GH-5 and GH-6 build UI**
+- [ ] **GH-1 — Connect GitHub** · deps: — · migration, app auth, `github-connect`, Settings card, setup doc
+- [ ] **GH-2 — Webhooks, items and auto-linking** · deps: GH-1
+- [ ] **GH-3 — GitHub references: chips and cards** · deps: GH-D, GH-2
+- [ ] **GH-4 — Paste and "/"** · deps: GH-3
+- [ ] **GH-5 — GitHub on task surfaces** · deps: GH-3
+- [ ] **GH-6 — Status suggestions and automatic moves** · deps: GH-2, GH-5
+- [ ] **GH-7 — Connector** · deps: GH-2
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
