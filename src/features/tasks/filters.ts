@@ -234,7 +234,7 @@ export function showsArchived(conditions: readonly FilterCondition[]): boolean {
 /**
  * A Status filter that asks for Done shows done tasks whatever Display →
  * Completed says: otherwise "Status is Done" would list nothing but
- * "N completed · show" lines.
+ * a "N completed · Show" line.
  */
 export function showsDone(conditions: readonly FilterCondition[]): boolean {
   return asksForStatus(conditions, "done") || asksForCompletion(conditions);

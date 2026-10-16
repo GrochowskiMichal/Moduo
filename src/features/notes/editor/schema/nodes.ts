@@ -15,6 +15,7 @@ import { CodeHighlightNode, CodeNode } from "@lexical/code";
 import { HorizontalRuleNode } from "@lexical/extension";
 import { LinkNode } from "@lexical/link";
 import { ListItemNode, ListNode } from "@lexical/list";
+import { MarkNode } from "@lexical/mark";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import type { Klass, LexicalNode } from "lexical";
@@ -39,4 +40,6 @@ export const NOTE_EDITOR_NODES: ReadonlyArray<Klass<LexicalNode>> = [
   EntityRefNode,
   PageRowNode,
   TaskLineNode,
+  // Comment anchors (NR-8): ids are thread ids; markdown drops the mark, keeps the text.
+  MarkNode,
 ];

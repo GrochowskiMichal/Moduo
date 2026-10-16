@@ -346,10 +346,10 @@ _Finished blocks of this section (and the v2 blocks that landed): [BUILD_LOG.md]
 
 > **Planned 2026-10-13 (`/s1`, engineer mode, Mike).** Keeps Lexical + the Yjs/`note_updates` model; rebuilds the surface and editor core behind a per-user "New Notes" switch, then flips (NR-12). NR-1, NR-2 and NR-3 are done (see BUILD_LOG); NR-4, NR-5 and NR-6 can now run in parallel, and NR-7 beside them. NR-9 waits for AT-1 to reach `develop` (it is held on `maciej`) and is not a flip dependency.
 
-- [ ] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy)
-- [ ] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor
+- [x] **NR-7 — Secure live channel + named presence** · deps: — · lane notes-data · Tier 2 (`realtime.messages` policy) · ✅ built 2026-10-16 (`t/mike/nr-7-secure-live-channel`, #409); migrations `20261016120000` (and #412's compaction guard `20261016150000`) applied to prod 2026-10-16; the app/`moduo-mcp` ship waits on Maciej's release train
+- [x] **NR-4 — Writing UX: quiet block handles, unified menus, `[[` links, ⌘K link dialog, mindmap drop** · deps: NR-3 · lane notes-editor · ✅ built 2026-10-16 (`t/mike/nr-4-writing-ux`, #414)
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
-- [ ] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`)
+- [x] **NR-8 — Comments anchored to text** · deps: NR-4 · lane notes-editor · Tier 2 (migration on `comments`) · ✅ built 2026-10-16 (`t/mike/nr-8-anchored-comments`, #415); migration `20261016180000` tested locally, **not applied to prod**; `moduo-mcp` must redeploy with or before the web release
 - [ ] **NR-10 — ⌘K searches everything** · deps: NR-2 · lane notes-ui
 - [ ] **NR-11 — Import hardening (trashed re-import, size cap, honest progress, >1000 notes)** · deps: NR-3 · lane notes-data
 - [ ] **NR-12 — Flip to New Notes + delete classic** · deps: NR-4, NR-5, NR-6, NR-7, NR-8, NR-10, NR-11 · lane notes-ui
@@ -377,6 +377,19 @@ _Finished blocks of this section (and the v2 blocks that landed): [BUILD_LOG.md]
 - [ ] **TX-10 — Build updates + announcements (B2, E1, E2, `news.moduo.app`, the `moduo.app/email` page)** · deps: TX-8
 
 _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
+
+## GitHub on tasks · [`specs/github.md`](./github.md)
+
+> Planned 2026-10-16 (MOD-156, Maciej's answers G1–G51). GH-D and GH-1 can run in parallel. **Maciej's step before GH-2's live check:** create the "moduo" GitHub organisation and register the app (GH-1 ships `docs/github-app-setup.md`). Tier 2: GH-1, GH-2, GH-6 and GH-7 touch migrations, Edge Functions or `moduo-mcp`.
+
+- [ ] **GH-D — Chip, card and suggestion frames** · deps: — · prototype `.design/github/prototypes/github.html`; **Maciej approves before GH-3, GH-5 and GH-6 build UI**
+- [ ] **GH-1 — Connect GitHub** · deps: — · migration, app auth, `github-connect`, Settings card, setup doc
+- [ ] **GH-2 — Webhooks, items and auto-linking** · deps: GH-1
+- [ ] **GH-3 — GitHub references: chips and cards** · deps: GH-D, GH-2
+- [ ] **GH-4 — Paste and "/"** · deps: GH-3
+- [ ] **GH-5 — GitHub on task surfaces** · deps: GH-3
+- [ ] **GH-6 — Status suggestions and automatic moves** · deps: GH-2, GH-5
+- [ ] **GH-7 — Connector** · deps: GH-2
 
 ## Running sessions & parallelism
 

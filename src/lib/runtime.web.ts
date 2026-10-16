@@ -129,6 +129,7 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { createTasksAgents } from "./runtime.web.agents";
+import { joinNoteLive } from "./runtime.web.notes-live";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
@@ -1150,7 +1151,7 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
-    async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
+    async pullDoc({ workspaceId, noteId, sinceUpdateId, knownDocVersion }) {
       // Log FIRST, snapshot SECOND. A concurrent compaction between the two
       // reads then only ever makes the snapshot NEWER than the log we hold —
       // applying both stays lossless (Yjs is idempotent). The reverse order
@@ -1179,6 +1180,20 @@ export const webRuntime: ModuoRuntime = {
       }
       if (updRes.error) throw new Error(updRes.error.message);
       const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
+
+      // Every snapshot change (compaction, seed) bumps doc_version, so an
+      // unchanged version means the snapshot adds nothing to what we hold.
+      if (knownDocVersion != null) {
+        const ver = await supabaseClient
+          .from("notes")
+          .select("doc_version")
+          .eq("id", noteId)
+          .eq("workspace_id", workspaceId)
+          .single();
+        if (!ver.error && ver.data?.doc_version === knownDocVersion) {
+          return { snapshotB64: null, docVersion: knownDocVersion, updates };
+        }
+      }
 
       const noteRes = await supabaseClient
         .from("notes")
@@ -1437,7 +1452,15 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
-    async saveSnapshot({ workspaceId, noteId, snapshotB64, uptoUpdateId, bodyText, bodyMd }) {
+    async saveSnapshot({
+      workspaceId,
+      noteId,
+      snapshotB64,
+      uptoUpdateId,
+      bodyText,
+      bodyMd,
+      expectedDocVersion,
+    }) {
       const { data, error } = await supabaseClient.rpc("notes_op_save_snapshot", {
         p_workspace_id: workspaceId,
         p_note_id: noteId,
@@ -1445,11 +1468,13 @@ export const webRuntime: ModuoRuntime = {
         p_upto_update_id: uptoUpdateId,
         p_body_text: bodyText ?? null,
         p_body_md: bodyMd ?? null,
+        p_expected_doc_version: expectedDocVersion ?? undefined,
       });
       if (error) throw new Error(error.message);
       return {
         folded: Number(data?.folded ?? 0),
         docVersion: Number(data?.doc_version ?? 0),
+        refused: data?.refused === true,
       };
     },
 
@@ -1566,6 +1591,10 @@ export const webRuntime: ModuoRuntime = {
         title: (r.title as string) ?? "",
         bodyMd: (r.body_md as string) ?? "",
       }));
+    },
+
+    joinLive(input) {
+      return joinNoteLive(supabaseClient, input);
     },
   },
 
@@ -3358,20 +3387,41 @@ export const webRuntime: ModuoRuntime = {
       mentionedUserIds,
       entityLabel,
       entityIcon,
+      anchorId,
     }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_add", {
-        p_workspace_id: workspaceId,
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_body: body,
-        p_mentioned_user_ids: mentionedUserIds ?? [],
-        p_entity_label: entityLabel ?? null,
-        p_entity_icon: entityIcon ?? null,
-      });
+      const { data, error } = anchorId
+        ? await supabaseClient.rpc("comments_op_add_anchored", {
+            p_workspace_id: workspaceId,
+            p_entity_id: entityId,
+            p_anchor_id: anchorId,
+            p_body: body,
+            p_mentioned_user_ids: mentionedUserIds ?? [],
+            p_entity_label: entityLabel ?? null,
+            p_entity_icon: entityIcon ?? null,
+          })
+        : await supabaseClient.rpc("comments_op_add", {
+            p_workspace_id: workspaceId,
+            p_entity_type: entityType,
+            p_entity_id: entityId,
+            p_body: body,
+            p_mentioned_user_ids: mentionedUserIds ?? [],
+            p_entity_label: entityLabel ?? null,
+            p_entity_icon: entityIcon ?? null,
+          });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async resolveCommentThread({ workspaceId, noteId, anchorId, resolved }) {
+      const { error } = await supabaseClient.rpc("comments_op_resolve", {
+        p_workspace_id: workspaceId,
+        p_entity_id: noteId,
+        p_anchor_id: anchorId,
+        p_resolved: resolved,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async getCommentExcerpts({ workspaceId, commentIds }) {
@@ -5035,6 +5085,8 @@ function commentRowToModel(raw: unknown): SpineComment {
     deletedAt: r.deleted_at ?? null,
     editedAt: r.edited_at ?? null,
     reactions: reactionMarks(r.comment_reactions ?? []),
+    anchorId: r.anchor_id ?? null,
+    resolvedAt: r.resolved_at ?? null,
   };
 }
 

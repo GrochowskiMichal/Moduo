@@ -99,7 +99,6 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "notes_list_unmaterialized",
   "notifications_list",
   "share_assign_preview",
-  "share_can",
   "share_defaults_get",
   "share_op_state",
   "storage_status",

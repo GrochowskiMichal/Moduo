@@ -494,6 +494,9 @@ export const commentRowSchema = z.object({
   deleted_at: optStr,
   // TV-U13: absent before 20261013100000.
   edited_at: optStr,
+  // NR-8: absent before 20261016180000 (then every comment is note-level).
+  anchor_id: optStr,
+  resolved_at: optStr,
   comment_reactions: z
     .array(z.object({ user_id: z.string(), reaction: z.string() }))
     .nullable()

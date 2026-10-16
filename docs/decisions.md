@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
@@ -147,6 +148,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
+- 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
+- 2026-10-16 · NR-7: clients send nothing over Realtime; the server stamps who is viewing (`notes_live_here`) and hands each saved update to people who may still view the note (`notes-live:<uid>` topics).
 - 2026-10-14 · NR-6 built — agent (MCP) note writes are real Yjs updates: they land live, are attributed, and can be undone.
 - 2026-10-13 · NR-3 built — one markdown converter reads the CRDT back through the real binding, node schemas load without React, and an open note paints from its cache.
 - 2026-10-13 · NR-2 built — New Notes ships behind a synced per-user switch, and a new note is a device-only draft until its first character.
@@ -212,6 +216,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
+- 2026-10-16 · GitHub on tasks (Maciej, MOD-156, G1–G51) · a read-only GitHub App per workspace; PRs and issues as live chips and cards, auto-linked by task ID; Start / Mark done suggested by default, automatic as an opt-in workspace setting; forks and outsiders never move a task · agents open PRs all day and linking should be a side effect of work · rejected: automatic by default, an OAuth App, unauthenticated public previews → decisions/spine.md
 - 2026-10-08 · One reference grammar: `@` mentions anything, `#` is tags, `/` is commands; `#tag` inside text is a link and never applies the tag.
 - 2026-07-13 · DF-21 (Universal Inbox — spine lane) /s1 PLANNED — spec DoR-ready, 6 sub-blocks, no code yet.
 - 2026-07-13 · DF-9 notification-generation trigger APPLIED TO PROD
@@ -230,6 +235,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 - 2026-10-16 · A project's client is a person or a company, never both (Maciej, MOD-155): one search grouped People · Companies, setting one clears the other, a company is checked like a contact (live, this workspace, one you can open); the connector names a client only with Contacts at View; migration 20261016135941 (local only, Tier 2) · rejected: a polymorphic client_type + id → decisions/tasks.md MOD-155
+- 2026-10-16 · Hidden means hidden (Maciej, MOD-148: "11 lines for two open tasks"): while Display → Completed is Hidden no group or column has its own completed line; one "N completed · Show" ends the List (after "+ Add section") and the Board (beside "3 hidden · Show", agent's choice), showing them in place until "Hide", never saving Display; 7 days keeps each group's line, Backlog its line (agent's choices, revisitable) · replaces round-1c frame 6's line per group · rejected: a Filter, a line per group → decisions/tasks.md
+- 2026-10-16 · The Project view, dogfood batch (Maciej, 2026-10-16, MOD-150/151/153/154): no ⋯ beside the centre's project title, Statuses… in the Project view's title-row ⋯ (supersedes MOD-95's ⋯ and round-2b's `.pmore`); Start · Lead · Client come from the task details' "+" line and menu; Next up, Waiting and Recently put their icon, picture and time on the title's first line; the foot's actions stack as quiet rows (layout calls marked agent's) → decisions/tasks.md
+- 2026-10-16 · The details' feed opens on Comments, its "All · Comments" switch at the "Activity" title's 13 px (Maciej, MOD-157; an All pick stays remembered on the device); the tags' "+" is a round 22 px button that rides with the last chip (MOD-158, agent's layout); a connected app's comment or change shows the gray circle with a plug, never "?" (Maciej, MOD-149; Moduo's own lines too, agent's choice) · rejected: a text-only toggle, a "+" that wraps alone, an AI glyph → decisions/tasks.md 2026-10-16
 - 2026-10-16 · The app calls the reader "you", app-wide (Maciej, dogfood call #27, MOD-137): a value reads "You", a people list "Maciej Grzywacz (you)", a sentence "you"; "my" labels say "your" and "Remind me" loses the pronoun; "My tasks" and typed `@me` stay; capture followed on 2026-10-16 ("Reminder at…"); rejected: "Me" everywhere → decisions/tasks.md call #27
 - 2026-10-15 · ⏎ in quick capture's description creates the task, ⇧⏎ starts a new line (Maciej, 2026-10-15, dogfood call #14, MOD-117) · open `@ # /` menus keep ⏎ for their pick; the panel and full page keep ⏎ = new line · ⏎ there did nothing · rejected: ⏎ = new line in capture → decisions/tasks.md call 14
 - 2026-10-15 · One description editor everywhere, stored as Markdown (Maciej, 2026-10-15, dogfood call #15, MOD-98/120) · capture, panel, full page and Focus share the Lexical editor with `@ # /`; Markdown renders as you type; references are `[task](moduo://task/<id>)` (+ `"card"`/`"link"`), dates `[Oct 17](moduo://date/…)`; old HTML read as Markdown everywhere and saved as Markdown on its next edit · raw markup reached agents and capture had no menus · rejected: a bulk migration, HTML storage → decisions/tasks.md call 15
@@ -333,6 +341,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
 - 2026-10-16 · A picker's group headings use the eyebrow recipe in a popover too (agent's, revisitable, found building MOD-155) · `CommandGroup` carries it, so popover pickers ("People", "Due date") stop rendering 16 px body headings · rejected: styling one picker → decisions/design-system.md
+- 2026-10-16 · `--row-first-line-pad` (agent's choice for Maciej's MOD-153, revisitable): a small-rung row whose title wraps centres its first line in the rung, so a one-line row stays 26 / 24 / 22 px, and puts its marks on that line in `h-lh` boxes → decisions/design-system.md
+- 2026-10-16 · `SegmentedControl size="xs"` (the header switch: chip rung, 13 px, R1's one exception), `AppAvatar` (gray circle + plug for an API key or agent) and `TagAddButton` (round "+" at a chip's height) (Maciej, MOD-157 / MOD-149; MOD-158's look the agent's) · each fixed a one-off at its shared cause · rejected: call-site font overrides, a magic `PersonAvatar` name → decisions/design-system.md
 - 2026-10-16 · The panel frame, corrected after dogfooding (Maciej, 2026-10-16; the scroller fix is the agent's) · the "Details ▾" chip is `--row-h-sm` (28 / 26 / 24) beside 26 / 24 / 22 buttons, as round-2b frame 7 draws it; a side panel's `.pane-scroll` reserves no gutter, so fills sit 9 / 9 px from both edges with classic bars · a full-row chip dwarfed its buttons; the reserved strip made the left panel's right inset 20 against 9 · rejected: a control-height chip, a both-edges gutter → decisions/design-system.md
 - 2026-10-15 · One panel frame, fixed across densities (Maciej, 2026-10-15, dogfood call #28, MOD-121) · `--panel-pad` 8 to a fill at a panel's edge, `--panel-inset` 16 to the text column, the centre's top derived so its title line centres on the side panels' first row; the right panel's title row and chip are a row tall; bottom bar 16, top bar 20; panels stay `rounded-xl` (R2 amended) · the inset scaled with density while the radii didn't, so fills drifted off the corner and the chip crossed the border · rejected: a 12 px corner, density-scaled padding → decisions/design-system.md
 - 2026-10-15 · Tags are dot chips (MOD-97, option C): a neutral pill, a 6 px dot in the tag's hue, the name, no "#"; Standard rows and cards count tags with a tag icon + number, Detailed rows and cards show the chips.

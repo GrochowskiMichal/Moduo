@@ -21,7 +21,6 @@ describe("slash grammar (AC5 — the ratified final set)", () => {
       "contact",
       "company",
       "event",
-      "mindmap",
     ]);
   });
 
@@ -29,13 +28,13 @@ describe("slash grammar (AC5 — the ratified final set)", () => {
     const ids = SLASH_COMMANDS.map((c) => c.id) as string[];
     expect(ids).not.toContain("toggle");
     expect(ids).not.toContain("embed-task");
-    expect(ids).not.toContain("embed-mindmap"); // renamed to /mindmap
+    expect(ids).not.toContain("embed-mindmap");
     expect(filterSlashCommands("toggle")).toHaveLength(0);
   });
 
-  it("mindmap is demoted to the last group", () => {
-    expect(SLASH_COMMANDS[SLASH_COMMANDS.length - 1]!.id).toBe("mindmap");
-    expect(SLASH_COMMANDS.at(-1)!.group).toBe("Embeds");
+  it("/mindmap is gone (NR-4): old embeds render the unavailable line", () => {
+    expect(SLASH_COMMANDS.map((c) => c.id) as string[]).not.toContain("mindmap");
+    expect(filterSlashCommands("mindmap")).toHaveLength(0);
   });
 
   it("aliases keep discovery forgiving (child/subpage → page, check → todo)", () => {
