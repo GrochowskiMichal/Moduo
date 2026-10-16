@@ -1,22 +1,7 @@
-import {
-  ChartGantt,
-  CircleDashed,
-  Columns3,
-  Ellipsis,
-  FolderKanban,
-  List,
-  Plus,
-} from "lucide-react";
+import { ChartGantt, Columns3, List, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
-import { IconButton } from "../../../components/ui/icon-button";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Separator } from "../../../components/ui/separator";
 import { Toolbar } from "../../../components/ui/toolbar";
@@ -51,19 +36,18 @@ export type PlanHeaderControls = {
   viewSave?: ReactNode;
   /**
    * The project this view shows (MOD-95, round-2b): its title opens Project
-   * details in the right panel, and a ⋯ beside it offers the project's own
-   * actions. Absent for the Inbox, All, My tasks and saved views.
+   * details in the right panel in one click (MOD-131). Nothing beside it
+   * (MOD-150): Statuses… moved from a ⋯ here to the ⋯ in the panel's Project
+   * view. Absent for the Inbox, All, My tasks and saved views.
    */
   project?: {
     onOpenDetails: () => void;
-    /** ⋯ → Statuses… (TV-D9); absent without edit access. */
-    onEditStatuses?: () => void;
   };
 };
 
 /**
  * The one toolbar of the List, Board and Timeline (tasks-v2 §7, comp §1):
- * title (a project's opens its details, with its ⋯ beside it) + count ·
+ * title (a project's opens its details) + count ·
  * Search · Filter · Display | view switch | New. One control
  * language: ghost controls on the sm rung, the view switch as a raised
  * plate, and New as the one primary. Grouping lives in Display; a view's own
@@ -95,7 +79,7 @@ export function PlanViewHeader({
     <div className="@container mb-3 shrink-0 space-y-1.5">
       <Toolbar gap="snug" className="flex-wrap gap-y-1.5">
         {/* The title comes first (MOD-95 follow-up): it starts at 10rem with
-            its ⋯ and count (about ten characters of the name), takes all the
+            its count (about ten characters of the name), takes all the
             room the controls leave, and shortens with an ellipsis only below
             that. Past that point the controls wrap under it, right-aligned,
             instead of squeezing it away. */}
@@ -118,7 +102,6 @@ export function PlanViewHeader({
           ) : (
             <h1 className="truncate font-display text-lg text-foreground">{title}</h1>
           )}
-          {project ? <ProjectMenu project={project} /> : null}
           {count !== undefined ? (
             <span className="shrink-0 font-sans text-sm tabular-nums text-muted-foreground">
               {count}
@@ -193,37 +176,6 @@ export function SortedOrderLine({
         {BACK_TO_MANUAL_ORDER}
       </button>
     </p>
-  );
-}
-
-/**
- * The project's ⋯ beside its title (round-2b `.pmore`, "Project · Statuses ·
- * …"): the items the app already has an action for.
- */
-function ProjectMenu({ project }: { project: NonNullable<PlanHeaderControls["project"]> }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <IconButton
-          icon={Ellipsis}
-          label="Project actions"
-          tooltip={null}
-          className="-ml-1 shrink-0 self-center text-muted-foreground"
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-48">
-        <DropdownMenuItem onSelect={project.onOpenDetails}>
-          <FolderKanban aria-hidden />
-          Project details
-        </DropdownMenuItem>
-        {project.onEditStatuses ? (
-          <DropdownMenuItem onSelect={project.onEditStatuses}>
-            <CircleDashed aria-hidden />
-            Statuses…
-          </DropdownMenuItem>
-        ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 

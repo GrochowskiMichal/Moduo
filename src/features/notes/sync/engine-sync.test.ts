@@ -276,3 +276,70 @@ describe("agent body re-save (NR-6)", () => {
     expect(later.at(-1)?.bodyMd).toContain("Mine");
   });
 });
+
+describe("compaction against a newer snapshot", () => {
+  it("is refused when another client folded since the pull, then pulls and folds on top", async () => {
+    let serverVersion = 3;
+    const pullDoc = rs.fn(async () => ({
+      snapshotB64: null,
+      docVersion: serverVersion,
+      updates: [],
+    }));
+    const pushUpdates = rs.fn(async () => ({ inserted: 0 }));
+    const saveSnapshot = rs.fn(
+      async ({ expectedDocVersion }: { expectedDocVersion?: number | null }) => {
+        if (expectedDocVersion !== serverVersion) {
+          return { folded: 0, docVersion: serverVersion, refused: true };
+        }
+        serverVersion += 1;
+        return { folded: 5, docVersion: serverVersion, refused: false };
+      },
+    );
+    const runtime = { notesV2: { pullDoc, pushUpdates, saveSnapshot } } as unknown as ModuoRuntime;
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("c1");
+    await session.booted;
+    // biome-ignore lint/suspicious/noExplicitAny: driving the private fold directly
+    const internal = engine as any;
+    const s = internal.sessions.get("c1");
+    s.state = { ...s.state, updatesSinceCompact: 50 };
+
+    // Another client folds between our compaction's pull and its save.
+    pullDoc.mockImplementationOnce(async () => {
+      const res = { snapshotB64: null, docVersion: serverVersion, updates: [] };
+      serverVersion += 1;
+      return res;
+    });
+    await internal.compact(s);
+    expect(saveSnapshot).toHaveBeenCalledTimes(1);
+    expect(saveSnapshot.mock.calls[0]![0]).toMatchObject({ expectedDocVersion: 3 });
+    // Refused: we pulled the newer snapshot and still owe a fold.
+    expect(s.docVersion).toBe(4);
+    expect(s.state.updatesSinceCompact).toBe(50);
+
+    await internal.compact(s);
+    expect(saveSnapshot).toHaveBeenCalledTimes(2);
+    expect(saveSnapshot.mock.calls[1]![0]).toMatchObject({ expectedDocVersion: 4 });
+    expect(s.docVersion).toBe(5);
+    expect(s.state.updatesSinceCompact).toBe(0);
+  });
+
+  it("never folds while no pull has told it the server's version", async () => {
+    const pullDoc = rs.fn(async () => {
+      throw new Error("Failed to fetch");
+    });
+    const pushUpdates = rs.fn(async () => ({ inserted: 0 }));
+    const saveSnapshot = rs.fn(async () => ({ folded: 0, docVersion: 1, refused: false }));
+    const runtime = { notesV2: { pullDoc, pushUpdates, saveSnapshot } } as unknown as ModuoRuntime;
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("c2");
+    await session.booted;
+    // biome-ignore lint/suspicious/noExplicitAny: driving the private fold directly
+    const internal = engine as any;
+    const s = internal.sessions.get("c2");
+    s.state = { ...s.state, updatesSinceCompact: 50 };
+    await internal.compact(s);
+    expect(s.docVersion).toBeNull();
+    expect(saveSnapshot).not.toHaveBeenCalled();
+  });
+});

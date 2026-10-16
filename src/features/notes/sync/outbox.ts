@@ -49,13 +49,19 @@ export function emptyNoteState(noteId: string): NoteSyncState {
 /** Advance the pull cursor. Only PULLED updates move it — a push response's
  * global max id may cover other clients' updates we haven't applied yet, so
  * it must never fast-forward the cursor (that would silently skip them). */
-export function advanceCursor(state: NoteSyncState, pulledIds: number[]): NoteSyncState {
+export function advanceCursor(
+  state: NoteSyncState,
+  pulledIds: number[],
+  /** Rows this client pushed itself were counted at push (NR-7: every save
+   * now comes back by pull), so they don't count again. */
+  ownRows = 0,
+): NoteSyncState {
   if (pulledIds.length === 0) return state;
   const max = Math.max(...pulledIds);
   return {
     ...state,
     lastPulledUpdateId: Math.max(state.lastPulledUpdateId, max),
-    updatesSinceCompact: state.updatesSinceCompact + pulledIds.length,
+    updatesSinceCompact: state.updatesSinceCompact + Math.max(0, pulledIds.length - ownRows),
   };
 }
 

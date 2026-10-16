@@ -81,3 +81,12 @@ describe("pull cursor", () => {
     expect(shouldCompact({ ...state, updatesSinceCompact: 40 })).toBe(true);
   });
 });
+
+describe("advanceCursor own rows (NR-7)", () => {
+  it("doesn't count this client's own pushed rows twice toward compaction", async () => {
+    const { advanceCursor: advance, emptyNoteState: empty } = await import("./outbox");
+    const s = advance(empty("n1"), [1, 2, 3, 4], 3);
+    expect(s.updatesSinceCompact).toBe(1);
+    expect(s.lastPulledUpdateId).toBe(4);
+  });
+});

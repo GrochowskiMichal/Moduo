@@ -1,183 +1,86 @@
 /**
- * Notes realtime (Wave-3 NO-6, AC7): one Supabase broadcast + presence channel
- * per open note.
+ * Notes realtime (Wave-3 NO-6, AC7; secured in NR-7, AC12): following the
+ * open note live, through the runtime (`notesV2.joinLive`).
  *
- * - Relays local Yjs updates to peers (coalesced per tick) so edits appear
- *   near-live, and applies peers' updates to the live doc with origin
- *   `"remote"` — so the NO-2 engine never re-pushes an echo (its observer
- *   ignores that origin) and durability stays with the outbox + pull path.
- * - Tracks presence for the viewer facepile; closing the note (unmount /
- *   selection change) untracks and removes the channel, clearing presence.
+ * - Edits reach peers when they are SAVED: the server tells the people who
+ *   have the note open (re-checking their access every time) that it
+ *   changed, and the editor pulls through the normal access-checked read.
+ *   No note content travels over Realtime, and nothing peer-to-peer. Agent
+ *   (MCP) writes arrive the same way, so the stored row says who wrote them.
+ * - Presence: the server says who has the note open (from each person's
+ *   session); names and photos come from the workspace's member list.
  *
- * Realtime is a LATENCY layer, not the source of truth: a channel failure
- * degrades silently to the engine's refocus/reconnect pulls, never data loss
- * (spec assumption 5). This is the app's first Realtime consumer, so the
- * Supabase client is imported directly rather than through the runtime seam
- * (Realtime is a socket concern, not an RPC).
+ * Realtime is a LATENCY layer, not the source of truth: a refused or failed
+ * channel degrades silently to the engine's refocus/reconnect pulls, never
+ * data loss (spec assumption 5).
  */
 
-import { useEffect, useState } from "react";
-import * as Y from "yjs";
-import { supabaseClient } from "@/lib/runtime.web";
-import { isAgentWriteCue, isForeignOrigin } from "../sync/agent-origin";
+import { useEffect, useMemo, useState } from "react";
+import type { ModuoRuntime } from "@/lib/runtime";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
-import {
-  coalesceUpdates,
-  NOTE_UPDATE_EVENT,
-  type NoteViewer,
-  noteChannelName,
-  type PresenceState,
-  presenceViewers,
-} from "../sync/notes-realtime";
-import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
+import { type NoteViewer, type PresencePerson, presenceViewers } from "../sync/notes-realtime";
 
-/** Buffer local edits this long before one merged broadcast — keeps typing
- * under the per-client message rate while staying sub-perceptible. */
-const BROADCAST_COALESCE_MS = 180;
-
-/** Skip broadcasting an outsized merged update (a huge paste); the durable
- * outbox + the peer's next pull carry it — realtime is latency, not truth. */
-const MAX_BROADCAST_BYTES = 200_000;
+const NOBODY: string[] = [];
 
 type Args = {
+  /** The runtime's notes surface; null until the runtime is ready. */
+  notes: Pick<ModuoRuntime["notesV2"], "joinLive"> | null;
   engine: NotesSyncEngineV2 | null;
   /** The open note, or null when nothing is selected / it's trashed. */
   noteId: string | null;
-  /** Gate: only open a channel with a real identity + workspace. */
+  /** Gate: only follow a note with a real identity + workspace. */
   enabled: boolean;
   selfUserId: string | null;
-  selfName: string;
+  /** A workspace member by user id (`useCommentPeople().personOf`). */
+  personOf: (userId: string) => PresencePerson | null;
 };
 
-export function useNoteRealtime({ engine, noteId, enabled, selfUserId, selfName }: Args): {
+export function useNoteRealtime({ notes, engine, noteId, enabled, selfUserId, personOf }: Args): {
   viewers: NoteViewer[];
 } {
-  const [viewers, setViewers] = useState<NoteViewer[]>([]);
+  const [viewerIds, setViewerIds] = useState<string[]>(NOBODY);
 
   useEffect(() => {
-    if (!engine || !noteId || !enabled || !selfUserId) {
-      setViewers([]);
-      return;
-    }
+    setViewerIds(NOBODY);
+    if (!notes || !engine || !noteId || !enabled || !selfUserId) return;
 
-    let cancelled = false;
-    let teardown: (() => void) | null = null;
-
-    void (async () => {
-      // A note created moments ago may not be saved yet, so "no access" can be
-      // a race, not a refusal: re-ask a few times before giving up.
-      let permitted = false;
-      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
-        const allowed = await supabaseClient.rpc("share_can", {
-          p_type: "note",
-          p_id: noteId,
-          p_min: "view",
-        });
-        if (allowed.error?.code === "PGRST202") {
-          // Missing function = the migration isn't applied yet. Keep today's channel.
-          permitted = true;
-          break;
-        }
-        if (allowed.data === true) {
-          permitted = true;
-          break;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+    engine.getOrCreateSession(noteId);
+    // One pull at a time: saves that land meanwhile ask for one more, after.
+    let disposed = false;
+    let pulling = false;
+    let again = false;
+    const pull = () => {
+      if (disposed) return;
+      if (pulling) {
+        again = true;
+        return;
       }
-      if (cancelled || !permitted) return;
-
-      const session = engine.getOrCreateSession(noteId);
-      const doc = session.doc;
-      const persistence = session.persistence;
-      const channel = supabaseClient.channel(noteChannelName(noteId), {
-        config: { broadcast: { self: false }, presence: { key: selfUserId } },
+      pulling = true;
+      void engine.pullNote(noteId).finally(() => {
+        pulling = false;
+        if (again) {
+          again = false;
+          pull();
+        }
       });
-
-      // ── outbound: coalesce local edits, one merged broadcast per tick ──────
-      // `send()` on a channel that isn't JOINED does NOT drop — realtime-js
-      // silently REST-falls-back (with a console.warn). So gate the outbound
-      // path on a real subscribed state; while joining or after teardown we drop
-      // the burst rather than REST-spam or accumulate unbounded — durability
-      // rides the outbox + the peer's next pull (realtime is latency, not truth).
-      let buffer: Uint8Array[] = [];
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      let pushable = false;
-      const flush = () => {
-        if (timer) {
-          clearTimeout(timer);
-          timer = null;
-        }
-        if (!pushable) {
-          buffer = [];
-          return;
-        }
-        const merged = coalesceUpdates(buffer);
-        buffer = [];
-        if (!merged || merged.byteLength > MAX_BROADCAST_BYTES) return;
-        void channel.send({
-          type: "broadcast",
-          event: NOTE_UPDATE_EVENT,
-          payload: { b64: encodeUint8ToBase64(merged) },
-        });
-      };
-      const onLocalUpdate = (update: Uint8Array, origin: unknown) => {
-        // Mirror the engine's own guard (engine-v2 getOrCreateSession observer):
-        // ignore remote applications and the IndexedDB replay — relay only
-        // genuine local edits.
-        if (isForeignOrigin(origin, persistence)) return;
-        buffer.push(update);
-        if (!timer) timer = setTimeout(flush, BROADCAST_COALESCE_MS);
-      };
-      doc.on("update", onLocalUpdate);
-
-      const syncViewers = () =>
-        setViewers(presenceViewers(channel.presenceState() as PresenceState, selfUserId));
-
-      channel
-        .on("broadcast", { event: NOTE_UPDATE_EVENT }, (msg) => {
-          const payload = msg.payload as Record<string, unknown> | undefined;
-          // An MCP write (NR-6) is announced, never relayed: pull it, so the
-          // stored row (not a peer's claim) says it was an agent's.
-          if (isAgentWriteCue(payload)) {
-            void engine.pullNote(noteId);
-            return;
-          }
-          const b64 = payload?.b64;
-          if (typeof b64 !== "string") return;
-          try {
-            Y.applyUpdate(doc, decodeBase64ToUint8(b64), "remote");
-          } catch {
-            // A malformed peer update can't wedge us; the next pull reconciles.
-          }
-        })
-        .on("presence", { event: "sync" }, syncViewers)
-        .on("presence", { event: "join" }, syncViewers)
-        .on("presence", { event: "leave" }, syncViewers)
-        .subscribe((status) => {
-          if (status === "SUBSCRIBED") {
-            pushable = true;
-            void channel.track({ userId: selfUserId, name: selfName, at: Date.now() });
-          } else {
-            // CLOSED / CHANNEL_ERROR / TIMED_OUT — stop pushing, degrade to pull.
-            pushable = false;
-          }
-        });
-
-      teardown = () => {
-        pushable = false;
-        doc.off("update", onLocalUpdate);
-        if (timer) clearTimeout(timer);
-        void channel.untrack();
-        void supabaseClient.removeChannel(channel);
-      };
-    })();
+    };
+    const live = notes.joinLive({
+      noteId,
+      selfUserId,
+      onPull: pull,
+      onViewers: setViewerIds,
+    });
 
     return () => {
-      cancelled = true;
-      teardown?.();
-      setViewers([]);
+      disposed = true;
+      live.close();
+      setViewerIds(NOBODY);
     };
-  }, [engine, noteId, enabled, selfUserId, selfName]);
+  }, [notes, engine, noteId, enabled, selfUserId]);
 
+  const viewers = useMemo(
+    () => presenceViewers(viewerIds, selfUserId, personOf),
+    [viewerIds, selfUserId, personOf],
+  );
   return { viewers };
 }

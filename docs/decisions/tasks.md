@@ -18,6 +18,57 @@ No migration. Frames: [round-1c](../../.design/tasks-v3/prototypes/round-1c.html
   - Rejected: no line at all (finished work vanishes with no hint), one line above the columns (a new strip).
 - **Kept:** the Timeline's "Show done" (its own Display row), and the Queue, which ignores Completed.
 
+## 2026-10-16 · The Project view's ⋯, "+" line, rows and actions (dogfood MOD-150, MOD-151, MOD-153, MOD-154)
+
+No migration. No approved frame draws the Project view as built. The nearest is [structure](../../.design/tasks-v3/prototypes/structure.html) frame 2 (the right panel's "Overview": a ⋯ in its header, one-line `.mini` rows, centred); round-2b draws the `.pmore` this batch removes. Each item is built as Maciej wrote it; the layout calls below are marked.
+
+- **MOD-150 · No ⋯ beside the project's title; Statuses… is in the Project view's own ⋯** → `plan-view-header.tsx` (`ProjectMenu` removed), `project-panel.tsx` (`TitleActions`), `tasks-plan-view.tsx`
+  - Who: Maciej, 2026-10-16, MOD-150 (approved: "remove the ⋯. The title keeps opening Project details in one click (MOD-131), and 'Statuses…' moves into the ⋯ of the right panel's Project view").
+  - Decision: the centre's project title is its only control and opens Project in one click. The Project view puts a ⋯ ("Project actions") at the right of its title row, as the task's ⋯ sits beside "Details ▾"; it holds Statuses…, for someone who may edit the project (not an archived one). A Board column's header keeps "Edit statuses…" and the sidebar row's ⋯ keeps Statuses….
+  - Agent's choice, revisitable: the ⋯ holds Statuses… alone. Time report, Copy as text, Duplicate… and Archive… stay in the list at the foot (MOD-154) and aren't repeated there.
+  - Why: the ⋯ beside the title repeated the title's own way in ("Project details") and sat between the name and its count.
+  - Rejected: keeping a ⋯ in the centre with only Statuses… in it; moving the foot's actions into the panel's ⋯.
+  - Supersedes: MOD-95's ⋯ beside the title (2026-10-14) and round-2b's `.pmore`.
+- **MOD-151 · One "+" line for optional fields, the task details' line and its menu** → `add-property-line.tsx` (moved out of `task-detail-properties.tsx`), `project-panel.tsx`
+  - Who: Maciej, 2026-10-16, MOD-151 ("I prefer the one in task details, which opens a list. We should use the same solutions across different panels, especially in one module").
+  - Decision: the Project view's Start, Lead and Client come from the details' `AddPropertyLine`: one quiet control, "+ Start · Lead · Client" ("+n" when they don't fit), that opens a menu with each field's icon (the calendar, person and contact icons their values show). A pick shows its row, empty, with its editor open, and a picked row stays while the project is open when another is picked (it used to swap out). Target still always shows to editors.
+  - Agent's choice, revisitable: the line stays in `features/tasks/ui` (both users are Tasks); it moves to `components/ui` with a story when another module needs it.
+  - Why: two panels in one module answered the same question two ways.
+  - Rejected: keeping the project's separate buttons, and revealing one field at a time.
+- **MOD-153 · Next up, Waiting and Recently put their icon, picture and time on the title's first line** → `project-panel.tsx` (`FIRST_LINE_ROW`, `FirstLine`), `--row-first-line-pad` (tokens.css, [design-system](design-system.md))
+  - Who: Maciej, 2026-10-16, MOD-153 (the status icon and the picture "are centred on the row, so their position moves with the number of title lines. Hard to scan where an item starts and ends. In Recently, the 'Today' label should sit at the top").
+  - Decision: these rows lay out from the top. The status icon, the due day, the picture and Recently's day each sit in a box one line of the row's 14 px text tall, so each centres on the title's first line wherever the title ends (`ItemCardTitle`'s way; round-2b's `.card .ct` and `.dtitle`). The row's padding, `--row-first-line-pad`, centres that first line in the rung, so a one-line row stays 26 / 24 / 22 px. Measured live at 1440 × 900 and 1024 × 700: 0 px between each mark's centre and the first line's, at all three densities.
+  - Agent's choice, revisitable: Waiting's rows follow, since they are the same task row. Files (the name over its task, MOD-127), Sections and People keep their centred marks; their text rarely wraps.
+  - Why: where an item started moved with its length, so a list of long titles was hard to scan.
+  - Rejected: `py-0.5` with the box centred on its first line (a one-line dense row would grow from 22 to 25 px); cutting titles to one line as structure frame 2 does (values wrap, calls 41 and 89).
+- **MOD-154 · The actions at the foot stack** → `project-panel.tsx`
+  - Who: Maciej, 2026-10-16, MOD-154 ("We'll need to scroll down there anyway, so maybe stacking them all vertically instead of using a grid would be better").
+  - Decision: Time report, Copy as text, Duplicate… and Archive…, one per row at full width, icon and label from the left, the icons on the rows' status column (4 px in). Same order, same behaviour.
+  - Agent's layout, revisitable: all four are quiet (ghost) rows. Time report was the one raised button, which reads as a primary action in a list.
+  - Why: four buttons wrapping into a grid looked slapped on.
+  - Rejected: a ⋯ menu instead of the list, and keeping Time report raised.
+
+## 2026-10-16 · The details' feed, tags and app avatars (dogfood MOD-157, MOD-158, MOD-149)
+
+No migration. Frames: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) `.shead .fseg` (the feed header's switch, frames 5 and 6) for MOD-157. No frame draws the "+" after a tag chip ([structure](../../.design/tasks-v3/prototypes/structure.html) draws only the empty "Add tag", round-2b "None") or an app's avatar, so MOD-158 and the mark's look are the agent's layout, revisitable.
+
+- **MOD-157 · The feed opens on Comments, and its "All · Comments" switch reads at the "Activity" title's size** → `task-feed.tsx` (`readFilter`, `SegmentedControl size="xs"`), `segmented-control.tsx`; [specs/tasks-v3.md](../../specs/tasks-v3.md) §9 line, [DESIGN_RULES R1](../DESIGN_RULES.md)
+  - Who: Maciej, 2026-10-16, MOD-157 ("looks like it's reused from the previous version of the app… even if it's just matching the font style and size of the 'activity' title next to it. Looks huge"; "'Comments' should be the default to keep it cleaner. Most people don't need to see all of the activity on a task unless they're looking for something").
+  - Decision: the switch is `SegmentedControl`'s new `xs` size: the chip rung (`--ctrl-h-xs`, 24 / 22 / 20) with the title's 13 px medium, 8 px a side, the frame's segmented look kept (13 px rather than the frame's 12, per his "same size"). A task opens on Comments unless you picked All on this device; the pick stays remembered per person in local storage, and an earlier "comments" pick reads the same. With Comments on and none yet, one quiet "No comments yet." line stays under the header and the comment box stays pinned (agent's choice, revisitable: the header alone over nothing read as broken).
+  - Why: the `sm` control rung (26 px, 14 px text) is a toolbar control's bundle, louder than the 13 px title it sits beside; most people only want the talk.
+  - Rejected: a text-only toggle with no track (the frame draws the segmented control), keeping `sm` and shrinking only the font in place (a one-off; the size is now a primitive variant with its R1 exception), and migrating stored "all" picks to Comments (a pick someone made stays theirs).
+  - Amends U13-4 below: the switch's default is Comments, no longer All.
+- **MOD-158 · The tags' "+" is a round quiet button at the chip's height, and it rides with the last chip** → `components/tag-chip.tsx` `TagAddButton` (+ story), `task-detail-properties.tsx` `TagsValue`
+  - Who: Maciej, 2026-10-16, MOD-158 (a screenshot: "a large square "+" sits on its own line under the tag chips"). The design is the agent's, revisitable.
+  - Decision: with tags, the "+" is a 22 px circle (the `md` chip's height; 18 px beside `sm` chips), a muted plus that lights on hover, a 24 px hit area and "Add tag" as its name and tooltip. It sits in one group with the last chip, so the two wrap together and the "+" never starts a line. With no tags the value still reads "+ Add tag"; read-only shows the chips and no "+".
+  - Why: the value control (26 px square, `rounded-md`) was taller than the chips and wrapped alone whenever the chips filled their line.
+  - Rejected: letting the smaller "+" wrap on its own (it still lands alone on a full line), and an `IconButton` (its rungs are density-scaled; the chips are drawn at fixed sizes).
+- **MOD-149 · A connected app shows the gray circle with a plug, never the former member's "?"** → `components/ui/avatar.tsx` `AppAvatar` (+ story), `spine/activity.ts` `isAppActor`, the spine's `PersonAvatar` / `CommentCard` (`app`), `task-feed.tsx`, `notes/ui/note-comments-panel.tsx`
+  - Who: Maciej, 2026-10-16, MOD-149 (approved: "a neutral mark for any connected app, the same gray circle with a small plug icon. The name stays "Claude Code (app)". No colour and no AI badge").
+  - Decision: an API key's comment (`authorKind` "api_key") and an API key's or an agent's change (`actorType` "api_key" or "agent") show `AppAvatar`: the gray label fill, a lucide `Plug` sized per rung, no hue, no badge (brand 40a). The names stay ("Claude Code (app)", "Maciej · via Claude Code"). A person the app can't name keeps "?". Traced and needing nothing: notifications and the Tasks Inbox draw no avatars, the project panel's "Recently" names a task's creator (a key acts as its creator), and the agent session line keeps its own mark. Agent's choice, revisitable: Moduo's own system lines (catch-up, reminders: `actorType` "agent", label "Moduo") take the plug too, rather than the Moduo mark.
+  - Why: the activity row's actor id is the key's id, so no person matched and the feed fell back to the former-member mark, which read as someone missing.
+  - Rejected: the creator's own avatar on an app's line (it would read as the person writing), and a robot or sparkle glyph (an AI badge by another name; Chat v1's `Bot` square is being rebuilt on the Chat v2 branch, which can adopt `AppAvatar`).
+
 ## 2026-10-16 · One way to name you (dogfood call #27)
 
 An app-wide copy pass, recorded here because most of it is Tasks; the rule also sits in the voice guide ([BRAND_BRIEF §11](../../.design/brand/BRAND_BRIEF.md)) and [DESIGN_RULES R8](../DESIGN_RULES.md). No migration. Frames: every prototype ([round-1c](../../.design/tasks-v3/prototypes/round-1c.html), [round-2a](../../.design/tasks-v3/prototypes/round-2a.html), [round-2b](../../.design/tasks-v3/prototypes/round-2b.html), [structure](../../.design/tasks-v3/prototypes/structure.html)) titles your avatar "Alex Rivera (you)", and structure's trail reads "**You** created this"; the pass matches them. No frame draws a picker's own row, a chip, a toast or a Settings switch, so those words are the agent's, revisitable.
@@ -240,6 +291,7 @@ The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([rou
   - Decision: the title opens Project in the right panel (over an item stacked there, and during a multi-selection, until the cursor or the place moves); the ⋯ holds Project details and Statuses… (round-2b names nothing else). The title group starts at 10rem with its ⋯ and count; under 36rem Filter and Display are icons; narrower still, the controls wrap under the title.
   - Why: the project's details had no way in from the centre; at a 1024 px window with both side panels open the title collapsed to nothing.
   - Rejected: a new route or a separate "About" button, and squeezing the title before the controls give way.
+  - Superseded in part (2026-10-16, MOD-150): the ⋯ beside the title is gone; Statuses… is in the Project view's ⋯.
 
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 

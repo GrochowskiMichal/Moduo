@@ -7,7 +7,7 @@ import { FilterButton } from "../../../components/ui/filter-bar";
 import { PlanViewHeader } from "./plan-view-header";
 
 // The List / Board / Timeline toolbar at three widths (MOD-95 follow-up): the
-// title keeps about ten characters with its ⋯ and count; under 36rem Filter
+// title keeps about ten characters with its count (no ⋯ since MOD-150); under 36rem Filter
 // and Display become icons; narrower still, the controls wrap under the title.
 
 function Header({ title }: { title: string }) {
@@ -20,7 +20,7 @@ function Header({ title }: { title: string }) {
       onRequestCapture={() => {}}
       controls={{
         count: 12,
-        project: { onOpenDetails: () => {}, onEditStatuses: () => {} },
+        project: { onOpenDetails: () => {} },
         search: (
           <Button variant="ghost" size="sm" aria-label="Search" className="aspect-square px-0">
             <Search aria-hidden />

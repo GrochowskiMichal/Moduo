@@ -46,7 +46,6 @@ import {
   scrollEditorToHeading,
   scrollEditorToQuote,
 } from "../../features/notes/shell/editor-dom";
-import { nameFromEmail } from "../../features/notes/sync/notes-realtime";
 import { displayTitle } from "../../features/notes/title";
 import {
   buildNoteSections,
@@ -65,6 +64,7 @@ import { NoteTreeSidebar } from "../../features/notes/ui/note-tree-sidebar";
 import { NotesEditorDropZone } from "../../features/notes/ui/notes-editor-drop-zone";
 import { noteIsPrivate } from "../../features/sharing/rules";
 import { ShareMenu } from "../../features/sharing/share-menu";
+import { useCommentPeople } from "../../features/spine/hooks/use-comment-people";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
@@ -75,7 +75,7 @@ import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 export function NotesClassicPage() {
-  const { runtime, userId, userEmail, configError } = useAuth();
+  const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions, can, members } = useWorkspace();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as NotesSearch;
@@ -271,13 +271,14 @@ export function NotesClassicPage() {
 
   // Live multiplayer (NO-6, AC7): a broadcast + presence channel for the open
   // note — near-live edits + a viewer facepile. No-ops without a note/identity.
-  const selfName = useMemo(() => nameFromEmail(userEmail), [userEmail]);
+  const people = useCommentPeople();
   const { viewers } = useNoteRealtime({
+    notes: runtime?.notesV2 ?? null,
     engine: engine ?? null,
     noteId: selectedNote && !selectedNote.deletedAt ? selectedNote.id : null,
     enabled: canRender && Boolean(selectedWorkspaceId),
     selfUserId: userId,
-    selfName,
+    personOf: people.personOf,
   });
 
   // Right-panel variant (NO-7): remembered per user+workspace.

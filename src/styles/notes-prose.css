@@ -384,3 +384,20 @@
 .notes-public-prose input[type="checkbox"] {
   margin-right: 0.375rem;
 }
+
+/* NR-8 comment anchors: only marks whose thread is open are highlighted. */
+.notes-editor-v2 mark.notes-comment-mark {
+  background: none;
+  color: inherit;
+}
+
+.notes-editor-v2 mark.notes-comment-mark[data-comment="open"] {
+  background: var(--comment-mark-bg);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.notes-editor-v2 mark.notes-comment-mark[data-comment="focused"] {
+  background: var(--comment-mark-bg-focused);
+  border-radius: var(--radius-sm);
+}

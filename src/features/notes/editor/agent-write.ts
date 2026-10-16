@@ -186,11 +186,6 @@ export function bodyFromLog(input: { snapshotB64: string | null; updatesB64: str
   }
 }
 
-export { AGENT_WRITE_CUE } from "../sync/agent-origin";
-/** The app's live channel for a note, shipped in the bundle so the connector
- * can never drift from it. */
-export { NOTE_UPDATE_EVENT, noteChannelName } from "../sync/notes-realtime";
-
 /** A brand-new note's doc from markdown (the connector's `notes_create`). */
 export function agentCreateDoc(noteId: string, markdown: string): MaterializedDoc | null {
   return buildDocStateFromMarkdown(noteId, markdown);

@@ -2,7 +2,7 @@
  * NR-6 AC11, the connector half ("crdt write"): notes_append / notes_update /
  * notes_create produce real Yjs updates, through the prebuilt notes-doc
  * bundle the Edge Function ships, that a client doc materializes into the
- * same markdown, and every write is stored and broadcast as an agent's.
+ * same markdown, and every write is stored as an agent's (the server tells open editors).
  *
  * The database is an in-memory stand-in; the doc work is real.
  */
@@ -34,13 +34,12 @@ const NOTE = "44444444-4444-4444-8444-444444444444";
 
 const b64ToBytes = (b64: string) => Uint8Array.from(Buffer.from(b64, "base64"));
 
-/** notes + note_updates + the RPCs the write path calls + a channel.
+/** notes + note_updates + the RPCs the write path calls.
  * `beforeApply` runs inside the next apply call, before its insert (to
  * stage a write that races the connector's). */
 function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
   const tables: Record<string, Row[]> = { notes: [note], note_updates: [] };
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
-  const broadcasts: Array<{ topic: string; event: string; payload: Row }> = [];
   let nextId = 1;
   function from(table: string) {
     const filters: Array<(r: Row) => boolean> = [];
@@ -103,12 +102,7 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
     }
     return { data: null, error: { message: `unexpected rpc ${fn}` } };
   }
-  const channel = (topic: string) => ({
-    httpSend: async (event: string, payload: Row) => {
-      broadcasts.push({ topic, event, payload });
-    },
-  });
-  const db = { from, rpc, channel, removeChannel: async () => {} };
+  const db = { from, rpc };
   const ctx: ToolContext = {
     key: { id: "key-1", workspaceId: WS, name: "Research bot", createdBy: null, scopes: {} } as any,
     db: db as any,
@@ -122,7 +116,7 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
       update_b64: Buffer.from(update).toString("base64"),
       origin: "user",
     });
-  return { ctx, tables, rpcCalls, broadcasts, pushRow };
+  return { ctx, tables, rpcCalls, pushRow };
 }
 
 function tool(name: string) {
@@ -155,8 +149,8 @@ function materializedNote(markdown: string): Row {
 }
 
 describe("crdt write", () => {
-  it("notes_append writes the key's update the client materializes, and cues open editors", async () => {
-    const { ctx, tables, rpcCalls, broadcasts } = fakeDb(materializedNote("# Plan\n\nHello"));
+  it("notes_append writes the key's update the client materializes", async () => {
+    const { ctx, tables, rpcCalls } = fakeDb(materializedNote("# Plan\n\nHello"));
     await tool("notes_append").handler({ note_id: NOTE, markdown: "- [ ] call **Acme**" }, ctx);
 
     const call = rpcCalls.find((c) => c.fn === "notes_op_apply_updates")!;
@@ -168,11 +162,6 @@ describe("crdt write", () => {
     expect(call.args.p_body_md).toBe(expected);
     expect(clientMarkdown(tables, NOTE)).toBe(expected);
     expect(tables.note_updates!.every((u) => u.origin === "api_key")).toBe(true);
-
-    // A content-free cue on the app's own channel: editors pull the row.
-    expect(broadcasts).toEqual([
-      { topic: `notes:${NOTE}`, event: "u", payload: { origin: "api_key" } },
-    ]);
   });
 
   it("appends on top of earlier logged updates, not just the snapshot", async () => {
