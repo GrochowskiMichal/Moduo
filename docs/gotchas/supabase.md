@@ -341,3 +341,9 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 - **A policy may not call `chat_is_workspace_member(ws, auth.uid())` directly (`access_check`'s rule):** wrap it in a caller-only SECURITY DEFINER helper (`chat_emoji__readable`). (CV-20)
 - **`storage.objects` refuses a direct DELETE in SQL ("use the Storage API"):** a test of "nobody deletes" sees that error, not `ok 0`. (CV-20)
 - **The `chat_realtime` publication test lists chat tables exactly:** a new published chat table updates it. (CV-20)
+
+## Chat agents and MCP tools (CV-21)
+
+- **`chat__chain_root` reads `chat_can_read_channel` (`auth.uid()`):** any body run for a key's creator needs a person-parameter twin (`chat__chain_root_as`); check every helper an `_as` body calls. (CV-21)
+- **The connector rejects a tool with no arguments schema in `_shared/contracts/mcp-tool-args.ts` ("unknown tool"), and `z.object` strips unknown keys:** a new tool argument must be added there too. (CV-21)
+- **The local edge runtime serves whichever worktree started the stack:** to round-trip this worktree's connector, run a one-off `edge-runtime` container on `supabase_network_moduo` with `--main-service=<functions>/moduo-mcp` (it reads `deno.json` without `--import-map`) and pass `SUPABASE_URL=http://kong:8000` and `SUPABASE_SECRET_KEYS`. (CV-21)
