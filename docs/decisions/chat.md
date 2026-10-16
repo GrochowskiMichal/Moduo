@@ -2,6 +2,51 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index. Earlier chat lines (v1 ships as the 7th tab, 2026-10-06; chat + calls become a planned module, 2026-10-02) stay under Billing and Product in the index.
 
+## 2026-10-16 · CV-21 (agents and MCP tools) — the agent's choices; five are open calls for Maciej
+
+Migration `20261017000000_chat_v2_agents.sql`; see [the record](../build/chat-v2/CV-21.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. CV21-1…CV21-5 are open calls for Maciej. The record holds the rest.
+
+- **CV21-1 · ❓ A key's reply switch lives in the person's preferences (Settings → Preferences → Chat), on by default** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: one switch per key of yours that reads chat, "Replies to posts by <key>", stored as `chatKeyReplies.<key id>`; off means a reply doesn't reach the creator at all (no Catch up item, bell or notice) unless it mentions them; on makes it an ordinary reply.
+  - Why: it's the creator's own notification, and a column on the key would let any key manager change it; held items would still pile up CI chatter.
+  - Rejected: a column on `workspace_api_keys`; a held Catch up item.
+- **CV21-2 · ❓ Only the key's creator turns "Include private channels I'm in" on; any key manager turns it off** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: `workspace_api_keys_set_private_chat(key, on)` enforces it; a key reads a private channel only with the switch on while its creator is a member, and never a direct message; Details' People section names the apps that can read a private channel.
+  - Why: the switch opens the creator's own channels.
+  - Rejected: any manager turning it on.
+- **CV21-3 · ❓ An announcement channel refuses a key's post unless its creator manages the channel** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: an agent's `@channel` from a creator who may not use it is sent as plain text, but a post in an announcement channel can't be turned into plain text, so it is refused.
+  - Why: the key posts with the creator's rights and no more.
+  - Rejected: letting a key post where its creator can't.
+- **CV21-4 · ❓ A key creates a private channel only with its private switch on** → ❓ Maciej
+  - Who: agent's choice, deferred — confirmed for building, revisitable (open call for Maciej).
+  - Decision: a key without the switch checks name clashes against public channels only.
+  - Why: otherwise it couldn't read what it made.
+  - Rejected: creating channels the key then can't read.
+- **CV21-5 · ❓ The creator gets no reply item for their own agent's replies** → ❓ Maciej
+  - Who: orchestrator's call, revisitable (open call for Maciej).
+  - Decision: a reply posted through the creator's own key gives them no Catch up "reply" item, bell row or notice, and doesn't count as addressed to them; it still counts as unread. Someone else's reply in that chain reaches them as usual.
+  - Why: the creator shouldn't be told of their own agent's work.
+  - Rejected: treating the agent's replies as ordinary replies.
+- **CV21-6 · The post keeps its v1 signature and runs as the creator** → CV-21
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat_op_agent_post` keeps `p_parent_id` (the answered message); the author is the key's creator with `author_kind 'api_key'`; it joins the answered message's chain like `chat_op_send`; 30 posts a minute per key.
+  - Why: the deployed connector calls it by name between the migration and the redeploy.
+  - Rejected: `p_reply_to_id` with DROP + CREATE.
+- **CV21-7 · A key's post is the creator's for edit, delete and wrap-up on the server; the app offers Edit, ↑-edit and "Reply privately" only on what a person wrote** → CV-21
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: the post is theirs, via a delegate; a key's post counts as new to its creator.
+  - Why: the existing `author_id = you` rules already say it.
+  - Rejected: special-casing `author_kind` in four ops.
+- **CV21-8 · The writes take the acting person and every manifest op is workspace-scoped** → CV-21
+  - Who: agent's choice, deferred to by Maciej, 2026-10-16.
+  - Decision: `chat__react_as`, `chat__mark_decision_as`, `chat__wrap_up_as` and `chat__create_channel_as` hold one body each; the app's ops pass `auth.uid()` and the agent ops pass the key's creator after the key's rules; the agent ops take the workspace id and refuse another workspace's; trails read "<person> · via <key>".
+  - Why: one body each.
+  - Rejected: parallel copies of the bodies.
+
 ## 2026-10-16 · CV-20 (custom emoji) — the agent's choices (deferred to by Maciej)
 
 Migration `20261016235000_chat_v2_custom_emoji.sql`; see [the record](../build/chat-v2/CV-20.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. The record holds the rest.
