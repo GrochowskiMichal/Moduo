@@ -11,7 +11,14 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { supabaseClient } from "@/lib/runtime.web";
 import { postgresChangesSource } from "../realtime";
+import {
+  currentChatServerPrefs,
+  readChatServerPrefs,
+  subscribeChatServerPrefs,
+} from "@/lib/notices/chat-prefs";
 import { type ChatPresenceSnapshot, chatPresence } from "./presence";
+import { PresenceSelfWatcher, windowInput } from "./presence-self";
+import "@/lib/statuses/live";
 import {
   type ChatSnapshot,
   type ChatStore,
@@ -28,6 +35,7 @@ const emptySnapshot = () => EMPTY_CHAT_SNAPSHOT;
 const EMPTY_PRESENCE: ChatPresenceSnapshot = {
   status: "connecting",
   online: new Set(),
+  away: new Set(),
   error: null,
 };
 const emptyPresence = () => EMPTY_PRESENCE;
@@ -64,7 +72,9 @@ export function useChatPresence(
 ): ChatPresenceSnapshot {
   const store = useMemo(
     () =>
-      enabled && workspaceId && userId ? chatPresence(supabaseClient, workspaceId, userId) : null,
+      enabled && workspaceId && userId
+        ? chatPresence(supabaseClient, workspaceId, userId, tabPresenceSelf())
+        : null,
     [enabled, workspaceId, userId],
   );
   useEffect(() => store?.acquire(), [store]);
@@ -73,6 +83,23 @@ export function useChatPresence(
     store ? store.getSnapshot : emptyPresence,
     store ? store.getSnapshot : emptyPresence,
   );
+}
+
+let tabSelf: PresenceSelfWatcher | null = null;
+
+/** This tab's "me" on presence (CV-17): tracks nothing until your "Show me as
+ *  online" is read, then follows it; away after 10 minutes without input. */
+function tabPresenceSelf(): PresenceSelfWatcher {
+  if (tabSelf) return tabSelf;
+  const known = currentChatServerPrefs();
+  const self = new PresenceSelfWatcher(known?.showOnline ?? false, { onInput: windowInput });
+  subscribeChatServerPrefs(() => {
+    const prefs = currentChatServerPrefs();
+    if (prefs) self.setShowOnline(prefs.showOnline);
+  });
+  if (!known) void readChatServerPrefs().catch(() => undefined);
+  tabSelf = self;
+  return self;
 }
 
 const typingStores = new Map<string, ChatTypingStore>();

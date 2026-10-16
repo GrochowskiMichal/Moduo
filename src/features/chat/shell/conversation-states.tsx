@@ -187,6 +187,24 @@ export function ComposerLineView({
 }
 
 /** Offline: the conversation reads from this device; what you send waits. */
+/**
+ * The line above the box when the person you're writing to won't be pinged
+ * (CV-17, #33; prototype round 5, the DM note): "Jana is on vacation until
+ * Oct 20. They won't be notified; your message waits in their Catch up."
+ * CV-18 puts the quiet-hours line in the same place.
+ */
+export function HoldLine({ text }: { text: string }) {
+  return (
+    <p
+      data-slot="chat-hold-line"
+      role="status"
+      className="mx-2 mb-1.5 flex min-h-(--ctrl-h-sm) items-center rounded-md bg-state-hover px-3 py-1 text-xs text-muted-foreground"
+    >
+      {text}
+    </p>
+  );
+}
+
 export function OfflineLine() {
   return (
     <p

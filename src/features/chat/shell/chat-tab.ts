@@ -68,8 +68,8 @@ export function useChatTab({
   const store = useChatStore(runtime, userId, workspaceId);
   const snapshot = useChatSnapshot(store);
   const enabled = snapshot.status === "ready";
-  // The workspace presence topic still asks for the plan (CV-17 drops that).
-  useChatPresence(workspaceId, userId, enabled && !snapshot.paused);
+  // Presence needs only membership, so it keeps working while chat is paused (CV-17).
+  useChatPresence(workspaceId, userId, enabled);
 
   const { mine, unread } = snapshot;
   const count = useMemo(

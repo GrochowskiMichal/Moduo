@@ -37,6 +37,7 @@ import type {
 } from "../model";
 import { NOTIFY_LEVEL_COPY } from "../shell/conversation-toolbar";
 import { detailsPeople } from "./details-model";
+import type { PresenceState } from "@/lib/statuses/model";
 import { PresenceAvatar } from "./person-card";
 import { DetailsChainRows } from "./reply-chains-view";
 
@@ -50,6 +51,9 @@ export type DetailsViewProps = {
   selfId: string;
   personOf: (id: string) => ChatPerson | undefined;
   online: (id: string) => boolean;
+  /** The presence shape and the "now" line per person (CV-17). */
+  stateOf?: (id: string) => PresenceState;
+  statusOf?: (id: string) => string;
   members: readonly ChatMember[] | null;
   pinned: readonly ChatMessage[] | null;
   history: readonly ChatHistoryEntry[] | null;
@@ -72,6 +76,8 @@ export function DetailsView({
   selfId,
   personOf,
   online,
+  stateOf,
+  statusOf,
   members,
   pinned,
   history,
@@ -86,7 +92,7 @@ export function DetailsView({
   onOpenChain,
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
-  const people = members ? detailsPeople(members, selfId, personOf, online) : null;
+  const people = members ? detailsPeople(members, selfId, personOf, online, stateOf) : null;
   const canLeave = isChannel && !!member && !channel.isDefault;
 
   return (
@@ -126,15 +132,18 @@ export function DetailsView({
                     name={p.name}
                     id={p.userId}
                     src={p.avatarUrl}
-                    online={p.online && !p.former}
+                    state={p.state}
                   />
                   <span className="min-w-0 flex-1 truncate text-foreground">{p.name}</span>
-                  {/* The status line (presets, "clear after") arrives with CV-17. */}
                   <span
                     data-slot="person-status"
-                    className="shrink-0 text-xs text-subtle-foreground"
+                    className="min-w-0 max-w-1/2 shrink truncate text-xs text-subtle-foreground"
                   >
-                    {p.self ? "you" : p.former ? "former member" : null}
+                    {p.self
+                      ? "you"
+                      : p.former
+                        ? "former member"
+                        : statusOf?.(p.userId) || null}
                   </span>
                 </button>
               </li>

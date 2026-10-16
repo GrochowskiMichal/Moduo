@@ -10,7 +10,7 @@ import { Inbox, Lock, MessageCircle, MoreHorizontal, Plus } from "lucide-react";
 import type * as React from "react";
 import { useCallback, useState } from "react";
 
-import { PersonAvatar } from "@/components/ui/avatar";
+import { PersonAvatar, PresenceBadge } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { NavRow, NavSectionHeader } from "@/components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { PresenceState } from "@/lib/statuses/model";
 import type { ChatPerson } from "../model";
 import type { ChatRow, ChatSidebarModel } from "./sidebar-model";
 
@@ -67,7 +68,8 @@ export function ConversationGlyph({
 }: {
   row: Pick<ChatRow, "channel" | "people">;
   personOf: (id: string) => ChatPerson | undefined;
-  online?: (id: string) => boolean;
+  /** The presence shape for a person (CV-17); a group DM shows none. */
+  online?: (id: string) => PresenceState;
 }) {
   const { channel } = row;
   if (channel.kind === "channel") {
@@ -79,7 +81,8 @@ export function ConversationGlyph({
   }
   const first = row.people[0];
   const person = first ? personOf(first) : undefined;
-  const here = !!first && row.people.length === 1 && !!online?.(first);
+  const state: PresenceState =
+    first && row.people.length === 1 && online ? online(first) : "offline";
   return (
     <span className="relative flex size-icon items-center justify-center">
       <PersonAvatar
@@ -88,12 +91,7 @@ export function ConversationGlyph({
         src={person?.avatarUrl}
         size="icon"
       />
-      {here ? (
-        <span
-          data-slot="presence"
-          className="absolute -right-0.5 -bottom-0.5 size-1.5 rounded-full bg-success ring-2 ring-card"
-        />
-      ) : null}
+      <PresenceBadge state={state} />
     </span>
   );
 }
@@ -104,7 +102,7 @@ export type ChatSidebarProps = {
   /** Catch up is open (CV-11's view). */
   catchupCurrent?: boolean;
   personOf: (id: string) => ChatPerson | undefined;
-  online?: (id: string) => boolean;
+  online?: (id: string) => PresenceState;
   collapsed: ReadonlySet<string>;
   onToggleSection: (section: ChatSection) => void;
   onOpen: (channelId: string) => void;

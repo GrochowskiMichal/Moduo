@@ -70,6 +70,68 @@ function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
   );
 }
 
+/** The presence shapes (chat v2 §10, AC11.1): one neutral badge for every
+ *  state, a sixth ("In a call") ready for Calls (§18). */
+type PresenceShape = "reachable" | "away" | "dnd" | "focusing" | "in_call" | "offline";
+
+const PRESENCE_WORDS: Record<PresenceShape, string> = {
+  reachable: "Online",
+  away: "Away",
+  dnd: "Do not disturb",
+  focusing: "Focusing",
+  in_call: "In a call",
+  offline: "",
+};
+
+/**
+ * Where you'd message someone, this says whether they're reachable now. Only
+ * green means one thing (reachable); everything else is grey and told apart
+ * by shape: an outline (away), a thick bar (do not disturb), a target
+ * (Focusing), a dot (in a call), nothing (offline). Sits on an avatar's
+ * corner inside a `relative` wrapper; `inline` draws it in a row of text.
+ * The state's words are its accessible name.
+ */
+function PresenceBadge({
+  state,
+  size = "sm",
+  inline = false,
+  className,
+  ...props
+}: Omit<React.ComponentProps<"span">, "children"> & {
+  state: PresenceShape;
+  /** `sm` beside an icon-rung avatar, `lg` on a large one. */
+  size?: "sm" | "lg";
+  inline?: boolean;
+}) {
+  if (state === "offline") return null;
+  return (
+    <span
+      data-slot="presence"
+      data-state={state}
+      role="img"
+      aria-label={PRESENCE_WORDS[state]}
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-full ring-2 ring-card",
+        inline ? "relative" : "absolute -right-0.5 -bottom-0.5",
+        size === "lg" ? "size-3" : "size-2.5",
+        state === "reachable" && "bg-success",
+        (state === "dnd" || state === "in_call") && "bg-muted-foreground",
+        (state === "away" || state === "focusing") && "border-2 border-muted-foreground bg-card",
+        className,
+      )}
+      {...props}
+    >
+      {state === "dnd" ? (
+        <span className="h-0.5 w-3/5 rounded-full bg-card" aria-hidden />
+      ) : state === "focusing" ? (
+        <span className="size-1 rounded-full bg-muted-foreground" aria-hidden />
+      ) : state === "in_call" ? (
+        <span className="size-1 rounded-full bg-card" aria-hidden />
+      ) : null}
+    </span>
+  );
+}
+
 function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -254,7 +316,7 @@ function TeamMark({
   );
 }
 
-export type { AvatarHue, PersonAvatarProps, TeamMarkProps };
+export type { AvatarHue, PersonAvatarProps, PresenceShape, TeamMarkProps };
 export {
   AVATAR_HUES,
   Avatar,
@@ -266,6 +328,7 @@ export {
   avatarHue,
   initialsOf,
   PersonAvatar,
+  PresenceBadge,
   TeamMark,
   teamLettersOf,
 };
