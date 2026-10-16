@@ -145,3 +145,28 @@ describe("global.css scrollbars (DS-1)", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+// MOD-161 — the app never scrolls sideways. A sideways swipe that runs out of
+// a scroller (the Board at its end, Home's pages) stops at the page instead of
+// rubber-banding the desktop app's WebKit view or swiping a browser back, and
+// the shell clips rather than hides, so focus or a scroll to something off
+// screen can't shift it. Headless Chromium neither chains nor rubber-bands a
+// wheel, so the rest was checked live (docs/decisions/design-system.md).
+describe("the app never scrolls sideways (MOD-161)", () => {
+  it("stops a sideways overscroll at the page", async () => {
+    expect(Object.fromEntries(block(await globalBlocks(), "html, body", []))).toEqual({
+      "overscroll-behavior-x": "none",
+    });
+  });
+
+  it("clips the shell's root and content area instead of hiding them", async () => {
+    const chrome = await read("src/components/app/app-chrome.tsx");
+    expect(chrome).toContain('"flex h-screen min-h-screen flex-col overflow-clip bg-background"');
+    expect(chrome).toContain('"min-h-0 flex-1 overflow-clip"');
+    expect(chrome).not.toMatch(/h-screen[^"]*overflow-hidden/);
+    // …and the panels' group, through the library's one overridable style.
+    expect(await read("src/components/ui/resizable.tsx")).toMatch(
+      /style=\{\{ overflow: "clip", \.\.\.style \}\}/,
+    );
+  });
+});

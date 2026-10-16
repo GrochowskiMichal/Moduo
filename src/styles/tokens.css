@@ -723,6 +723,10 @@
      column: --panel-pad plus a row's own 8. */
   --panel-pad:            0.5rem;  /* 8   — panel edge → a fill (nav row, title chip) */
   --panel-inset:          1rem;    /* 16  — panel edge → the text column */
+  /* The space between two shell panels, half the 16 px from the window's edge
+     to a panel (MOD-162). It is the resize handle's width; the handle still
+     grabs over 16 px (resizable.tsx). */
+  --panel-gap:            0.5rem;  /* 8   — panel ↔ panel */
   --tree-indent:          0.875rem; /* 14  — one level of a nested tree (notes sidebar) */
 
   --bp-sm: 640px;
@@ -753,8 +757,8 @@
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
   --shadow-overlay: 0 24px 64px rgb(0 0 0 / 0.65); /* dialogs */
 
-  /* Focus ring shadow composes with --ring */
-  --shadow-focus: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+  /* No focus shadow (MOD-160): focus is the offset-less 2 px ring on controls
+     and the --ring edge on fields (field-shell.ts), never an offset ring. */
 
   /* Raised control plate (§5b): none on dark — the plate reads by being
      lighter than its track. A zero shadow, not `none`, so it stays valid
@@ -768,7 +772,6 @@
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.10);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.14);
   --shadow-overlay: 0 24px 64px rgb(0 0 0 / 0.20);
-  --shadow-focus: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
 
   /* Raised control plate (§5b): the white card needs a shadow to lift off
      its light track. */

@@ -1018,7 +1018,8 @@ export function TaskBoardView({
       }
     />
   ) : (
-    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
+    // A sideways swipe stays in the Board when it runs out (MOD-161).
+    <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto overscroll-x-contain pb-1">
       {visibleColumns.map((column) => {
         const cell = cells.get(column.id);
         // A folded column is its small button, in the column's place (53b).
@@ -1325,7 +1326,7 @@ function LaneBoard({
   end: React.ReactNode;
 }) {
   return (
-    <div className="min-h-0 flex-1 overflow-auto pb-1">
+    <div className="min-h-0 flex-1 overflow-auto overscroll-x-contain pb-1">
       <div className="flex w-max flex-col">
         <div className="sticky top-0 z-(--z-sticky) flex gap-3 bg-background pb-1.5">
           {columns.map((column) =>

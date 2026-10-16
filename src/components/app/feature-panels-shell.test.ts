@@ -52,3 +52,31 @@ describe("the panels' padding", () => {
     expect(chrome).toMatch(/"relative grid w-full items-center bg-background px-5"/);
   });
 });
+
+// MOD-162 (Maciej, 2026-10-16): 8 px between panels, 16 at the window's edges.
+// The gap is the resize handle's width; the handle still grabs over 16 px,
+// which the library does by growing the separator's box to a minimum (it
+// hit-tests by geometry, so a wider pseudo-element would do nothing). Checked
+// live: a grab 7 px either side of the gap's centre resizes, 10 px does not.
+describe("the space between panels (MOD-162)", () => {
+  const resizable = () =>
+    fs.readFile(path.join(process.cwd(), "src/components/ui/resizable.tsx"), "utf8");
+
+  it("makes the handle the --panel-gap wide, with its line centred", async () => {
+    const source = await resizable();
+    expect(source).toMatch(/"relative flex w-\(--panel-gap\) items-center/);
+    expect(source).toMatch(/before:left-1\/2 before:w-px before:-translate-x-1\/2/);
+  });
+
+  it("keeps a 16 px drag target on every group", async () => {
+    const source = await resizable();
+    expect(source).toMatch(/const RESIZE_TARGET = \{ fine: 16, coarse: 24 \} as const;/);
+    expect(source).toMatch(/resizeTargetMinimumSize=\{RESIZE_TARGET\}/);
+  });
+
+  it("keeps 16 px at the window's edges", async () => {
+    const shell = await read();
+    expect(shell).toMatch(/"flex h-full min-h-0 bg-background px-4"/);
+    expect(shell).toMatch(/"flex h-full min-h-0 flex-col bg-background px-4"/);
+  });
+});

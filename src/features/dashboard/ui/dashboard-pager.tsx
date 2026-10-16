@@ -30,7 +30,10 @@ export interface DashboardPagerProps {
  * to `--motion-base` (0s under reduced motion → instant, AC12). The transform is
  * the *inline style* target, so — unlike a JS/rAF tween — the layer can never
  * freeze mid-slide; the transition is purely cosmetic. Only the ACTIVE page is
- * interactive + edit-wired (others are `pointer-events-none` + aria-hidden). A
+ * interactive + edit-wired: the others are `inert`, so Tab never walks into a
+ * page off screen (MOD-161: focusing one scrolled the viewport sideways and
+ * left two half pages under the first page's dot). The viewport clips rather
+ * than hides, so it is no scroll container and nothing can shift it. A
  * widget's own wheel is swallowed in GridCanvas, so this viewport's handler only
  * sees grid-background travel — deltaX-dominant, threshold + lockout — and pages.
  */
@@ -66,7 +69,7 @@ export function DashboardPager({
   };
 
   return (
-    <div className="relative min-h-0 w-full flex-1 overflow-hidden" onWheel={handleWheel}>
+    <div className="relative min-h-0 w-full flex-1 overflow-clip" onWheel={handleWheel}>
       {layout.pages.map((page, i) => {
         const isActive = i === activeIndex;
         return (
@@ -78,6 +81,7 @@ export function DashboardPager({
             )}
             style={{ transform: `translateX(${(i - activeIndex) * 100}%)` }}
             aria-hidden={!isActive}
+            inert={!isActive}
           >
             <GridCanvas
               widgets={page.widgets}

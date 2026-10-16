@@ -33,6 +33,16 @@ body,
   color: var(--foreground);
 }
 
+/* MOD-161: a sideways swipe that runs out of a scroller (the Board at its
+   end, Home's pages, anything that doesn't scroll sideways) stops at the page.
+   Without this the desktop app's WebKit view rubber-bands the whole window
+   sideways and a browser swipes back a page. The app root and the content
+   area clip instead of scrolling (app-chrome.tsx), so nothing can shift it. */
+html,
+body {
+  overscroll-behavior-x: none;
+}
+
 @font-face {
   font-family: "Pilat Extended";
   src:
