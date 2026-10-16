@@ -13,8 +13,11 @@ import {
   CreditCard,
   FileText,
   FolderKanban,
+  Hash,
   Link2,
+  Lock,
   Mail,
+  MessageCircle,
   MessageSquare,
   Paperclip,
   Receipt,
@@ -36,6 +39,11 @@ const ENTITY_TYPE_ICONS: Record<string, LucideIcon> = {
   invoice: Receipt,
   event: Calendar,
   file: Paperclip,
+  // Chat (CV-10): a channel, a private one, a direct message, a message.
+  chat_channel: Hash,
+  chat_private: Lock,
+  chat_dm: MessageCircle,
+  chat_message: MessageSquare,
 };
 
 /** The fallback glyph for an unknown/unmapped entity type. */

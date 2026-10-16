@@ -25,6 +25,7 @@ import {
   Inbox,
   LayoutTemplate,
   Mail,
+  MessageSquare,
   Paperclip,
   Plus,
   User,
@@ -115,6 +116,7 @@ const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
   note: FileText,
   event: CalendarDays,
   contact: User,
+  message: MessageSquare,
 };
 
 /**

@@ -27,6 +27,8 @@ export type RecentLinkItem = {
   target: RecentLinkEndpoint;
 };
 
+const CHAT_ENDS = new Set(["chat_channel", "chat_message"]);
+
 function refKey(type: string, id: string): string {
   return `${type}:${id}`;
 }
@@ -53,14 +55,19 @@ export function shapeRecentLinks(
   links: EntityLink[],
   byKey: Map<string, EntityRecord>,
 ): RecentLinkItem[] {
-  return links
-    .map((link) => ({
-      id: link.id,
-      relationKind: link.relationKind,
-      origin: link.origin,
-      createdAt: link.createdAt,
-      source: endpoint(link.sourceType, link.sourceId, byKey),
-      target: endpoint(link.targetType, link.targetId, byKey),
-    }))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  return (
+    links
+      // Chat's own links ("Mentioned in", "Became a task") show in chat and on
+      // the item, not as workspace link activity (CV-10).
+      .filter((link) => !CHAT_ENDS.has(link.sourceType) && !CHAT_ENDS.has(link.targetType))
+      .map((link) => ({
+        id: link.id,
+        relationKind: link.relationKind,
+        origin: link.origin,
+        createdAt: link.createdAt,
+        source: endpoint(link.sourceType, link.sourceId, byKey),
+        target: endpoint(link.targetType, link.targetId, byKey),
+      }))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+  );
 }

@@ -36,7 +36,7 @@ import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
-import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
@@ -53,6 +53,7 @@ import {
   useChatTypingSnapshot,
 } from "../store/react";
 import type { ChatWindow, ChatWriteResult } from "../store/store";
+import { MadeFromScope, useMadeFrom } from "../stream/made-from";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
 import { authorName } from "../stream/rows";
 import { readThroughHidden, wrappedReplyIds } from "../timeline";
@@ -517,13 +518,52 @@ export function ChatScreen({
   );
 
   // T / "Make a task": the app's capture opens as Task with the message's words (AC2.7).
-  const makeTaskFrom = useCallback((m: ChatMessage) => {
-    const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 200);
-    dispatchOpenCapture({ type: "task", draft: text });
-  }, []);
+  // With a removable "From: Sofia's message in Acme" chip that links the task
+  // to the message, and "Became a task" under the message once made (CV-10).
+  // The messages on screen: the stream's and the open reply chains' (a wrapped
+  // chain's replies show only in the panel).
+  const madeFromIds = useMemo(() => {
+    const ids = new Set<string>();
+    const take = (m: ChatMessage | null | undefined) => {
+      if (m && !m.sendState && m.kind === "message") ids.add(m.id);
+    };
+    for (const m of streamWin?.rows ?? []) take(m);
+    for (const chain of Object.values(snap.chains)) {
+      if (chain.root?.channelId !== conversationId) continue;
+      take(chain.root);
+      for (const r of chain.replies) take(r);
+    }
+    return [...ids];
+  }, [streamWin?.rows, snap.chains, conversationId]);
+  const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
+  const addMadeFrom = madeFrom.add;
+  const makeTaskFrom = useCallback(
+    (m: ChatMessage) => {
+      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200);
+      const chat = runtime?.chat;
+      dispatchOpenCapture({
+        type: "task",
+        draft: text,
+        source:
+          chat && !m.sendState
+            ? {
+                kind: "message",
+                label: messageSourceLabel(m, snap.channels[m.channelId], selfId, personOf),
+                resolve: () => chat.registerMessage(m.id).catch(() => null),
+              }
+            : null,
+        // Only a task carries the From link; the line drops one the server
+        // never shows (the chip removed, a template, a failed link).
+        onCreated: (ref) => {
+          if (ref.type === "task") addMadeFrom(m.id, { type: ref.type, id: ref.id });
+        },
+      });
+    },
+    [runtime, snap.channels, selfId, personOf, addMadeFrom],
+  );
 
   const copyLink = useCallback((m: ChatMessage) => {
     const params = new URLSearchParams({ c: m.channelId, m: m.id });
@@ -742,126 +782,131 @@ export function ChatScreen({
             )
           }
         />
-        <MessageStream
-          key={channel.id}
-          ref={streamRef}
-          conversationId={channel.id}
-          window={streamWin ?? EMPTY_WINDOW}
-          selfId={selfId}
-          personOf={personOf}
-          rowById={rowById}
-          hidden={streamHidden}
-          editingId={editingId}
-          canWrite={canWrite}
-          // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
-          canUseTools={!channel.archivedAt}
-          intro={
-            <ConversationStart
-              channel={channel}
-              title={title}
-              people={others}
-              personOf={personOf}
-              workspaceName={workspaceName}
-            />
-          }
-          onLoadOlder={() => void store?.loadOlder(channel.id)}
-          onLoadNewer={() => void store?.loadNewer(channel.id)}
-          onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
-          onSeen={(id) =>
-            store?.markSeen(channel.id, readThroughHidden(streamWin?.rows ?? [], id, streamHidden))
-          }
-          onStartEdit={(m) => setEditingId(m.id)}
-          renderEditor={(m) => (
-            <ChatComposer
-              mode="edit"
-              className="mt-0.5"
-              runtime={runtime}
-              workspaceId={workspaceId}
-              selfId={selfId}
-              people={people}
-              placeholder="Edit message"
-              initial={m.body}
-              autoFocus
-              onCancel={() => {
-                setEditingId(null);
-                returnToComposer();
-              }}
-              onSend={(body) => {
-                setEditingId(null);
-                returnToComposer();
-                void store?.edit(m.id, body, "v2").then((res) => {
-                  if (!res.ok) toast(res.offline ? "Offline" : res.message);
-                });
-              }}
-            />
-          )}
-          onDelete={deleteWithUndo}
-          onReact={(m, key, on) => {
-            if (!store || m.sendState) return;
-            void store
-              .react(m.id, key, on)
-              .then((res) => failed(res, "Couldn't add the reaction."));
-          }}
-          onPin={(m) => {
-            if (!store) return;
-            const pinned = !m.pinnedAt;
-            void store.pin(m.id, pinned).then((res) => {
-              if (!failed(res, "Couldn't update the pin.")) {
-                toast(pinned ? "Pinned to the conversation" : "Unpinned");
+        <MadeFromScope value={madeFrom}>
+          <MessageStream
+            key={channel.id}
+            ref={streamRef}
+            conversationId={channel.id}
+            window={streamWin ?? EMPTY_WINDOW}
+            selfId={selfId}
+            personOf={personOf}
+            rowById={rowById}
+            hidden={streamHidden}
+            editingId={editingId}
+            canWrite={canWrite}
+            // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
+            canUseTools={!channel.archivedAt}
+            intro={
+              <ConversationStart
+                channel={channel}
+                title={title}
+                people={others}
+                personOf={personOf}
+                workspaceName={workspaceName}
+              />
+            }
+            onLoadOlder={() => void store?.loadOlder(channel.id)}
+            onLoadNewer={() => void store?.loadNewer(channel.id)}
+            onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
+            onSeen={(id) =>
+              store?.markSeen(
+                channel.id,
+                readThroughHidden(streamWin?.rows ?? [], id, streamHidden),
+              )
+            }
+            onStartEdit={(m) => setEditingId(m.id)}
+            renderEditor={(m) => (
+              <ChatComposer
+                mode="edit"
+                className="mt-0.5"
+                runtime={runtime}
+                workspaceId={workspaceId}
+                selfId={selfId}
+                people={people}
+                placeholder="Edit message"
+                initial={m.body}
+                autoFocus
+                onCancel={() => {
+                  setEditingId(null);
+                  returnToComposer();
+                }}
+                onSend={(body) => {
+                  setEditingId(null);
+                  returnToComposer();
+                  void store?.edit(m.id, body, "v2").then((res) => {
+                    if (!res.ok) toast(res.offline ? "Offline" : res.message);
+                  });
+                }}
+              />
+            )}
+            onDelete={deleteWithUndo}
+            onReact={(m, key, on) => {
+              if (!store || m.sendState) return;
+              void store
+                .react(m.id, key, on)
+                .then((res) => failed(res, "Couldn't add the reaction."));
+            }}
+            onPin={(m) => {
+              if (!store) return;
+              const pinned = !m.pinnedAt;
+              void store.pin(m.id, pinned).then((res) => {
+                if (!failed(res, "Couldn't update the pin.")) {
+                  toast(pinned ? "Pinned to the conversation" : "Unpinned");
+                }
+              });
+            }}
+            onTask={makeTaskFrom}
+            onCopyLink={copyLink}
+            onMarkUnread={(m) => {
+              void store
+                ?.markUnread(m.channelId, m.id)
+                .then((res) => failed(res, "Couldn't mark as unread."));
+            }}
+            onOpenChain={(m) => openChain(m.parentId ?? m.id)}
+            onReply={(m) => {
+              if (!canWrite) {
+                openChain(m.parentId ?? m.id);
+                return;
               }
-            });
-          }}
-          onTask={makeTaskFrom}
-          onCopyLink={copyLink}
-          onMarkUnread={(m) => {
-            void store
-              ?.markUnread(m.channelId, m.id)
-              .then((res) => failed(res, "Couldn't mark as unread."));
-          }}
-          onOpenChain={(m) => openChain(m.parentId ?? m.id)}
-          onReply={(m) => {
-            if (!canWrite) {
-              openChain(m.parentId ?? m.id);
-              return;
+              setReplyingTo(m);
+              composerRef.current?.focus();
+            }}
+            onJumpTo={(m) => {
+              // A reply of a wrapped chain isn't drawn: its chain opens instead.
+              if (streamHidden.has(m.id)) {
+                openChain(m.parentId ?? m.id);
+                return;
+              }
+              if (streamRef.current?.jumpTo(m.id)) return;
+              void store?.openAt(m.channelId, m.id).then((at) => {
+                if (!at) toast("That message isn't available.");
+              });
+            }}
+            wrapUpFor={(m) =>
+              !m.parentId && m.replyCount > 0 && !m.wrappedAt && canWrapUp(m)
+                ? () => askWrapUp(m.id)
+                : undefined
             }
-            setReplyingTo(m);
-            composerRef.current?.focus();
-          }}
-          onJumpTo={(m) => {
-            // A reply of a wrapped chain isn't drawn: its chain opens instead.
-            if (streamHidden.has(m.id)) {
-              openChain(m.parentId ?? m.id);
-              return;
+            replyToFor={(m) =>
+              mayAttach(m, channel, chainRights) ? () => setAttachFor(m) : undefined
             }
-            if (streamRef.current?.jumpTo(m.id)) return;
-            void store?.openAt(m.channelId, m.id).then((at) => {
-              if (!at) toast("That message isn't available.");
-            });
-          }}
-          wrapUpFor={(m) =>
-            !m.parentId && m.replyCount > 0 && !m.wrappedAt && canWrapUp(m)
-              ? () => askWrapUp(m.id)
-              : undefined
-          }
-          replyToFor={(m) =>
-            mayAttach(m, channel, chainRights) ? () => setAttachFor(m) : undefined
-          }
-          onRetry={(m) => store?.retry(m.id)}
-          onDiscard={(m) => store?.discard(m.id)}
-          onPersonClick={openPerson}
-          personPreview={(id) => (
-            <PersonCard
-              compact
-              userId={id}
-              person={personOf(id)}
-              self={id === selfId}
-              online={id === selfId || online(id)}
-              canMessage={canStart}
-              onMessage={(uid) => openDmWith([uid])}
-            />
-          )}
-          onReturnToComposer={returnToComposer}
-        />
+            onRetry={(m) => store?.retry(m.id)}
+            onDiscard={(m) => store?.discard(m.id)}
+            onPersonClick={openPerson}
+            personPreview={(id) => (
+              <PersonCard
+                compact
+                userId={id}
+                person={personOf(id)}
+                self={id === selfId}
+                online={id === selfId || online(id)}
+                canMessage={canStart}
+                onMessage={(uid) => openDmWith([uid])}
+              />
+            )}
+            onReturnToComposer={returnToComposer}
+          />
+        </MadeFromScope>
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
           {managersPending ? null : line ? (
@@ -1003,46 +1048,48 @@ export function ChatScreen({
         title: "Reply chain",
         icon: MessagesSquare,
         render: () => (
-          <ChainItem
-            chat={runtime?.chat ?? null}
-            rootId={entry.id}
-            chain={chain}
-            selfId={selfId}
-            personOf={personOf}
-            onLoad={loadChain}
-            onPersonClick={openPerson}
-            onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
-            onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
-            renderComposer={
-              channel && canWriteHere && root?.channelId === channel.id
-                ? (placeholder) => (
-                    <ChatComposer
-                      key={`chain:${entry.id}`}
-                      runtime={runtime}
-                      workspaceId={workspaceId}
-                      selfId={selfId}
-                      people={people}
-                      placeholder={placeholder}
-                      initial={store?.draft(channel.id, entry.id) ?? ""}
-                      onSend={(body) => {
-                        if (!store || !body.trim()) return false;
-                        store.send({
-                          channelId: channel.id,
-                          body,
-                          replyToId: entry.id,
-                          format: "v2",
-                        });
-                        typingStore?.send(channel.id, entry.id, true);
-                        return true;
-                      }}
-                      onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
-                      onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
-                      onEscapeEmpty={panelStack.back}
-                    />
-                  )
-                : undefined
-            }
-          />
+          <MadeFromScope value={madeFrom}>
+            <ChainItem
+              chat={runtime?.chat ?? null}
+              rootId={entry.id}
+              chain={chain}
+              selfId={selfId}
+              personOf={personOf}
+              onLoad={loadChain}
+              onPersonClick={openPerson}
+              onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
+              onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
+              renderComposer={
+                channel && canWriteHere && root?.channelId === channel.id
+                  ? (placeholder) => (
+                      <ChatComposer
+                        key={`chain:${entry.id}`}
+                        runtime={runtime}
+                        workspaceId={workspaceId}
+                        selfId={selfId}
+                        people={people}
+                        placeholder={placeholder}
+                        initial={store?.draft(channel.id, entry.id) ?? ""}
+                        onSend={(body) => {
+                          if (!store || !body.trim()) return false;
+                          store.send({
+                            channelId: channel.id,
+                            body,
+                            replyToId: entry.id,
+                            format: "v2",
+                          });
+                          typingStore?.send(channel.id, entry.id, true);
+                          return true;
+                        }}
+                        onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
+                        onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
+                        onEscapeEmpty={panelStack.back}
+                      />
+                    )
+                  : undefined
+              }
+            />
+          </MadeFromScope>
         ),
       };
     }
@@ -1206,4 +1253,20 @@ export function ChatScreen({
       />
     </>
   );
+}
+
+/** The capture's "From:" chip for a message: "Sofia's message in Acme". */
+export function messageSourceLabel(
+  m: ChatMessage,
+  where: ChatChannel | undefined,
+  selfId: string,
+  personOf: (id: string) => ChatPerson | undefined,
+): string {
+  const author =
+    m.authorId && m.authorId === selfId
+      ? "Your"
+      : `${authorName(m, m.authorId ? personOf(m.authorId) : undefined)}'s`;
+  return where
+    ? `${author} message in ${conversationTitle(where, selfId, personOf)}`
+    : `${author} message`;
 }
