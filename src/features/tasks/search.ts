@@ -219,7 +219,7 @@ export type SearchToken = { dimension: "tag" | "assignee"; value: string };
 
 export type SearchTokenContext = {
   tags: ReadonlyArray<{ id: string; name: string }>;
-  /** Members in picker order; the current user is named "Me" there. */
+  /** Members in picker order; you are named "You" there (SELF_NAME) and found by `@me`. */
   people: ReadonlyArray<{ userId: string; name: string; isMe?: boolean }>;
 };
 

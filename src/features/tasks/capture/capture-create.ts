@@ -46,7 +46,7 @@ export type CaptureTaskPlan = {
   mentions?: string[];
   /** Link the "From:" item (93). */
   fromSource: boolean;
-  /** "Remind me at…" (ISO), yours. */
+  /** The reminder ("Reminder at…", ISO), yours. */
   remindAt: string | null;
   /** Waiting on these people. */
   waitingOn: string[];
