@@ -40,11 +40,14 @@ import {
   type ChatError,
   type ChatMember,
   type ChatMessage,
+  type ChatMessageRef,
   type ChatResult,
   type ChatRuntime,
 } from "../features/chat/model";
 
 const MESSAGE_COLUMNS = CHAT_MESSAGE_COLUMNS;
+
+type Row = Record<string, unknown>;
 
 function single<T>(data: unknown, mapper: (r: unknown) => T | null, what: string): T {
   const row = Array.isArray(data) ? data[0] : data;
@@ -636,5 +639,76 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       fail(error);
       return mapUserChatPrefs(data);
     },
+
+    async registerMessage(messageId) {
+      const { error } = await db().rpc("chat_op_register_message", { p_message_id: messageId });
+      fail(error);
+      return { type: "chat_message", id: messageId };
+    },
+
+    async messageRefs(ids) {
+      if (ids.length === 0) return [];
+      const { data, error } = await db().rpc("chat_message_refs", { p_ids: [...ids] });
+      fail(error);
+      return ((data as Row[] | null) ?? []).map(mapMessageRef);
+    },
+
+    async conversationsForItem(type, id) {
+      const { data, error } = await db().rpc("chat_conversations_for_item", {
+        p_type: type,
+        p_id: id,
+      });
+      fail(error);
+      return ((data as Row[] | null) ?? []).map((r) => ({
+        channelId: String(r.channel_id),
+        workspaceId: String(r.workspace_id),
+        channelKind: r.channel_kind === "dm" ? "dm" : "channel",
+        channelName: typeof r.channel_name === "string" ? r.channel_name : null,
+        channelPrivate: r.channel_private === true,
+        relation: "mentions" as const,
+        since: String(r.since),
+      }));
+    },
+
+    async madeFrom(messageIds) {
+      if (messageIds.length === 0) return [];
+      // entity_links' policy shows a link to a message only to its readers.
+      const { data, error } = await db()
+        .from("entity_links")
+        .select("source_type, source_id, target_id, created_at")
+        .eq("target_type", "chat_message")
+        .in("target_id", [...messageIds])
+        .eq("relation_kind", "spawned-from")
+        .in("source_type", ["task", "note", "event"])
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
+      fail(error);
+      return ((data as Row[] | null) ?? []).map((r) => ({
+        messageId: String(r.target_id),
+        type: String(r.source_type),
+        id: String(r.source_id),
+        createdAt: String(r.created_at),
+      }));
+    },
+  };
+}
+
+function mapMessageRef(r: Row): ChatMessageRef {
+  const str = (v: unknown) => (typeof v === "string" ? v : null);
+  return {
+    id: String(r.id),
+    workspaceId: String(r.workspace_id),
+    channelId: String(r.channel_id),
+    channelKind: r.channel_kind === "dm" ? "dm" : "channel",
+    channelName: str(r.channel_name),
+    channelPrivate: r.channel_private === true,
+    parentId: str(r.parent_id),
+    authorId: str(r.author_id),
+    authorKind: str(r.author_kind),
+    authorLabel: str(r.author_label),
+    createdAt: String(r.created_at),
+    editedAt: str(r.edited_at),
+    deleted: r.deleted === true,
+    excerpt: str(r.excerpt),
   };
 }

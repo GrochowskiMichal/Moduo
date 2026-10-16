@@ -327,7 +327,50 @@ export type ChatRuntime = {
   myPrefs(): Promise<UserChatPrefs>;
   /** Changes only what the patch names; answers the whole set. */
   setMyPrefs(patch: Partial<UserChatPrefs>): Promise<UserChatPrefs>;
+
+  // ── References (CV-10; throw on failure) ──
+  /** Makes a message linkable (no label), only for someone who can read it. */
+  registerMessage(messageId: string): Promise<{ type: "chat_message"; id: string }>;
+  /** Chips and cards for the messages you can read; the rest don't answer. */
+  messageRefs(ids: readonly string[]): Promise<ChatMessageRef[]>;
+  /** The "Mentioned in" lines you can read for an item you can open. */
+  conversationsForItem(type: string, id: string): Promise<ChatItemConversation[]>;
+  /** The tasks, notes and events made from these messages ("Became a task"). */
+  madeFrom(messageIds: readonly string[]): Promise<ChatMadeFrom[]>;
 };
+
+/** A message as a reference (chat_message_refs): no words when it's deleted. */
+export type ChatMessageRef = {
+  id: string;
+  workspaceId: string;
+  channelId: string;
+  channelKind: ChatChannelKind;
+  /** Null for a direct message. */
+  channelName: string | null;
+  channelPrivate: boolean;
+  parentId: string | null;
+  authorId: string | null;
+  authorKind: string | null;
+  authorLabel: string | null;
+  createdAt: string;
+  editedAt: string | null;
+  deleted: boolean;
+  excerpt: string | null;
+};
+
+/** One "Mentioned in" line (chat_conversations_for_item). */
+export type ChatItemConversation = {
+  channelId: string;
+  workspaceId: string;
+  channelKind: ChatChannelKind;
+  channelName: string | null;
+  channelPrivate: boolean;
+  relation: "mentions";
+  since: string;
+};
+
+/** An item made from a message (a `spawned-from` link to it). */
+export type ChatMadeFrom = { messageId: string; type: string; id: string; createdAt: string };
 
 /** Your chat settings. `reactionRow` null = Moduo's six (CH16a). */
 export type UserChatPrefs = {

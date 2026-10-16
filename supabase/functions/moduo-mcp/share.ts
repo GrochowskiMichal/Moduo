@@ -75,6 +75,9 @@ export async function assertReach(ctx: ToolContext, type: string, id: string): P
 /** Throws unless the key can see both endpoints' modules (a link's two ends). */
 export function assertLinkInScope(ctx: ToolContext, link: Record<string, unknown>): void {
   for (const type of [link.source_type, link.target_type]) {
+    if (typeof type === "string" && CHAT_ENDS.has(type)) {
+      throw new Error("This link touches something agents can't work with.");
+    }
     if (typeof type !== "string" || !keyCanSeeEntityType(ctx.key.scopes, type)) {
       const module = typeof type === "string" ? entityTypeKeyModule(type) : null;
       throw new Error(
@@ -104,12 +107,21 @@ export async function assertLiveLinkInScope(ctx: ToolContext, linkId: string): P
   if (data?.[0]) assertLinkInScope(ctx, data[0] as Record<string, unknown>);
 }
 
-/** Links with both ends in modules the key can see (the rest are dropped). */
+/** Apps read conversations through the chat tools alone, never the spine. */
+const CHAT_ENDS = new Set(["chat_channel", "chat_message"]);
+
+/**
+ * Links with both ends in modules the key can see (the rest are dropped). A
+ * link with a conversation or a message at either end ("Mentioned in",
+ * "Became a task") is always dropped, whatever the key's Chat access.
+ */
 export function linksInScope<T extends Record<string, unknown>>(ctx: ToolContext, links: T[]): T[] {
   return links.filter(
     (l) =>
       typeof l.source_type === "string" &&
       typeof l.target_type === "string" &&
+      !CHAT_ENDS.has(l.source_type) &&
+      !CHAT_ENDS.has(l.target_type) &&
       keyCanSeeEntityType(ctx.key.scopes, l.source_type) &&
       keyCanSeeEntityType(ctx.key.scopes, l.target_type),
   );

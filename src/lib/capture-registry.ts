@@ -3,7 +3,7 @@
 // ⌘⇧K opens the app's one capture, always as Task. While it's open, ⌘1–7 switch
 // the capture's *type* to the module with that number in the top bar (⌘2 a
 // note, ⌘4 an event), never the app behind it. A number whose module has no
-// registered type (⌘1 Home, Email, Chat) does nothing. Each module registers
+// registered type (⌘1 Home, Email) does nothing; ⌘7 Chat is Message (CV-10). Each module registers
 // its own type here: label, icon, default destination and the body it renders.
 // Tasks ships the Task type; the others register theirs when rebuilt (until
 // then Notes, Calendar and Contacts register the one-line captures ⌘⇧K already
@@ -13,6 +13,7 @@ import type { PriorityLevel, TaskStatusCategory } from "@contracts/vocabularies"
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { calendarCaptureType } from "../features/calendar/capture-type";
+import { chatCaptureType } from "../features/chat/capture-type";
 import { contactsCaptureType } from "../features/contacts/capture-type";
 import { notesCaptureType } from "../features/notes/capture-type";
 import { taskCaptureType } from "../features/tasks/capture-type";
@@ -73,11 +74,16 @@ export type CaptureRequest = {
    * the device until it's made. Only the Task body reads it.
    */
   fromRefused?: boolean;
+  /**
+   * What the capture is made from, instead of what the page has open (chat's
+   * "Make a task": "From: Sofia's message in Acme", CV-10).
+   */
+  source?: CaptureSource | null;
 };
 
 /** A request as the body gets it: plus what was open when it was opened (93). */
-export type CaptureContext = CaptureRequest & {
-  /** The email, note, event or contact open when the capture opened. */
+export type CaptureContext = Omit<CaptureRequest, "source"> & {
+  /** The opener's source, else the email, note, event or contact open when it opened. */
   source: CaptureSource | null;
   /** Bumped on every open, so a body can tell a fresh open from a re-render. */
   openId: number;
@@ -139,6 +145,7 @@ export const CAPTURE_TYPES: readonly CaptureTypeDef[] = [
   notesCaptureType,
   calendarCaptureType,
   contactsCaptureType,
+  chatCaptureType,
 ];
 
 /** One top-bar tab, as far as numbering goes: Home has no module. */

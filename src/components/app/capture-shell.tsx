@@ -113,7 +113,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
       } else if (before !== null) setDraft(before);
       setContext((prev) => ({
         ...(request ?? {}),
-        source: getCaptureSource(),
+        source: request?.source !== undefined ? request.source : getCaptureSource(),
         openId: prev.openId + 1,
         // A prefilled open keeps its own draft for as long as it's open.
         ...(request?.draft !== undefined ? { held: { current: null } } : {}),
