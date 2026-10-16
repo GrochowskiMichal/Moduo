@@ -44,7 +44,7 @@ export function HandleAutolinkPlugin({
 }: {
   taskKeys: readonly string[];
   /** A handle became a reference (the host writes its `mentions` link, like `@`). */
-  onLinked?: (taskId: string) => void;
+  onLinked?: (taskId: string, made: { handle: string; nodeKey: NodeKey }) => void;
 }) {
   const [editor] = useLexicalComposerContext();
   const store = useReferenceStore();
@@ -73,7 +73,7 @@ export function HandleAutolinkPlugin({
       const { key, handle, start } = found as { key: NodeKey; handle: string; start: number };
       void store.resolveHandle(handle).then((taskId) => {
         if (!taskId) return;
-        let linked = false;
+        let linked: NodeKey | null = null;
         editor.update(
           () => {
             const node = $getNodeByKey(key);
@@ -83,12 +83,20 @@ export function HandleAutolinkPlugin({
             const parts = node.splitText(start, start + handle.length);
             const target = start === 0 ? parts[0] : parts[1];
             if (!target) return;
-            target.replace(
-              $createReferenceNode({ entityType: "task", entityId: taskId, display: "chip" }),
-            );
-            linked = true;
+            const chip = $createReferenceNode({
+              entityType: "task",
+              entityId: taskId,
+              display: "chip",
+            });
+            target.replace(chip);
+            linked = chip.getKey();
           },
-          { tag: AUTOLINK_TAG, onUpdate: () => linked && onLinkedRef.current?.(taskId) },
+          {
+            tag: AUTOLINK_TAG,
+            onUpdate: () => {
+              if (linked) onLinkedRef.current?.(taskId, { handle, nodeKey: linked });
+            },
+          },
         );
       });
     });

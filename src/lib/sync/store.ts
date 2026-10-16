@@ -42,7 +42,7 @@
 import { toast } from "sonner";
 import type { AgentSession } from "../../features/spine/agent-session";
 import { applyLiveTags, seedTags } from "../../features/tags/store";
-import { isNewer, type LiveChange, timestampMicros } from "../../features/tasks/live";
+import { isNewer, type LiveChange, stampMinus } from "../../features/tasks/live";
 import type {
   RecurrenceRule,
   Task,
@@ -358,16 +358,8 @@ export const DEFAULT_TIMING: StoreTiming = {
   accessDebounceMs: 400,
 };
 
-/** A server stamp moved back by `ms`, keeping its microseconds. */
-export function stampMinus(stamp: string, ms: number): string {
-  const micros = timestampMicros(stamp);
-  if (micros === null) return stamp;
-  const at = micros - ms * 1000;
-  const whole = Math.floor(at / 1000);
-  const frac = String(((at % 1000) + 1000) % 1000).padStart(3, "0");
-  // toISOString gives milliseconds; add the remaining microseconds.
-  return new Date(whole).toISOString().replace(/Z$/, `${frac}+00:00`);
-}
+/** A server stamp moved back by `ms` (lives with `timestampMicros`). */
+export { stampMinus };
 
 /** The grant feed's start when it was empty at the session's first read. */
 const EPOCH = "1970-01-01T00:00:00+00:00";

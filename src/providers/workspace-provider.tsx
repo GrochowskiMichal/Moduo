@@ -1,4 +1,5 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { keepChatWorkspaces } from "../features/chat/store/store";
 import { PROFILE_UPDATED_EVENT } from "../features/profile/profile-storage";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type { Overrides, WorkspaceRoleDef } from "../features/workspaces/access";
@@ -191,6 +192,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
           rememberWorkspaces(userId, next);
           // Tasks device copies of workspaces you left or that went away go too.
           void keepWorkspaceCopies(
+            userId,
+            next.map((workspace) => workspace.id),
+          );
+          // And chat's (CV-3).
+          void keepChatWorkspaces(
             userId,
             next.map((workspace) => workspace.id),
           );

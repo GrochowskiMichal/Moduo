@@ -1,0 +1,1794 @@
+<!doctype html>
+<html lang="en" data-frame="1">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chat round 3 prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* biome-ignore-all lint: a throwaway static prototype, not app code */
+/* Throwaway prototype for the Chat round 3 calls (CH29d–f, CH30a–c, CH28a–c) in .design/chat-v2/REPLAN.md §8. Built on .design/tasks-v3/prototypes/round-2b.html: same tokens, shell (3×3, with the bottom bar), rail, panel, menus and capture. Not a spec. */
+/* ── Tokens (tokens.css dark theme) ─────────────────────────────────────── */
+:root {
+  --neutral-50: oklch(0.985 0 0); --neutral-400: oklch(0.72 0 0);
+  --neutral-800: oklch(0.22 0 0); --neutral-850: oklch(0.18 0 0); --neutral-900: oklch(0.14 0 0);
+  --background: oklch(0 0 0); --foreground: var(--neutral-50);
+  --card: var(--neutral-900); --popover: var(--neutral-850); --muted: var(--neutral-850);
+  --muted-foreground: var(--neutral-400);
+  --primary: oklch(0.95 0 0); --primary-foreground: oklch(0.10 0 0);
+  --label-gray: var(--neutral-400); --label-blue: oklch(0.66 0.18 245); --label-green: oklch(0.72 0.17 150);
+  --label-amber: oklch(0.80 0.16 75); --label-violet: oklch(0.66 0.20 295); --label-teal: oklch(0.72 0.13 200);
+  --motion-fade: 100ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --font: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+
+  /* State layer (tokens.css §5b) */
+  --state-hover: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-active-hover: color-mix(in oklab, var(--foreground) 14%, transparent);
+  --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
+  --hairline: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --scroll-thumb: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --scroll-thumb-hover: color-mix(in oklab, var(--foreground) 32%, transparent);
+  --hover-solid: color-mix(in oklab, var(--foreground) 5%, var(--card));
+
+  /* Density: comfortable (tokens.css §7) */
+  --row-h: 2.25rem; --row-h-sm: 1.75rem; --ctrl-h: 2rem; --ctrl-h-sm: 1.625rem;
+  --icon-xs: .75rem; --icon-sm: .875rem; --icon: 1rem; --bar-h: 3rem;
+  /* Radius: soft (tokens.css §8) */
+  --radius-sm: .25rem; --radius-md: .5rem; --radius-lg: .75rem; --radius-xl: 1rem; --avatar-radius: 9999px;
+
+  /* Call 38: three readable text levels */
+  --text-1: var(--foreground);
+  --text-2: var(--muted-foreground);
+  --text-3: color-mix(in oklab, var(--muted-foreground) 86%, var(--card));
+  /* Call 43: two initials + one stable colour per person (contacts too) */
+  --person-ar: color-mix(in oklab, var(--label-blue) 55%, var(--card));
+  --person-so: color-mix(in oklab, var(--label-teal) 50%, var(--card));
+  --person-mc: color-mix(in oklab, var(--label-violet) 52%, var(--card));
+  --person-an: color-mix(in oklab, var(--label-amber) 40%, var(--card));
+  /* references: one neutral fill, no hue (EntityRefChip is monochrome) */
+  --ref-bg: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --ref-bg-hover: color-mix(in oklab, var(--foreground) 12%, var(--card));
+}
+
+* { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 9999px; border: 3px solid transparent; background-clip: content-box; }
+* { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
+html, body { background: var(--background); color: var(--text-1); }
+body { font: 400 14px/1.4 var(--font); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+.ic { width: var(--icon-sm); height: var(--icon-sm); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic-xs { width: var(--icon-xs); height: var(--icon-xs); }
+.ic-md { width: var(--icon); height: var(--icon); }
+.gl { width: 10px; height: 10px; fill: currentColor; stroke: none; flex-shrink: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.t1 { color: var(--text-1); } .t2 { color: var(--text-2); } .t3 { color: var(--text-3); }
+
+/* ── Prototype chrome (NOT part of the app) ──────────────────────────────── */
+.stage { display: flex; flex-direction: column; height: 100vh; min-height: 860px; min-width: 1280px; }
+.strip { flex-shrink: 0; position: relative; z-index: 60; padding: 7px 16px 7px; display: flex; flex-direction: column; gap: 5px; font-size: 12px;
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px);
+  border-bottom: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); }
+.strip .l1, .strip .l2 { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.ptag { height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--radius-sm); background: var(--foreground); color: var(--background); font-weight: 600; white-space: nowrap; }
+.pcalls { color: var(--text-2); white-space: nowrap; }
+.pcalls b { color: var(--text-1); font-weight: 500; }
+.strip .grow { flex: 1; }
+.strip .lab { color: var(--text-3); white-space: nowrap; }
+.strip .seg { background: var(--background); flex-shrink: 0; }
+.strip .seg button { font-size: 12px; padding: 0 9px; }
+.strip .seg button.soon { color: var(--text-3); }
+.strip .l2 { color: var(--text-2); }
+.strip .cap { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strip .keys { color: var(--text-3); white-space: nowrap; }
+.strip .keys b { color: var(--text-2); font-weight: 500; }
+.ctl { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.appframe { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* annotation inside a frame: striped like the strip, so it never reads as UI */
+.pnote { font-size: 11.5px; line-height: 1.45; color: var(--text-2); padding: 4px 8px; border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent);
+  background: repeating-linear-gradient(-45deg, color-mix(in oklab, var(--foreground) 4%, var(--popover)) 0 7px, var(--popover) 7px 14px); }
+.pnote b { color: var(--text-1); font-weight: 600; }
+
+/* ── Primitives ─────────────────────────────────────────────────────────── */
+.seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; height: var(--ctrl-h-sm); background: var(--muted); border-radius: var(--radius-md); }
+.seg button { height: 100%; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: calc(var(--radius-md) - 2px); color: var(--text-2); font-size: 13px; font-weight: 500; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.seg button:hover { color: var(--text-1); }
+.seg button.on { background: var(--control-raised); color: var(--text-1); }
+.seg.icons button { padding: 0 6px; }
+
+.btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); white-space: nowrap; }
+.btn:hover { background: var(--state-hover); color: var(--text-1); }
+.btn.on { background: var(--state-active); color: var(--text-1); }
+.btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 10px; }
+.btn.primary:hover { background: color-mix(in oklab, var(--primary) 90%, var(--background)); }
+.btn.secondary { background: var(--state-active); color: var(--text-1); }
+.btn.secondary:hover { background: var(--state-active-hover); }
+.btn.sm { font-size: 13px; }
+.kbd { font-size: 11px; color: var(--text-2); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; line-height: 16px; font-weight: 500; white-space: nowrap; }
+.kbdin { opacity: .6; font-weight: 400; }
+
+/* Avatar: 16px, two initials, a stable colour per person (call 43) */
+.ava { width: var(--icon); height: var(--icon); border-radius: var(--avatar-radius); display: inline-grid; place-items: center; font-size: 8.5px; font-weight: 600; letter-spacing: 0; line-height: 1; color: var(--text-1); background: var(--ava, color-mix(in oklab, var(--foreground) 20%, var(--card))); flex-shrink: 0; }
+.ava.ar { --ava: var(--person-ar); }
+.ava.so { --ava: var(--person-so); }
+.ava.mc { --ava: var(--person-mc); }
+.ava.an { --ava: var(--person-an); }
+.ava.none { background: none; border: 1px dashed var(--text-3); }
+.ava.lg { width: 26px; height: 26px; font-size: 10.5px; }
+.ava.xl { width: 32px; height: 32px; font-size: 12px; }
+
+/* Checkbox (CompleteToggle) — rest border clears 3:1 */
+.cb { width: var(--icon); height: var(--icon); border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); display: grid; place-items: center; flex-shrink: 0; transition: border-color var(--motion-fade); }
+.cb:hover { border-color: color-mix(in oklab, var(--foreground) 70%, transparent); }
+.cb.done { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+.cb.done .ic { width: 70%; height: 70%; stroke-width: 3; }
+.cb.sm { width: var(--icon-sm); height: var(--icon-sm); }
+/* the step you're on: a ring with a centre, never a colour */
+.cb.cur { border-color: var(--text-1); }
+.cb.cur::after { content: ""; width: 6px; height: 6px; border-radius: 9999px; background: var(--text-1); }
+.cb.sm.cur::after { width: 5px; height: 5px; }
+
+/* Priority glyph — fixed footprint, ghost bars are decoration */
+.pri { width: var(--icon-sm); height: var(--icon-sm); color: var(--text-2); fill: currentColor; flex-shrink: 0; }
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+.topbar { flex-shrink: 0; height: var(--bar-h); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 20px; }
+.tleft { display: flex; align-items: center; gap: 4px; }
+.mark { width: 28px; height: 28px; color: var(--foreground); margin-right: 2px; }
+.wsbtn { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); }
+.wsbtn:hover { background: var(--state-hover); }
+.wsbtn .ic { color: var(--text-2); }
+.mtabs { display: flex; gap: 4px; }
+.mtab { height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.mtab:hover { background: var(--state-hover); color: var(--text-1); }
+.mtab.on { background: var(--state-active); color: var(--text-1); }
+.tright { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.ibtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); }
+.ibtn:hover { background: var(--state-hover); color: var(--text-1); }
+
+.app { position: relative; flex: 1; min-height: 0; display: flex; gap: 12px; padding: 0 16px; }
+.panel { background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius-lg); min-height: 0; }
+.rail { position: relative; width: 236px; flex-shrink: 0; padding: 8px; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.center { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.rpanel { position: relative; width: 340px; flex-shrink: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Rail (NavRow + one header recipe) ───────────────────────────────────── */
+.nav { height: var(--row-h); flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 8px; border-radius: var(--radius-md); color: var(--text-2); font-weight: 500; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.nav:hover { background: var(--state-hover); color: var(--text-1); }
+.nav.active { background: var(--state-active); color: var(--text-1); }
+.nav .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.nav .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 2px; background: var(--c, var(--label-gray)); flex-shrink: 0; }
+.trail { position: relative; display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; height: 20px; min-width: 20px; }
+.count { font-size: 12px; color: var(--text-2); transition: opacity var(--motion-fade) var(--ease-out); }
+.more { width: 20px; height: 20px; border-radius: var(--radius-sm); display: grid; place-items: center; color: var(--text-2); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.more:hover { background: var(--state-active); color: var(--text-1); }
+.trail .more { position: absolute; right: 0; top: 0; }
+.nav:hover .trail .count, .ghdr:hover .trail .count { opacity: 0; }
+.nav:hover .trail .more, .ghdr:hover .trail .more { opacity: 1; }
+.nav.add { color: var(--text-3); font-weight: 400; margin-top: 4px; }
+.nav.add:hover { color: var(--text-1); }
+html[data-frame="3"] #rail .fcount { display: none; }
+.area { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+.ghdr { flex-shrink: 0; display: flex; align-items: center; gap: 5px; height: var(--row-h-sm); margin-top: 8px; padding: 0 6px 0 8px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-2); cursor: pointer; transition: color var(--motion-fade) var(--ease-out); }
+.ghdr:hover { color: var(--text-1); }
+.ghdr .chev { color: var(--text-3); transition: transform 140ms var(--ease-out); }
+.ghdr .trail { margin-left: auto; }
+.ghdr .count { color: var(--text-3); }
+.area.collapsed .ghdr .chev { transform: rotate(-90deg); }
+.area.collapsed .kids { display: none; }
+.kids { display: flex; flex-direction: column; gap: 1px; }
+.rdiv { flex-shrink: 0; position: relative; height: 13px; display: flex; align-items: center; padding: 0 8px; }
+.rdiv .line { flex: 1; height: 1px; background: var(--hairline); }
+.rdiv .more { position: absolute; right: 6px; top: -4px; background: var(--card); }
+.cust-more { opacity: 0; }
+.rail:has(.rdiv:hover) .cust-more { opacity: 1; }
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.toolbar { display: flex; align-items: center; gap: 4px; padding: 12px 12px 8px 16px; flex-shrink: 0; }
+.toolbar .title { display: flex; align-items: baseline; gap: 8px; margin-right: auto; min-width: 0; }
+.toolbar .title.proj { align-items: center; gap: 10px; }
+.toolbar h3 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.toolbar .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
+.pdot { width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex-shrink: 0; }
+.toolbar .title .pmore { margin-left: -4px; }
+
+/* ── Right panel: one header recipe, the view's name + collapse ──────────── */
+.rphead { position: relative; flex-shrink: 0; height: 44px; display: flex; align-items: center; gap: 4px; padding: 0 9px 0 16px; }
+.rphead .vname { font-size: 13px; font-weight: 600; color: var(--text-1); margin-right: auto; white-space: nowrap; }
+.rphead .btn.icon { color: var(--text-3); }
+.rphead .btn.icon:hover { color: var(--text-1); }
+.rpbody { flex: 1; min-height: 0; overflow: auto; }
+
+
+/* ── Focus view ──────────────────────────────────────────────────────────── */
+.nowwrap { padding: 0 16px; flex-shrink: 0; }
+.now { background: var(--popover); border-radius: var(--radius-xl); box-shadow: inset 0 0 0 1px var(--hairline); padding: 16px 20px 18px; display: flex; flex-direction: column; }
+.ntop { display: flex; align-items: center; gap: 12px; min-height: 26px; }
+.nctx { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.nctx .dot { width: 7px; height: 7px; margin-right: 1px; }
+.nctx .sp { color: var(--text-3); }
+/* one timer pill: the task's time, and Pause is part of it */
+.pill { margin-left: auto; flex-shrink: 0; height: 26px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px 0 10px; border-radius: 9999px; background: color-mix(in oklab, var(--foreground) 7%, var(--popover)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 5%, transparent); font-size: 13px; font-weight: 500; color: var(--text-1); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.pill:hover { background: color-mix(in oklab, var(--foreground) 11%, var(--popover)); }
+.pill > span { display: inline-flex; align-items: center; gap: 7px; }
+.pill .gl { color: var(--text-2); }
+.pill .of { color: var(--text-2); font-weight: 400; }
+.pill .p-paused { display: none; }
+.now h5 { margin-top: 10px; font-size: 22px; font-weight: 600; letter-spacing: -.015em; line-height: 1.25; }
+.ndesc { margin-top: 8px; font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 80%, transparent); max-width: 66ch; }
+.ndesc.folded { max-height: calc(1.55em * 3); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent); }
+.nmore { margin-top: 2px; height: 22px; font-size: 12px; font-weight: 500; color: var(--text-2); align-self: flex-start; }
+.nmore:hover { color: var(--text-1); }
+.linkchips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.lchip { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--text-1); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.lchip:hover { background: var(--state-hover); }
+.lchip .ic { color: var(--text-2); }
+/* the chip whose reference is open in the panel */
+.lchip.open { background: var(--state-active); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent); }
+.nacts { margin-top: 18px; display: flex; align-items: center; gap: 6px; }
+.nacts .hint { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.nacts .hint .kbd { color: var(--text-2); }
+/* paused: only a slight dim on the card; the pill stays as it is */
+html[data-v1="paused"] #now1 .pill .p-run { display: none; }
+html[data-v1="paused"] #now1 .pill .p-paused { display: inline-flex; }
+html[data-v1="paused"] #now1 .dimmable { opacity: .72; transition: opacity 160ms var(--ease-out); }
+html[data-v1="notimer"] #now1 .pill { display: none; }
+html[data-v1="between"] #now1, html:not([data-v1="between"]) #offer1 { display: none; }
+
+/* Between tasks: one offer, in the Now card's place */
+.offer { background: var(--popover); border-radius: var(--radius-xl); box-shadow: inset 0 0 0 1px var(--hairline); padding: 14px 16px 14px 20px; display: flex; flex-direction: column; gap: 8px; }
+.olab { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.olab .ic { color: var(--text-3); }
+.orow { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.orow .ot { font-size: 15px; font-weight: 500; color: var(--text-1); white-space: nowrap; }
+.orow .oest { font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.orow .oacts { margin-left: auto; display: flex; gap: 6px; }
+
+/* Up next */
+.upnext { flex: 1; min-height: 0; overflow: auto; padding: 22px 16px 16px; }
+.unhead { display: flex; align-items: center; gap: 6px; height: 28px; font-size: 13px; white-space: nowrap; }
+.unhead .nm { font-weight: 500; color: var(--text-1); }
+.unhead .sum { color: var(--text-3); }
+.unhead .arr { margin-left: auto; margin-right: -8px; height: 26px; padding: 0 8px; border-radius: var(--radius-md); font-size: 12px; color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.unhead .arr:hover { background: var(--state-hover); color: var(--text-1); }
+.unhead .arr .t3 { color: var(--text-3); }
+.qrow { margin: 0 -8px; padding: 0 8px; height: var(--row-h); display: grid; grid-template-columns: 14px minmax(0, 1fr) auto auto; align-items: center; column-gap: 12px; border-radius: var(--radius-md); transition: background-color var(--motion-fade) var(--ease-out); }
+.qrow:hover { background: var(--state-hover); }
+.qrow .n { font-size: 12px; color: var(--text-2); text-align: right; }
+.qrow .n b { font-weight: 400; }
+.qrow .n .g { display: none; color: var(--text-2); }
+.qrow:hover .n b { display: none; }
+.qrow:hover .n .g { display: inline-block; }
+.qrow .tt { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.qrow .est { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+/* a thin divider wherever the project changes; the name sits in the title column */
+.pdiv { margin: 0 -8px; padding: 0 8px; display: flex; align-items: center; gap: 12px; height: 26px; font-size: 12px; color: var(--text-3); }
+.pdiv .dslot { width: 14px; display: grid; place-items: center; flex-shrink: 0; }
+.pdiv .dot { width: 7px; height: 7px; }
+.pdiv .line { flex: 1; height: 1px; background: var(--hairline); }
+/* your next meeting, where it falls in the line-up */
+.mtdiv { display: flex; align-items: center; gap: 8px; height: 30px; margin: 4px 0 2px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.mtdiv::before, .mtdiv::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+.mtdiv::before { margin-right: 4px; }
+.mtdiv::after { margin-left: 4px; }
+.mtdiv .ic { color: var(--text-3); }
+.mtdiv .sp { color: var(--text-3); }
+html:not([data-v1="meeting"]) #up1 .mtdiv { display: none; }
+.dline { margin: 6px -8px 0; padding: 0 8px; height: 28px; display: grid; grid-template-columns: 14px auto; align-items: center; column-gap: 12px; font-size: 12px; color: var(--text-3); white-space: nowrap; justify-content: start; }
+.dline .cslot { display: grid; place-items: center; }
+.dline > span:last-child { display: inline-flex; align-items: center; gap: 5px; }
+.dline button { color: var(--text-2); font-weight: 500; }
+.dline button:hover { color: var(--text-1); }
+#up1 .dl-between, #up1 .dl-notimer { display: none; }
+html[data-v1="between"] #up1 .dl-run, html[data-v1="notimer"] #up1 .dl-run { display: none; }
+html[data-v1="between"] #up1 .dl-between, html[data-v1="notimer"] #up1 .dl-notimer { display: inline; }
+
+/* In flight */
+.flight { padding: 2px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fcard { padding: 11px 13px 12px; border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); display: flex; flex-direction: column; gap: 7px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.fcard:hover { background: var(--state-hover); }
+.fcard .ft { font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--text-1); }
+.fcard .fm { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.fcard .fm .sp { color: var(--text-3); }
+.fcard .fm .gs { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; margin-right: 2px; }
+.adot { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-3); flex-shrink: 0; }
+.fhint { font-size: 13px; line-height: 1.55; color: var(--text-2); padding: 4px 16px 0; }
+.fhint .kbd { margin: 0 1px; }
+
+/* ── Frame 2 · subtasks as steps ─────────────────────────────────────────── */
+.steps { margin: 18px -8px 0; display: flex; flex-direction: column; gap: 1px; }
+.step { height: 32px; display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; align-items: center; column-gap: 10px; padding: 0 10px 0 8px; border-radius: var(--radius-md); font-size: 14px; color: var(--text-1); cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.step:hover { background: var(--state-hover); }
+.step .cb { justify-self: center; }
+.step .st { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step .mk { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.step.done .st { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--foreground) 32%, transparent); }
+.step.cur, .step.cur:hover { background: var(--state-selected); }
+.step.cur .st { font-weight: 500; }
+.sdesc { font-size: 13.5px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 80%, transparent); max-width: 62ch; }
+.ndesc.two { max-height: calc(1.55em * 2); }
+/* a reference opened in the panel: back arrow + where it goes back to */
+.backbtn { height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 7px; padding: 0 8px 0 6px; margin-left: -6px; margin-right: auto; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; min-width: 0; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.backbtn:hover { background: var(--state-hover); color: var(--text-1); }
+.backbtn .ic { color: var(--text-2); }
+.mailv { padding: 4px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.mtype { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); }
+.msubj { font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; margin-top: -6px; }
+.mfrom { display: flex; align-items: center; gap: 10px; }
+.mfrom .mname { font-size: 13px; font-weight: 500; color: var(--text-1); }
+.mfrom .maddr { font-size: 12px; color: var(--text-3); margin-top: 1px; }
+.mfrom .mdate { margin-left: auto; align-self: flex-start; margin-top: 1px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.mbody { font-size: 14px; line-height: 1.6; color: color-mix(in oklab, var(--foreground) 88%, transparent); }
+.mbody p + p { margin-top: 6px; }
+.mfoot { display: flex; align-items: center; gap: 6px; padding-top: 12px; border-top: 1px solid var(--hairline); font-size: 12px; color: var(--text-3); }
+.mfoot .ic { color: var(--text-3); }
+
+/* ── Frame 3 · empty Focus ───────────────────────────────────────────────── */
+.now.empty { padding: 22px 24px 24px; }
+.elead { font-size: 16px; font-weight: 500; letter-spacing: -.005em; color: var(--text-1); }
+.ehints { margin-top: 18px; display: flex; flex-direction: column; gap: 14px; }
+.eh { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr); column-gap: 12px; align-items: start; font-size: 13.5px; line-height: 20px; color: var(--text-2); }
+.eh > .ic { width: var(--icon); height: var(--icon); margin-top: 2px; color: var(--text-3); }
+.eh.btnrow > .ic { margin-top: 5px; }
+.eh .kbd { margin: 0 2px; }
+.eh .btn { height: var(--ctrl-h-sm); font-size: 13px; }
+.eprev { margin-top: 10px; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; row-gap: 3px; font-size: 12px; line-height: 18px; color: var(--text-2); }
+.eprev .tm { color: var(--text-3); text-align: right; white-space: nowrap; }
+
+/* ── Lists (frame 7), from round 1c ─────────────────────────────────────── */
+.pmeta { display: flex; align-items: center; gap: 4px; padding: 0 16px 10px; flex-shrink: 0; }
+.pm { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); white-space: nowrap; cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.pm:hover { background: var(--state-hover); color: var(--text-1); }
+.pm .ic { color: var(--text-3); }
+.pm .lab { color: var(--text-3); }
+.chip { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); box-shadow: inset 0 0 0 1px var(--hairline); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.chip:hover { background: var(--state-hover); }
+.chip .ic { color: var(--text-2); }
+.chip .ext { color: var(--text-3); }
+.pmeta .chip { margin-right: 6px; }
+.pbar { width: 44px; height: 3px; border-radius: 9999px; background: var(--hairline); overflow: hidden; }
+.pbar i { display: block; height: 100%; background: var(--text-2); }
+.list { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; }
+.row { position: relative; height: var(--row-h); display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 12px; padding: 0 10px 0 8px; border-radius: var(--radius-md); cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.row:hover { background: var(--state-hover); }
+.row.sel, .row.sel:hover { background: var(--state-selected); }
+.tcell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.t { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: var(--text-1); }
+.ind { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; color: var(--text-3); font-size: 12px; }
+.ind > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.ind .wait { color: var(--text-2); gap: 4px; }
+.date { font-size: 12px; color: var(--text-2); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; justify-self: end; }
+.qcol { display: grid; place-items: center; color: var(--text-3); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.row:hover .qcol, .row.sel .qcol { opacity: 1; }
+.qcol.on { color: var(--text-1); opacity: 1; } /* in Focus = neutral "on", never the accent */
+.sec { display: flex; flex-direction: column; }
+.sec + .sec, .sec + .addrow { margin-top: 8px; }
+.ghead { position: sticky; top: 0; z-index: 2; height: var(--row-h-sm); display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; background: var(--card); border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-1); cursor: pointer; }
+.ghead:hover { background: var(--hover-solid); }
+.cslot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; margin-right: 4px; }
+.ghead .chev { color: var(--text-3); transition: transform 140ms var(--ease-out); }
+.sec.collapsed .chev { transform: rotate(-90deg); }
+.sec.collapsed .rows { display: none; }
+.ghead .gc { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.dchip { height: 20px; padding: 0 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 400; color: var(--text-2); box-shadow: inset 0 0 0 1px var(--hairline); white-space: nowrap; }
+.dchip .ic { color: var(--text-3); }
+.completed-line { height: var(--row-h-sm); display: flex; align-items: center; gap: 12px; padding: 0 8px; font-size: 12px; color: var(--text-3); }
+.completed-line .cslot { margin-right: 0; }
+.completed-line button:hover { color: var(--text-1); }
+.addrow { height: var(--row-h); display: flex; align-items: center; gap: 12px; padding: 0 10px 0 8px; color: var(--text-3); border-radius: var(--radius-md); font-size: 14px; cursor: pointer; }
+.addrow .slot { width: var(--icon); display: grid; place-items: center; flex-shrink: 0; }
+.addrow:hover { background: var(--state-hover); color: var(--text-1); }
+
+/* ── Details (frames 2 B, 7), from round 1c ─────────────────────────────── */
+.dbody { padding: 2px 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+.dcrumb { display: flex; align-items: center; gap: 2px; margin-right: -7px; }
+.crumb { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); margin-right: auto; height: var(--ctrl-h-sm); white-space: nowrap; }
+.crumb .ic { color: var(--text-3); }
+.crumb .dot { width: 7px; height: 7px; }
+.dcrumb .btn.icon { color: var(--text-3); }
+.dcrumb .btn.icon:hover { color: var(--text-1); }
+.dcrumb .btn.icon.on { color: var(--text-1); }
+.dtitle { display: flex; gap: 10px; align-items: flex-start; }
+.dtitle .cb { margin-top: 4px; }
+.dtitle h4 { font-size: 18px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
+.desc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); margin: 6px 0 0 calc(var(--icon) + 10px); }
+.props { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; row-gap: 1px; }
+.plabel { font-size: 13px; color: var(--text-2); height: var(--ctrl-h-sm); display: flex; align-items: center; }
+.pval { justify-self: start; max-width: 100%; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); font-size: 14px; color: var(--text-1); white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.pval:hover { background: var(--state-hover); }
+.pval .ic, .pval .pri { color: var(--text-2); }
+.addprop { justify-self: start; grid-column: 1 / -1; height: var(--ctrl-h-sm); display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-md); color: var(--text-3); font-size: 13px; }
+.addprop:hover { background: var(--state-hover); color: var(--text-1); }
+.shead { display: flex; align-items: center; gap: 6px; height: var(--ctrl-h-sm); font-size: 13px; font-weight: 500; color: var(--text-1); }
+.shead .num { color: var(--text-3); font-weight: 400; }
+.shead .btn { margin-left: auto; margin-right: -7px; color: var(--text-3); }
+.coll { display: flex; flex-direction: column; }
+.subrow { display: flex; align-items: center; gap: 10px; height: 28px; font-size: 14px; }
+.subrow .cb { margin: 0 1px; }
+.subrow.done span:last-child { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--foreground) 32%, transparent); }
+.lrow { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; align-items: center; column-gap: 10px; height: 30px; margin: 0 -8px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13.5px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.lrow:hover { background: var(--state-hover); }
+.lrow > .ic { justify-self: center; color: var(--text-2); }
+.lrow .lt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+.lrow .lm { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+
+/* ── Frame 7 · three ways to switch the panel ───────────────────────────── */
+#det7.menu-closed #vmenu { display: none; }
+.vpick { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; margin-left: -8px; margin-right: auto; border-radius: var(--radius-md); font-size: 13px; font-weight: 600; color: var(--text-1); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.vpick .ic { color: var(--text-2); }
+.vpick:hover, .vpick.open { background: var(--state-active); }
+.vtabs { gap: 2px; padding-left: 10px; }
+.vtab { height: 28px; min-width: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 7px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.vtab .ic { width: var(--icon); height: var(--icon); }
+.vtab:hover { background: var(--state-hover); color: var(--text-1); }
+.vtab.on { background: var(--state-active); color: var(--text-1); padding: 0 10px 0 8px; }
+.vtab .n { font-size: 11px; color: var(--text-3); margin-left: -2px; }
+.vtabs .grow { flex: 1; }
+
+/* ── Popovers and menus ──────────────────────────────────────────────────── */
+.menu { position: absolute; z-index: 30; min-width: 176px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 12px 30px rgb(0 0 0 / .5); padding: 4px; }
+.menu .mi { height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); cursor: pointer; white-space: nowrap; }
+.menu .mi .ic { color: var(--text-2); }
+.menu .mi:hover, .menu .mi.hl { background: var(--state-active); }
+.menu .mi .n { font-size: 12px; color: var(--text-3); }
+.menu .mi .sc { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.menu .mi .ck { width: 14px; display: grid; place-items: center; color: var(--text-1); }
+.menu hr { border: 0; height: 1px; background: var(--hairline); margin: 4px 0; }
+.menu .mlab { height: 26px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: var(--text-3); }
+
+/* ── Frame 6 · board with per-project statuses ──────────────────────────── */
+html:not([data-v6="creator"]) .f6-cre, html[data-v6="creator"] .f6-dev { display: none !important; }
+.board { flex: 1; min-height: 0; overflow: auto; display: flex; gap: 12px; align-items: flex-start; padding: 2px 12px 16px 12px; --colw: 232px; }
+.col { width: var(--colw); flex-shrink: 0; display: flex; flex-direction: column; }
+.chead { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 6px; margin-bottom: 4px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-1); white-space: nowrap; }
+.chead .gc { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.chead .sti { color: var(--text-2); }
+.chead .more { margin-left: auto; }
+.col:hover .chead .more { opacity: 1; }
+.cards { display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--card); border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.card:hover { background: var(--hover-solid); }
+.card .ct { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; line-height: 1.4; color: var(--text-1); }
+.card .ct .cb { margin-top: 2px; }
+.card .cm { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); padding-left: calc(var(--icon) + 10px); white-space: nowrap; overflow: hidden; }
+.card .cm .ava { margin-left: auto; }
+.card .cm .cnt { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); }
+.card .cm .plus { color: var(--text-3); }
+.card .cm .agent { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+.card.done .ct span:last-child { color: var(--text-2); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--foreground) 32%, transparent); }
+.addcard { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; margin-top: 4px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-3); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.col:hover .addcard { opacity: 1; }
+.addcard:hover { background: var(--state-hover); color: var(--text-1); }
+/* a folded column: same header, read left to right; the rest is a quiet drop target */
+.fcol { width: 124px; flex-shrink: 0; align-self: stretch; display: flex; flex-direction: column; }
+.fcol .chead { gap: 7px; padding-right: 2px; }
+.fcol .chead .unf { opacity: 1; margin-left: auto; color: var(--text-3); }
+.fcol .chead .unf:hover { color: var(--text-1); }
+.drop { flex: 1; border-radius: var(--radius-lg); background: color-mix(in oklab, var(--foreground) 2.5%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 4%, transparent); transition: background-color var(--motion-fade) var(--ease-out); cursor: pointer; }
+.drop:hover { background: color-mix(in oklab, var(--foreground) 4.5%, transparent); }
+.gcol { flex-shrink: 0; }
+.addst { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-3); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.addst:hover { background: var(--state-hover); color: var(--text-1); }
+/* ⋯ → Statuses */
+.stpop { position: absolute; z-index: 20; width: 304px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 16px 40px rgb(0 0 0 / .55); padding: 4px; }
+html:not([data-v6="statuses"]) .stpop { display: none; }
+html[data-v6="statuses"] #pmore6 { background: var(--state-active); color: var(--text-1); }
+.sph { display: flex; align-items: baseline; gap: 8px; padding: 9px 10px 3px; font-size: 13px; font-weight: 600; color: var(--text-1); }
+.sph .pj { margin-left: auto; font-size: 12px; font-weight: 400; color: var(--text-3); }
+.stcat { display: flex; align-items: center; height: 26px; padding: 0 4px 0 10px; margin-top: 6px; font-size: 12px; color: var(--text-2); }
+.stcat .add { margin-left: auto; height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: var(--radius-sm); font-size: 12px; color: var(--text-3); }
+.stcat .add:hover { background: var(--state-hover); color: var(--text-1); }
+.strow { height: 30px; display: grid; grid-template-columns: 12px var(--icon-sm) minmax(0, 1fr) 20px; align-items: center; column-gap: 8px; padding: 0 4px 0 4px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-1); cursor: grab; }
+.strow .grip { width: 12px; height: 12px; color: var(--text-3); opacity: .5; }
+.strow .sti { color: var(--text-2); }
+.strow .more { opacity: 1; color: var(--text-3); }
+.strow:hover, .strow.is-hover { background: var(--state-hover); }
+.strow:hover .grip, .strow.is-hover .grip { opacity: 1; }
+.stfoot { margin: 8px -4px -4px; padding: 10px 14px 12px; border-top: 1px solid var(--hairline); font-size: 12px; line-height: 1.5; color: var(--text-3); }
+
+
+/* ── Frames 4 + 5 · Timeline ─────────────────────────────────────────────── */
+html:not([data-v4="perweek"]) #tl4 .v4w, html[data-v4="perweek"] #tl4 .v4q { display: none !important; }
+html:not([data-v5="nodate"]) .v5n, html[data-v5="nodate"] .v5m { display: none !important; }
+.tlbar { flex-shrink: 0; display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px 2px 8px; }
+.tlbar .grow { flex: 1; }
+.tlbar .btn.sm { color: var(--text-2); }
+.tlbar .btn.sm:hover { color: var(--text-1); }
+.seg.zoom button { font-size: 12.5px; padding: 0 9px; }
+.btn.nodate .t3 { font-weight: 400; }
+html[data-v5="nodate"] #nodate5 { background: var(--state-active); color: var(--text-1); }
+.tl { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; --nc: 280px; --dw: 14px; --wk0: 0;
+  --grid: color-mix(in oklab, var(--foreground) 5.5%, transparent);
+  --grid-strong: color-mix(in oklab, var(--foreground) 13%, transparent);
+  --wkend: color-mix(in oklab, var(--foreground) 2.4%, transparent);
+  --rowbg: var(--card); border-top: 1px solid var(--hairline); }
+/* the time header: months, then weeks or days; sticky */
+.tlhead { flex-shrink: 0; position: sticky; top: 0; z-index: 6; display: grid; grid-template-columns: var(--nc) minmax(0, 1fr); background: var(--card); box-shadow: 0 1px 0 var(--hairline); }
+.tlcorner { position: relative; box-shadow: inset -1px 0 0 var(--hairline); }
+.tlcorner .dpw { position: absolute; left: 16px; right: 12px; bottom: 0; height: 20px; display: none; align-items: center; font-size: 11.5px; color: var(--text-3); }
+.tlscale { position: relative; height: 48px; overflow: hidden; }
+.tier { position: absolute; left: 0; right: 0; }
+.tier.t1 { top: 0; height: 24px; }
+.tier.t2 { top: 24px; height: 24px; }
+.tier.t3 { top: 48px; height: 20px; display: none; box-shadow: inset 0 1px 0 var(--grid); }
+html[data-v4="perweek"] #tl4 .tlscale { height: 68px; }
+html[data-v4="perweek"] #tl4 .tier.t3, html[data-v4="perweek"] #tl4 .tlcorner .dpw { display: flex; }
+.mlab { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; padding-left: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.hline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+.hline.m { background: var(--grid-strong); }
+.ulab { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.ulab.wkend { color: color-mix(in oklab, var(--text-3) 70%, var(--card)); }
+.ulab.istoday { color: var(--text-1); font-weight: 600; }
+.ulab.cnt.hi { color: var(--text-1); font-weight: 600; }
+.tpill { position: absolute; top: 4px; height: 16px; padding: 0 6px; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); font-size: 10.5px; font-weight: 600; line-height: 16px; transform: translateX(-50%); white-space: nowrap; }
+/* the canvas: grid as a background, today's 1 px line, rows on top */
+.tlbody { position: relative; flex: 1 0 auto; }
+/* the name column's edge runs on below the last row */
+.tlbody::before { content: ""; position: absolute; z-index: 1; top: 0; bottom: 0; left: calc(var(--nc) - 1px); width: 1px; background: var(--hairline); }
+.tlgrid { position: absolute; top: 0; bottom: 0; left: var(--nc); right: 0; z-index: 0; pointer-events: none; }
+.tlgrid.wk { background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px); background-size: calc(var(--dw) * 7) 100%; background-position-x: calc(var(--wk0) * var(--dw)); }
+.tlgrid.dy { background-image: linear-gradient(to right, var(--grid) 1px, transparent 1px), linear-gradient(to right, transparent calc(var(--dw) * 5), var(--wkend) calc(var(--dw) * 5)); background-size: var(--dw) 100%, calc(var(--dw) * 7) 100%; background-position-x: 0, calc(var(--wk0) * var(--dw)); }
+.tlgrid .mline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid-strong); }
+.tline { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; z-index: 1; background: var(--primary); pointer-events: none; }
+.tlrow { position: relative; z-index: 2; display: grid; grid-template-columns: var(--nc) minmax(0, 1fr); height: var(--row-h); }
+.tlrow.gh { height: var(--row-h-sm); }
+.tlrow.area.sp::before { content: ""; position: absolute; z-index: 3; left: 0; right: 0; top: 0; height: 1px; background: var(--hairline); }
+.tln { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 0 12px 0 46px; background: var(--card); box-shadow: inset -1px 0 0 var(--hairline); }
+.tlrow.area .tln { padding-left: 16px; }
+.tlrow.proj .tln { padding-left: 10px; }
+.tlrow.tsec .tln { padding-left: 26px; gap: 8px; }
+.tln .cs { width: var(--icon-xs); display: grid; place-items: center; flex-shrink: 0; color: var(--text-3); }
+.tln .cs .ic { color: var(--text-3); }
+.tln .cs.r .ic { transform: rotate(-90deg); }
+.tln .dot { width: 8px; height: 8px; }
+.tnm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; color: var(--text-1); }
+.tlrow.task .tnm { font-size: 13px; }
+.tlrow.proj .tnm { font-weight: 500; }
+.tlrow.tsec .tnm { font-size: 13px; font-weight: 500; flex-shrink: 0; }
+.tlrow.area .tnm { font-size: 13px; font-weight: 500; color: var(--text-2); }
+.tmeta { font-size: 12px; color: var(--text-3); white-space: nowrap; flex-shrink: 0; margin-left: -3px; }
+.tln .ava { margin-left: auto; }
+.tln .cs .dia-s { width: 10px; height: 10px; fill: var(--text-2); }
+.tlt { position: relative; min-width: 0; overflow: hidden; }
+.tlrow.sel, .tl.v5sel .tlrow.sel5 { --rowbg: color-mix(in oklab, var(--primary) 13%, var(--card)); }
+.tlrow.sel .tln, .tl.v5sel .tlrow.sel5 .tln { background: color-mix(in oklab, var(--primary) 13%, var(--card)); }
+.tlrow.sel .tlt, .tl.v5sel .tlrow.sel5 .tlt { background: var(--state-selected); }
+.tlrow.ghost .tnm { color: var(--text-2); }
+/* a section with a range: a faint band behind its rows */
+.band { position: absolute; top: 0; bottom: 0; left: calc(var(--s) * var(--dw)); width: calc((var(--e) - var(--s) + 1) * var(--dw)); background: color-mix(in oklab, var(--foreground) 3.2%, transparent); }
+/* a project: one slim bar; sections with a range are segments on it */
+.xbar { position: absolute; top: 50%; height: 22px; margin-top: -11px; left: calc(var(--s) * var(--dw)); width: calc((var(--e) - var(--s) + 1) * var(--dw)); border-radius: 5px; background: color-mix(in oklab, var(--foreground) 9%, var(--card)); overflow: hidden; }
+.xbar::before { content: ""; position: absolute; z-index: 2; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+.xbar .xp { position: absolute; z-index: 2; left: 0; bottom: 0; height: 2px; width: var(--p); background: color-mix(in oklab, var(--foreground) 52%, transparent); }
+.xbar.derived { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 24%, transparent); }
+.xseg { position: absolute; top: 0; bottom: 0; z-index: 1; left: calc((var(--s) - var(--bs)) * var(--dw)); width: calc((var(--e) - var(--s) + 1) * var(--dw)); display: flex; align-items: center; padding: 0 8px 1px; background: color-mix(in oklab, var(--foreground) 16%, var(--card)); font-size: 11.5px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; }
+.xseg.at0 { padding-left: 10px; }
+.xseg.nolab { color: transparent; }
+/* tasks are 12 px circles on their day; sections with one date are diamonds */
+.pt { position: absolute; z-index: 2; top: 50%; left: calc(var(--d) * var(--dw) + var(--dw) / 2); width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 9999px; background: var(--text-2); box-shadow: 0 0 0 2px var(--rowbg); }
+.pt.hollow { background: var(--rowbg); box-shadow: inset 0 0 0 1.5px var(--text-2), 0 0 0 2px var(--rowbg); }
+.pt.late { background: color-mix(in oklab, var(--text-2) 46%, var(--card)); }
+.pt.sel, .tl.v5sel .pt.sel5 { background: var(--text-1); box-shadow: 0 0 0 2px var(--rowbg), 0 0 0 3.5px color-mix(in oklab, var(--foreground) 30%, transparent); }
+.pt.ghost { background: transparent; box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 45%, transparent); }
+.dia { position: absolute; z-index: 2; top: 50%; left: calc(var(--d) * var(--dw) + var(--dw) / 2); width: 14px; height: 14px; margin: -7px 0 0 -7px; overflow: visible; fill: var(--text-2); stroke: var(--rowbg); stroke-width: 2; paint-order: stroke; }
+/* the selected item's dependency: one thin neutral line with a small arrowhead */
+.deps { position: absolute; top: 0; left: var(--nc); right: 0; bottom: 0; z-index: 3; pointer-events: none; overflow: visible; }
+.deps path.ln { fill: none; stroke: color-mix(in oklab, var(--foreground) 50%, transparent); stroke-width: 1.25; }
+.deps path.hd { fill: color-mix(in oklab, var(--foreground) 50%, transparent); }
+/* dragging an undated task onto a day */
+.dropcell { position: absolute; z-index: 1; top: 4px; bottom: 4px; left: calc(var(--d) * var(--dw)); width: var(--dw); border-radius: 5px; background: color-mix(in oklab, var(--foreground) 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 24%, transparent); }
+.dragchip { position: absolute; z-index: 8; height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 11px 0 8px; border-radius: var(--radius-md); background: var(--popover); border: 1px solid color-mix(in oklab, var(--foreground) 16%, transparent); box-shadow: 0 14px 30px rgb(0 0 0 / .6); font-size: 13px; color: var(--text-1); white-space: nowrap; pointer-events: none; }
+.dragchip .grip { width: 12px; height: 12px; color: var(--text-3); }
+.dragchip .pt { position: static; margin: 0; box-shadow: none; flex-shrink: 0; }
+/* the No date view in the right panel */
+.ndl { padding: 2px 8px 12px; display: flex; flex-direction: column; gap: 1px; }
+.ndrow { height: 34px; display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; padding: 0 10px 0 8px; border-radius: var(--radius-md); font-size: 13.5px; color: var(--text-1); cursor: grab; transition: background-color var(--motion-fade) var(--ease-out); }
+.ndrow:hover { background: var(--state-hover); }
+.ndrow .grip { width: 12px; height: 12px; color: var(--text-3); }
+.ndrow .nt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ndrow .ns { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.ndrow.lifted { color: var(--text-3); outline: 1px dashed color-mix(in oklab, var(--foreground) 22%, transparent); outline-offset: -1px; }
+.ndrow.lifted .ns { color: var(--text-3); }
+.ndl .fhint { padding: 10px 8px 0; font-size: 12px; color: var(--text-3); }
+
+/* ── Bottom bar: the module's tools; each side panel's toggle sits under it ── */
+.bbar { flex-shrink: 0; height: var(--bar-h); display: flex; align-items: center; padding: 0 16px; }
+.bside { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bside.r { justify-content: flex-end; }
+.bmid { display: flex; align-items: center; gap: 8px; }
+.bbtn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.bbtn:hover { background: var(--state-hover); color: var(--text-1); }
+.bbtn .rt-closed, .bbar.rclosed .bbtn .rt-open { display: none; }
+.bbar.rclosed .bbtn .rt-closed { display: block; }
+/* the running Focus chip: only while a session runs; a calm dot, never a colour */
+.fchip { height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; border-radius: var(--radius-md); background: var(--card); font-size: 12px; color: var(--text-1); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.fchip:hover { background: var(--hover-solid); }
+.fchip .fdot { width: 6px; height: 6px; border-radius: 9999px; background: var(--text-2); }
+.fchip .fpause { width: 9px; height: 9px; color: var(--text-2); display: none; }
+.fchip .fl { color: var(--text-2); }
+.bbar.fpaused .fchip .fdot { display: none; }
+.bbar.fpaused .fchip .fpause { display: block; }
+
+/* ── The right panel's title row is its switch (B) ─────────────────────────── */
+.rphead { padding: 0 12px 0 16px; }
+.rphead .vpick { margin-left: -8px; }
+.rphead .backbtn { margin-left: -6px; }
+
+/* ── Frame 1 · Pomodoro pill in the header, and the ⋯ menu ─────────────────── */
+.hpill { margin-left: 0; margin-right: 2px; display: none; }
+.hpill > span { display: inline; }
+html[data-v1="pomodoro"] #center1 .hpill { display: inline-flex; }
+html[data-v1="pomodoro"] #now1 .pill { display: none; }
+html:not([data-v1="menu"]) #fmenu { display: none; }
+html[data-v1="menu"] #fmore1 { background: var(--state-active); color: var(--text-1); }
+.fmenu { width: 286px; }
+.fmenu > .mi { position: relative; }
+.fmenu .mi .subchev { margin-left: 2px; color: var(--text-3); }
+.fmenu .mi .sc + .subchev { margin-left: 4px; }
+.submenu { top: -5px; right: calc(100% + 6px); width: 216px; }
+.menu .mi.ind { height: 26px; padding-left: 22px; font-size: 12.5px; color: var(--text-2); }
+.menu .mi .ck { margin-left: auto; }
+.menu .mi .sc + .ck { margin-left: 8px; }
+
+/* ── Frame 2 · the focused task's subtasks; a clicked one opens on the right ── */
+.subh { display: flex; align-items: center; gap: 6px; margin-top: 18px; height: 22px; font-size: 13px; font-weight: 500; color: var(--text-1); }
+.subh .num { color: var(--text-3); font-weight: 400; }
+.subh + .steps { margin-top: 4px; }
+.step.sel, .step.sel:hover { background: var(--state-selected); }
+.pcrumb { display: inline-flex; align-items: center; gap: 6px; height: var(--ctrl-h-sm); font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.pcrumb .dot { width: 7px; height: 7px; }
+.pcrumb .ic { color: var(--text-3); }
+.fobtn { margin: 12px 0 0 calc(var(--icon) + 10px); }
+.fobtn .btn { height: 26px; font-size: 13px; }
+.fobtn .kbd { margin-left: 2px; }
+.feed { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.cmt { display: grid; grid-template-columns: var(--icon) minmax(0, 1fr); column-gap: 10px; font-size: 13px; line-height: 1.5; color: color-mix(in oklab, var(--foreground) 88%, transparent); }
+.cmt .ava { margin-top: 2px; }
+.cmt .who { font-size: 12px; color: var(--text-2); }
+.cmt .who b { color: var(--text-1); font-weight: 500; }
+.composer { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 9px 12px; font-size: 13px; color: var(--text-3); display: flex; align-items: center; justify-content: space-between; }
+.ev { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-2); min-height: 24px; }
+.ev b { color: var(--text-1); font-weight: 500; }
+
+/* ── Frame 3 · today's scheduled tasks as real rows ───────────────────────── */
+.trows { margin: 8px -8px 0 calc(var(--icon) + 12px - 8px); display: flex; flex-direction: column; gap: 1px; max-width: 560px; }
+.trow { height: var(--row-h); display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto auto 26px; align-items: center; column-gap: 10px; padding: 0 6px 0 8px; border-radius: var(--radius-md); font-size: 14px; cursor: default; transition: background-color var(--motion-fade) var(--ease-out); }
+.trow:hover, .trow.hov { background: var(--state-hover); }
+.trow.sel, .trow.sel:hover { background: var(--state-selected); }
+.trow .tt { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+.trow .tp { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.trow .tp .dot { width: 7px; height: 7px; }
+.trow .tm { font-size: 12px; color: var(--text-2); white-space: nowrap; min-width: 4.4rem; text-align: right; }
+.tadd { width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-2); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.trow:hover .tadd, .trow.hov .tadd { opacity: 1; }
+.tadd:hover { background: var(--state-active); color: var(--text-1); }
+.lineall { margin: 12px 0 0 calc(var(--icon) + 12px); }
+
+/* ── Frame 6 · a folded column is a small button, never a column ──────────── */
+.fold { position: relative; width: 32px; flex-shrink: 0; align-self: flex-start; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 0 7px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); color: var(--text-2); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.fold:hover, .fold.is-hover { background: var(--state-hover); color: var(--text-1); }
+.fold .n { font-size: 12px; line-height: 1; color: var(--text-2); }
+.fold .ic-xs { color: var(--text-3); }
+.tipbox { position: absolute; left: calc(100% + 6px); top: 24px; height: 22px; display: none; align-items: center; gap: 5px; padding: 0 9px; border-radius: var(--radius-md); background: var(--popover); border: 1px solid var(--hairline); box-shadow: 0 8px 24px rgb(0 0 0 / .5); font-size: 12px; font-weight: 500; color: var(--text-1); white-space: nowrap; pointer-events: none; z-index: 10; }
+.tipbox .t3 { font-weight: 400; }
+html[data-v6="dev"] .fold.is-hover .tipbox { display: inline-flex; }
+html:not([data-v6="dev"]) .fold.is-hover { background: none; color: var(--text-2); }
+
+/* ── Frame 7 · B: menu open, or a reference open ───────────────────────────── */
+html:not([data-v7="ref"]) #det7 .v7r, html[data-v7="ref"] #det7 .v7m { display: none !important; }
+html[data-v7="ref"] #vmenu { display: none; }
+
+/* placeholder frames */
+.ph { display: grid; place-items: center; }
+
+
+/* ═══════════════════════ Round 2b additions ═══════════════════════ */
+.appframe { position: relative; }
+.toolbar .tsub { font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.toolbar .tcount { font-size: 14px; color: var(--text-3); }
+/* status glyph: the category's icon; a click completes the task */
+.sg { width: var(--icon); height: var(--icon); flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: color-mix(in oklab, var(--foreground) 50%, transparent); cursor: pointer; }
+.sg.ip { color: var(--text-2); }
+.sg.bl { color: var(--text-3); }
+.cb.sgd { width: var(--icon); height: var(--icon); }
+.dtitle .sg { margin-top: 4px; }
+/* rows */
+.list { padding-top: 2px; }
+.row .t { font-size: 15px; }
+.proj { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); white-space: nowrap; min-width: 0; overflow: hidden; }
+.proj .dot { width: 7px; height: 7px; }
+.date .lt { color: var(--text-3); }
+.date .dpk { display: none; color: var(--text-3); }
+.date .dpk .ic { width: var(--icon-sm); height: var(--icon-sm); }
+.row:hover .date .dpk, .row.is-hover .date .dpk { display: inline-flex; }
+.row.is-hover { background: var(--state-hover); }
+.row.sel.is-hover { background: color-mix(in oklab, var(--primary) 17%, transparent); }
+.row.is-hover .qcol { opacity: 1; }
+.agent { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); white-space: nowrap; font-size: 12px; }
+.fix { margin-left: auto; display: inline-flex; gap: 4px; flex-shrink: 0; padding-left: 4px; }
+.xchip { height: 22px; padding: 0 8px; display: inline-flex; align-items: center; border-radius: var(--radius-md); font-size: 12px; font-weight: 500; color: var(--text-1); background: var(--state-active); white-space: nowrap; }
+.hfix { opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.row:hover .hfix, .row.is-hover .hfix { opacity: 1; }
+/* group headers: sticky, sentence case; the + stays visible, ⋯ on hover */
+.ghead .gright { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
+.gadd, .gmore { width: 22px; height: 22px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-3); transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out), opacity var(--motion-fade) var(--ease-out); }
+.gadd:hover, .gmore:hover { background: var(--state-active); color: var(--text-1); }
+.gmore { opacity: 0; }
+.ghead:hover .gmore { opacity: 1; }
+.gbtn { height: 22px; padding: 0 7px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 400; color: var(--text-2); }
+.gbtn:hover { background: var(--state-active); color: var(--text-1); }
+.ghead .sti { color: var(--text-2); margin-right: -2px; }
+.sec + .sec { margin-top: 6px; }
+.list.up .sec + .sec { margin-top: 2px; }
+.sec.empty .ghead { color: var(--text-2); }
+.sec.early .ghead { color: var(--text-2); }
+/* Detailed: a sticky column header, a handle, the status name */
+.colhead { position: sticky; top: 0; z-index: 3; height: var(--row-h-sm); display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: 12px; padding: 0 10px 0 8px; margin: 0 0 4px; background: var(--card); box-shadow: 0 1px 0 var(--hairline); font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.colhead .srt { display: inline-flex; align-items: center; gap: 3px; color: var(--text-1); font-weight: 500; justify-self: end; }
+.colhead > span:nth-child(6), .colhead > span:last-child { justify-self: end; }
+.list.v1det .ghead { top: 28px; }
+.hdl { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.stn { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.whon { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.row .est { font-size: 12px; color: var(--text-2); white-space: nowrap; justify-self: end; }
+.sortnote { display: flex; align-items: center; gap: 6px; padding: 0 16px 8px; font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+.sortnote button { color: var(--text-2); font-weight: 500; }
+.sortnote button:hover { color: var(--text-1); }
+html:not([data-v1="detailed"]) .v1det, html[data-v1="detailed"] .v1std { display: none !important; }
+/* team marks: rounded squares, two letters, a stable colour; people stay round */
+.tmark { width: var(--icon); height: var(--icon); border-radius: 4px; display: inline-grid; place-items: center; flex-shrink: 0; font-size: 7.5px; font-weight: 600; letter-spacing: .01em; line-height: 1; color: var(--text-1); background: color-mix(in oklab, var(--label-green) 42%, var(--card)); }
+.ghead .tmark { margin-right: 0; }
+.takeit { margin: -2px 0 2px; }
+/* bulk: the bottom bar's centre becomes the verbs; the panel shows shared values */
+.bm-bulk, .bm-tri { display: none; align-items: center; gap: 1px; }
+.bbar.bulk .bm-tools, .bbar.tri .bm-tools { display: none; }
+.bbar.bulk .bm-bulk, .bbar.tri .bm-tri { display: flex; }
+.bm-bulk button, .bm-tri button { height: 30px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out), color var(--motion-fade) var(--ease-out); }
+.bm-bulk button:hover, .bm-tri button:hover { background: var(--state-hover); color: var(--text-1); }
+.bm-bulk .bsel { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; padding-left: 12px; box-shadow: inset 1px 0 0 var(--hairline); font-size: 13px; color: var(--text-1); white-space: nowrap; }
+.bm-tri .t3 { font-size: 12px; }
+.blist { display: flex; flex-direction: column; gap: 2px; padding-bottom: 4px; }
+.blist .bl { display: flex; align-items: center; gap: 10px; height: 26px; font-size: 13.5px; color: var(--text-1); white-space: nowrap; overflow: hidden; }
+.blist .bl .sg { width: var(--icon-sm); height: var(--icon-sm); }
+.pval.mixed { color: var(--text-2); font-style: normal; }
+.pval.empty { color: var(--text-3); }
+.bnote { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+#rp1 .p1-bulk, html[data-v1="bulk"] #rp1 .p1-proj { display: none !important; }
+html[data-v1="bulk"] #rp1 .p1-bulk { display: flex !important; }
+html[data-v1="bulk"] #rp1 .rpbody.p1-bulk { display: block !important; }
+/* the Project view */
+.pov { gap: 14px; }
+.povh { display: flex; align-items: center; gap: 10px; }
+.povh h4 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+.povm { display: flex; gap: 4px; margin: -6px 0 0 -6px; }
+.povp { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); margin-top: -4px; }
+.desc0 { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); }
+.secrow { display: flex; align-items: center; gap: 8px; height: 30px; font-size: 13.5px; }
+.secrow .sn { color: var(--text-1); }
+.secrow .sm { margin-left: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.prow { display: flex; align-items: center; gap: 10px; height: 28px; font-size: 13.5px; color: var(--text-1); }
+.prow .t3 { font-size: 12px; margin-left: -4px; }
+.avrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.avrow .ava + * { margin-right: 6px; }
+.mention { font-weight: 500; color: var(--text-1); background: var(--ref-bg); border-radius: 3px; padding: 0 3px; }
+/* the detail anatomy, at 280 px: labels narrow to 76 px, values wrap */
+.rpanel.w280 { width: 280px; }
+.rpanel.w280 .props { grid-template-columns: 76px minmax(0, 1fr); align-items: start; }
+.fpside .props { align-items: start; }
+.pval.wrap { height: auto; min-height: var(--ctrl-h-sm); white-space: normal; align-items: flex-start; padding-top: 4px; padding-bottom: 4px; line-height: 1.4; }
+.pval.wrap > .ic { margin-top: 2px; }
+.dcrumb .hdl { margin-left: auto; margin-right: 6px; }
+.rpanel .dcrumb .crumb { margin-right: 0; }
+.ldesc { font-size: 14px; line-height: 1.55; color: color-mix(in oklab, var(--foreground) 86%, transparent); margin: 6px 0 0 calc(var(--icon) + 10px); }
+.ldesc > * + * { margin-top: .5em; }
+.ldesc.folded { max-height: calc(1.55em * 4); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5em), transparent); }
+.moreline { margin: 2px 0 0 calc(var(--icon) + 10px); height: 22px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.moreline button { color: var(--text-2); font-weight: 500; }
+.atts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.att { width: 52px; height: 38px; border-radius: var(--radius-md); background: var(--g); box-shadow: inset 0 0 0 1px var(--hairline); }
+.afile { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; color: var(--text-1); white-space: nowrap; }
+.afile .ic { color: var(--text-2); }
+.subrow .sdue { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.lcards { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.lcard { border-radius: var(--radius-lg); box-shadow: inset 0 0 0 1px var(--hairline); padding: 9px 11px 10px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; transition: background-color var(--motion-fade) var(--ease-out); }
+.lcard:hover { background: var(--hover-solid); }
+html[data-v5="link"] #full5 .lcard[data-ref], .lcard.open { background: var(--state-active); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent); }
+.lcard .lc1 { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-1); min-width: 0; }
+.lcard .lc1 .who { font-weight: 500; white-space: nowrap; }
+.lcard .lc1 .ic { color: var(--text-2); }
+.lcard .lc1 .when { margin-left: auto; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.lcard .subj { font-size: 13.5px; font-weight: 500; color: var(--text-1); line-height: 1.35; }
+.lcard .snip { font-size: 12.5px; line-height: 1.5; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.shead .fseg { margin-left: auto; height: 24px; }
+.shead .fseg button { font-size: 12px; padding: 0 8px; }
+.reacts { display: flex; gap: 4px; margin-top: 6px; }
+.rx { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 7px; border-radius: 9999px; box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12px; color: var(--text-1); line-height: 1; }
+.rx .num { color: var(--text-2); }
+.rx.add { color: var(--text-3); padding: 0 6px; }
+.metaline { font-size: 12px; color: var(--text-3); }
+#rp5 .v5f, #rp5 .v5l { display: none !important; }
+html[data-v5="full"] #rp5 .v5p, html[data-v5="link"] #rp5 .v5p { display: none !important; }
+html[data-v5="full"] #rp5 .rphead.v5f, html[data-v5="link"] #rp5 .rphead.v5l { display: flex !important; }
+html[data-v5="full"] #rp5 .rpbody.v5f, html[data-v5="link"] #rp5 .rpbody.v5l { display: block !important; }
+html[data-v5="full"] #rp5, html[data-v5="link"] #rp5 { width: 300px; }
+html[data-frame="5"]:not([data-v5="full"]):not([data-v5="link"]) #full5, html[data-frame="5"][data-v5="full"] #list1, html[data-frame="5"][data-v5="link"] #list1 { display: none !important; }
+#rp5 .rphead .grow { flex: 1; }
+.rphead .vpick { margin-right: auto; }
+.rphead .btn.icon { color: var(--text-3); }
+/* the full-page task: two columns in the centre */
+.fpc { overflow: auto; }
+.fp { padding: 0 0 24px; }
+.fphead { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 12px 0 16px; background: var(--card); }
+.fphead .backbtn { margin-left: -6px; margin-right: auto; }
+.fphead .fpn { font-size: 12px; color: var(--text-3); margin-right: 2px; }
+.fphead .sep { width: 1px; height: 16px; background: var(--hairline); margin: 0 4px; }
+.fpgrid { display: grid; grid-template-columns: minmax(0, 1fr) 232px; column-gap: 28px; padding: 4px 24px 0 28px; }
+.fpmain { padding: 0 8px 0 0; gap: 18px; }
+.fpmain .dcrumb { margin-right: 0; }
+.fpmain .dtitle h2 { font-size: 24px; font-weight: 600; letter-spacing: -.015em; line-height: 1.25; }
+.fpmain .dtitle .sg { margin-top: 7px; }
+.fpmain .ldesc { max-width: 64ch; }
+.fpside { padding-top: 6px; }
+.fpside .props { grid-template-columns: 76px minmax(0, 1fr); position: sticky; top: 56px; }
+/* Upcoming: day headers carry each day's load */
+.list.up .ghead .gc { font-weight: 400; }
+/* My tasks */
+html:not([data-v3="date"]) #rp3 ~ * .v3d { display: none; }
+html:not([data-v3="date"]) .v3d, html[data-v3="date"] .v3s { display: none !important; }
+.list.my .sec.team { margin-bottom: 10px; }
+/* Board: fixed-width cards; a folded column is a small button */
+.board.fixed { --colw: 296px; gap: 10px; }
+.board.fixed .card { padding: 12px; }
+.fold { position: relative; width: 32px; flex-shrink: 0; align-self: flex-start; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 0 7px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); color: var(--text-2); }
+.fold:hover { background: var(--state-hover); color: var(--text-1); }
+.fold .n { font-size: 12px; line-height: 1; color: var(--text-2); }
+.fold .ic-xs { color: var(--text-3); }
+.addst { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-3); white-space: nowrap; }
+.addst:hover { background: var(--state-hover); color: var(--text-1); }
+.gcol { flex-shrink: 0; }
+html:not([data-v4="lanes"]) .v4l, html[data-v4="lanes"] .v4p { display: none !important; }
+.board.lanes { gap: 10px; align-items: flex-start; }
+.lanesarea { display: flex; flex-direction: column; flex-shrink: 0; }
+.lheads { display: flex; gap: 10px; align-items: flex-start; }
+.lheads .chead { margin-bottom: 0; }
+.hidn { margin-left: 4px; height: 20px; display: inline-flex; align-items: center; padding: 0 6px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 400; color: var(--text-3); box-shadow: inset 0 0 0 1px var(--hairline); cursor: pointer; }
+.lane { display: flex; flex-direction: column; }
+.lhead { height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px; margin-top: 8px; border-radius: var(--radius-md); font-size: 13px; font-weight: 500; color: var(--text-1); box-shadow: inset 0 -1px 0 var(--hairline); }
+.lhead .cslot { margin-right: 0; }
+.lhead .gc { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.lcells { display: flex; gap: 10px; align-items: flex-start; padding-top: 8px; }
+.lspace { width: 32px; flex-shrink: 0; }
+.lcell { width: var(--colw); flex-shrink: 0; }
+.lcell .cards:empty { min-height: 1px; }
+/* Capture */
+.scrim { position: absolute; inset: 0; z-index: 90; background: rgb(0 0 0 / .64); display: flex; justify-content: center; align-items: flex-start; padding-top: 112px; }
+.capm { width: 640px; background: var(--popover); border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent); border-radius: var(--radius-xl); box-shadow: 0 28px 70px rgb(0 0 0 / .65); display: flex; flex-direction: column; }
+.cdest { display: flex; align-items: center; gap: 8px; padding: 12px 14px 0 12px; }
+.cdest .grow { flex: 1; }
+.dbtn { height: 26px; display: inline-flex; align-items: center; gap: 7px; padding: 0 8px; border-radius: var(--radius-md); font-size: 13px; color: var(--text-1); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.dbtn .dot { width: 7px; height: 7px; }
+.dbtn .ic { color: var(--text-3); }
+.dbtn:hover { background: var(--state-hover); }
+.dbtn.moved { background: var(--state-selected); }
+.dbtn.need { background: var(--state-active); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 28%, transparent); }
+.srcchip { height: 24px; display: inline-flex; align-items: center; gap: 6px; padding: 0 3px 0 8px; border-radius: var(--radius-md); background: var(--ref-bg); font-size: 12px; color: var(--text-1); white-space: nowrap; }
+.srcchip .ic { color: var(--text-2); }
+.srcchip button { width: 18px; height: 18px; display: grid; place-items: center; border-radius: var(--radius-sm); color: var(--text-3); }
+.srcchip button:hover { background: var(--state-active); color: var(--text-1); }
+.ctitle { padding: 14px 20px 0; font-size: 18px; font-weight: 500; line-height: 1.5; color: var(--text-1); }
+.tok { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 7px 0 4px; margin: 0 1px; border-radius: var(--radius-sm); vertical-align: 1px; font-size: 16px; font-weight: 500; line-height: 1; }
+.tok.contact { background: var(--ref-bg); }
+.tok.date { padding: 0 6px; background: var(--state-selected); box-shadow: inset 0 -1px 0 color-mix(in oklab, var(--foreground) 40%, transparent); }
+.tok.team { background: var(--state-selected); }
+.ctitle .caret { display: inline-block; width: 1.5px; height: 1.1em; background: var(--foreground); vertical-align: -.2em; margin-left: 3px; }
+.cdesc { padding: 6px 20px 0; font-size: 14px; color: var(--text-3); }
+.cpills { display: flex; align-items: center; gap: 6px; padding: 18px 16px 14px; }
+.cpill { height: 26px; display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.cpill .ic, .cpill .pri { color: var(--text-3); }
+.cpill.set { color: var(--text-1); background: var(--state-active); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foreground) 14%, transparent); }
+.cpill.set .ic { color: var(--text-2); }
+.cfoot { display: flex; align-items: center; gap: 6px; padding: 10px 12px 10px 18px; border-top: 1px solid var(--hairline); }
+.cfoot .grow { flex: 1; }
+.chint { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.cfoot .btn .kbd { margin-left: 2px; }
+html:not([data-v6="team"]) .capm .v6t, html[data-v6="team"] .capm .v6p { display: none !important; }
+/* Inbox */
+.inote { padding: 0 16px 10px; font-size: 13px; color: var(--text-3); flex-shrink: 0; }
+.isrc { display: inline-flex; align-items: center; justify-self: end; }
+.src { height: 22px; display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border-radius: var(--radius-sm); background: var(--ref-bg); font-size: 12px; color: var(--text-1); white-space: nowrap; }
+.src .ic { color: var(--text-2); }
+.via { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.via .ic { color: var(--text-3); }
+.trirow { display: flex; align-items: center; gap: 2px; padding: 0 12px 6px 10px; flex-shrink: 0; }
+.trirow .btn { height: 26px; padding: 0 7px; font-size: 12.5px; color: var(--text-2); gap: 5px; }
+.trirow .btn .ic { width: 12px; height: 12px; }
+.trirow .btn .kbd { font-size: 10.5px; padding: 0 3px; line-height: 14px; }
+html:not([data-v7="zero"]) .v7z, html[data-v7="zero"] .v7t { display: none !important; }
+.ezero { padding: 20px 16px; }
+.ezero .zs { font-size: 13.5px; color: var(--text-3); }
+.ezero .zl { font-weight: 500; color: var(--text-1); }
+.ezero .zs .kbd { margin: 0 1px; }
+/* side panels collapse from the bottom bar */
+.bbar .lt-closed, .bbar.lclosed .lt-open { display: none; }
+.bbar.lclosed .lt-closed { display: block; }
+
+
+
+
+/* ═══════════════════════ Chat round 2 additions ═══════════════════════
+   Everything above is copied unchanged from .design/tasks-v3/prototypes/round-2b.html.
+   Below: the chat look from research/visual-competitors.md §4–§5 (variant C by default;
+   A = Slack calm, B = Discord depth), on Moduo's tokens only. */
+.stage { min-width: 1360px; }
+.rpanel { width: 330px; }
+.ic-lg { width: 20px; height: 20px; }
+
+/* density rungs (tokens.css §7): comfortable is the base above */
+html[data-dens="compact"] { --row-h: 2rem; --row-h-sm: 1.625rem; --ctrl-h: 1.875rem; --ctrl-h-sm: 1.5rem; --icon: .9375rem; --icon-sm: .8125rem; }
+html[data-dens="dense"] { --row-h: 1.75rem; --row-h-sm: 1.5rem; --ctrl-h: 1.75rem; --ctrl-h-sm: 1.375rem; --icon: .875rem; --icon-sm: .75rem; }
+
+/* the message geometry: variant C comfortable */
+:root {
+  --m-av: 32px; --m-avfs: 12px; --m-padx: 12px; --m-gap: 12px; --m-inset: calc(var(--m-padx) + var(--m-av) + var(--m-gap));
+  --m-gmt: 10px; --m-gpt: 6px; --m-name-w: 600; --m-row-r: var(--radius-md); --m-list-px: 8px; --m-chip-h: 24px; --m-emoji: 16px;
+}
+html[data-dens="compact"] { --m-av: 28px; --m-avfs: 11px; --m-padx: 10px; --m-gap: 10px; --m-gmt: 8px; --m-gpt: 5px; --m-chip-h: 22px; --m-emoji: 15px; }
+html[data-dens="dense"] { --m-av: 24px; --m-avfs: 10px; --m-padx: 8px; --m-gap: 8px; --m-gmt: 6px; --m-gpt: 4px; --m-chip-h: 20px; --m-emoji: 14px; }
+/* B · Discord depth: bigger avatars, more air, full-bleed rows */
+html[data-look="b"] { --m-av: 40px; --m-avfs: 14px; --m-gmt: 14px; --m-gpt: 8px; --m-name-w: 500; --m-row-r: 0px; --m-list-px: 0px; }
+
+/* conversation header (the Tasks toolbar recipe) */
+.chead { padding: 12px 12px 8px 16px; }
+.chead .title { align-items: center; gap: 8px; }
+.chead h3 { font-size: 18px; }
+.chead .cico { width: var(--icon); height: var(--icon); color: var(--text-2); }
+.lchip { height: 22px; display: inline-flex; align-items: center; gap: 6px; padding: 0 7px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; color: var(--text-1); white-space: nowrap; }
+.lchip .dot { width: 7px; height: 7px; }
+.lchip:hover { background: var(--state-hover); }
+.faces { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-3); margin-left: 2px; padding: 2px 4px; border-radius: var(--radius-sm); }
+.faces:hover { background: var(--state-hover); }
+.stack { display: inline-flex; }
+.stack .ava { box-shadow: 0 0 0 2px var(--card); }
+.stack .ava + .ava { margin-left: -4px; }
+
+/* the stream */
+.msgs { flex: 1; min-height: 0; overflow: auto; padding: 0 var(--m-list-px) 6px; display: flex; flex-direction: column; }
+.msgs .spacer { flex: 1; }
+.m { position: relative; display: grid; grid-template-columns: var(--m-av) minmax(0, 1fr); column-gap: var(--m-gap); padding: 2px var(--m-padx); border-radius: var(--m-row-r); }
+.m:hover, .m.hov { background: var(--state-hover); }
+.m.sel { background: var(--state-selected); }
+.m.first { margin-top: var(--m-gmt); padding-top: var(--m-gpt); }
+.m .av { width: var(--m-av); height: var(--m-av); border-radius: var(--avatar-radius); display: grid; place-items: center; font-size: var(--m-avfs); font-weight: 600; color: var(--text-1); background: var(--ava); margin-top: 1px; }
+.m .av.ar { --ava: var(--person-ar); } .m .av.so { --ava: var(--person-so); } .m .av.mc { --ava: var(--person-mc); } .m .av.an { --ava: var(--person-an); }
+.m .gut { font-size: 11px; color: var(--text-3); text-align: right; padding-top: 4px; opacity: 0; white-space: nowrap; font-variant-numeric: tabular-nums; transition: opacity var(--motion-fade) var(--ease-out); }
+.m:hover .gut { opacity: 1; }
+html[data-dens="dense"] .m .gut { display: none; }
+.mh { display: flex; align-items: baseline; gap: 8px; min-width: 0; line-height: 22.5px; }
+.mh b { font-size: 15px; font-weight: var(--m-name-w); color: var(--text-1); white-space: nowrap; }
+.mh .via { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-2); }
+.mh .tm { font-size: 12px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mb { font-size: 15px; line-height: 22.5px; color: var(--text-1); }
+.mb p + p { margin-top: 6px; }
+.mb .men { font-weight: 500; padding: 0 2px; border-radius: 4px; background: var(--state-active); }
+.mb .men.me { background: var(--primary); color: var(--primary-foreground); }
+.mb a { color: var(--text-1); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--text-2); }
+.mb code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 4px; border-radius: 4px; background: var(--state-active); }
+.mb .edited { font-size: 12px; color: var(--text-3); }
+/* RF-1 references in text */
+.rch { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px 0 5px; margin: 0 1px; border-radius: var(--radius-sm); background: var(--ref-bg); font-size: 14px; font-weight: 500; line-height: 1; vertical-align: 1px; cursor: pointer; white-space: nowrap; }
+.rch:hover { background: var(--ref-bg-hover); }
+.rch .ic, .rch .sg { width: 13px; height: 13px; }
+.rch .ic { color: var(--text-2); }
+.rch .f { font-weight: 400; color: var(--text-2); }
+.rch.priv { color: var(--text-2); font-weight: 400; }
+.rch .ava { width: 14px; height: 14px; font-size: 7px; }
+.tagc { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; vertical-align: 1px; color: var(--text-2); }
+/* a reference alone on a line = its card */
+.rcard { margin-top: 6px; width: 440px; max-width: 100%; border: 1px solid var(--hairline); border-radius: var(--radius-lg); padding: 10px 12px; display: grid; grid-template-columns: var(--icon) minmax(0, 1fr) auto; column-gap: 10px; row-gap: 3px; align-items: center; }
+.rcard .t1 { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rcard .rm { grid-column: 2 / 3; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.rcard .rm .ava { width: 14px; height: 14px; font-size: 7px; }
+.rcard .act { grid-row: 1 / 3; grid-column: 3; }
+.rcard .hdl { margin-left: 6px; font-size: 12px; color: var(--text-3); font-weight: 400; }
+/* files */
+.img1 { margin-top: 6px; width: 360px; height: 216px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); background: linear-gradient(135deg, color-mix(in oklab, var(--label-violet) 30%, var(--card)), color-mix(in oklab, var(--label-blue) 20%, var(--card)) 60%, color-mix(in oklab, var(--label-teal) 18%, var(--card))); position: relative; }
+.img1 span { position: absolute; left: 10px; bottom: 8px; font-size: 11px; color: var(--text-1); opacity: .8; }
+.mfile { margin-top: 6px; width: 320px; height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); }
+.mfile .tile { width: 32px; height: 32px; border-radius: var(--radius-md); background: var(--state-active); display: grid; place-items: center; color: var(--text-2); flex-shrink: 0; }
+.mfile .fn { font-size: 14px; font-weight: 500; }
+.mfile .fm { font-size: 12px; color: var(--text-3); }
+/* reactions: the kit's Chip, xs, shape md */
+.rxs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.rx { height: var(--m-chip-h); display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 13px; color: var(--text-2); line-height: 1; cursor: pointer; }
+.rx .e { font-size: var(--m-emoji); line-height: 1; }
+.rx:hover { background: var(--state-hover); }
+.rx.mine { background: var(--state-active); box-shadow: none; color: var(--text-1); font-weight: 500; }
+.rx.add { color: var(--text-3); opacity: 0; transition: opacity var(--motion-fade) var(--ease-out); }
+.m:hover .rx.add, .m.hov .rx.add { opacity: 1; }
+.rx .cust { width: var(--m-emoji); height: var(--m-emoji); border-radius: 4px; background: linear-gradient(135deg, var(--label-amber), var(--label-violet)); display: inline-block; }
+html[data-look="a"] .rx { border-radius: 9999px; }
+/* replies (CH30): quote line, reply line, folded chain row */
+.qline { display: flex; align-items: center; gap: 6px; height: 20px; margin: 2px 0 0 -2px; padding: 0 4px; border-radius: var(--radius-sm); font-size: 13px; color: var(--text-2); max-width: 100%; cursor: pointer; overflow: hidden; }
+.qline:hover { background: var(--state-hover); }
+.qline .ic { width: 12px; height: 12px; color: var(--text-3); flex-shrink: 0; }
+.qline .ava { width: 14px; height: 14px; font-size: 7px; }
+.qline b { font-weight: 500; color: var(--text-1); white-space: nowrap; }
+.qline .q { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rline { display: inline-flex; align-items: center; gap: 8px; height: var(--ctrl-h-sm); margin: 4px 0 0 -4px; padding: 0 6px 0 4px; border-radius: var(--radius-md); font-size: 13px; cursor: pointer; }
+.rline:hover { background: var(--state-hover); }
+.rline.on { background: var(--state-active); }
+.rline .stack .ava { width: 16px; height: 16px; font-size: 7px; }
+.rline b { font-weight: 500; color: var(--text-1); }
+.rline .nm { color: var(--text-2); }
+.rline .nw { color: var(--text-1); font-weight: 500; }
+.rline .ic { color: var(--text-3); width: 12px; height: 12px; }
+.chainrow { display: flex; align-items: center; gap: 8px; height: var(--row-h-sm); margin: 4px 0 2px; padding: 0 8px; margin-left: calc(var(--m-list-px) + var(--m-inset) - 8px); margin-right: var(--m-padx); border-radius: var(--radius-md); font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; overflow: hidden; }
+.chainrow:hover { background: var(--state-hover); }
+.chainrow .ic { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; }
+.chainrow b { font-weight: 500; color: var(--text-1); }
+.chainrow .q { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.chainrow .tm { font-size: 12px; color: var(--text-3); margin-left: auto; padding-left: 8px; }
+.chainrow.wrapped .ic.ok { color: var(--text-2); }
+/* hover toolbar: 3 quick reactions + any + verbs, one floating surface */
+.mtools { position: absolute; top: -15px; right: var(--m-padx); z-index: 5; display: flex; align-items: center; gap: 1px; padding: 2px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-md); box-shadow: 0 8px 22px rgb(0 0 0 / .45); }
+.mtools button { height: var(--ctrl-h-sm); min-width: var(--ctrl-h-sm); padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border-radius: var(--radius-sm); font-size: var(--m-emoji); color: var(--text-2); white-space: nowrap; }
+.mtools button:hover { background: var(--state-active); color: var(--text-1); }
+.mtools .ic { width: var(--icon); height: var(--icon); }
+.mtools .tsep { width: 1px; height: 16px; background: var(--hairline); margin: 0 3px; }
+.mtools .lb { font-size: 12.5px; }
+/* dividers */
+.dayh { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 10px; height: var(--row-h-sm); margin-top: 10px; padding: 0 var(--m-padx); background: var(--card); font-size: 13px; font-weight: 500; color: var(--text-1); }
+.dayh::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+html[data-look="a"] .dayh, html[data-look="b"] .dayh { justify-content: center; font-size: 12px; font-weight: 500; color: var(--text-2); }
+html[data-look="a"] .dayh::before, html[data-look="b"] .dayh::before { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+.newl { display: flex; align-items: center; gap: 8px; height: 16px; margin: 4px var(--m-padx) 4px calc(var(--m-inset)); font-size: 12px; font-weight: 500; color: var(--primary); }
+.newl::before { content: ""; flex: 1; height: 1px; background: var(--primary); }
+html[data-look="b"] .newl { margin-left: var(--m-padx); }
+.newbar { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); z-index: 6; height: 26px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 9999px; background: var(--popover); border: 1px solid var(--hairline); box-shadow: 0 8px 22px rgb(0 0 0 / .45); font-size: 12.5px; color: var(--text-1); }
+.newbar .t3 { font-size: 12px; }
+.sysl { display: flex; align-items: center; gap: 8px; height: var(--row-h-sm); padding: 0 var(--m-padx) 0 var(--m-inset); font-size: 12px; color: var(--text-2); }
+.sysl b { font-weight: 500; color: var(--text-1); }
+/* composer: FeedComposer, filled; one row (C, B) or two rows (A) */
+.comp { position: relative; margin: 4px 8px 0; min-height: 40px; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: var(--radius-lg); background: var(--state-hover); box-shadow: inset 0 0 0 1px var(--hairline); flex-shrink: 0; }
+.comp .cin { flex: 1; min-width: 0; font-size: 15px; line-height: 22.5px; color: var(--text-3); padding: 4px 4px; }
+.comp .cin.typed { color: var(--text-1); }
+.comp .cin .caret { display: inline-block; width: 1.5px; height: 1.1em; background: var(--foreground); vertical-align: -.2em; margin-left: 1px; }
+.comp .ib { width: var(--ctrl-h-sm); height: var(--ctrl-h-sm); display: grid; place-items: center; border-radius: var(--radius-md); color: var(--text-2); flex-shrink: 0; }
+.comp .ib:hover { background: var(--state-active); color: var(--text-1); }
+.comp .send { color: var(--text-3); }
+.comp .send.on { background: var(--primary); color: var(--primary-foreground); }
+.comp .rbar { position: absolute; left: 0; right: 0; bottom: calc(100% + 0px); display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--state-hover); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 12.5px; color: var(--text-2); }
+.comp .rbar b { color: var(--text-1); font-weight: 500; }
+.comp .rbar .grow { flex: 1; }
+.comp.a2 { display: none; }
+html[data-look="a"] .comp.c1 { display: none; }
+html[data-look="a"] .comp.a2 { display: flex; flex-direction: column; align-items: stretch; padding: 6px 6px 4px; }
+.comp.a2 .row2 { display: flex; align-items: center; gap: 2px; border-top: 1px solid var(--hairline); padding-top: 4px; margin-top: 2px; }
+.comp.a2 .row2 .grow { flex: 1; }
+.typing { height: 20px; padding: 2px 22px 0; font-size: 12px; color: var(--text-3); flex-shrink: 0; }
+.paused { margin: 4px 8px 0; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-radius: var(--radius-lg); background: var(--muted); font-size: 13.5px; color: var(--text-2); flex-shrink: 0; }
+.paused b { color: var(--text-1); font-weight: 500; }
+.paused .grow { flex: 1; }
+/* left panel: NavRow, unread = weight, neutral presence */
+.nav .lbl.unread { color: var(--text-1); font-weight: 600; }
+.nav .count.mine { color: var(--text-1); font-weight: 500; }
+.nav .lbl.muted { color: var(--text-3); }
+.nav .ic.chn { color: var(--text-3); }
+.nav .slot { position: relative; }
+.nav .slot .ava { width: 16px; height: 16px; font-size: 7px; }
+.pd { position: absolute; right: -2px; bottom: -2px; width: 7px; height: 7px; border-radius: 9999px; box-shadow: 0 0 0 2px var(--card); }
+.pd.on { background: var(--text-2); }
+.pd.away { background: var(--card); box-shadow: 0 0 0 2px var(--card), inset 0 0 0 1.5px var(--text-3); }
+html[data-pres="green"] .pd.on { background: var(--label-green); }
+.nav .grpava { position: relative; width: 16px; height: 16px; }
+.nav .grpava i { position: absolute; width: 11px; height: 11px; border-radius: 9999px; }
+.nav .grpava i:first-child { left: 0; top: 0; background: var(--person-so); }
+.nav .grpava i:last-child { right: 0; bottom: 0; background: var(--person-mc); box-shadow: 0 0 0 1.5px var(--card); }
+.nav .st { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 400; }
+.nav.two { height: auto; min-height: var(--row-h); padding-top: 4px; padding-bottom: 4px; align-items: flex-start; }
+.nav.two .lbl { display: flex; flex-direction: column; gap: 0; }
+.nav.two .slot { margin-top: 2px; }
+/* right panel bits */
+.cdet { padding: 2px 16px 18px; display: flex; flex-direction: column; gap: 18px; }
+.lcardp { border: 1px solid var(--hairline); border-radius: var(--radius-lg); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.lcardp .l1 { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.lcardp .l2 { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-2); }
+.lcardp .lrow { margin: 0 -6px; padding: 0 6px; }
+.pplrow { display: flex; align-items: center; gap: 10px; height: 30px; font-size: 13.5px; }
+.pplrow .t3 { font-size: 12px; margin-left: auto; }
+.pplrow .ava { position: relative; }
+/* the chain in the panel: same type, small avatars, 40 px inset */
+.rpanel .msgs { padding: 0 4px 4px; }
+.rpanel .m { --m-av: 24px; --m-avfs: 10px; --m-gap: 8px; --m-padx: 8px; }
+.rpanel .comp { margin: 4px 8px 8px; }
+.chainhd { display: flex; align-items: center; gap: 10px; height: var(--row-h-sm); padding: 0 8px; margin: 8px 0 2px; font-size: 13px; font-weight: 500; color: var(--text-1); }
+.chainhd::after { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+.chainmeta { padding: 0 16px 6px; font-size: 12px; color: var(--text-3); display: flex; gap: 6px; align-items: center; }
+.chainmeta button { color: var(--text-2); }
+/* menus */
+.mmenu { right: 40px; top: 44px; width: 248px; }
+.emenu { width: 340px; }
+.emenu .eg { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 2px 4px 6px; }
+.emenu .eg span { height: 32px; display: grid; place-items: center; border-radius: var(--radius-sm); font-size: 20px; cursor: pointer; }
+.emenu .eg span:hover { background: var(--state-active); }
+.emenu .eg .cust { width: 22px; height: 22px; border-radius: 5px; }
+.emenu .esearch { margin: 4px 4px 6px; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 13px; color: var(--text-3); }
+.emenu .elab { display: flex; align-items: center; justify-content: space-between; height: 24px; padding: 0 8px; font-size: 12px; color: var(--text-3); }
+.emenu .elab button { color: var(--text-2); font-size: 12px; }
+.c1e { background: linear-gradient(135deg, var(--label-amber), var(--label-violet)); }
+.c2e { background: linear-gradient(135deg, var(--label-teal), var(--label-blue)); }
+.c3e { background: linear-gradient(135deg, var(--label-green), var(--label-amber)); }
+.c4e { background: linear-gradient(135deg, var(--label-blue), var(--label-violet)); }
+/* person card on hover */
+.pcard { position: absolute; z-index: 30; width: 280px; background: var(--popover); border: 1px solid var(--hairline); border-radius: var(--radius-lg); box-shadow: 0 12px 30px rgb(0 0 0 / .5); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.pcard .ph { display: flex; gap: 12px; align-items: center; }
+.pcard .ph .ava { width: 40px; height: 40px; font-size: 14px; }
+.pcard .nm { font-size: 15px; font-weight: 600; }
+.pcard .rl { font-size: 12.5px; color: var(--text-2); }
+.pcard .stl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); }
+.pcard .stl .ic { color: var(--text-2); }
+.pcard .acts { display: flex; gap: 6px; }
+/* settings-like sheet (frame: your reactions) */
+.sheet { margin: 12px 16px; border: 1px solid var(--hairline); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; max-width: 560px; }
+.sheet h4 { font-size: 14px; font-weight: 600; }
+.sheet .d { font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.slots { display: flex; gap: 6px; }
+.slots span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--hairline); font-size: 20px; }
+.slots span.drag { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.ce-list { display: flex; flex-direction: column; }
+.ce-row { display: grid; grid-template-columns: 28px 140px 1fr auto; align-items: center; gap: 10px; height: 36px; font-size: 13.5px; border-bottom: 1px solid var(--hairline); }
+.ce-row .cust { width: 22px; height: 22px; border-radius: 5px; }
+.ce-row .t3 { font-size: 12px; }
+.vv { display: none !important; }
+
+/* ═══════════════════════ Chat round 3 overrides ═══════════════════════
+   From Maciej's round 2 notes: A (Slack calm) is the base; centred date separators;
+   more air between people; chips inline on the text's baseline; cards with room;
+   the hover time on the first line's centre; the conversation fades at both ends. */
+:root { --m-gmt: 12px; --m-gpt: 9px; --m-lh: 23px; }
+html[data-dens="compact"] { --m-gmt: 10px; --m-gpt: 7px; }
+html[data-dens="dense"] { --m-gmt: 8px; --m-gpt: 5px; }
+.m { padding-top: 3px; padding-bottom: 3px; }
+.mh, .mb { line-height: var(--m-lh); }
+/* the time on hover sits on the first line's centre and may use the gap */
+.m .gut { width: calc(100% + var(--m-gap) - 6px); padding-top: 0; line-height: var(--m-lh); font-size: 11px; }
+/* chips: inline, on the text's baseline, lighter */
+.mb .rch { display: inline; height: auto; padding: 2px 6px; margin: 0 1px; border-radius: 5px; font-size: 14px; font-weight: 500; line-height: 1; vertical-align: baseline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.mb .rch .ic, .mb .rch .sg { display: inline-block; width: 13px; height: 13px; vertical-align: -2px; margin-right: 5px; }
+.mb .rch .ava { display: inline-grid; vertical-align: -3px; margin-right: 5px; }
+.mb .rch .f { margin-left: 4px; }
+.mb .men { padding: 1px 3px; border-radius: 4px; }
+/* cards, files and images: one left edge, room above */
+.rcard { margin-top: 8px; padding: 12px 14px; width: 420px; column-gap: 12px; row-gap: 4px; }
+.mfile { margin-top: 8px; }
+.img1 { margin-top: 8px; width: 340px; height: 204px; }
+.rxs { margin-top: 6px; }
+.rline { margin-top: 6px; }
+/* date separators centred (A); the conversation fades at both ends */
+.dayh { justify-content: center; font-size: 12px; font-weight: 500; color: var(--text-2); margin-top: 14px; }
+.dayh::before { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+.msgs { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 20px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 20px), transparent 100%); }
+.rx { border-radius: 9999px; }
+/* the "New" line: four candidates (CH29d) */
+.newl { display: none; }
+html[data-newl="center"] .newl.n-center { display: flex; justify-content: center; margin: 10px var(--m-padx) 4px; height: 18px; font-size: 12px; font-weight: 600; color: var(--primary); gap: 10px; }
+html[data-newl="center"] .newl.n-center::before, html[data-newl="center"] .newl.n-center::after { content: ""; flex: 1; height: 1px; background: color-mix(in oklab, var(--primary) 45%, transparent); }
+html[data-newl="pill"] .newl.n-pill { display: flex; align-items: center; margin: 10px var(--m-padx) 4px; height: 18px; gap: 0; }
+html[data-newl="pill"] .newl.n-pill::before { content: ""; flex: 1; height: 1px; background: var(--hairline); }
+.newl.n-pill span { height: 18px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground); font-size: 11px; font-weight: 600; }
+html[data-newl="tint"] .m.unread { background: color-mix(in oklab, var(--primary) 6%, transparent); }
+html[data-newl="tint"] .m.unread.first { box-shadow: inset 0 1px 0 color-mix(in oklab, var(--primary) 30%, transparent); }
+.newchip { display: none; position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); z-index: 6; height: 28px; align-items: center; gap: 6px; padding: 0 12px; border-radius: 9999px; background: var(--popover); border: 1px solid var(--hairline); box-shadow: 0 8px 22px rgb(0 0 0 / .45); font-size: 12.5px; color: var(--text-1); }
+html[data-newl="chip"] .newchip { display: inline-flex; }
+/* composer: two rows (A) or one row (CH29e) */
+html[data-look="a"] .comp.c1 { display: flex; }
+html[data-comp="one"] .comp.c1.main:not([hidden]) { display: flex !important; }
+html[data-comp="one"] .comp.a2 { display: none !important; }
+html[data-comp="two"] .comp.c1.main { display: none !important; }
+html[data-comp="two"] .comp.a2:not([hidden]) { display: flex !important; flex-direction: column; align-items: stretch; padding: 6px 6px 4px; }
+/* presence: three candidate colours (CH28a) and statuses (CH28c) */
+.pd { width: 8px; height: 8px; right: -3px; bottom: -3px; }
+html[data-pres="green"] .pd.on { background: var(--label-green); }
+html[data-pres="white"] .pd.on { background: var(--foreground); }
+html[data-pres="light"] .pd.on { background: color-mix(in oklab, var(--foreground) 72%, var(--card)); }
+.pd.away { background: var(--card); box-shadow: 0 0 0 2px var(--card), inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 55%, var(--card)); }
+.pd.dnd { background: color-mix(in oklab, var(--foreground) 72%, var(--card)); }
+.pd.dnd::after { content: ""; position: absolute; left: 2px; right: 2px; top: 3.25px; height: 1.5px; border-radius: 1px; background: var(--card); }
+.pd.focus { background: var(--card); box-shadow: 0 0 0 2px var(--card), inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 72%, var(--card)); }
+.pd.focus::after { content: ""; position: absolute; inset: 2.5px; border-radius: 9999px; background: color-mix(in oklab, var(--foreground) 72%, var(--card)); }
+.nav .st { display: block; }
+.stmenu { width: 280px; }
+.stmenu .mi .pd { position: static; box-shadow: none; flex-shrink: 0; margin: 0 2px; }
+.stmenu .mi .pd.away { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 55%, var(--card)); }
+.stmenu .stnote { padding: 6px 8px 4px; font-size: 12px; line-height: 1.4; color: var(--text-3); white-space: normal; }
+.stmenu .stin { margin: 4px; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 13px; color: var(--text-3); }
+/* person card, fixed: the task name gives way on its own line */
+.pcard { width: 300px; gap: 12px; }
+.pcard .stl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); white-space: nowrap; }
+.pcard .pcline { display: flex; align-items: center; gap: 8px; min-width: 0; height: 30px; padding: 0 10px; border-radius: var(--radius-md); background: var(--state-hover); font-size: 13.5px; }
+.pcard .pcline .sg { width: 14px; height: 14px; flex-shrink: 0; }
+.pcard .pcline .tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.pcard .pcline .tm { margin-left: auto; flex-shrink: 0; font-size: 12px; color: var(--text-3); padding-left: 8px; }
+/* explanation notes for the replies frames */
+.explain { position: absolute; z-index: 7; left: 16px; right: 16px; top: 52px; display: flex; gap: 10px; }
+.explain .pnote { flex: 1; font-size: 12px; }
+.menu .mlx { position: static; height: 26px; display: flex; align-items: center; padding: 0 8px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-queue" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="i-upcoming" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-mine" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="10" r="3"/><path d="M7 19.5V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+  <symbol id="i-gantt" viewBox="0 0 24 24"><path d="M10 6h8"/><path d="M12 16h6"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 11h7"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chev-u" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-fold" viewBox="0 0 24 24"><path d="m11 17-5-5 5-5"/><path d="m18 17-5-5 5-5"/></symbol>
+  <symbol id="i-unfold" viewBox="0 0 24 24"><path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-sub" viewBox="0 0 24 24"><path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/></symbol>
+  <symbol id="i-steps" viewBox="0 0 24 24"><path d="M10 12h11"/><path d="M10 18h11"/><path d="M10 6h11"/><path d="M4 10h2"/><path d="M4 6h1v4"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m14.8 9.2-5.6 5.6"/><path d="m9.2 9.2 5.6 5.6"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16"/><path d="M4 15h16"/><path d="M10 3 8 21"/><path d="M16 3l-2 18"/></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/></symbol>
+  <symbol id="i-backlog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" stroke-dasharray="3.4 2.9"/></symbol>
+  <symbol id="i-progress" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5a4.5 4.5 0 0 1 0 9z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-review" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5a4.5 4.5 0 1 1-4.5 4.5H12z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/></symbol>
+  <symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M5 2h14"/><path d="M17 22v-4.17a2 2 0 0 0-.59-1.42L12 12l-4.41 4.41A2 2 0 0 0 7 17.83V22"/><path d="M7 2v4.17a2 2 0 0 0 .59 1.42L12 12l4.41-4.41A2 2 0 0 0 17 6.17V2"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+  <symbol id="i-corner" viewBox="0 0 24 24"><path d="m15 10 5 5-5 5"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .71-1.53l7-6a2 2 0 0 1 2.58 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M21 10.66V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.34"/><path d="m9 11 3 3L22 4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-contact" viewBox="0 0 24 24"><path d="M16 2v2"/><path d="M7 22v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/><path d="M8 2v2"/><circle cx="12" cy="11" r="3"/><rect x="3" y="4" width="18" height="18" rx="2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+  <symbol id="i-handoff" viewBox="0 0 24 24"><path d="M3 5v14"/><path d="M21 12H7"/><path d="m15 18 6-6-6-6"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+  <symbol id="i-msg-sq" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <!-- right panel views -->
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 16v-4.5"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-flight" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+  <symbol id="i-panel-close" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></symbol>
+  <symbol id="i-project" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M8 10v4"/><path d="M12 10v2"/><path d="M16 10v6"/></symbol>
+  <symbol id="i-nodate" viewBox="0 0 24 24"><path d="M4.2 4.2A2 2 0 0 0 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 1.82-1.18"/><path d="M21 15.5V6a2 2 0 0 0-2-2H9.5"/><path d="M16 2v4"/><path d="M3 10h7"/><path d="M21 10h-5.5"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-group" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><path d="M14 17.5h7"/><path d="M3 17.5h7"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/></symbol>
+  <symbol id="i-focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <!-- filled glyphs for the timer pill -->
+  <symbol id="g-pause" viewBox="0 0 24 24"><rect x="5.5" y="4" width="4.5" height="16" rx="1.4"/><rect x="14" y="4" width="4.5" height="16" rx="1.4"/></symbol>
+  <symbol id="g-play" viewBox="0 0 24 24"><path d="M7 5.2v13.6a1.2 1.2 0 0 0 1.8 1.03l11.2-6.8a1.2 1.2 0 0 0 0-2.06L8.8 4.17A1.2 1.2 0 0 0 7 5.2z"/></symbol>
+  <symbol id="p0" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1" opacity=".25"/><rect x="6.5" y="6" width="3" height="8" rx="1" opacity=".25"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p1" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1" opacity=".25"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p2" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1" opacity=".25"/></symbol>
+  <symbol id="p3" viewBox="0 0 16 16"><rect x="2" y="9" width="3" height="5" rx="1"/><rect x="6.5" y="6" width="3" height="8" rx="1"/><rect x="11" y="3" width="3" height="11" rx="1"/></symbol>
+
+  <symbol id="i-cal-plus" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="M16 19h6"/><path d="M19 16v6"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></symbol>
+  <symbol id="i-shrink" viewBox="0 0 24 24"><path d="m15 15 6 6"/><path d="m15 9 6-6"/><path d="M21 16v5h-5"/><path d="M21 8V3h-5"/><path d="M3 16v5h5"/><path d="m3 21 6-6"/><path d="M3 8V3h5"/><path d="M9 9 3 3"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-snooze" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M10 10h4l-4 5h4"/></symbol>
+  <symbol id="i-inbox-in" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+  <symbol id="mark" viewBox="0 0 1000 1000"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M621.122 228.124C634.336 227.102 647.241 232.464 655.842 242.551C665.755 254.176 665.755 279.231 665.755 329.34V363.215L746.907 282.348C782.394 246.985 800.138 229.303 815.367 228.125C828.58 227.103 841.485 232.465 850.087 242.552C859.999 254.177 860 279.232 860 329.341V472.45C860 482.617 860 487.701 858.849 492.483C857.829 496.723 856.147 500.776 853.864 504.491C851.289 508.681 847.688 512.268 840.488 519.443L641.582 717.653C606.095 753.016 588.351 770.698 573.122 771.876C559.909 772.898 547.004 767.535 538.403 757.449C528.49 745.824 528.489 720.769 528.489 670.66V637.249L653.561 512.616C661.367 504.838 665.755 494.268 665.755 483.245V363.679L540.684 488.312C532.878 496.091 528.489 506.661 528.489 517.683V636.785L447.338 717.653C411.85 753.016 394.106 770.697 378.878 771.875C365.664 772.897 352.759 767.534 344.158 757.448C334.245 745.823 334.245 720.769 334.245 670.66V636.785L253.093 717.653C217.606 753.016 199.862 770.698 184.633 771.876C171.42 772.898 158.515 767.535 149.913 757.449C140.001 745.824 140 720.769 140 670.66V527.551C140 517.385 140 512.3 141.151 507.518C142.171 503.278 143.853 499.226 146.136 495.511C148.711 491.32 152.312 487.732 159.512 480.557L358.418 282.348C393.905 246.985 411.649 229.303 426.878 228.125C440.091 227.103 452.996 232.465 461.597 242.552C471.51 254.177 471.511 279.232 471.511 329.341V363.214L552.662 282.347C588.15 246.984 605.894 229.302 621.122 228.124ZM346.439 487.848C338.633 495.627 334.245 506.197 334.245 517.219V636.785L459.316 512.152C467.122 504.373 471.511 493.804 471.511 482.781V363.214L346.439 487.848Z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="16" height="11" x="4" y="11" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <symbol id="i-mega" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="i-bubble" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></symbol>
+  <symbol id="i-cul" viewBox="0 0 24 24"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-cdr" viewBox="0 0 24 24"><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></symbol>
+  <symbol id="i-smileplus" viewBox="0 0 24 24"><path d="M22 11v1a10 10 0 1 1-9-10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/><path d="M16 5h6"/><path d="M19 2v6"/></symbol>
+  <symbol id="i-belloff" viewBox="0 0 24 24"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-filetext" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-arrowdown" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+  <symbol id="i-wrap" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+</svg>
+
+<div class="stage">
+
+  <!-- ═══════════ PROTOTYPE STRIP (not part of the app) ═══════════ -->
+  <div class="strip" role="banner">
+    <div class="l1">
+      <span class="ptag">Throwaway prototype — not a spec.</span>
+      <span class="pcalls"><b>Chat round 3</b> · CH29d–f the look · CH30a–c replies · CH28a–c presence</span>
+      <span class="grow"></span>
+      <span class="seg" id="frameSw">
+        <button type="button" data-go="1">1 · Look</button>
+        <button type="button" data-go="2">2 · New line</button>
+        <button type="button" data-go="3">3 · Composer</button>
+        <button type="button" data-go="4">4 · Replies</button>
+        <button type="button" data-go="5">5 · Reply chain</button>
+        <button type="button" data-go="6">6 · Tidy up</button>
+        <button type="button" data-go="7">7 · Presence</button>
+        <button type="button" data-go="8">8 · Status</button>
+      </span>
+    </div>
+    <div class="l2">
+      <span class="cap" id="cap"></span>
+      <span class="ctl" id="ctlVar"><span class="lab" id="varLab"></span><span class="seg" id="varSeg"></span></span>
+      <span class="keys">Keys <b>1–8</b> · <b>V</b> variant</span>
+    </div>
+  </div>
+
+  <div class="appframe">
+    <header class="topbar">
+      <div class="tleft">
+        <svg class="mark" aria-label="moduo"><use href="#mark"/></svg>
+        <button type="button" class="wsbtn">Moduo Studio <svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+      </div>
+      <nav class="mtabs" aria-label="Modules">
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-home"/></svg>Home</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Notes</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg>Tasks</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-cal"/></svg>Calendar</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg>Email</span>
+        <span class="mtab"><svg class="ic" aria-hidden="true"><use href="#i-contact"/></svg>Contacts</span>
+        <span class="mtab on"><svg class="ic" aria-hidden="true"><use href="#i-bubble"/></svg>Chat</span>
+      </nav>
+      <div class="tright">
+        <button type="button" class="ibtn" title="Help"><svg class="ic ic-md" aria-hidden="true"><use href="#i-help"/></svg></button>
+        <button type="button" class="ibtn" title="Notifications"><svg class="ic ic-md" aria-hidden="true"><use href="#i-bell"/></svg></button>
+        <span class="ava ar lg" title="Alex Rivera (you)">AR</span>
+      </div>
+    </header>
+
+    <div class="app" id="app">
+
+      <!-- ═══════════ LEFT ═══════════ -->
+      <aside class="panel rail" id="rail">
+        <div class="nav"><span class="slot"><svg class="ic ic-md" aria-hidden="true"><use href="#i-inbox-in"/></svg></span><span class="lbl">Catch up</span><span class="trail"><span class="count num mine">3</span></span></div>
+        <div class="rdiv"><span class="line"></span></div>
+        <div class="area">
+          <div class="ghdr"><span>Pinned</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav active"><span class="slot"><span class="dot" style="--c: var(--label-violet)"></span></span><span class="lbl">Acme rebrand</span><span class="trail"></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Channels</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <div class="nav"><span class="slot"><svg class="ic chn" aria-hidden="true"><use href="#i-bubble"/></svg></span><span class="lbl">General</span><span class="trail"></span></div>
+            <div class="nav"><span class="slot"><span class="dot" style="--c: var(--label-teal)"></span></span><span class="lbl unread">Launch v1</span><span class="trail"><span class="count num mine">1</span></span></div>
+            <div class="nav"><span class="slot"><svg class="ic chn" aria-hidden="true"><use href="#i-building"/></svg></span><span class="lbl">Acme client</span><span class="trail"></span></div>
+            <div class="nav"><span class="slot"><span class="tmark" style="background: color-mix(in oklab, var(--label-blue) 45%, var(--card))">DS</span></span><span class="lbl unread">Design</span><span class="trail"></span></div>
+            <div class="nav"><span class="slot"><svg class="ic chn" aria-hidden="true"><use href="#i-bubble"/></svg></span><span class="lbl muted">Random</span><span class="trail"><svg class="ic ic-xs t3" aria-hidden="true"><use href="#i-belloff"/></svg></span></div>
+            <div class="nav"><span class="slot"><svg class="ic chn" aria-hidden="true"><use href="#i-lock"/></svg></span><span class="lbl">Founders</span><span class="trail"></span></div>
+          </div>
+        </div>
+        <div class="area">
+          <div class="ghdr"><span>Direct messages</span><svg class="ic ic-xs chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+          <div class="kids">
+            <!-- plain rows (frames 1–6, 8) -->
+            <div class="nav" data-f="1 2 3 4 5 6"><span class="slot"><span class="ava so">SO</span><span class="pd on"></span></span><span class="lbl unread">Sofia Ortiz</span><span class="trail"><span class="count num mine">2</span></span></div>
+            <div class="nav" data-f="1 2 3 4 5 6"><span class="slot"><span class="ava mc">MC</span><span class="pd away"></span></span><span class="lbl">Mike Chen</span><span class="trail"></span></div>
+            <div class="nav" data-f="1 2 3 4 5 6"><span class="slot"><span class="ava an">JL</span></span><span class="lbl">Jana Lis</span><span class="trail"></span></div>
+            <div class="nav" data-f="1 2 3 4 5 6"><span class="slot"><span class="grpava"><i></i><i></i></span></span><span class="lbl">Sofia, Mike</span><span class="trail"></span></div>
+            <!-- with states (frame 7 · b) -->
+            <div class="nav two" data-f="7 8"><span class="slot"><span class="ava so">SO</span><span class="pd focus"></span></span><span class="lbl"><span class="unread">Sofia Ortiz</span><span class="st">Focusing · until 3:00 PM</span></span><span class="trail"><span class="count num mine">2</span></span></div>
+            <div class="nav two" data-f="7 8"><span class="slot"><span class="ava ar" style="--ava: var(--person-ar)">KN</span><span class="pd on"></span></span><span class="lbl"><span>Kasia Nowak</span><span class="st">Active</span></span><span class="trail"></span></div>
+            <div class="nav two" data-f="7 8"><span class="slot"><span class="ava mc">MC</span><span class="pd away"></span></span><span class="lbl"><span>Mike Chen</span><span class="st">Away since 1:10 PM</span></span><span class="trail"></span></div>
+            <div class="nav two" data-f="7 8"><span class="slot"><span class="ava an">JL</span><span class="pd dnd"></span></span><span class="lbl"><span>Jana Lis</span><span class="st">Do not disturb · back 9:00 AM</span></span><span class="trail"></span></div>
+          </div>
+        </div>
+        <div class="nav add"><span class="slot"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="lbl">New conversation</span></div>
+      </aside>
+
+      <!-- ═══════════ CENTRE · the conversation (frames 1, 2, 3, 7, 8) ═══════════ -->
+      <main class="panel center" data-f="1 2 3 7 8" style="position:relative">
+        <div class="toolbar chead">
+          <div class="title">
+            <span class="dot pdot" style="--c: var(--label-violet)"></span><h3>Acme rebrand</h3>
+            <span class="lchip" title="Linked to a project"><span class="dot" style="--c: var(--label-violet)"></span>Project · Active · 7 of 12</span>
+            <span class="faces" title="People in this channel"><span class="stack"><span class="ava ar">AR</span><span class="ava so">SO</span><span class="ava mc">MC</span></span><span class="num">4</span></span>
+          </div>
+          <button type="button" class="btn icon" title="Search in this conversation  ⌘F"><svg class="ic ic-md" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn icon" title="Notifications, pin to sidebar, mark as read, leave"><svg class="ic ic-md" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+
+        <div class="msgs">
+          <div class="spacer"></div>
+          <div class="dayh">Yesterday</div>
+          <div class="m first"><span class="av ar">AR</span>
+            <div><div class="mh"><b>Alex Rivera</b><span class="tm">4:12 PM</span></div>
+              <div class="mb">Kickoff notes are in <span class="rch"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Acme kickoff · Oct 12</span>. Scope is the homepage and the brand guidelines.</div></div></div>
+          <div class="m"><span class="gut">4:13 PM</span>
+            <div class="mb">Launch review is Thursday at 3. I'll send the agenda tomorrow.</div></div>
+
+          <div class="dayh">Today</div>
+          <div class="m first"><span class="av so">SO</span>
+            <div><div class="mh"><b>Sofia Ortiz</b><span class="tm">9:40 AM</span></div>
+              <div class="mb">Morning! Pushed the new hero to staging.</div>
+              <div class="img1"><span>hero-v3.png</span></div></div></div>
+          <div class="m"><span class="gut">9:41 AM</span>
+            <div><div class="mb"><span class="rch"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg>Collect assets<span class="f">· Fri</span></span> is stuck on the logo files. <span class="men me">@Alex Rivera</span> can you ask Anna for the SVGs?</div>
+              <div class="rline"><span class="stack"><span class="ava ar">AR</span><span class="ava mc">MC</span></span><b>2 replies</b><span class="nm">Alex, Mike</span><svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></div></div></div>
+          <div class="m first hov" id="mMike"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">10:05 AM</span></div>
+              <div class="mb">Copy is next, this one's mine:</div>
+              <div class="rcard"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg><span class="t1">Draft homepage copy<span class="hdl">ACM-31</span></span><button type="button" class="btn sm act"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg>Complete</button>
+                <span class="rm"><span>Acme rebrand › Copy</span><span>Due Fri</span><span>2 of 5</span></span></div>
+              <div class="rxs"><span class="rx mine"><span class="e">✅</span>1</span><span class="rx"><span class="e">🙏</span>1</span><span class="rx add"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-smileplus"/></svg></span></div></div>
+            <div class="mtools" data-f="9">
+              <button type="button" title="👍">👍</button><button type="button" title="✅">✅</button><button type="button" title="👀">👀</button><button type="button" title="Any emoji, including the workspace's own"><svg class="ic" aria-hidden="true"><use href="#i-smileplus"/></svg></button>
+              <span class="tsep"></span>
+              <button type="button" title="Reply  R"><svg class="ic" aria-hidden="true"><use href="#i-reply"/></svg></button>
+              <button type="button" class="lb" title="Make a task  T"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg>Task</button>
+              <button type="button" title="More"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="m first"><span class="av an">JL</span>
+            <div><div class="mh"><b>Jana Lis</b><span class="tm">10:20 AM</span></div>
+              <div class="mb">Nav looks great on narrow windows too. Nice work.</div></div></div>
+          <div class="newl n-center">New</div>
+          <div class="newl n-pill"><span>New</span></div>
+          <div class="m first unread"><span class="av so">SO</span>
+            <div><div class="mh"><b>Sofia Ortiz</b><span class="tm">11:20 AM</span></div>
+              <div class="mb">Client call moved to Thursday at 4:00 PM. <span class="men me">@channel</span> please keep the hour free.</div>
+              <div class="rxs"><span class="rx mine"><span class="e">👍</span>2</span><span class="rx add"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-smileplus"/></svg></span></div></div></div>
+          <div class="m first unread"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">11:24 AM</span></div>
+              <div class="mb">Will do. I'll bring the copy draft.</div></div></div>
+        </div>
+        <div class="newchip"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-arrowdown"/></svg>2 new messages</div>
+
+        <div class="typing">Sofia is typing…</div>
+        <div class="comp c1 main">
+          <button type="button" class="ib" title="Attach a file (or paste one)"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <div class="cin">Message Acme rebrand</div>
+          <button type="button" class="ib" title="Mention someone or link something  @"><svg class="ic ic-md" aria-hidden="true"><use href="#i-at"/></svg></button>
+          <button type="button" class="ib" title="Emoji  :"><svg class="ic ic-md" aria-hidden="true"><use href="#i-smile"/></svg></button>
+          <button type="button" class="ib send" title="Send  ⏎"><svg class="ic ic-md" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </div>
+        <div class="comp a2">
+          <div class="cin">Message Acme rebrand</div>
+          <div class="row2">
+            <button type="button" class="ib" title="Attach"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+            <button type="button" class="ib" title="Formatting" style="font-size:13px;font-weight:600">Aa</button>
+            <button type="button" class="ib" title="Mention"><svg class="ic ic-md" aria-hidden="true"><use href="#i-at"/></svg></button>
+            <button type="button" class="ib" title="Emoji"><svg class="ic ic-md" aria-hidden="true"><use href="#i-smile"/></svg></button>
+            <span class="grow"></span>
+            <button type="button" class="ib send" title="Send"><svg class="ic ic-md" aria-hidden="true"><use href="#i-send"/></svg></button>
+          </div>
+        </div>
+        <div style="height:8px; flex-shrink:0"></div>
+
+        <!-- person card, fixed (frame 8 · card / long) -->
+        <div class="pcard" data-v="8:card" style="left: 60px; top: 230px">
+          <div class="ph"><span class="ava so">SO</span><div><div class="nm">Sofia Ortiz</div><div class="rl">Product designer · 3:12 PM her time</div></div></div>
+          <div class="stl"><span class="pd focus" style="position:relative;right:auto;bottom:auto;box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 72%, var(--card))"></span>Focusing · until 3:00 PM</div>
+          <div class="pcline"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg><span class="tt">Hero v3</span><span class="tm">ACM-29</span></div>
+          <div class="rl">A message now waits until her Focus ends.</div>
+          <div class="acts"><button type="button" class="btn secondary sm">Message</button><button type="button" class="btn sm">View profile</button></div>
+        </div>
+        <div class="pcard" data-v="8:long" style="left: 60px; top: 230px">
+          <div class="ph"><span class="ava so">SO</span><div><div class="nm">Sofia Ortiz</div><div class="rl">Product designer · 3:12 PM her time</div></div></div>
+          <div class="stl"><span class="pd focus" style="position:relative;right:auto;bottom:auto;box-shadow:inset 0 0 0 1.5px color-mix(in oklab, var(--foreground) 72%, var(--card))"></span>Focusing · until 3:00 PM</div>
+          <div class="pcline" title="Rewrite the onboarding emails for the Q4 enterprise trial cohort, including the follow-up sequence for inactive accounts"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg><span class="tt">Rewrite the onboarding emails for the Q4 enterprise trial cohort, including the follow-up sequence for inactive accounts</span><span class="tm">ACM-142</span></div>
+          <div class="rl">A message now waits until her Focus ends.</div>
+          <div class="acts"><button type="button" class="btn secondary sm">Message</button><button type="button" class="btn sm">View profile</button></div>
+        </div>
+      </main>
+
+      <!-- ═══════════ CENTRE · replies, not threads (frames 3, 4, 5) ═══════════ -->
+      <main class="panel center" data-f="4 5 6" style="position:relative">
+        <div class="toolbar chead">
+          <div class="title">
+            <span class="dot pdot" style="--c: var(--label-violet)"></span><h3>Acme rebrand</h3>
+            <span class="lchip"><span class="dot" style="--c: var(--label-violet)"></span>Project · Active · 7 of 12</span>
+            <span class="faces"><span class="stack"><span class="ava ar">AR</span><span class="ava so">SO</span><span class="ava mc">MC</span></span><span class="num">4</span></span>
+          </div>
+          <button type="button" class="btn icon"><svg class="ic ic-md" aria-hidden="true"><use href="#i-search"/></svg></button>
+          <button type="button" class="btn icon"><svg class="ic ic-md" aria-hidden="true"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="explain" data-v="4:slack"><div class="pnote"><b>Slack today.</b> Alex replied in a thread (hidden behind "3 replies"); Mike and Jana answered in the channel instead. Half the conversation is inside, half outside, and Jana doesn't know Alex already said yes. This is the mess you described.</div></div>
+        <div class="explain" data-v="4:stream"><div class="pnote"><b>Proposed: one Reply button.</b> A reply posts at the bottom like any message, with a one-line quote of what it answers. Everyone sees it; nobody chooses "thread or channel". The original gets "2 replies ›" to read them together on the right.</div></div>
+        <div class="explain" data-v="4:chainrow"><div class="pnote"><b>When it gets tangled, the app tidies it.</b> 6 replies with other talk in between: they chainrow into one row at the bottom (where the latest reply is). The rest of the channel reads cleanly; click the row to read the chain on the right.</div></div>
+        <div class="explain" data-v="4:every"><div class="pnote"><b>The same chain, never folded</b> (a personal display option for people who want every message in the stream). This is what the chainrow saves you from in a busy channel.</div></div>
+        <div class="msgs">
+          <div class="spacer"></div>
+          <div class="dayh">Today</div>
+          <div class="m first"><span class="av so">SO</span>
+            <div><div class="mh"><b>Sofia Ortiz</b><span class="tm">10:41 AM</span></div>
+              <div class="mb">Can someone get the logo SVGs from Anna? Need them for Friday.</div>
+              <div class="rline" data-v="4:slack"><span class="stack"><span class="ava ar">AR</span><span class="ava an">JL</span></span><b>3 replies</b><span class="nm">in a thread · Alex, Jana</span><svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></div>
+              <div class="rline" data-v="4:stream"><span class="stack"><span class="ava ar">AR</span><span class="ava mc">MC</span></span><b>2 replies</b><span class="nm">Alex, Mike</span><svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></div>
+              <div class="rline" data-v="4:chainrow 4:every 6:menu 6:moved"><span class="stack"><span class="ava ar">AR</span><span class="ava an">JL</span><span class="ava mc">MC</span></span><b>6 replies</b><span class="nm">Alex, Jana, Mike</span><svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></div>
+              <div class="rline on" data-f="5"><span class="stack"><span class="ava ar">AR</span><span class="ava an">JL</span><span class="ava mc">MC</span></span><b>6 replies</b><span class="nm">Alex, Jana, Mike</span><svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></div>
+              <div class="rline" data-v="6:wrap"><svg class="ic" aria-hidden="true" style="color:var(--text-2)"><use href="#i-wrap"/></svg><b>Wrapped up</b><span class="nm">· 6 replies</span><svg class="ic" aria-hidden="true"><use href="#i-chev-r"/></svg></div>
+            </div></div>
+          <div class="m first"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">10:43 AM</span></div>
+              <div class="mb">Homepage copy draft is up: <span class="rch"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg>Draft homepage copy<span class="f">· Fri</span></span></div></div></div>
+          <div class="m first" data-v="4:slack"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">10:52 AM</span></div>
+              <div class="mb">PNG works too if SVG takes long.</div></div></div>
+          <div class="m first" data-v="4:slack"><span class="av an">JL</span>
+            <div><div class="mh"><b>Jana Lis</b><span class="tm">10:56 AM</span></div>
+              <div class="mb">Wait, who's getting the SVGs? I'm seeing Anna at 2.</div></div></div>
+          <!-- short chain: replies stay in the stream -->
+          <div class="m first" data-v="4:stream 4:every"><span class="av ar">AR</span>
+            <div><div class="mh"><b>Alex Rivera</b><span class="tm">10:47 AM</span></div>
+              <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg><span class="ava so">SO</span><b>Sofia</b><span class="q">Can someone get the logo SVGs from Anna? Need them for Friday.</span></div>
+              <div class="mb">I'll ask her today.</div></div></div>
+          <div class="m first" data-v="4:stream"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">10:52 AM</span></div>
+              <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg><span class="ava so">SO</span><b>Sofia</b><span class="q">Can someone get the logo SVGs from Anna? Need them for Friday.</span></div>
+              <div class="mb">PNG works too if SVG takes long.</div></div></div>
+          <!-- tangled: other talk in between -->
+          <div class="m first" data-v="4:chainrow 4:every 6:menu 6:wrap 6:moved" data-f="4 5 6"><span class="av an">JL</span>
+            <div><div class="mh"><b>Jana Lis</b><span class="tm">10:49 AM</span></div>
+              <div class="mb">Pushed the new nav, have a look when you can.</div></div></div>
+          <div class="m first" data-v="4:every"><span class="av an">JL</span>
+            <div><div class="mh"><b>Jana Lis</b><span class="tm">10:51 AM</span></div>
+              <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg><span class="ava ar">AR</span><b>Alex</b><span class="q">I'll ask her today.</span></div>
+              <div class="mb">I'm meeting her at 2, I can grab them.</div></div></div>
+          <div class="m first" data-v="4:chainrow 4:every 6:menu 6:wrap 6:moved" data-f="4 5 6"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">10:55 AM</span></div>
+              <div class="mb">Standup moved to 11:30.</div></div></div>
+          <div class="m first" data-v="4:every"><span class="av ar">AR</span>
+            <div><div class="mh"><b>Alex Rivera</b><span class="tm">10:58 AM</span></div>
+              <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg><span class="ava an">JL</span><b>Jana</b><span class="q">I'm meeting her at 2, I can grab them.</span></div>
+              <div class="mb">Perfect, thanks. Ask for the dark version too.</div></div></div>
+          <div class="m first" data-v="4:every"><span class="av mc">MC</span>
+            <div><div class="mh"><b>Mike Chen</b><span class="tm">10:59 AM</span></div>
+              <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg><span class="ava so">SO</span><b>Sofia</b><span class="q">Can someone get the logo SVGs from Anna?</span></div>
+              <div class="mb">PNG works too if SVG takes long.</div></div></div>
+          <div class="m first" data-v="4:every"><span class="av an">JL</span>
+            <div><div class="mh"><b>Jana Lis</b><span class="tm">11:02 AM</span></div>
+              <div class="qline"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg><span class="ava ar">AR</span><b>Alex</b><span class="q">Perfect, thanks. Ask for the dark version too.</span></div>
+              <div class="mb">Got them, both versions are in the shared drive.</div></div></div>
+          <!-- a stray message typed without Reply (frame 5) -->
+          <div class="m first sel" data-v="6:menu" style="position:relative"><span class="av so">SO</span>
+            <div><div class="mh"><b>Sofia Ortiz</b><span class="tm">11:04 AM</span></div>
+              <div class="mb">Great, Jana! I'll swap them in tonight.</div></div>
+            <div class="menu" style="right: 12px; top: -150px; width: 270px; z-index: 40">
+              <div class="mi hl"><svg class="ic" aria-hidden="true"><use href="#i-cul"/></svg>Reply to…<span class="sc">attach to a chain</span></div>
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-move"/></svg>Move to a conversation…</div>
+              <hr />
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-tasks"/></svg>Make a task<span class="sc">T</span></div>
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-note"/></svg>Make a note<span class="sc">proposal</span></div>
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-msg-sq"/></svg>Move to a task's comments<span class="sc">proposal</span></div>
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg>Mark as decision<span class="sc">D</span></div>
+              <hr />
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg>Pin to conversation</div>
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-pen"/></svg>Edit<span class="sc">E</span></div>
+              <div class="mi"><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg>Copy link</div>
+              <div class="mi">Mark unread</div>
+              <div class="mi">Delete<span class="sc">⌫</span></div>
+            </div></div>
+          <div class="sysl" data-v="6:moved"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-move"/></svg><span><b>Alex</b> moved 3 messages to Founders · 11:06 AM · <span style="text-decoration:underline">Undo</span></span></div>
+          <!-- the folded chain row: one row, where the latest reply is -->
+          <div class="chainrow" data-v="4:chainrow 6:menu 6:moved"><svg class="ic" aria-hidden="true"><use href="#i-cdr"/></svg><b>Sofia's</b><span class="q">"Can someone get the logo SVGs…"</span><b>· 6 replies</b><span class="q">· Jana: Got them, both versions are in the shared drive</span><span class="tm">11:02 AM</span></div>
+          <div class="chainrow on" data-f="5" style="background: var(--state-active)"><svg class="ic" aria-hidden="true"><use href="#i-cdr"/></svg><b>Sofia's</b><span class="q">"Can someone get the logo SVGs…"</span><b>· 6 replies</b><span class="q">· Jana: Got them, both versions are in the shared drive</span><span class="tm">11:02 AM</span></div>
+          <div class="chainrow wrapped" data-v="6:wrap"><svg class="ic ok" aria-hidden="true"><use href="#i-wrap"/></svg><b>Sofia's</b><span class="q">"Can someone get the logo SVGs…"</span><b>· Wrapped up:</b><span class="q">Jana "Got them, both versions are in the shared drive"</span><span class="tm">11:02 AM</span></div>
+        </div>
+        <div class="typing"></div>
+        <div class="comp c1" data-v="5:main" data-f="5" style="margin-top:34px">
+          <div class="rbar"><svg class="ic ic-xs" aria-hidden="true"><use href="#i-cul"/></svg>Replying to <b>Sofia</b><span class="q" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">· Can someone get the logo SVGs from Anna?</span><span class="grow"></span><span class="kbd">Esc</span></div>
+          <button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <div class="cin typed">Thanks Jana, swapping them in tonight<span class="caret"></span></div>
+          <button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-at"/></svg></button>
+          <button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-smile"/></svg></button>
+          <button type="button" class="ib send on"><svg class="ic ic-md" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </div>
+        <div class="comp c1" data-v="4:slack 4:stream 4:chainrow 4:every 6:menu 6:wrap 6:moved 5:chain">
+          <button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          <div class="cin">Message Acme rebrand</div>
+          <button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-at"/></svg></button>
+          <button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-smile"/></svg></button>
+          <button type="button" class="ib send"><svg class="ic ic-md" aria-hidden="true"><use href="#i-send"/></svg></button>
+        </div>
+        <div style="height:8px; flex-shrink:0"></div>
+      </main>
+
+      <!-- ═══════════ RIGHT · Details (frames 1–3, 5–8) ═══════════ -->
+      <aside class="panel rpanel" data-f="1 2 3 4 6 7 8">
+        <div class="rphead"><button type="button" class="vpick">Details<svg class="ic ic-xs" aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+        <div class="rpbody"><div class="cdet">
+          <div>
+            <div class="shead">Linked to</div>
+            <div class="lcardp">
+              <div class="l1"><span class="dot" style="--c: var(--label-violet)"></span>Acme rebrand<span class="t3" style="font-weight:400; font-size:12px; margin-left:auto">Target Nov 30</span></div>
+              <div class="l2"><span>Active</span><span class="pbar"><i style="width:58%"></i></span><span class="num">7 of 12</span><span>Client Acme Corp</span></div>
+              <div class="lrow"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg><span class="lt">Collect assets</span><span class="lm">Fri</span></div>
+              <div class="lrow"><svg class="sg ip" aria-hidden="true"><use href="#i-progress"/></svg><span class="lt">Draft homepage copy</span><span class="lm">Fri</span></div>
+            </div>
+          </div>
+          <div>
+            <div class="shead">People<span class="num">4</span></div>
+            <div class="pplrow"><span class="ava ar">AR</span>Alex Rivera<span class="t3">you</span></div>
+            <div class="pplrow"><span class="ava so">SO</span>Sofia Ortiz<span class="t3">Focusing · until 3:00 PM</span></div>
+            <div class="pplrow"><span class="ava mc">MC</span>Mike Chen<span class="t3">Away</span></div>
+            <div class="pplrow"><span class="ava an">JL</span>Jana Lis<span class="t3">Quiet hours</span></div>
+          </div>
+          <div>
+            <div class="shead">Decisions<span class="num">1</span></div>
+            <div class="lrow"><svg class="ic" aria-hidden="true"><use href="#i-flag"/></svg><span class="lt">Brand colours are final: ink, paper, one accent</span><span class="lm">Oct 9</span></div>
+          </div>
+          <div>
+            <div class="shead">Pinned<span class="num">1</span></div>
+            <div class="lrow"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg><span class="lt">Staging: acme-staging.example.com</span><span class="lm">Oct 8</span></div>
+          </div>
+          <div>
+            <div class="shead">Files<span class="num">6</span></div>
+            <div class="lrow"><svg class="ic" aria-hidden="true"><use href="#i-image"/></svg><span class="lt">hero-v3.png</span><span class="lm">Today</span></div>
+            <div class="lrow"><svg class="ic" aria-hidden="true"><use href="#i-filetext"/></svg><span class="lt">acme-brief.pdf</span><span class="lm">Yesterday</span></div>
+          </div>
+        </div></div>
+      </aside>
+
+      <!-- ═══════════ RIGHT · the reply chain (frame 5) ═══════════ -->
+      <aside class="panel rpanel" data-f="5">
+        <div class="rphead"><button type="button" class="btn icon backbtn" title="Back to Details  Esc"><svg class="ic" aria-hidden="true"><use href="#i-back"/></svg></button><span class="vname" style="margin-left:4px">Reply chain<span class="t3" style="font-weight:400"> · Acme rebrand</span></span><button type="button" class="btn icon" title="Wrap up, make a task, move…"><svg class="ic" aria-hidden="true"><use href="#i-more"/></svg></button></div>
+        <div class="chainmeta">Sofia, Alex, Jana, Mike · You're following · <button type="button">Stop</button></div>
+        <div class="msgs">
+          <div class="m first"><span class="av so">SO</span><div><div class="mh"><b>Sofia Ortiz</b><span class="tm">10:41 AM</span></div><div class="mb">Can someone get the logo SVGs from Anna? Need them for Friday.</div></div></div>
+          <div class="chainhd">6 replies</div>
+          <div class="m first"><span class="av ar">AR</span><div><div class="mh"><b>Alex Rivera</b><span class="tm">10:47 AM</span></div><div class="mb">I'll ask her today.</div></div></div>
+          <div class="m first"><span class="av an">JL</span><div><div class="mh"><b>Jana Lis</b><span class="tm">10:51 AM</span></div><div class="mb">I'm meeting her at 2, I can grab them.</div></div></div>
+          <div class="m first"><span class="av ar">AR</span><div><div class="mh"><b>Alex Rivera</b><span class="tm">10:58 AM</span></div><div class="mb">Perfect, thanks. Ask for the dark version too.</div></div></div>
+          <div class="m first"><span class="av mc">MC</span><div><div class="mh"><b>Mike Chen</b><span class="tm">10:59 AM</span></div><div class="mb">PNG works too if SVG takes long.</div></div></div>
+          <div class="m first"><span class="av an">JL</span><div><div class="mh"><b>Jana Lis</b><span class="tm">11:02 AM</span></div><div class="mb">Got them, both versions are in the shared drive.</div></div></div>
+        </div>
+        <div class="comp c1" data-v="5:chain"><div class="cin">Reply to Sofia</div><button type="button" class="ib"><svg class="ic ic-md" aria-hidden="true"><use href="#i-smile"/></svg></button><button type="button" class="ib send"><svg class="ic ic-md" aria-hidden="true"><use href="#i-send"/></svg></button></div>
+        <div class="comp c1" data-v="5:main" style="opacity:.55"><div class="cin">Reply to Sofia</div><button type="button" class="ib send"><svg class="ic ic-md" aria-hidden="true"><use href="#i-send"/></svg></button></div>
+      </aside>
+    </div>
+
+    <!-- ═══════════ BOTTOM BAR ═══════════ -->
+    <footer class="bbar" id="bbar">
+      <div class="bside"><button type="button" class="bbtn" title="Collapse left panel"><svg class="ic ic-md lt-open" aria-hidden="true"><use href="#i-fold"/></svg><svg class="ic ic-md lt-closed" aria-hidden="true"><use href="#i-unfold"/></svg></button></div>
+      <div class="bmid bm-tools" role="toolbar" aria-label="Chat tools">
+        <button type="button" class="bbtn" title="Keyboard shortcuts  ?"><svg class="ic ic-md" aria-hidden="true"><use href="#i-keyboard"/></svg></button>
+        <button type="button" class="bbtn" title="Search everything  ⌘K"><svg class="ic ic-md" aria-hidden="true"><use href="#i-search"/></svg></button>
+        <button type="button" class="bbtn" title="Quick capture  ⌘⇧K"><svg class="ic ic-md" aria-hidden="true"><use href="#i-pen"/></svg></button>
+        <button type="button" class="bbtn" title="New conversation  ⌘N"><svg class="ic ic-md" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="bside r"><button type="button" class="bbtn" title="Collapse right panel"><svg class="ic ic-md rt-open" aria-hidden="true"><use href="#i-unfold"/></svg><svg class="ic ic-md rt-closed" aria-hidden="true"><use href="#i-fold"/></svg></button></div>
+    </footer>
+
+    <div class="menu stmenu" data-v="8:status" style="top: 50px; right: 16px">
+      <div class="mi hl"><span class="pd on" style="position:static"></span>Active<span class="sc">automatic</span></div>
+      <div class="mi"><span class="pd away" style="position:static"></span>Away<span class="sc">after 10 min idle</span></div>
+      <div class="mi"><span class="pd dnd" style="position:relative"></span>Do not disturb…<span class="sc">1 h · today · until…</span></div>
+      <hr />
+      <div class="stin">Set a status: "Sleeping until 6"</div>
+      <div class="stnote">Do not disturb turns on by itself during Focus and quiet hours.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var html = document.documentElement;
+  var q = new URLSearchParams(location.search);
+  var FRAMES = 8;
+  var VARS = {
+    1: { lab: 'Density', opts: [['comfortable', 'Comfortable'], ['compact', 'Compact'], ['dense', 'Dense']] },
+    2: { lab: '"New" line', opts: [['pill', 'Line + pill (recommended)'], ['center', 'Centred "New"'], ['tint', 'Unread rows tinted'], ['chip', 'Only a floating chip']] },
+    3: { lab: 'Composer', opts: [['one', 'One row (recommended)'], ['two', 'Two rows (Slack)']] },
+    4: { lab: 'Replies', opts: [['slack', 'Slack today: the mess'], ['stream', 'Proposed: replies in the stream'], ['chainrow', 'Proposed: a tangled chain folds'], ['every', 'Display option: never chainrow']] },
+    5: { lab: 'Chain', opts: [['chain', 'Read the chain on the right'], ['main', 'Reply from the main box']] },
+    6: { lab: 'Tidy up', opts: [['menu', 'A stray message: Reply to…'], ['wrap', 'Wrap up a chain'], ['moved', 'Moved, with Undo']] },
+    7: { lab: 'Dot colour', opts: [['green', 'Green'], ['white', 'White'], ['light', 'Light grey']] },
+    8: { lab: 'Status', opts: [['status', 'Your status menu'], ['card', 'Person card'], ['long', 'Person card, long task name']] }
+  };
+  var CAP = {
+    '1:comfortable': 'CH29f · Slack calm as the base: centred date separators, 24 px before a new person, chips on the text\'s baseline, the conversation fades at both ends.',
+    '1:compact': 'CH29f · Compact: 20 px before a new person; text stays 15 px.',
+    '1:dense': 'CH29f · Dense: 16 px before a new person; avatars 24.',
+    '2:center': 'CH29d · "New" centred on a faint accent line, like the date separators.',
+    '2:pill': 'CH29d · A hairline with a small accent "New" pill at the right (Slack\'s shape, without red).',
+    '2:tint': 'CH29d · No line: unread messages carry a faint accent wash until you\'ve read them.',
+    '2:chip': 'CH29d · No line in the stream; a floating "2 new messages" chip takes you there.',
+    '3:one': 'CH29e · One row: attach · text · @ · emoji · send. Formatting appears when you select text.',
+    '3:two': 'CH29e · Two rows (Slack): the text, then a row of tools under it.',
+    '4:slack': 'CH30a · How Slack works today, and the mess it creates.',
+    '4:stream': 'CH30a · Replies stay in the stream with a quote; no thread to open, nothing hidden.',
+    '4:chainrow': 'CH30b · A tangled chain folds into one row, kept at the bottom while it\'s active.',
+    '4:every': 'CH30b · The same with folding off (a personal display option).',
+    '5:chain': 'CH30 · Clicking "6 replies" or the folded row opens the chain on the right.',
+    '5:main': 'CH30 · Or reply from the main box: "Replying to Sofia" until Esc.',
+    '6:menu': 'CH30c · Decided: a message sent outside its chain can be attached afterwards (Reply to…), no delete-and-resend.',
+    '6:wrap': 'CH30c · Wrap up: the chain folds for good, showing the reply that settled it.',
+    '6:moved': 'CH30c · Moving leaves a visible line with Undo; nothing pings.',
+    '7:green': 'CH28a · Green for "here" (the convention).',
+    '7:white': 'CH28a · White for "here": the brightest neutral.',
+    '7:light': 'CH28a · Light grey for "here".',
+    '8:status': 'CH28c · Your status: Active (automatic), Away, Do not disturb (by hand, or on its own in Focus and quiet hours), plus a short status text.',
+    '8:card': 'CH28b · The person card, fixed: the state on one line, the task on its own line.',
+    '8:long': 'CH28b · A very long task name gives way with an ellipsis; the time and the task number never do.'
+  };
+  var S = { frame: Math.min(FRAMES, Math.max(1, parseInt(q.get('frame'), 10) || 1)), v: {} };
+  Object.keys(VARS).forEach(function (f) { S.v[f] = VARS[f].opts[0][0]; });
+  if (q.get('v') && VARS[S.frame] && VARS[S.frame].opts.some(function (o) { return o[0] === q.get('v'); })) S.v[S.frame] = q.get('v');
+  function visible(el, f, v) {
+    if (el.dataset.f && el.dataset.f.split(' ').indexOf(String(f)) === -1) return false;
+    if (el.dataset.v) {
+      var mine = el.dataset.v.split(' ').filter(function (t) { return t.split(':')[0] === String(f); });
+      if (!el.dataset.f && mine.length === 0) return false;
+      if (mine.length && !mine.some(function (t) { return t.split(':')[1] === v; })) return false;
+    }
+    return true;
+  }
+  function apply() {
+    var f = S.frame, v = S.v[f];
+    html.dataset.frame = f;
+    html.dataset.look = 'a';
+    html.dataset.dens = f === 1 ? v : 'comfortable';
+    html.dataset.newl = f === 2 ? v : 'pill';
+    html.dataset.comp = f === 3 ? v : 'one';
+    html.dataset.pres = f === 7 ? v : 'white';
+    document.querySelectorAll('[data-f], [data-v]').forEach(function (el) { el.hidden = !visible(el, f, v); });
+    document.getElementById('mMike').classList.toggle('hov', false);
+    document.querySelectorAll('#frameSw [data-go]').forEach(function (b) { b.classList.toggle('on', +b.dataset.go === f); });
+    var def = VARS[f];
+    document.getElementById('varLab').textContent = def ? def.lab : '';
+    var seg = document.getElementById('varSeg'); seg.innerHTML = '';
+    if (def) def.opts.forEach(function (o) { var b = document.createElement('button'); b.type = 'button'; b.textContent = o[1]; b.dataset.var = o[0]; if (o[0] === v) b.classList.add('on'); seg.appendChild(b); });
+    document.getElementById('cap').textContent = CAP[f + ':' + v] || '';
+    var u = new URL(location.href); u.searchParams.set('frame', f); u.searchParams.set('v', v); history.replaceState(null, '', u);
+  }
+  function cycleVar() { var def = VARS[S.frame]; if (!def) return; var i = def.opts.findIndex(function (o) { return o[0] === S.v[S.frame]; }); S.v[S.frame] = def.opts[(i + 1) % def.opts.length][0]; apply(); }
+  document.addEventListener('click', function (e) {
+    var g = e.target.closest('[data-go]'); if (g) { S.frame = +g.dataset.go; apply(); return; }
+    var vb = e.target.closest('#varSeg [data-var]'); if (vb) { S.v[S.frame] = vb.dataset.var; apply(); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var n = parseInt(e.key, 10); if (n >= 1 && n <= FRAMES) { S.frame = n; apply(); return; }
+    if (e.key === 'v' || e.key === 'V') cycleVar();
+  });
+  apply();
+  function toBottom() { document.querySelectorAll('.msgs').forEach(function (m) { m.scrollTop = m.scrollHeight; }); }
+  toBottom(); setTimeout(toBottom, 60); window.addEventListener('load', toBottom); if (document.fonts && document.fonts.ready) document.fonts.ready.then(toBottom); document.addEventListener('keydown', function () { setTimeout(toBottom, 0); }); document.addEventListener('click', function () { setTimeout(toBottom, 0); });
+})();
+</script>
+</body>
+</html>

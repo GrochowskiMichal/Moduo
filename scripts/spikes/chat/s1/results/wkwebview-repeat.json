@@ -1,0 +1,745 @@
+{
+  "engine": "wkwebview-repeat",
+  "libs": {
+    "tanstack": {
+      "at": "2026-10-14T13:19:35.369Z",
+      "fingerprint": {
+        "engine": "wkwebview-repeat",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+        "platform": "MacIntel",
+        "maxTouchPoints": 0,
+        "devicePixelRatio": 2,
+        "viewport": "1280x840",
+        "overflowAnchorSupported": true,
+        "scrollendEvent": true,
+        "entryTypes": "event,first-input,largest-contentful-paint,mark,measure,navigation,paint,resource",
+        "tauri": false,
+        "brands": "",
+        "build": "development"
+      },
+      "results": [
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "prepend-honest",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "anchor row moves ≤ 1 px on each of 10 prepends of 50",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "maxFinalDrift": 0,
+            "perPrependMax": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            "rowsAtEnd": 550
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "fold-mid",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a 6-reply chain folding mid-screen: the row above it moves ≤ 1 px (fold and unfold)",
+          "pass": true,
+          "metrics": {
+            "foldMaxDrift": 0,
+            "unfoldMaxDrift": 0
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "edit-above-scrolling-up",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a row above the viewport grows by ~3 lines: the rows in view move ≤ 1 px beyond the scroll",
+          "pass": true,
+          "metrics": {
+            "maxUnexpected": 0,
+            "total": 0,
+            "jumps": [],
+            "edited": "m09491"
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "arrive-reading-history",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "a message arrives while reading history: no pull (anchor ≤ 1 px)",
+          "pass": true,
+          "metrics": {
+            "maxDrift": 0,
+            "finalDrift": 0,
+            "gapBefore": 28677,
+            "gapAfter": 28951
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "density-anchored",
+          "lib": "tanstack",
+          "config": "recommended",
+          "bar": "density switch: anchor ≤ 1 px; then scrolling up through rows measured at the old density: ≤ 1 px",
+          "pass": true,
+          "metrics": {
+            "driftBySwitch": {
+              "dense": 0,
+              "compact": 0,
+              "comfortable": 0
+            },
+            "anchorMissingAtFrame": {
+              "dense": -1,
+              "compact": -1,
+              "comfortable": -1
+            },
+            "scrollUpMaxUnexpected": 0,
+            "scrollUpJumps": []
+          }
+        },
+        {
+          "scenario": "max-elements",
+          "lib": "tanstack",
+          "config": "all",
+          "bar": "≤ 3,000 elements in the stream",
+          "pass": true,
+          "metrics": {
+            "maxElements": 192,
+            "where": "recommended/arrive-history"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -71,6 +71,29 @@ describe("entityOpenTarget", () => {
     });
   });
 
+  it("lands a chat notice on its message and opens its chain (CV-3, AC1.6)", () => {
+    // A conversation alone opens it.
+    expect(entityOpenTarget("chat_channel", "c1")).toEqual({
+      to: "/chat",
+      search: { c: "c1" },
+      intentId: "c1",
+    });
+    // A message in it: the stream loads a window around it.
+    expect(entityOpenTarget("chat_channel", "c1", { messageId: "m1" })).toEqual({
+      to: "/chat",
+      search: { c: "c1", m: "m1" },
+      intentId: "c1",
+    });
+    // A reply: its chain opens beside it.
+    expect(entityOpenTarget("chat_channel", "c1", { messageId: "m2", chainId: "r1" })).toEqual({
+      to: "/chat",
+      search: { c: "c1", m: "m2", t: "r1" },
+      intentId: "c1",
+    });
+    // A chain without a message names nothing to land on.
+    expect(entityOpenTarget("chat_channel", "c1", { chainId: "r1" })?.search).toEqual({ c: "c1" });
+  });
+
   it("returns null for types with no page yet (payment, unknown)", () => {
     expect(entityOpenTarget("payment", "x")).toBeNull();
     expect(entityOpenTarget("invoice", "x")).toBeNull();

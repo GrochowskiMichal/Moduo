@@ -395,6 +395,41 @@ BEGIN
 END;
 $$;
 
+-- ── Quiet hours and Focus (Chat v2 CV-18's notice gate) ─────────────────────
+-- A reminder always lands in the bell; its push is dropped in quiet hours and
+-- written as before outside them. Focus holds only chat's pings, not reminders.
+DO $$
+DECLARE
+  r text;
+  v_bell integer;
+BEGIN
+  r := test.as_user('E', format($q$SELECT public.user_op_set_time_region(%L::jsonb)$q$,
+    jsonb_build_object('time_zone', 'UTC', 'quiet_hours', jsonb_build_object('on', true,
+      'from', to_char(now() AT TIME ZONE 'UTC' - interval '30 minutes', 'HH24:MI'),
+      'to', to_char(now() AT TIME ZONE 'UTC' + interval '30 minutes', 'HH24:MI')))));
+  PERFORM test.ok(r = 'ok 1', 'E''s quiet hours are now', r);
+  v_bell := test.bell('E', 'tasks.reminder');
+  PERFORM test.new_task('E', 'Quiet call', 'SB');
+  PERFORM test.remind('E', 'Quiet call', now() - interval '1 minute');
+  PERFORM public.tasks__fire_reminders(now(), 500);
+  PERFORM test.ok(test.bell('E', 'tasks.reminder') = v_bell + 1
+              AND (SELECT fired_at IS NOT NULL FROM public.task_reminders WHERE task_id = test.id('Quiet call'))
+              AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries WHERE task_id = test.id('Quiet call')),
+    'in quiet hours a reminder fires into the bell and its push is dropped');
+
+  r := test.as_user('E', $q$SELECT public.user_op_set_time_region('{"quiet_hours": {"on": false}}'::jsonb)$q$);
+  INSERT INTO public.focus_runs (workspace_id, user_id, status, mode, device_id)
+  VALUES (test.id('W'), test.id('E'), 'running', 'per_task', 'db-test-device');
+  PERFORM test.new_task('E', 'Focus call', 'SB');
+  PERFORM test.remind('E', 'Focus call', now() - interval '1 minute');
+  PERFORM public.tasks__fire_reminders(now(), 500);
+  PERFORM test.ok(test.bell('E', 'tasks.reminder') = v_bell + 2
+              AND (SELECT NOT held_for_focus FROM public.notice_deliveries WHERE task_id = test.id('Focus call')),
+    'outside quiet hours a reminder pushes as before, during Focus too (Focus holds only chat)', r);
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE user_id = test.id('E') AND status = 'running';
+END;
+$$;
+
 -- ── Account erasure covers the new tables ───────────────────────────────────
 DO $$
 DECLARE

@@ -21,6 +21,7 @@ import {
   CopyPlus,
   Ellipsis,
   FolderKanban,
+  MessageSquare,
   Paperclip,
   UserRound,
 } from "lucide-react";
@@ -131,6 +132,7 @@ export function ProjectPanel({
   onArchive,
   onDuplicate,
   onEditStatuses,
+  onStartConversation,
   chat,
 }: {
   project: Bucket | null;
@@ -150,6 +152,8 @@ export function ProjectPanel({
   /** The title row's ⋯ → Statuses… (TV-D9; MOD-150 moved it here from the
    *  plan header's ⋯). Shown only to someone who may edit the project. */
   onEditStatuses?: (project: Bucket) => void;
+  /** The same ⋯ → Start a conversation (Chat, CV-13); absent without chat or edit access. */
+  onStartConversation?: (project: Bucket) => void;
   /** Chat's slots (empty until Chat fills them). */
   chat?: ProjectChatSlots;
 }) {
@@ -178,6 +182,7 @@ export function ProjectPanel({
       onArchive={onArchive}
       onDuplicate={onDuplicate}
       onEditStatuses={onEditStatuses}
+      onStartConversation={onStartConversation}
       chat={chat}
     />
   );
@@ -196,6 +201,7 @@ function ProjectOverview({
   onArchive,
   onDuplicate,
   onEditStatuses,
+  onStartConversation,
   chat,
 }: {
   project: Bucket;
@@ -210,6 +216,7 @@ function ProjectOverview({
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
   onEditStatuses?: (project: Bucket) => void;
+  onStartConversation?: (project: Bucket) => void;
   chat?: ProjectChatSlots;
 }) {
   const { byId } = useAssignees();
@@ -335,17 +342,25 @@ function ProjectOverview({
           the centre's title (MOD-150; it changes round-2b's `.pmore`). The
           title still opens this view in one click (MOD-131), and a Board
           column's header keeps its own "Edit statuses…". */}
-      {allowed && onEditStatuses ? (
+      {allowed && (onEditStatuses || onStartConversation) ? (
         <TitleActions>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <IconButton icon={Ellipsis} label="Project actions" tooltip={null} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onSelect={() => onEditStatuses(project)}>
-                <CircleDashed aria-hidden />
-                Statuses…
-              </DropdownMenuItem>
+              {onEditStatuses ? (
+                <DropdownMenuItem onSelect={() => onEditStatuses(project)}>
+                  <CircleDashed aria-hidden />
+                  Statuses…
+                </DropdownMenuItem>
+              ) : null}
+              {onStartConversation ? (
+                <DropdownMenuItem onSelect={() => onStartConversation(project)}>
+                  <MessageSquare aria-hidden />
+                  Start a conversation
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </TitleActions>

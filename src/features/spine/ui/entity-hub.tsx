@@ -31,6 +31,7 @@ import {
   type RelationKind,
 } from "@/lib/entity-links";
 import { cn } from "@/lib/utils";
+import { MentionedInLines } from "../../chat/mentioned-in";
 import type { HubStatus } from "../hooks/use-entity-hub";
 import { resolveEntityIcon } from "../icon-map";
 import { allowedKinds } from "../kind-constraints";
@@ -48,6 +49,8 @@ export type EntityHubProps = {
   onUnlink?: (link: EntityLink) => void;
   onRetry?: () => void;
   className?: string;
+  /** The item this hub is for: its "Mentioned in" lines show under the links (CV-10). */
+  focus?: EntityRef;
 };
 
 export function EntityHub({
@@ -60,7 +63,9 @@ export function EntityHub({
   onUnlink,
   onRetry,
   className,
+  focus,
 }: EntityHubProps) {
+  const mentioned = focus ? <MentionedInLines entityType={focus.type} entityId={focus.id} /> : null;
   if (status === "loading") {
     return (
       <div className={cn("space-y-4", className)} aria-busy="true">
@@ -92,6 +97,7 @@ export function EntityHub({
     return (
       <div className={className}>
         <EmptyState title="Nothing linked yet" description="Drag, @mention, or /ref to connect." />
+        {mentioned}
       </div>
     );
   }
@@ -109,6 +115,7 @@ export function EntityHub({
           onUnlink={onUnlink}
         />
       ))}
+      {mentioned}
     </div>
   );
 }

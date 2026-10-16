@@ -6,7 +6,13 @@
 // Pure + deterministic; the runtime does the two reads (links + a batched
 // registry lookup) and hands them here.
 
-import type { EntityLink, EntityRecord, LinkOrigin, RelationKind } from "../../lib/entity-links";
+import {
+  type EntityLink,
+  type EntityRecord,
+  isChatEnd,
+  type LinkOrigin,
+  type RelationKind,
+} from "../../lib/entity-links";
 
 /** One endpoint of a recent link, label/icon resolved from the registry. */
 export type RecentLinkEndpoint = {
@@ -53,14 +59,19 @@ export function shapeRecentLinks(
   links: EntityLink[],
   byKey: Map<string, EntityRecord>,
 ): RecentLinkItem[] {
-  return links
-    .map((link) => ({
-      id: link.id,
-      relationKind: link.relationKind,
-      origin: link.origin,
-      createdAt: link.createdAt,
-      source: endpoint(link.sourceType, link.sourceId, byKey),
-      target: endpoint(link.targetType, link.targetId, byKey),
-    }))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+  return (
+    links
+      // Chat's own links ("Mentioned in", "Became a task") show in chat and on
+      // the item, not as workspace link activity (CV-10).
+      .filter((link) => !isChatEnd(link.sourceType) && !isChatEnd(link.targetType))
+      .map((link) => ({
+        id: link.id,
+        relationKind: link.relationKind,
+        origin: link.origin,
+        createdAt: link.createdAt,
+        source: endpoint(link.sourceType, link.sourceId, byKey),
+        target: endpoint(link.targetType, link.targetId, byKey),
+      }))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+  );
 }

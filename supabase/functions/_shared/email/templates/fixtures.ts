@@ -80,6 +80,15 @@ export const EMAIL_FIXTURES: { [K in BuiltEmailKind]: EmailTemplateData[K] } = {
     removedBy: { name: "Anna Carter", email: "anna@northwind.studio" },
     at: "2026-10-08T09:12:00Z",
   },
+  chat_waiting: {
+    workspaceName: "Northwind Studio",
+    conversationKind: "dm",
+    conversationName: null,
+    senderName: "Anna Carter",
+    count: 1,
+    text: "Can you send the logo files before Friday?",
+    path: "/chat?c=5e2b9c1d-7a4f-4e8b-b3c6-0d9f1a2e4b7c&m=8f0c2a4e-1b6d-4c3a-9e7f-2d5b8a1c6e90",
+  },
 };
 
 /** A label for each kind in the gallery, matching the IDs in the ratified email set. */
@@ -97,4 +106,5 @@ export const EMAIL_LABELS: Record<BuiltEmailKind, string> = {
   workspace_invite: "B3 · Workspace invite",
   workspace_owner: "B4 · You're the owner now",
   workspace_removed: "B5 · Removed from a workspace",
+  chat_waiting: "Chat · Messages waiting after an hour away",
 };

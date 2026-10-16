@@ -5,6 +5,8 @@
 import { useMemo } from "react";
 
 import { supabaseClient } from "../../lib/runtime.web";
+import { pickerSuffix } from "../../lib/statuses/model";
+import { usePeopleNow } from "../../lib/statuses/store";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../workspaces/workspace-context";
 import { type Assignee, toAssignees } from "./assignee-options";
@@ -28,15 +30,18 @@ export function useAssignees(): {
   currentUserId: string | null;
   byId: (id: string | null | undefined) => Assignee | null;
 } {
-  const { members } = useWorkspace();
+  const { members, selectedWorkspaceId } = useWorkspace();
   const { userId } = useAuth();
+  // Statuses come from Chat's people-now (CV-17); the app chrome holds it.
+  const now = usePeopleNow(userId, selectedWorkspaceId ?? null);
   return useMemo(() => {
-    const list = toAssignees(members, userId);
+    const at = new Date();
+    const list = toAssignees(members, userId, (id) => pickerSuffix(now.people.get(id), at));
     const map = new Map(list.map((a) => [a.userId, a]));
     return {
       assignees: list,
       currentUserId: userId,
       byId: (id) => (id ? (map.get(id) ?? null) : null),
     };
-  }, [members, userId]);
+  }, [members, userId, now.people]);
 }

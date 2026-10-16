@@ -501,6 +501,35 @@ describe("deleteAccount — erasing what the FK cascade can't reach", () => {
     expect([...db.bucket("attachments").files]).toEqual(["ws-team/att-3/original.png"]);
   });
 
+  it("removes the custom emoji images of every owned workspace and keeps other people's", async () => {
+    const { db, deps } = world();
+    for (const path of [
+      "ws-solo/slot-1.gif",
+      "ws-solo/slot-1.poster.png",
+      "ws-trashed/slot-2.png",
+      "ws-team/slot-3.png",
+      "ws-team/slot-3.poster.png",
+    ]) {
+      db.bucket("chat-emoji").files.add(path);
+    }
+
+    await deleteAccount(deps, me);
+
+    expect([...db.bucket("chat-emoji").files].sort()).toEqual([
+      "ws-team/slot-3.png",
+      "ws-team/slot-3.poster.png",
+    ]);
+  });
+
+  it("treats a missing chat-emoji bucket (before CV-20's migration) as nothing to remove", async () => {
+    const { db, deps } = world();
+    db.missingBuckets.add("chat-emoji");
+
+    const result = await deleteAccount(deps, me);
+
+    expect(result.status).toBe("deleted");
+  });
+
   it("treats a missing attachments table (before AT-1's migration) as nothing to remove", async () => {
     const { db, deps } = world();
     db.missingTables.add("attachments");

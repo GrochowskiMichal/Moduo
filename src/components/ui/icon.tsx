@@ -1,6 +1,7 @@
 import {
   BarChart2,
   Bell,
+  BellOff,
   Calendar,
   CheckSquare,
   Clock3,
@@ -84,6 +85,7 @@ function GroundRootsIcon({
 
 export type IconName =
   | "bell"
+  | "bell-off"
   | "edit-2"
   | "settings"
   | "log-out"
@@ -124,6 +126,7 @@ function resolveSize(size: IconSize | number | undefined): number {
 
 const ICONS: Record<IconName, any> = {
   bell: Bell,
+  "bell-off": BellOff,
   "edit-2": Edit2,
   settings: Settings,
   "log-out": LogOut,

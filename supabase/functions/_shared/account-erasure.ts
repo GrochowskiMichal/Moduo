@@ -17,8 +17,10 @@
  *                     `avatars` bucket (public files stay readable by URL until removed),
  *                     and every file the owned workspaces' `attachments` rows name in the
  *                     private `attachments` bucket (AT-1: the cascade takes the rows, never
- *                     the objects). Files the user put in other people's workspaces stay,
- *                     uploader cleared by the FK.
+ *                     the objects), and the owned workspaces' custom emoji images in the
+ *                     private `chat-emoji` bucket (CV-20). Files the user put in other
+ *                     people's workspaces stay, uploader cleared by the FK (an emoji's
+ *                     adder by account_erase_workspace_data).
  *   4. booking        the user's booking links, the bookings and busy windows tied to
  *                     them, and their co-host seats on other people's links. No FK.
  *   5. integrations   user_integrations: the encrypted Google / Zoom tokens. No FK.
@@ -479,6 +481,23 @@ async function removeStoredImages(deps: ErasureDeps, userId: string): Promise<vo
   }
   await removePaths(avatars, paths);
   await removeAttachments(deps, owned.map((w) => w.id));
+  await removeEmojiImages(deps, owned.map((w) => w.id));
+}
+
+/** Custom emoji images (CV-20), stored as `<workspace>/…` in the private `chat-emoji` bucket. */
+const CHAT_EMOJI_BUCKET = "chat-emoji";
+
+/** The owned workspaces' custom emoji images: the cascade takes the rows, never
+ *  the objects. Emoji the user added to other people's workspaces stay there. */
+async function removeEmojiImages(deps: ErasureDeps, workspaceIds: string[]): Promise<void> {
+  if (workspaceIds.length === 0) return;
+  const bucket = deps.db.storage.from(CHAT_EMOJI_BUCKET);
+  // Before CV-20's migration there is no bucket, so nothing to remove.
+  const probe = await bucket.list("", { limit: 1, offset: 0 });
+  if (probe.error && /bucket not found/i.test(probe.error.message)) return;
+  const paths: string[] = [];
+  for (const id of workspaceIds) paths.push(...(await listFiles(bucket, id)));
+  await removePaths(bucket, paths);
 }
 
 /** Attachments of the owned workspaces (AT-1), by their rows: one select per

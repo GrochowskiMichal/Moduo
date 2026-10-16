@@ -10,7 +10,14 @@
 
 import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { useReturnFocus } from "../../hooks/use-return-focus";
-import { formatShortcut, onShortcut, SHORTCUTS, type ShortcutId } from "../../lib/shortcuts";
+import {
+  type ChatKeyScope,
+  chatKeyRows,
+  formatShortcut,
+  onShortcut,
+  SHORTCUTS,
+  type ShortcutId,
+} from "../../lib/shortcuts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Kbd } from "../ui/kbd";
 
@@ -75,9 +82,20 @@ export function GlobalShortcutsDialog() {
     });
   }
 
+  // Chat's key map (chat v2 §16, CV-22), grouped by where each key works.
+  const chatGroups = new Map<ChatKeyScope, ReturnType<typeof chatKeyRows>>();
+  for (const row of chatKeyRows()) {
+    const list = chatGroups.get(row.scope) ?? [];
+    list.push(row);
+    chatGroups.set(row.scope, list);
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-sm" onCloseAutoFocus={returnFocus}>
+      <DialogContent
+        className="max-h-[85vh] max-w-md overflow-y-auto"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>Move around Moduo without the mouse.</DialogDescription>
@@ -90,6 +108,26 @@ export function GlobalShortcutsDialog() {
             </Fragment>
           ))}
         </dl>
+        <section aria-label="Chat" className="flex flex-col gap-2" data-shortcuts-chat="">
+          <h3 className="font-display text-sm text-foreground">Chat</h3>
+          {[...chatGroups.entries()].map(([scope, list]) => (
+            <div key={scope} className="flex flex-col gap-1.5">
+              <h4 className="text-xs text-muted-foreground">{scope}</h4>
+              <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1.5">
+                {list.map((row) => (
+                  <Fragment key={`${scope}:${row.desc}`}>
+                    <dt className="flex flex-wrap items-center gap-1">
+                      {row.keys.map((k) => (
+                        <Kbd key={k}>{k}</Kbd>
+                      ))}
+                    </dt>
+                    <dd className="text-sm text-muted-foreground">{row.desc}</dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
+          ))}
+        </section>
       </DialogContent>
     </Dialog>
   );
