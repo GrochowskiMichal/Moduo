@@ -457,9 +457,8 @@ function ProjectOverview({
                 <li key={w.task.id}>
                   <OverviewTaskButton task={w.task} onOpen={onOpenTask}>
                     <WaitingMeta
-                      who={`${waitingWho(w.entries[0], sentenceNameOf)}${
-                        w.entries.length > 1 ? ` +${w.entries.length - 1}` : ""
-                      }`}
+                      who={waitingWho(w.entries[0], sentenceNameOf)}
+                      more={w.entries.length - 1}
                       day={formatDay(w.since)}
                     />
                   </OverviewTaskButton>
@@ -734,17 +733,19 @@ function OverviewTaskButton({
  * What a waiting task waits on and since when, on its title's first line.
  * Who or what is cut short once the title is down to its floor, so a long
  * label ("on the analytics export") no longer squeezes the title into a
- * column a few letters wide; the day is never cut (MOD-152, now that Waiting
- * leads the lists).
+ * column a few letters wide; "+1" (it waits on more) and the day are never
+ * cut (MOD-152, now that Waiting leads the lists).
  */
-function WaitingMeta({ who, day }: { who: string; day: string }) {
+function WaitingMeta({ who, more, day }: { who: string; more: number; day: string }) {
   return (
     <span className="flex h-lh min-w-0 items-center">
       <span className="flex min-w-0 text-xs text-muted-foreground">
         <span className="truncate" title={who}>
           {who}
         </span>
-        <span className="shrink-0 whitespace-pre tabular-nums"> · {day}</span>
+        <span className="shrink-0 whitespace-pre tabular-nums">
+          {more > 0 ? ` +${more}` : ""} · {day}
+        </span>
       </span>
     </span>
   );

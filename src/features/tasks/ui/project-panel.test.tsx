@@ -315,6 +315,22 @@ describe("a row's first line (MOD-153)", () => {
     expect(day.className).toContain("shrink-0");
   });
 
+  it('keeps "+1" with the day when a task waits on more than one thing', () => {
+    const more: TaskWaitingEntry = { ...WAIT, id: "w2", label: "the logo files" };
+    render(
+      <TooltipProvider>
+        <ProjectPanel project={PROJECT} tasks={[TASK]} sections={[]} waiting={[WAIT, more]} />
+      </TooltipProvider>,
+    );
+    const row = within(sectionOf("Waiting")).getByRole("button", {
+      name: /Draft the launch post/,
+    });
+    // The label may be cut short; the count of the others never is.
+    expect(within(row).getByText("on the copy").className).toContain("truncate");
+    const tail = within(row).getByText(/^\+1 · /);
+    expect(tail.className).toContain("shrink-0");
+  });
+
   it("puts Recently's day at the top, on the first line", () => {
     render(
       <TooltipProvider>
