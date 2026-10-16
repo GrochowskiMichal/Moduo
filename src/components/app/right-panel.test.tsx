@@ -386,10 +386,12 @@ describe("the title row's actions slot (MOD-118 follow-up)", () => {
 describe("the title row's frame (MOD-121)", () => {
   const pulled = /(^|\s)-m[lxtrb]?-/;
 
-  it("is a row tall, and the ▾ chip is a row tall with no pull into the padding", () => {
+  // The chip is a small row (28 / 26 / 24), 2 px over the 26 px buttons beside
+  // it as round-2b frame 7 draws it; a full row (36) dwarfed them.
+  it("is a row tall, and the ▾ chip is a small row tall with no pull into the padding", () => {
     renderPanel();
     const trigger = screen.getByRole("button", { name: "Panel view: Tasks" });
-    expect(trigger.style.height).toBe("var(--row-h)");
+    expect(trigger.style.height).toBe("var(--row-h-sm)");
     expect(trigger.className).toMatch(/(^|\s)px-2(\s|$)/);
     expect(trigger.className).not.toMatch(pulled);
     const row = trigger.closest("div");
