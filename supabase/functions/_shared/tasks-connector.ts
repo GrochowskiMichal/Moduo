@@ -5,6 +5,7 @@
  */
 
 import { isOpenTask, normalizeTaskStatusCategory } from "./contracts/vocabularies.ts";
+import { descriptionToMarkdown, markdownExcerpt } from "./description-markdown.ts";
 import { assigneeIdOf, FORMER_MEMBER, taskPeople } from "./task-people.ts";
 
 type Row = Record<string, any>;
@@ -217,8 +218,10 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   };
   const subtasks = data.subtaskCounts.get(t.id);
   if (subtasks) out.subtask_count = subtasks;
-  const description = (t.description ?? "").trim();
-  if (description) out.description = full ? description : description.slice(0, 280);
+  // Markdown, whichever way it's stored: an older description is the editor's
+  // HTML, read as Markdown here (call #15, MOD-120); the excerpt is cut after.
+  const description = descriptionToMarkdown(t.description).trim();
+  if (description) out.description = full ? description : markdownExcerpt(description, 280);
   if (t.parent_id && data.byId.has(t.parent_id)) out.parent_id = t.parent_id;
   // TV-D9: the status's category (backlog · todo · in_progress · done ·
   // wont_do) and the due date as a date, the same for everyone (due_date is
