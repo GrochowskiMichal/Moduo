@@ -3,6 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 import {
   DEV,
   devWorkspace,
+  removeRun,
   rest,
   rpc,
   runTag,
@@ -42,6 +43,13 @@ test.beforeAll(async () => {
       position: `z${tag}`,
     },
   });
+});
+
+/** The project is soft-deleted at the end (with its sections and tasks, and the
+ *  Inbox ones tagged with this run) so the shared dev workspace stays under
+ *  the app's 500-project first-load read. */
+test.afterAll(async () => {
+  await removeRun(ws.id, tag, [project.id]);
 });
 
 async function createTask(title: string, bucketId = project.id): Promise<TaskRow> {

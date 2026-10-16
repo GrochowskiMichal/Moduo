@@ -207,7 +207,7 @@ describe("removed from a workspace (B5)", () => {
 });
 
 describe("the worker's templates", () => {
-  it("send the workspace kinds and keep every kind already live (TX-3 to TX-6)", () => {
+  it("send the workspace kinds and keep every kind already live (TX-3 to TX-6, chat v2's CV-6a)", () => {
     expect(Object.keys(OUTBOX_TEMPLATES).sort()).toEqual(
       [
         "booking_guest_added",
@@ -217,6 +217,7 @@ describe("the worker's templates", () => {
         "booking_guest_reminder",
         "booking_host_guest_cancelled",
         "booking_host_new",
+        "chat_waiting",
         "ops_alert",
         "waitlist_invite",
         "workspace_invite",

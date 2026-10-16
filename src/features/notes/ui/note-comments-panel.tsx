@@ -20,6 +20,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { commentAuthorName, relativeTime } from "@/features/spine/comments";
 import { useCommentPeople } from "@/features/spine/hooks/use-comment-people";
 import { useCommentThread } from "@/features/spine/hooks/use-comment-thread";
+import { WithCommentReactions } from "@/features/spine/ui/comment-reactions";
 import { CommentBody, CommentCard, CommentComposer } from "@/features/spine/ui/comments-panel";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { anchorStore, useNoteAnchors } from "../comments/anchor-store";
@@ -123,30 +124,50 @@ export function NoteCommentsPanel({
   const renderComment = (c: SpineComment) => {
     const parsed = parseQuoteComment(c.body);
     return (
-      <CommentCard
+      // CV-7c: the same reactions as task comments and chat (CH49).
+      <WithCommentReactions
         key={c.id}
-        author={c.authorKind === "api_key" || !c.createdBy ? null : people.personOf(c.createdBy)}
-        // An app's comment shows the plug mark, not the "?" (MOD-149).
-        app={c.authorKind === "api_key"}
-        authorName={commentAuthorName(c, currentUserId, people.nameOf)}
-        time={relativeTime(c.createdAt)}
-        timeTitle={new Date(c.createdAt).toLocaleString()}
+        comment={c}
+        thread={thread}
+        currentUserId={currentUserId}
+        nameOf={people.nameOf}
+        canReact={canComment}
       >
-        {parsed.quote ? (
-          <button
-            type="button"
-            onClick={() => onScrollToQuote(parsed.quote!)}
-            className="mb-1.5 flex w-full gap-1.5 rounded-md border-l-2 border-border bg-muted/50 px-2 py-1 text-left text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            title="Jump to the quoted text"
+        {(reactions) => (
+          <CommentCard
+            actions={reactions.button}
+            footer={reactions.chips}
+            author={
+              c.authorKind === "api_key" || !c.createdBy ? null : people.personOf(c.createdBy)
+            }
+            // An app's comment shows the plug mark, not the "?" (MOD-149).
+            app={c.authorKind === "api_key"}
+            authorName={commentAuthorName(c, currentUserId, people.nameOf)}
+            time={relativeTime(c.createdAt)}
+            timeTitle={new Date(c.createdAt).toLocaleString()}
           >
-            <QuoteIcon className="mt-0.5 size-3 shrink-0" aria-hidden />
-            <span className="line-clamp-3">{parsed.quote}</span>
-          </button>
-        ) : null}
-        {parsed.text ? (
-          <CommentBody text={parsed.text} mentionNames={people.names} selfName={selfName} />
-        ) : null}
-      </CommentCard>
+            {parsed.quote ? (
+              <button
+                type="button"
+                onClick={() => onScrollToQuote(parsed.quote!)}
+                className="mb-1.5 flex w-full gap-1.5 rounded-md border-l-2 border-border bg-muted/50 px-2 py-1 text-left text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                title="Jump to the quoted text"
+              >
+                <QuoteIcon className="mt-0.5 size-3 shrink-0" aria-hidden />
+                <span className="line-clamp-3">{parsed.quote}</span>
+              </button>
+            ) : null}
+            {parsed.text ? (
+              <CommentBody
+                text={parsed.text}
+                mentionNames={people.names}
+                selfName={selfName}
+                workspaceId={c.workspaceId}
+              />
+            ) : null}
+          </CommentCard>
+        )}
+      </WithCommentReactions>
     );
   };
 

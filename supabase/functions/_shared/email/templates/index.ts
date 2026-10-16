@@ -22,6 +22,7 @@ import {
   bookingHostGuestCancelledEmail,
   bookingHostNewEmail,
 } from "./booking.ts";
+import { type ChatWaitingData, chatWaitingEmail } from "./chat-waiting.ts";
 import { type OpsAlertData, opsAlertEmail } from "./ops-alert.ts";
 import { type WaitlistInviteData, waitlistInviteEmail } from "./waitlist-invite.ts";
 import {
@@ -36,6 +37,7 @@ import {
 export { AUTH_CODE_VALID_MINUTES } from "./auth-code.ts";
 export { EMAIL_RUNBOOK_URL, OPS_ALERT_RECIPIENT, type OpsAlertData, parseOpsAlertPayload } from "./ops-alert.ts";
 export { BOOKING_QUEUED, BOOKING_SETTINGS_URL, type BookingEmailData, parseBookingPayload } from "./booking.ts";
+export { type ChatWaitingData, parseChatWaitingPayload } from "./chat-waiting.ts";
 export {
   MAC_DOWNLOAD_URL,
   parseWaitlistInvitePayload,
@@ -72,6 +74,7 @@ export interface EmailTemplateData {
   workspace_invite: WorkspaceInviteData;
   workspace_owner: WorkspaceOwnerData;
   workspace_removed: WorkspaceRemovedData;
+  chat_waiting: ChatWaitingData;
 }
 
 export type BuiltEmailKind = keyof EmailTemplateData & EmailKind;
@@ -90,6 +93,7 @@ export const EMAIL_TEMPLATES: { [K in BuiltEmailKind]: (data: EmailTemplateData[
   workspace_invite: workspaceInviteEmail,
   workspace_owner: workspaceOwnerEmail,
   workspace_removed: workspaceRemovedEmail,
+  chat_waiting: chatWaitingEmail,
 };
 
 export const BUILT_EMAIL_KINDS = Object.keys(EMAIL_TEMPLATES) as BuiltEmailKind[];

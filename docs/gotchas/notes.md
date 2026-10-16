@@ -103,6 +103,21 @@ Read before working in `src/features/notes/`, Lexical surfaces, import. Index of
 - **`@lexical/markdown` 0.52 merges adjacent non-empty lines into one paragraph with a line break**, and drops blank lines after import. Element transformers still see each line on its own, so a line-based transformer (tables) builds across lines by looking at the previous sibling; two tables separated by a blank line still import as two (the empty paragraph sits between them until the end).
 - **The exporter escapes backslashes**: `C:\new` in, `C:\\new` out, then stable. Assert idempotence after one round trip, not byte equality, for text containing `\`.
 
+## Chat editor and the stored form (CV-0 spike 4)
+
+- **Lexical's list transform merges two adjacent lists of one kind in the editor itself.** Any tree that holds two such lists must merge them too, or the editor-to-stored-to-editor round trip stops matching. → [canonical.ts](../../src/features/chat/markup-v2/canonical.ts), [record](../build/chat-v2/CV-0-S4.md)
+- **`editor.read()` is read-only: building nodes inside it (`$createParagraphNode`) throws.** Take the tree in a read, build the nodes in an `update`. → [lexical.ts](../../src/features/chat/markup-v2/lexical.ts)
+- **`KeyboardEventInit` has no `keyCode`, and WebKit's IME-committing Enter is `keyCode` 229 with `isComposing` false.** A test sets `keyCode` with `Object.defineProperty`, and the send-on-⏎ guard must swallow both `isComposing` and 229, or ⏎ sends in the middle of a Japanese composition in Safari and the desktop app. → [enter.ts](../../src/features/chat/markup-v2/enter.ts)
+
+## Chat composer (CV-7b)
+
+- **Lexical command priorities decide who gets ⏎.** The shared menus take ⏎ / Tab at HIGH with no IME check; a chat-only CRITICAL ⏎ handler must swallow the composing ⏎ first, or an IME commit picks a menu item. (CV-7b)
+- **An edit's "unchanged" check compares with the re-exported body, not the stored string:** a non-canonical body would save a phantom "(edited)" (DF-23's trap again). (CV-7b)
+
+## Chat references (CV-10)
+
+- **A reference inline needs a real uuid:** `serializeBlocks` drops a `{t:'ref'}` with a malformed id, and two paragraphs serialize with one newline. (CV-10)
+
 ## Agent writes (NR-6)
 
 - **Edge Functions can't import the app's notes editor directly.** App sources use extensionless relative imports and bare `lexical`/`yjs` specifiers; Deno resolves neither without sloppy imports and a long import map. The connector lazy-loads a prebuilt single-file bundle instead (`bun run build:notes-doc`, built with Lexical's `production` conditions, ~390 KB). Rebuild it whenever anything under `src/features/notes/editor/` (or the spine chip schema, or a bundled package) changes: `modules/notes.test.ts` "notes-doc bundle is current" fails until you do, and also fails on a hand edit (code hash). Loading it needs env access (lib0 reads `process.env`). (2026-10-14)

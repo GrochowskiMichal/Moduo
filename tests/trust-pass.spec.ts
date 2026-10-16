@@ -5,6 +5,7 @@ import {
   devWorkspace,
   endFocusRuns,
   ensureTeammate,
+  removeRun,
   rest,
   rpc,
   runTag,
@@ -43,6 +44,15 @@ test.beforeAll(async () => {
   tag = runTag();
 });
 
+/** Projects this run made; soft-deleted at the end (with their tasks and the
+ *  Inbox ones tagged with this run) so the shared dev workspace stays under
+ *  the app's 500-project first-load read. */
+const created: string[] = [];
+
+test.afterAll(async () => {
+  await removeRun(ws.id, tag, created);
+});
+
 async function createTask(
   as: Session,
   fields: { title: string; bucketId: string; parentId?: string; status?: string },
@@ -68,6 +78,7 @@ async function createProject(as: Session, name: string): Promise<{ id: string }>
     method: "POST",
     body: { workspace_id: ws.id, owner_id: as.user.id, name, position: `z${tag}` },
   });
+  created.push(row.id);
   return row;
 }
 
@@ -99,7 +110,10 @@ async function openFocus(page: Page) {
     .getByRole("button", { name: /^Focus\b/ })
     .first()
     .click();
-  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible();
+  // Not the loading skeleton (same data-slot, aria-busy): its Now card comes after.
+  await expect(page.locator('[data-slot="focus-view"]:not([aria-busy="true"])')).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 /** Writes the page sends for a task: field saves and intent ops. */

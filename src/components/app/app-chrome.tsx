@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from "sonner";
 import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
-import { useChatBadge } from "../../features/chat/hooks/use-chat-badge";
+import { useChatTab } from "../../features/chat/shell/chat-tab";
 import {
   DASHBOARD_EDIT_CHANGED_EVENT,
   DASHBOARD_PAGER_EVENT,
@@ -50,7 +50,6 @@ import { Icon } from "../ui/icon";
 import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
 import { visibleModuleNavItems } from "./app-chrome-constants";
@@ -64,6 +63,7 @@ import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
 import { NoticeDeliveries } from "./notice-deliveries";
+import { StatusMenu } from "./status-menu";
 import { TasksSyncStatus } from "./sync-status";
 import { TimeRegionPrompt } from "./time-region-prompt";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
@@ -125,15 +125,22 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const { runtime, userEmail, userId } = useAuth();
   // AT-2: pending uploads resume for whoever is signed in.
   useUploadQueueBoot(userId ?? null, runtime);
-  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace } =
+  const { loading, modulePermissions, selectedWorkspaceId, workspaces, selectWorkspace, members } =
     useWorkspace();
   // What a deep link to another workspace needs, without re-adding the listener.
   const workspaceNav = useRef({ selectedWorkspaceId, workspaces, selectWorkspace });
   useLayoutEffect(() => {
     workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
   });
-  // Chat tab badge + app-wide presence (you show as online anywhere in Moduo).
-  const chatBadge = useChatBadge({ runtime, workspaceId: selectedWorkspaceId, userId });
+  // Chat tab: its count, whether it shows, and app-wide presence (you show as
+  // online anywhere in Moduo). It reads the chat store (CV-8a).
+  const chatMemberCount = members.filter((m) => m.isActive && !m.removedAt).length;
+  const chatBadge = useChatTab({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    userId,
+    memberCount: chatMemberCount,
+  });
   // Global capture (Wave-3 Notes AC1): ⌘⇧N → a fresh note from anywhere.
   useShortcut(
     "new-note",
@@ -248,6 +255,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           to?: string;
           search?: Record<string, string>;
           workspaceId?: string;
+          /** A chat notice's message and chain (CV-3). */
+          messageId?: string;
+          chainId?: string;
         }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
@@ -281,7 +291,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         dispatchOpenSettings({ section: detail.id });
         return;
       }
-      const target = entityOpenTarget(detail.type, detail.id ?? "");
+      const target = entityOpenTarget(detail.type, detail.id ?? "", {
+        messageId: detail.messageId,
+        chainId: detail.chainId,
+      });
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,
@@ -301,9 +314,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
   }, [navigate]);
 
+  const chatTabShows = chatBadge.shows;
   const modulesNavItems = useMemo(
-    () => visibleModuleNavItems(modulePermissions),
-    [modulePermissions],
+    () =>
+      visibleModuleNavItems(modulePermissions).filter(
+        (tab) => tab.module !== "chat" || chatTabShows,
+      ),
+    [modulePermissions, chatTabShows],
   );
 
   const navHrefs = useMemo(() => modulesNavItems.map((tab) => tab.href), [modulesNavItems]);
@@ -596,10 +613,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
               }
             />
             <NotificationCenter />
-            <NoticeDeliveries />
+            <NoticeDeliveries chat={chatBadge} />
             {/* Asks once when this device is in another time zone (TV-D14). */}
             <TimeRegionPrompt />
-            <UserMenu
+            {/* Your status and saved ones, Do not disturb, then Settings (CV-17, §15). */}
+            <StatusMenu
+              userId={userId ?? null}
+              workspaceId={selectedWorkspaceId ?? null}
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}
               onOpenSettings={() => dispatchOpenSettings()}

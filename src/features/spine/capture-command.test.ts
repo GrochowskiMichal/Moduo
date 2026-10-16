@@ -65,6 +65,20 @@ describe("createCapturedEntity", () => {
     expect(m.noteCreate).toHaveBeenCalledWith({ workspaceId: "w1", title: "Design review" });
     expect(result.target).toBe("note");
     expect(result.openTo).toBe("/notes");
+    // Its ref, so an opener (chat's `/note`) can put a chip where it asked.
+    expect(result.ref).toEqual({ type: "note", id: "n1" });
+  });
+
+  it("answers an event's ref too (chat's `/event`)", async () => {
+    const m = mockRuntime();
+    const result = await createCapturedEntity({
+      runtime: m.runtime,
+      workspaceId: "w1",
+      target: "event",
+      body: "Review at 3pm",
+      now: REF,
+    });
+    expect(result.ref).toEqual({ type: "event", id: "e1" });
   });
 
   it("captures a contact through contacts.createContact", async () => {

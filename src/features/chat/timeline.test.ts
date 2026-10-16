@@ -1,15 +1,21 @@
 import { describe, expect, it } from "@rstest/core";
 import type { ChatChannel, ChatMessage } from "./model";
 import {
-  badgeCount,
   buildSidebar,
+  buildStream,
   buildTimeline,
   channelTitle,
+  countNewSince,
+  isEmojiOnlyText,
+  lastSeenMessage,
+  localDay,
   mergeMessages,
   normalizeChannelName,
+  readThroughHidden,
   type SidebarEntry,
   toggleReaction,
   upsertMessage,
+  wrappedReplyIds,
 } from "./timeline";
 
 const ME = "me";
@@ -21,21 +27,35 @@ function msg(id: string, createdAt: string, extra: Partial<ChatMessage> = {}): C
     workspaceId: "w",
     channelId: "c",
     parentId: null,
+    replyToId: null,
+    kind: "message",
+    event: null,
+    formatVersion: 2,
     authorId: YOU,
     authorKind: "user",
     authorLabel: null,
     body: id,
     mentionedUserIds: [],
+    mentionedTeamIds: [],
+    mentionsEveryone: false,
     reactions: {},
     replyCount: 0,
     lastReplyAt: null,
     replyUserIds: [],
+    wrappedAt: null,
+    wrappedBy: null,
+    settledId: null,
+    reopenedAt: null,
+    reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
+    decisionAt: null,
+    decisionBy: null,
     editedAt: null,
     deletedAt: null,
     clientId: null,
     createdAt,
+    updatedAt: createdAt,
     ...extra,
   };
 }
@@ -151,6 +171,8 @@ describe("channels", () => {
   it("normalizes names like the SQL op", () => {
     expect(normalizeChannelName("  Design Crit Ñandú! ")).toBe("design-crit-ñandú");
     expect(normalizeChannelName("--a  b--")).toBe("a-b");
+    expect(normalizeChannelName(`${"-".repeat(50_000)}a${"-".repeat(50_000)}`)).toBe("a");
+    expect(normalizeChannelName(`${"a".repeat(79)}-b`)).toBe(`${"a".repeat(79)}-`);
     expect(normalizeChannelName("!!!")).toBe("");
   });
 
@@ -207,7 +229,220 @@ describe("channels", () => {
     expect(s.starred.map((x) => x.channel.id)).toEqual(["star"]);
     expect(s.channels.map((x) => x.channel.id)).toEqual(["alpha", "muted", "zeta"]);
     expect(s.dms.map((x) => x.channel.id)).toEqual(["dm2", "dm1"]);
-    // alpha: 1 mention (default level), zeta: 0 mentions, dm1: 3 unread, muted: 0.
-    expect(badgeCount(entries, () => "mentions")).toBe(4);
+  });
+});
+
+// ── Chat v2's stream (CV-7a) ────────────────────────────────────────────────
+
+describe("read mark, New pill, page boundaries", () => {
+  const T = (min: number) => `2026-10-14T10:${String(min).padStart(2, "0")}:00Z`;
+
+  it("draws a centred day separator per local day and starts a person after 5 minutes", () => {
+    const rows = [
+      msg("a", "2026-10-13T10:00:00Z"),
+      msg("b", T(0)),
+      msg("c", T(1)),
+      msg("d", T(9)),
+      msg("e", T(10), { authorId: ME }),
+    ];
+    const items = buildStream(rows);
+    expect(items.map((i) => i.type)).toEqual([
+      "day",
+      "message",
+      "day",
+      "message",
+      "message",
+      "message",
+      "message",
+    ]);
+    const firsts = items.flatMap((i) => (i.type === "message" ? [[i.key, i.first]] : []));
+    expect(firsts).toEqual([
+      ["a", true],
+      ["b", true],
+      ["c", false],
+      ["d", true],
+      ["e", true],
+    ]);
+    expect(items[0]).toMatchObject({ type: "day", key: `d:${localDay(rows[0]!.createdAt)}` });
+  });
+
+  it("the pill sits before the first unseen message from someone else, never on your own", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("b", T(1)),
+      msg("mine", T(2), { authorId: ME }),
+      msg("c", T(3)),
+      msg("d", T(4)),
+    ];
+    const items = buildStream(rows, { newAfter: { at: T(1), id: "b" }, selfId: ME });
+    const keys = items.map((i) => i.key);
+    expect(keys.indexOf("new")).toBe(keys.indexOf("c") - 1);
+    expect(items[keys.indexOf("c")]).toMatchObject({ first: true });
+    // Newer messages arriving later don't move it.
+    const more = buildStream([...rows, msg("e", T(5))], {
+      newAfter: { at: T(1), id: "b" },
+      selfId: ME,
+    });
+    expect(more.map((i) => i.key).indexOf("new")).toBe(keys.indexOf("new"));
+    // Nothing after the mark: no pill.
+    expect(
+      buildStream(rows, { newAfter: { at: T(4), id: "d" }, selfId: ME }).some(
+        (i) => i.type === "new",
+      ),
+    ).toBe(false);
+  });
+
+  it("two messages with one timestamp both appear, once, and the pill splits them by id", () => {
+    const at = "2026-10-14T10:00:00.123456Z";
+    const rows = [msg("a1", at), msg("a2", at), msg("a2", at)];
+    const items = buildStream(rows, { newAfter: { at, id: "a1" }, selfId: ME });
+    expect(items.map((i) => i.key)).toEqual([`d:${localDay(at)}`, "a1", "new", "a2"]);
+  });
+
+  it("microseconds decide the mark inside one millisecond", () => {
+    const rows = [msg("x", "2026-10-14T10:00:00.123400Z"), msg("y", "2026-10-14T10:00:00.123900Z")];
+    const items = buildStream(rows, {
+      newAfter: { at: "2026-10-14T10:00:00.123500Z", id: "zzz" },
+      selfId: ME,
+    });
+    expect(items.map((i) => i.key).slice(1)).toEqual(["x", "new", "y"]);
+  });
+
+  it("the row past the window's edge sets grouping and the separator but isn't drawn", () => {
+    const rows = [msg("edge", T(0)), msg("a", T(1)), msg("b", T(2))];
+    const items = buildStream(rows, { hasOlder: true });
+    expect(items.map((i) => i.key)).toEqual(["a", "b"]);
+    expect(items[0]).toMatchObject({ first: false });
+  });
+
+  it("a deleted message without replies disappears; with replies it reads as deleted", () => {
+    const rows = [
+      msg("a", T(0), { deletedAt: T(5) }),
+      msg("b", T(1), { deletedAt: T(5), replyCount: 2 }),
+      msg("c", T(2)),
+      msg("h", T(3)),
+    ];
+    const items = buildStream(rows, { hidden: new Set(["h"]) });
+    expect(items.map((i) => [i.type, i.key])).toEqual([
+      ["day", `d:${localDay(T(0))}`],
+      ["deleted", "b"],
+      ["message", "c"],
+    ]);
+    expect(items[2]).toMatchObject({ first: true });
+  });
+
+  it("event lines draw through their own row and break a person's run", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("ev", T(1), { kind: "event", event: { type: "moved_out" }, authorId: null }),
+      msg("b", T(2)),
+    ];
+    const items = buildStream(rows);
+    expect(items.map((i) => i.type)).toEqual(["day", "message", "event", "message"]);
+    expect(items[3]).toMatchObject({ first: true });
+  });
+
+  it("an event line its Undo deleted leaves no trace (CV-16)", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("ev", T(1), {
+        kind: "event",
+        event: { type: "moved_in", ids: ["x"] },
+        deletedAt: T(2),
+      }),
+    ];
+    expect(buildStream(rows).map((i) => i.type)).toEqual(["day", "message"]);
+  });
+
+  it("the mark moves to the last message on screen, skipping unsent sends and events", () => {
+    const rows = [
+      msg("a", T(0)),
+      msg("b", T(1)),
+      msg("ev", T(2), { kind: "event", authorId: null }),
+      msg("s", T(3), { authorId: ME, sendState: "waiting" }),
+    ];
+    const items = buildStream(rows);
+    expect(lastSeenMessage(items, items.length - 1)?.id).toBe("b");
+    expect(lastSeenMessage(items, 1)?.id).toBe("a");
+    expect(lastSeenMessage(items, 0)).toBeNull();
+  });
+
+  it("a reply converted into its root's chain reads with the stream by position", () => {
+    const rows = [
+      msg("root", T(0)),
+      msg("reply", T(1), { parentId: "root", replyToId: "root" }),
+      msg("later", T(2)),
+    ];
+    const items = buildStream(rows, { newAfter: { at: T(1), id: "reply" }, selfId: ME });
+    expect(items.map((i) => i.key).slice(1)).toEqual(["root", "reply", "new", "later"]);
+  });
+
+  it("counts what arrived from others after the last row seen (the floating chip)", () => {
+    const rows = [msg("a", T(0)), msg("b", T(1)), msg("m", T(2), { authorId: ME }), msg("c", T(3))];
+    expect(countNewSince(rows, "a", ME)).toBe(2);
+    expect(countNewSince(rows, "c", ME)).toBe(0);
+    expect(countNewSince(rows, null, ME)).toBe(0);
+    // Hidden replies of a wrapped-up chain can't be scrolled to.
+    expect(countNewSince(rows, "a", ME, new Set(["c"]))).toBe(1);
+  });
+
+  it("the read mark passes the hidden replies after the last row drawn (CV-12)", () => {
+    const rows = [msg("a", T(0)), msg("b", T(1)), msg("c", T(2)), msg("d", T(3))];
+    expect(readThroughHidden(rows, "b", new Set(["c", "d"]))).toBe("d");
+    expect(readThroughHidden(rows, "b", new Set(["c"]))).toBe("b");
+    expect(readThroughHidden(rows, "b", new Set())).toBe("b");
+    expect(readThroughHidden(rows, "x", new Set(["c"]))).toBe("x");
+    // An event line after the hidden replies doesn't hold the mark back.
+    const withEvent = [...rows, msg("e", T(4), { kind: "event" })];
+    expect(readThroughHidden(withEvent, "b", new Set(["c", "d"]))).toBe("d");
+  });
+
+  it("emoji-only messages draw large", () => {
+    expect(isEmojiOnlyText("🎉")).toBe(true);
+    expect(isEmojiOnlyText("👍🏽 🇵🇱 👨‍👩‍👧")).toBe(true);
+    expect(isEmojiOnlyText("", 1)).toBe(true);
+    expect(isEmojiOnlyText("ok 🎉")).toBe(false);
+    expect(isEmojiOnlyText("1")).toBe(false);
+    expect(isEmojiOnlyText("🎉".repeat(9))).toBe(false);
+  });
+});
+
+describe("wrapped chains in the stream (CV-12)", () => {
+  const root = msg("r", "2026-10-01T10:00:00Z", { replyCount: 2 });
+  const a = msg("a", "2026-10-01T10:01:00Z", { parentId: "r", replyToId: "r" });
+  const talk = msg("t", "2026-10-01T10:02:00Z", { authorId: ME });
+  const b = msg("b", "2026-10-01T10:03:00Z", { parentId: "r", replyToId: "a" });
+  const ids = (items: ReturnType<typeof buildStream>) =>
+    items.flatMap((i) => (i.type === "message" ? [i.key] : []));
+
+  it("nothing folds automatically: an open chain's replies stay with the talk between them", () => {
+    const rows = [root, a, talk, b];
+    const hidden = wrappedReplyIds(rows, () => undefined);
+    expect(ids(buildStream(rows, { hidden }))).toEqual(["r", "a", "t", "b"]);
+  });
+
+  it("hides the replies of a wrapped root, keeps the root, and joins the deletes", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T11:00:00Z", settledId: "b" };
+    const rows = [wrapped, a, talk, b];
+    const hidden = wrappedReplyIds(rows, () => undefined, new Set(["t"]));
+    expect([...hidden].sort()).toEqual(["a", "b", "t"]);
+    expect(ids(buildStream(rows, { hidden }))).toEqual(["r"]);
+  });
+
+  it("reads a root outside the window from the store; an unknown root keeps its replies", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T11:00:00Z" };
+    const rows = [a, talk, b];
+    expect([...wrappedReplyIds(rows, (id) => (id === "r" ? wrapped : undefined))]).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(wrappedReplyIds(rows, () => undefined).size).toBe(0);
+  });
+
+  it("a reply after the wrap-up shows (it reopened the chain), and so do unsent ones", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T10:02:30Z" };
+    const unsent = msg("u", "2026-10-01T10:02:10Z", { parentId: "r", sendState: "sending" });
+    const rows = [wrapped, a, talk, unsent, b];
+    expect([...wrappedReplyIds(rows, () => undefined)]).toEqual(["a"]);
   });
 });

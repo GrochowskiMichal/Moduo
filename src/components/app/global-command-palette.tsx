@@ -7,14 +7,19 @@ import {
   FileText,
   House,
   Inbox,
+  MessageCircle,
   MessagesSquare,
   Paperclip,
+  Search,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filesLabel } from "../../features/attachments/files";
+import { hasSearchableWords } from "../../features/chat/find/model";
+import { Snippet } from "../../features/chat/find/snippet";
+import type { ChatConversationFound, ChatSearchHit } from "../../features/chat/model";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import { taskIdForHandle } from "../../features/tasks/search";
@@ -67,6 +72,20 @@ const TYPE_LABEL: Record<string, string> = {
   event: "Event",
 };
 
+const NOTHING_FAILED = { messages: false, conversations: false };
+
+/** ⌘K's name for a found conversation: a channel's own, a direct message's people
+ *  (everyone it was opened with besides you), a note-to-self your name or "You". */
+export function foundConversationName(
+  c: ChatConversationFound,
+  selfId: string | null,
+  nameOf: (id: string) => string | undefined,
+): string {
+  if (c.kind === "channel") return c.name ?? "Channel";
+  if (c.people.length === 0) return (selfId ? nameOf(selfId) : undefined) ?? "You";
+  return c.people.map((id) => nameOf(id) ?? "Former member").join(", ");
+}
+
 export function dispatchOpenPalette() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(PALETTE_OPEN_EVENT));
@@ -74,14 +93,24 @@ export function dispatchOpenPalette() {
 
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
-  const { runtime } = useAuth();
-  const { selectedWorkspaceId, selectedWorkspace, modulePermissions } = useWorkspace();
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId, selectedWorkspace, modulePermissions, members } = useWorkspace();
   const taskKey = selectedWorkspace?.taskKey ?? null;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<EntityRecord[]>([]);
   const [searching, setSearching] = useState(false);
   const reqRef = useRef(0);
+  // Chat (CV-19): Messages from the server search, Conversations by name
+  // (Polish without diacritics), the top five each, then "See all in Chat".
+  const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
+  const [chatConversations, setChatConversations] = useState<ChatConversationFound[]>([]);
+  // Which half failed: a failed read says "Search isn't available", never "No results.".
+  const [chatFailed, setChatFailed] = useState(NOTHING_FAILED);
+  // While chat's answers are on their way, "No results." waits.
+  const [chatSearching, setChatSearching] = useState(false);
+  const chatReqRef = useRef(0);
+  const chatOn = modulePermissions.chat !== "none";
   const trimmed = query.trim();
 
   useEffect(() => onShortcut("palette", () => setOpen((prev) => !prev)), []);
@@ -106,8 +135,62 @@ export function GlobalCommandPalette() {
       setQuery("");
       setResults([]);
       setSearching(false);
+      setChatHits([]);
+      setChatConversations([]);
+      setChatFailed(NOTHING_FAILED);
+      setChatSearching(false);
     }
   }, [open]);
+
+  // Chat's half of the search: its own request counter, so a slow chat answer
+  // never overwrites a newer query's and the other modules never wait for it.
+  // A failed message search says so ("Search isn't available"), never "no results".
+  useEffect(() => {
+    if (!open) return;
+    const reqId = ++chatReqRef.current;
+    if (!trimmed || !runtime || !selectedWorkspaceId || !chatOn) {
+      setChatHits([]);
+      setChatConversations([]);
+      setChatFailed(NOTHING_FAILED);
+      setChatSearching(false);
+      return;
+    }
+    setChatSearching(true);
+    const timer = setTimeout(() => {
+      // Negated words only ("-standup") name nothing to find: no Messages.
+      const messages = hasSearchableWords(trimmed)
+        ? runtime.chat.search({ workspaceId: selectedWorkspaceId, query: trimmed, limit: 5 })
+        : Promise.resolve({ data: [] as ChatSearchHit[], error: null });
+      const conversations = runtime.chat.findConversations({
+        workspaceId: selectedWorkspaceId,
+        query: trimmed,
+        limit: 5,
+      });
+      void Promise.all([messages, conversations]).then(([hits, convs]) => {
+        if (reqId !== chatReqRef.current) return;
+        setChatFailed({ messages: hits.error !== null, conversations: convs.error !== null });
+        setChatHits(hits.error ? [] : hits.data);
+        setChatConversations(convs.error ? [] : convs.data.slice(0, 5));
+        setChatSearching(false);
+      });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [open, trimmed, runtime, selectedWorkspaceId, chatOn]);
+
+  const memberNames = useMemo(
+    () => new Map(members.map((m) => [m.userId, m.displayName?.trim() || "Member"])),
+    [members],
+  );
+  const memberName = useCallback(
+    (hit: ChatSearchHit) =>
+      hit.authorLabel ?? (hit.authorId ? memberNames.get(hit.authorId) : null) ?? "Former member",
+    [memberNames],
+  );
+  // A direct message reads as its people, a note-to-self as you (as the sidebar).
+  const conversationName = useCallback(
+    (c: ChatConversationFound) => foundConversationName(c, userId, (id) => memberNames.get(id)),
+    [memberNames, userId],
+  );
 
   // Debounced registry search — last-write-wins via a request counter so a slow
   // response can't overwrite a newer query's results. Only navigable kinds are
@@ -223,6 +306,36 @@ export function GlobalCommandPalette() {
     );
   }, []);
 
+  // A message lands in its conversation, on it (and its chain when it is a reply).
+  const openChatHit = useCallback(
+    (hit: ChatSearchHit) => {
+      setOpen(false);
+      void navigate({
+        to: "/chat",
+        search: {
+          c: hit.channelId,
+          m: hit.messageId,
+          ...(hit.parentId ? { t: hit.parentId } : {}),
+        } as Record<string, string>,
+      });
+    },
+    [navigate],
+  );
+  const openConversation = useCallback(
+    (c: ChatConversationFound) => {
+      setOpen(false);
+      void navigate({ to: "/chat", search: { c: c.channelId } as Record<string, string> });
+    },
+    [navigate],
+  );
+  const seeAllInChat = useCallback(() => {
+    setOpen(false);
+    void navigate({
+      to: "/chat",
+      search: { view: "search", q: trimmed } as Record<string, string>,
+    });
+  }, [navigate, trimmed]);
+
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
   const newNoteShortcut = SHORTCUTS.find((s) => s.id === "new-note");
@@ -323,8 +436,17 @@ export function GlobalCommandPalette() {
   const actionCount =
     visibleNav.length + visibleNotes.length + visibleContacts.length + visibleSettings.length;
 
+  const showChat = chatOn && trimmed.length > 0;
+  const anyChatFailed = chatFailed.messages || chatFailed.conversations;
+  const chatFound = chatHits.length + chatConversations.length;
   const showNoResults =
-    trimmed.length > 0 && !searching && resultGroups.length === 0 && actionCount === 0;
+    trimmed.length > 0 &&
+    !searching &&
+    resultGroups.length === 0 &&
+    actionCount === 0 &&
+    chatFound === 0 &&
+    !chatSearching &&
+    !anyChatFailed;
 
   const renderAction = ({ id, label, icon: Icon, shortcut, run }: Action) => (
     <CommandItem key={id} value={`action:${id}`} onSelect={run}>
@@ -344,7 +466,7 @@ export function GlobalCommandPalette() {
       <CommandInput
         value={query}
         onValueChange={setQuery}
-        placeholder="Search tasks, notes, contacts… or jump to a page"
+        placeholder="Search messages, tasks, notes, contacts… or jump to a page"
       />
       <CommandList>
         {visibleNav.length > 0 ? (
@@ -358,6 +480,68 @@ export function GlobalCommandPalette() {
         ) : null}
         {visibleSettings.length > 0 ? (
           <CommandGroup heading="Workspace">{visibleSettings.map(renderAction)}</CommandGroup>
+        ) : null}
+
+        {showChat && (chatHits.length > 0 || chatFailed.messages) ? (
+          <CommandGroup heading="Messages">
+            {chatFailed.messages ? (
+              <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
+                Search isn't available
+              </div>
+            ) : (
+              chatHits.map((hit) => (
+                <CommandItem
+                  key={`chat_message:${hit.messageId}`}
+                  value={`chat_message:${hit.messageId}`}
+                  onSelect={() => openChatHit(hit)}
+                >
+                  <MessageCircle />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <Snippet text={hit.snippet} className="block truncate" />
+                    <span className="truncate text-xs text-muted-foreground">
+                      {memberName(hit)} · {hit.channelName ?? "Direct message"}
+                    </span>
+                  </span>
+                </CommandItem>
+              ))
+            )}
+          </CommandGroup>
+        ) : null}
+        {showChat && chatFailed.conversations && !chatFailed.messages ? (
+          <CommandGroup heading="Conversations">
+            <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
+              Search isn't available
+            </div>
+          </CommandGroup>
+        ) : null}
+        {showChat && chatConversations.length > 0 ? (
+          <CommandGroup heading="Conversations">
+            {chatConversations.map((c) => {
+              const Icon = resolveEntityIcon("chat_channel");
+              return (
+                <CommandItem
+                  key={`chat_channel:${c.channelId}`}
+                  value={`entity:chat_channel:${c.channelId}`}
+                  data-chat-conversation={c.channelId}
+                  onSelect={() => openConversation(c)}
+                >
+                  <Icon />
+                  <span className="min-w-0 flex-1 truncate">{conversationName(c)}</span>
+                  {c.archived ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">Archived</span>
+                  ) : null}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        ) : null}
+        {showChat ? (
+          <CommandGroup>
+            <CommandItem value="action:see-all-in-chat" onSelect={seeAllInChat}>
+              <Search />
+              <span>See all in Chat</span>
+            </CommandItem>
+          </CommandGroup>
         ) : null}
 
         {/* Keep prior results on screen while a newer query debounces (like the

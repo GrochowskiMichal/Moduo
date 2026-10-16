@@ -6,7 +6,13 @@
 // hold here too: no title, no preview.
 
 import { useReference } from "../context";
-import { deletedLabel, openInLabel, PRIVATE_ITEM_LABEL, referenceKind } from "../kinds";
+import {
+  archivedLabel,
+  deletedLabel,
+  openInLabel,
+  PRIVATE_ITEM_LABEL,
+  referenceKind,
+} from "../kinds";
 import { openReferenceFull } from "../open";
 import { plainReferenceName } from "../text";
 import type { ReferenceRef, ReferenceState } from "../types";
@@ -44,6 +50,13 @@ export function ReferencePanelBody({ reference }: { reference: ReferenceRef }) {
   }
   if (state.status === "deleted") {
     return <p className="px-1 text-base text-subtle-foreground">{deletedLabel(state.kind)}</p>;
+  }
+  if (state.status === "archived") {
+    return (
+      <p className="px-1 text-base text-subtle-foreground">
+        {archivedLabel(state.kind, state.title)}
+      </p>
+    );
   }
   if (state.status === "error") {
     return (

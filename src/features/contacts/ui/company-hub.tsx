@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import type { EntityRef } from "@/lib/entity-links";
 import type { CompanyDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+import { useStartConversation } from "../../chat/start-conversation";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
 import { EntityTagRow } from "../../tags/ui/entity-tag-row";
@@ -106,6 +107,7 @@ export function CompanyHub({
   const [name, setName] = useState(company.name);
   const [website, setWebsite] = useState(company.website ?? "");
   const [domains, setDomains] = useState(company.domains.join(", "));
+  const startConversation = useStartConversation();
 
   useEffect(() => {
     setEditing(false);
@@ -190,7 +192,7 @@ export function CompanyHub({
                     onClick={() => setEditing(true)}
                   />
                 ) : null}
-                {onDelete ? (
+                {onDelete || (canEdit && startConversation) ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <IconButton
@@ -201,9 +203,17 @@ export function CompanyHub({
                       />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-                        Delete company
-                      </DropdownMenuItem>
+                      {canEdit && startConversation ? (
+                        // Chat's "Start a conversation for X" (CV-13).
+                        <DropdownMenuItem onSelect={() => startConversation("company", company.id)}>
+                          Start a conversation
+                        </DropdownMenuItem>
+                      ) : null}
+                      {onDelete ? (
+                        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                          Delete company
+                        </DropdownMenuItem>
+                      ) : null}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 ) : null}
@@ -329,6 +339,7 @@ export function CompanyHub({
         </section>
 
         <LinkedSections
+          focus={{ type: "company", id: company.id }}
           status={status}
           sections={rollup.unionSections}
           canEdit={false}

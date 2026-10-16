@@ -8,6 +8,7 @@
 // number, tasks-v3 call 90b), never by a "/note" prefix any more. Kept out of
 // the UI so it stays unit-testable with a mock runtime.
 
+import type { EntityRef } from "../../lib/entity-links";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { captureTaskToStore } from "../../lib/sync/capture";
 import { findWorkspaceStore } from "../../lib/sync/store";
@@ -80,6 +81,8 @@ export type CaptureCreated = {
   description: string;
   /** Module page to jump to on "Open". */
   openTo: string;
+  /** The item made, when its module answers with it (a note, an event). */
+  ref?: EntityRef;
 };
 
 /** timed 60-min block / all-day day / next-hour default for a captured event. */
@@ -143,6 +146,7 @@ export async function createCapturedEntity(input: {
         title: note.title || trimmed || "Untitled",
         description: "Added to Notes",
         openTo: "/notes",
+        ref: { type: "note", id: note.id },
       };
     }
     case "contact": {
@@ -158,12 +162,19 @@ export async function createCapturedEntity(input: {
       const parsed = parseCapture(trimmed, now);
       const title = parsed.title.trim() || trimmed;
       const { startsAt, endsAt, allDay } = eventTimes(parsed, now);
-      await runtime.calendar.createEvent({ workspaceId, title, startsAt, endsAt, allDay });
+      const event = await runtime.calendar.createEvent({
+        workspaceId,
+        title,
+        startsAt,
+        endsAt,
+        allDay,
+      });
       return {
         target,
         title,
         description: eventDescription(startsAt, allDay),
         openTo: "/calendar",
+        ...(event?.id ? { ref: { type: "event", id: event.id } } : {}),
       };
     }
     case "task":

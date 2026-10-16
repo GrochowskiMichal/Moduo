@@ -28,6 +28,7 @@ describe("DEFAULT_PREFERENCES", () => {
       landingView: "home",
       reopenLastWorkspace: true,
       soundEnabled: true,
+      chatSound: false,
       motion: "system",
       notifications: {
         mention: true,
@@ -41,7 +42,12 @@ describe("DEFAULT_PREFERENCES", () => {
         overdueTasks: false,
         storage: true,
         bookings: true,
+        chatDirect: true,
+        chatMentions: true,
+        chatAnnouncements: true,
+        chatEvery: true,
       },
+      chatKeyReplies: {},
       confirmBeforeQuit: false,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {}, projectOrder: {} },
@@ -80,6 +86,7 @@ describe("sanitizePreferences", () => {
       landingView: "calendar",
       reopenLastWorkspace: false,
       soundEnabled: false,
+      chatSound: false,
       motion: "reduced",
       // overdueTasks absent from input → coerced to its opt-in default (off);
       // completed (added in TV-D1), storage (AT-1) and comments (TV-D12) absent →
@@ -96,7 +103,12 @@ describe("sanitizePreferences", () => {
         overdueTasks: false,
         storage: true,
         bookings: true,
+        chatDirect: true,
+        chatMentions: true,
+        chatAnnouncements: true,
+        chatEvery: true,
       },
+      chatKeyReplies: {},
       confirmBeforeQuit: true,
       keepInMenuBar: true,
       tasksSidebar: { hidden: [], pinned: {}, projectOrder: {} },
@@ -148,6 +160,10 @@ describe("sanitizePreferences", () => {
       overdueTasks: false,
       storage: true,
       bookings: true,
+      chatDirect: true,
+      chatMentions: true,
+      chatAnnouncements: true,
+      chatEvery: true,
     });
     expect(
       sanitizePreferences({ notifications: { unblocked: false, waiting: true } }).notifications
@@ -369,6 +385,20 @@ describe("notificationTypeForOp", () => {
     expect(notificationTypeForOp("tasks.handed_back")).toBe("assigned");
   });
 
+  it("sends a chat row that reached you through a team to the teams switch (CV-5)", () => {
+    expect(notificationTypeForOp("chat.mention", { reason: "team" })).toBe("teams");
+    // CV-6b: everything else of chat.mention follows "Mentions and replies".
+    expect(notificationTypeForOp("chat.mention", { reason: "person" })).toBe("chatMentions");
+    expect(notificationTypeForOp("chat.mention")).toBe("chatMentions");
+    expect(
+      isNotificationEnabled(
+        "chat.mention",
+        { ...DEFAULT_PREFERENCES.notifications, teams: false },
+        { reason: "team" },
+      ),
+    ).toBe(false);
+  });
+
   it("returns null for ops outside the quiet set (legacy / future)", () => {
     expect(notificationTypeForOp("workspace.invite_accepted")).toBeNull();
     expect(notificationTypeForOp("note_shared")).toBeNull();
@@ -390,6 +420,10 @@ describe("isNotificationEnabled", () => {
       overdueTasks: false,
       storage: false,
       bookings: false,
+      chatDirect: false,
+      chatMentions: false,
+      chatAnnouncements: false,
+      chatEvery: false,
     };
     expect(isNotificationEnabled("comments.add", prefs)).toBe(true);
     expect(isNotificationEnabled("attachments.storage_95", prefs)).toBe(false);
@@ -414,6 +448,17 @@ describe("isNotificationEnabled", () => {
     expect(isNotificationEnabled("comments.add", quiet, participant, "me")).toBe(true);
   });
 
+  // CV-6b: chat's bell rows follow the Chat switches; @Team follows "Your teams".
+  it("maps chat's bell rows to the Chat switches", () => {
+    const off = { ...DEFAULT_NOTIFICATION_PREFS, chatMentions: false, chatAnnouncements: false };
+    expect(isNotificationEnabled("chat.mention", off, { reason: "person" })).toBe(false);
+    expect(isNotificationEnabled("chat.mention", off, { reason: "everyone" })).toBe(false);
+    expect(isNotificationEnabled("chat.reply", off)).toBe(false);
+    expect(isNotificationEnabled("chat.announcement", off)).toBe(false);
+    expect(isNotificationEnabled("chat.mention", off, { reason: "team" })).toBe(true);
+    expect(isNotificationEnabled("chat.mention", DEFAULT_NOTIFICATION_PREFS)).toBe(true);
+  });
+
   it("fails open for an unmapped op regardless of prefs", () => {
     const allOff = {
       mention: false,
@@ -427,6 +472,10 @@ describe("isNotificationEnabled", () => {
       overdueTasks: false,
       storage: false,
       bookings: false,
+      chatDirect: false,
+      chatMentions: false,
+      chatAnnouncements: false,
+      chatEvery: false,
     };
     expect(isNotificationEnabled("tasks.reminder", allOff)).toBe(true);
     expect(isNotificationEnabled("workspace.invite_accepted", allOff)).toBe(true);
@@ -535,5 +584,18 @@ describe("consumeLandingRedirect", () => {
     signIn();
     localStorage.setItem("moduo.preferences", JSON.stringify({ landingView: "home" }));
     expect(consumeLandingRedirect("/", "")).toBeNull();
+  });
+});
+
+describe("chatKeyReplies (CV-21): a reply switch per key", () => {
+  it("keeps key ids with a boolean, drops the rest, and defaults to none", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(sanitizePreferences({}).chatKeyReplies).toEqual({});
+    expect(
+      sanitizePreferences({
+        chatKeyReplies: { [id]: false, "not-a-key": true, [id.replace("1", "2")]: "yes" },
+      }).chatKeyReplies,
+    ).toEqual({ [id]: false });
+    expect(sanitizePreferences({ chatKeyReplies: "nope" }).chatKeyReplies).toEqual({});
   });
 });

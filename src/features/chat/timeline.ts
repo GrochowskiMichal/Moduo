@@ -5,7 +5,8 @@
 // one tested place. `buildTimeline` turns the list into render rows: day
 // dividers, the "New" marker at the read mark, and author grouping.
 
-import type { ChatChannel, ChatMessage, ChatPerson } from "./model";
+import type { ChatChannel, ChatKey, ChatMessage, ChatPerson } from "./model";
+import { compareKeys, keyOf } from "./store/keys";
 
 /** Consecutive messages by one author within this window collapse together. */
 export const GROUP_WINDOW_MS = 5 * 60 * 1000;
@@ -77,7 +78,8 @@ export function buildTimeline(
       !newPlaced &&
       opts.lastReadAt &&
       m.createdAt > opts.lastReadAt &&
-      m.authorId !== opts.selfId &&
+      // A post through your key (CV-21) is new to you.
+      (m.authorId !== opts.selfId || m.authorKind === "api_key") &&
       !m.pending
     ) {
       rows.push({ kind: "new", key: "new" });
@@ -104,6 +106,221 @@ export function buildTimeline(
   return rows;
 }
 
+// ── Chat v2's stream (CV-7a) ────────────────────────────────────────────────
+//
+// `buildStream` turns a store window (`ChatWindow.rows`, oldest first) into the
+// rows `MessageStream` draws: centred day separators, the "New" pill at the
+// read mark, message rows that know whether they start a new person (24/20/16
+// px above) or continue one (6 px), event lines, and "Deleted message" for a
+// deleted message that still has replies. Keys are ids, so a row keeps its
+// measured height across renders (the measurement cache).
+
+export type StreamItem =
+  | { type: "day"; key: string; at: string }
+  | { type: "new"; key: "new" }
+  | { type: "message"; key: string; message: ChatMessage; first: boolean }
+  | { type: "deleted"; key: string; message: ChatMessage; first: boolean }
+  | { type: "event"; key: string; message: ChatMessage };
+
+/** The local calendar day of a stamp, `YYYY-MM-DD` (separators and their keys). */
+export function localDay(iso: string): string {
+  const d = new Date(iso);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+function sameAuthor(a: ChatMessage, b: ChatMessage): boolean {
+  return (
+    a.authorId === b.authorId && a.authorKind === b.authorKind && a.authorLabel === b.authorLabel
+  );
+}
+
+/**
+ * The stream's rows.
+ * - `hasOlder`: the window's oldest row is the one past the edge (the store
+ *   loads 51 and the stream draws 50): it sets the first drawn row's grouping
+ *   and separator but isn't drawn.
+ * - `newAfter`: the read mark when the conversation opened (it never moves
+ *   while open). The pill sits before the first message after it from someone
+ *   else; your own messages and unsent sends never count.
+ * - `hidden`: ids deleted on this screen and still inside their Undo time.
+ */
+export function buildStream(
+  rows: readonly ChatMessage[],
+  opts: {
+    hasOlder?: boolean;
+    newAfter?: ChatKey | null;
+    selfId?: string | null;
+    hidden?: ReadonlySet<string>;
+  } = {},
+): StreamItem[] {
+  const out: StreamItem[] = [];
+  const seen = new Set<string>();
+  let prev: ChatMessage | null = null;
+  let newPlaced = !opts.newAfter;
+  const start = opts.hasOlder && rows.length > 0 ? 1 : 0;
+  if (start === 1) prev = rows[0] ?? null;
+  if (prev) seen.add(prev.id);
+
+  for (let i = start; i < rows.length; i += 1) {
+    const m = rows[i]!;
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    if (opts.hidden?.has(m.id)) continue;
+    // A deleted message without replies leaves no trace, nor does an event
+    // line its Undo deleted (CV-16).
+    if (m.deletedAt && (m.replyCount === 0 || m.kind === "event")) continue;
+
+    const day = localDay(m.createdAt);
+    const newDay = !prev || localDay(prev.createdAt) !== day;
+    if (newDay) out.push({ type: "day", key: `d:${day}`, at: m.createdAt });
+
+    let afterPill = false;
+    if (
+      !newPlaced &&
+      opts.newAfter &&
+      m.kind !== "event" &&
+      !m.sendState &&
+      (m.authorId !== (opts.selfId ?? undefined) || m.authorKind === "api_key") &&
+      compareKeys(opts.newAfter, keyOf(m)) < 0
+    ) {
+      out.push({ type: "new", key: "new" });
+      newPlaced = true;
+      afterPill = true;
+    }
+
+    if (m.kind === "event") {
+      out.push({ type: "event", key: m.id, message: m });
+      prev = m;
+      continue;
+    }
+
+    const first =
+      !prev ||
+      newDay ||
+      afterPill ||
+      prev.kind === "event" ||
+      !!prev.deletedAt ||
+      !!m.deletedAt ||
+      !sameAuthor(prev, m) ||
+      Date.parse(m.createdAt) - Date.parse(prev.createdAt) >= GROUP_WINDOW_MS;
+
+    out.push(
+      m.deletedAt
+        ? { type: "deleted", key: m.id, message: m, first: true }
+        : { type: "message", key: m.id, message: m, first },
+    );
+    prev = m;
+  }
+  return out;
+}
+
+/**
+ * Replies whose chain is wrapped up (CV-12): the stream doesn't draw them (a
+ * drawing rule on the root; they stay rows for unread, Catch up, search and
+ * export). The root is read from the window first (your pending Wrap up shows
+ * at once), then from what the store holds; a reply whose root isn't held
+ * stays drawn, and so do your unsent sends. Joined with the ids deleted
+ * inside their Undo: same path.
+ */
+export function wrappedReplyIds(
+  rows: readonly ChatMessage[],
+  rowById: (id: string) => ChatMessage | undefined,
+  base?: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const inWindow = new Map<string, ChatMessage>();
+  for (const m of rows) inWindow.set(m.id, m);
+  let out: Set<string> | null = null;
+  for (const m of rows) {
+    if (!m.parentId || m.sendState) continue;
+    const root = inWindow.get(m.parentId) ?? rowById(m.parentId);
+    // A reply after the wrap-up reopened it (CH54): it shows before the root's change arrives.
+    if (!root?.wrappedAt || m.createdAt > root.wrappedAt) continue;
+    out ??= new Set(base);
+    out.add(m.id);
+  }
+  return out ?? base ?? new Set();
+}
+
+/**
+ * The read mark's candidate: the newest server message at or above `index`
+ * (the last row on screen). Unsent sends and event lines never count; null
+ * when nothing on screen is a message.
+ */
+export function lastSeenMessage(items: readonly StreamItem[], index: number): ChatMessage | null {
+  for (let i = Math.min(index, items.length - 1); i >= 0; i -= 1) {
+    const it = items[i]!;
+    if (it.type !== "message" && it.type !== "deleted") continue;
+    if (it.message.sendState) continue;
+    return it.message;
+  }
+  return null;
+}
+
+/**
+ * Where the read mark goes when `seenId` is on screen: past the rows after it
+ * that the stream doesn't draw (replies of a wrapped-up chain, CV-12), so a
+ * conversation whose newest messages are hidden replies can still be read.
+ * Their Catch up items stay open until the chain is read (the server's rule).
+ */
+export function readThroughHidden(
+  rows: readonly ChatMessage[],
+  seenId: string,
+  hidden: ReadonlySet<string>,
+): string {
+  const at = rows.findIndex((m) => m.id === seenId);
+  if (at < 0) return seenId;
+  let out = seenId;
+  for (let i = at + 1; i < rows.length; i += 1) {
+    const m = rows[i]!;
+    // Unsent sends and event lines are never the mark; they don't stop it either.
+    if (m.sendState || m.kind === "event") continue;
+    if (!hidden.has(m.id)) return seenId;
+    out = m.id;
+  }
+  return out;
+}
+
+/** How many messages from others arrived after `afterId` (the floating "N new ↓" chip). */
+export function countNewSince(
+  rows: readonly ChatMessage[],
+  afterId: string | null,
+  selfId: string | null,
+  hidden?: ReadonlySet<string>,
+): number {
+  if (!afterId) return 0;
+  let n = 0;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const m = rows[i]!;
+    if (m.id === afterId) return n;
+    // A post through your key (CV-21) is new to you; your own writing isn't.
+    const yours = m.authorId === selfId && m.authorKind === "user";
+    if (m.kind === "event" || m.sendState || m.deletedAt || yours) continue;
+    // A row the stream doesn't draw can't be scrolled to.
+    if (hidden?.has(m.id)) continue;
+    n += 1;
+  }
+  return 0;
+}
+
+// Emoji-only messages draw large ("jumbo", CH29): one paragraph of at most
+// this many emoji and nothing else but spaces.
+export const JUMBO_MAX = 8;
+const EMOJI_RUN =
+  /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Component}|️|‍|\s)+$/u;
+const EMOJI_ONE =
+  /\p{Regional_Indicator}{2}|\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?(?:‍\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?)*/gu;
+
+/** True when a plain text is only emoji (1…JUMBO_MAX of them). */
+export function isEmojiOnlyText(text: string, customEmoji = 0): boolean {
+  const t = text.trim();
+  if (!t) return customEmoji > 0 && customEmoji <= JUMBO_MAX;
+  if (/[0-9#*]/.test(t) || !EMOJI_RUN.test(t)) return false;
+  const n = (t.match(EMOJI_ONE)?.length ?? 0) + customEmoji;
+  return n > 0 && n <= JUMBO_MAX;
+}
+
 // ── Reactions ────────────────────────────────────────────────────────────────
 
 /** Optimistic toggle — mirrors chat_op_react. */
@@ -128,13 +345,16 @@ export function toggleReaction(
 
 /** Same normalization as public.chat_normalize_channel_name — keep in lockstep. */
 export function normalizeChannelName(input: string): string {
-  return input
+  const kept = input
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "-")
     .replace(/[^\p{L}\p{N}_-]/gu, "")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
+    .replace(/^-+/, "");
+  // Trailing dashes go before the cut, as in SQL; a loop keeps it linear.
+  let end = kept.length;
+  while (end > 0 && kept[end - 1] === "-") end--;
+  return kept.slice(0, end).slice(0, 80);
 }
 
 /** Everyone in a DM except me (a DM with only me is "notes to self"). */
@@ -190,21 +410,4 @@ export function buildSidebar(
     channels: live.filter((e) => !e.starred && e.channel.kind === "channel").sort(byName),
     dms: live.filter((e) => !e.starred && e.channel.kind === "dm").sort(byRecent),
   };
-}
-
-/**
- * The nav badge: DMs count every unread, channels only count mentions unless
- * the user set them to "all" (quiet bar). Muted channels never count.
- */
-export function badgeCount(
-  entries: SidebarEntry[],
-  levelOf: (channelId: string) => string,
-): number {
-  let n = 0;
-  for (const e of entries) {
-    if (e.muted || e.channel.archivedAt) continue;
-    if (e.channel.kind === "dm" || levelOf(e.channel.id) === "all") n += e.unread;
-    else n += e.mentions;
-  }
-  return n;
 }

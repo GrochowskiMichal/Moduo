@@ -8,7 +8,7 @@
 // sibling modules: `onCreateEntity` (e.g. Tasks' create op for `/task Foo`) and
 // `onMentionPerson` (the person-targeted activity row — its op lands with CT-5).
 
-import type { EntityRef } from "@/lib/entity-links";
+import { type EntityRef, isChatEnd } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import type { MentionResolution } from "./mention";
 
@@ -47,6 +47,11 @@ export async function executeMention(
 ): Promise<MentionInsert | null> {
   switch (resolution.action) {
     case "link": {
+      // A conversation or a message stays a chip in the text: "Mentioned in"
+      // lines to them are written by Chat's send and edit alone.
+      if (isChatEnd(resolution.target.type) || isChatEnd(ctx.source.type)) {
+        return { ref: resolution.target, label: resolution.label, icon: resolution.icon };
+      }
       await runtime.spine.createLink({
         workspaceId: ctx.workspaceId,
         source: ctx.source,

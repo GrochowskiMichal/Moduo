@@ -13,12 +13,21 @@
  * that wasn't committed, create → trash a note, create → delete a contact and
  * an event, link → unlink, follow-up → clear on a thread that had none. It
  * never posts to chat and never comments (neither can be removed over MCP).
+ *
+ *   … --chat-write #channel    # + chat's writes (CV-21), on a test workspace only
+ *
+ * --chat-write posts one message in that channel through the key (it stays:
+ * nothing deletes a post over MCP), replies to it quoting it, reacts and takes
+ * the reaction back, marks the reply a decision and unmarks it, and checks that
+ * the conversation reads both back as "<person> · via <key>".
  */
 
 const URL_ =
   process.env.MODUO_MCP_URL ?? "https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp";
 const KEY = process.env.MODUO_MCP_KEY ?? "";
 const WRITE = process.argv.includes("--write");
+const CHAT_AT = process.argv.indexOf("--chat-write");
+const CHAT_CHANNEL = CHAT_AT > 0 ? (process.argv[CHAT_AT + 1] ?? "") : "";
 if (!/^moduo_sk_[a-f0-9]{48}$/i.test(KEY)) {
   console.error("Set MODUO_MCP_KEY to a key from Settings → API keys (moduo_sk_…).");
   process.exit(2);
@@ -107,11 +116,29 @@ if (has("contacts_list"))
     "contacts_list",
     async () => `${(await call("contacts_list", { limit: 5 })).contacts.length} people`,
   );
+let chatChannels: Json[] = [];
 if (has("chat_list_channels"))
+  await check("chat", "chat_list_channels", async () => {
+    chatChannels = await call("chat_list_channels");
+    const priv = chatChannels.filter((c) => c.private).length;
+    return `${chatChannels.length} conversations (${priv} private)`;
+  });
+if (has("chat_read") && chatChannels[0])
+  await check("chat", "chat_read", async () => {
+    const page = await call("chat_read", { channel: chatChannels[0].id, limit: 5 });
+    return `${page.messages.length} messages in ${page.channel.name}`;
+  });
+if (has("chat_search"))
   await check(
     "chat",
-    "chat_list_channels",
-    async () => `${(await call("chat_list_channels")).length} public channels`,
+    "chat_search",
+    async () => `${(await call("chat_search", { query: "the", limit: 5 })).length} hits`,
+  );
+if (has("chat_addressed_to_me"))
+  await check(
+    "chat",
+    "chat_addressed_to_me",
+    async () => `${(await call("chat_addressed_to_me", { limit: 5 })).length} waiting`,
   );
 if (has("links_search_entities"))
   await check("links", "links_search_entities", async () => {
@@ -202,10 +229,32 @@ if (WRITE) {
     });
 }
 
+// ── chat's writes (--chat-write #channel): posts stay, the rest is undone ──
+if (CHAT_CHANNEL && has("chat_post"))
+  await check("chat", "post → reply → react → decision (via <key>)", async () => {
+    const stamp = `MCP round-trip ${new Date().toISOString()}`;
+    const post = await call("chat_post", { channel: CHAT_CHANNEL, text: stamp });
+    const reply = await call("chat_reply", { message_id: post.id, text: `${stamp} (reply)` });
+    if (reply.chain_root_id !== post.id) throw new Error("the reply didn't join the post's chain");
+    await call("chat_react", { message_id: post.id, emoji: "👍" });
+    await call("chat_react", { message_id: post.id, emoji: "👍", on: false });
+    await call("chat_mark_decision", { message_id: reply.id });
+    await call("chat_mark_decision", { message_id: reply.id, on: false });
+    const chain = await call("chat_read", { channel: CHAT_CHANNEL, chain_id: post.id });
+    const names = chain.messages.map((m: Json) => m.author.name);
+    if (chain.messages.length !== 2 || !names.every((n: string) => / · via /.test(n)))
+      throw new Error(`chain reads back as ${JSON.stringify(names)}`);
+    return names[0];
+  });
+
 // A key must be refused what it can't do: pick a write tool it doesn't list.
-const refusal = ["notes_create", "tasks_commit", "contacts_create", "links_create"].find(
-  (t) => !has(t),
-);
+const refusal = [
+  "notes_create",
+  "tasks_commit",
+  "contacts_create",
+  "links_create",
+  "chat_post",
+].find((t) => !has(t));
 if (refusal)
   await check("scope", `refuses ${refusal}`, async () => {
     try {

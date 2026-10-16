@@ -6,7 +6,7 @@
 // surface turns the URIs back into references (or plain words) per reader.
 
 import { formatDay } from "../../../lib/time-format";
-import { deletedLabel, PRIVATE_ITEM_LABEL, referenceKind } from "./kinds";
+import { archivedLabel, deletedLabel, PRIVATE_ITEM_LABEL, referenceKind } from "./kinds";
 import type { ReferenceRef, ReferenceState } from "./types";
 
 const URI = /moduo:\/\/([a-z][a-z_-]*)\/([A-Za-z0-9-]+)/g;
@@ -69,6 +69,7 @@ export function plainReferenceName(ref: ReferenceRef, state: ReferenceState | nu
   if (!state || state.status === "loading" || state.status === "error") return "…";
   if (state.status === "private") return PRIVATE_ITEM_LABEL;
   if (state.status === "deleted") return deletedLabel(referenceKind(ref.type));
+  if (state.status === "archived") return archivedLabel(state.kind, state.title);
   return state.facts.title;
 }
 

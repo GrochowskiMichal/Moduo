@@ -75,6 +75,91 @@ describe("push-send", () => {
     expect(pushMessage({ ...base, title: "x".repeat(200), url: null }).body).toHaveLength(80);
   });
 
+  it("says a chat notice in the server's words, with the conversation's tag (CV-6a)", () => {
+    const message = pushMessage({
+      id: "d",
+      user_id: "u1",
+      kind: "chat_message",
+      title: "Sofia Ortiz · Acme",
+      body: "3 messages: lunch?",
+      url: "/chat?c=c1&m=m1",
+      task_id: null,
+      tag: "chat:c1",
+      subscriptions: [],
+    });
+    expect(message).toEqual({
+      uid: "u1",
+      title: "Sofia Ortiz · Acme",
+      body: "3 messages: lunch?",
+      url: "/chat?c=c1&m=m1",
+      tag: "chat:c1",
+    });
+    expect(
+      pushMessage({ id: "d", user_id: "u1", kind: "chat_mention", title: "T", body: null, url: null, task_id: null, subscriptions: [] }),
+    ).toMatchObject({ body: "", url: "/", tag: "notice-d" });
+  });
+
+  it("waits for a notice inside its hold and claims again, at most 10 s and three claims", async () => {
+    const waits: number[] = [];
+    let claims = 0;
+    const t = deps({
+      claim: async () => {
+        claims += 1;
+        return [];
+      },
+      nextDue: async () => 7800,
+      sleep: async (ms: number) => {
+        waits.push(ms);
+      },
+    });
+    await handlePushRequest({ method: "POST", secret: SECRET }, t.deps);
+    expect(claims).toBe(3);
+    expect(waits).toEqual([8050, 8050]);
+
+    claims = 0;
+    const far = deps({
+      claim: async () => {
+        claims += 1;
+        return [];
+      },
+      nextDue: async () => 60_000,
+      sleep: async () => {},
+    });
+    await handlePushRequest({ method: "POST", secret: SECRET }, far.deps);
+    expect(claims).toBe(1);
+
+    claims = 0;
+    const none = deps({
+      claim: async () => {
+        claims += 1;
+        return [];
+      },
+      nextDue: async () => null,
+      sleep: async () => {},
+    });
+    await handlePushRequest({ method: "POST", secret: SECRET }, none.deps);
+    expect(claims).toBe(1);
+
+    claims = 0;
+    const reports: string[] = [];
+    const old = deps({
+      claim: async () => {
+        claims += 1;
+        return [];
+      },
+      nextDue: async () => {
+        throw new Error("function notice_deliveries__next_due does not exist");
+      },
+      sleep: async () => {},
+      report: (event: string) => {
+        reports.push(event);
+      },
+    });
+    await handlePushRequest({ method: "POST", secret: SECRET }, old.deps);
+    expect(claims).toBe(1);
+    expect(reports).not.toContain("run_failed");
+  });
+
   it("says an agent's state with the task's title (TV-D16)", () => {
     const base = { id: "d", user_id: "u1", subscriptions: [] };
     const message = pushMessage({

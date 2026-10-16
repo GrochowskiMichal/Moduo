@@ -153,6 +153,9 @@
   --warning: var(--status-warning);
   --danger:  var(--status-danger);
   --info:    var(--status-info);
+  /* Presence (chat v2 CV-17, AC11.1): the one green, "reachable now"; it
+     keeps 3:1 on the card in both themes. */
+  --presence-reachable: var(--status-success);
 
   /* Comment highlight on anchored text (NR-8): a soft wash, stronger when its thread is open. */
   --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 22%, transparent);
@@ -201,6 +204,7 @@
 
   --success-foreground: oklch(0.97 0 0);
   --warning-foreground: oklch(0.15 0 0);
+  --presence-reachable: oklch(0.6 0.15 145);
   --danger-foreground:  oklch(0.97 0 0);
   --info-foreground:    oklch(0.97 0 0);
 }
@@ -518,6 +522,13 @@
   /* How tall the fade is at the foot of a menu that scrolls, while more items
      wait below (`[data-more-below]`, global.css; TV-U10). */
   --menu-fade: 1.75rem; /* 28 */
+  /* A conversation's stream fades its text at both ends (chat v2, CH29). */
+  --stream-fade-top: 1.75rem;    /* 28 */
+  --stream-fade-bottom: 1.25rem; /* 20 */
+  /* The largest box a picture or a video takes in a feed (chat v2 §17, CV-9):
+     its stored size fit inside this, so the row's height is known before it loads. */
+  --feed-media-max-w: 22.5rem; /* 360 */
+  --feed-media-max-h: 15rem;   /* 240 */
 }
 
 /* ============================================================================
@@ -552,6 +563,11 @@
      never reflows as you scroll; the column adds its drop-tint inset. */
   --board-card-w: 18.5rem;  /* 296 */
   --board-col-w: calc(var(--board-card-w) + 0.5rem);
+  /* A feed's person (chat v2's stream, CH29/CH29f): the avatar, and the air
+     before a new person. Each line carries 3 px above and below (6 px between
+     one person's lines), so the gap adds 18 to make 24 between people. */
+  --avatar-feed: 2rem;          /* 32 */
+  --feed-person-gap: 1.125rem;  /* 18 (+6 = 24) */
 }
 
 [data-density="compact"] {
@@ -572,6 +588,8 @@
   --cal-hour-h: 3rem;      /* 48   */
   --board-card-w: 17.5rem; /* 280  */
   --board-col-w: calc(var(--board-card-w) + 0.5rem);
+  --avatar-feed: 1.75rem;        /* 28 */
+  --feed-person-gap: 0.875rem;   /* 14 (+6 = 20) */
 }
 
 [data-density="dense"] {
@@ -592,6 +610,8 @@
   --cal-hour-h: 2.75rem;   /* 44      */
   --board-card-w: 16.5rem; /* 264     */
   --board-col-w: calc(var(--board-card-w) + 0.5rem);
+  --avatar-feed: 1.5rem;         /* 24      */
+  --feed-person-gap: 0.625rem;   /* 10 (+6 = 16) */
 }
 
 /* ============================================================================
@@ -944,6 +964,7 @@
 
   --color-success:              var(--success);
   --color-success-foreground:   var(--success-foreground);
+  --color-presence-reachable:   var(--presence-reachable);
   --color-warning:              var(--warning);
   --color-warning-foreground:   var(--warning-foreground);
   --color-danger:               var(--danger);
@@ -997,6 +1018,9 @@
   --spacing-icon-sm: var(--icon-sm);
   --spacing-icon:    var(--icon);
   --spacing-icon-lg: var(--icon-lg);
+  /* The feed's media box (chat v2 §17, CV-9) → max-w-feed-media / max-h-feed-media. */
+  --spacing-feed-media:   var(--feed-media-max-w);
+  --spacing-feed-media-h: var(--feed-media-max-h);
 
   --text-3xs:  var(--text-3xs);
   --text-2xs:  var(--text-2xs);

@@ -2,7 +2,10 @@
 // (public/push-sw.js, through importScripts) and its unit test. A notice shows
 // its words only to the person signed in on this browser (the page tells the
 // worker who that is); for anyone else, or nobody, it's a plain line with no
-// task in it. Only a path inside Moduo is ever opened.
+// task or message in it. Only a path inside Moduo is ever opened. A chat
+// notice (CV-6b) carries the server's "Sofia Ortiz · #plans · Acme" title and
+// text, cut to push-send's lengths; its tag ("chat:<conversation>") makes a
+// burst replace the last notice.
 ((root) => {
   function pushDisplay(data, signedInUserId) {
     var d = data && typeof data === "object" ? data : {};
@@ -12,14 +15,20 @@
     if (!mine) {
       return {
         title: "Moduo",
-        body: "You have a reminder. Sign in to see it.",
+        body: "You have a new notice. Sign in to see it.",
         url: "/",
         tag: "moduo-notice",
       };
     }
+    var chat = typeof d.tag === "string" && d.tag.indexOf("chat:") === 0;
     return {
-      title: typeof d.title === "string" && d.title ? d.title.slice(0, 80) : "Reminder",
-      body: typeof d.body === "string" ? d.body.slice(0, 120) : "",
+      title:
+        typeof d.title === "string" && d.title
+          ? d.title.slice(0, chat ? 120 : 80)
+          : chat
+            ? "New message"
+            : "Reminder",
+      body: typeof d.body === "string" ? d.body.slice(0, chat ? 160 : 120) : "",
       url: url,
       tag: typeof d.tag === "string" ? d.tag.slice(0, 80) : "moduo-notice",
     };

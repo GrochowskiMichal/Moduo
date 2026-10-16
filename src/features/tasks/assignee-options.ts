@@ -22,6 +22,8 @@ export type Assignee = {
   isMe: boolean;
   /** Viewers can't complete tasks, so they can't be assigned. */
   canTakeTasks: boolean;
+  /** Their status for the picker (chat v2 CV-17): "on vacation until Oct 20"; "" when none. */
+  statusNote?: string;
 };
 
 /** The picker's value for "nobody" (Radix items can't use an empty string). */
@@ -49,7 +51,11 @@ export function assigneeInSentence(a: Pick<Assignee, "name" | "fullName" | "isMe
 }
 
 /** Active workspace members as assignable people, current user first. */
-export function toAssignees(members: WorkspaceMember[], userId: string | null): Assignee[] {
+export function toAssignees(
+  members: WorkspaceMember[],
+  userId: string | null,
+  noteOf?: (userId: string) => string,
+): Assignee[] {
   return members
     .filter((m) => m.isActive && !m.removedAt)
     .map((m) => ({
@@ -59,6 +65,7 @@ export function toAssignees(members: WorkspaceMember[], userId: string | null): 
       avatarUrl: m.avatarUrl,
       isMe: m.userId === userId,
       canTakeTasks: canBeAssignee(m.perms),
+      statusNote: noteOf?.(m.userId) ?? "",
     }))
     .sort((a, b) => Number(b.isMe) - Number(a.isMe) || a.name.localeCompare(b.name));
 }
@@ -81,11 +88,19 @@ export function assigneeOptions(assignees: Assignee[]): AssigneeOption[] {
     { value: UNASSIGNED, label: "Unassigned", assignee: null, disabled: false },
     ...assignees.map((a) => ({
       value: a.userId,
-      label: a.canTakeTasks ? assigneeListName(a) : `${assigneeListName(a)} (view only)`,
+      label: assigneePickerLabel(a),
       assignee: a,
       disabled: !a.canTakeTasks,
     })),
   ];
+}
+
+/** A person in a picker: "Jana · on vacation until Oct 20", "Mo (view only)",
+ *  "Maciej (you)" (MOD-137). */
+export function assigneePickerLabel(a: Assignee): string {
+  const listed = assigneeListName(a);
+  const name = a.canTakeTasks ? listed : `${listed} (view only)`;
+  return a.statusNote ? `${name} · ${a.statusNote}` : name;
 }
 
 export function toAssigneeValue(assigneeId: string | null): string {
