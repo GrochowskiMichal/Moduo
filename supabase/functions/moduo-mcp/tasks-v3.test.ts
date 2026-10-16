@@ -1115,6 +1115,116 @@ describe("writes go through the ops, checked before anything is written", () => 
     expect(rpcCalls.filter((c) => c.fn === "projects_op_update")).toHaveLength(2);
   });
 
+  describe("a project's client: a person or a company (MOD-155)", () => {
+    const ACME = "c0c0c0c0-0000-4000-8000-000000000001";
+    const SECRET = "c0c0c0c0-0000-4000-8000-000000000002";
+    const ANNA = "c0c0c0c0-0000-4000-8000-000000000003";
+    const withContacts = { tasks: "edit", contacts: "view" };
+
+    function clients(scopes: Record<string, string> = withContacts) {
+      const s = setup({
+        scopes,
+        rpcs: {
+          share_visible_ids: (a) =>
+            a.p_resource_type === "bucket"
+              ? [INBOX, P_SHARED]
+              : a.p_resource_type === "company"
+                ? [ACME]
+                : a.p_resource_type === "contact"
+                  ? [ANNA]
+                  : [],
+          perm_can_see_entity: (a) => a.p_id === ACME || a.p_id === ANNA,
+          projects_op_update: (a) => ({
+            id: P_SHARED,
+            name: "Launch",
+            is_system: false,
+            client_contact_id: (a.p_patch as Row).client_contact_id ?? null,
+            client_company_id: (a.p_patch as Row).client_company_id ?? null,
+          }),
+          projects_op_create: (a) => ({ id: "p-new", name: "Site", is_system: false, ...(a.p_project as Row) }),
+        },
+      });
+      s.tables.companies = [
+        { id: ACME, workspace_id: WS, name: "Acme Inc.", deleted_at: null },
+        { id: SECRET, workspace_id: WS, name: "Bea's secret client", deleted_at: null },
+      ];
+      s.tables.contacts = [{ id: ANNA, workspace_id: WS, name: "Anna Kowalski", deleted_at: null }];
+      return s;
+    }
+    const lastPatch = (calls: Array<{ fn: string; args: Row }>) =>
+      calls.filter((c) => c.fn === "projects_op_update").at(-1)?.args.p_patch;
+
+    it("projects_list names a client the key's person can open, with Contacts access only", async () => {
+      const { ctx, tables } = clients();
+      tables.buckets!.find((b) => b.id === P_SHARED)!.client_company_id = ACME;
+      const listed: Row[] = await call("projects_list", {}, ctx);
+      expect(listed.find((p) => p.id === P_SHARED)?.client).toEqual({ type: "company", id: ACME, name: "Acme Inc." });
+
+      tables.buckets!.find((b) => b.id === P_SHARED)!.client_company_id = SECRET;
+      const hidden: Row[] = await call("projects_list", {}, ctx);
+      expect(hidden.find((p) => p.id === P_SHARED)).not.toHaveProperty("client");
+      expect(JSON.stringify(hidden)).not.toContain("secret client");
+    });
+
+    it("a key without Contacts never learns who the client is", async () => {
+      const { ctx, tables, rpcCalls } = clients({ tasks: "edit" });
+      tables.buckets!.find((b) => b.id === P_SHARED)!.client_company_id = ACME;
+      const listed: Row[] = await call("projects_list", {}, ctx);
+      expect(listed.find((p) => p.id === P_SHARED)).not.toHaveProperty("client");
+      expect(JSON.stringify(listed)).not.toContain("Acme");
+      expect(JSON.stringify(listed)).not.toContain(ACME);
+      for (const args of [{ client_company_id: ACME }, { client_company_id: null }, { client_contact_id: ANNA }]) {
+        await expect(call("projects_update", { project_id: P_SHARED, ...args }, ctx)).rejects.toThrow(
+          "This API key has no access to Contacts.",
+        );
+      }
+      expect(rpcCalls.filter((c) => c.fn === "projects_op_update")).toHaveLength(0);
+    });
+
+    it("projects_update sets a company or a person, and clears it", async () => {
+      const { ctx, rpcCalls } = clients();
+      const set = await call("projects_update", { project_id: P_SHARED, client_company_id: ACME }, ctx);
+      expect(lastPatch(rpcCalls)).toEqual({ client_company_id: ACME });
+      expect(set.client).toEqual({ type: "company", id: ACME, name: "Acme Inc." });
+
+      const person = await call("projects_update", { project_id: P_SHARED, client_contact_id: ANNA }, ctx);
+      expect(lastPatch(rpcCalls)).toEqual({ client_contact_id: ANNA });
+      expect(person.client).toEqual({ type: "contact", id: ANNA, name: "Anna Kowalski" });
+
+      const cleared = await call("projects_update", { project_id: P_SHARED, client_company_id: null }, ctx);
+      expect(lastPatch(rpcCalls)).toEqual({ client_company_id: null });
+      expect(cleared).not.toHaveProperty("client");
+    });
+
+    it("refuses a private company like a missing one, and both at once", async () => {
+      const { ctx, rpcCalls } = clients();
+      const hidden = await call("projects_update", { project_id: P_SHARED, client_company_id: SECRET }, ctx).catch(
+        (e: Error) => e.message,
+      );
+      const missing = await call(
+        "projects_update",
+        { project_id: P_SHARED, client_company_id: "c0c0c0c0-0000-4000-8000-0000000000ff" },
+        ctx,
+      ).catch((e: Error) => e.message);
+      expect(hidden).toBe("No company with that id in this workspace.");
+      expect(missing).toBe(hidden);
+      await expect(
+        call("projects_update", { project_id: P_SHARED, client_company_id: ACME, client_contact_id: ANNA }, ctx),
+      ).rejects.toThrow("A project's client is a person or a company, not both.");
+      expect(rpcCalls.filter((c) => c.fn === "projects_op_update")).toHaveLength(0);
+    });
+
+    it("projects_create takes a company client", async () => {
+      const { ctx, rpcCalls } = clients();
+      const made = await call("projects_create", { name: "Site", client_company_id: ACME }, ctx);
+      expect(rpcCalls.find((c) => c.fn === "projects_op_create")?.args.p_project).toEqual({
+        name: "Site",
+        client_company_id: ACME,
+      });
+      expect(made.client).toEqual({ type: "company", id: ACME, name: "Acme Inc." });
+    });
+  });
+
   it("tasks_update to done finishes the open subtasks too (call 87)", async () => {
     const statusCalls: string[] = [];
     const { ctx } = setup({

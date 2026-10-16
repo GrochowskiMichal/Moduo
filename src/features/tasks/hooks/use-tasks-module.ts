@@ -81,6 +81,7 @@ import {
   type TimeBlockSlot,
   type TrackTimeInput,
 } from "../model";
+import { clientCopyClears } from "../project-overview";
 import {
   alsoInLabel,
   applyQueueMoves,
@@ -3159,9 +3160,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
         if (value === undefined) continue;
         (local as Record<string, unknown>)[key] = key === "description" ? (value ?? "") : value;
       }
+      // MOD-155: a client is a person or a company; the op clears the other.
+      Object.assign(
+        local,
+        clientCopyClears(
+          allBuckets.find((b) => b.id === id),
+          patch,
+        ),
+      );
       return editProject(id, patch, local);
     },
-    [editProject],
+    [editProject, allBuckets],
   );
 
   // Undo runs seconds later: it saves through the newest `editProject`.

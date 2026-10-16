@@ -4,7 +4,8 @@
 // Assignee + Team, Priority, Due and Tags always show; Energy, Scheduled,
 // Reminder, Estimate, Repeat and Waiting on show once set, and until then
 // sit in one quiet "+" line that names them on one line, "+n" for what
-// doesn't fit (MOD-114). The line opens a menu of them all; picking one shows
+// doesn't fit (MOD-114; `AddPropertyLine`, which the Project view shares,
+// MOD-151). The line opens a menu of them all; picking one shows
 // its row, empty, with its editor open (Waiting on opens its list, below the
 // properties). Values wrap and never truncate; the label column narrows from
 // 96 to 76 px when the panel is under 320 px (the panel is the container).
@@ -27,10 +28,10 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { TagChip } from "../../../components/tag-chip";
+import { TagAddButton, TagChip } from "../../../components/tag-chip";
 import { TagPicker } from "../../../components/tag-picker";
 import { TeamMark } from "../../../components/ui/avatar";
 import {
@@ -46,7 +47,6 @@ import { DateField } from "../../../components/ui/date-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -61,7 +61,6 @@ import { type Assignee, assigneeLabel, assigneeListName, SELF_KEYWORDS } from ".
 import { previewAssign, useAssignees } from "../assignees";
 import { dueDayOf } from "../bulk";
 import {
-  namesThatFit,
   OPTIONAL_PROPERTY_LABELS,
   type OptionalProperty,
   type PropertyExtras,
@@ -73,6 +72,7 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, EnergyLevel, PriorityLevel, Task } from "../model";
 import { changePatternRule, engineZone } from "../recurrence-engine";
 import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
+import { type AddPropertyItem, AddPropertyLine } from "./add-property-line";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { EnergyIcon, PriorityIcon } from "./level-icons";
 import { RepeatMoveDialog } from "./repeat-move-dialog";
@@ -252,12 +252,14 @@ export function TaskDetailProperties({
       <PropertyRow label="Tags" align="start">
         <TagsValue task={task} api={api} canEdit={canEdit} />
       </PropertyRow>
-      {quiet.length > 0 ? <AddPropertyLine properties={quiet} onPick={reveal} /> : null}
+      {quiet.length > 0 ? (
+        <AddPropertyLine items={quiet.map(propertyItem)} onPick={reveal} />
+      ) : null}
     </div>
   );
 }
 
-// ── the "+" line ──────────────────────────────────────────────────────────────
+// ── the "+" line (add-property-line.tsx, shared with the Project view) ────────
 
 const PROPERTY_ICONS: Record<OptionalProperty, LucideIcon> = {
   energy: Zap,
@@ -268,149 +270,11 @@ const PROPERTY_ICONS: Record<OptionalProperty, LucideIcon> = {
   waiting: Hourglass,
 };
 
-/**
- * "+ Energy · Scheduled · Reminder · +3" (MOD-114, round-2b `.addprop`): the
- * hidden properties as quiet text on one line that never wraps, whole names
- * then "+n" (call 42). The whole line is one control: it opens a menu with
- * every hidden property, and picking one adds its row. A hidden copy of the
- * names (clipped, so it never widens the panel) gives their widths.
- */
-function AddPropertyLine({
-  properties,
-  onPick,
-}: {
-  properties: OptionalProperty[];
-  onPick: (p: OptionalProperty) => void;
-}) {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const namesRef = useRef<HTMLSpanElement>(null);
-  const measureRef = useRef<HTMLSpanElement>(null);
-  const [fit, setFit] = useState(properties.length);
-  // The last count set, so a re-measure that changes nothing draws nothing.
-  const fitRef = useRef(fit);
-  // A pick opens its row's editor, which takes focus: the menu mustn't hand
-  // it back to this line as it closes (gotchas/ui.md, SH-1's capture).
-  const picked = useRef(false);
-  const key = properties.join(" ");
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the names change
-  useLayoutEffect(() => {
-    const box = boxRef.current;
-    const button = buttonRef.current;
-    const names = namesRef.current;
-    const measure = measureRef.current;
-    if (!box || !button || !names || !measure) return;
-    // Fractional widths: offsetWidth rounds, and six rounded names can add
-    // up to a pixel or two past the line.
-    const width = (el: Element | null) => el?.getBoundingClientRect().width ?? 0;
-    const run = () => {
-      const widths = [...measure.querySelectorAll("[data-name]")].map(width);
-      const more = width(measure.querySelector("[data-more]"));
-      // The "+" and the button's padding take the rest of the line.
-      const chrome = width(button) - width(names);
-      const line = width(box);
-      const room = line > 0 ? line - chrome : 0;
-      const next = namesThatFit(room, widths, more);
-      if (next !== fitRef.current) {
-        fitRef.current = next;
-        setFit(next);
-      }
-    };
-    run();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(run);
-    observer.observe(box);
-    observer.observe(measure);
-    return () => observer.disconnect();
-  }, [key]);
-
-  const shown = properties.slice(0, Math.min(fit, properties.length));
-  const rest = properties.length - shown.length;
-  // The name holds the words on the line (label in name, WCAG 2.5.3).
-  const label = `Add a property: ${shown.map((p) => OPTIONAL_PROPERTY_LABELS[p]).join(", ")}${
-    rest > 0 ? `, +${rest}` : ""
-  }`;
-  const names = (list: OptionalProperty[], measuring: boolean) =>
-    list.map((p, i) => (
-      <span key={p} data-name={measuring ? p : undefined} className="shrink-0">
-        {i > 0 ? (
-          <span aria-hidden className="px-1">
-            ·
-          </span>
-        ) : null}
-        {OPTIONAL_PROPERTY_LABELS[p]}
-      </span>
-    ));
-
-  return (
-    <div ref={boxRef} className="relative flex min-w-0">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            ref={buttonRef}
-            type="button"
-            aria-label={label}
-            className={cn(
-              // PropertyValue's quiet control on the sm rung (round-2b `.addprop`).
-              // It pulls out 4 px, not 6: the panel's scroll box pads 4, and
-              // more would clip the hover fill.
-              "-ml-1 flex min-h-(--ctrl-h-sm) min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 py-0.5",
-              "font-sans text-sm text-subtle-foreground outline-none",
-              "transition-colors duration-(--motion-fade) ease-(--ease-out)",
-              "hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active aria-expanded:text-foreground",
-              "focus-visible:ring-2 focus-visible:ring-ring/50",
-            )}
-          >
-            <Plus className="size-icon-sm shrink-0" aria-hidden />
-            <span
-              ref={namesRef}
-              data-slot="add-property-names"
-              className="flex min-w-0 items-center overflow-hidden whitespace-nowrap"
-            >
-              {names(shown, false)}
-              {rest > 0 ? <span className="shrink-0 ps-1.5 tabular-nums">+{rest}</span> : null}
-            </span>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="w-48"
-          onCloseAutoFocus={(e) => {
-            if (!picked.current) return;
-            picked.current = false;
-            e.preventDefault();
-          }}
-        >
-          {properties.map((p) => {
-            const Icon = PROPERTY_ICONS[p];
-            return (
-              <DropdownMenuItem
-                key={p}
-                onSelect={() => {
-                  picked.current = true;
-                  onPick(p);
-                }}
-              >
-                <Icon aria-hidden />
-                {OPTIONAL_PROPERTY_LABELS[p]}
-              </DropdownMenuItem>
-            );
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      {/* The widths: every name and a "+n", laid out but unseen and clipped. */}
-      <span aria-hidden className="pointer-events-none invisible absolute size-0 overflow-hidden">
-        <span ref={measureRef} className="flex w-max font-sans text-sm whitespace-nowrap">
-          {names(properties, true)}
-          <span data-more className="shrink-0 ps-1.5 tabular-nums">
-            +{properties.length}
-          </span>
-        </span>
-      </span>
-    </div>
-  );
-}
+const propertyItem = (p: OptionalProperty): AddPropertyItem<OptionalProperty> => ({
+  key: p,
+  label: OPTIONAL_PROPERTY_LABELS[p],
+  icon: PROPERTY_ICONS[p],
+});
 
 // ── values ────────────────────────────────────────────────────────────────────
 
@@ -716,40 +580,51 @@ function LevelValue({
 
 function TagsValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
   const taskTags = api.tagsByTask.get(task.id) ?? [];
+  const chip = (t: (typeof taskTags)[number]) => (
+    <TagChip
+      key={t.id}
+      name={t.name}
+      color={t.color}
+      size="md"
+      onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
+    />
+  );
+  const picker = (trigger: ReactNode) => (
+    <TagPicker
+      tags={api.tags}
+      selectedIds={taskTags.map((t) => t.id)}
+      canEdit={canEdit}
+      onToggle={(tagId) => api.toggleTaskTag(task.id, tagId)}
+      onCreate={(name) => api.createTagForTask(name, task.id)}
+      onRecolor={(tagId, color) => api.setTagColor(tagId, color)}
+      onDelete={(tagId) => api.deleteTag(tagId)}
+      trigger={trigger}
+    />
+  );
+  const last = taskTags[taskTags.length - 1];
   return (
     <div className="flex min-h-(--ctrl-h-sm) flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
-      {taskTags.map((t) => (
-        <TagChip
-          key={t.id}
-          name={t.name}
-          color={t.color}
-          size="md"
-          onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
-        />
-      ))}
-      {canEdit ? (
-        <TagPicker
-          tags={api.tags}
-          selectedIds={taskTags.map((t) => t.id)}
-          canEdit={canEdit}
-          onToggle={(tagId) => api.toggleTaskTag(task.id, tagId)}
-          onCreate={(name) => api.createTagForTask(name, task.id)}
-          onRecolor={(tagId, color) => api.setTagColor(tagId, color)}
-          onDelete={(tagId) => api.deleteTag(tagId)}
-          trigger={
-            <PropertyValue
-              icon={<Plus />}
-              empty
-              aria-label="Add tag"
-              className={cn(taskTags.length > 0 && "ml-0 px-1")}
-            >
-              {taskTags.length === 0 ? "Add tag" : null}
-            </PropertyValue>
-          }
-        />
-      ) : taskTags.length === 0 ? (
-        <span className="font-sans text-sm text-muted-foreground">No tags</span>
-      ) : null}
+      {!last ? (
+        canEdit ? (
+          picker(
+            <PropertyValue icon={<Plus />} empty aria-label="Add tag">
+              Add tag
+            </PropertyValue>,
+          )
+        ) : (
+          <span className="font-sans text-sm text-muted-foreground">No tags</span>
+        )
+      ) : (
+        <>
+          {taskTags.slice(0, -1).map(chip)}
+          {/* The "+" rides with the last chip, at its height (MOD-158), so it
+              never wraps onto a line of its own. */}
+          <span className="flex min-w-0 max-w-full items-center gap-1.5">
+            {chip(last)}
+            {canEdit ? picker(<TagAddButton />) : null}
+          </span>
+        </>
+      )}
     </div>
   );
 }

@@ -405,7 +405,7 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
       <button
         type="button"
         onClick={openAvatarPicker}
-        className="group relative rounded-avatar outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="group relative rounded-avatar outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         aria-label="Choose profile picture"
       >
         <Avatar className="size-14 border border-border">

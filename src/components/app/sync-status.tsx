@@ -56,7 +56,7 @@ export function TasksSyncStatus() {
         data-slot="sync-status"
         onClick={syncError && !offline ? () => void store.reload() : undefined}
         aria-label={`${words}. ${tip}`}
-        className="flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xs:px-2"
+        className="flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-md font-sans text-xs text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 @2xs:px-2"
       >
         <Glyph className="size-4 @2xs:size-3.5" aria-hidden />
         <span className="hidden @2xs:inline">{words}</span>

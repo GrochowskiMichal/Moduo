@@ -628,6 +628,8 @@ export function bucketRowToModel(raw: unknown): Bucket {
     archivedAt: r.archived_at ?? null,
     // TV-U16 (absent before its migration).
     ...(r.description !== undefined ? { description: r.description ?? "" } : {}),
+    // MOD-155: a company client (absent before its migration).
+    ...(r.client_company_id !== undefined ? { clientCompanyId: r.client_company_id ?? null } : {}),
   };
 }
 

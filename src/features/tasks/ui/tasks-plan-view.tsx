@@ -1794,16 +1794,8 @@ export function TasksPlanView({
       view !== "timeline" && order !== "manual" && showsSortedNote(place, order) ? (
         <SortedOrderLine label={sortedByLabel(order)} onManualOrder={backToManualOrder} />
       ) : null,
-    project: titleProjectId
-      ? {
-          onOpenDetails: openProjectDetails,
-          // An archived project is read-only (TV-U6).
-          onEditStatuses:
-            canEdit && !archivedProject
-              ? () => setStatusesEditor({ projectId: titleProjectId })
-              : undefined,
-        }
-      : undefined,
+    // Statuses… lives in the Project view's ⋯ now (MOD-150).
+    project: titleProjectId ? { onOpenDetails: openProjectDetails } : undefined,
   };
 
   const sharedViewProps = {
@@ -2512,6 +2504,13 @@ export function TasksPlanView({
       }}
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
+      // The title row's ⋯ → Statuses… (MOD-150, from the plan header's ⋯);
+      // an archived project is read-only (TV-U6).
+      onEditStatuses={
+        canEdit && !panelProject.archivedAt
+          ? (p) => setStatusesEditor({ projectId: p.id })
+          : undefined
+      }
     />
   ) : null;
   // The panel remembers its view; the title's ask shows Project only while

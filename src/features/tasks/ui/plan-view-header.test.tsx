@@ -1,6 +1,6 @@
 // TV-U4 (AC11.4, default m) — a sorted project view says so under the
 // toolbar, and its action goes back to manual order. MOD-95 — a project's
-// title opens its details, with its ⋯ beside it.
+// title opens its details; MOD-150 took the ⋯ beside it away.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -25,8 +25,8 @@ describe("SortedOrderLine", () => {
   });
 });
 
-describe("a project's title and ⋯ (MOD-95, round-2b)", () => {
-  const header = (project?: { onOpenDetails: () => void; onEditStatuses?: () => void }) =>
+describe("a project's title (MOD-95, round-2b; MOD-150)", () => {
+  const header = (project?: { onOpenDetails: () => void }) =>
     render(
       <TooltipProvider>
         <PlanViewHeader
@@ -48,37 +48,22 @@ describe("a project's title and ⋯ (MOD-95, round-2b)", () => {
     expect(onOpenDetails).toHaveBeenCalledOnce();
   });
 
-  it("offers Project details and Statuses… in the ⋯", async () => {
-    const onOpenDetails = rs.fn();
-    const onEditStatuses = rs.fn();
-    header({ onOpenDetails, onEditStatuses });
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Project actions" }), {
-      button: 0,
-      pointerType: "mouse",
-    });
-    const menu = await screen.findByRole("menu");
+  it("has no ⋯ beside the title: Statuses… lives in the Project view's ⋯ (MOD-150)", () => {
+    header({ onOpenDetails: () => {} });
+    expect(screen.queryByRole("button", { name: "Project actions" })).toBeNull();
+    const title = document.querySelector("[data-slot=plan-title]") as HTMLElement;
+    // The title's button, the count and nothing else.
     expect(
-      within(menu)
-        .getAllByRole("menuitem")
-        .map((i) => i.textContent),
-    ).toEqual(["Project details", "Statuses…"]);
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Statuses…" }));
-    expect(onEditStatuses).toHaveBeenCalledOnce();
+      within(title)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Website"]);
   });
 
-  it("leaves Statuses… out without edit access, and a plain title elsewhere", async () => {
-    header({ onOpenDetails: () => {} });
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Project actions" }), {
-      button: 0,
-      pointerType: "mouse",
-    });
-    const menu = await screen.findByRole("menu");
-    expect(within(menu).queryByRole("menuitem", { name: "Statuses…" })).toBeNull();
-    cleanup();
+  it("is a plain title elsewhere", () => {
     header();
     const heading = screen.getByRole("heading", { level: 1, name: "Website" });
     expect(within(heading).queryByRole("button")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Project actions" })).toBeNull();
   });
 });
 
@@ -103,7 +88,7 @@ describe("a narrow toolbar keeps the title (MOD-95 follow-up)", () => {
       </TooltipProvider>,
     );
     const title = document.querySelector("[data-slot=plan-title]") as HTMLElement;
-    // About ten characters with its ⋯ and count, then all the room left.
+    // About ten characters with its count, then all the room left.
     expect(title.className).toContain("basis-40");
     expect(title.className).toContain("grow");
     expect(title.contains(screen.getByText("12"))).toBe(true);

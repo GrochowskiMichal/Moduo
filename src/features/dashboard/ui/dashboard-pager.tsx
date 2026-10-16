@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,9 @@ import { GridCanvas } from "./grid-canvas";
 const WHEEL_THRESHOLD = 60;
 /** Ignore further wheel this long after a turn, so trackpad momentum can't skip pages (assumption 11). */
 const WHEEL_LOCKOUT_MS = 350;
+/** What can take focus inside a page (its widgets' controls). */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export interface DashboardPagerProps {
   layout: DashboardLayout;
@@ -30,7 +33,12 @@ export interface DashboardPagerProps {
  * to `--motion-base` (0s under reduced motion → instant, AC12). The transform is
  * the *inline style* target, so — unlike a JS/rAF tween — the layer can never
  * freeze mid-slide; the transition is purely cosmetic. Only the ACTIVE page is
- * interactive + edit-wired (others are `pointer-events-none` + aria-hidden). A
+ * interactive + edit-wired: the others are `inert`, so Tab never walks into a
+ * page off screen (MOD-161: focusing one scrolled the viewport sideways and
+ * left two half pages under the first page's dot). The viewport clips rather
+ * than hides, so it is no scroll container and nothing can shift it. Paging
+ * with ←/→ while a widget has focus hands focus to the new page's first control
+ * (else it would fall out of the now inert page to the body). A
  * widget's own wheel is swallowed in GridCanvas, so this viewport's handler only
  * sees grid-background travel — deltaX-dominant, threshold + lockout — and pages.
  */
@@ -47,6 +55,22 @@ export function DashboardPager({
 }: DashboardPagerProps) {
   const accum = useRef(0);
   const lockedUntil = useRef(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const shownRef = useRef(activeIndex);
+
+  // Runs after the commit that made the old page inert, before the browser
+  // moves focus out of it. `preventScroll`: the new page is still sliding in.
+  useLayoutEffect(() => {
+    const from = shownRef.current;
+    shownRef.current = activeIndex;
+    if (from === activeIndex) return;
+    const layers = viewportRef.current?.children;
+    const outgoing = layers?.[from];
+    const incoming = layers?.[activeIndex];
+    const focused = document.activeElement;
+    if (!outgoing || !incoming || !focused || !outgoing.contains(focused)) return;
+    incoming.querySelector<HTMLElement>(FOCUSABLE)?.focus({ preventScroll: true });
+  }, [activeIndex]);
 
   const handleWheel = (e: React.WheelEvent) => {
     // Vertical-dominant wheel is left alone (the grid never scrolls); only a
@@ -66,7 +90,11 @@ export function DashboardPager({
   };
 
   return (
-    <div className="relative min-h-0 w-full flex-1 overflow-hidden" onWheel={handleWheel}>
+    <div
+      ref={viewportRef}
+      className="relative min-h-0 w-full flex-1 overflow-clip"
+      onWheel={handleWheel}
+    >
       {layout.pages.map((page, i) => {
         const isActive = i === activeIndex;
         return (
@@ -78,6 +106,7 @@ export function DashboardPager({
             )}
             style={{ transform: `translateX(${(i - activeIndex) * 100}%)` }}
             aria-hidden={!isActive}
+            inert={!isActive}
           >
             <GridCanvas
               widgets={page.widgets}

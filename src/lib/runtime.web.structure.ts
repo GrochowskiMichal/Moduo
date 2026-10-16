@@ -49,7 +49,9 @@ export type ProjectFields = {
   startsOn?: string | null;
   targetOn?: string | null;
   leadId?: string | null;
+  /** A project's client is a contact or a company: naming one clears the other (MOD-155). */
   clientContactId?: string | null;
+  clientCompanyId?: string | null;
   areaId?: string | null;
   position?: string;
   /** TV-U6: a label hue name; null = neutral. */
@@ -116,6 +118,7 @@ const PROJECT_KEYS: Record<Exclude<keyof ProjectFields, "archived">, string> = {
   targetOn: "target_on",
   leadId: "lead_id",
   clientContactId: "client_contact_id",
+  clientCompanyId: "client_company_id",
   areaId: "area_id",
   position: "position",
   color: "color",

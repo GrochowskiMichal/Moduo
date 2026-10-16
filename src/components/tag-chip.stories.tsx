@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import { TagChip, TagChipList } from "./tag-chip";
+import { TagAddButton, TagChip, TagChipList } from "./tag-chip";
 import { LABEL_COLORS } from "./tag-colors";
 
 const meta: Meta<typeof TagChip> = {
@@ -124,6 +124,27 @@ export const BothThemes: Story = {
             <TagChip name="tasks" color="green" active />
           </div>
         </section>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * The "+" after the chips (MOD-158): round, at the chips' height (`md` 22 px,
+ * `sm` 18 px), a muted plus that lights on hover. In the details panel it rides
+ * with the last chip, so it never wraps onto a line of its own.
+ */
+export const WithAdd: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3">
+      {(["md", "sm"] as const).map((size) => (
+        <div key={size} className="flex w-40 flex-wrap items-center gap-x-1.5 gap-y-1">
+          <TagChip name="shell" color="pink" size={size} onRemove={() => {}} />
+          <span className="flex min-w-0 max-w-full items-center gap-1.5">
+            <TagChip name="visual" color="violet" size={size} onRemove={() => {}} />
+            <TagAddButton size={size} />
+          </span>
+        </div>
       ))}
     </div>
   ),
