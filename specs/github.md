@@ -174,7 +174,19 @@ Each is the agent's choice, deferred to it by Maciej during grilling: confirmed 
 
 - **A GitHub App, not an OAuth App.** Fine-grained read-only permissions (Metadata, Pull requests, Checks, Commit statuses, Issues), installer picks repos, one central webhook, 1-hour installation tokens. Rejected: an OAuth App (needs the `repo` scope, read+write to everything, webhooks per repo).
 - **Owner** (G34, amended by Maciej 2026-10-16: "14 ok"): Maciej registers the app under his own GitHub account (En5hi). Mike, who owns the account that holds the Moduo repo (GrochowskiMichal), installs it there and picks the repo. If Moduo gets a GitHub organisation later, the app transfers to it in one step without breaking installs. Setup steps ship with GH-1 in `docs/github-app-setup.md`.
-- **Secrets** (app private key converted to PKCS#8, webhook secret, client secret) are Edge Function secrets set by Maciej, never in the repo. App ID and client ID are public config.
+- **Proving the install belongs to the admin (GH-1, from GH-1's research, 2026-10-16).** GitHub's setup-URL docs warn that the `installation_id` on the return can be forged: nothing ties it to the person who installed. The connect flow therefore:
+  - turns on "Request user authorization (OAuth) during installation" and "Redirect on update", with the app's callback URL set to `github-connect`;
+  - on finish, exchanges the code (with the client secret, `GITHUB_APP_CLIENT_SECRET`) for a user token, checks that the installation id is in that user's `GET /user/installations` (paged), then throws the token away;
+  - when GitHub returns without a code (an update to an organisation already connected to another workspace, G24), bounces once through GitHub's OAuth authorize URL, carrying the installation id in the signed state.
+- **Disconnect** marks this workspace's link `disconnected` (a fourth status beside active / suspended / removed, so the card never says "Disconnected on GitHub" for a local disconnect). It calls `DELETE /app/installations/{id}` only when no other workspace still uses that installation.
+- **GH-1 notes:**
+  - Stamp the migration after the Chat v2 files (`20261017123000`).
+  - `perm_can_see_entity`'s newest body is `20261014090000_chat_privacy_rules.sql`. Unknown types fall through as visible, so the GitHub branch is required.
+  - There is no `ws.admin` key; the admin check uses `ws.manage_members`.
+  - `ACTIVITY_ACTOR_TYPES` has no parse / normalize / is helpers yet, and `vocabularies.test.ts` pins the lists.
+  - `links_op_create`'s newest body is `20261017112000_chat_v2_mention_rows.sql`, and it refuses unknown origins. GH-2's automatic links need their own definer path.
+  - "Connected by" for a former member needs a SECURITY DEFINER read (and a `READ_RPCS` line in `src/lib/min-build.ts`).
+- **Secrets** (app private key converted to PKCS#8, webhook secret, client secret `GITHUB_APP_CLIENT_SECRET`) are Edge Function secrets set by Maciej, never in the repo. App ID and client ID are public config.
 - **Tables** (one migration in GH-1, workspace-scoped, service-role writes, member reads via RLS):
   - `github_installations` (workspace, installation id, account login and type, status active/suspended/removed, connected_by, auto_move boolean default false);
   - `github_repos` (installation, GitHub repo id, full name, private, default branch, active);

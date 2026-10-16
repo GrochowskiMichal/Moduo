@@ -513,7 +513,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > Planned 2026-10-16 (MOD-156, Maciej's answers G1–G51). GH-D and GH-1 can run in parallel. **Before GH-2's live check:** Maciej registers the app under his GitHub account (En5hi), and Mike installs it on the Moduo repo (GH-1 ships `docs/github-app-setup.md`). Tier 2: GH-1, GH-2, GH-6 and GH-7 touch migrations, Edge Functions or `moduo-mcp`.
 
 - [~] **GH-D — Chip, card and suggestion frames** · deps: — · prototype `.design/github/prototypes/github.html`; **Maciej approves before GH-3, GH-5 and GH-6 build UI**
-- [~] **GH-1 — Connect GitHub** · deps: — · migration, app auth, `github-connect`, Settings card, setup doc
+- [ ] **GH-1 — Connect GitHub** · deps: — · migration, app auth, `github-connect` (with the install-ownership check in the spec), Settings card, setup doc · _research done 2026-10-16, nothing built yet; notes in the spec_
 - [ ] **GH-2 — Webhooks, items and auto-linking** · deps: GH-1
 - [ ] **GH-3 — GitHub references: chips and cards** · deps: GH-D, GH-2
 - [ ] **GH-4 — Paste and "/"** · deps: GH-3
