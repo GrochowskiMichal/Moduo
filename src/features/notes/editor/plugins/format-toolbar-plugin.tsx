@@ -28,10 +28,11 @@ import {
   SELECTION_CHANGE_COMMAND,
   type TextFormatType,
 } from "lexical";
-import { Bold, Code, Italic, Link2, Strikethrough } from "lucide-react";
+import { Bold, Code, Italic, Link2, MessageSquarePlus, Strikethrough } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconButton } from "@/components/ui/icon-button";
+import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
 import { OPEN_LINK_DIALOG_COMMAND } from "./link-dialog-plugin";
 
 type Formats = { bold: boolean; italic: boolean; strikethrough: boolean; code: boolean };
@@ -95,10 +96,13 @@ function inCodeBlock(node: LexicalNode | null): boolean {
 export function FormatToolbarPlugin({
   editable,
   link = false,
+  comment = false,
 }: {
   editable: boolean;
   /** Show "Link ⌘K" (the link dialog is mounted, NR-4). */
   link?: boolean;
+  /** Show "Comment" (anchored threads, NR-8). */
+  comment?: boolean;
 }) {
   const [editor] = useLexicalComposerContext();
   const [state, setState] = useState<ToolbarState | null>(null);
@@ -266,6 +270,15 @@ export function FormatToolbarPlugin({
           className="text-muted-foreground"
           onPointerDown={(e) => e.preventDefault()}
           onClick={() => editor.dispatchCommand(OPEN_LINK_DIALOG_COMMAND, undefined)}
+        />
+      ) : null}
+      {comment ? (
+        <IconButton
+          icon={MessageSquarePlus}
+          label="Comment"
+          className="text-muted-foreground"
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={() => editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined)}
         />
       ) : null}
     </div>,

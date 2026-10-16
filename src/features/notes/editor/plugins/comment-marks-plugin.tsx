@@ -1,0 +1,155 @@
+/**
+ * CommentMarksPlugin (NR-8) — the editor half of comments anchored to text.
+ *
+ * - "Comment" (selection toolbar) wraps the selection in a MarkNode carrying
+ *   a fresh thread id and opens the Comments panel's composer for it.
+ * - Every update reports the thread ids in the doc, in order, to the anchor
+ *   store, so the panel can sort threads and tell which became Detached.
+ * - Only marks whose thread is open are highlighted (`data-comment`); a mark
+ *   whose thread was resolved elsewhere, or never got its first comment,
+ *   reads as plain text.
+ * - Clicking a highlight focuses its thread in the panel.
+ */
+
+import { $getMarkIDs, $isMarkNode } from "@lexical/mark";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import {
+  $getNodeByKey,
+  $getRoot,
+  $getSelection,
+  $isElementNode,
+  $isRangeSelection,
+  $isTextNode,
+  CLICK_COMMAND,
+  COMMAND_PRIORITY_LOW,
+  createCommand,
+  type LexicalCommand,
+  type LexicalNode,
+} from "lexical";
+import { useEffect } from "react";
+import { anchorStore } from "../../comments/anchor-store";
+import {
+  $anchorIdsInOrder,
+  $anchorSelection,
+  $firstMarkKey,
+  $unanchor,
+} from "../../comments/anchors";
+import { useNotesEditorBridge } from "../notes-editor-bridge";
+
+export const ADD_COMMENT_COMMAND: LexicalCommand<void> = createCommand("NOTES_ADD_COMMENT");
+
+type Editor = ReturnType<typeof useLexicalComposerContext>[0];
+
+/** Marks' DOM state from the store: open, focused, or plain. */
+function paintMarks(editor: Editor, noteId: string) {
+  const { openThreads, focused, pending } = anchorStore.get(noteId);
+  const isOpen = (id: string) => openThreads === null || openThreads.has(id) || id === pending;
+  editor.getEditorState().read(() => {
+    const walk = (node: LexicalNode) => {
+      if ($isMarkNode(node)) {
+        const el = editor.getElementByKey(node.getKey());
+        const ids = node.getIDs();
+        const state = ids.some((id) => id === focused && isOpen(id))
+          ? "focused"
+          : ids.some(isOpen)
+            ? "open"
+            : "plain";
+        if (el && el.dataset.comment !== state) el.dataset.comment = state;
+      }
+      if ($isElementNode(node)) for (const child of node.getChildren()) walk(child);
+    };
+    walk($getRoot());
+  });
+}
+
+export function CommentMarksPlugin({ noteId, editable }: { noteId: string; editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  const bridge = useNotesEditorBridge();
+
+  useEffect(() => {
+    const publish = () => {
+      const order = editor.getEditorState().read(() => $anchorIdsInOrder());
+      anchorStore.setDocOrder(noteId, order);
+      paintMarks(editor, noteId);
+    };
+    publish();
+    const offUpdate = editor.registerUpdateListener(publish);
+    const offStore = anchorStore.subscribe(() => paintMarks(editor, noteId));
+
+    const offActions = anchorStore.register(noteId, {
+      anchorSelection: () => {
+        if (!editable) return null;
+        const id = crypto.randomUUID();
+        let ok = false;
+        editor.update(
+          () => {
+            const sel = $getSelection();
+            ok = $isRangeSelection(sel) && $anchorSelection(sel, id);
+          },
+          { discrete: true },
+        );
+        return ok ? id : null;
+      },
+      unanchor: (anchorId) => {
+        if (!editable) return;
+        editor.update(() => $unanchor(anchorId), { discrete: true });
+      },
+      scrollTo: (anchorId) => {
+        const key = editor.getEditorState().read(() => $firstMarkKey(anchorId));
+        const el = key ? editor.getElementByKey(key) : null;
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      },
+      textOf: (anchorId) =>
+        editor.getEditorState().read(() => {
+          const key = $firstMarkKey(anchorId);
+          const node = key ? $getNodeByKey(key) : null;
+          return node?.getTextContent() ?? "";
+        }),
+    });
+
+    const offAdd = editor.registerCommand(
+      ADD_COMMENT_COMMAND,
+      () => {
+        const id = anchorStore.actions(noteId)?.anchorSelection() ?? null;
+        if (!id) return false;
+        anchorStore.setPending(noteId, id);
+        anchorStore.focus(noteId, id);
+        bridge?.openComments?.();
+        return true;
+      },
+      COMMAND_PRIORITY_LOW,
+    );
+
+    // A click on a highlight opens its thread (never steals the caret).
+    const offClick = editor.registerCommand(
+      CLICK_COMMAND,
+      () => {
+        const sel = editor.getEditorState().read(() => {
+          const s = $getSelection();
+          if (!$isRangeSelection(s) || !s.isCollapsed()) return null;
+          const node = s.anchor.getNode();
+          return $isTextNode(node) ? $getMarkIDs(node, s.anchor.offset) : null;
+        });
+        if (!sel?.length) return false;
+        const { openThreads } = anchorStore.get(noteId);
+        const id = sel.find((x) => openThreads === null || openThreads.has(x));
+        if (!id) return false;
+        anchorStore.focus(noteId, id);
+        bridge?.openComments?.();
+        return false;
+      },
+      COMMAND_PRIORITY_LOW,
+    );
+
+    return () => {
+      offUpdate();
+      offStore();
+      offActions();
+      offAdd();
+      offClick();
+      anchorStore.setDocOrder(noteId, null);
+    };
+  }, [editor, noteId, editable, bridge]);
+
+  return null;
+}

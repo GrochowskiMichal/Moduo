@@ -3387,20 +3387,41 @@ export const webRuntime: ModuoRuntime = {
       mentionedUserIds,
       entityLabel,
       entityIcon,
+      anchorId,
     }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_add", {
-        p_workspace_id: workspaceId,
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_body: body,
-        p_mentioned_user_ids: mentionedUserIds ?? [],
-        p_entity_label: entityLabel ?? null,
-        p_entity_icon: entityIcon ?? null,
-      });
+      const { data, error } = anchorId
+        ? await supabaseClient.rpc("comments_op_add_anchored", {
+            p_workspace_id: workspaceId,
+            p_entity_id: entityId,
+            p_anchor_id: anchorId,
+            p_body: body,
+            p_mentioned_user_ids: mentionedUserIds ?? [],
+            p_entity_label: entityLabel ?? null,
+            p_entity_icon: entityIcon ?? null,
+          })
+        : await supabaseClient.rpc("comments_op_add", {
+            p_workspace_id: workspaceId,
+            p_entity_type: entityType,
+            p_entity_id: entityId,
+            p_body: body,
+            p_mentioned_user_ids: mentionedUserIds ?? [],
+            p_entity_label: entityLabel ?? null,
+            p_entity_icon: entityIcon ?? null,
+          });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async resolveCommentThread({ workspaceId, noteId, anchorId, resolved }) {
+      const { error } = await supabaseClient.rpc("comments_op_resolve", {
+        p_workspace_id: workspaceId,
+        p_entity_id: noteId,
+        p_anchor_id: anchorId,
+        p_resolved: resolved,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async getCommentExcerpts({ workspaceId, commentIds }) {
@@ -5064,6 +5085,8 @@ function commentRowToModel(raw: unknown): SpineComment {
     deletedAt: r.deleted_at ?? null,
     editedAt: r.edited_at ?? null,
     reactions: reactionMarks(r.comment_reactions ?? []),
+    anchorId: r.anchor_id ?? null,
+    resolvedAt: r.resolved_at ?? null,
   };
 }
 
