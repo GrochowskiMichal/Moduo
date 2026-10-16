@@ -101,6 +101,9 @@ BEGIN
   r := test.try('E', format($q$SELECT public.projects_op_create(%L, %L::jsonb)$q$, test.id('W'),
     jsonb_build_object('name', 'Sneaky', 'client_company_id', test.id('CP'))));
   PERFORM test.ok(r = '22023 That company isn''t in this workspace.', 'creating a project checks it too', r);
+  r := test.try('E', format($q$SELECT public.projects_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('name', 'Both', 'client_contact_id', test.id('C1'), 'client_company_id', test.id('CO'))));
+  PERFORM test.ok(r LIKE '22023%person or a company, not both%', 'and a new project can''t name both', r);
   r := test.set_client('O', 'P', jsonb_build_object('client_company_id', test.id('CP')));
   PERFORM test.ok(r = 'ok 1', 'the private company''s owner can name it', r);
 

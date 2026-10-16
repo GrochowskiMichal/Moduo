@@ -212,7 +212,8 @@ function useClientSearch(
     let live = true;
     const timer = setTimeout(() => {
       const kinds: ProjectClient["type"][] = companies ? ["contact", "company"] : ["contact"];
-      Promise.all(
+      // Each kind on its own: a failed company search keeps the people.
+      void Promise.allSettled(
         kinds.map((type) =>
           runtime.spine.searchEntities({
             workspaceId,
@@ -221,14 +222,11 @@ function useClientSearch(
             limit: CLIENT_SEARCH_LIMIT,
           }),
         ),
-      ).then(
-        (lists) => {
-          if (live) setResults(lists.flat().filter((e) => !e.deletedAt));
-        },
-        () => {
-          if (live) setResults([]);
-        },
-      );
+      ).then((answers) => {
+        if (!live) return;
+        const found = answers.flatMap((a) => (a.status === "fulfilled" ? a.value : []));
+        setResults(found.filter((e) => !e.deletedAt));
+      });
     }, 150);
     return () => {
       live = false;

@@ -86,6 +86,16 @@ describe("the client picker (MOD-155)", () => {
     expect(mocks.searchEntities.mock.calls.map((c) => c[0].types)).toEqual([["contact"]]);
   });
 
+  it("keeps the people when the company search fails", async () => {
+    mocks.searchEntities.mockImplementation(async ({ types }: { types: string[] }) => {
+      if (types[0] === "company") throw new Error("offline");
+      return [entity("contact", "c1", "Anna Kowalski")];
+    });
+    renderValue();
+    await screen.findByRole("option", { name: /Anna Kowalski/ });
+    expect(screen.queryByText("Companies")).toBeNull();
+  });
+
   it("clears a company client with No client", async () => {
     const onChange = renderValue({ client: { type: "company", id: "co1" } });
     fireEvent.click(await screen.findByRole("option", { name: /No client/ }));

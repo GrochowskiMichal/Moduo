@@ -347,13 +347,21 @@ async function projectClients(ctx: ToolContext, buckets: readonly Row[]): Promis
   const out = new Map<string, Row>();
   await Promise.all(
     kinds.map(async (k) => {
-      const [seen, found] = await Promise.all([
-        visibleIds(ctx, k.type),
-        rows(ctx.db.from(k.table).select("id, name")
-          .eq("workspace_id", ctx.key.workspaceId).in("id", k.ids).is("deleted_at", null)),
-      ]);
-      for (const r of found) {
-        if (!seen.has(r.id)) continue;
+      const found = await rows(ctx.db.from(k.table).select("id, name")
+        .eq("workspace_id", ctx.key.workspaceId).in("id", k.ids).is("deleted_at", null));
+      // One check per client (a project list names few), never the
+      // workspace's whole visible set.
+      const seen = await Promise.all(found.map(async (r) => {
+        const { data, error } = await ctx.db.rpc("perm_can_see_entity", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_type: k.type,
+          p_id: r.id,
+        });
+        if (error) throw new Error(error.message);
+        return data === true;
+      }));
+      for (const [i, r] of found.entries()) {
+        if (!seen[i]) continue;
         const name = typeof r.name === "string" && r.name.trim() ? r.name.trim() : null;
         out.set(`${k.type}:${r.id}`, {
           type: k.type,

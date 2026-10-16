@@ -10,8 +10,9 @@
 --     Setting one clears the other; naming both in one patch is refused.
 --   * The guard trigger checks a company the way it checks a contact: live,
 --     in this workspace, and one the setter can open. Missing, deleted, in
---     another workspace and private all get the same message, so it never
---     confirms that a private company exists. A company cleared by its
+--     another workspace and private all get the same message, so a refusal
+--     never confirms that a private company exists (a project's readers see
+--     the id it names, as with client_contact_id). A company cleared by its
 --     foreign key (deleted for good) passes the edit gate, as a contact does.
 --
 -- Redefines, each re-cut from its live body: buckets__project_check
