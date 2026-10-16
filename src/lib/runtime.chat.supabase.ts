@@ -25,6 +25,8 @@ import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import {
   mapCatchupItem,
   mapChannel,
+  mapChatFile,
+  mapConversationFound,
   mapDeletedChannel,
   mapHistory,
   mapItemDecision,
@@ -32,9 +34,11 @@ import {
   mapMessage,
   mapPerson,
   mapRows,
+  mapSearchHit,
   mapSyncRow,
   mapUnread,
   mapUserChatPrefs,
+  parseMoveAnswer,
 } from "../features/chat/mappers";
 import {
   CHAT_HISTORY_OPS,
@@ -60,11 +64,6 @@ function single<T>(data: unknown, mapper: (r: unknown) => T | null, what: string
 
 function fail(error: { message: string } | null): void {
   if (error) throw new Error(error.message);
-}
-
-/** Escape LIKE wildcards so a search for "50%" matches literally. */
-function likeLiteral(q: string): string {
-  return q.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
 // ── Results (the store's transport never throws) ────────────────────────────
@@ -196,6 +195,34 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return ok(mapRows(data, mapPerson));
       }),
 
+    search: ({ workspaceId, query, channelId, fromId, after, hasFile, before, limit }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_search", {
+          p_workspace_id: workspaceId,
+          p_query: query,
+          p_channel_id: channelId ?? null,
+          p_before: before?.createdAt ?? null,
+          p_before_id: before?.messageId ?? null,
+          p_limit: limit ?? 50,
+          p_from: fromId ?? null,
+          p_after: after ?? null,
+          p_has_file: hasFile ?? false,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapSearchHit));
+      }),
+
+    findConversations: ({ workspaceId, query, limit }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_find_conversations", {
+          p_workspace_id: workspaceId,
+          p_query: query,
+          p_limit: limit ?? 5,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapConversationFound));
+      }),
+
     counts: (workspaceId) =>
       attempt(async () => {
         const { data, error } = await db().rpc("chat_unread_counts", {
@@ -303,6 +330,19 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return rowResult(data, error, "reply to");
       }),
 
+    moveMessages: ({ ids, targetId, confirm, undo }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_op_move_messages", {
+          p_ids: ids,
+          p_target_channel_id: targetId,
+          p_confirm: confirm,
+          p_undo: undo ?? false,
+        });
+        if (error) return bad(chatError(error));
+        const answer = parseMoveAnswer(data);
+        return answer ? ok(answer) : bad({ code: null, message: "Couldn't move the messages." });
+      }),
+
     messages: (ids) =>
       attempt(async () => {
         // PostgREST puts the ids in the URL: 100 at a time, side by side.
@@ -372,6 +412,39 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
           .limit(100);
         if (error) return bad(chatError(error));
         return ok(mapRows(data, mapMessage));
+      }),
+
+    // CV-9: the Files view (newest message first) and the files of a page of messages.
+    files: ({ channelId, before, limit }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_files", {
+          p_channel_id: channelId,
+          p_before: before?.sentAt ?? null,
+          p_limit: limit ?? 50,
+          p_before_id: before?.id ?? null,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapChatFile));
+      }),
+
+    messageFiles: (messageIds) =>
+      attempt(async () => {
+        if (messageIds.length === 0) return ok([]);
+        // Read through the attachments policy: only what the reader may read.
+        const { data, error } = await db()
+          .from("attachments")
+          .select(
+            "id, entity_id, uploader_id, file_name, mime, size_bytes, width, height, object_path, preview_path, preview_mime, created_at",
+          )
+          .eq("entity_type", "chat_message")
+          .in("entity_id", [...messageIds])
+          .eq("status", "ready")
+          .is("deleted_at", null)
+          .order("created_at")
+          .order("id")
+          .limit(messageIds.length * 10);
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapChatFile));
       }),
 
     async chainFollowing(rootId) {
@@ -552,22 +625,6 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         }
       }
       return out;
-    },
-
-    async search({ workspaceId, query, limit = 40 }) {
-      const term = query.trim();
-      if (!term) return [];
-      const { data, error } = await db()
-        .from("chat_messages")
-        .select(MESSAGE_COLUMNS)
-        .eq("workspace_id", workspaceId)
-        .eq("kind", "message")
-        .is("deleted_at", null)
-        .ilike("body", `%${likeLiteral(term)}%`)
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      fail(error);
-      return mapRows(data, mapMessage);
     },
 
     async createChannel({ workspaceId, name, topic, isPrivate, memberIds, announcement, link }) {

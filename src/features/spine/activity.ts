@@ -337,6 +337,12 @@ export function spineActivityLine(
     // Decisions (CV-14): ids only.
     case "chat.decision":
       return p.on === false ? "took back a decision" : "marked a decision";
+    // Move to… (CV-16): logged on the conversation the messages left.
+    case "chat.move": {
+      if (p.undo === true) return "undid a move";
+      const n = typeof p.count === "number" ? p.count : 1;
+      return n === 1 ? "moved a message out" : `moved ${n} messages out`;
+    }
     case "chat.react":
       return p.on === false ? "took back a reaction" : "reacted to a message";
     default:

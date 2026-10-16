@@ -20,12 +20,22 @@ export type ExportModuleKey =
   | "habits"
   | "attachments"
   /** Your own status and saved statuses (chat v2 CV-17, #31); one for every workspace. */
-  | "statuses";
+  | "statuses"
+  /** Every conversation you can read, with chains, reactions and files (chat v2 CV-22, #31). */
+  | "chat"
+  /** Your own apps and tabs (`user_clients`, chat v2 CV-22). */
+  | "devices";
 
 /** One module's read outcome — the impure gather wraps every runtime read in a
  * try/catch and reports failures here rather than throwing the whole export. */
 export type ModuleReadResult =
-  | { module: ExportModuleKey; ok: true; data: unknown }
+  | {
+      module: ExportModuleKey;
+      ok: true;
+      data: unknown;
+      /** More files of the module, written under `<module>/` (Markdown, attachments as bytes). */
+      files?: Record<string, string | Uint8Array>;
+    }
   | { module: ExportModuleKey; ok: false; error: string };
 
 /**
@@ -199,8 +209,8 @@ export type ExportMeta = {
 };
 
 export type ExportBundle = {
-  /** zip-relative filename → JSON string. The component encodes these to bytes. */
-  entries: Record<string, string>;
+  /** zip-relative filename → text (JSON, Markdown) or bytes. The component encodes text to bytes. */
+  entries: Record<string, string | Uint8Array>;
   /** module → error message for any read that failed (mirrors `_errors.json`). */
   errors: Record<string, string>;
 };
@@ -216,7 +226,7 @@ function stableJson(value: unknown): string {
  * `_manifest.json` always lists all modules with an ok/error status.
  */
 export function buildExportBundle(results: ModuleReadResult[], meta: ExportMeta): ExportBundle {
-  const entries: Record<string, string> = {};
+  const entries: Record<string, string | Uint8Array> = {};
   const errors: Record<string, string> = {};
   const modules: Record<string, "ok" | "error"> = {};
 
@@ -224,6 +234,9 @@ export function buildExportBundle(results: ModuleReadResult[], meta: ExportMeta)
     if (result.ok) {
       modules[result.module] = "ok";
       entries[`${result.module}.json`] = stableJson(result.data);
+      for (const [path, contents] of Object.entries(result.files ?? {})) {
+        entries[`${result.module}/${path}`] = contents;
+      }
     } else {
       modules[result.module] = "error";
       errors[result.module] = result.error;

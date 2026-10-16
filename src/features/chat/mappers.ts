@@ -13,13 +13,17 @@ import {
 import type {
   ChatCatchupItem,
   ChatChannel,
+  ChatConversationFound,
   ChatDeletedChannel,
+  ChatFile,
   ChatHistoryEntry,
   ChatItemDecision,
   ChatMember,
   ChatMessage,
+  ChatMoveAnswer,
   ChatPerson,
   ChatReactions,
+  ChatSearchHit,
   ChatSyncRow,
   ChatUnread,
   UserChatPrefs,
@@ -148,6 +152,7 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     mentionsEveryone: r.mentions_everyone === true,
     reactions: mapReactions(r.reactions),
     replyCount: num(r.reply_count),
+    fileCount: num(r.file_count),
     lastReplyAt: str(r.last_reply_at),
     replyUserIds: strArr(r.reply_user_ids),
     wrappedAt: str(r.wrapped_at),
@@ -255,6 +260,23 @@ export function mapItemDecision(raw: unknown): ChatItemDecision | null {
   };
 }
 
+/** `chat_op_move_messages`'s answer (CV-16), or null when it isn't one. */
+export function parseMoveAnswer(raw: unknown): ChatMoveAnswer | null {
+  const r = asRow(raw);
+  if (!r) return null;
+  if (r.status === "confirm") {
+    return typeof r.newly === "number" && r.newly >= 0
+      ? { status: "confirm", newly: r.newly }
+      : null;
+  }
+  if (r.status !== "moved" && r.status !== "undone") return null;
+  const from = str(r.from);
+  const to = str(r.to);
+  if (!from || !to || !Array.isArray(r.ids)) return null;
+  const ids = r.ids.filter((v): v is string => typeof v === "string");
+  return { status: r.status, ids, from, to };
+}
+
 export function mapRows<T>(rows: unknown, mapper: (r: unknown) => T | null): T[] {
   if (!Array.isArray(rows)) return [];
   const out: T[] = [];
@@ -292,5 +314,65 @@ export function mapHistory(raw: unknown): ChatHistoryEntry | null {
     actorLabel: str(r.actor_label),
     payload: asRow(r.payload) ?? {},
     createdAt,
+  };
+}
+
+/** A `chat_find_conversations` row (CV-19). */
+export function mapConversationFound(raw: unknown): ChatConversationFound | null {
+  const r = asRow(raw);
+  const channelId = str(r?.channel_id);
+  if (!r || !channelId || !isChatChannelKind(r.kind)) return null;
+  return {
+    channelId,
+    kind: r.kind,
+    name: str(r.name),
+    people: Array.isArray(r.people)
+      ? r.people.filter((x): x is string => typeof x === "string")
+      : [],
+    archived: r.archived === true,
+  };
+}
+
+/** A `chat_search` row (CV-19). */
+export function mapSearchHit(raw: unknown): ChatSearchHit | null {
+  const r = asRow(raw);
+  const messageId = str(r?.message_id);
+  const channelId = str(r?.channel_id);
+  if (!r || !messageId || !channelId || !isChatChannelKind(r.channel_kind)) return null;
+  return {
+    messageId,
+    channelId,
+    channelKind: r.channel_kind,
+    channelName: str(r.channel_name),
+    parentId: str(r.parent_id),
+    replyToId: str(r.reply_to_id),
+    authorId: str(r.author_id),
+    authorLabel: r.author_kind === "api_key" ? str(r.author_label) : null,
+    createdAt: str(r.created_at) ?? EPOCH,
+    snippet: str(r.snippet) ?? "",
+  };
+}
+
+/** A row of `chat_files`, or of `attachments` read by message (CV-9), as a chat file. */
+export function mapChatFile(raw: unknown): ChatFile | null {
+  const r = asRow(raw);
+  const id = str(r?.id);
+  const messageId = str(r?.message_id) ?? str(r?.entity_id);
+  const objectPath = str(r?.object_path);
+  if (!r || !id || !messageId || !objectPath) return null;
+  const dim = (v: unknown) => (num(v) > 0 ? num(v) : null);
+  return {
+    id,
+    messageId,
+    authorId: str(r.author_id) ?? str(r.uploader_id),
+    fileName: str(r.file_name) ?? "file",
+    mime: str(r.mime) ?? "application/octet-stream",
+    sizeBytes: num(r.size_bytes),
+    width: dim(r.width),
+    height: dim(r.height),
+    objectPath,
+    previewPath: str(r.preview_path),
+    previewMime: str(r.preview_mime),
+    sentAt: str(r.sent_at) ?? str(r.created_at) ?? EPOCH,
   };
 }

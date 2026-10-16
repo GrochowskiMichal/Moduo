@@ -198,6 +198,12 @@ describe("spineActivityLine", () => {
     expect(spineActivityLine(entry("chat.reopen", { ...m, undo: true }))).toBe("undid a wrap-up");
   });
 
+  it("renders a move and its undo (CV-16)", () => {
+    expect(spineActivityLine(entry("chat.move", { count: 1 }))).toBe("moved a message out");
+    expect(spineActivityLine(entry("chat.move", { count: 3 }))).toBe("moved 3 messages out");
+    expect(spineActivityLine(entry("chat.move", { count: 3, undo: true }))).toBe("undid a move");
+  });
+
   it("renders a conversation's message changes for Details' history (CV-8b)", () => {
     const m = { message_id: "m1" };
     expect(spineActivityLine(entry("chat.pin", { ...m, pinned: true }))).toBe("pinned a message");
