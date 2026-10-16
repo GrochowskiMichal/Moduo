@@ -18,7 +18,8 @@ import { unclaimedForMe } from "./teams";
 /**
  * My tasks' scope: assigned to you, Won't do left out (the one kept in view
  * comes back through `keep`), Backlog in (the List folds it behind its
- * line, U10-12). Done stays (Display hides it behind "N completed").
+ * line, U10-12). Done stays (Display hides it behind the list's one
+ * "N completed · Show", MOD-148).
  */
 export function myTasksView(
   tasks: readonly Task[],

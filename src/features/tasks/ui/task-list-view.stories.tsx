@@ -90,7 +90,8 @@ type Story = StoryObj<typeof meta>;
 /** One bucket: no bucket text (implied), columns line up, completed hidden. */
 export const SingleBucket: Story = {};
 
-/** All, grouped by bucket: each group ends with its own completed line. */
+/** All, grouped by bucket: no group ends with a completed line; the list
+ *  ends with its one "N completed · Show" (MOD-148). */
 export const AllByBucket: Story = {
   args: { tasks: TASKS, scopeTitle: "All", selection: "all", groupBy: "bucket" },
 };
@@ -139,6 +140,57 @@ export const BySection: Story = {
     onRenameSection: () => {},
     onDeleteSection: () => {},
   },
+};
+
+/** A project grouped by section with mostly finished work (MOD-148, the
+ *  dogfood board): Completed is Hidden, so no section ends with its own
+ *  "N completed · show"; one quiet "9 completed · Show" ends the list after
+ *  "+ Add section" and lists them in place, in their sections, until "Hide".
+ *  Backlog keeps its folded line in its section; Build, all done, keeps its
+ *  header. */
+const DONE_AT = "2026-09-20T00:00:00.000Z";
+const MOSTLY_DONE: Task[] = [
+  ...appTasks.slice(0, 2).map((t, i) => ({
+    ...t,
+    status: "todo" as const,
+    sectionId: i === 0 ? null : "s-design",
+  })),
+  ...appTasks.slice(2, 3).map((t) => ({
+    ...t,
+    status: "todo" as const,
+    statusCategory: "backlog" as const,
+    sectionId: "s-design",
+  })),
+  ...Array.from({ length: 9 }, (_, i) => ({
+    ...(appTasks[i % appTasks.length] as Task),
+    id: `finished-${i}`,
+    title: `Finished piece ${i + 1}`,
+    position: `z${i}`,
+    parentId: null,
+    status: "done" as const,
+    statusCategory: "done" as const,
+    updatedAt: DONE_AT,
+    completedAt: DONE_AT,
+    sectionId: i < 2 ? null : i < 5 ? "s-design" : "s-build",
+  })),
+];
+export const BySectionMostlyDone: Story = {
+  args: {
+    groupBy: "section",
+    sections: SECTIONS,
+    tasks: MOSTLY_DONE,
+    selectedTaskId: MOSTLY_DONE[0]?.id ?? null,
+    onAddSection: () => {},
+    onRenameSection: () => {},
+    onDeleteSection: () => {},
+    api: stubApi(MOSTLY_DONE, { sections: SECTIONS }),
+  },
+};
+
+/** The same project in Display → Completed: 7 days: each section keeps its
+ *  own line for the work finished before the last seven days (MOD-148). */
+export const BySectionSevenDays: Story = {
+  args: { ...BySectionMostlyDone.args, completed: "week" },
 };
 
 /** A late row (REPLAN 23): muted, never red; hover or select it for

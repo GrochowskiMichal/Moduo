@@ -218,6 +218,40 @@ describe("folding every group that holds tasks (MOD-122, MOD-123)", () => {
   });
 });
 
+describe("a project with only completed work (MOD-148)", () => {
+  // Hidden means hidden: no row shows, only the headers and the list's one
+  // "N completed · Show" line, so the page and the List must agree on nothing.
+  const allDone = [
+    task("a", { status: "done", statusCategory: "done" }),
+    task("b", { sectionId: "s1", status: "done", statusCategory: "done" }),
+    task("c", { sectionId: "s1", status: "done", statusCategory: "done" }),
+  ];
+  const endLine = () => screen.getByRole("button", { name: /^\d+ completed, (show|hide)$/ });
+
+  it("settles on nothing, then Show picks the first row it lists, and Hide keeps it", () => {
+    const { picks, shown } = renderPage({ tasks: allDone });
+    expect(row("Task a")).toBeNull();
+    expect(endLine().textContent).toBe("3 completed · Show");
+    expect(picks).toEqual([]);
+    expect(shown.nothing).toBe(true);
+
+    fireEvent.click(endLine());
+    expect(row("Task a")).toBeTruthy();
+    expect(picks).toEqual(["a"]);
+    expect(shown.nothing).toBe(false);
+    // The selected one is kept whatever Display says, so the line counts the
+    // other two (TV-U1's rule: the panel never points at a row that isn't there).
+    expect(endLine().textContent).toBe("2 completed · Hide");
+
+    // Hiding again keeps the selected row (it's never pulled from under you),
+    // and nothing flips.
+    fireEvent.click(endLine());
+    expect(row("Task a")).toBeTruthy();
+    expect(row("Task b")).toBeNull();
+    expect(picks).toEqual(["a"]);
+  });
+});
+
 describe("a closed Backlog line stays closed (MOD-124)", () => {
   // Triage holds only a Backlog task (behind its "Backlog · 1" line); the
   // scope's first task is that Backlog task.
