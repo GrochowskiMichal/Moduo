@@ -135,6 +135,8 @@ export type ChatPerson = {
   name: string;
   avatarUrl: string | null;
   role: string | null;
+  /** Their role is read-only (a custom read-only role): chat is view-only for them. */
+  readOnly?: boolean;
   /** No longer in the workspace (`chat_people.former`): their messages stay. */
   former?: boolean;
 };

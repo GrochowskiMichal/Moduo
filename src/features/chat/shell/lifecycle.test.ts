@@ -10,7 +10,7 @@ import { daysLeft, makePrivateCopy } from "../dialogs/channel-dialogs";
 import { mapChannel, mapDeletedChannel, mapMember, mapMessage } from "../mappers";
 import type { ChatChannel, ChatMember, ChatMessage } from "../model";
 import { composerLine, newestPost } from "./composer-state";
-import { managesChannel } from "./use-chat-rights";
+import { managesChannel, personPosts } from "./use-chat-rights";
 
 const ME = "me";
 const member = { canPost: true, manageAny: false };
@@ -211,5 +211,26 @@ describe("Reply privately from the announcement line (CH50, AC5.5)", () => {
     expect(newestPost(rows, ME)?.id).toBe("b");
     expect(newestPost([msg("mine", { author_id: ME })], ME)).toBeNull();
     expect(newestPost(undefined, ME)).toBeNull();
+  });
+});
+
+describe("who can be made a manager: a role that posts (rule 1)", () => {
+  const rows = [
+    { role_key: "admin", post: true },
+    { role_key: "member", post: true },
+    { role_key: "viewer", post: false },
+  ];
+  it("reads the role's chat rights, a read-only custom role as a viewer", () => {
+    expect(personPosts(rows, { role: "member" })).toBe(true);
+    expect(personPosts(rows, { role: "viewer" })).toBe(false);
+    expect(personPosts(rows, { role: "member", readOnly: true })).toBe(false);
+    expect(personPosts(rows, { role: "owner", readOnly: false })).toBe(true);
+  });
+  it("follows the switch when a role's posting is turned off", () => {
+    expect(personPosts([{ role_key: "member", post: false }], { role: "member" })).toBe(false);
+  });
+  it("reads someone unknown as a member until the rows arrive", () => {
+    expect(personPosts(null, undefined)).toBe(true);
+    expect(personPosts(null, { role: null, readOnly: true })).toBe(false);
   });
 });

@@ -61,12 +61,8 @@ export function rightsFrom(
   };
 }
 
-export function useChatRights(
-  workspaceId: string | null,
-  role: WorkspaceRole | null,
-  /** Chat is view-only for your role (a read-only custom role). */
-  readOnly: boolean,
-): ChatRights {
+/** The workspace's chat rights rows (null while they load or can't be read). */
+export function useChatCapsRows(workspaceId: string | null): CapsRow[] | null {
   const [rows, setRows] = useState<CapsRow[] | null>(null);
   useEffect(() => {
     setRows(null);
@@ -79,7 +75,28 @@ export function useChatRights(
       live = false;
     };
   }, [workspaceId]);
-  return rightsFrom(rows, role, readOnly);
+  return rows;
+}
+
+export function useChatRights(
+  workspaceId: string | null,
+  role: WorkspaceRole | null,
+  /** Chat is view-only for your role (a read-only custom role). */
+  readOnly: boolean,
+): ChatRights {
+  return rightsFrom(useChatCapsRows(workspaceId), role, readOnly);
+}
+
+/**
+ * Whether someone else's role posts (the server's `chat_has_cap(…, 'post')`):
+ * only they can be made a manager. Unknown people read as members.
+ */
+export function personPosts(
+  rows: readonly CapsRow[] | null,
+  person: { role: string | null; readOnly?: boolean } | undefined,
+): boolean {
+  const role = (person?.role ?? null) as WorkspaceRole | null;
+  return rightsFrom(rows, role, !!person?.readOnly).canPost;
 }
 
 /**

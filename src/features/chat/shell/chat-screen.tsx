@@ -33,6 +33,7 @@ import {
 } from "../chains";
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
+import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
 import {
   AddPeopleDialog,
   ConfirmDialog,
@@ -40,7 +41,6 @@ import {
   makePrivateCopy,
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
-import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
@@ -69,7 +69,13 @@ import { composerLine, newestPost } from "./composer-state";
 import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
 import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
-import { managesChannel, useChannelManagers, useChatRights } from "./use-chat-rights";
+import {
+  managesChannel,
+  personPosts,
+  rightsFrom,
+  useChannelManagers,
+  useChatCapsRows,
+} from "./use-chat-rights";
 
 /** "Deleted · Undo" stays this long; then the server deletes (§6 #10). */
 const DELETE_UNDO_MS = 8000;
@@ -172,16 +178,26 @@ export function ChatScreen({
     [runtime, userId],
   );
   const typing = useChatTypingSnapshot(typingStore);
-  const rights = useChatRights(workspaceId, role, readOnly);
+  const capsRows = useChatCapsRows(workspaceId);
+  const rights = rightsFrom(capsRows, role, readOnly);
 
   // ── people ────────────────────────────────────────────────────────────────
   const peopleById = useMemo(() => {
     const out: Record<string, ChatPerson> = {};
     for (const p of members) out[p.userId] = p;
-    for (const p of Object.values(snap.people)) out[p.userId] = { ...out[p.userId], ...p };
+    // Chat's own read knows no roles: keep the workspace's (role, read-only) under it.
+    for (const p of Object.values(snap.people)) {
+      const ws = out[p.userId];
+      out[p.userId] = { ...ws, ...p, role: p.role ?? ws?.role ?? null, readOnly: ws?.readOnly };
+    }
     return out;
   }, [members, snap.people]);
   const personOf = useCallback((id: string) => peopleById[id], [peopleById]);
+  // Only someone whose role posts can be made a manager (the server's rule).
+  const canBeManager = useCallback(
+    (id: string) => personPosts(capsRows, peopleById[id]),
+    [capsRows, peopleById],
+  );
   const people = useMemo(
     () =>
       Object.values(peopleById)
@@ -1132,6 +1148,7 @@ export function ChatScreen({
       views={{
         details: () => (
           <DetailsView
+            canBeManager={canBeManager}
             channel={channel}
             member={member ?? null}
             selfId={selfId}

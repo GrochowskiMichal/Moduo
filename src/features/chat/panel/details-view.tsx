@@ -53,6 +53,8 @@ export type DetailsViewProps = {
   member: ChatMember | null;
   selfId: string;
   personOf: (id: string) => ChatPerson | undefined;
+  /** Whether this person's role posts (only they can be made a manager); default: not a viewer. */
+  canBeManager?: (id: string) => boolean;
   online: (id: string) => boolean;
   members: readonly ChatMember[] | null;
   pinned: readonly ChatMessage[] | null;
@@ -90,6 +92,7 @@ export function DetailsView({
   member,
   selfId,
   personOf,
+  canBeManager,
   online,
   members,
   pinned,
@@ -203,8 +206,10 @@ export function DetailsView({
                     name={p.name}
                     self={p.self}
                     manager={managerSet.has(p.userId)}
-                    // A viewer reads and reacts: never a manager (§12).
-                    canBeManager={personOf(p.userId)?.role !== "viewer"}
+                    // A viewer (or a read-only role) reads and reacts: never a manager (§12).
+                    canBeManager={
+                      canBeManager ? canBeManager(p.userId) : personOf(p.userId)?.role !== "viewer"
+                    }
                     onSetManager={(on) => onSetManager?.(p.userId, on)}
                     onRemove={p.self ? undefined : () => onRemovePerson?.(p.userId)}
                   />
