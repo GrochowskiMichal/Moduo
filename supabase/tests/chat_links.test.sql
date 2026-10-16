@@ -746,6 +746,10 @@ BEGIN
   v := test.as_op('A', format($q$UPDATE public.entity_links SET target_id = %L
     WHERE source_id = %L AND relation_kind = 'conversation-of' AND deleted_at IS NULL$q$, test.id('PB2'), test.ref('RL')));
   PERFORM test.ok(v LIKE '42501 %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'nor can it move to another item', v);
+  -- A row removed outright while the link holds is made again.
+  DELETE FROM public.entity_links WHERE source_id = test.ref('RL') AND relation_kind = 'conversation-of';
+  v := test.link('A', 'RL', 'project', test.id('SB'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mirrors('RL') = 'bucket:' || test.id('SB'), 'a row removed outright comes back on relinking', v);
 END;
 $$;
 SELECT test.ok(test.convo('A', 'project', test.id('SB')) LIKE '%founders/0%'

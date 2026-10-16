@@ -315,6 +315,14 @@ BEGIN
                         AND x.relation_kind = 'conversation-of' AND x.deleted_at IS NOT NULL
                       ORDER BY x.deleted_at DESC, x.created_at DESC
                       LIMIT 1);
+      IF NOT FOUND THEN
+        INSERT INTO public.entity_links
+          (workspace_id, source_type, source_id, target_type, target_id, relation_kind, origin, created_by)
+        VALUES
+          (v_channel.workspace_id, 'chat_channel', v_channel.id, v_type, p_id, 'conversation-of', 'manual', v_me)
+        ON CONFLICT (workspace_id, pair_key, relation_kind) WHERE deleted_at IS NULL
+        DO NOTHING;
+      END IF;
     END IF;
     RETURN v_channel;
   END IF;
