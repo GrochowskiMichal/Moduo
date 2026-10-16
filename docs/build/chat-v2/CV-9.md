@@ -1,7 +1,7 @@
 # CV-9 — Files
 
-> Branch `t/maciej/cv-9-files` · status: built, not landed (waiting for its migration turn)
-> Migration: `supabase/migrations/20261016170000_chat_v2_files.sql` · applied to the local stack: no (waiting for its turn; dry-run green inside a rolled-back transaction)
+> Branch `t/maciej/cv-9-files-2` (from `t/maciej/cv-9-files`, build head merged after CV-10-fix) · status: built, ready to land
+> Migration: `supabase/migrations/20261016170000_chat_v2_files.sql` · applied to the local stack 2026-10-16, after CV-11 (`20261016150000`) and CV-17 (`20261016160000`); every redefined function re-based on its live body first (none of them changed since)
 
 ## Delivered against the row
 
@@ -18,7 +18,7 @@
 | --- | --- |
 | AC2.3 (server) | `supabase/tests/chat_files.test.sql` · "files follow the message" (64 checks, dry-run) |
 | AC2.3 (client rules) | `src/features/chat/files/files.test.ts` (media fit, cap, shapes, gate, composer files, a send waiting for its files) |
-| AC2.3 (app) | `tests/chat-files.spec.ts` · "paste, drop, Files view" — written; runs once the migration is applied |
+| AC2.3 (app) | `tests/chat-files.spec.ts` · "paste, drop, Files view" (green on the local stack) |
 | A key reads no chat file | `chat_files.test.sql` (begin and the Files view refuse a key) · `supabase/functions/moduo-mcp/chat-files.test.ts` |
 
 ## Agent's choices (deferred to by Maciej: confirmed for building, may be reconsidered)
@@ -32,6 +32,13 @@
 - **Chat links are shorter-lived than task links** (`CHAT_FILE_LINK_TTL_SECONDS`: previews 10 min, originals 3 min) · agent · rejected: tasks' 1 h previews.
 - **Details has no Files section** (CV-8b's choice kept): the Files view is one switch away.
 - **Drop target = the whole conversation column**, no drag-over highlight · agent · rejected: a composer-only zone.
+- **No `download=` on signed links** · agent · a download already fetches the bytes and saves them under the file's name; a link is never opened in the browser · rejected: a second signing path for chat.
+- **A picture without a stored preview opens in the viewer from the picture itself** (only the four inline types) · agent · rejected: a "no preview" card for a picture the stream draws.
+
+## Gotchas (area: ui)
+
+- With the React Compiler on, a hook must return what `useSyncExternalStore` hands it (RF-1): `useComposerFiles` read the store beside a version token and the chips never showed; it now returns `store.view(channel)`, and `useMessageFiles` returns the cached files as its snapshot. Only the e2e caught it.
+- The attachment viewer looks a preview up by **path** (`previews.get(rec.previewPath)`), not by file id.
 
 ## Gotchas (area: supabase)
 

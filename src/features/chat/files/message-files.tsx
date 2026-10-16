@@ -63,18 +63,21 @@ function request(chat: ChatRuntime, messageId: string) {
 /** A sent message's files (null while they load). */
 export function useMessageFiles(chat: ChatRuntime | null, messageId: string): ChatFile[] | null {
   const c = chat ? cacheFor(chat) : null;
-  useSyncExternalStore(
+  // The snapshot is the message's files themselves: with the React Compiler on,
+  // a read beside `useSyncExternalStore` is memoised away (gotchas/ui.md, RF-1).
+  const files = useSyncExternalStore(
     (fn) => {
       if (!c) return () => {};
       c.listeners.add(fn);
       return () => c.listeners.delete(fn);
     },
-    () => c?.version ?? 0,
+    () => c?.files.get(messageId) ?? null,
+    () => c?.files.get(messageId) ?? null,
   );
   useEffect(() => {
     if (chat) request(chat, messageId);
   }, [chat, messageId]);
-  return c?.files.get(messageId) ?? null;
+  return files;
 }
 
 /** Tests only. */
@@ -125,7 +128,8 @@ export function asAttachmentRecord(f: ChatFile): AttachmentRecord {
     objectPath: f.objectPath,
     // Only a picture the stream draws is drawn by the viewer; anything else is
     // a file card there too (downloaded, never shown from its bytes).
-    previewPath: fileShape(f) === "image" ? f.previewPath : null,
+    // A picture without a stored preview is drawn from the picture itself.
+    previewPath: inlinePath(f),
     previewMime:
       fileShape(f) === "image"
         ? ((f.previewMime as AttachmentRecord["previewMime"]) ?? null)
@@ -177,8 +181,10 @@ function SentFiles({ message, runtime }: { message: ChatMessage; runtime: ModuoR
   const records = files.map(asAttachmentRecord);
   const previews = new Map<string, string>();
   for (const f of files) {
-    const p = f.previewPath ? links?.get(f.previewPath) : null;
-    if (p) previews.set(f.id, p);
+    // The viewer looks its preview up by path (the record's previewPath).
+    const path = inlinePath(f);
+    const p = path ? links?.get(path) : null;
+    if (path && p) previews.set(path, p);
   }
   const indexOf = (f: ChatFile) => files.indexOf(f);
   return (

@@ -121,7 +121,9 @@ test("paste, drop, Files view", async ({ page, browser }) => {
   ).toBeVisible();
 
   // A file dropped on the conversation joins the next message.
-  await page.locator(`[data-conversation="${room.general}"]`).evaluate((el, fileName) => {
+  // The conversation column (the sidebar row carries the same mark).
+  const column = page.locator(`[data-conversation="${room.general}"]:not([data-slot="nav-row"])`);
+  await column.evaluate((el, fileName) => {
     const dt = new DataTransfer();
     dt.items.add(new File(["notes"], fileName, { type: "text/plain" }));
     el.dispatchEvent(

@@ -11,6 +11,7 @@ import { ChatStore } from "../store/store";
 import { FakeChatServer, fakeLive, ME, settle, uuid, WS } from "../store/testing";
 import { ComposerFilesStore } from "./composer-files";
 import { type ChatFileGate, type ChatFilesState, filesState } from "./gate";
+import { asAttachmentRecord } from "./message-files";
 import { capNotice, FEED_MEDIA, fileShape, fitMedia, takeFiles } from "./model";
 
 describe("files in a message (CV-9, §7)", () => {
@@ -45,6 +46,30 @@ describe("files in a message (CV-9, §7)", () => {
     expect(shape("image/png", "page.html")).toBe("chip");
     expect(shape("image/png", "logo.svg")).toBe("chip");
     expect(shape("application/pdf", "page.html")).toBe("chip");
+  });
+
+  it("hands the viewer a picture to draw only for the four safe types", () => {
+    const file = (mime: string, fileName: string, previewPath: string | null) =>
+      asAttachmentRecord({
+        id: "f",
+        messageId: "m",
+        authorId: ME,
+        fileName,
+        mime,
+        sizeBytes: 10,
+        width: null,
+        height: null,
+        objectPath: "w/o",
+        previewPath,
+        previewMime: previewPath ? "image/webp" : null,
+        sentAt: "2026-10-16T00:00:00Z",
+      }).previewPath;
+    expect(file("image/png", "a.png", "w/p")).toBe("w/p");
+    // A picture without a stored preview is drawn from the picture itself.
+    expect(file("image/png", "a.png", null)).toBe("w/o");
+    expect(file("image/svg+xml", "logo.svg", "w/p")).toBeNull();
+    expect(file("image/png", "page.html", "w/p")).toBeNull();
+    expect(file("application/pdf", "deck.pdf", "w/p")).toBeNull();
   });
 
   it("never draws a file's bytes in a frame, an object or raw HTML", () => {
@@ -146,12 +171,20 @@ describe("the composer's files", () => {
       () => `msg-${++minted}`,
     );
     const C = "chan";
+    // The hook's snapshot is a new object only when something changed (the
+    // React Compiler memoises any other read: the chips would never show).
+    const empty = store.view(C);
+    expect(store.view(C)).toBe(empty);
     await store.add({
       channelId: C,
       workspaceId: WS,
       userId: ME,
       files: [file("a.png"), file("b.pdf", "application/pdf")],
     });
+    const added = store.view(C);
+    expect(added).not.toBe(empty);
+    expect(added.files).toHaveLength(2);
+    expect(store.view(C)).toBe(added);
     expect(q.added[0]!.target).toEqual({
       workspaceId: WS,
       entityType: "chat_message",

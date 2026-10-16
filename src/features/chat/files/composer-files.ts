@@ -112,6 +112,27 @@ export class ComposerFilesStore {
     return this.seen.token;
   };
 
+  private views = new Map<string, { token: object; view: ComposerFilesView }>();
+
+  /**
+   * A conversation's files as one snapshot: a new object only when something
+   * changed. With the React Compiler on, a hook must return what
+   * `useSyncExternalStore` hands it (docs/gotchas/ui.md, RF-1): reading the
+   * store beside it is memoised away and never repaints.
+   */
+  view(channelId: string): ComposerFilesView {
+    const token = this.getVersion();
+    const hit = this.views.get(channelId);
+    if (hit && hit.token === token) return hit.view;
+    const view = {
+      files: this.files(channelId),
+      notice: this.notice(channelId),
+      busy: this.busy(channelId),
+    };
+    this.views.set(channelId, { token, view });
+    return view;
+  }
+
   private emit() {
     this.version += 1;
     for (const fn of this.listeners) fn();
@@ -297,6 +318,12 @@ export function composerFilesStore(): ComposerFilesStore {
   return shared;
 }
 
+export type ComposerFilesView = {
+  files: ComposerFile[];
+  notice: string | null;
+  busy: boolean;
+};
+
 export type ComposerFilesApi = {
   files: ComposerFile[];
   notice: string | null;
@@ -316,8 +343,12 @@ export function useComposerFiles(args: {
   store?: ComposerFilesStore;
 }): ComposerFilesApi | null {
   const store = args.store ?? composerFilesStore();
-  useSyncExternalStore(store.subscribe, store.getVersion, store.getVersion);
   const { runtime, workspaceId, userId, channelId } = args;
+  const snap = useSyncExternalStore(
+    store.subscribe,
+    () => store.view(channelId),
+    () => store.view(channelId),
+  );
   const add = useCallback(
     (files: File[]) => {
       if (!workspaceId || !userId || files.length === 0) return;
@@ -332,9 +363,9 @@ export function useComposerFiles(args: {
   const take = useCallback(() => store.take(channelId), [store, channelId]);
   if (!workspaceId || !userId) return null;
   return {
-    files: store.files(channelId),
-    notice: store.notice(channelId),
-    busy: store.busy(channelId),
+    files: snap.files,
+    notice: snap.notice,
+    busy: snap.busy,
     add,
     remove,
     take,

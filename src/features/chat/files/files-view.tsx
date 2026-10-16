@@ -12,7 +12,7 @@ import { formatPastDay } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import type { ChatFile, ChatPerson } from "../model";
 import { firstName } from "../stream/rows";
-import { asAttachmentRecord, useSignedLinks } from "./message-files";
+import { asAttachmentRecord, inlinePath, useSignedLinks } from "./message-files";
 
 const PAGE = 50;
 
@@ -66,7 +66,10 @@ export function FilesView({
     void read(null);
   }, [read, refreshKey]);
 
-  const previewPaths = (files ?? []).flatMap((f) => (f.previewPath ? [f.previewPath] : []));
+  const previewPaths = (files ?? []).flatMap((f) => {
+    const path = inlinePath(f);
+    return path ? [path] : [];
+  });
   const links = useSignedLinks(
     open !== null ? runtime : null,
     previewPaths,
@@ -89,8 +92,10 @@ export function FilesView({
   }
   const previews = new Map<string, string>();
   for (const f of files) {
-    const url = f.previewPath ? links?.get(f.previewPath) : null;
-    if (url) previews.set(f.id, url);
+    // Keyed by path: the viewer reads its preview by the record's previewPath.
+    const path = inlinePath(f);
+    const url = path ? links?.get(path) : null;
+    if (path && url) previews.set(path, url);
   }
   return (
     <div className="flex flex-col gap-0.5 px-1 pb-3" data-slot="files-view">
