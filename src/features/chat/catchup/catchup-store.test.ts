@@ -117,6 +117,63 @@ describe("Catch up's list (CV-11)", () => {
     expect(ids(catchup)).toEqual([uuid(102)]);
   });
 
+  it("Later from Catch up names the item, not its message", async () => {
+    const { server, catchup } = setup();
+    catchup.watch();
+    await settle();
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    expect(await catchup.remind({ itemIds: [uuid(101)] }, at, [uuid(101)])).toEqual({ ok: true });
+    expect(server.reminds).toEqual([
+      { messageId: null, channelId: null, itemIds: [uuid(101)], at },
+    ]);
+    expect(ids(catchup)).toEqual([uuid(102)]);
+  });
+
+  it("Later never flashes the item back from a read that started before the write", async () => {
+    const server = new FakeChatServer();
+    server.addChannel(C);
+    server.addChannel(D);
+    const m1 = server.post(uuid(1), C);
+    const m2 = server.post(uuid(2), D);
+    server.catchup = [item(1, C, m1.id), item(2, D, m2.id)];
+    const base = server.transport();
+    let gate: Promise<void> | null = null;
+    const transport = {
+      ...base,
+      // Answers the list as it was when the read started, after a network's delay.
+      catchupOpen: async (ws: string) => {
+        const was = [...server.catchup];
+        const wait = gate;
+        gate = null;
+        await (wait ?? new Promise((r) => setTimeout(r, 5)));
+        const res = await base.catchupOpen(ws);
+        return res.error ? res : { data: was, error: null };
+      },
+    };
+    const catchup = new CatchupStore(transport, WS, { settleMs: 0 });
+    catchup.watch();
+    await settle();
+    expect(ids(catchup)).toEqual([uuid(101), uuid(102)]);
+
+    let release!: () => void;
+    gate = new Promise<void>((r) => {
+      release = r;
+    });
+    void catchup.load(); // in flight: it will still list 101
+    await settle();
+    const seen: string[][] = [];
+    catchup.subscribe(() => seen.push(ids(catchup)));
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    const done = catchup.remind({ itemIds: [uuid(101)] }, at, [uuid(101)]);
+    await settle();
+    release();
+    expect(await done).toEqual({ ok: true });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(seen.length).toBeGreaterThan(0);
+    for (const shown of seen) expect(shown).not.toContain(uuid(101));
+    expect(ids(catchup)).toEqual([uuid(102)]);
+  });
+
   it("a refused Later shows the item again", async () => {
     const { server, catchup, m1 } = setup();
     catchup.watch();

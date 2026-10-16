@@ -192,8 +192,8 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
     if (selected && selected.item.id !== selectedId) setSelectedId(selected.item.id);
   }, [active, selected, selectedId]);
 
-  const latest = useRef({ rows, selected });
-  latest.current = { rows, selected };
+  const latest = useRef({ rows, selected, channels });
+  latest.current = { rows, selected, channels };
 
   const select = useCallback((id: string | null) => {
     setSelectedId(id);
@@ -250,11 +250,10 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
     (row: CatchupRow, at: string) => {
       if (!catchup) return;
       setLater(null);
-      const target = row.item.messageId
-        ? { messageId: row.item.messageId }
-        : { channelId: row.item.channelId };
       select(nextSelection(latest.current.rows, [row.item.id], row.item.id));
-      void catchup.remind(target, at, [row.item.id]).then((res) => {
+      // By item: a chain whose newest reply was deleted shows on an older
+      // reply its item doesn't name, so a message id would write a reminder.
+      void catchup.remind({ itemIds: [row.item.id] }, at, [row.item.id]).then((res) => {
         if (failed(res, "Couldn't put it off.")) return;
         toast(`Back ${laterHint(new Date(at), new Date(), region.timeZone, region.hour12)}`);
       });
@@ -286,6 +285,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
           showRight();
           return;
         case "go":
+          if (!canOpen(latest.current.channels, row.item)) return;
           actions.current.onOpenConversation(row.item.channelId, row.item.messageId);
           return;
         case "done-all":
@@ -401,7 +401,10 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
           data-reason={row.item.reason}
           aria-current={sel ? "true" : undefined}
           onClick={() => select(row.item.id)}
-          onDoubleClick={() => onOpenConversation(row.item.channelId, row.item.messageId)}
+          onDoubleClick={() =>
+            canOpen(channels, row.item) &&
+            onOpenConversation(row.item.channelId, row.item.messageId)
+          }
           className={cn(
             "flex w-full min-w-0 items-start gap-2.5 rounded-md px-3 py-2 text-left outline-none",
             "transition-colors duration-(--motion-fade) ease-(--ease-out)",
@@ -595,7 +598,11 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
       selfId={selfId}
       personOf={personOf}
       onPersonClick={onPersonClick}
-      onOpen={() => onOpenConversation(selected.item.channelId, selected.item.messageId)}
+      onOpen={
+        canOpen(channels, selected.item)
+          ? () => onOpenConversation(selected.item.channelId, selected.item.messageId)
+          : undefined
+      }
       reply={selectedMessage && renderReply ? renderReply(selectedMessage) : null}
     />
   ) : null;
@@ -611,6 +618,14 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
   );
 
   return { center, right, dialogs };
+}
+
+/**
+ * Whether a row's conversation can be opened: "X removed you from Q" names one
+ * you may no longer read (a private one isn't among your conversations).
+ */
+function canOpen(channels: Readonly<Record<string, ChatChannel>>, item: ChatCatchupItem): boolean {
+  return item.reason !== "removed" || !!channels[item.channelId];
 }
 
 function channelTitleFor(
@@ -644,7 +659,8 @@ function CatchupContext({
   selfId: string;
   personOf: (id: string) => ChatPerson | undefined;
   onPersonClick?: (id: string) => void;
-  onOpen: () => void;
+  /** Absent: the conversation can't be opened (no button). */
+  onOpen?: () => void;
   reply: ReactNode;
 }) {
   return (
@@ -653,9 +669,11 @@ function CatchupContext({
         <h2 className="min-w-0 flex-1 truncate font-display text-base font-medium text-foreground">
           In {title}
         </h2>
-        <Button size="sm" variant="secondary" onClick={onOpen}>
-          Open conversation
-        </Button>
+        {onOpen ? (
+          <Button size="sm" variant="secondary" onClick={onOpen}>
+            Open conversation
+          </Button>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1">
         {messageId ? (

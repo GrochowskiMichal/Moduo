@@ -111,6 +111,23 @@ export class CatchupStore {
     }, this.settleMs);
   }
 
+  /**
+   * A read that starts after this call: one already in flight may have
+   * started before a write it must see, so it reads once more after it.
+   */
+  private async loadFresh(): Promise<void> {
+    if (this.loading) {
+      this.again = true;
+      await this.loading;
+      // The read `again` asked for started as the old one settled.
+      if (this.loading) {
+        await this.loading;
+        return;
+      }
+    }
+    await this.load();
+  }
+
   /** Read the list (one read at a time; a change meanwhile reads again). */
   load(): Promise<void> {
     if (this.loading) {
@@ -197,17 +214,17 @@ export class CatchupStore {
       if (res.error) return writeResult(res.error);
     }
     for (const id of ids) this.hidden.delete(id);
-    await this.load();
+    await this.loadFresh();
     return { ok: true };
   }
 
   /**
-   * Later / Remind me: a message's items (or a conversation's, for `/remind`)
-   * come back at `at`. `hide` names the items to hide at once (the selected
-   * one in Catch up).
+   * Later / Remind me: a message's items (or a conversation's, for `/remind`,
+   * or Catch up's items by id) come back at `at`. `hide` names the items to
+   * hide at once (the selected one in Catch up).
    */
   async remind(
-    target: { messageId: string } | { channelId: string },
+    target: { messageId: string } | { channelId: string } | { itemIds: readonly string[] },
     at: string | null,
     hide: readonly string[] = [],
   ): Promise<ChatWriteResult> {
@@ -216,6 +233,7 @@ export class CatchupStore {
     const res = await this.transport.remind({
       messageId: "messageId" in target ? target.messageId : null,
       channelId: "channelId" in target ? target.channelId : null,
+      itemIds: "itemIds" in target ? target.itemIds : null,
       at,
     });
     if (res.error) {
@@ -223,7 +241,9 @@ export class CatchupStore {
       if (hide.length) this.notify();
       return writeResult(res.error);
     }
-    if (this.watchers > 0) await this.load();
+    // Un-hide only after a read that started after the write (one in flight
+    // may still list the item and would flash it back).
+    if (this.watchers > 0) await this.loadFresh();
     else this.stale = true;
     // Shown again if the server still lists it (it put off something else,
     // e.g. the chain had moved on): never hidden for the rest of the session.

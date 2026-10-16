@@ -145,7 +145,12 @@ export class FakeChatServer {
   /** Items Done closed (Undo reopens them). */
   catchupDone = new Map<string, ChatCatchupItem>();
   /** Every Later / Remind me asked for. */
-  reminds: { messageId: string | null; channelId: string | null; at: string | null }[] = [];
+  reminds: {
+    messageId: string | null;
+    channelId: string | null;
+    itemIds?: string[];
+    at: string | null;
+  }[] = [];
 
   now(): string {
     this.clock += 1000;
@@ -421,11 +426,21 @@ export class FakeChatServer {
           this.catchup = [...this.catchup, ...back];
           return ok(back.length);
         }),
-      remind: ({ messageId, channelId, at }) =>
+      remind: ({ messageId, channelId, itemIds, at }) =>
         this.gate("remind", () => {
-          this.reminds.push({ messageId: messageId ?? null, channelId: channelId ?? null, at });
+          this.reminds.push({
+            messageId: messageId ?? null,
+            channelId: channelId ?? null,
+            ...(itemIds ? { itemIds: [...itemIds] } : {}),
+            at,
+          });
           const hide = (i: ChatCatchupItem) =>
-            at !== null && (messageId ? i.messageId === messageId : i.channelId === channelId);
+            at !== null &&
+            (itemIds
+              ? itemIds.includes(i.id)
+              : messageId
+                ? i.messageId === messageId
+                : i.channelId === channelId);
           const n = this.catchup.filter(hide).length;
           this.catchup = this.catchup.filter((i) => !hide(i));
           return ok(Math.max(1, n));

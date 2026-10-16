@@ -84,6 +84,16 @@ BEGIN
   RETURN public.chat__fire_later(now());
 END;
 $$;
+-- Later on Catch up items by id (what Catch up sends).
+CREATE FUNCTION test.later_items(p_who text, p_ids uuid[], p_at timestamptz) RETURNS text LANGUAGE sql AS $$
+  SELECT test.as_user(p_who, format($q$SELECT public.chat_op_remind(NULL, NULL, %L::timestamptz, %L::uuid[])$q$, p_at, p_ids))
+$$;
+-- The id of the item Catch up lists on a message.
+CREATE FUNCTION test.listed_id(p_who text, p_msg text) RETURNS uuid LANGUAGE sql VOLATILE AS $$
+  SELECT test.value_as(p_who, format(
+    $q$SELECT min(id::text) FROM public.chat_catchup_open(%L) WHERE message_id = %L$q$,
+    test.id('W'), test.mid(p_msg)))::uuid
+$$;
 -- Whether Catch up's list shows a person's item about a message.
 CREATE FUNCTION test.listed(p_who text, p_msg text) RETURNS text LANGUAGE sql VOLATILE AS $$
   SELECT test.value_as(p_who, format(
@@ -116,8 +126,8 @@ $$;
 
 -- ── Grants ──────────────────────────────────────────────────────────────────
 SELECT test.ok(
-  has_function_privilege('authenticated', 'public.chat_op_remind(uuid, uuid, timestamptz)', 'EXECUTE')
-  AND NOT has_function_privilege('anon', 'public.chat_op_remind(uuid, uuid, timestamptz)', 'EXECUTE'),
+  has_function_privilege('authenticated', 'public.chat_op_remind(uuid, uuid, timestamptz, uuid[])', 'EXECUTE')
+  AND NOT has_function_privilege('anon', 'public.chat_op_remind(uuid, uuid, timestamptz, uuid[])', 'EXECUTE'),
   'grants: chat_op_remind is for signed-in people, never anon');
 SELECT test.ok(
   has_function_privilege('authenticated', 'public.chat_catchup_open(uuid)', 'EXECUTE')
@@ -327,6 +337,22 @@ SELECT test.ok(test.as_user('A', format($q$SELECT public.chat_op_delete(%L::uuid
                AND test.listed('B', 'a1') = 'reply' AND test.listed('B', 'a2') = ''
                AND test.catchup('B', 'G') = '1',
   'list: the chain''s newest reply deleted, the item lists on the reply still there (as the count keeps it)');
+SELECT test.ok(test.later_items('B', ARRAY[test.listed_id('B', 'a1')], now() + interval '1 hour') = 'ok 1'
+               AND test.item('B', 'a2', 'reply') = 'later+bell-hidden'
+               AND test.item('B', 'a1', 'reminder') = 'none' AND test.listed('B', 'a1') = '',
+  'Later from Catch up on that chain (shown on a1): the chain''s item is put off, no reminder is written');
+SELECT test.ok(test.value_as('B', format($q$SELECT public.chat_op_remind(NULL, NULL, now() + interval '1 hour', ARRAY[%L]::uuid[])::text$q$,
+                 test.mid('a1'))) = '0'
+               AND test.item('B', 'a1', 'reminder') = 'none',
+  'Later on items: an id that isn''t your item puts nothing off and writes no reminder');
+SELECT test.ok(test.as_user('B', format($q$SELECT public.chat_op_remind(%L::uuid, NULL, now() + interval '1 hour', ARRAY[%L]::uuid[])$q$,
+                     test.mid('a1'), test.mid('a1'))) = '22023 Name a message or a conversation.',
+  'Later on items: never together with a message');
+SELECT test.ok(test.fire(interval '61 minutes') >= 1
+               AND test.item('B', 'a2', 'reply') LIKE 'back%'
+               AND test.notices('B', 'a1') = 1 AND test.notices('B', 'a2') = 0
+               AND test.listed('B', 'a1') = 'reply',
+  'Later on a chain whose newest reply was deleted: it comes back with exactly one notice, about the reply still there');
 
 -- ── Access lost before the time: nothing comes back, no notice ──────────────
 DO $$
@@ -349,3 +375,19 @@ SELECT test.ok(test.value_as('B', format(
     $q$SELECT coalesce(string_agg(coalesce(channel_name, '?'), ','), '') FROM public.chat_catchup_open(%L)
         WHERE reason = 'removed' AND channel_id = %L$q$, test.id('W'), test.ref('P'))) = 'Secret',
   'list: "A removed you from Secret" is listed for the private channel B can''t read, with its stored name');
+DO $$
+DECLARE
+  v_id uuid;
+  v text;
+BEGIN
+  v_id := test.value_as('B', format($q$SELECT min(id::text) FROM public.chat_catchup_open(%L)
+             WHERE reason = 'removed' AND channel_id = %L$q$, test.id('W'), test.ref('P')))::uuid;
+  v := test.as_user('B', format($q$SELECT public.chat_op_catchup_done(ARRAY[%L]::uuid[])$q$, v_id));
+  PERFORM test.ok(v = 'ok 1' AND test.value_as('B', format($q$SELECT count(*)::text FROM public.chat_catchup_open(%L) WHERE id = %L$q$,
+                    test.id('W'), v_id)) = '0', 'setup: B clears the "removed you" line', v);
+  v := test.as_user('B', format($q$SELECT public.chat_op_catchup_reopen(ARRAY[%L]::uuid[])$q$, v_id));
+  PERFORM test.ok(v = 'ok 1' AND test.value_as('B', format($q$SELECT count(*)::text FROM public.chat_catchup_open(%L) WHERE id = %L$q$,
+                    test.id('W'), v_id)) = '1',
+    'Undo: the "removed you" line comes back to Catch up', v);
+END;
+$$;

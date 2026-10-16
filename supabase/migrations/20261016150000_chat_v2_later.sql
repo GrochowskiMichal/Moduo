@@ -27,7 +27,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS chat_catchup_open_conv_reminder_uq
 
 -- ── 2. chat_op_remind ───────────────────────────────────────────────────────
 
-CREATE OR REPLACE FUNCTION public.chat_op_remind(p_message_id uuid, p_channel_id uuid, p_at timestamptz)
+-- Catch up puts items off by item (p_item_ids): a chain whose newest reply was
+-- deleted shows on an older reply, which its item doesn't name.
+DROP FUNCTION IF EXISTS public.chat_op_remind(uuid, uuid, timestamptz);
+CREATE OR REPLACE FUNCTION public.chat_op_remind(p_message_id uuid, p_channel_id uuid, p_at timestamptz,
+                                                 p_item_ids uuid[] DEFAULT NULL)
 RETURNS integer
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -42,8 +46,11 @@ BEGIN
   IF v_me IS NULL THEN
     RAISE EXCEPTION 'Sign in first.' USING ERRCODE = '42501';
   END IF;
-  IF (p_message_id IS NULL) = (p_channel_id IS NULL) THEN
+  IF num_nonnulls(p_message_id, p_channel_id, p_item_ids) <> 1 THEN
     RAISE EXCEPTION 'Name a message or a conversation.' USING ERRCODE = '22023';
+  END IF;
+  IF cardinality(p_item_ids) > 1000 THEN
+    RAISE EXCEPTION 'Too many items at once.' USING ERRCODE = '22023';
   END IF;
   IF p_at IS NOT NULL AND p_at > now() + interval '1 year' THEN
     RAISE EXCEPTION 'Pick a time within a year.' USING ERRCODE = '22023';
@@ -52,7 +59,9 @@ BEGIN
     RAISE EXCEPTION 'Pick a time in the future.' USING ERRCODE = '22023';
   END IF;
 
-  IF p_message_id IS NOT NULL THEN
+  IF p_item_ids IS NOT NULL THEN
+    NULL;  -- your own Catch up items: nothing to look up
+  ELSIF p_message_id IS NOT NULL THEN
     SELECT m.* INTO v_msg FROM public.chat_messages m
      WHERE m.id = p_message_id AND m.kind = 'message' AND m.deleted_at IS NULL;
     -- A message you can't read answers like one that isn't there.
@@ -73,7 +82,8 @@ BEGIN
       SELECT k.id, k.reason, k.activity_id
         FROM public.chat_catchup k
        WHERE k.user_id = v_me AND k.done_at IS NULL
-         AND CASE WHEN p_message_id IS NOT NULL THEN k.message_id = p_message_id
+         AND CASE WHEN p_item_ids IS NOT NULL THEN k.id = ANY (p_item_ids)
+                  WHEN p_message_id IS NOT NULL THEN k.message_id = p_message_id
                   ELSE k.channel_id = v_channel.id AND k.reason = 'reminder' AND k.message_id IS NULL END
        FOR UPDATE
     ), done AS (
@@ -94,13 +104,16 @@ BEGIN
     RETURN v_n;
   END IF;
 
-  IF p_message_id IS NOT NULL THEN
+  IF p_message_id IS NOT NULL OR p_item_ids IS NOT NULL THEN
     -- Later: your open items for this message (a grouped item names its
-    -- newest message) are put off; their bell twins go with them.
+    -- newest message), or the Catch up items named, are put off; their bell
+    -- twins go with them.
     WITH snoozed AS (
       UPDATE public.chat_catchup k
          SET later_until = p_at, later_notified_at = NULL
-       WHERE k.user_id = v_me AND k.message_id = p_message_id AND k.done_at IS NULL
+       WHERE k.user_id = v_me AND k.done_at IS NULL
+         AND CASE WHEN p_item_ids IS NOT NULL THEN k.id = ANY (p_item_ids)
+                  ELSE k.message_id = p_message_id END
          AND k.reason NOT IN ('added', 'removed', 'level_reset')
       RETURNING k.workspace_id, k.activity_id
     ), hidden AS (
@@ -112,7 +125,8 @@ BEGIN
       RETURNING 1
     )
     SELECT count(*)::int INTO v_n FROM snoozed;
-    IF v_n > 0 THEN
+    -- Items named: never a reminder in their place.
+    IF v_n > 0 OR p_item_ids IS NOT NULL THEN
       RETURN v_n;
     END IF;
 
@@ -175,6 +189,7 @@ DECLARE
   v_n integer := 0;
   v_channel public.chat_channels;
   v_msg public.chat_messages;
+  v_alive public.chat_messages;
   v_readable boolean;
   v_newest uuid;
   v_gate text;
@@ -182,7 +197,7 @@ DECLARE
   v_ws text;
 BEGIN
   FOR r IN
-    SELECT k.id, k.user_id, k.workspace_id, k.channel_id, k.message_id, k.reason, k.activity_id
+    SELECT k.id, k.user_id, k.workspace_id, k.channel_id, k.message_id, k.reason, k.activity_id, k.chain_root_id
       FROM public.chat_catchup k
      WHERE k.done_at IS NULL AND k.later_notified_at IS NULL AND k.later_until <= p_now
      ORDER BY k.later_until, k.id
@@ -195,6 +210,7 @@ BEGIN
     BEGIN
       v_n := v_n + 1;
       v_msg := NULL;
+      v_alive := NULL;
       v_newest := NULL;
       SELECT c.* INTO v_channel FROM public.chat_channels c WHERE c.id = r.channel_id;
       v_readable := public.chat__can_read_channel_as(r.channel_id, r.user_id);
@@ -218,6 +234,28 @@ BEGIN
 
       IF r.message_id IS NOT NULL THEN
         SELECT m.* INTO v_msg FROM public.chat_messages m WHERE m.id = r.message_id;
+        -- A chain or Every-message line whose newest message was deleted rings
+        -- about the message Catch up lists it on: its newest live one from
+        -- someone else, still unread (chat_catchup_open).
+        IF v_msg.id IS NOT NULL AND v_msg.deleted_at IS NOT NULL AND r.reason IN ('reply', 'every_message') THEN
+          SELECT x.* INTO v_alive
+            FROM public.chat_messages x
+            LEFT JOIN public.chat_members mem
+              ON mem.channel_id = x.channel_id AND mem.user_id = r.user_id AND mem.left_at IS NULL
+            LEFT JOIN public.chat_messages rm ON rm.id = mem.last_read_id
+           WHERE x.channel_id = v_msg.channel_id AND x.kind = 'message' AND x.deleted_at IS NULL
+             AND x.author_id IS DISTINCT FROM r.user_id
+             AND (r.reason = 'every_message' OR x.parent_id = r.chain_root_id)
+             AND (x.created_at, x.id) < (v_msg.created_at, v_msg.id)
+             AND (mem.channel_id IS NULL
+                  OR CASE WHEN rm.id IS NULL THEN x.created_at > coalesce(mem.last_read_at, '-infinity'::timestamptz)
+                          ELSE (x.created_at, x.id) > (rm.created_at, rm.id) END)
+           ORDER BY x.created_at DESC, x.id DESC
+           LIMIT 1;
+          IF v_alive.id IS NOT NULL THEN
+            v_msg := v_alive;
+          END IF;
+        END IF;
         v_readable := v_msg.id IS NOT NULL AND v_msg.deleted_at IS NULL
                       AND public.chat__can_read_channel_as(v_msg.channel_id, r.user_id);
         IF v_readable AND v_msg.channel_id <> v_channel.id THEN
@@ -262,6 +300,67 @@ BEGIN
       UPDATE public.chat_catchup k SET later_notified_at = p_now WHERE k.id = r.id;
     END;
   END LOOP;
+  RETURN v_n;
+END;
+$function$;
+
+-- ── 4b. Undo brings back "X removed you from Q" too ─────────────────────────
+-- Catch up lists that line though the conversation can't be read (section 5),
+-- so Done on it can be undone (live body: 20261015170000_chat_v2_catchup).
+
+CREATE OR REPLACE FUNCTION public.chat__reopen(p_user uuid, p_ids uuid[])
+ RETURNS integer
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_n integer;
+BEGIN
+  WITH cand AS (
+    SELECT k.id, k.reason, k.channel_id, k.chain_root_id,
+           coalesce(m.created_at, k.created_at) AS at, coalesce(m.id, k.id) AS tie
+      FROM public.chat_catchup k
+      LEFT JOIN public.chat_messages m ON m.id = k.message_id
+     WHERE k.user_id = p_user AND k.id = ANY (coalesce(p_ids, '{}'::uuid[]))
+       AND k.done_at IS NOT NULL AND k.done_how <> 'closed'
+       AND (public.chat__can_read_channel_as(k.channel_id, p_user)
+            OR (k.reason = 'removed' AND k.message_id IS NULL
+                AND public.chat__reads_workspace(k.workspace_id, p_user)))
+       AND NOT (k.reason = 'reply' AND EXISTS (
+             SELECT 1 FROM public.chat_chain_mutes cm
+              WHERE cm.user_id = p_user AND cm.root_id = k.chain_root_id))
+  ), grouped AS (
+    SELECT DISTINCT ON (c.reason, coalesce(c.chain_root_id, c.channel_id))
+           c.id, c.reason, c.channel_id, c.chain_root_id, c.at, c.tie
+      FROM cand c
+     WHERE c.reason IN ('reply', 'every_message')
+     ORDER BY c.reason, coalesce(c.chain_root_id, c.channel_id), c.at DESC, c.tie DESC
+  ), pick AS (
+    SELECT c.id FROM cand c WHERE c.reason NOT IN ('reply', 'every_message')
+    UNION ALL
+    SELECT g.id FROM grouped g
+     WHERE NOT EXISTS (
+       SELECT 1 FROM public.chat_catchup o
+         LEFT JOIN public.chat_messages om ON om.id = o.message_id
+        WHERE o.user_id = p_user AND o.reason = g.reason AND o.id <> g.id
+          AND CASE WHEN g.reason = 'reply' THEN o.chain_root_id = g.chain_root_id
+                   ELSE o.channel_id = g.channel_id END
+          AND (o.done_at IS NULL
+               OR (coalesce(om.created_at, o.created_at), coalesce(om.id, o.id)) > (g.at, g.tie)))
+  ), opened AS (
+    UPDATE public.chat_catchup k
+       SET done_at = NULL, done_how = NULL
+      FROM pick
+     WHERE k.id = pick.id
+    RETURNING k.activity_id
+  ), shown AS (
+    UPDATE public.notification_state ns
+       SET dismissed_at = NULL
+      FROM opened o
+     WHERE ns.user_id = p_user AND ns.activity_id = o.activity_id AND ns.dismissed_at IS NOT NULL
+    RETURNING 1
+  )
+  SELECT count(*)::int INTO v_n FROM opened;
   RETURN v_n;
 END;
 $function$;
@@ -352,24 +451,27 @@ $function$;
 DO $$
 BEGIN
   -- The op: signed-in people (a key reaches it as the service role and is refused inside).
-  REVOKE ALL ON FUNCTION public.chat_op_remind(uuid, uuid, timestamptz) FROM PUBLIC, anon, authenticated;
-  GRANT EXECUTE ON FUNCTION public.chat_op_remind(uuid, uuid, timestamptz) TO authenticated, service_role;
+  REVOKE ALL ON FUNCTION public.chat_op_remind(uuid, uuid, timestamptz, uuid[]) FROM PUBLIC, anon, authenticated;
+  GRANT EXECUTE ON FUNCTION public.chat_op_remind(uuid, uuid, timestamptz, uuid[]) TO authenticated, service_role;
   -- The list answers people only, like chat_unread_counts.
   REVOKE ALL ON FUNCTION public.chat_catchup_open(uuid) FROM PUBLIC, anon, authenticated, service_role;
   GRANT EXECUTE ON FUNCTION public.chat_catchup_open(uuid) TO authenticated;
-  -- Server-only: the job and the trigger's function.
+  -- Server-only: the job, the trigger's function and Undo's helper (as 20261015170000).
+  REVOKE ALL ON FUNCTION public.chat__reopen(uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+  GRANT EXECUTE ON FUNCTION public.chat__reopen(uuid, uuid[]) TO service_role;
   REVOKE ALL ON FUNCTION public.chat__fire_later(timestamptz, integer) FROM PUBLIC, anon, authenticated;
   GRANT EXECUTE ON FUNCTION public.chat__fire_later(timestamptz, integer) TO service_role;
   REVOKE ALL ON FUNCTION public.chat__catchup_snoozed_twin() FROM PUBLIC, anon, authenticated;
 
-  IF has_function_privilege('anon', 'public.chat_op_remind(uuid, uuid, timestamptz)', 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', 'public.chat_op_remind(uuid, uuid, timestamptz)', 'EXECUTE')
+  IF has_function_privilege('anon', 'public.chat_op_remind(uuid, uuid, timestamptz, uuid[])', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.chat_op_remind(uuid, uuid, timestamptz, uuid[])', 'EXECUTE')
      OR has_function_privilege('anon', 'public.chat_catchup_open(uuid)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.chat_catchup_open(uuid)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.chat_catchup_open(uuid)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.chat__fire_later(timestamptz, integer)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.chat__fire_later(timestamptz, integer)', 'EXECUTE')
-     OR has_function_privilege('authenticated', 'public.chat__catchup_snoozed_twin()', 'EXECUTE') THEN
+     OR has_function_privilege('authenticated', 'public.chat__catchup_snoozed_twin()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.chat__reopen(uuid, uuid[])', 'EXECUTE') THEN
     RAISE EXCEPTION 'Grants on the Later functions are not as intended.';
   END IF;
 END;

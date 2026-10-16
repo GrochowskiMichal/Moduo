@@ -333,12 +333,13 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return error ? bad(chatError(error)) : ok(Number(data) || 0);
       }),
 
-    remind: ({ messageId, channelId, at }) =>
+    remind: ({ messageId, channelId, itemIds, at }) =>
       attempt(async () => {
         const { data, error } = await db().rpc("chat_op_remind", {
-          p_message_id: messageId ?? null,
-          p_channel_id: messageId ? null : (channelId ?? null),
+          p_message_id: itemIds ? null : (messageId ?? null),
+          p_channel_id: itemIds || messageId ? null : (channelId ?? null),
           p_at: at,
+          p_item_ids: itemIds ? [...itemIds] : null,
         });
         return error ? bad(chatError(error)) : ok(Number(data) || 0);
       }),

@@ -294,10 +294,14 @@ export type ChatRuntime = {
   catchupDone(ids: readonly string[]): Promise<ChatResult<number>>;
   /** Undo Done. */
   catchupReopen(ids: readonly string[]): Promise<ChatResult<number>>;
-  /** Later / Remind me on a message, or `/remind` on a conversation; `at` null clears. */
+  /**
+   * Later / Remind me on a message, `/remind` on a conversation, or Later on
+   * Catch up items by id (one of the three); `at` null clears.
+   */
   remind(args: {
     messageId?: string | null;
     channelId?: string | null;
+    itemIds?: readonly string[] | null;
     at: string | null;
   }): Promise<ChatResult<number>>;
   /** You read the chain on the right: its Catch up items close. */
