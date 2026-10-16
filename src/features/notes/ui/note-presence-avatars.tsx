@@ -1,11 +1,12 @@
 /**
  * Presence facepile (Wave-3 NO-6, AC7): who else is viewing this note, right
  * now. Renders nothing when you're alone — presence is a quiet ambient signal,
- * not persistent chrome. Names/initials come from the realtime channel's
- * presence payload (see `useNoteRealtime`).
+ * not persistent chrome. Who is there comes from the note's private live
+ * channel; names and photos come from the workspace's member list (NR-7,
+ * see `useNoteRealtime`).
  */
 
-import { Avatar, AvatarFallback, AvatarGroup, AvatarGroupCount } from "@/components/ui/avatar";
+import { AvatarGroup, AvatarGroupCount, PersonAvatar } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NoteViewer } from "../sync/notes-realtime";
 
@@ -24,9 +25,7 @@ export function NotePresenceAvatars({ viewers }: { viewers: NoteViewer[] }) {
       {shown.map((v) => (
         <Tooltip key={v.userId}>
           <TooltipTrigger asChild>
-            <Avatar size="sm">
-              <AvatarFallback>{v.initials}</AvatarFallback>
-            </Avatar>
+            <PersonAvatar size="sm" name={v.name} id={v.userId} src={v.avatarUrl} />
           </TooltipTrigger>
           <TooltipContent side="bottom">{v.name} is viewing</TooltipContent>
         </Tooltip>

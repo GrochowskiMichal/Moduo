@@ -27,13 +27,13 @@ import { type CaptureSource, useCaptureSource } from "../../../lib/capture-sourc
 import type { EntityRef } from "../../../lib/entity-links";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
 import { ShareMenu } from "../../sharing/share-menu";
+import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import { useNotesExperience } from "../experience";
 import { useNoteLinkDrop } from "../hooks/use-note-link-drop";
 import { useNoteRealtime } from "../hooks/use-note-realtime";
 import { useTrashWithTaskDetach } from "../hooks/use-trash-with-task-detach";
 import { shapeNoteSearchResults } from "../search";
-import { nameFromEmail } from "../sync/notes-realtime";
 import { displayTitle } from "../title";
 import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
@@ -50,17 +50,8 @@ import { useShellTasks } from "./use-shell-tasks";
 
 export function NotesShell() {
   const shell = useNotesShell();
-  const {
-    runtime,
-    userId,
-    userEmail,
-    workspace,
-    workspaceId,
-    module,
-    selectedId,
-    selectedNote,
-    draft,
-  } = shell;
+  const { runtime, userId, workspace, workspaceId, module, selectedId, selectedNote, draft } =
+    shell;
   const { notes, favorites, engine, canEdit, degraded, loading } = module;
   const [, setExperience] = useNotesExperience();
   const [importOpen, setImportOpen] = useState(false);
@@ -127,13 +118,16 @@ export function NotesShell() {
       !shell.configError &&
       workspace.modulePermissions.notes !== "none",
   );
-  const selfName = useMemo(() => nameFromEmail(userEmail), [userEmail]);
+  const people = useCommentPeople();
   const { viewers } = useNoteRealtime({
+    notes: runtime?.notesV2 ?? null,
     engine: engine ?? null,
-    noteId: liveNote?.id ?? null,
+    // A draft isn't on the server yet: nobody can view it, and you aren't
+    // viewing the note you had open before it.
+    noteId: liveNoteId,
     enabled: canRender,
     selfUserId: userId,
-    selfName,
+    personOf: people.personOf,
   });
 
   const onDragEnd = useNoteLinkDrop({ runtime, workspaceId, canEdit });

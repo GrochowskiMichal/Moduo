@@ -38,18 +38,10 @@ export function isAgentOrigin(origin: unknown): origin is AgentOrigin {
   return origin instanceof AgentOrigin;
 }
 
-/** Updates the sync engine and the realtime relay must NOT push back out:
+/** Updates the sync engine must NOT push back out:
  * they came from the server (or a peer) and are already stored. */
 export function isForeignOrigin(origin: unknown, persistence: unknown): boolean {
   return origin === "remote" || origin === persistence || isAgentOrigin(origin);
-}
-
-/** The live channel's "an agent just wrote this note" cue (NR-6). It carries
- * no content: receivers pull, and the stored row says who wrote it. */
-export const AGENT_WRITE_CUE = "api_key";
-
-export function isAgentWriteCue(payload: Record<string, unknown> | undefined): boolean {
-  return payload?.origin === AGENT_WRITE_CUE && payload.b64 === undefined;
 }
 
 export type AgentUndo = {

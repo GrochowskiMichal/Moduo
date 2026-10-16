@@ -129,6 +129,7 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { createTasksAgents } from "./runtime.web.agents";
+import { joinNoteLive } from "./runtime.web.notes-live";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
@@ -1150,7 +1151,7 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
-    async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
+    async pullDoc({ workspaceId, noteId, sinceUpdateId, knownDocVersion }) {
       // Log FIRST, snapshot SECOND. A concurrent compaction between the two
       // reads then only ever makes the snapshot NEWER than the log we hold —
       // applying both stays lossless (Yjs is idempotent). The reverse order
@@ -1179,6 +1180,20 @@ export const webRuntime: ModuoRuntime = {
       }
       if (updRes.error) throw new Error(updRes.error.message);
       const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
+
+      // Every snapshot change (compaction, seed) bumps doc_version, so an
+      // unchanged version means the snapshot adds nothing to what we hold.
+      if (knownDocVersion != null) {
+        const ver = await supabaseClient
+          .from("notes")
+          .select("doc_version")
+          .eq("id", noteId)
+          .eq("workspace_id", workspaceId)
+          .single();
+        if (!ver.error && ver.data?.doc_version === knownDocVersion) {
+          return { snapshotB64: null, docVersion: knownDocVersion, updates };
+        }
+      }
 
       const noteRes = await supabaseClient
         .from("notes")
@@ -1566,6 +1581,10 @@ export const webRuntime: ModuoRuntime = {
         title: (r.title as string) ?? "",
         bodyMd: (r.body_md as string) ?? "",
       }));
+    },
+
+    joinLive(input) {
+      return joinNoteLive(supabaseClient, input);
     },
   },
 
