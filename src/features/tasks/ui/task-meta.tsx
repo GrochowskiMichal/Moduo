@@ -238,24 +238,30 @@ export function DateMark({ date, className }: { date: RowDate; className?: strin
 }
 
 /**
- * The quiet line that ends a list or group whose completed tasks Display
- * hides: "5 completed · show". Once shown, it offers "hide" again.
+ * The quiet line for completed tasks Display hides: under a group or column
+ * in "7 days" (the older ones), "5 completed · show", then "hide". With
+ * `end` it is the one line that ends a whole list while Completed is Hidden
+ * (MOD-148): "12 completed · Show", then "Hide".
  */
 export function CompletedLine({
   count,
   shown,
   onToggle,
+  end = false,
   className,
 }: {
   count: number;
   shown: boolean;
   onToggle: () => void;
+  end?: boolean;
   className?: string;
 }) {
   if (count <= 0) return null;
   const label = completedLabel(count);
+  const verb = shown ? "hide" : "show";
   return (
     <div
+      data-slot={end ? "completed-end-line" : "completed-line"}
       className={cn(
         "flex min-h-(--row-h-sm) items-center gap-2 px-2.5 font-sans text-xs text-muted-foreground",
         className,
@@ -265,14 +271,14 @@ export function CompletedLine({
       <button
         type="button"
         aria-expanded={shown}
-        aria-label={`${label}, ${shown ? "hide" : "show"}`}
+        aria-label={`${label}, ${verb}`}
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
         }}
         className="rounded-sm tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
-        {label} · {shown ? "hide" : "show"}
+        {label} · {end ? (shown ? "Hide" : "Show") : verb}
       </button>
     </div>
   );

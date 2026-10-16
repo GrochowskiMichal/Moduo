@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 /**
  * Tasks List rows — visual regression (TV-U1: U1-1, U1-2, U1-3, U1-5). The row
  * anatomy (fixed columns, quiet counts, the priority glyph, done rows, the
- * "N completed" line) under every density and radius, every dark shade, and
- * a spread of accents.
+ * list's one "N completed · Show" line and, in "7 days", each group's, MOD-148)
+ * under every density and radius, every dark shade, and a spread of accents.
  *
  * Baselines are captured by a human, never by an agent (DESIGN_SYSTEM §5):
  *   bun run storybook
@@ -25,6 +25,10 @@ const STORIES = [
   "detailed-rows",
   "by-section",
   "late-row",
+  // MOD-148: a mostly finished project by section, Hidden and 7 days (new:
+  // their first baselines are a human capture too).
+  "by-section-mostly-done",
+  "by-section-seven-days",
 ];
 const DENSITIES = ["comfortable", "compact", "dense"] as const;
 const RADII = ["sharp", "soft", "round"] as const;
