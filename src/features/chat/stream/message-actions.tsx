@@ -3,8 +3,8 @@
 // Reply · Task · ⋯ (Reply before Task). ⋯ holds the verbs whose blocks exist
 // today: Edit (own) · Delete (own) · Pin to conversation · Make a task ·
 // Remind me… (CV-11, H) · Copy link · Mark unread. Reply to… and Wrap up (a
-// root with replies) came with CV-12; Mark as decision, Move to… and Make a
-// note join with their blocks (CV-14, CV-16, CV-15).
+// root with replies) came with CV-12; Move to… came with CV-16 (Make a note
+// waits on Notes' op); Mark as decision joins with its block (CV-14).
 // Right-click opens the same menu with your whole quick row on top and
 // "Customize…" (CV-7c, CH16a); "any emoji" shows once the picker passes
 // `onAnyEmoji` (CV-7b).
@@ -48,6 +48,8 @@ export type MessageVerbs = {
   onReplyTo?: () => void;
   /** Wrap up this root's chain (absent: no item). */
   onWrapUp?: () => void;
+  /** "Move to…" another conversation (CV-16; absent: no item). */
+  onMoveTo?: () => void;
   onTask: () => void;
   /** "Remind me…" (CV-11): the message comes back in Catch up at a time you pick (absent: no item). */
   onRemind?: () => void;
@@ -158,6 +160,13 @@ function ActionsMenu({
           Copy link
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={verbs.onMarkUnread}>Mark unread</DropdownMenuItem>
+        {/* Frame 5: Move to… closes the second group, after Mark unread. */}
+        {verbs.onMoveTo ? (
+          <DropdownMenuItem onSelect={verbs.onMoveTo}>
+            Move to…
+            <DropdownMenuShortcut>M</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        ) : null}
         {verbs.onEdit || verbs.onDelete ? <DropdownMenuSeparator /> : null}
         {verbs.onEdit ? (
           <DropdownMenuItem onSelect={verbs.onEdit}>

@@ -334,6 +334,12 @@ export function spineActivityLine(
       return "wrapped up a reply chain";
     case "chat.reopen":
       return p.undo === true ? "undid a wrap-up" : "reopened a reply chain";
+    // Move to… (CV-16): logged on the conversation the messages left.
+    case "chat.move": {
+      if (p.undo === true) return "undid a move";
+      const n = typeof p.count === "number" ? p.count : 1;
+      return n === 1 ? "moved a message out" : `moved ${n} messages out`;
+    }
     case "chat.react":
       return p.on === false ? "took back a reaction" : "reacted to a message";
     default:
