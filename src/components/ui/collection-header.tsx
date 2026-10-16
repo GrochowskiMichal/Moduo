@@ -9,7 +9,10 @@ import { cn } from "@/lib/utils";
  *
  * On the small control rung (`--ctrl-h-sm`), so a `+` IconButton beside it
  * lines up. The label is chrome (display face, 13 px medium, sentence case);
- * the count is the secondary level.
+ * the count is the tertiary level, as the frames draw it (round-2b
+ * `.shead .num`, `--text-3`). 4 px sit between the header and the rows under
+ * it, so it reads as their header rather than one more row (MOD-152); only
+ * when rows follow, so an empty collection ("Linked 0") ends at its header.
  */
 function CollectionHeader({
   label,
@@ -31,13 +34,15 @@ function CollectionHeader({
       data-slot="collection-header"
       className={cn(
         "flex h-(--ctrl-h-sm) min-w-0 items-center gap-1.5 font-display text-sm font-medium text-foreground",
+        // The next sibling holds rows (an empty list or slot doesn't count).
+        "[&:has(+:not(:empty))]:mb-1",
         className,
       )}
       {...props}
     >
       <Tag className="min-w-0 truncate">{label}</Tag>
       {count !== undefined && count !== null ? (
-        <span className="shrink-0 font-sans font-normal text-muted-foreground tabular-nums">
+        <span className="shrink-0 font-sans font-normal text-subtle-foreground tabular-nums">
           {count}
         </span>
       ) : null}
