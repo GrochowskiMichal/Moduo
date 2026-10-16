@@ -276,8 +276,9 @@ export function TaskFeed({
       </div>
       {rows.map(render)}
       {/* Comments on and none yet (most tasks, MOD-157): one quiet line, so the
-          header doesn't sit over nothing; the changes are a click away on All. */}
-      {filter === "comments" && rows.length === 0 && !thread.loading ? (
+          header doesn't sit over nothing; the changes are a click away on All.
+          Not when the read failed: then the Retry line below says so. */}
+      {filter === "comments" && rows.length === 0 && !thread.loading && !thread.failed ? (
         <p className="font-sans text-xs text-muted-foreground">No comments yet.</p>
       ) : null}
       {thread.failed ? (

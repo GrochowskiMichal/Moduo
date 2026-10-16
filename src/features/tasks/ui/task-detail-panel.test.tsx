@@ -911,9 +911,36 @@ describe("the feed opens on Comments, its switch at the title's size (MOD-157)",
   it("a task with changes but no comments says so in one quiet line, and keeps its box", async () => {
     const { runtime } = fakeRuntime();
     const t = task();
-    renderPanel(t, api(t, { loadActivity: async () => [] }), runtime);
+    const changed: ActivityEntry = {
+      id: "a1",
+      workspaceId: "w",
+      module: "tasks",
+      entityType: "task",
+      entityId: "t1",
+      op: "tasks.update",
+      actorType: "user",
+      actorId: "u2",
+      actorLabel: "Mike",
+      payload: { fields: ["priority"] },
+      createdAt: "2026-10-07T09:00:00Z",
+    };
+    const loadActivity = rs.fn(async () => [changed]);
+    renderPanel(t, api(t, { loadActivity }), runtime);
     await waitFor(() => expect(within(feed()).getByText("No comments yet.")).toBeTruthy());
+    expect(loadActivity).toHaveBeenCalled();
+    // The change waits behind All.
+    expect(within(feed()).queryByText("Mike")).toBeNull();
     expect(screen.getByRole("textbox", { name: "Comment on this task" })).toBeTruthy();
+  });
+
+  it("when the comments don't load, says that, never 'No comments yet.' too", async () => {
+    const { runtime, spine } = fakeRuntime();
+    spine.listComments = rs.fn(async () => {
+      throw new Error("offline");
+    });
+    renderPanel(task(), api(task()), runtime);
+    await waitFor(() => expect(within(feed()).getByText(/didn’t load/)).toBeTruthy());
+    expect(within(feed()).queryByText("No comments yet.")).toBeNull();
   });
 
   it("All brings the changes back, and stays picked on this device", async () => {
@@ -927,11 +954,18 @@ describe("the feed opens on Comments, its switch at the title's size (MOD-157)",
     expect(shown("All")).toBe("true");
   });
 
-  it("an earlier Comments pick still reads as Comments", () => {
-    localStorage.setItem(FEED_FILTER_KEY, "comments");
-    const { runtime } = fakeRuntime();
-    renderPanel(task(), api(task()), runtime);
-    expect(shown("Comments")).toBe("true");
+  it("an earlier Comments pick, or anything but All, reads as Comments", () => {
+    for (const stored of ["comments", "bogus"]) {
+      localStorage.setItem(FEED_FILTER_KEY, stored);
+      const { runtime } = fakeRuntime();
+      renderPanel(task(), api(task()), runtime);
+      expect(shown("Comments")).toBe("true");
+      cleanup();
+    }
+    // The control: a stored All is read, so the cases above came from storage.
+    pickAll();
+    renderPanel(task(), api(task()), fakeRuntime().runtime);
+    expect(shown("All")).toBe("true");
   });
 
   it("draws the switch on the quiet header size, not the control rung", () => {
@@ -1237,6 +1271,15 @@ describe("the tags' + ends the chips, at their height (MOD-158)", () => {
     expect(chips).toHaveLength(1);
     expect(chips[0]?.textContent).toBe("visual");
     expect(group.lastElementChild).toBe(add);
+  });
+
+  it("opens the tag picker through both its triggers (popover and tooltip)", async () => {
+    renderPanel(task(), withTags(TAGS));
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(add);
+    expect(await screen.findByPlaceholderText("Filter or create…")).toBeTruthy();
+    expect(add.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("with no tags yet, the value still reads Add tag", () => {
