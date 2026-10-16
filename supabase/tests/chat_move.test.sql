@@ -423,3 +423,99 @@ BEGIN
     'grants: chat_op_move_messages is for signed-in people, never anon');
 END;
 $$;
+
+-- ── Files follow their message (CV-9); conversation references stay quiet (CV-13) ─
+CREATE FUNCTION test.file(p_name text) RETURNS public.attachments LANGUAGE sql VOLATILE AS $$
+  SELECT * FROM public.attachments WHERE file_name = p_name
+$$;
+CREATE FUNCTION test.sees_file(p_who text, p_file text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format($q$SELECT count(*)::text FROM public.attachments WHERE id = %L$q$,
+    (test.file(p_file)).id))
+$$;
+CREATE FUNCTION test.sees_bytes(p_who text, p_file text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format($q$SELECT count(*)::text FROM storage.objects
+    WHERE bucket_id = 'attachments' AND name = %L$q$, (test.file(p_file)).object_path))
+$$;
+CREATE FUNCTION test.files_view(p_who text, p_conv text) RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format($q$SELECT coalesce(string_agg(file_name, ',' ORDER BY file_name), '')
+    FROM public.chat_files(%L)$q$, test.ref(p_conv)))
+$$;
+DO $$
+DECLARE
+  v text;
+  j jsonb;
+BEGIN
+  -- The earlier sections' moves happened "now" too: out of the pace window.
+  UPDATE public.chat_messages SET created_at = created_at - interval '1 minute'
+   WHERE workspace_id = test.id('W') AND kind = 'event' AND event ->> 'type' = 'moved_out';
+
+  v := test.as_user('B', format(
+    $q$SELECT public.attachments_op_begin(p_workspace_id => %L, p_entity_type => 'chat_message',
+         p_entity_id => %L, p_file_name => 'moved.png', p_mime => 'image/png', p_size_bytes => 1000,
+         p_channel_id => %L)$q$, test.id('W'), test.mid('fl'), test.ref('P')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: B uploads moved.png for a message in P', v);
+  v := test.as_user('B', format(
+    $q$INSERT INTO storage.objects (bucket_id, name, owner, owner_id, metadata)
+       VALUES ('attachments', %L, %L, %L, jsonb_build_object('size', 1000))$q$,
+    (test.file('moved.png')).object_path, test.id('B'), test.id('B')::text));
+  v := test.as_user('B', format($q$SELECT public.attachments_op_finalize(%L)$q$, (test.file('moved.png')).id));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: the upload finishes', v);
+  v := test.as_user('B', format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, %L::text, NULL::uuid)$q$,
+    test.mid('fl'), test.ref('P'), 'See ' || 'moduo://chat_channel/' || test.ref('Q')));
+  PERFORM test.ok(v LIKE 'ok %' AND (test.msg('fl')).file_count = 1, 'setup: B sends it with the file', v);
+  PERFORM test.ok(test.sees_file('C', 'moved.png') = '0' AND test.sees_bytes('C', 'moved.png') = '0',
+    'C, outside P, reads neither the file nor its bytes');
+
+  v := test.mv('B', ARRAY['fl'], 'F');
+  j := v::jsonb;
+  PERFORM test.ok(j ->> 'status' = 'confirm' AND (j ->> 'newly')::int = 2,
+    'the file''s message into F first asks (C and O couldn''t read P)', v);
+  PERFORM test.ok(test.sees_file('C', 'moved.png') = '0', 'the question shows C nothing');
+  v := test.mv('B', ARRAY['fl'], 'F', true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'confirmed, it moves', v);
+  PERFORM test.ok((test.msg('fl')).file_count = 1 AND (test.file('moved.png')).entity_id = test.mid('fl')
+              AND (test.file('moved.png')).deleted_at IS NULL,
+    'the file rides the message (same row, same count, not trashed)');
+  PERFORM test.ok(test.sees_file('C', 'moved.png') = '1' AND test.sees_bytes('C', 'moved.png') = '1',
+    'C reads the file and its bytes in F now');
+  PERFORM test.ok(test.files_view('B', 'F') LIKE '%moved.png%' AND test.files_view('B', 'P') NOT LIKE '%moved.png%',
+    'the Files view lists it in F, no longer in P');
+  PERFORM test.ok(test.sees_file('X', 'moved.png') = '0', 'X, in neither, still reads nothing');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.entity_links
+                               WHERE workspace_id = test.id('W') AND deleted_at IS NULL
+                                 AND (target_type IN ('chat_channel', 'chat_message')
+                                      AND source_type = 'chat_channel' AND relation_kind = 'mentions')),
+    'a reference to a conversation makes no "Mentioned in" line, moved or not');
+
+  v := test.mv('B', ARRAY['fl'], 'P');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone', 'B undoes it', v);
+  PERFORM test.ok(test.sees_file('C', 'moved.png') = '0' AND test.sees_bytes('C', 'moved.png') = '0'
+              AND test.files_view('B', 'P') LIKE '%moved.png%',
+    'Undo takes the file back to P: C reads it no more');
+
+  -- Nobody outside the source moves it (its file with it).
+  v := test.mv('C', ARRAY['fl'], 'F');
+  PERFORM test.ok(v LIKE 'P0002 %' OR v LIKE '42501 %', 'C can''t move a message it can''t read', v);
+END;
+$$;
+
+-- ── A manager moves someone else's mention: the line follows in the author's name ─
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('T2'), 'title', 'Brief the printer', 'bucket_id', test.id('SB'))));
+  v := test.say('B', 'Q', 'lkb', 'Who has ' || test.uri('task', 'T2'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mentions('Q', 'T2') = 1, 'setup: B mentions T2 in Q', v);
+  v := test.mv('A', ARRAY['lkb'], 'F');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'Q''s manager A moves B''s message into the narrower F', v);
+  PERFORM test.ok(test.mentions('F', 'T2') = 1 AND test.mentions('Q', 'T2') = 0,
+    'the line follows it to F and leaves Q');
+  PERFORM test.ok((SELECT l.created_by FROM public.entity_links l
+                    WHERE l.workspace_id = test.id('W') AND l.deleted_at IS NULL AND l.relation_kind = 'mentions'
+                      AND l.pair_key = public.spine_pair_key('chat_channel', test.ref('F'), 'task', test.id('T2')))
+                  = test.id('B'),
+    'the line is written in B''s name (the author), not the mover''s');
+END;
+$$;

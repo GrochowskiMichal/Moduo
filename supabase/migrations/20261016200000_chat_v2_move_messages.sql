@@ -1,6 +1,6 @@
 -- CV-16: Move to… (spec §5 "Tidy up afterwards", round-3 §2.19, Assumption
 -- #24, CH55). Fixed stamp in chat's order (after CV-10-fix, CV-11, CV-17,
--- CV-9, CV-13 and CV-19). Adds; redefines nothing that exists.
+-- CV-9 and CV-13). Adds; redefines nothing that exists.
 --
 --   1. Columns on chat_messages: moved_at, moved_by, moved_from_channel_id
 --      (the last move: when, who, from where).
