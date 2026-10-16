@@ -263,14 +263,22 @@ export function ProjectClientValue({
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [query, setQuery] = useState("");
   const results = useClientSearch(workspaceId, query, open, companies);
-  const groups: { type: ProjectClient["type"]; heading: string; items: EntityRecord[] }[] = [
-    { type: "contact", heading: "People", items: results.filter((e) => e.type === "contact") },
-    { type: "company", heading: "Companies", items: results.filter((e) => e.type === "company") },
-  ];
+  const people = results.filter((e) => e.type === "contact");
+  const orgs = results.filter((e) => e.type === "company");
   const pick = (next: ProjectClient | null) => {
     setOpen(false);
     if (next?.type !== client?.type || next?.id !== client?.id) onChange(next);
   };
+  const items = (type: ProjectClient["type"], list: EntityRecord[]) =>
+    list.map((e) => {
+      const Icon = resolveEntityIcon(e.type, e.icon);
+      return (
+        <CommandItem key={e.id} value={`${type}:${e.id}`} onSelect={() => pick({ type, id: e.id })}>
+          <Icon aria-hidden />
+          {e.label || (type === "company" ? "Untitled company" : "Unnamed contact")}
+        </CommandItem>
+      );
+    });
   const picker = (
     <PopoverContent align="start" className="w-64 p-0">
       <Command shouldFilter={false}>
@@ -287,25 +295,12 @@ export function ProjectClientValue({
               </CommandItem>
             </CommandGroup>
           ) : null}
-          {groups.map((g) =>
-            g.items.length > 0 ? (
-              <CommandGroup key={g.type} heading={g.heading}>
-                {g.items.map((e) => {
-                  const Icon = resolveEntityIcon(e.type, e.icon);
-                  return (
-                    <CommandItem
-                      key={e.id}
-                      value={`${g.type}:${e.id}`}
-                      onSelect={() => pick({ type: g.type, id: e.id })}
-                    >
-                      <Icon aria-hidden />
-                      {e.label || (g.type === "company" ? "Untitled company" : "Unnamed contact")}
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            ) : null,
-          )}
+          {people.length > 0 ? (
+            <CommandGroup heading="People">{items("contact", people)}</CommandGroup>
+          ) : null}
+          {orgs.length > 0 ? (
+            <CommandGroup heading="Companies">{items("company", orgs)}</CommandGroup>
+          ) : null}
         </CommandList>
       </Command>
     </PopoverContent>
