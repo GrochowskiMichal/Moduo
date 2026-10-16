@@ -353,6 +353,15 @@ AS $$
 $$;
 
 -- ── 5. Every device notice passes the gate ──────────────────────────────────
+-- Until now only do not disturb held a row (CV-17); it drops from here on, and
+-- no Focus held anything. Those rows close quietly, so the stale sweep below
+-- never rings them as "N messages while you focused" (their items wait in
+-- Catch up). A person focusing right now keeps theirs (a re-run).
+UPDATE public.notice_deliveries d SET acked_at = now()
+ WHERE d.held_for_focus AND d.acked_at IS NULL
+   AND NOT EXISTS (SELECT 1 FROM public.focus_runs f
+                    WHERE f.user_id = d.user_id AND f.status = 'running');
+
 CREATE OR REPLACE FUNCTION public.notice_deliveries__gate()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -472,9 +481,12 @@ BEGIN
     UPDATE public.notice_deliveries d SET acked_at = now()
      WHERE d.user_id = p_user AND d.held_for_focus AND d.acked_at IS NULL
     RETURNING d.id, d.channel_id, d.message_id)
+  -- Messages still there and still theirs to read.
   SELECT count(DISTINCT coalesce(c.message_id, c.id)) INTO v_n
     FROM closed c
-   WHERE c.channel_id IS NULL OR public.chat__can_read_channel_as(c.channel_id, p_user);
+   WHERE (c.channel_id IS NULL OR public.chat__can_read_channel_as(c.channel_id, p_user))
+     AND (c.message_id IS NULL OR EXISTS (SELECT 1 FROM public.chat_messages m
+                                           WHERE m.id = c.message_id AND m.deleted_at IS NULL));
   v_n := coalesce(v_n, 0);
   IF p_summary AND v_n > 0 AND p_workspace_id IS NOT NULL THEN
     INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title, url, tag, push_after)
@@ -486,7 +498,9 @@ BEGIN
 END;
 $$;
 
--- A run leaving running (ended or paused), or a running run deleted. Nothing
+-- A run leaving running (ended or paused), a Pomodoro work phase ending (the
+-- break rings again, so what the work phase held is released with it), or a
+-- running run deleted. Nothing
 -- here ever stops Focus from ending: any failure is a warning, the held rows
 -- stay held, and the stale sweep below releases them.
 CREATE OR REPLACE FUNCTION public.focus_runs__release_held()
@@ -514,8 +528,9 @@ END;
 $$;
 DROP TRIGGER IF EXISTS focus_runs_release_held ON public.focus_runs;
 CREATE TRIGGER focus_runs_release_held
-  AFTER UPDATE OF status ON public.focus_runs
-  FOR EACH ROW WHEN (OLD.status = 'running' AND NEW.status <> 'running')
+  AFTER UPDATE OF status, phase ON public.focus_runs
+  FOR EACH ROW WHEN (OLD.status = 'running'
+                     AND (NEW.status <> 'running' OR (OLD.phase = 'work' AND NEW.phase <> 'work')))
   EXECUTE FUNCTION public.focus_runs__release_held();
 DROP TRIGGER IF EXISTS focus_runs_release_held_gone ON public.focus_runs;
 CREATE TRIGGER focus_runs_release_held_gone

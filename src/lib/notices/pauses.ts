@@ -13,6 +13,8 @@ import { supabaseClient } from "@/lib/runtime.web";
 
 let paused: ReadonlySet<string> = new Set();
 let loadedFor: string | null = null;
+/** Bumped by every pause or resume: a read that started before one is stale. */
+let changes = 0;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -30,8 +32,9 @@ export function pausesFromRow(raw: unknown): Set<string> {
 }
 
 async function load(userId: string): Promise<void> {
+  const at = changes;
   const { data, error } = await supabaseClient.rpc("workspace_notice_pauses");
-  if (error || loadedFor !== userId) return;
+  if (error || loadedFor !== userId || at !== changes) return;
   paused = pausesFromRow(data);
   emit();
 }
@@ -58,6 +61,7 @@ export function usePausedWorkspaces(userId: string | null): ReadonlySet<string> 
 
 /** Pause or resume one workspace: shown at once, put back when refused. */
 export async function setWorkspacePaused(workspaceId: string, on: boolean): Promise<void> {
+  changes += 1;
   const before = paused;
   const next = new Set(paused);
   if (on) next.add(workspaceId);

@@ -715,6 +715,24 @@ BEGIN
     'focus: a summary the gate drops writes nothing; the holds close and the item waits in Catch up');
   DELETE FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W');
 
+  -- A Pomodoro break rings again, so the work phase's holds close at the break.
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, phase, phase_seconds, device_id, started_at)
+  VALUES (test.id('run:B7'), test.id('W'), test.id('B'), 'running', 'pomodoro', 'work', 1500, 'db-test-device', now() + interval '5 minutes');
+  PERFORM test.ok(test.send('A', 'D', 'f7', 'during a work phase') = 'ok 1', 'sent: ' || 'f7');
+  PERFORM test.ok(test.notice('B', 'f7') LIKE 'chat_message|%|t', 'focus: a Pomodoro work phase holds', test.notice('B', 'f7'));
+  UPDATE public.focus_runs SET phase = 'break' WHERE id = test.id('run:B7');
+  PERFORM test.ok(test.send('A', 'D', 'f8', 'during the break') = 'ok 1', 'sent: ' || 'f8');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B7')) = '1 message while you focused'
+                  AND test.notice('B', 'f8') LIKE 'chat_message|%|f',
+    'focus: a break releases what the work phase held (one summary) and rings what comes in it', test.notice('B', 'f8'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B7');
+  PERFORM test.ok((SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                     AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B7')) = 1,
+    'focus: ending in a break, with nothing held since, writes no second summary');
+
   -- Statuses: at most 30 changes in 10 minutes.
   FOR i IN 1..30 LOOP
     v := test.as_user('C', format($q$SELECT public.user_op_set_status('{"emoji": "☕", "text": "Break %s"}')$q$, i));

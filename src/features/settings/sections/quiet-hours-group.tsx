@@ -37,7 +37,12 @@ export function QuietHoursGroup() {
       return;
     }
     setBusy(true);
-    saveTimeRegion(runtime.preferences, { quietHours: next })
+    // The server reads quiet hours in the saved zone: save the one named here
+    // when none is saved yet (as signing in does), so both read the same clock.
+    saveTimeRegion(runtime.preferences, {
+      quietHours: next,
+      ...(saved.timeZone ? {} : { timeZone }),
+    })
       .catch(() => toast.error("Couldn't save quiet hours. Try again."))
       .finally(() => setBusy(false));
   };
@@ -45,7 +50,7 @@ export function QuietHoursGroup() {
   return (
     <PrefGroup
       label="Quiet hours"
-      description={`Notifications from every module wait until quiet hours end. Nothing is lost: your bell and Catch up keep everything. Times are in ${zoneCity(timeZone)} time (Time & region).`}
+      description={`Notifications from every module stay silent during quiet hours. Nothing is lost: your bell and Catch up keep everything. Times are in ${zoneCity(timeZone)} time (Time & region).`}
     >
       <PrefRow title="Quiet hours" description="No notifications and no emails while they're on.">
         <Switch
