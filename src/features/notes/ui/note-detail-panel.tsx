@@ -99,6 +99,7 @@ export function NoteDetailPanel({
       ) : null}
       <EntityHub
         variant="rail"
+        focus={focus}
         status={status}
         sections={sections}
         canEdit={canEdit}

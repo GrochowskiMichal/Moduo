@@ -254,6 +254,7 @@ export function EventDetailPanel({
           point of mirroring their metadata (§8). */}
       <EntityHub
         variant="rail"
+        focus={focus}
         status={hub.status}
         sections={hub.sections}
         canEdit={canEdit}

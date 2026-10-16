@@ -65,3 +65,29 @@ export const Default: Story = {
 export const Densities: Story = {
   render: () => <AtThreeDensities>{() => <SampleFeed />}</AtThreeDensities>,
 };
+
+/** Chat's composer surface (CV-7b): filled, a 15 px input at every density. */
+function FilledComposer() {
+  return (
+    <FeedComposer
+      variant="filled"
+      className="w-96"
+      actions={
+        <>
+          <IconButton icon={AtSign} label="Mention or link" />
+          <IconButton icon={ArrowUp} label="Send" variant="default" />
+        </>
+      }
+    >
+      <FeedComposerInput
+        size="md"
+        aria-label="Message #design"
+        defaultValue="Ship the hero today?"
+      />
+    </FeedComposer>
+  );
+}
+
+export const FilledComposerDensities: Story = {
+  render: () => <AtThreeDensities>{() => <FilledComposer />}</AtThreeDensities>,
+};

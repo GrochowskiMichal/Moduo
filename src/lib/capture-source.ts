@@ -10,7 +10,8 @@ import { useEffect } from "react";
 
 import type { EntityRef } from "./entity-links";
 
-export type CaptureSourceKind = "email" | "note" | "event" | "contact";
+/** A chat message rides along when chat opens the capture for it (T, CV-10). */
+export type CaptureSourceKind = "email" | "note" | "event" | "contact" | "message";
 
 export type CaptureSource = {
   kind: CaptureSourceKind;

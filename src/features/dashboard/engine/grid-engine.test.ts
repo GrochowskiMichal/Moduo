@@ -9,6 +9,7 @@ import {
   canPlace,
   compact,
   findFirstFit,
+  fitAllowedSizes,
   inBounds,
   isValidPlacement,
   overlaps,
@@ -455,5 +456,21 @@ describe("invariants (property)", () => {
       expect(out.pages.length).toBeGreaterThanOrEqual(1);
       for (const page of out.pages) expect(isValidPlacement(page.widgets)).toBe(true);
     }
+  });
+});
+
+describe("fitAllowedSizes (a type that dropped a size)", () => {
+  it("fits a saved size the type no longer offers to the largest allowed size inside it, and compacts", () => {
+    const layout = {
+      version: 1 as const,
+      pages: [{ id: "p", widgets: [w("a", "chat", "L", 0, 0), w("b", "chat", "S", 4, 0)] }],
+    };
+    const sizes = (): readonly WidgetSize[] => ["S", "M"];
+    const out = fitAllowedSizes(layout, sizes);
+    expect(out.pages[0]!.widgets.find((x) => x.id === "a")!.size).toBe("M");
+    expect(out.pages[0]!.widgets.find((x) => x.id === "b")!.size).toBe("S");
+    expect(isValidPlacement(out.pages[0]!.widgets)).toBe(true);
+    // Nothing to fit: the same layout back.
+    expect(fitAllowedSizes(out, sizes)).toBe(out);
   });
 });

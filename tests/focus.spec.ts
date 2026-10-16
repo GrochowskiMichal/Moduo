@@ -4,6 +4,7 @@ import {
   DEV,
   devWorkspace,
   endFocusRuns,
+  removeRun,
   rest,
   rpc,
   runTag,
@@ -39,7 +40,22 @@ test.beforeAll(async () => {
 // No session left over from another test, and none left for the next one:
 // the card starts from Up next.
 test.beforeEach(() => endFocusRuns(dev.user.id));
-test.afterAll(() => endFocusRuns(dev.user.id));
+
+/** The workspaces `freshPlace` made, soft-deleted at the end with the Inbox
+ *  tasks tagged with this run, so the dev's workspace switcher and Inbox don't
+ *  grow with every run. */
+const places: string[] = [];
+
+test.afterAll(async () => {
+  await endFocusRuns(dev.user.id);
+  if (places.length > 0) {
+    await rest("service", `workspaces?id=in.(${places.join(",")})&deleted_at=is.null`, {
+      method: "PATCH",
+      body: { deleted_at: new Date().toISOString() },
+    });
+  }
+  await removeRun(ws.id, tag, []);
+});
 
 async function createTask(fields: {
   title: string;
@@ -76,7 +92,18 @@ async function openFocus(page: Page) {
     .getByRole("button", { name: /^Focus\b/ })
     .first()
     .click();
-  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible({ timeout: 20_000 });
+  await focusLoaded(page);
+}
+
+/**
+ * The Focus view draws a skeleton with the same `data-slot` and `aria-busy`
+ * until the store has loaded, so "the view is visible" is true before its Now
+ * card exists; wait for it to stop being busy, then read the card.
+ */
+async function focusLoaded(page: Page) {
+  await expect(page.locator('[data-slot="focus-view"]:not([aria-busy="true"])')).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 test("AC8.1–8.3 — the sidebar's Focus, Start, one pill with Pause, Stop in ⋯ with Undo", async ({
@@ -148,6 +175,7 @@ async function freshPlace(name: string): Promise<Place> {
     method: "POST",
     body: { owner_id: dev.user.id, name },
   });
+  places.push(w.id);
   const bucket = async (bucketName: string, isSystem: boolean) => {
     const [b] = await rest<Array<{ id: string }>>("service", "buckets", {
       method: "POST",
@@ -201,7 +229,7 @@ async function openFocusIn(page: Page, place: Place) {
     .getByRole("button", { name: /^Focus\b/ })
     .first()
     .click();
-  await expect(page.locator('[data-slot="focus-view"]')).toBeVisible({ timeout: 20_000 });
+  await focusLoaded(page);
 }
 
 /** Up next as the screen draws it: task titles and "@meeting". */

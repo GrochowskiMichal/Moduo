@@ -61,7 +61,7 @@
 **Projects, overview and templates** · [12](../local/tasks-v3-walkthrough/12-project-overview.png) · [13](../local/tasks-v3-walkthrough/13-templates.png) · [14](../local/tasks-v3-walkthrough/14-template-use.png)
 - [ ] Open Hackathon kit, then set the panel's view (title-row ▾) to Project. **Expect:**
   - status, start, target, lead and client, and an editable description;
-  - "2 of 6 done", Done this month with time, Next up, Sections, People and Lately.
+  - Progress with "2 of 6 done", then Done this month with time; Waiting, Sections, People, Files and Recently, each after a thin line (no Next up since MOD-152).
 - [ ] Set the project's status to Done while it still has open tasks. **Expect:** it asks first, with Won't do · Move · Keep.
 - [ ] Open the sidebar's ⋯ → Templates, then Use… on Hackathon kit. **Expect:** a start date, "Every date moves with the start" and Keep who's assigned.
 - [ ] From a project's ⋯, try Save as template… and Duplicate….

@@ -14,15 +14,13 @@
 //   "Show 12 earlier changes", and after the last comment the latest five
 //   show (`TAIL_VISIBLE`).
 // - Comments: edit your own ("edited"), delete with an 8 s Undo and no
-//   tombstone (yours, or anyone's with Full access to the project), six fixed
-//   reactions that never notify (hover says who). No threads.
+//   tombstone (yours, or anyone's with Full access to the project), reactions
+//   (any emoji, your quick row first; CV-7c) that never notify. No threads.
 // Comments go through the spine's ops (`comments_op_*`); the thread re-reads
 // whenever the store sees one of this task's comments change (an edit, a
 // reaction, a delete elsewhere).
 
-import type { CommentReaction } from "@contracts/vocabularies";
-import { COMMENT_REACTIONS } from "@contracts/vocabularies";
-import { Ellipsis, Pencil, SmilePlus, Trash2 } from "lucide-react";
+import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -36,19 +34,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FeedItem as FeedLine } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
-import { cn } from "@/lib/utils";
 import { appActorKind } from "../../spine/activity";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { type CommentThread, useCommentThread } from "../../spine/hooks/use-comment-thread";
-import { groupReactions, REACTION_GLYPHS, REACTION_NAMES, reactedBy } from "../../spine/reactions";
 import { useReferences } from "../../spine/references/context";
 import { referencesInText } from "../../spine/references/text";
+import { useCommentReactions } from "../../spine/ui/comment-reactions";
 import {
   CommentBody,
   CommentCard,
@@ -475,13 +470,8 @@ function CommentItem({
       });
   };
 
-  const react = (reaction: CommentReaction, on: boolean) => {
-    void thread.react(comment.id, reaction, on).catch((e: unknown) => {
-      toast.error(e instanceof Error ? e.message : "Couldn’t save the reaction.");
-    });
-  };
-
-  const groups = groupReactions(comment.reactions, currentUserId, people.nameOf);
+  // CV-7c: the kit's reactions with your quick row (any emoji, never a notice).
+  const reactions = useCommentReactions({ comment, thread, currentUserId, nameOf: people.nameOf });
   const author =
     comment.authorKind === "api_key" || !comment.createdBy
       ? null
@@ -524,7 +514,7 @@ function CommentItem({
       meta={comment.editedAt ? <span title={formatTimestamp(comment.editedAt)}>edited</span> : null}
       actions={
         <>
-          <ReactionPicker groups={groups} onPick={(reaction, on) => react(reaction, on)} />
+          {reactions.button}
           {mine || canRemove ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -548,80 +538,14 @@ function CommentItem({
           ) : null}
         </>
       }
-      footer={
-        groups.length > 0 ? (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {groups.map((g) => (
-              <Tooltip key={g.reaction}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-pressed={g.mine}
-                    aria-label={`${REACTION_NAMES[g.reaction]}: ${reactedBy(g.people)}`}
-                    onClick={() => react(g.reaction, !g.mine)}
-                    className={cn(
-                      "hit-min inline-flex h-(--ctrl-h-xs) items-center gap-1 rounded-full border px-1.5 font-sans text-xs tabular-nums",
-                      "transition-colors duration-(--motion-fade) ease-(--ease-out)",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                      // A pressed toggle is neutral (R5); the accent stays for selection.
-                      g.mine
-                        ? "border-border bg-state-active text-foreground"
-                        : "border-hairline text-muted-foreground hover:bg-state-hover",
-                    )}
-                  >
-                    <span aria-hidden>{REACTION_GLYPHS[g.reaction]}</span>
-                    {g.count}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{reactedBy(g.people)}</TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-        ) : null
-      }
+      footer={reactions.chips}
     >
-      <CommentBody text={comment.body} mentionNames={mentionNames} selfName={selfName} />
+      <CommentBody
+        text={comment.body}
+        mentionNames={mentionNames}
+        selfName={selfName}
+        workspaceId={comment.workspaceId}
+      />
     </CommentCard>
-  );
-}
-
-/** The six reactions, fixed (REPLAN 88): a click adds or takes back yours. */
-function ReactionPicker({
-  groups,
-  onPick,
-}: {
-  groups: ReturnType<typeof groupReactions>;
-  onPick: (reaction: CommentReaction, on: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const mine = new Set(groups.filter((g) => g.mine).map((g) => g.reaction));
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <IconButton icon={SmilePlus} label="React" size="sm" />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-auto gap-0.5 p-1">
-        {COMMENT_REACTIONS.map((reaction) => (
-          <button
-            key={reaction}
-            type="button"
-            aria-pressed={mine.has(reaction)}
-            aria-label={REACTION_NAMES[reaction]}
-            onClick={() => {
-              onPick(reaction, !mine.has(reaction));
-              setOpen(false);
-            }}
-            className={cn(
-              "flex size-(--ctrl-h-sm) items-center justify-center rounded-md text-base",
-              "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              mine.has(reaction) && "bg-state-active",
-            )}
-          >
-            <span aria-hidden>{REACTION_GLYPHS[reaction]}</span>
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
   );
 }

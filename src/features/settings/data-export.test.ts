@@ -46,7 +46,7 @@ describe("buildExportBundle — bundle shape + error manifest (AC11)", () => {
     expect(bundle.errors).toEqual({});
     expect(bundle.entries["_errors.json"]).toBeUndefined();
 
-    const manifest = JSON.parse(bundle.entries["_manifest.json"]);
+    const manifest = JSON.parse(String(bundle.entries["_manifest.json"]));
     expect(manifest.workspaceId).toBe("ws-1");
     expect(manifest.appVersion).toBe("1.0.0");
     expect(manifest.modules).toEqual({
@@ -75,12 +75,12 @@ describe("buildExportBundle — bundle shape + error manifest (AC11)", () => {
     // ...but is surfaced in the errors map and the _errors.json file.
     expect(bundle.errors.notes).toBe("boom: notes RPC failed");
     expect(bundle.entries["_errors.json"]).toBeDefined();
-    expect(JSON.parse(bundle.entries["_errors.json"])).toEqual({
+    expect(JSON.parse(String(bundle.entries["_errors.json"]))).toEqual({
       notes: "boom: notes RPC failed",
     });
 
     // Every module is still accounted for in the manifest.
-    const manifest = JSON.parse(bundle.entries["_manifest.json"]);
+    const manifest = JSON.parse(String(bundle.entries["_manifest.json"]));
     expect(manifest.modules.notes).toBe("error");
     expect(manifest.modules.tasks).toBe("ok");
   });
@@ -90,8 +90,8 @@ describe("buildExportBundle — bundle shape + error manifest (AC11)", () => {
       [{ module: "tasks", ok: true, data: { tasks: [{ id: "t1" }] } }],
       META,
     );
-    expect(() => JSON.parse(bundle.entries["tasks.json"])).not.toThrow();
-    expect(JSON.parse(bundle.entries["tasks.json"])).toEqual({ tasks: [{ id: "t1" }] });
+    expect(() => JSON.parse(String(bundle.entries["tasks.json"]))).not.toThrow();
+    expect(JSON.parse(String(bundle.entries["tasks.json"]))).toEqual({ tasks: [{ id: "t1" }] });
   });
 });
 

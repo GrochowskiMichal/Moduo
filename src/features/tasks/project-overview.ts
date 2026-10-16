@@ -86,41 +86,6 @@ export function projectFacts(tasks: readonly Task[], projectId: string) {
 
 const dueKey = (t: Task) => t.dueOn ?? t.dueDate?.slice(0, 10) ?? null;
 
-/**
- * What's next in a project: its open top-level tasks (To do and In progress),
- * work already started first, then by due date (dated before undated), then
- * in the project's own order (section, then place). `rest` counts the others.
- */
-export function nextUp(
-  tasks: readonly Task[],
-  projectId: string,
-  sections: readonly Section[],
-  limit = 5,
-): { tasks: Task[]; rest: number } {
-  const sectionPos = new Map(
-    sections.filter((s) => s.projectId === projectId).map((s) => [s.id, s.position]),
-  );
-  const open = tasksOfProject(tasks, projectId).filter((t) => !t.parentId && isOpenTask(t));
-  const sorted = [...open].sort((a, b) => {
-    const started =
-      Number(taskCategoryOf(b) === "in_progress") - Number(taskCategoryOf(a) === "in_progress");
-    if (started) return started;
-    const da = dueKey(a);
-    const db = dueKey(b);
-    if (da !== db) {
-      if (da === null) return 1;
-      if (db === null) return -1;
-      return da < db ? -1 : 1;
-    }
-    // Tasks outside a section come first, as in the List.
-    const sa = a.sectionId ? (sectionPos.get(a.sectionId) ?? 0) + 1 : 0;
-    const sb = b.sectionId ? (sectionPos.get(b.sectionId) ?? 0) + 1 : 0;
-    if (sa !== sb) return sa - sb;
-    return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
-  });
-  return { tasks: sorted.slice(0, limit), rest: Math.max(0, sorted.length - limit) };
-}
-
 export type SectionProgress = {
   section: Section;
   done: number;

@@ -173,7 +173,7 @@ Why now: Maciej and Mike build Moduo with agents that open PRs all day. The agen
 Each is the agent's choice, deferred to it by Maciej during grilling: confirmed for building, revisitable.
 
 - **A GitHub App, not an OAuth App.** Fine-grained read-only permissions (Metadata, Pull requests, Checks, Commit statuses, Issues), installer picks repos, one central webhook, 1-hour installation tokens. Rejected: an OAuth App (needs the `repo` scope, read+write to everything, webhooks per repo).
-- **Owner:** a new "moduo" GitHub organisation owns the app (G34). Maciej registers it (setup steps ship with GH-1 in `docs/github-app-setup.md`).
+- **Owner** (G34, amended by Maciej 2026-10-16: "14 ok"): Maciej registers the app under his own GitHub account (En5hi). Mike, who owns the account that holds the Moduo repo (GrochowskiMichal), installs it there and picks the repo. If Moduo gets a GitHub organisation later, the app transfers to it in one step without breaking installs. Setup steps ship with GH-1 in `docs/github-app-setup.md`.
 - **Secrets** (app private key converted to PKCS#8, webhook secret, client secret) are Edge Function secrets set by Maciej, never in the repo. App ID and client ID are public config.
 - **Tables** (one migration in GH-1, workspace-scoped, service-role writes, member reads via RLS):
   - `github_installations` (workspace, installation id, account login and type, status active/suspended/removed, connected_by, auto_move boolean default false);

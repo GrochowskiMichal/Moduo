@@ -53,6 +53,7 @@ import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ContactDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import { formatFullDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+import { useStartConversation } from "../../chat/start-conversation";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
@@ -385,6 +386,7 @@ export function ContactHub(props: ContactHubProps) {
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => draftFrom(contact));
+  const startConversation = useStartConversation();
 
   // Leave edit mode + resync the draft whenever the selected contact changes.
   useEffect(() => {
@@ -625,6 +627,12 @@ export function ContactHub(props: ContactHubProps) {
                       />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      {canEdit && startConversation ? (
+                        // Chat's "Start a conversation for X" (CV-13).
+                        <DropdownMenuItem onSelect={() => startConversation("contact", contact.id)}>
+                          Start a conversation
+                        </DropdownMenuItem>
+                      ) : null}
                       <DropdownMenuItem onSelect={onShare}>Share as vCard…</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem variant="destructive" onSelect={onDelete}>
@@ -890,6 +898,7 @@ export function ContactHub(props: ContactHubProps) {
         {/* Linked work — one fixed section per module relation, always present */}
         {!editing ? (
           <LinkedSections
+            focus={{ type: "contact", id: contact.id }}
             status={hubStatus}
             sections={sections}
             canEdit={canEdit}

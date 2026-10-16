@@ -4,11 +4,24 @@
 // route. Pages without a stack open full on a plain click too.
 
 import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
+import { messageConversation } from "./chat";
 import type { ReferenceRef } from "./types";
 
 /** Open an item full, in its own module (the `moduo:entity:open` route). */
 export function openReferenceFull(ref: ReferenceRef): void {
   if (typeof window === "undefined") return;
+  // A message opens its conversation at the message (and its chain beside it).
+  if (ref.type === "chat_message") {
+    const home = messageConversation(ref.id);
+    window.dispatchEvent(
+      new CustomEvent(ENTITY_OPEN_EVENT, {
+        detail: home
+          ? { type: "chat_channel", id: home.channelId, messageId: ref.id, chainId: home.parentId }
+          : { type: ref.type, id: ref.id },
+      }),
+    );
+    return;
+  }
   window.dispatchEvent(
     new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: ref.type, id: ref.id } }),
   );

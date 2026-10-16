@@ -282,7 +282,10 @@ test("the Inbox row takes no drop; a project row moves the task and its subtasks
 
   // Onto the other project's row: it moves, its subtasks (Won't do too) follow.
   const toRow = page.getByRole("button", { name: new RegExp(`^To ${tag}`) }).first();
-  await toRow.scrollIntoViewIfNeeded();
+  // Centred in the sidebar: scrollIntoViewIfNeeded leaves the row at the list's
+  // edge, and dnd-kit auto-scrolls a drag held there, so the drop would land on
+  // a neighbour once the sidebar has more projects than fit.
+  await toRow.evaluate((el) => el.scrollIntoView({ block: "center" }));
   const toBox = await toRow.boundingBox();
   if (!toBox) throw new Error("no project row");
   await drag(page, row(page, parent.id), {

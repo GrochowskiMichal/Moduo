@@ -9,6 +9,8 @@ import {
   AvatarGroupCount,
   AvatarImage,
   PersonAvatar,
+  PresenceBadge,
+  type PresenceShape,
   TeamMark,
 } from "./avatar";
 import { AtThreeDensities } from "./kit-densities";
@@ -253,6 +255,44 @@ export const Densities: Story = {
         <TeamMark name="Design" id="t-design" />
         <TeamMark name="Development" id="t-dev" />
         <PersonAvatar name="Maciej" id="u-maciej" size="sm" />
+      </div>
+    </AtThreeDensities>
+  ),
+};
+
+const SHAPES: PresenceShape[] = ["reachable", "away", "dnd", "focusing", "in_call", "offline"];
+
+/** The presence shapes (chat v2 §10, AC11.1): green only for reachable; grey
+ *  outline, bar, target and dot; nothing offline. At three densities. */
+export const Presence: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex items-center gap-4" data-testid="presence-shapes">
+        {SHAPES.map((state) => (
+          <span key={state} className="flex items-center gap-4">
+            <span className="relative flex">
+              <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="icon" />
+              <PresenceBadge state={state} />
+            </span>
+            <span className="relative flex">
+              <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="lg" />
+              <PresenceBadge state={state} size="lg" />
+            </span>
+          </span>
+        ))}
+      </div>
+    </AtThreeDensities>
+  ),
+};
+
+/** The feed rung (chat's stream, CH29): 32 / 28 / 24 px beside a message. */
+export const Feed: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex items-center gap-2">
+        <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="feed" />
+        <PersonAvatar name="Mike Chen" id="u-mike" size="feed" />
+        <PersonAvatar name="?" size="feed" />
       </div>
     </AtThreeDensities>
   ),

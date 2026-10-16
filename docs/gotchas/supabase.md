@@ -4,6 +4,8 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 
 ## Supabase / migrations
 
+- **A `db push` from a scratch folder needs two things the repo's `config.toml` doesn't give it:** copy `supabase/templates/` next to it (the auth email templates are config paths, or the CLI refuses to load the config) and set `[db.migrations] enabled = true` in the scratch copy only (the repo keeps it off, so a push there silently says "up to date"). Always read the dry run's file list before the real push. (Chat v2 release, 2026-10-16)
+- **Another session may apply a migration to prod between your snapshot and your push** (MOD-155 landed at 17:22 the day of the Chat release, under a different version than its file). Re-read prod's history count and newest version right before pushing, and grep your release files for every function the newcomer redefines. (Chat v2 release, 2026-10-16)
 - **Never `supabase db push` from the repo folder: the repo's migration versions and prod's history don't match.** Most older files were renamed after applying, applied in the SQL editor, or came from another branch, so the CLI sees dozens of "unapplied" files. Push a release from a scratch folder that holds only the new files, plus an empty placeholder per version prod already has (decision 2026-10-14). Dry-run first with `--include-all`.
 - **`supabase db push` writes `config.toml`'s Vault secrets to the target before migrating** unless you pass `--skip-vault`. Against prod, always pass it.
 - **Removing a workspace member leaves `share.bypass` on for the rest of that transaction.** `share_member_removed` sets it with `set_config(..., true)` and never puts it back. In the app every removal is its own request, so nothing else runs under it; a SQL test that removes someone and then goes on runs every later write as system work (no assignment notices, for one), and its checks pass or fail for the wrong reason. Reset it right after (`PERFORM set_config('share.bypass', '', true)`). → [teams_routing.test.sql](../../supabase/tests/teams_routing.test.sql) (2026-10-13, TV-D13)
@@ -185,3 +187,170 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 
 - **PostHog has two hosts, and deleting a person takes a JSON body its API reference doesn't show.** Events go to the ingestion host `eu.i.posthog.com`; the private API (persons, deletion) is `https://eu.posthog.com`, with a personal API key (`phx_…`, scope `person:write`), never the public project key (`phc_…`). `POST /api/projects/<id>/persons/bulk_delete/` reads `distinct_ids` / `delete_events` from the **JSON body**, although the reference lists them as query parameters; it answers **202** with a summary, and an unknown distinct id is still a 202 (`persons_found: 0`). The person goes at once; the events are only **queued** for PostHog's weekly run (Sundays 05:00 UTC), and only events PostHog already has go, which is why `analytics-forget` waits ~10 s before deleting (in the function, not the app, so the request leaves while the person is still signed in). An event sent after the deletion creates the person again, so `app_signed_out` is tracked only when the person signs out (never on a SIGNED_OUT auth-js fires itself), the Danger zone records a "no" before signing out, and analytics starts only once the profile read confirms the account (a cached session outlives an account deleted elsewhere by up to an hour). Treat only a timeout, 408, 429 or 5xx as worth retrying; any other 4xx, or a success that isn't JSON (a wrong host's web page), is a refusal. Otherwise one broken setting fails every account deletion. To deploy a function with large shared files, `supabase functions deploy <fn> --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --use-api` from the repo root uploads exactly the files it imports (no Docker); the connector's `deploy_edge_function` needs every file's contents pasted in. → [posthog-erasure.ts](../../supabase/functions/_shared/posthog-erasure.ts), [analytics-forget.ts](../../supabase/functions/_shared/analytics-forget.ts)
 
+## Chat device copy and server stamps (CV-0 spike 2)
+
+- **A delta test whose rows were all written inside the lookback window proves nothing.** Every row falls inside the store's 5-minute lookback, so each "delta" is a full read in disguise: the spike's first run re-read all 11,120 rows and passed. Seed test rows with `updated_at = created_at` and the stamp trigger disabled, so the cursor can leave rows behind and the delta has something to skip. → [sql-proof.ts](../../scripts/spikes/chat/s2/sql-proof.ts), [record](../build/chat-v2/CV-0-S2.md)
+- **Stamps and keyset positions must travel as text, never as a JS `Date`.** A `Date` keeps milliseconds and drops the microseconds, so a keyset page that restarts from it repeats or skips rows at the boundary. PostgREST already returns text; `Bun.sql` returns a `Date`, so the harness selects `to_char(…US)`. → [db.ts](../../scripts/spikes/chat/s2/db.ts)
+- **With a unique `byId` index in IndexedDB, a moved row's `put` aborts the whole transaction unless the old key is deleted first.** The key holds `channel_id`, a move changes it, and the unique index then sees the same id under two keys. Only a move changes `channel_id`, so only rows with `moved_at` need the lookup. → [device-copy.ts](../../scripts/spikes/chat/s2/page/device-copy.ts) `put`
+- **A failed IndexedDB transaction rejects with a `DOMException`, which Playwright reports as `null`.** Wrap it in an `Error` that carries its name, or the failure is invisible in a test's output.
+- **`Bun.sql` double-encodes a string parameter cast `$n::jsonb`**: a JSON string is stored, not an object. Cast `$n::text::jsonb`.
+
+## Chat Realtime delivery and quotas (CV-0 spike 3)
+
+- **On the local stack Postgres Changes reads the WAL about every 0.5 s, whatever `poll_interval_ms` says, so delivery sits at p50 ~300 ms and p95 ~530 ms even with a dozen subscribers.** Broadcast from the database (`realtime.send`) takes about 10 ms on the same server. Don't read the delay as a client bug, and measure on the real project before designing around it. → [record](../build/chat-v2/CV-0-S3.md)
+- **A publication column list does not narrow Postgres Changes payloads.** Realtime decodes with wal2json, which ignores the list. The binding's `select: [...]` does narrow it: 19 columns and 694 bytes became 8 columns and 418 bytes (`realtime-columns.ts`). A column list is still harmless, it just does nothing for Realtime.
+- **The local Realtime restarts its Postgres Changes poller about every 20 minutes** ("Rebalancing Postgres Changes replication for a closer region", a single-node artefact). One message sent during the restart reached no subscriber with every socket up, and the hackathon minute missed 6 of 600 deliveries with no log line. A gap fill that runs only on rejoin doesn't catch these: run it on window focus and every minute or two while visible too.
+- **Going over the plan's messages-per-second cap for about 30 s doesn't slow Postgres Changes, it drops every change for every subscriber in the project, while each socket stays SUBSCRIBED with no error.** Realtime logs `MessagePerSecondRateLimitReached`. The local tenant has Free's 100 a second, which one message a second into a 102-person conversation reaches (about 200 deliveries a second). A gap fill that runs only on rejoin never notices; Pro's 500 a second puts it five times further away.
+- **While a test holds 200 sockets, every other session's Realtime connection on the Mac is refused** (`Too many connected users`; the local tenant enforces Free's 200). Run the hackathon phase only when nobody else is testing.
+- **A load test can't sign 100 people in by password: the local stack allows 30 per 5 minutes.** Mint HS256 tokens from `supabase status`'s `JWT_SECRET` at run time. Never print or commit that secret.
+- **The auth admin API writes `auth.audit_log_entries` lines for every user it creates or deletes, and the local stack is shared.** Clean them by the run's email tag, and check your own leftovers by id: a before and after row-count diff also shows other sessions' work. → [row-counts.sql](../../scripts/spikes/chat/row-counts.sql)
+- **A `select` binding on a fresh socket answered "Subscribed to PostgreSQL" but created no `realtime.subscription` row and delivered no event, in every attempt inside the load harness** (five runs, two different people, 3 to 22 other clients). It never failed in isolation (`realtime-columns.ts`, 4 of 4), and the difference wasn't found. Anything that leans on `select` (CV-1, CV-3) needs a probe that asserts the narrowed payload arrives in the app's real channel setup, not only that the join succeeds.
+
+## Chat search and the stored form's SQL (CV-0 spikes 4 and 5)
+
+- **A regex that adds `:*` to tsquery text must anchor on the lexeme's opening quote** (the start, a space or `(`). The naive `'([^']{3,})'` matched the gap between two lexemes and produced `'na' <-> ':*jutro'`. → [search.sql](../build/chat-v2/drafts/search.sql)
+- **`ts_headline` with the `simple` config never highlights an unaccented match** ("zolw" doesn't mark "żółw"), so the snippet shows no mark. Use a config that unaccents each word (`chat_headline`), for the headline only; the index keeps `simple` plus the wrapper.
+- **`simple` splits "MOD-142" into `mod` and `-142`, and "2026-10-14" into `2026`, `-10` and `-14`, so "142" alone doesn't find "MOD-142".** Low impact, because a typed task key becomes a reference and references add no words; say so if someone reports it.
+- **On the local stack the research workspace's owner is on Free, so `chat_can_read_channel` returns false for everyone there** until CV-1 drops the plan from reads. A test of the real read rule needs a paid plan on the owner, or CV-1's body.
+- **Never call `chat_can_read_channel` per message in a loop: it costs about 83 µs a call.** Per conversation is fine for tens, not for thousands (170 ms at 2,025 conversations). Work out the set of readable conversations once (`chat__readable_channel_ids`) and filter by it. → [record](../build/chat-v2/CV-0-S5.md)
+- **PostgreSQL regex alternation is leftmost-longest, and a non-greedy quantifier follows the greediness of the whole expression.** `+?` doesn't behave as it does in Perl or JavaScript. Write patterns whose pieces exclude their own delimiters, such as `(?:[^*\n]|\*(?!\*))+`. → [chat_v1_to_v2.sql](../build/chat-v2/drafts/chat_v1_to_v2.sql)
+
+## Chat foundation and conversion (CV-1)
+
+- **A nested `SECURITY DEFINER` call with `SET search_path` inside a function that a read policy calls per row costs about 100 µs a row.** Reading 3,032 messages went from 406 ms to 26 ms once the rule was written out in both functions. Keep per-row read rules free of definer hops, and guard the written-out copy with a parity test (`chat_foundation.test.sql` compares it with `perm_user_has`). → [record](../build/chat-v2/CV-1.md) (2026-10-14)
+- **A plpgsql character loop is about 100 times slower than the same loop in JavaScript.** A scan the client can afford per character (`](` looking for its `)`) took 4.4 s on an 8,000-character body. Bound every look-ahead in a parser that runs from a trigger.
+- **A regex bound past 255 (`` `{300,} ``) is an error ("invalid repetition count"), not a no-match.** Compare run lengths instead of building `{N,}` from data.
+- **`text[] || 'literal'` resolves the literal as an array and fails ("malformed array literal").** Cast it: `o || '['::text`.
+- **`perm_members_resolve` recomputes `workspace_members.perms` on every update.** A test that removes a permission by hand has to bypass the trigger (`SET LOCAL session_replication_role = replica`).
+- **The shared local stack owns its functions as `supabase_admin` (applied by `scripts/local/stack.sh`); prod's migration role is `postgres`.** Redefine and apply as `supabase_admin` locally (`spine__visible_to` is one), and expect `postgres` as the owner on prod.
+- **A whole-database "zero rows changed" check in READ COMMITTED sees other sessions' commits.** Run it REPEATABLE READ, and compare `ctid`s, not `xmin` (one transaction keeps one `xmin`).
+- **`share_chat_message_guard` is a BEFORE INSERT trigger and fires before the CHECK constraints.** A probe without an author gets `42501`, not the CHECK's `23514`.
+
+## Chat message ops (CV-2a)
+
+- **A function with a defaulted trailing argument shadows a shorter signature of the same name.** `f(uuid, text)` beside `f(uuid, text, uuid[] DEFAULT …)` is "not unique" in SQL and ambiguous in PostgREST. Drop the default (DROP, CREATE, restate the grants), as the v1 `chat_op_edit` wrapper had to. → [record](../build/chat-v2/CV-2a.md) (2026-10-14)
+- **`perm_enforce_write` fires before `share_chat_message_guard` (triggers run in name order).** A viewer's insert reads "Your role can't add messages" unless the op checks "post" first.
+- **`chat__is_iso_day(NULL)` is false, not NULL.**
+
+## Chat plan source (CV-4)
+
+- **A `LANGUAGE sql` function body is parsed and its functions resolved at `CREATE` time.** A function that may not exist yet can only be reached from plpgsql: guard it with `to_regprocedure` and call it plainly (plpgsql prepares the call on its first run, so it is never resolved while the function is absent). → [record](../build/chat-v2/CV-4.md) (2026-10-14)
+- **A `DO $$ … $$` block whose body contains `$$` anywhere ends early with a confusing syntax error.** Name the outer quote: `DO $do$ … $do$`.
+- **`coalesce(obj_description(…), 'mark') = 'mark'` counts an uncommented object as marked.** Match a marker positively: `obj_description(…) IS NOT DISTINCT FROM 'mark'`, and check the object exists.
+
+## Chat conversation ops (CV-2b, CV-2-fix)
+
+- **`chat_ops.test.sql` already makes people F and H (CV-2a's limits).** `test.person` twice with one letter is a `users_pkey` error: pick a new letter. (CV-2b)
+- **Every op in one test transaction stamps the same `now()`**, so messages sent through ops tie on `created_at` and order by id. To test read marks and counts, insert rows at fixed `created_at` (`chat_counts.test.sql`'s `test.put` does, and fans out like a send). (CV-2b)
+- **Changing a function's return type needs `DROP` + `CREATE`** (bootstrap `void` → row, `chat_unread_counts`' new columns); re-state its grants by name. (CV-2b)
+- **A manager row isn't enough to manage.** Use `chat__can_manage` / `chat__is_manager` (in the channel, a role that posts), never `EXISTS (… chat_channel_managers …)`. (CV-2b)
+- **Check a membership rule ("in the channel") in the op, before any membership upsert the op makes**; the row trigger is the backstop for other writers. (CV-2-fix)
+- **A removal is `removed_at`, never `removed_by`** (`removed_by` goes null with the remover's account). A test that writes a removal directly sets both: CHECK `chat_members_removal_check` ties them. (CV-2-fix)
+
+## Chat catch-up (CV-5)
+
+- **A check that shares a statement with the send it looks at sees the rows as they were when the statement started.** A plain subquery next to `test.send(...)` in one `test.ok(...)` reads nothing new (VOLATILE helper functions do): send first, check in the next statement. (CV-5)
+- **A partial unique index used as an `ON CONFLICT` arbiter needs its predicate in the clause** (`ON CONFLICT (user_id, chain_root_id) WHERE reason = 'reply' AND done_at IS NULL`). Every path that reopens an item reopens at most one per chain or line, and only while none is open (`chat__reopen`). (CV-5)
+- **`module_activity_log` returns nothing, so the bell twin's id needs the row inserted directly.** `chat__activity` mirrors its attribution (the person, or the key with its person's name): a change to one must go to the other. (CV-5)
+- **Two migrations redefining one function: cut the later stamp from the earlier one's body** (CV-5's `chat_op_send` from CV-2-fix's), or a replay in stamp order silently drops a rule. (CV-5)
+
+## Chat device notices (CV-6a)
+
+- **One transaction gives every send the same `now()`:** notices of one test share `created_at`, so tag replacement ("a newer row") needs distinct times set in the test. (CV-6a)
+- **`UPDATE workspace_members SET perms = …` is recomputed by `perm_members_resolve`.** Tests that take chat away use `session_replication_role = replica` (as `chat_foundation` does). (CV-6a)
+- **Heavy sends in one test hit the sending limit:** move each message to an old minute after sending (`test.send` in `chat_notices.test.sql`). (CV-6a)
+
+## Chat store (CV-3)
+
+- **Postgres Changes doesn't filter DELETE events by the binding's `filter`:** every subscriber gets every deleted row's key. Check the key's person before acting on a delete. (CV-3)
+- **realtime-js `channel(topic)` returns the channel that is still leaving when the same topic is asked for again, and `subscribe()` on it does nothing.** Wait for `removeChannel` before joining a named topic again (`whenTopicFree` in `realtime.ts`). (CV-3)
+- **An `async` IIFE assigned to a "running" field runs its `finally` before the assignment when it settles without awaiting:** the field stays set and every later call waits on a finished promise. Chain `.finally` on the promise instead (`drain`, `sync`, `checkAccess` do). (CV-3)
+- **The local stack's send limit counts directly inserted rows by author too:** a probe or spec that seeds messages "now" as a person, then sends as them, gets `PT429`. Seed with an older `created_at`, or insert the later rows directly. (CV-3)
+- **A keyset window around a jumped-to message isn't contiguous with the newest page:** going back to the newest restarts the window at that page (`lo = null`), or the overlap rule draws the gap as if nothing were missing. (CV-3)
+- **`chat_sync_ids` names a moved-away id only for the check after the move:** drop it from the device even when its conversation isn't in memory, or it stays for good. (CV-3)
+- **`rpc(...).select(columns)` narrows a composite op answer on PostgREST (probe-checked):** without it every op answer carries `search_tsv`. (CV-3)
+- **A spec that types writes `chat:typing:<id>` rows to `realtime.messages`.** `chat_privacy.test.sql` now counts only its own conversations' rows; any other test that counts rows across the whole database flakes on a shared stack, so scope counts to the test's own rows. (CV-3)
+
+## The shared local stack (2026-10-15)
+
+- **The shared local stack was reset twice on 2026-10-15 from a fresh prod snapshot newer than every repo migration, so no repo migration replays, and `anon` / `authenticated` keep the EXECUTE and table grants Supabase's default privileges give at load** (prod's dump grants many only to `service_role`). About 19 non-chat `db:test` files fail locally for that reason alone (for example `comments.test.sql`'s grant checks on functions CV-7c doesn't touch). Judge a failure by whether the file touches your block; a migration that re-states its own grants by name passes its own checks.
+- **Tests that count rows across the whole database (typing rows, the blank-deleted job) flake on a shared stack.** Scope every count to the test's own rows (`chat_privacy` counts only its conversations' typing rows; `chat_ops` blanks older deletions before counting its own).
+- **After a snapshot reload the local stack's function and table ACLs are not prod's:** `proacl` locally shows `anon` / `authenticated` EXECUTE (and table grants) that prod doesn't have. Take a migration's grants from `~/.cache/moduo/supabase-snapshot/public.sql` or the repo's last migration for that object, never from the local `proacl`. (CV-10; Checkpoint 4)
+- **Never insert test users straight into `auth.users` with SQL:** GoTrue can't read a NULL in its token columns (`confirmation_token`, `recovery_token`, `email_change*`, `phone_change*`, `reauthentication_token`), so `/auth/v1/admin/users` answers 500 and every e2e fixture that lists users fails in 0 ms. Create users through the admin API, or set those columns to `''`. (Checkpoint 5)
+
+## Chat reply chains (CV-12)
+
+- **Db tests run in one transaction, so every `now()` is the same:** chain-order tests stamp `created_at` themselves (`chat_chains.test.sql`'s `test.post`). (CV-12)
+- **`chat__enter` (rejoin) closes items through `chat__close_read`:** items of replies hidden in a wrapped chain stay open after a rejoin too. (CV-12)
+
+## Chat channel lifecycle (CV-15)
+
+- **A Realtime update on `chat_channels` reaches only those who can read the row afterwards:** deleting a channel or making it private reaches nobody that way. Stamp each member's own row (`access_at`) so their copy checks access. (CV-15)
+- **`module_activity` op `chat.announcement` is the bell's:** the announcement switch's history op is `chat.announcement_switch`. (CV-15)
+- **`entities_op_tombstone` checks links edit access, which a chat manager may lack:** ops update `entities` directly. (CV-15)
+
+## Chat Catch up and Later (CV-11)
+
+- **Your own send reads the conversation through (closes your items there), and so does opening it:** an e2e that seeds Catch up posts the other person's messages and doesn't open the conversation before checking the list. (CV-11)
+- **`chat_unread_counts` compares `later_until` with `now()`:** a test that fires `chat__fire_later` with a future `p_now` sees the item back in the list but not in the count; move `later_until` back instead (`test.elapse`). (CV-11)
+
+## Chat statuses and presence (CV-17)
+
+- **`pg_policies.qual` prints `auth.uid()` as `uid()`:** match on `uid()`. (CV-17)
+- **A `pg_temp.recut` whose new text contains the old (an append) checks for the new text first,** or a re-run cuts twice. (CV-17)
+- **An API key's `chat_now` call sets the `request.*` claims before `SET LOCAL ROLE service_role`** (the test schema isn't readable as `service_role`). (CV-17)
+- **`focus_runs.test.sql` fails 11 grant and publication checks on the local stack,** before CV-17 too: local grants drift, not a block's fault. (CV-17)
+
+## Chat linked channels (CV-13)
+
+- **`workspace_members.perms` is resolved from the role by a trigger:** to make an admin in a SQL test insert `role = 'admin'`, not `perms`. (CV-13)
+- **A direct `INSERT INTO buckets` in a SQL test doesn't register the project in `entities`:** the link op registers its target itself (the mirror row needs the foreign key). (CV-13)
+- **`refs-parity.test.ts` skips without psql or the stack:** set `MODUO_REQUIRE_DB=1` on a run that must check the server, and it fails instead (nothing sets it yet; `chat_links.test.sql` pins the grammar's edges). (CV-13)
+
+## Chat files (CV-9)
+
+- **The Storage policies read `public.attachments` through its own row policy:** a pending chat row must be visible to its uploader in `attachments_select`, or the upload's INSERT policy can't see it. (CV-9)
+- **`can_access('chat_message', …)` is false:** chat files have their own policy branch. (CV-9)
+- **`attachments_largest` and `attachments_op_restore` handle task files only;** `storage__unsettled_bytes` and `attachments_op_abandon` already cover chat uploads. (CV-9)
+
+## Chat search (CV-19)
+
+- **Under `SET LOCAL ROLE authenticated` a test loses the `test` schema:** build ids and names before switching role, map returned ids to names after. (CV-19)
+- **`SET LOCAL session_replication_role = replica` loads a 100,000-row fixture into `chat_messages` without the ops' triggers,** with no `ALTER TABLE … DISABLE TRIGGER` (which would lock the shared stack's table for the whole test). (CV-19)
+- **A `statement_timeout` in a function's `SET` clause doesn't bound the statement that calls it in psql;** PostgREST applies it per call. (CV-19)
+
+## Chat moves (CV-16)
+
+- **DB tests share one `now()`, so a pace test can't post six messages through `chat_op_send`** (the sending limit counts them): write them straight in as the test's admin. (CV-16)
+- **`share_chat_message_guard` checks the announcement rule on event inserts too:** an op that writes a line in someone's name must check that rule first, or the insert fails with a less useful message. (CV-16)
+- **The store dropped ids only on `moved_out`:** an Undo's soft-deleted `moved_in` line must drop them too, or readers of the target who can't read the source keep the rows. (CV-16)
+
+## Chat quiet hours and holds (CV-18)
+
+- **A check in the same statement as a volatile call doesn't see its writes** (`test.ok(f() >= 1 AND NOT EXISTS (…))` reads the snapshot from before `f` ran): call the function first, then check. (CV-18)
+- **Rows inserted in one transaction share `now()`:** tests that order Focus runs by `started_at` set them apart by hand. (CV-18)
+- **`test.try` runs its SQL and then rolls it back (it is for refusals):** writes a later check depends on must use `test.as_user`. (CV-18)
+- **`pg_temp.recut` edits one step at a time:** each step must compile on its own (a select list using a join added by a later step fails). (CV-18)
+- **A partial index in a migration is built without `CONCURRENTLY` (a migration runs in one transaction):** `notice_deliveries_held_open` briefly locks writes to that table; fine at today's size, apply in a quiet window. (CV-18)
+
+## Chat Realtime keys and export (CV-22)
+
+- **A removed row's key reaches Realtime listeners without a read rule, and a filtered subscription whose filter column isn't in the key gets no deletes at all:** key a published table by its own row id. The migration's assert and `chat_erasure.test.sql` fail on a table keyed by a person. (CV-22)
+
+## Chat decisions (CV-14)
+
+- **A mention links only an item in `entities`:** a test that inserts a bucket directly must register it, or its "Mentioned in" (and decision) lines never appear. (CV-14)
+- **The CHECK and two indexes on `chat_messages` take short locks on a big table (`lock_timeout` 5 s):** the columns are nullable without a default, so no rewrite. `chat_op_wrap_up` locks the root, then the settling reply, the order every chain op uses. (CV-14)
+- **`chat_decisions_for_item`'s readable-conversation CTE groups by `c.id` to fold its two halves;** a test's `value_as` runs as `authenticated` and can't read the `test` schema, so map ids outside it. (CV-14)
+
+## Chat custom emoji (CV-20)
+
+- **A policy may not call `chat_is_workspace_member(ws, auth.uid())` directly (`access_check`'s rule):** wrap it in a caller-only SECURITY DEFINER helper (`chat_emoji__readable`). (CV-20)
+- **`storage.objects` refuses a direct DELETE in SQL ("use the Storage API"):** a test of "nobody deletes" sees that error, not `ok 0`. (CV-20)
+- **The `chat_realtime` publication test lists chat tables exactly:** a new published chat table updates it. (CV-20)
+
+## Chat agents and MCP tools (CV-21)
+
+- **`chat__chain_root` reads `chat_can_read_channel` (`auth.uid()`):** any body run for a key's creator needs a person-parameter twin (`chat__chain_root_as`); check every helper an `_as` body calls. (CV-21)
+- **The connector rejects a tool with no arguments schema in `_shared/contracts/mcp-tool-args.ts` ("unknown tool"), and `z.object` strips unknown keys:** a new tool argument must be added there too. (CV-21)
+- **The local edge runtime serves whichever worktree started the stack:** to round-trip this worktree's connector, run a one-off `edge-runtime` container on `supabase_network_moduo` with `--main-service=<functions>/moduo-mcp` (it reads `deno.json` without `--import-map`) and pass `SUPABASE_URL=http://kong:8000` and `SUPABASE_SECRET_KEYS`. (CV-21)

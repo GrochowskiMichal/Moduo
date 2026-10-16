@@ -15,10 +15,11 @@ import {
   type LinkOrigin,
   RELATION_KINDS,
   type RelationKind,
+  USER_RELATION_KINDS,
 } from "@contracts/vocabularies";
 
 export type { LinkOrigin, RelationKind };
-export { LINK_ORIGINS, RELATION_KINDS };
+export { LINK_ORIGINS, RELATION_KINDS, USER_RELATION_KINDS };
 
 /** The default kind when a gesture implies no stronger relationship. */
 export const DEFAULT_RELATION_KIND: RelationKind = "references";
@@ -33,6 +34,7 @@ export const RELATION_KIND_LABELS: Record<RelationKind, string> = {
   "works-at": "Works at",
   "follow-up": "Follow-up",
   "paid-by": "Paid by",
+  "conversation-of": "Conversation",
 };
 
 /**
@@ -117,6 +119,30 @@ export function isLinkOrigin(value: unknown): value is LinkOrigin {
  */
 export function coerceRelationKind(value: unknown): RelationKind {
   return isRelationKind(value) ? value : DEFAULT_RELATION_KIND;
+}
+
+/** A conversation or a message: links to them follow Chat's rules. */
+export function isChatEnd(type: string): boolean {
+  return type === "chat_channel" || type === "chat_message";
+}
+
+/**
+ * A link only Chat writes: "Mentioned in" (a mention, or an inline reference,
+ * with a conversation or a message at either end; the send and edit write it)
+ * and a conversation's link to its item (`conversation-of`, mirrored from the
+ * conversation's Details). No other path makes, moves or retypes one.
+ */
+export function isChatOwnedLink(link: {
+  sourceType: string;
+  targetType: string;
+  relationKind: string;
+  origin?: string | null;
+}): boolean {
+  return (
+    link.relationKind === "conversation-of" ||
+    ((isChatEnd(link.sourceType) || isChatEnd(link.targetType)) &&
+      (link.relationKind === "mentions" || link.origin === "ref"))
+  );
 }
 
 /** Are two entity refs the same entity? (A self-link target.) */

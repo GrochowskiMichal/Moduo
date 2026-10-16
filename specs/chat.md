@@ -1,5 +1,7 @@
 # Spec: Chat — real-time messaging for Duo / Team
 
+> **Superseded 2026-10-14 by [`specs/chat-v2.md`](./chat-v2.md)** (the re-plan: [`.design/chat-v2/REPLAN.md`](../.design/chat-v2/REPLAN.md)). v1's engine (tables, `chat_op_*` writes, one-row live updates) stays and is extended there; every screen below is replaced. Kept for history; the assumptions below were answered call by call in the re-plan.
+>
 > Status: **v1 built** 2026-10-06 (`t/mike/chat`) · Owner: mike · Related: [ROADMAP](../docs/ROADMAP.md) *Communication module* + Q14 · [decisions 2026-10-02](../docs/decisions.md) · [`specs/moduo-meet.md`](./moduo-meet.md) (calls — separate track) · [module contract](../docs/moduo-module-contract.md)
 >
 > Built directly from the designer's ask ("end to end … production ready … world-class UI/UX") without a `/s1` grilling round. Every product call below is an **assumption made by the agent** and is listed so the designer can overturn it — see *Assumptions to confirm*.

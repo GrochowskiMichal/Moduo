@@ -6,6 +6,7 @@ import {
   Info,
   KeyRound,
   type LucideIcon,
+  MessageSquare,
   Palette,
   Plug,
   Sliders,
@@ -30,6 +31,7 @@ import { AdvancedSection } from "./sections/advanced-section";
 import { ApiKeysSection } from "./sections/api-keys-section";
 import { AppearanceSection } from "./sections/appearance-section";
 import { BillingSection } from "./sections/billing-section";
+import { ChatSection } from "./sections/chat-section";
 import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
@@ -71,6 +73,7 @@ const SECTIONS: SectionEntry[] = [
   },
   { id: "timeregion", label: "Time & region", icon: Globe, Component: TimeRegionSection },
   { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
+  { id: "chat", label: "Chat", icon: MessageSquare, Component: ChatSection },
   {
     id: "advanced",
     label: "Advanced",

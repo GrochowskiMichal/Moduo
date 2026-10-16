@@ -97,6 +97,23 @@ export function formatDay(value: DateInput, now: Date = new Date()): string {
   return monthDayText(d, d.getFullYear() !== now.getFullYear());
 }
 
+/**
+ * A day in the past, for a conversation's separators (chat v2, CH29c): the
+ * shared grammar extended back instead of forward. "Today", "Yesterday", the
+ * weekday up to six days back ("Mon"), else "Oct 9", with the year when it
+ * isn't this year's ("Oct 9, 2025"). A future day (a clock ahead) reads as a
+ * date. Empty for an invalid date.
+ */
+export function formatPastDay(value: DateInput, now: Date = new Date()): string {
+  const d = toDate(value);
+  if (!d) return "";
+  const offset = dayOffset(d, now);
+  if (offset === 0) return "Today";
+  if (offset === -1) return "Yesterday";
+  if (offset < -1 && offset >= -6) return formats().weekday.format(d);
+  return monthDayText(d, d.getFullYear() !== now.getFullYear());
+}
+
 /** A calendar date with no relative words: "Oct 16", "Oct 16, 2027". */
 export function formatDate(value: DateInput, now: Date = new Date()): string {
   const d = toDate(value);

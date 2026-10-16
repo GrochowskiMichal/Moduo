@@ -22,6 +22,11 @@ import {
   enableBrowserPush,
 } from "../../../lib/notices/browser-push";
 import {
+  type ChatServerPrefs,
+  readChatServerPrefs,
+  setChatServerPrefs,
+} from "../../../lib/notices/chat-prefs";
+import {
   type LandingView,
   type MotionPref,
   type NotificationType,
@@ -29,7 +34,9 @@ import {
 } from "../../../lib/preferences";
 import { isTauriRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
 
+import { QuietHoursGroup } from "./quiet-hours-group";
 import { SettingsSectionShell } from "./section-shell";
 
 const LANDING_OPTIONS: ReadonlyArray<{ value: LandingView; label: string }> = [
@@ -112,6 +119,39 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
   },
 ];
 
+/** Chat's switches (CV-6b, spec §11 "The switches", §15). Each hides its bell
+ *  rows and turns off the notification and the email for its messages (the
+ *  server reads them since CV-18). Catch up keeps every item.
+ *  Prototype frame 9 (Settings · Notifications · Chat) draws one switch for
+ *  all of them; the spec's table names four, plus one per key of yours
+ *  (CV-21, ChatKeyReplyRows). */
+const CHAT_NOTIFICATION_ROWS: ReadonlyArray<{
+  type: NotificationType;
+  title: string;
+  description: string;
+}> = [
+  {
+    type: "chatDirect",
+    title: "Direct messages",
+    description: "When someone messages you directly.",
+  },
+  {
+    type: "chatMentions",
+    title: "Mentions and replies",
+    description: "When someone @mentions you, or replies in a chain you started or were named in.",
+  },
+  {
+    type: "chatAnnouncements",
+    title: "Announcements",
+    description: "New posts in channels where only managers post.",
+  },
+  {
+    type: "chatEvery",
+    title: "Every message",
+    description: "Conversations you set to notify you about every message.",
+  },
+];
+
 /** Day-to-day behaviour: per-type notification mutes, what opens on launch,
  *  startup behaviour, and sounds & motion — all persisted to the synced
  *  `preferences` domain (usePreferences) — plus the analytics opt-in, which
@@ -156,7 +196,11 @@ export function PreferencesSection() {
         </PrefRow>
       </PrefGroup>
 
+      <ChatNotificationsGroup />
+
       <RemindersGroup />
+
+      <QuietHoursGroup />
 
       <AgentWorkGroup />
 
@@ -270,12 +314,146 @@ function AnalyticsConsentGroup() {
 }
 
 const BROWSER_PUSH_COPY: Record<BrowserPushState, string> = {
-  on: "On in this browser. Reminders arrive even when Moduo's tab is closed.",
-  off: "Get reminders from this browser even when Moduo's tab is closed.",
+  on: "On in this browser. Reminders and messages arrive even when Moduo's tab is closed.",
+  off: "Get reminders and messages from this browser even when Moduo's tab is closed.",
   denied: "Not allowed by the browser. Allow notifications for Moduo in the browser's settings.",
   unsupported: "This browser can't show notifications from Moduo.",
   unavailable: "Browser notifications aren't set up for this copy of Moduo yet.",
 };
+
+/** Chat's notices (CV-6b): the four switches and Sound follow you as synced
+ *  preferences; "Show message text" and "Email when away" live on the server,
+ *  which writes the notice's words and sends the email. */
+function ChatNotificationsGroup() {
+  const { userId } = useAuth();
+  const { preferences, setPreferences } = usePreferences();
+  const [server, setServer] = useState<ChatServerPrefs | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    readChatServerPrefs().then(
+      (prefs) => {
+        if (!cancelled) setServer(prefs);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const saveServer = async (patch: Partial<ChatServerPrefs>) => {
+    if (!server) return;
+    const before = server;
+    setServer({ ...server, ...patch });
+    setBusy(true);
+    try {
+      setServer(await setChatServerPrefs(patch));
+    } catch {
+      setServer(before);
+      toast("Couldn't change your chat notifications — try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <PrefGroup
+      label="Chat"
+      description="Each switch turns off notifications and emails for its messages. Catch up keeps every one."
+    >
+      {CHAT_NOTIFICATION_ROWS.map((row) => (
+        <PrefRow key={row.type} title={row.title} description={row.description}>
+          <Switch
+            checked={preferences.notifications[row.type]}
+            onCheckedChange={(v) =>
+              setPreferences({ notifications: { ...preferences.notifications, [row.type]: v } })
+            }
+            aria-label={`${row.title} notifications`}
+          />
+        </PrefRow>
+      ))}
+      <ChatKeyReplyRows />
+      <PrefRow
+        title="Show message text in notifications"
+        description="Turn off if you share your screen: a notification then says who and where, not what."
+      >
+        <Switch
+          checked={server?.noticeShowText ?? true}
+          disabled={!server || busy}
+          onCheckedChange={(v) => void saveServer({ noticeShowText: v })}
+          aria-label="Show message text in notifications"
+        />
+      </PrefRow>
+      <PrefRow title="Sound" description="One soft sound for direct messages and @you.">
+        <Switch
+          checked={preferences.chatSound}
+          onCheckedChange={(v) => setPreferences({ chatSound: v })}
+          aria-label="Chat sound"
+        />
+      </PrefRow>
+      <PrefRow
+        title="Email when away"
+        description="When a direct message or @you waits over an hour while none of your apps is open."
+      >
+        <Switch
+          checked={server?.emailWhenAway ?? true}
+          disabled={!server || busy}
+          onCheckedChange={(v) => void saveServer({ emailWhenAway: v })}
+          aria-label="Email when away"
+        />
+      </PrefRow>
+    </PrefGroup>
+  );
+}
+
+/** One switch per live key of yours that reads chat here (CV-21, §11): a reply
+ *  to a post made through that key reaches you only while it's on, unless the
+ *  reply mentions you. Your keys whatever your role now: they still post as you. */
+function ChatKeyReplyRows() {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspace } = useWorkspace();
+  const { preferences, setPreferences } = usePreferences();
+  const [keys, setKeys] = useState<Array<{ id: string; name: string }>>([]);
+  const workspaceId = selectedWorkspace?.id ?? null;
+
+  useEffect(() => {
+    if (!runtime || !workspaceId || !userId) {
+      setKeys([]);
+      return;
+    }
+    let cancelled = false;
+    runtime.workspace.listMyChatKeys(workspaceId).then(
+      (list) => {
+        if (!cancelled) setKeys(list);
+      },
+      () => {
+        if (!cancelled) setKeys([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [runtime, workspaceId, userId]);
+
+  return keys.map((key) => (
+    <PrefRow
+      key={key.id}
+      title={`Replies to posts by ${key.name}`}
+      description="When someone replies to a post made through this key. A reply that mentions you always reaches you."
+    >
+      <Switch
+        checked={preferences.chatKeyReplies[key.id] ?? true}
+        onCheckedChange={(v) =>
+          setPreferences({ chatKeyReplies: { ...preferences.chatKeyReplies, [key.id]: v } })
+        }
+        aria-label={`Replies to posts by ${key.name}`}
+      />
+    </PrefRow>
+  ));
+}
 
 /** Where reminders reach you (REPLAN 73): your bell always, plus the desktop
  *  app in the menu bar, or this browser when you allow it. A reminder has no

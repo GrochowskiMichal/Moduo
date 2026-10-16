@@ -40,6 +40,7 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
 import { NavRowDot } from "../../../components/ui/nav-row";
+import { isChatOwnedLink } from "../../../lib/entity-links";
 import {
   type TasksInboxSnooze,
   updatePreferences,
@@ -414,6 +415,8 @@ export function useInboxView({
         // A dependency is the duplicate's own (and could close a loop on the
         // original): it stays, and goes quiet with the Won't do.
         if (link.relationKind === "blocks") continue;
+        // A "Mentioned in" line is the conversation's history: it stays put.
+        if (isChatOwnedLink(link)) continue;
         const here = { type: "task", id: original.id };
         await runtime.spine.createLink({
           workspaceId,

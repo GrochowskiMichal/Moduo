@@ -11,6 +11,9 @@ import { expect, test } from "@playwright/test";
  *   bunx playwright test --project=visual tests/visual/tasks-detail.spec.ts --update-snapshots
  * The stories use a fixed "now" and the page clock is frozen at it, so the
  * feed's times and the metadata line read the same at every capture.
+ * MOD-152 (2026-10-16) moved every collection header's count ("Subtasks 1/3")
+ * to the tertiary text level and put 4 px between a header and its rows: the
+ * baselines captured before it differ there and need a fresh capture.
  */
 
 const NOW = new Date("2026-10-09T13:00:00Z");
