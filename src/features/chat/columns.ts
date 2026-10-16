@@ -15,6 +15,8 @@ export const CHAT_MESSAGE_COLUMN_LIST = [
   "author_id",
   "author_kind",
   "author_label",
+  // CV-21: the key a post went through (its creator is author_id).
+  "api_key_id",
   "body",
   "mentioned_user_ids",
   "mentioned_team_ids",

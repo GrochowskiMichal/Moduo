@@ -78,7 +78,8 @@ export function buildTimeline(
       !newPlaced &&
       opts.lastReadAt &&
       m.createdAt > opts.lastReadAt &&
-      m.authorId !== opts.selfId &&
+      // A post through your key (CV-21) is new to you.
+      (m.authorId !== opts.selfId || m.authorKind === "api_key") &&
       !m.pending
     ) {
       rows.push({ kind: "new", key: "new" });
@@ -181,7 +182,7 @@ export function buildStream(
       opts.newAfter &&
       m.kind !== "event" &&
       !m.sendState &&
-      m.authorId !== (opts.selfId ?? undefined) &&
+      (m.authorId !== (opts.selfId ?? undefined) || m.authorKind === "api_key") &&
       compareKeys(opts.newAfter, keyOf(m)) < 0
     ) {
       out.push({ type: "new", key: "new" });
@@ -293,7 +294,9 @@ export function countNewSince(
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const m = rows[i]!;
     if (m.id === afterId) return n;
-    if (m.kind === "event" || m.sendState || m.deletedAt || m.authorId === selfId) continue;
+    // A post through your key (CV-21) is new to you; your own writing isn't.
+    const yours = m.authorId === selfId && m.authorKind === "user";
+    if (m.kind === "event" || m.sendState || m.deletedAt || yours) continue;
     // A row the stream doesn't draw can't be scrolled to.
     if (hidden?.has(m.id)) continue;
     n += 1;

@@ -31,7 +31,14 @@ import type { ChatMessage, ChatPerson } from "../model";
 import { MadeFromLine } from "./made-from";
 import { type BodyContext, MessageBody } from "./message-body";
 
+/** A post through a key (CV-21) is its creator's: "Alex · via CI key". */
+export function viaKey(m: Pick<ChatMessage, "authorKind" | "authorId">): boolean {
+  return m.authorKind === "api_key" && !!m.authorId;
+}
+
 export function authorName(m: ChatMessage, person: ChatPerson | undefined): string {
+  if (viaKey(m)) return `${person?.name ?? "Former member"} · via ${m.authorLabel ?? "an app"}`;
+  // v1's app posts have no person: the app's name alone.
   if (m.authorKind === "api_key") return m.authorLabel ?? "An app";
   return person?.name ?? "Former member";
 }
@@ -493,15 +500,20 @@ export function MessageRow({
           {first ? (
             <div className="flex min-w-0 items-baseline gap-2 leading-normal">
               <AuthorName
-                name={name}
-                userId={message.authorKind === "api_key" ? null : message.authorId}
+                name={viaKey(message) ? (person?.name ?? "Former member") : name}
+                userId={message.authorId}
                 handlers={handlers}
               />
-              {message.authorKind === "api_key" ? (
+              {/* A named delegate (§14): the person, then the key, no badge. */}
+              {viaKey(message) ? (
+                <span data-slot="via-key" className="text-xs text-muted-foreground">
+                  via {message.authorLabel ?? "an app"}
+                </span>
+              ) : message.authorKind === "api_key" ? (
                 <span className="text-xs text-muted-foreground">app</span>
               ) : null}
               {/* Someone who left keeps their name, with a quiet label (AC6.5). */}
-              {message.authorKind !== "api_key" && person?.former ? (
+              {(message.authorKind !== "api_key" || viaKey(message)) && person?.former ? (
                 <span data-slot="former-member" className="text-xs text-muted-foreground">
                   former member
                 </span>

@@ -1,237 +1,392 @@
 /**
- * Chat — module #7 on the Moduo MCP connector (specs/chat.md §Agents).
+ * Chat — module #7 on the Moduo MCP connector (specs/chat-v2.md §14).
  *
  * Connector-side mirror of src/features/chat/ops-manifest.ts (keep the
  * descriptions in sync). Chat has its OWN key scope (`scopes->>'chat'`, none by
- * default) and agents only ever see PUBLIC, non-archived channels — DMs and
- * private channels are invisible to every key, whatever its scope.
+ * default). A key acts as its creator — "Alex · via CI key" — inside the key's
+ * rules, which the database applies (chat__key_actor / chat__key_reads_channel):
+ * channels only, public ones, private ones only with the key's "Include private
+ * channels I'm in" switch while its creator is a member; direct messages never.
  *
- * Reads run as service_role (RLS bypassed), so every query filters on
- * ctx.key.workspaceId AND the public-channel predicate, and checks the plan gate
- * (`chat_workspace_enabled`). The one write is `chat_op_agent_post`, which
- * re-checks all of it server-side and attributes the post to the key
- * (author_kind 'api_key', shown with an "App" badge).
+ * Every tool is one RPC; none reads a chat table itself (the service role
+ * bypasses RLS, so a hand-filtered query here would be the only guard).
  */
 
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 
 type Row = Record<string, any>;
 
-function str(args: Row, name: string, required = true): string {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function str(args: Row, name: string, required = true): string {
   const v = args?.[name];
   if (typeof v === "string" && v.trim() !== "") return v.trim();
   if (!required) return "";
   throw new Error(`Missing required argument: ${name}`);
 }
 
-function clampLimit(args: Row, fallback: number, max: number): number {
+/** A message or chain id: canonical uuids only (the server reads more spellings). */
+export function messageId(args: Row, name: string, required = true): string {
+  const v = str(args, name, required);
+  if (v === "") return "";
+  if (!UUID.test(v)) throw new Error(`${name} must be a message id.`);
+  return v.toLowerCase();
+}
+
+export function clampLimit(args: Row, fallback: number, max: number): number {
   const v = Number(args?.limit);
   if (!Number.isFinite(v) || v <= 0) return fallback;
   return Math.min(Math.floor(v), max);
 }
 
-async function rows(
-  query: PromiseLike<{ data: Row[] | null; error: { message: string } | null }>,
-): Promise<Row[]> {
-  const { data, error } = await query;
+async function call<T = Row[]>(ctx: ToolContext, fn: string, params: Row): Promise<T> {
+  const { data, error } = await ctx.db.rpc(fn, params);
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return data as T;
 }
 
-async function assertEnabled(ctx: ToolContext): Promise<void> {
-  const { data, error } = await ctx.db.rpc("chat_workspace_enabled", {
-    p_workspace_id: ctx.key.workspaceId,
-  });
-  if (error) throw new Error(error.message);
-  if (data !== true) throw new Error("Chat is available on the Duo and Team plans.");
+function one(data: unknown): Row {
+  return (Array.isArray(data) ? data[0] : data) as Row;
 }
 
-/** A public, live channel in this key's workspace — or throws. */
-async function publicChannel(ctx: ToolContext, channel: string): Promise<Row> {
-  const byName = !/^[0-9a-f-]{36}$/i.test(channel);
-  let q = ctx.db
-    .from("chat_channels")
-    .select("id, name, topic, archived_at, last_message_at, created_at")
-    .eq("workspace_id", ctx.key.workspaceId)
-    .eq("kind", "channel")
-    .eq("is_private", false)
-    .is("deleted_at", null);
-  q = byName ? q.eq("name", channel.replace(/^#/, "").toLowerCase()) : q.eq("id", channel);
-  const found = await rows(q.limit(1));
-  const c = found[0];
-  if (!c) throw new Error(`No public channel "${channel}". Use chat_list_channels to see them.`);
-  return c;
+/** "Alex" or "Alex · via CI key". */
+export function byline(name: string, via: string | null | undefined): string {
+  return via ? `${name} · via ${via}` : name;
 }
 
-/** userId → display name, for the authors + mentions in a page of messages. */
-async function names(ctx: ToolContext, ids: string[]): Promise<Map<string, string>> {
-  const unique = [...new Set(ids.filter(Boolean))];
-  if (unique.length === 0) return new Map();
-  const found = await rows(ctx.db.from("profiles").select("id, display_name").in("id", unique));
-  return new Map(found.map((p) => [p.id as string, ((p.display_name as string) || "Member").trim()]));
+/**
+ * Bodies are stored in Markdown with Moduo links (`[@Alex](moduo://person/<id>)`).
+ * Agents get the text as stored, plus a readable line without the link targets.
+ */
+export function readable(body: string): string {
+  return String(body ?? "").replace(/\[([^\]]*)\]\(moduo:\/\/[a-z_]+\/[0-9a-f-]{36}\)/gi, "$1");
 }
 
-const MESSAGE_COLS =
-  "id, channel_id, parent_id, author_id, author_kind, author_label, body, reactions, reply_count, pinned_at, edited_at, created_at";
+/**
+ * A conversation by id, or by its name as typed ("#Release Train" or
+ * "Release Train"): names are matched exactly, never lower-cased.
+ */
+export async function conversation(ctx: ToolContext, channel: string): Promise<Row> {
+  const list = await call<Row[]>(ctx, "chat_agent_conversations", { p_workspace_id: ctx.key.workspaceId });
+  const wanted = channel.trim();
+  const byId = UUID.test(wanted) ? list.find((c) => c.id === wanted.toLowerCase()) : undefined;
+  const named = byId ? [] : list.filter((c) => c.name === wanted || `#${c.name}` === wanted);
+  // A name that matches more than one conversation is refused: the id picks one.
+  if (named.length > 1)
+    throw new Error(`Two conversations are named "${channel}"; use its id from chat_list_channels.`);
+  const found = byId ?? named[0];
+  if (!found) throw new Error(`No conversation "${channel}" this key can read. Use chat_list_channels to see them.`);
+  return found;
+}
 
-/** Bodies keep <@uuid> tokens; agents get readable names AND the raw token. */
-function shapeMessages(list: Row[], who: Map<string, string>): Row[] {
-  return list.map((m) => ({
+/** A conversation's id: as given when it's an id (the RPC applies the key's rules), else by name. */
+export async function conversationId(ctx: ToolContext, channel: string): Promise<string> {
+  const wanted = channel.trim();
+  return UUID.test(wanted) ? wanted.toLowerCase() : (await conversation(ctx, wanted)).id;
+}
+
+function shapeMessage(m: Row): Row {
+  return {
     id: m.id,
-    parent_id: m.parent_id,
-    author:
-      m.author_kind === "api_key"
-        ? { app: m.author_label ?? "App" }
-        : { user_id: m.author_id, name: who.get(m.author_id) ?? "Former member" },
-    text: String(m.body ?? "").replace(/<@([0-9a-f-]{36})>/gi, (_t, id: string) => `@${who.get(id.toLowerCase()) ?? "someone"}`)
-      .replace(/<!channel>/g, "@channel")
-      .replace(/<moduo:([a-z_]+):([0-9a-f-]{36})\|([^>]*)>/gi, (_t, type: string, id: string, label: string) => `[${type}: ${label}](moduo:${type}:${id})`),
+    chain_root_id: m.parent_id ?? null,
+    reply_to_id: m.reply_to_id ?? null,
+    author: { user_id: m.author_id ?? null, name: byline(m.author_name, m.via) },
+    text: readable(m.body),
     body: m.body,
     reactions: m.reactions ?? {},
     reply_count: m.reply_count ?? 0,
-    pinned: Boolean(m.pinned_at),
-    edited: Boolean(m.edited_at),
+    decision: Boolean(m.decision),
+    wrapped_up: Boolean(m.wrapped),
+    settled_by: m.settled_id ?? null,
+    edited: Boolean(m.edited),
     created_at: m.created_at,
-  }));
+  };
 }
 
-function mentionIds(list: Row[]): string[] {
-  const ids: string[] = [];
-  for (const m of list) {
-    if (m.author_id) ids.push(m.author_id);
-    for (const t of String(m.body ?? "").matchAll(/<@([0-9a-f-]{36})>/gi)) ids.push(t[1].toLowerCase());
-  }
-  return ids;
-}
+const POST_HINT =
+  "Write Markdown (**bold**, _italic_, `code`); mention a person with <@USER_ID> and everyone with <!channel> (plain text unless the key's creator may mention everyone).";
 
 export const chatConnectorModule: ConnectorModule = {
   module: "chat",
   tools: [
-    // ── reads (view scope) — public channels only ────────────────────────────
+    // ── reads (View) ───────────────────────────────────────────────────────
     {
       name: "chat_list_channels",
       description:
-        "The workspace's public chat channels (name, topic, last activity). DMs and private channels are never visible to apps.",
+        "List the conversations this key can read: public channels, and private channels its creator is in when the key's \"Include private channels I'm in\" is on. Direct messages are never visible to a key.",
       access: "view",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
-        await assertEnabled(ctx);
-        const data = await rows(
-          ctx.db
-            .from("chat_channels")
-            .select("id, name, topic, last_message_at, created_at")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .eq("kind", "channel")
-            .eq("is_private", false)
-            .is("archived_at", null)
-            .is("deleted_at", null)
-            .order("name"),
-        );
-        return data.map((c) => ({ id: c.id, name: `#${c.name}`, topic: c.topic || null, last_message_at: c.last_message_at }));
+        const list = await call<Row[]>(ctx, "chat_agent_conversations", { p_workspace_id: ctx.key.workspaceId });
+        return list.map((c) => ({
+          id: c.id,
+          name: c.name,
+          topic: c.topic ?? null,
+          private: Boolean(c.is_private),
+          announcement: Boolean(c.announcement),
+          archived: Boolean(c.archived),
+          last_message_at: c.last_message_at,
+        }));
       },
     },
     {
       name: "chat_read",
       description:
-        "Recent messages in a public channel (newest last), or one thread's replies when thread_id is given. Mentions are resolved to names; Moduo items appear as [type: label](moduo:type:id).",
+        "Read a conversation (its messages, oldest first) or one reply chain when chain_id is given (the chain's first message and its replies). Pages back with before (a message id from the previous page).",
       access: "view",
       inputSchema: {
         type: "object",
         properties: {
-          channel: { type: "string", description: "Channel name (e.g. general or #general) or id." },
-          thread_id: { type: "string", description: "Optional: a message id — returns that thread's replies." },
+          channel: { type: "string", description: "Conversation name as shown (e.g. Release Train) or id." },
+          chain_id: { type: "string", description: "Optional: the first message of a reply chain." },
+          before: { type: "string", description: "Optional: read the messages before this message id." },
           limit: { type: "number", description: "Max messages (default 30, max 100)." },
         },
         required: ["channel"],
       },
       handler: async (args, ctx) => {
-        await assertEnabled(ctx);
-        const channel = await publicChannel(ctx, str(args, "channel"));
-        const thread = str(args, "thread_id", false);
+        const channel = await conversation(ctx, str(args, "channel"));
+        // thread_id: v1's name for it, still read from agents set up then.
+        const chain = messageId(args, "chain_id", false) || messageId(args, "thread_id", false) || null;
         const limit = clampLimit(args, 30, 100);
-        let q = ctx.db
-          .from("chat_messages")
-          .select(MESSAGE_COLS)
-          .eq("workspace_id", ctx.key.workspaceId)
-          .eq("channel_id", channel.id)
-          .is("deleted_at", null);
-        q = thread ? q.eq("parent_id", thread).order("created_at", { ascending: true }) : q.is("parent_id", null).order("created_at", { ascending: false });
-        const list = await rows(q.limit(limit));
-        if (!thread) list.reverse();
+        const before = messageId(args, "before", false);
+        const list = await call<Row[]>(ctx, "chat_agent_messages", {
+          p_channel_id: channel.id,
+          p_root_id: chain,
+          p_before: null,
+          p_before_id: before || null,
+          p_limit: limit,
+        });
+        const messages = [...list].reverse().map(shapeMessage);
         return {
-          channel: { id: channel.id, name: `#${channel.name}`, topic: channel.topic || null, archived: Boolean(channel.archived_at) },
-          messages: shapeMessages(list, await names(ctx, mentionIds(list))),
+          channel: { id: channel.id, name: channel.name, topic: channel.topic ?? null, archived: Boolean(channel.archived) },
+          messages,
+          more: list.length === limit ? { before: list[list.length - 1]?.id } : null,
         };
       },
     },
     {
       name: "chat_search",
-      description: "Search message text across the workspace's public channels. Newest first.",
+      description:
+        "Search messages in the conversations this key can read, newest first. Matches whole words and their beginnings, Polish without diacritics too.",
       access: "view",
       inputSchema: {
         type: "object",
         properties: {
           query: { type: "string", description: "The search text." },
+          channel: { type: "string", description: "Optional: only this conversation (name or id)." },
           limit: { type: "number", description: "Max results (default 20, max 50)." },
         },
         required: ["query"],
       },
       handler: async (args, ctx) => {
-        await assertEnabled(ctx);
-        const channels = await rows(
-          ctx.db
-            .from("chat_channels")
-            .select("id, name")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .eq("kind", "channel")
-            .eq("is_private", false)
-            .is("deleted_at", null),
-        );
-        if (channels.length === 0) return [];
-        const byId = new Map(channels.map((c) => [c.id as string, c.name as string]));
-        const q = str(args, "query").replace(/[\\%_]/g, (c) => `\\${c}`);
-        const list = await rows(
-          ctx.db
-            .from("chat_messages")
-            .select(MESSAGE_COLS)
-            .eq("workspace_id", ctx.key.workspaceId)
-            .in("channel_id", [...byId.keys()])
-            .is("deleted_at", null)
-            .ilike("body", `%${q}%`)
-            .order("created_at", { ascending: false })
-            .limit(clampLimit(args, 20, 50)),
-        );
-        const shaped = shapeMessages(list, await names(ctx, mentionIds(list)));
-        return shaped.map((m, i) => ({ ...m, channel: `#${byId.get(list[i].channel_id) ?? "?"}` }));
+        const only = str(args, "channel", false);
+        // By id or by name, a conversation the key can't read answers the same.
+        const channelId = only ? (await conversation(ctx, only)).id : null;
+        const list = await call<Row[]>(ctx, "chat_agent_search", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_query: str(args, "query"),
+          p_channel_id: channelId,
+          p_limit: clampLimit(args, 20, 50),
+        });
+        return list.map((h) => ({
+          id: h.message_id,
+          channel: { id: h.channel_id, name: h.channel_name },
+          chain_root_id: h.parent_id ?? null,
+          author: { user_id: h.author_id ?? null, name: byline(h.author_name, h.via) },
+          // The match is marked with U+E000 … U+E001; agents get **…**.
+          snippet: String(h.snippet ?? "").replace(/\uE000/g, "**").replace(/\uE001/g, "**"),
+          created_at: h.created_at,
+        }));
+      },
+    },
+    {
+      name: "chat_addressed_to_me",
+      description:
+        "What's waiting for the key's creator in Catch up: messages that mention them, their teams or everyone, replies in chains they're in, and announcements, in conversations this key can read (never direct messages). Newest first.",
+      access: "view",
+      inputSchema: {
+        type: "object",
+        properties: { limit: { type: "number", description: "Max items (default 30, max 100)." } },
+      },
+      handler: async (args, ctx) => {
+        const list = await call<Row[]>(ctx, "chat_agent_addressed", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_limit: clampLimit(args, 30, 100),
+        });
+        return list.map((i) => ({
+          reason: i.reason,
+          channel: { id: i.channel_id, name: i.channel_name },
+          message_id: i.message_id,
+          chain_root_id: i.chain_root_id ?? null,
+          author: { user_id: i.author_id ?? null, name: byline(i.author_name, i.via) },
+          text: readable(i.body),
+          created_at: i.created_at,
+        }));
       },
     },
 
-    // ── write (edit scope) ───────────────────────────────────────────────────
+    // ── writes (Edit) ──────────────────────────────────────────────────────
     {
       name: "chat_post",
-      description:
-        "Post a message to a public channel (or reply in a thread) as this app. It shows with an \"App\" badge and the key's name. Supports **bold**, _italic_, `code`; mention a person with <@USER_ID>.",
+      description: `Post a message in a conversation as the key's creator ("Alex · via <key name>"). ${POST_HINT} 30 posts a minute per key.`,
       access: "edit",
       inputSchema: {
         type: "object",
         properties: {
-          channel: { type: "string", description: "Channel name or id." },
+          channel: { type: "string", description: "Conversation name as shown or id." },
           text: { type: "string", description: "The message (max 8,000 characters)." },
-          thread_id: { type: "string", description: "Optional: reply in this message's thread." },
+          thread_id: { type: "string", description: "Deprecated: use chat_reply. A message to answer." },
         },
         required: ["channel", "text"],
       },
       handler: async (args, ctx) => {
-        const channel = await publicChannel(ctx, str(args, "channel"));
-        const { data, error } = await ctx.db.rpc("chat_op_agent_post", {
-          p_workspace_id: ctx.key.workspaceId,
-          p_channel_id: channel.id,
-          p_body: str(args, "text"),
-          p_parent_id: str(args, "thread_id", false) || null,
-        });
-        if (error) throw new Error(error.message);
-        const m = Array.isArray(data) ? data[0] : data;
-        return { id: m?.id, channel: `#${channel.name}`, created_at: m?.created_at };
+        const channelId = await conversationId(ctx, str(args, "channel"));
+        const m = one(
+          await call(ctx, "chat_op_agent_post", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_channel_id: channelId,
+            p_body: str(args, "text"),
+            p_parent_id: messageId(args, "thread_id", false) || null,
+          }),
+        );
+        // v1 agents read `channel` (the name): keep it beside the id.
+        const typed = str(args, "channel");
+        const name = UUID.test(typed)
+          ? ((await conversation(ctx, typed).catch(() => null))?.name ?? null)
+          : typed.replace(/^#/, "");
+        return {
+          id: m?.id,
+          channel: name,
+          channel_id: m?.channel_id,
+          chain_root_id: m?.parent_id ?? null,
+          created_at: m?.created_at,
+        };
+      },
+    },
+    {
+      name: "chat_reply",
+      description: `Reply to a message, quoting it: the reply joins that message's chain. ${POST_HINT}`,
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          message_id: { type: "string", description: "The message to answer." },
+          text: { type: "string", description: "The reply (max 8,000 characters)." },
+        },
+        required: ["message_id", "text"],
+      },
+      handler: async (args, ctx) => {
+        const m = one(
+          await call(ctx, "chat_op_agent_post", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_channel_id: null,
+            p_body: str(args, "text"),
+            p_parent_id: messageId(args, "message_id"),
+          }),
+        );
+        return { id: m?.id, chain_root_id: m?.parent_id ?? null, reply_to_id: m?.reply_to_id ?? null, created_at: m?.created_at };
+      },
+    },
+    {
+      name: "chat_react",
+      description: "Add (or, with on=false, take back) the key creator's reaction on a message: an emoji like 👍, or a workspace emoji as :name:.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          message_id: { type: "string", description: "The message." },
+          emoji: { type: "string", description: "The emoji, e.g. 👍 or :shipit:." },
+          on: { type: "boolean", description: "false takes the reaction back (default true)." },
+        },
+        required: ["message_id", "emoji"],
+      },
+      handler: async (args, ctx) => {
+        const m = one(
+          await call(ctx, "chat_op_agent_react", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_message_id: messageId(args, "message_id"),
+            p_key: str(args, "emoji"),
+            p_on: args?.on !== false,
+          }),
+        );
+        return { id: m?.id, reactions: m?.reactions ?? {} };
+      },
+    },
+    {
+      name: "chat_mark_decision",
+      description:
+        "Mark a message as a decision (or unmark it with on=false). Decisions show in the conversation's Details and on the items it's linked to.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          message_id: { type: "string", description: "The message." },
+          on: { type: "boolean", description: "false unmarks it (default true)." },
+        },
+        required: ["message_id"],
+      },
+      handler: async (args, ctx) => {
+        const m = one(
+          await call(ctx, "chat_op_agent_mark_decision", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_message_id: messageId(args, "message_id"),
+            p_on: args?.on !== false,
+          }),
+        );
+        return { id: m?.id, decision: Boolean(m?.decision_at) };
+      },
+    },
+    {
+      name: "chat_wrap_up",
+      description:
+        "Wrap up a reply chain with the reply that settled it (optionally marking that reply as a decision). Whoever started the chain, the channel's managers and admins can.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          chain_id: { type: "string", description: "The chain's first message." },
+          settled_by: { type: "string", description: "The reply that settled it." },
+          mark_decision: { type: "boolean", description: "Also mark that reply as a decision." },
+        },
+        required: ["chain_id", "settled_by"],
+      },
+      handler: async (args, ctx) => {
+        const m = one(
+          await call(ctx, "chat_op_agent_wrap_up", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_root_id: messageId(args, "chain_id"),
+            p_settled_id: messageId(args, "settled_by"),
+            p_mark_decision: args?.mark_decision === true,
+          }),
+        );
+        return { id: m?.id, wrapped_up: Boolean(m?.wrapped_at), settled_by: m?.settled_id ?? null };
+      },
+    },
+    {
+      name: "chat_create_channel",
+      description:
+        "Create a channel as the key's creator (their role decides whether they may). Private only when the key's \"Include private channels I'm in\" is on.",
+      access: "edit",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", description: "The channel's name, as it should read." },
+          topic: { type: "string", description: "Optional topic." },
+          private: { type: "boolean", description: "Make it private (default false)." },
+        },
+        required: ["name"],
+      },
+      handler: async (args, ctx) => {
+        const c = one(
+          await call(ctx, "chat_op_agent_create_channel", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_name: str(args, "name"),
+            p_topic: str(args, "topic", false),
+            p_is_private: args?.private === true,
+          }),
+        );
+        return { id: c?.id, name: c?.name, private: Boolean(c?.is_private) };
       },
     },
   ],

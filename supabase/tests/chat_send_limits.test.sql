@@ -189,7 +189,7 @@ BEGIN
   v := test.post_as_app('K', 'W', 'Q');
   PERFORM test.ok(v = c_limited, 'send: the app''s eleventh message in 10 s is refused with PT429', v);
   v := test.post_as_app('K2', 'W', 'G');
-  PERFORM test.ok(v = c_limited, 'send: another app in the same workspace shares that budget', v);
+  PERFORM test.ok(v LIKE 'ok %', 'send: another app in the same workspace has its own budget (per key, CV-21)', v);
   v := test.post_as_app('K3', 'W2', 'G2');
   PERFORM test.ok(v LIKE 'ok %', 'send: an app in another workspace is not held back', v);
   v := test.send('A', 'G');

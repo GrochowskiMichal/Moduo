@@ -257,7 +257,8 @@ BEGIN
     pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'comment_reactions_reaction_check'))
       LIKE '%reactions__key_ok(reaction)%',
     'key: comments store only what the shared check allows');
-  PERFORM test.ok(position('reactions__key_ok' IN pg_get_functiondef('public.chat_op_react(uuid, text, boolean)'::regprocedure)) > 0
+  PERFORM test.ok(position('reactions__key_ok' IN pg_get_functiondef('public.chat__react_as(uuid, uuid, text, boolean)'::regprocedure)) > 0
+              AND position('chat__react_as' IN pg_get_functiondef('public.chat_op_react(uuid, text, boolean)'::regprocedure)) > 0
               AND position('reactions__key_ok' IN pg_get_functiondef('public.comments_op_react(uuid, text, boolean)'::regprocedure)) > 0
               AND position('reactions__key_ok' IN pg_get_functiondef('public.user_op_set_chat_prefs(jsonb)'::regprocedure)) > 0,
     'key: chat, comments and the quick row ask the same check');

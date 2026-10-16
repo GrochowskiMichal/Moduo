@@ -593,6 +593,19 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       return mapRows(data, mapMessage);
     },
 
+    async listKeyReaders(channelId) {
+      const { data, error } = await db().rpc("chat_key_readers", { p_channel_id: channelId });
+      // Not on this server yet (CV-21's migration): nobody to name.
+      if (error?.code === "PGRST202") return [];
+      fail(error);
+      return ((data ?? []) as Array<{ user_id?: unknown; display_name?: unknown }>)
+        .filter((r) => typeof r.user_id === "string")
+        .map((r) => ({
+          userId: r.user_id as string,
+          name: typeof r.display_name === "string" ? r.display_name : "Someone",
+        }));
+    },
+
     async history({ workspaceId, channelId, limit = 50 }) {
       // The trail's read policy answers only conversations the caller reads.
       const { data, error } = await db()

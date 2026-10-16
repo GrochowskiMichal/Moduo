@@ -488,7 +488,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       if (!newestId || newestId === lastAnnounced.current) return;
       lastAnnounced.current = newestId;
       const m = win.rows.find((r) => r.id === newestId);
-      if (!m || m.authorId === selfId || m.kind === "event") return;
+      if (!m || (m.authorId === selfId && m.authorKind === "user") || m.kind === "event") return;
       setAnnounce(
         `New message from ${authorName(m, m.authorId ? personOf(m.authorId) : undefined)}`,
       );

@@ -246,6 +246,12 @@ export interface Preferences {
   motion: MotionPref;
   /** Per-type notification mutes (read-side filter over the bell feed). */
   notifications: NotificationPrefs;
+  /**
+   * Chat (CV-21, §11): per API key of yours, whether a reply to a post made
+   * through it reaches you (key id → on; on when absent). The server reads it
+   * at `user_preferences.preferences.chatKeyReplies.<key id>`.
+   */
+  chatKeyReplies: Record<string, boolean>;
   /** Desktop-only: confirm before quitting. Both quit gestures (⌘Q via a custom Quit
    *  menu item, and window close via `CloseRequested`) are intercepted natively in Rust,
    *  which reads this value from `AppState` — mirrored there by the `set_confirm_before_quit`
@@ -277,6 +283,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   chatSound: false,
   motion: "system",
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
+  chatKeyReplies: {},
   confirmBeforeQuit: false,
   keepInMenuBar: true,
   tasksSidebar: { hidden: [], pinned: {} },
@@ -437,6 +444,18 @@ const tasksFoldsSchema = z
     entries.sort((a, b) => Date.parse(b[1].at) - Date.parse(a[1].at));
     return Object.fromEntries(entries.slice(0, TASKS_FOLDS_KEEP));
   });
+// Key id → on. A bad entry drops alone; at most 100 keys.
+const KEY_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const chatKeyRepliesSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((byKey) =>
+    Object.fromEntries(
+      Object.entries(byKey)
+        .filter((e): e is [string, boolean] => KEY_ID.test(e[0]) && typeof e[1] === "boolean")
+        .slice(0, 100),
+    ),
+  );
 const preferencesSchema = z.object({
   landingView: z.enum(LANDING_VIEWS).catch(DEFAULT_PREFERENCES.landingView),
   reopenLastWorkspace: z.boolean().catch(DEFAULT_PREFERENCES.reopenLastWorkspace),
@@ -444,6 +463,7 @@ const preferencesSchema = z.object({
   chatSound: z.boolean().catch(DEFAULT_PREFERENCES.chatSound),
   motion: z.enum(MOTION_PREFS).catch(DEFAULT_PREFERENCES.motion),
   notifications: notificationPrefsSchema,
+  chatKeyReplies: chatKeyRepliesSchema,
   confirmBeforeQuit: z.boolean().catch(DEFAULT_PREFERENCES.confirmBeforeQuit),
   keepInMenuBar: z.boolean().catch(DEFAULT_PREFERENCES.keepInMenuBar),
   tasksSidebar: tasksSidebarSchema,

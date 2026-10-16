@@ -41,7 +41,7 @@ import type {
   ChatPerson,
 } from "../model";
 import { NOTIFY_LEVEL_COPY } from "../shell/conversation-toolbar";
-import { detailsPeople } from "./details-model";
+import { detailsPeople, keyReadersLine } from "./details-model";
 import { PresenceAvatar } from "./person-card";
 import { DetailsChainRows } from "./reply-chains-view";
 
@@ -64,6 +64,8 @@ export type DetailsViewProps = {
   pinned: readonly ChatMessage[] | null;
   /** Marked decisions, newest first (CV-14); null while they load. */
   decisions?: readonly ChatMessage[] | null;
+  /** CV-21: whose keys read this private channel. */
+  keyReaders?: ReadonlyArray<{ userId: string; name: string }> | null;
   history: readonly ChatHistoryEntry[] | null;
   /** Archive and unarchive (a manager or an admin, while the plan allows writing). */
   canArchive: boolean;
@@ -107,6 +109,7 @@ export function DetailsView({
   members,
   pinned,
   decisions = [],
+  keyReaders = null,
   history,
   canArchive,
   managers = null,
@@ -131,6 +134,7 @@ export function DetailsView({
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
   const people = members ? detailsPeople(members, selfId, personOf, online, stateOf) : null;
+  const appLine = keyReadersLine(keyReaders, selfId);
   const canLeave = isChannel && !!member && !channel.isDefault;
   const managerSet = new Set(managers ?? []);
   // Archive sits in Channel settings (frame 4); an archived channel shows no
@@ -226,6 +230,10 @@ export function DetailsView({
             ))}
           </ul>
         )}
+        {/* CV-21: a key with "Include private channels I'm in" reads this channel. */}
+        {isChannel && channel.isPrivate && appLine ? (
+          <Quiet data-slot="details-key-readers">{appLine}</Quiet>
+        ) : null}
       </Section>
 
       {member ? (

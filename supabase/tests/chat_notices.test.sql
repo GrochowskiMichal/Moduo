@@ -200,8 +200,8 @@ BEGIN
   PERFORM test.ok(v = 'ok 1' AND EXISTS (
       SELECT 1 FROM public.notice_deliveries d JOIN public.chat_messages m ON m.id = d.message_id
        WHERE d.user_id = test.id('B') AND m.author_kind = 'api_key'
-         AND d.title = 'Claude Desktop · #Plans · Acme' AND d.body LIKE '%build is green @B'),
-    'an app''s post: the notice is from the app by its name', v);
+         AND d.title = 'A · via Claude Desktop · #Plans · Acme' AND d.body LIKE '%build is green @B'),
+    'an app''s post: the notice is from its creator via the key (CV-21)', v);
 
   PERFORM test.ok(public.notice__gate(test.id('B'), test.id('W'), 'chat_message', now()) = 'send'
                   AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries WHERE workspace_id = test.id('W') AND held_for_focus),
