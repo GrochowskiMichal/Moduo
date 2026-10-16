@@ -16,6 +16,8 @@ const KIND_BY_TYPE: Record<string, ReferenceKind> = {
   project: "project",
   bucket: "project",
   tag: "tag",
+  chat_message: "message",
+  chat_channel: "conversation",
 };
 
 /** The reference kind for an entity type; anything unknown is `other`. */
@@ -38,6 +40,8 @@ const NOUN: Record<ReferenceKind, string> = {
   event: "event",
   project: "project",
   tag: "tag",
+  message: "message",
+  conversation: "conversation",
   other: "item",
 };
 
@@ -69,6 +73,9 @@ export function openInLabel(kind: ReferenceKind): string | null {
       return "Open in Notes";
     case "event":
       return "Open in Calendar";
+    case "message":
+    case "conversation":
+      return "Open in Chat";
     default:
       return null;
   }

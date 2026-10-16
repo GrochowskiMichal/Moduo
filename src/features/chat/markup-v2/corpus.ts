@@ -140,7 +140,17 @@ export const REF_TYPES: Array<[string, string]> = [
 ];
 
 /** Kinds RF-1 can show as a card when alone on a line (kinds.ts canShowAsCard). */
-export const CARD_TYPES = new Set(["task", "note", "contact", "event", "email_thread", "bucket"]);
+export const CARD_TYPES = new Set([
+  "task",
+  "note",
+  "contact",
+  "event",
+  "email_thread",
+  "bucket",
+  // CV-10: a message and a conversation have cards too.
+  "chat_channel",
+  "chat_message",
+]);
 
 const uri = (type: string, id: string) => `moduo://${type}/${id}`;
 

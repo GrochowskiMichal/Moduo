@@ -83,6 +83,8 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
                     : null;
                 },
                 getEntities: (refs) => rt.spine.getEntities({ workspaceId, refs }),
+                chat: rt.chat,
+                userId: latest.current.userId ?? null,
                 // Done finishes open subtasks too, through the shared store (call 87).
                 setTaskStatus: canEdit
                   ? (taskId, done) =>

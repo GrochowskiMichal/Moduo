@@ -110,6 +110,8 @@ export type ChatSidebarProps = {
   onNewConversation?: () => void;
   /** Browse channels (CV-8b), from the hairline's ⋯. */
   onBrowse?: () => void;
+  /** Recently deleted (CV-15), from the hairline's ⋯: managers and admins. */
+  onRecentlyDeleted?: () => void;
   /** §18: a live huddle's mark (who's in it) beside a row's count. Empty until calls exist. */
   huddleOf?: (channelId: string) => React.ReactNode;
 };
@@ -126,6 +128,7 @@ export function ChatSidebar({
   onOpenCatchup,
   onNewConversation,
   onBrowse,
+  onRecentlyDeleted,
   huddleOf,
 }: ChatSidebarProps) {
   const row = (r: ChatRow) => {
@@ -175,6 +178,7 @@ export function ChatSidebar({
             personOf={personOf}
             onOpen={onOpen}
             onBrowse={onBrowse}
+            onRecentlyDeleted={onRecentlyDeleted}
           />
           {model.pinned.length > 0 ? section("pinned", "Pinned", model.pinned) : null}
           {section("channels", "Channels", model.channels)}
@@ -200,11 +204,13 @@ function PanelHairline({
   personOf,
   onOpen,
   onBrowse,
+  onRecentlyDeleted,
 }: {
   archived: ChatRow[];
   personOf: (id: string) => ChatPerson | undefined;
   onOpen: (channelId: string) => void;
   onBrowse?: () => void;
+  onRecentlyDeleted?: () => void;
 }) {
   return (
     <div
@@ -245,6 +251,9 @@ function PanelHairline({
               ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          {onRecentlyDeleted ? (
+            <DropdownMenuItem onSelect={onRecentlyDeleted}>Recently deleted</DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

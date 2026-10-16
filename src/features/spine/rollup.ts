@@ -145,6 +145,9 @@ export function rollupSections(
   for (const link of links) {
     const other = otherEndpoint(focus, link);
     if (!other) continue; // defensive: link not touching the focus entity
+    // A conversation that mentions the item is a quiet "Mentioned in" line
+    // (chat/mentioned-in.tsx, CV-10), never a link card.
+    if (other.type === "chat_channel" && link.relationKind === "mentions") continue;
 
     const key = entityRefKey(other);
     const record = records.get(key) ?? null;
