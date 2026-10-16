@@ -55,7 +55,7 @@ import { Kbd } from "../../../components/ui/kbd";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { taskHandle } from "../../../lib/task-handle";
+import { taskHandle, taskLinkId } from "../../../lib/task-handle";
 import { cn } from "../../../lib/utils";
 import { taskUrl } from "../../../lib/web-origin";
 import { useTaskClaim } from "../../focus/claims";
@@ -243,7 +243,9 @@ export function TaskDetailHeader({
               <GitBranch aria-hidden />
               Copy branch name
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => copy(taskUrl(task.id), "Link copied")}>
+            <DropdownMenuItem
+              onSelect={() => copy(taskUrl(taskLinkId(taskKey, task)), "Link copied")}
+            >
               <Link2 aria-hidden />
               Copy link
             </DropdownMenuItem>

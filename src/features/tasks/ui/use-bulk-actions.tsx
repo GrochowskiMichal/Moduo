@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { type BottomBarMode, useBottomBarModeOwner } from "../../../components/app/bottom-bar-mode";
 import { TeamMark } from "../../../components/ui/avatar";
 import { NavRowDot } from "../../../components/ui/nav-row";
+import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import {
   type BulkChange,
@@ -354,8 +355,9 @@ export function useBulkActions({
               .filter((a) => a.canTakeTasks)
               .map((a) => ({
                 key: a.userId,
-                label: a.isMe ? "Me" : a.fullName || a.name,
-                keywords: `${a.name} ${a.fullName}`,
+                // "Maciej Grzywacz (you)", and "me" still finds you (MOD-137).
+                label: assigneeListName(a),
+                keywords: `${a.name} ${a.fullName}${a.isMe ? ` ${SELF_KEYWORDS.join(" ")}` : ""}`,
                 icon: <AssigneeAvatar assignee={a} size="icon" />,
                 onPick: () => {
                   close();

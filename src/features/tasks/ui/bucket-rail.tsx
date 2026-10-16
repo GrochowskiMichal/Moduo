@@ -5,26 +5,31 @@
 //   ─────────────────────────────────── ⋯    ← the hairline; ⋯ = Customize
 //   All · Pinned · Views · projects without an area · areas and their projects
 //   New project
+//   ▣ Archived  ▣ Recently deleted            ← the footer, under the scroll
 //
 // No labels on the blocks (the split is taught in Tasks' welcome), no glyphs
 // on views, one sentence-case header style for every group, headers only when
 // a group has something, every group collapses (remembered per person).
-// Archived projects and Recently deleted open from the hairline's ⋯, never as
-// permanent rows. "Project" everywhere; "bucket" stays a code word until D7.
+// Archived projects and Recently deleted are two quiet items in the sidebar's
+// footer (MOD-140, superseding call 98's ⋯), icons alone when it's narrow.
+// "Project" everywhere; "bucket" stays a code word until D7.
 
 import { useDndMonitor } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  Archive,
   CalendarDays,
   Inbox,
   Layers,
   ListChecks,
   MoreHorizontal,
   Plus,
+  Trash2,
   UserRound,
 } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { SidebarFooter } from "../../../components/app/sidebar-footer";
 import type { LabelColor } from "../../../components/tag-colors";
 import {
   DropdownMenu,
@@ -57,7 +62,7 @@ import { BUCKET_COLOR_OPTIONS, bucketDotColor, sidebarGroups } from "../sidebar"
 import { type TaskView, viewIdOf, viewSelection } from "../views";
 import { type RailDropAccepts, RailDropRow } from "./dnd/rail-drop-row";
 
-/** The sidebar's selections besides projects: the centre views its ⋯ opens. */
+/** The sidebar's selections besides projects: its footer's (MOD-140) and its ⋯'s. */
 export const ARCHIVED_SELECTION = "archived";
 export const TRASH_SELECTION = "trash";
 /** Templates (TV-D15): opened from the hairline's ⋯ until Settings → Tasks → Templates exists. */
@@ -66,6 +71,9 @@ export const TEMPLATES_SELECTION = "templates";
 export const UPCOMING_SELECTION = "upcoming";
 /** Won't do: the reachable list with Reopen (tasks-v3 §2), from the ⋯ (TV-U15). */
 export const WONTDO_SELECTION = "wontdo";
+/** A new view, not saved yet (MOD-142): All through a blank Filter and
+ *  Display, named on Save. Never `view:…` (that's a saved view's). */
+export const NEW_VIEW_SELECTION = "new-view";
 
 /** The keys collapse is remembered by: Pinned, Views, and each area. */
 export const PINNED_GROUP = "pinned";
@@ -92,7 +100,7 @@ type Props = {
   /** "inbox" | "today" (Focus) | "upcoming" | "mine" | "all" | "archived" | "trash" | project id */
   selection: string;
   onSelect: (selection: string) => void;
-  /** Live projects (the Inbox excluded), in position order. */
+  /** Live projects (the Inbox excluded), in position order; shown in `projectOrder`. */
   buckets: Bucket[];
   areas: Area[];
   inbox: Bucket | null;
@@ -130,7 +138,13 @@ type Props = {
   /** Archive: asks first when the project has open work (REPLAN 78). */
   onRequestArchive: (bucket: Bucket) => void;
   onSetBucketColor: (id: string, color: LabelColor) => void;
-  /** A project dragged onto another one: it takes that place and area. */
+  /**
+   * This person's own order of the projects (MOD-38), from their synced
+   * preferences: placed ones first, the rest in the workspace's order.
+   */
+  projectOrder?: readonly string[];
+  /** A project dragged onto another one: it takes that place in this
+   *  person's order (and that project's area, for someone who can edit). */
   onMoveBucket: (activeId: string, overId: string) => void;
   onMoveBucketToArea: (id: string, areaId: string | null) => void;
   /** A project's hover "+": a new task in it. */
@@ -150,10 +164,7 @@ type Props = {
   onMoveArea: (areaId: string, direction: "up" | "down") => void;
   onDeleteArea: (areaId: string) => void;
 
-  /** Archived projects and Recently deleted: from the ⋯, never rows (98). */
-  archivedCount: number;
-  trashCount: number;
-  /** Won't do tasks (TV-U15): from the ⋯ too. */
+  /** Won't do tasks (TV-U15): from the ⋯. */
   wontDoCount?: number;
   /**
    * Templates (TV-D15): a project's ⋯ → Duplicate… and Save as template…, the
@@ -215,6 +226,8 @@ export type ViewActions = {
   onDelete: (viewId: string) => void;
   onMove: (viewId: string, direction: "up" | "down") => void;
   onCopyLink: (viewId: string) => void;
+  /** A new blank view (MOD-142): the Views header's + and the ⋯'s New view. */
+  onNew?: () => void;
   /** Sharing a view needs edit access. */
   canShare: boolean;
   /** The workspace's owner or an admin: may unshare or delete a shared view. */
@@ -246,6 +259,7 @@ export function BucketRail({
   onRequestDelete,
   onRequestArchive,
   onSetBucketColor,
+  projectOrder,
   onMoveBucket,
   onMoveBucketToArea,
   onCaptureInto,
@@ -257,8 +271,6 @@ export function BucketRail({
   onSetAreaColor,
   onMoveArea,
   onDeleteArea,
-  archivedCount,
-  trashCount,
   wontDoCount = 0,
   templates,
   onOpenWelcome,
@@ -279,10 +291,11 @@ export function BucketRail({
   const focusRowSoon = (navId: string | null) =>
     setTimeout(() => focusNavRow(nav.current, navId), 0);
 
-  const groups = sidebarGroups(buckets, areas);
+  const groups = sidebarGroups(buckets, areas, projectOrder);
   const inboxDrift = inbox ? (driftCountByBucket.get(inbox.id) ?? 0) : 0;
-  // Drag to reorder needs edit access and the page's DndContext.
-  const sortable = canEdit && !!dropAccepts;
+  // Drag to reorder needs only the page's DndContext: the order is this
+  // person's own, so someone who can't edit orders their sidebar too (MOD-38).
+  const sortable = !!dropAccepts;
   const pinnedIds = new Set(pinned);
   // Pinned projects and views, in pin order (one that's gone drops out).
   const pinnedEntries = pinned.flatMap((id): PinnedEntry[] => {
@@ -295,6 +308,16 @@ export function BucketRail({
     return bucket ? [{ kind: "project", bucket }] : [];
   });
   const ownViews = views.filter((v) => v.ownerId === viewActions?.currentUserId);
+  // A new view that isn't saved yet (MOD-142) shows at the Views group's end;
+  // like an area's +, starting one opens a folded group to show it.
+  const draftingView = selection === NEW_VIEW_SELECTION;
+  const onNewView = viewActions?.onNew;
+  const startNewView = onNewView
+    ? () => {
+        if (collapsed.has(VIEWS_GROUP)) onToggleCollapsed(VIEWS_GROUP);
+        onNewView();
+      }
+    : undefined;
   const viewRow = (view: TaskView, opts?: { pinnedCopy?: boolean }) => {
     const selectionKey = viewSelection(view.id);
     const mine = view.ownerId === viewActions?.currentUserId;
@@ -359,7 +382,7 @@ export function BucketRail({
     );
   };
   // One sortable list per area: a drop on another area's project moves the
-  // dragged one into that area (projectDropPatch).
+  // dragged one into that area, for someone who can edit (projectOrderDrop).
   const projectList = (list: Bucket[]) =>
     sortable ? (
       <SortableContext
@@ -473,15 +496,10 @@ export function BucketRail({
             onToggleHidden={onToggleHidden}
             onNewProject={() => setAdding({ kind: "project", areaId: null })}
             onNewArea={() => setAdding({ kind: "area" })}
-            archivedCount={archivedCount}
-            trashCount={trashCount}
-            onOpenArchived={() => onSelect(ARCHIVED_SELECTION)}
-            onOpenTrash={() => onSelect(TRASH_SELECTION)}
+            onNewView={startNewView}
             wontDoCount={wontDoCount}
             onOpenWontDo={() => onSelect(WONTDO_SELECTION)}
             wontDoCurrent={selection === WONTDO_SELECTION}
-            archivedCurrent={selection === ARCHIVED_SELECTION}
-            trashCurrent={selection === TRASH_SELECTION}
             onNewFromTemplate={templates?.onNewFromTemplate}
             onOpenTemplates={templates ? () => onSelect(TEMPLATES_SELECTION) : undefined}
             templatesCurrent={selection === TEMPLATES_SELECTION}
@@ -521,15 +539,28 @@ export function BucketRail({
           ) : null}
 
           {/* Views (TV-U8, 29c–29e): no glyphs (names line up with the
-              projects'), no header until there's one. */}
-          {views.length > 0 ? (
+              projects'), no header until there's one; its + opens a new
+              blank view (MOD-142; before the first view, the ⋯'s New view),
+              which sits at the group's end as "Untitled view" until saved. */}
+          {views.length > 0 || draftingView ? (
             <div className="mt-2 flex flex-col gap-px">
               <NavSectionHeader
                 label="Views"
                 collapsed={collapsed.has(VIEWS_GROUP)}
                 onToggle={() => onToggleCollapsed(VIEWS_GROUP)}
+                onAdd={startNewView}
+                addLabel="New view"
               />
               {collapsed.has(VIEWS_GROUP) ? null : views.map((v) => viewRow(v))}
+              {draftingView ? (
+                <NavRow
+                  navId={NEW_VIEW_SELECTION}
+                  label="Untitled view"
+                  icon={<span aria-hidden />}
+                  current
+                  onSelect={() => onSelect(NEW_VIEW_SELECTION)}
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -625,11 +656,30 @@ export function BucketRail({
           ) : null}
         </nav>
       </div>
+      {/* Pinned under the scrolling rows (MOD-140; round-1c frame 2 puts the
+          Notes rail's Archive and Trash at its bottom too). */}
+      <SidebarFooter
+        label="Archive and trash"
+        items={[
+          {
+            icon: Archive,
+            label: "Archived",
+            active: selection === ARCHIVED_SELECTION,
+            onSelect: () => onSelect(ARCHIVED_SELECTION),
+          },
+          {
+            icon: Trash2,
+            label: "Recently deleted",
+            active: selection === TRASH_SELECTION,
+            onSelect: () => onSelect(TRASH_SELECTION),
+          },
+        ]}
+      />
     </div>
   );
 }
 
-// ── the hairline and its ⋯ (REPLAN 20 A, 29a, 98) ────────────────────────────
+// ── the hairline and its ⋯ (REPLAN 20 A, 29a; MOD-140 moved 98's two out) ────
 
 const HIDEABLE_LABELS: Record<TasksSidebarHideable, string> = {
   focus: "Focus",
@@ -645,12 +695,7 @@ function SidebarHairline({
   onToggleHidden,
   onNewProject,
   onNewArea,
-  archivedCount,
-  trashCount,
-  onOpenArchived,
-  onOpenTrash,
-  archivedCurrent,
-  trashCurrent,
+  onNewView,
   wontDoCount,
   onOpenWontDo,
   wontDoCurrent,
@@ -666,12 +711,8 @@ function SidebarHairline({
   onToggleHidden: (row: TasksSidebarHideable) => void;
   onNewProject: () => void;
   onNewArea: () => void;
-  archivedCount: number;
-  trashCount: number;
-  onOpenArchived: () => void;
-  onOpenTrash: () => void;
-  archivedCurrent: boolean;
-  trashCurrent: boolean;
+  /** A new blank view (MOD-142). */
+  onNewView?: () => void;
   wontDoCount: number;
   onOpenWontDo: () => void;
   wontDoCurrent: boolean;
@@ -735,36 +776,37 @@ function SidebarHairline({
               {HIDEABLE_LABELS[row]}
             </DropdownMenuCheckboxItem>
           ))}
-          {canEdit ? (
+          {canEdit || onNewView ? (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={afterClose(onNewProject)}>New project</DropdownMenuItem>
-              {onNewFromTemplate ? (
-                <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
-                  New project from template…
-                </DropdownMenuItem>
+              {canEdit ? (
+                <>
+                  <DropdownMenuItem onSelect={afterClose(onNewProject)}>
+                    New project
+                  </DropdownMenuItem>
+                  {onNewFromTemplate ? (
+                    <DropdownMenuItem onSelect={afterClose(onNewFromTemplate)}>
+                      New project from template…
+                    </DropdownMenuItem>
+                  ) : null}
+                  <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
+                </>
               ) : null}
-              <DropdownMenuItem onSelect={afterClose(onNewArea)}>New area…</DropdownMenuItem>
-              {onImport ? (
+              {/* Anyone keeps views of their own (TV-U8); the Views header's +
+                  does the same once there's a view (MOD-142). */}
+              {onNewView ? (
+                <DropdownMenuItem onSelect={onNewView}>New view</DropdownMenuItem>
+              ) : null}
+              {canEdit && onImport ? (
                 // Opens a dialog: wait for the menu to close (gotchas/ui.md).
                 <DropdownMenuItem onSelect={afterClose(onImport)}>Import tasks…</DropdownMenuItem>
               ) : null}
             </>
           ) : null}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={onOpenArchived} data-current={archivedCurrent || undefined}>
-            Archived projects
-            {archivedCount > 0 ? (
-              <DropdownMenuShortcut>{archivedCount}</DropdownMenuShortcut>
-            ) : null}
-          </DropdownMenuItem>
           <DropdownMenuItem onSelect={onOpenWontDo} data-current={wontDoCurrent || undefined}>
             Won’t do
             {wontDoCount > 0 ? <DropdownMenuShortcut>{wontDoCount}</DropdownMenuShortcut> : null}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onOpenTrash} data-current={trashCurrent || undefined}>
-            Recently deleted
-            {trashCount > 0 ? <DropdownMenuShortcut>{trashCount}</DropdownMenuShortcut> : null}
           </DropdownMenuItem>
           {onOpenTemplates ? (
             <DropdownMenuItem
@@ -934,6 +976,7 @@ function SortableProject({
       }}
       // dnd-kit's own transform while sorting (no design property).
       style={{ transform: CSS.Transform.toString(transform), transition }}
+      data-slot="sortable-project"
       className={isDragging ? "relative z-10" : undefined}
       {...listeners}
     >

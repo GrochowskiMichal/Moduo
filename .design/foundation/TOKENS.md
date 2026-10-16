@@ -75,8 +75,16 @@ Density doesn't change the spacing scale. It changes the **per-instance dimensio
 | `--ctrl-h-lg` | 40px | 36px | 32px | Large buttons |
 | `--pad-x` | 16px | 14px | 12px | Primary horizontal padding |
 | `--pad-y` | 10px | 8px | 6px | Primary vertical padding |
-| `--pad-x-sm` | 12px | 10px | 8px | Rail / nested horizontal padding |
-| `--pad-y-sm` | 6px | 5px | 4px | Rail / nested vertical padding |
+| `--pad-x-sm` | 12px | 10px | 8px | Nested horizontal padding (cards, references) |
+| `--pad-y-sm` | 6px | 5px | 4px | Nested vertical padding |
+
+**The shell's panel frame never follows density** (MOD-121, 2026-10-15): density changes row and control heights, never a panel's padding. tokens.css §10:
+
+| Token | Value | Use for |
+| --- | --- | --- |
+| `--panel-pad` | 8px | A panel's edge → a fill at it (nav row, "Details ▾" chip). 8 = `--radius-xl` − `--radius-md`: concentric on every radius setting |
+| `--panel-inset` | 16px | A panel's edge → its text column (the centre's sides and foot) |
+| `--panel-title-top` | 12 / 10 / 8px (derived from `--row-h`) | The centre's top, so its title centres on the side panels' first row |
 
 Rows consume `--row-h` as a `min-height` (with a small fixed `py` as a multiline guard) so single-line rows track density exactly and wrapped content can still grow.
 
@@ -98,9 +106,9 @@ One root variable, four derived. The three user variants set all four derived va
 `--radius-full` stays for pills regardless of the variant.
 
 Default usage:
-- Buttons, inputs → `rounded-md` (8px soft)
-- Cards, panels → `rounded-lg` (12px soft)
-- Dialogs → `rounded-xl` (16px soft)
+- Buttons, inputs, rows → `rounded-md` (8px soft)
+- Cards and panels inside a shell panel → `rounded-lg` (12px soft)
+- The shell's three panels, dialogs → `rounded-xl` (16px soft; MOD-121)
 - Avatars, status dots → `rounded-full`
 
 ## Typography

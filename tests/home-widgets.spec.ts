@@ -202,9 +202,12 @@ test("the Team widget shows each person's load, and nothing hidden or per-person
     "Focus 2 · ~1h 30m · 1 in progress · 1 waiting · 1 due this week",
   );
   await expect(hana.locator("[data-team-load]")).toHaveText("Focus 1 · ~45m · 1 due this week");
-  // Me first; and no tracked time per person (Hana's 30m today is only hers, in Time).
+  // You first, as your name plus "(you)" (MOD-137); and no tracked time per
+  // person (Hana's 30m today is only hers, in Time).
   const people = page.locator("li[data-person]");
   await expect(people.first()).toHaveAttribute("data-person", lead.user.id);
+  await expect(hana).toContainText("(you)");
+  await expect(milo).not.toContainText("(you)");
   await expect(hana).not.toContainText("30m");
 
   // The time widget: your own tracked time this week.

@@ -52,7 +52,7 @@ describe("one caret-menu keyboard regime", () => {
     expect(state.closed).toBe(1);
   });
 
-  it("a closed or empty menu takes no key from the editor", () => {
+  it("a closed menu takes no key, and an empty one takes no arrow or Tab", () => {
     const closed = harness(3, false);
     for (const command of [
       KEY_ARROW_DOWN_COMMAND,
@@ -63,8 +63,16 @@ describe("one caret-menu keyboard regime", () => {
       expect(closed.editor.dispatchCommand(command, key())).toBe(false);
     }
     const empty = harness(0);
-    expect(empty.editor.dispatchCommand(KEY_ENTER_COMMAND, key())).toBe(false);
     expect(empty.editor.dispatchCommand(KEY_ARROW_DOWN_COMMAND, key())).toBe(false);
+    expect(empty.editor.dispatchCommand(KEY_TAB_COMMAND, key())).toBe(false);
+  });
+
+  it("↵ on a shown but empty menu closes it and goes no further (call #14)", () => {
+    // "Searching…" / "No matches": a host's ⏎ (capture's create) must not fire under it.
+    const empty = harness(0);
+    expect(empty.editor.dispatchCommand(KEY_ENTER_COMMAND, key())).toBe(true);
+    expect(empty.state.closed).toBe(1);
+    expect(empty.state.picked).toEqual([]);
   });
 
   it("stepMenuIndex wraps both ways", () => {

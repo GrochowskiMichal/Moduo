@@ -8,7 +8,14 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 const PEOPLE = {
-  u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  u1: {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   u2: { userId: "u2", name: "Mike", avatarUrl: null, isMe: false, canTakeTasks: true },
 } as const;
 
@@ -186,7 +193,15 @@ describe("Board v3 (TV-U11)", () => {
     renderBoard([task("a", { assigneeId: "u2" })], { boardGroupBy: "assignee" });
     expect(columnNames()).toEqual(["Mike"]);
     fireEvent.click(screen.getByRole("button", { name: "2 hidden · Show" }));
-    expect(columnNames()).toEqual(["Me", "Mike", "Unassigned"]);
+    expect(columnNames()).toEqual(["You", "Mike", "Unassigned"]);
+  });
+
+  it("your column reads You, and its buttons say you (MOD-137)", () => {
+    renderBoard([task("a", { assigneeId: "u1" })], { boardGroupBy: "assignee" });
+    expect(columnNames()).toContain("You");
+    expect(screen.getByRole("button", { name: "Add a task to you" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Your column options" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add a task to You" })).toBeNull();
   });
 
   it("lanes: one header per lane with cards, each folds (call 85)", () => {

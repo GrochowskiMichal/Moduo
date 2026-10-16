@@ -84,6 +84,7 @@ export function ListGroupHeader({
   section,
   extraAction,
   className,
+  self,
 }: {
   groupKey: string;
   label: string;
@@ -99,6 +100,8 @@ export function ListGroupHeader({
   /** Something the header always offers before its "+" (Upcoming's Earlier: "Move all…"). */
   extraAction?: ReactNode;
   className?: string;
+  /** The reader's own group ("You"): its "+" says "Add a task to you" (MOD-137). */
+  self?: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
   if (renaming && section) {
@@ -118,7 +121,7 @@ export function ListGroupHeader({
     addState.kind === "none" ? null : (
       <IconButton
         icon={Plus}
-        label={`Add a task to ${label || "this group"}`}
+        label={`Add a task to ${self ? "you" : label || "this group"}`}
         tooltip={addState.kind === "disabled" ? addState.reason : undefined}
         aria-description={addState.kind === "disabled" ? addState.reason : undefined}
         aria-disabled={addState.kind === "disabled" || undefined}

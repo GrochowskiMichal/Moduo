@@ -34,6 +34,26 @@ const draft = (over: Partial<CaptureDraft> = {}): CaptureDraft => ({
 afterEach(() => window.localStorage.clear());
 
 describe("the capture draft", () => {
+  it("keeps the description's @-mentioned people, each once, with the words the menu wrote (call #15)", () => {
+    const sam = { id: "u-sam", label: "Sam Ortiz" };
+    // Someone without a name is mentioned by their email: those are the words in the text.
+    const nameless = { id: "u-new", label: "new@example.com" };
+    saveDraft(
+      "u1",
+      "w1",
+      draft({ description: "Ask @Sam Ortiz and @new@example.com", mentions: [sam, sam, nameless] }),
+    );
+    expect(loadDraft("u1", "w1")?.mentions).toEqual([sam, nameless]);
+  });
+
+  it("reads an older draft's id-only mentions", () => {
+    window.localStorage.setItem(
+      "moduo:capture-draft:task:u1:w1",
+      JSON.stringify({ ...draft({ description: "Ask @Sam Ortiz" }), mentions: ["u-sam", 7, null] }),
+    );
+    expect(loadDraft("u1", "w1")?.mentions).toEqual([{ id: "u-sam", label: null }]);
+  });
+
   it("never keeps the status a group's + opened it with", () => {
     saveDraft("u1", "w1", draft({ fields: { ...EMPTY_FIELDS, status: "wont_do" } }));
     expect(loadDraft("u1", "w1")?.fields.status).toBeNull();

@@ -6,7 +6,13 @@ import { describe, expect, it } from "@rstest/core";
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "../../lib/entity-links";
 import { entityRefKey, rollupSections } from "../spine/rollup";
 import { relativeTimeAgo } from "../spine/snippet-format";
-import { backlinkCount, META_CHIP_CAP, shapeBacklinks, shapeNoteMetaLine } from "./note-meta";
+import {
+  backlinkCount,
+  META_CHIP_CAP,
+  noteEditorName,
+  shapeBacklinks,
+  shapeNoteMetaLine,
+} from "./note-meta";
 
 const NOTE: EntityRef = { type: "note", id: "n0" };
 const NOW = new Date("2026-10-13T12:00:00Z");
@@ -129,6 +135,22 @@ describe("meta line (AC6)", () => {
       "Edited 2 hours ago by Maciej",
     );
     expect(shapeNoteMetaLine({ ...base, editedBy: "  " }).edited).toBe("Edited 2 hours ago");
+  });
+
+  it('names your own edit "by you", never by your name (MOD-137)', () => {
+    const members = [
+      { userId: "u-me", displayName: "Maciej Grzywacz" },
+      { userId: "u-mike", displayName: " Mike " },
+      { userId: "u-anon", displayName: null },
+    ];
+    expect(noteEditorName("u-me", "u-me", members)).toBe("you");
+    expect(noteEditorName("u-mike", "u-me", members)).toBe("Mike");
+    expect(noteEditorName("u-anon", "u-me", members)).toBeNull();
+    expect(noteEditorName("u-gone", "u-me", members)).toBeNull();
+    const base = { sections: [], updatedAt: "2026-10-13T10:00:00Z", now: NOW };
+    expect(
+      shapeNoteMetaLine({ ...base, editedBy: noteEditorName("u-me", "u-me", members) }).edited,
+    ).toBe("Edited 2 hours ago by you");
   });
 
   it("prefers the person's own edit time when it is known (NR-6)", () => {

@@ -1,7 +1,7 @@
 // TV-U16 · The project overview's numbers and lists (AC6.6 "Done this month ·
 // 14 · 22h", AC6.4's client rollup, AC5.6's departure words): what's next,
 // sections, who's on it, completions in a month in the reader's zone, waiting,
-// what happened lately, and what someone leaving hands on.
+// what happened recently, and what someone leaving hands on.
 
 import { describe, expect, it } from "@rstest/core";
 
@@ -19,6 +19,7 @@ import {
   sectionProgress,
   waitingIn,
 } from "./project-overview";
+import { reportRange } from "./time-report";
 
 function task(id: string, over: Partial<Task> = {}): Task {
   return {
@@ -158,6 +159,20 @@ describe("doneInRange (Done this month)", () => {
     expect(doneInRange(tasks, completions, "p1", month, "UTC")).toBe(1);
     expect(doneInRange(tasks, completions, "p1", month, "America/New_York")).toBe(0);
     expect(dayIn("2026-10-01T03:30:00.000Z", "America/New_York")).toBe("2026-09-30");
+  });
+
+  it("counts the saved zone's month, the one the time report reads (MOD-110)", () => {
+    const tasks = [task("a"), task("b")];
+    // 23:30 UTC on Oct 31: Nov 1 in Auckland, Oct 31 in Los Angeles.
+    const now = new Date("2026-10-31T23:45:00.000Z");
+    const completions = [
+      completion("a", "2026-10-31T23:30:00.000Z"),
+      completion("b", "2026-10-15T12:00:00.000Z"),
+    ];
+    const doneIn = (zone: string) =>
+      doneInRange(tasks, completions, "p1", reportRange("this_month", now, 1, null, zone), zone);
+    expect(doneIn("Pacific/Auckland")).toBe(1);
+    expect(doneIn("America/Los_Angeles")).toBe(2);
   });
 
   it("counts a done task with no completion rows by when it was finished", () => {

@@ -7,7 +7,14 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const PEOPLE = {
-  u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  u1: {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   u2: { userId: "u2", name: "Mike Grochowski", avatarUrl: null, isMe: false, canTakeTasks: true },
 } as const;
 
@@ -25,7 +32,7 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
   useCommentPeople: () => ({
     currentUserId: "u1",
     mentionable: [],
-    names: ["Me", "Mike"],
+    names: ["Alex Rivera", "Mike"],
     nameOf: () => null,
     personOf: () => null,
   }),

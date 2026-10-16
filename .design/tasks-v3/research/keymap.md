@@ -89,6 +89,7 @@ Sources: `src/lib/shortcuts.ts`, `src/features/tasks/ui/list-keys.ts`, tasks-v2 
 | @ · # · / | Mention/assign · tag · command | D 33, 33a | |
 | ⏎ · ⌘⏎ | Create · create more | E / D 91 | |
 | ⇧⏎ | To description | P | Research had ↵ |
+| ⏎ · ⇧⏎ (in the description) | Create · new line | D call 14 (MOD-117) | An open `@ # /` menu keeps ⏎; ⌘⏎ creates more |
 | Tab | Accept suggested link | D 90 | ⌫ on chip removes |
 | Esc | Menu → undo recognition → close, keep draft | research §5 | |
 

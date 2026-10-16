@@ -14,9 +14,10 @@ import {
 /**
  * Tasks v3 TV-U8 — saved views on the real app, against the local stack
  * (AC11.1; REPLAN 29b–29e, 29d): Save as view… from All, the view in the
- * sidebar's Views group, a Display change shows "Unsaved changes" and Save
- * keeps it, the view reopens as saved, Pin puts it in Pinned, a `?view=` link
- * opens it, and Delete has Undo. Run as the teammate, so the dev's sidebar
+ * sidebar's Views group, a Display change shows the toolbar's Save (MOD-142)
+ * and Save keeps it, the view reopens as saved, the Views header's + makes a
+ * new view named on Save, Pin puts it in Pinned, a `?view=` link opens it, and
+ * Delete has Undo. Run as the teammate, so the dev's sidebar
  * stays as it was. Run it serially, like the other specs:
  *   bun run local:up && bun run env:local
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8136
@@ -97,10 +98,10 @@ test("save All as a view, change its Display, save, reopen it as saved", async (
   await expect(sidebar(page).getByText("Views", { exact: true })).toBeVisible();
   await expect(viewRow(page, name)).toBeVisible();
 
-  // A Display change is unsaved until Save.
+  // A Display change is unsaved until Save: a clear Save in the toolbar (MOD-142).
   await page.getByRole("radio", { name: "Board view" }).click();
   const changes = page.getByTestId("view-changes");
-  await expect(changes).toContainText("Unsaved changes");
+  await expect(changes.getByRole("button", { name: "Save", exact: true })).toBeVisible();
   await changes.getByRole("button", { name: "Save", exact: true }).click();
   await expect(changes).toBeHidden();
 
@@ -116,11 +117,39 @@ test("save All as a view, change its Display, save, reopen it as saved", async (
     "true",
   );
 
-  // Revert puts back what it saved.
+  // Revert (in Save's ▾) puts back what it saved.
   await page.getByRole("radio", { name: "List view" }).click();
   await expect(changes).toBeVisible();
-  await changes.getByRole("button", { name: "Revert" }).click();
+  await changes.getByRole("button", { name: "More ways to save" }).click();
+  await page.getByRole("menuitem", { name: "Revert changes" }).click();
   await expect(changes).toBeHidden();
+  await expect(page.getByRole("radio", { name: "Board view" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+});
+
+test("the Views header's + opens a new blank view, named when it's saved (MOD-142)", async ({
+  page,
+}) => {
+  const name = `Fresh ${tag}`;
+  await openTasks(page);
+  // The first test left a view, so the Views header is there.
+  await sidebar(page).getByText("Views", { exact: true }).hover();
+  await sidebar(page).getByRole("button", { name: "New view" }).click();
+  await expect(page.getByRole("heading", { name: "Untitled view" })).toBeVisible();
+  await expect(viewRow(page, "Untitled view")).toHaveAttribute("aria-current", "page");
+
+  // Set it up, then name it on Save.
+  await page.getByRole("radio", { name: "Board view" }).click();
+  await page.getByTestId("view-changes").getByRole("button", { name: "Save view…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Name this view" });
+  await dialog.getByRole("textbox", { name: "View name" }).fill(name);
+  await dialog.getByRole("button", { name: "Save view" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("heading", { name })).toBeVisible();
+  await expect(viewRow(page, name)).toBeVisible();
+  await expect(viewRow(page, "Untitled view")).toHaveCount(0);
   await expect(page.getByRole("radio", { name: "Board view" })).toHaveAttribute(
     "aria-checked",
     "true",

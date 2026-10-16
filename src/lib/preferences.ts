@@ -16,9 +16,9 @@
 // Only `motion` has a DOM surface (the `data-motion` attribute, layered over the OS
 // prefers-reduced-motion — see tokens.css); the rest are read by their consumers.
 
+import { normalizeTasksRole, type TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
-import { isTasksRole, type TasksRole } from "../features/tasks/onboarding";
 import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
@@ -159,11 +159,14 @@ export function isNotificationEnabled(
 export const TASKS_SIDEBAR_HIDEABLE = ["focus", "upcoming", "mine", "all"] as const;
 export type TasksSidebarHideable = (typeof TASKS_SIDEBAR_HIDEABLE)[number];
 
-/** A person's Tasks sidebar (TV-U6): the rows they hid, and what they pinned
- *  in each workspace (project ids, in pin order; REPLAN 29b). */
+/** A person's Tasks sidebar (TV-U6): the rows they hid, what they pinned in
+ *  each workspace (project ids, in pin order; REPLAN 29b), and their own
+ *  order of each workspace's projects (project ids, as they dragged them;
+ *  MOD-38: one person's order, never anyone else's). */
 export interface TasksSidebarPrefs {
   hidden: TasksSidebarHideable[];
   pinned: Record<string, string[]>;
+  projectOrder: Record<string, string[]>;
 }
 
 /**
@@ -252,7 +255,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   notifications: { ...DEFAULT_NOTIFICATION_PREFS },
   confirmBeforeQuit: false,
   keepInMenuBar: true,
-  tasksSidebar: { hidden: [], pinned: {} },
+  tasksSidebar: { hidden: [], pinned: {}, projectOrder: {} },
   tasksInbox: { snoozed: {} },
   tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
   tasksFolds: {},
@@ -293,7 +296,24 @@ const notificationPrefsSchema = z
     }),
   )
   .catch({ ...DEFAULT_NOTIFICATION_PREFS });
-// A bad entry drops alone; a workspace keeps at most 50 pins.
+/** Workspace → distinct non-empty ids, in their order; a bad entry drops alone. */
+const idListsByWorkspace = (max: number) =>
+  z
+    .record(z.string(), z.unknown())
+    .catch({})
+    .transform((byWs) => {
+      const out: Record<string, string[]> = {};
+      for (const [ws, ids] of Object.entries(byWs)) {
+        if (!Array.isArray(ids)) continue;
+        const clean = [
+          ...new Set(ids.filter((id): id is string => typeof id === "string" && id !== "")),
+        ].slice(0, max);
+        if (clean.length > 0) out[ws] = clean;
+      }
+      return out;
+    });
+// A bad entry drops alone; a workspace keeps at most 50 pins and the order
+// of 500 projects (MOD-38).
 const tasksSidebarSchema = z
   .object({
     hidden: z
@@ -306,22 +326,10 @@ const tasksSidebarSchema = z
           ),
         ),
       ]),
-    pinned: z
-      .record(z.string(), z.unknown())
-      .catch({})
-      .transform((byWs) => {
-        const out: Record<string, string[]> = {};
-        for (const [ws, ids] of Object.entries(byWs)) {
-          if (!Array.isArray(ids)) continue;
-          const clean = [
-            ...new Set(ids.filter((id): id is string => typeof id === "string" && id !== "")),
-          ].slice(0, 50);
-          if (clean.length > 0) out[ws] = clean;
-        }
-        return out;
-      }),
+    pinned: idListsByWorkspace(50),
+    projectOrder: idListsByWorkspace(500),
   })
-  .catch({ hidden: [], pinned: {} });
+  .catch({ hidden: [], pinned: {}, projectOrder: {} });
 // A bad entry drops alone; a workspace keeps at most 500 snoozed tasks.
 const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
 const tasksInboxSchema = z
@@ -373,7 +381,7 @@ const workspaceStampsSchema = z
   });
 const tasksOnboardingSchema = z
   .object({
-    role: z.unknown().transform((v) => (isTasksRole(v) ? v : null)),
+    role: z.unknown().transform(normalizeTasksRole),
     roleAt: stampSchema,
     welcomeSeenAt: stampSchema,
     seeded: workspaceStampsSchema,

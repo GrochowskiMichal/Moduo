@@ -3,6 +3,7 @@
 @import "tailwindcss/utilities.css";
 @import "./styles/tokens.css";
 @import "./styles/notes-prose.css";
+@import "./styles/description-prose.css";
 
 /* Body + display fonts.
    Token strings reference "Geist" and "Fraunces" (see tokens.css §9), but the
@@ -520,6 +521,17 @@ body,
    does the scrolling, or the pane shows a dead strip beside the real bar. */
 .pane-scroll {
   scrollbar-gutter: stable;
+}
+
+/* Except in a side panel (MOD-121 follow-up). With classic bars the reserved
+   strip put every fill and text line 11 px further from the panel's right
+   edge than its left, even when nothing scrolled (the left panel almost never
+   does). There the scroller keeps no gutter, so the panel's padding is the
+   same on both sides; the trade is that a view which starts to overflow (a
+   long task's details) narrows by the bar's width at that moment. Unlayered,
+   so a utility can't give a side panel's scroller its gutter back. */
+[data-rail-mode] .pane-scroll {
+  scrollbar-gutter: auto;
 }
 
 /* ═══ A menu that scrolls says so (DS-6 follow-up, TV-U10) ═══

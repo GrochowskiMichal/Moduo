@@ -1,6 +1,6 @@
 // Agents and imports in the app (Tasks v3 TV-D16, specs/tasks-v3.md §12, §15):
 // the reads and ops behind an agent session's line on a task (its hand-back
-// summary, "Post as comment", clearing it), "Show my agent work to teammates",
+// summary, "Post as comment", clearing it), "Show your agent work to teammates",
 // and the person's import runs (the data export; TV-U18's "Undo this import").
 // Sessions themselves reach the app through the shared store
 // (`agent_sessions`, RLS); these are what the store doesn't carry.
@@ -177,7 +177,7 @@ export function createTasksAgents(
       return agentSessionRowToModel(data);
     },
 
-    /** "Show my agent work to teammates" (off by default). */
+    /** "Show your agent work to teammates" (off by default). */
     async getAgentWork(): Promise<boolean> {
       const { data, error } = await client.rpc("user_agent_work");
       if (error) {

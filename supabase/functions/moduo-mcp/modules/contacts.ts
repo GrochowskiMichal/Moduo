@@ -302,19 +302,19 @@ export const contactsConnectorModule: ConnectorModule = {
           contact_type: { type: "string", description: "contact | company." },
           contact_id: { type: "string", description: "The contact/company uuid." },
           target_type: { type: "string", description: "Other entity type (task|note|company|…)." },
-          target_id: { type: "string", description: "Other entity uuid." },
+          target_id: { type: "string", description: "Other entity uuid (or a task's handle, e.g. MOD-142)." },
           relation_kind: { type: "string", enum: RELATION_KINDS, description: "Relation kind (default references)." },
         },
         required: ["contact_type", "contact_id", "target_type", "target_id"],
       },
       handler: async (args, ctx) => {
-        await assertReach(ctx, str(args, "contact_type"), str(args, "contact_id"));
-        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
+        const contactId = await assertReach(ctx, str(args, "contact_type"), str(args, "contact_id"));
+        const targetId = await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "contacts_op_link", {
           p_contact_type: str(args, "contact_type"),
-          p_contact_id: str(args, "contact_id"),
+          p_contact_id: contactId,
           p_target_type: str(args, "target_type"),
-          p_target_id: str(args, "target_id"),
+          p_target_id: targetId,
           p_relation_kind: str(args, "relation_kind", false) || "references",
           p_origin: "manual",
         });

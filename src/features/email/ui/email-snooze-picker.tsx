@@ -18,7 +18,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (at: Date) => void;
-  /** Header copy — "Snooze until" (default) or e.g. "Remind me if no reply". */
+  /** Header copy — "Snooze until" (default) or e.g. "Follow up if no reply". */
   title?: string;
   /** The custom-time confirm button label. */
   confirmLabel?: string;

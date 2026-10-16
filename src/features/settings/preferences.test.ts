@@ -44,7 +44,7 @@ describe("DEFAULT_PREFERENCES", () => {
       },
       confirmBeforeQuit: false,
       keepInMenuBar: true,
-      tasksSidebar: { hidden: [], pinned: {} },
+      tasksSidebar: { hidden: [], pinned: {}, projectOrder: {} },
       tasksInbox: { snoozed: {} },
       tasksOnboarding: {
         role: null,
@@ -99,7 +99,7 @@ describe("sanitizePreferences", () => {
       },
       confirmBeforeQuit: true,
       keepInMenuBar: true,
-      tasksSidebar: { hidden: [], pinned: {} },
+      tasksSidebar: { hidden: [], pinned: {}, projectOrder: {} },
       tasksInbox: { snoozed: {} },
       tasksOnboarding: {
         role: null,
@@ -169,11 +169,31 @@ describe("sanitizePreferences", () => {
           pinned: { ws1: ["p1", "p2", "p1", "", 7], ws2: "nope", ws3: [] },
         },
       }).tasksSidebar,
-    ).toEqual({ hidden: ["focus", "all"], pinned: { ws1: ["p1", "p2"] } });
+    ).toEqual({ hidden: ["focus", "all"], pinned: { ws1: ["p1", "p2"] }, projectOrder: {} });
     expect(sanitizePreferences({ tasksSidebar: "nope" }).tasksSidebar).toEqual({
       hidden: [],
       pinned: {},
+      projectOrder: {},
     });
+  });
+
+  it("keeps each workspace's own project order, dropping bad entries (MOD-38)", () => {
+    const many = Array.from({ length: 600 }, (_, i) => `p${i}`);
+    const { projectOrder } = sanitizePreferences({
+      tasksSidebar: {
+        hidden: [],
+        pinned: {},
+        projectOrder: { ws1: ["p2", "p1", "p2", "", 4], ws2: "nope", ws3: [], ws4: many },
+      },
+    }).tasksSidebar;
+    expect(projectOrder.ws1).toEqual(["p2", "p1"]);
+    expect(projectOrder.ws2).toBeUndefined();
+    expect(projectOrder.ws3).toBeUndefined();
+    expect(projectOrder.ws4).toHaveLength(500);
+    // A copy from before MOD-38 has none.
+    expect(
+      sanitizePreferences({ tasksSidebar: { hidden: ["all"], pinned: {} } }).tasksSidebar,
+    ).toEqual({ hidden: ["all"], pinned: {}, projectOrder: {} });
   });
 
   it("keeps snoozed Inbox tasks, dropping bad entries (TV-U15)", () => {

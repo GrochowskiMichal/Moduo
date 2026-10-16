@@ -1,6 +1,7 @@
 // One keyboard regime for every caret menu in a Lexical surface (NR-4, AC7):
 // the `/` commands, the `@` mentions and the Notes `[[` note picker.
-// ↑ / ↓ move the highlight (wrapping), ↵ or Tab picks, Esc closes and keeps the
+// ↑ / ↓ move the highlight (wrapping), ↵ or Tab picks (↵ on an empty menu just
+// closes it), Esc closes and keeps the
 // typed text, and a pointer-down anywhere outside the menu closes it. The menu
 // never takes focus: the caret stays in the text, so typing keeps filtering.
 // Keys are taken from the editor only while a menu is open with something in
@@ -52,7 +53,20 @@ export function registerMenuKeys(editor: LexicalEditor, menu: MenuKeyHandlers): 
   return mergeRegister(
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow(1), COMMAND_PRIORITY_HIGH),
     editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow(-1), COMMAND_PRIORITY_HIGH),
-    editor.registerCommand(KEY_ENTER_COMMAND, pick, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        if (pick(event)) return true;
+        // ⏎ never goes past a menu that shows: with nothing to pick yet
+        // ("Searching…", "No matches") it closes the menu and does nothing
+        // else, so a host's ⏎ (capture's create, call #14) can't fire under it.
+        if (!menu.isOpen()) return false;
+        event?.preventDefault();
+        menu.close();
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    ),
     editor.registerCommand(KEY_TAB_COMMAND, pick, COMMAND_PRIORITY_HIGH),
     editor.registerCommand(
       KEY_ESCAPE_COMMAND,

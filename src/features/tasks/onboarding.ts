@@ -6,23 +6,8 @@
 // from the sidebar's ⋯ or the top bar's Help. The state lives in the synced
 // preferences (`tasksOnboarding`), so it follows the person.
 
-import type { StarterTemplate } from "@contracts/vocabularies";
+import type { StarterTemplate, TasksRole } from "@contracts/vocabularies";
 import type { RowPreset } from "./row-layout";
-
-/** The answers to "What will you run in Moduo?" (REPLAN §3's role table). */
-export const TASKS_ROLES = [
-  "student",
-  "developer",
-  "pm",
-  "founder",
-  "client_work",
-  "creator",
-] as const;
-export type TasksRole = (typeof TASKS_ROLES)[number];
-
-export function isTasksRole(value: unknown): value is TasksRole {
-  return typeof value === "string" && (TASKS_ROLES as readonly string[]).includes(value);
-}
 
 /** Where Tasks first opens for a role: a sidebar place, or the first project's Board. */
 export type FirstView =

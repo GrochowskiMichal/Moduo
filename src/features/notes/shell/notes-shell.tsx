@@ -33,6 +33,7 @@ import { useNotesExperience } from "../experience";
 import { useNoteLinkDrop } from "../hooks/use-note-link-drop";
 import { useNoteRealtime } from "../hooks/use-note-realtime";
 import { useTrashWithTaskDetach } from "../hooks/use-trash-with-task-detach";
+import { noteEditorName } from "../note-meta";
 import { shapeNoteSearchResults } from "../search";
 import { displayTitle } from "../title";
 import { NoteImportDialog } from "../ui/note-import-dialog";
@@ -318,9 +319,7 @@ export function NotesShell() {
               onRestore={module.restoreNote}
               onOpenEntity={openEntity}
               onOpenDetail={() => shell.showPanelVariant("detail")}
-              memberName={(id) =>
-                workspace.members.find((m) => m.userId === id)?.displayName?.trim() || null
-              }
+              memberName={(id) => noteEditorName(id, userId, workspace.members)}
             />
           }
           right={

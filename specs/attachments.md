@@ -56,7 +56,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
   - Images longer than **4096 px** on the long edge are scaled down.
   - Phone photos have location/camera data removed (with the orientation applied).
   - **HEIC becomes JPEG** wherever the app can read it (the desktop app and Safari), so everyone can open it. Elsewhere the original is kept as a file without a preview.
-  - A small **preview** is made at upload for thumbnails; the original loads only in the viewer.
+  - A small **preview** is made at upload for thumbnails; the original loads only in the viewer. An image already that small (a JPEG, PNG or WebP at most 1280 px on its long edge and 100 KB) is stored once: it is its own preview, and tiles show it (MOD-132, 2026-10-15).
 - **Upload errors** — mirrors, not walls. Facts with numbers and one way forward, never red, never a blocking dialog:
   1. **Too big for the plan.**
      - Checked before uploading.
@@ -124,7 +124,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 **AT-2 — Upload pipeline + panel**
 - **AT2-1** — Paste/drop into the detail panel or description, or "+", uploads with visible progress. Big files resume after interruptions.
 - **AT2-2** — The panel shows the strip under the description and the viewer (←/→, Download, Copy, Delete).
-- **AT2-3** — Images get previews. Originals stay pixel-exact except: >4096 px is scaled; photo EXIF/GPS is stripped with orientation applied; HEIC becomes JPEG where the browser can decode it (desktop + Safari); elsewhere the original is kept with a file tile.
+- **AT2-3** — Images get previews, except one already small, which is its own (MOD-132). Originals stay pixel-exact except: >4096 px is scaled; photo EXIF/GPS is stripped with orientation applied; HEIC becomes JPEG where the browser can decode it (desktop + Safari); elsewhere the original is kept with a file tile.
 - **AT2-4** — Every error state shows its message and action (too big · almost full · full · failed · offline). *(Full's "Free up space" arrives with Settings → Storage in AT-3; until then full shows Upgrade for the owner and retries by itself.)*
 - **AT2-5** — Files dragged from Finder reach the app on desktop (`dragDropEnabled: false`). The Notes/Contacts import drop zones work on desktop again.
 - **AT2-6** — Pending uploads survive restarts and retry by themselves. "Reset local cache" counts them.
@@ -187,6 +187,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
 7. **Client pipeline** (`src/lib/uploads/`, shared):
    - **Decode:** `createImageBitmap`, or `<img>` for HEIC on WebKit.
    - **Scale:** to 4096 px for originals; 1280 px for previews.
+   - **No preview for a small image** (MOD-132): a final original (after the rules below) that is a JPEG, PNG or WebP, at most 1280 px on its long edge and at most 100 KB gets none (`originalIsItsOwnPreview`, `SELF_PREVIEW_MAX_BYTES`). Readers use `thumbnailPath` (`features/attachments/files.ts`): the preview, else that small original, signed for the preview's hour; any other image without a preview (HEIC kept as HEIC, a preview that never uploaded) stays a file tile. A GIF, an animated PNG (`acTL`) and an animated WebP (`ANIM`) keep their still preview (`isAnimatedImage`), so tiles never play.
    - **Encode:**
      - previews → WebP only where `toBlob('image/webp')` really returns WebP (Chromium; Safari/WKWebView silently return PNG);
      - otherwise PNG when the image has alpha, else JPEG q0.8.
@@ -199,7 +200,7 @@ The storage layer is polymorphic (`entity_type`), so Notes, comments and Chat ca
    - Joins the "Reset local cache" guard (`countPending…`).
 9. **Desktop drops** — `"dragDropEnabled": false` on the main window. HTML5 drops then deliver `File` objects on desktop, the same as web, and the dead Notes/Contacts import drop zones come back. Paths aren't needed because bytes are queued in IndexedDB. *Rejected: native `onDragDropEvent` with path copying into `app_data_dir` — a second code path and the app's first Tauri event subscription.*
 10. **Lexical** — the description editor registers a `DRAG_DROP_PASTE` handler that hands files to the attachments service (no image nodes; attachments-only).
-11. **Signed URLs** — previews 1 h, originals 10 min (viewer/download), MCP 5 min. Long `Cache-Control` on immutable objects.
+11. **Signed URLs** — previews 1 h (a small image's original standing in for its preview too, MOD-132), originals 10 min (viewer/download), MCP 5 min. Long `Cache-Control` on immutable objects.
 12. **MCP** — `tasks_attachments_list(task_id)` (read-only), args in `_shared/contracts/mcp-tool-args.ts`, docs updated.
 13. **Live counts** — the `attachments` table joins the Realtime publication (tasks-v2 #10) so 📎 counts update live.
 

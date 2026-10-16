@@ -41,9 +41,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
  *
  * - `FilterMenu`: the "+ Filter" popover. Pick a dimension, then its values;
  *   typing on the first step also lists matching values from every dimension,
- *   so "me" jumps straight to "Assignee › Me".
+ *   so "me" jumps straight to "Assignee › Alex Rivera (you)".
  * - `FilterChip`: one active condition, read as a sentence
- *   ("Assignee · is · Me ×"). The operator and the value are each clickable.
+ *   ("Assignee · is · You ×", an option's `chipLabel` over its `label`). The
+ *   operator and the value are each clickable.
  * - `FilterBar`: the chip row, "+ Filter", and "23 of 76 · Clear".
  * - `FilterButton`: the toolbar's "Filter" trigger with a count badge.
  *

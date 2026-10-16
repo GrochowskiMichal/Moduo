@@ -547,7 +547,7 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
                 <span className="min-w-0 flex-1 truncate">
                   {p.name}
                   {p.userId === userId ? (
-                    <span className="text-muted-foreground"> · You</span>
+                    <span className="text-muted-foreground"> (you)</span>
                   ) : null}
                 </span>
                 {p.userId === userId ? (

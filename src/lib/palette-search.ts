@@ -33,6 +33,17 @@ const GROUP_DEFS: ReadonlyArray<{ key: string; heading: string; types: readonly 
 export const PALETTE_ENTITY_TYPES: string[] = GROUP_DEFS.flatMap((g) => [...g.types]);
 
 /**
+ * The task a query names by its ID ("mod 99", MOD-144) first, then the
+ * registry's results without it. The registry matches a handle only as typed
+ * with its hyphen, and by its start ("MOD-9" finds MOD-90 too), so the exact
+ * task leads.
+ */
+export function withHandleHit(records: EntityRecord[], hit: EntityRecord | null): EntityRecord[] {
+  if (!hit) return records;
+  return [hit, ...records.filter((r) => !(r.type === hit.type && r.id === hit.id))];
+}
+
+/**
  * Fold a flat search result list into ordered, non-empty groups. Within-group
  * order is preserved from the input (label-sorted by the runtime). Types outside
  * {@link PALETTE_ENTITY_TYPES} are dropped.

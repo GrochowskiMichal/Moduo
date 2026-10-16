@@ -12,9 +12,9 @@
 
 ## After the release (runbook §TX-7, each step with Maciej's OK)
 
-- [ ] **Do:** step 1, deploy `email-worker` from `maciej` → **Expect:** a new version; `bun run functions:reconcile` clean.
-- [ ] **Do:** step 2, apply `20261015153935_tx7_workspace_emails.sql`, run its three checks → **Expect:** triggers `perm_invites_validate` + `workspace_invites_enqueue_email`, `null`, `true`.
-- [ ] **Do:** step 3, `supabase functions delete send-workspace-invite`, then the curl → **Expect:** `404`; reconcile clean. (AC39)
+- [x] **Do:** step 1, deploy `email-worker` from `maciej` → **Expect:** a new version; `bun run functions:reconcile` clean. _(2026-10-16: v5)_
+- [x] **Do:** step 2, apply `20261015153935_tx7_workspace_emails.sql`, run its three checks → **Expect:** triggers `perm_invites_validate` + `workspace_invites_enqueue_email`, `null`, `true`.
+- [x] **Do:** step 3, `supabase functions delete send-workspace-invite`, then the curl → **Expect:** `404`; reconcile clean. (AC39)
 - [ ] **Do:** in Settings → Members and access, invite a throwaway inbox you can read → **Expect:** toast "Invite sent to …", the copy link still shows; within a minute "<you> invited you to <workspace>" from "<you> via Moduo", Reply goes to you, role and "Works until" rows, "Accept invite" opens `app.moduo.app/join?invite=…`. _(web; Gmail + Apple Mail, light/dark)_ (AC34)
 - [ ] **Do:** open that link in a private window, sign in with the throwaway address and its code → **Expect:** straight to the join card, Accept → in the workspace, no onboarding. _(web, then the Mac app)_ (AC36)
 - [ ] **Do:** open the same kind of link while signed in as yourself → **Expect:** "This invite is for t•••@…. Sign in with that address to join." with Sign out. _(web)_ (AC35)

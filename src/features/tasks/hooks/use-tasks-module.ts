@@ -98,7 +98,6 @@ import {
   areaMoveAfter,
   projectDeletePlan,
   projectDeleteSummary,
-  projectDropPatch,
   projectEndPosition,
   projectOpenWork,
   storedBucketColor,
@@ -2900,30 +2899,17 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     [allBuckets, editProject],
   );
 
-  /** Move a project into an area (null: none), last in it (TV-U6). */
+  /** Move a project into an area (null: none), last in it (TV-U6). Answers
+   *  whether it's there (a refused move puts it back; MOD-38's drop asks). */
   const moveBucketToArea = useCallback(
-    (id: string, areaId: string | null) => {
+    (id: string, areaId: string | null): Promise<boolean> => {
       const existing = allBuckets.find((b) => b.id === id);
-      if (!existing || (existing.areaId ?? null) === areaId) return;
+      if (!existing) return Promise.resolve(false);
+      if ((existing.areaId ?? null) === areaId) return Promise.resolve(true);
       const position = projectEndPosition(allBuckets);
-      void editProject(id, { areaId, position }, { areaId, position });
+      return editProject(id, { areaId, position }, { areaId, position });
     },
     [allBuckets, editProject],
-  );
-
-  /** Drop a dragged project on another one (TV-U6): it takes that place, and
-   *  that project's area. */
-  const moveBucket = useCallback(
-    (activeId: string, overId: string) => {
-      const patch = projectDropPatch(buckets, areas, activeId, overId);
-      if (!patch) return;
-      void editProject(
-        activeId,
-        { areaId: patch.areaId, position: patch.position },
-        { areaId: patch.areaId, position: patch.position },
-      );
-    },
-    [buckets, areas, editProject],
   );
 
   /** Bring an archived project back (TV-U6). Its tasks aren't re-queued. */
@@ -3929,7 +3915,6 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     deleteBucket,
     setBucketGroup,
     setBucketColor,
-    moveBucket,
     moveBucketToArea,
     /** Archived projects (TV-U6), position-sorted, and their tasks. */
     archivedBuckets,
