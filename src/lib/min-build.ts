@@ -91,14 +91,11 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "booking_google_connected",
   "calendar_busy_blocks",
   "chat_caps_get",
-<<<<<<< HEAD
-  // CV-9: a conversation's Files view.
-  "chat_files",
-=======
   // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
   "chat_conversations_for_item",
+  // CV-9: a conversation's Files view.
+  "chat_files",
   "chat_message_refs",
->>>>>>> origin/t/maciej/chat-v2-build
   // CV-3: the chat store's access check and its people.
   "chat_people",
   "chat_recently_deleted",

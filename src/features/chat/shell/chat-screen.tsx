@@ -989,38 +989,6 @@ export function ChatScreen({
             replyToFor={(m) =>
               mayAttach(m, channel, chainRights) ? () => setAttachFor(m) : undefined
             }
-<<<<<<< HEAD
-            if (streamRef.current?.jumpTo(m.id)) return;
-            void store?.openAt(m.channelId, m.id).then((at) => {
-              if (!at) toast("That message isn't available.");
-            });
-          }}
-          wrapUpFor={(m) =>
-            !m.parentId && m.replyCount > 0 && !m.wrappedAt && canWrapUp(m)
-              ? () => askWrapUp(m.id)
-              : undefined
-          }
-          replyToFor={(m) =>
-            mayAttach(m, channel, chainRights) ? () => setAttachFor(m) : undefined
-          }
-          onRetry={(m) => store?.retry(m.id)}
-          onDiscard={(m) => store?.discard(m.id)}
-          onPersonClick={openPerson}
-          personPreview={(id) => (
-            <PersonCard
-              compact
-              userId={id}
-              person={personOf(id)}
-              self={id === selfId}
-              online={id === selfId || online(id)}
-              canMessage={canStart}
-              onMessage={(uid) => openDmWith([uid])}
-            />
-          )}
-          onReturnToComposer={returnToComposer}
-          renderFiles={renderFiles}
-        />
-=======
             onRetry={(m) => store?.retry(m.id)}
             onDiscard={(m) => store?.discard(m.id)}
             onPersonClick={openPerson}
@@ -1036,9 +1004,9 @@ export function ChatScreen({
               />
             )}
             onReturnToComposer={returnToComposer}
+            renderFiles={renderFiles}
           />
         </MadeFromScope>
->>>>>>> origin/t/maciej/chat-v2-build
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
           {managersPending ? null : line ? (

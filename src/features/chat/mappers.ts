@@ -10,11 +10,8 @@ import {
 } from "@contracts/vocabularies";
 import type {
   ChatChannel,
-<<<<<<< HEAD
-  ChatFile,
-=======
   ChatDeletedChannel,
->>>>>>> origin/t/maciej/chat-v2-build
+  ChatFile,
   ChatHistoryEntry,
   ChatMember,
   ChatMessage,
