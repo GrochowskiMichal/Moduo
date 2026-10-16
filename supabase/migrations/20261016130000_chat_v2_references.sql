@@ -1,7 +1,7 @@
 -- Chat v2 · CV-10 Links in messages and "make a task" (specs/chat-v2.md §8;
 -- CH10, CH11; §Assumptions #5, #6; .design/chat-v2/research/round-3-database.md
 -- §2.21, §2.25 d). The stamp is provisional: re-cut on the day it applies; it
--- must stay after …_chat_v2_reactions (CV-7c), whose chat_op_send/_edit bodies
+-- must stay after …_chat_v2_chains (CV-12), whose chat_op_send body (and CV-7c's _edit)
 -- it starts from. It runs again cleanly over itself.
 --
 -- What it does:
@@ -140,7 +140,7 @@ $function$;
 REVOKE ALL ON FUNCTION public.chat__link_mentions(public.chat_messages, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.chat__link_mentions(public.chat_messages, uuid) TO service_role;
 
--- chat_op_send, from its live body (CV-2a, CV-5, CV-7c): + "Mentioned in".
+-- chat_op_send, from its live body (CV-2a, CV-5, CV-7c, CV-12): + "Mentioned in".
 CREATE OR REPLACE FUNCTION public.chat_op_send(p_id uuid, p_channel_id uuid, p_body text, p_reply_to_id uuid DEFAULT NULL::uuid)
  RETURNS chat_messages
  LANGUAGE plpgsql
@@ -239,7 +239,10 @@ BEGIN
              SELECT coalesce(array_agg(u), '{}') FROM (
                SELECT u FROM unnest(array[v_me] || array_remove(reply_user_ids, v_me)) WITH ORDINALITY t(u, o)
                 ORDER BY o LIMIT 5) s)
-     WHERE id = v_root.id;
+     WHERE id = v_root.id
+    RETURNING * INTO v_root;
+    -- CV-12: a new reply to a wrapped chain reopens it, visibly (CH54).
+    PERFORM public.chat__reopen_chain(v_root, v_me, v_msg.created_at);
   END IF;
   -- Replies post at the bottom too: the conversation's last message moves.
   UPDATE public.chat_channels SET last_message_at = v_msg.created_at
