@@ -6,6 +6,8 @@ import type * as React from "react";
 import { initialsOf, teamLettersOf } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 
+import { ModuoMark } from "./moduo-mark";
+
 function Avatar({
   className,
   size = "default",
@@ -284,33 +286,56 @@ const APP_GLYPH: Record<IdentitySize, string> = {
   lg: "size-5",
 };
 
+// The Moduo mark's drawing keeps its clear space inside its square (the mark
+// is 72% of the box's width), so the box sits just inside the circle and the
+// mark spans about 63% of it, the weight the plug and the initials have. The
+// icon rung follows density with the circle (14 / 14 / 12.5 px in 16 / 15 / 14).
+const MODUO_GLYPH: Record<IdentitySize, string> = {
+  icon: "size-icon-sm",
+  sm: "size-5",
+  default: "size-7",
+  lg: "size-9",
+};
+
+/** Who an `AppAvatar` stands for: a connected app, or Moduo itself. */
+type AppAvatarKind = "app" | "moduo";
+
 /**
- * A connected app, not a person (MOD-149): what an API key or an agent wrote
- * through the connector. The same gray circle a former member gets, with a
- * small plug instead of "?", so an app never reads as a missing person. No
- * colour and no AI badge (brand decision 40a): the words beside it name the
- * app ("Claude Code (app)", "Maciej · via Claude Code"). Decorative by
- * default, like `PersonAvatar`.
+ * Not a person (MOD-149). `kind="app"` (the default) is a connected app,
+ * what an API key wrote through the connector: the same gray circle a former
+ * member gets, with a small plug instead of "?", so an app never reads as a
+ * missing person. `kind="moduo"` is Moduo's own work (a repeat's catch-up, a
+ * waiting-on that came in; MOD-149 follow-up): the Moduo mark on that gray circle, in the
+ * foreground colour, drawn from the small master like every mark under
+ * 24 px. No hue and no AI badge (brand decision 40a): the words beside it
+ * say who ("Claude Code (app)", "Maciej · via Claude Code", "Moduo").
+ * Decorative by default, like `PersonAvatar`.
  */
 function AppAvatar({
+  kind = "app",
   size = "icon",
   className,
   "aria-hidden": ariaHidden = true,
   ...props
 }: Omit<React.ComponentProps<typeof AvatarPrimitive.Root>, "children"> & {
+  kind?: AppAvatarKind;
   size?: IdentitySize;
 }) {
   return (
     <Avatar
       size={size}
-      data-kind="app"
+      data-kind={kind}
       data-label="gray"
       aria-hidden={ariaHidden}
       className={className}
       {...props}
     >
       <AvatarFallback className="bg-label-fill text-foreground">
-        <Plug aria-hidden className={APP_GLYPH[size]} />
+        {kind === "moduo" ? (
+          <ModuoMark small aria-hidden className={MODUO_GLYPH[size]} />
+        ) : (
+          <Plug aria-hidden className={APP_GLYPH[size]} />
+        )}
       </AvatarFallback>
     </Avatar>
   );
@@ -362,7 +387,7 @@ function TeamMark({
   );
 }
 
-export type { AvatarHue, PersonAvatarProps, PresenceShape, TeamMarkProps };
+export type { AppAvatarKind, AvatarHue, PersonAvatarProps, PresenceShape, TeamMarkProps };
 export {
   AppAvatar,
   AVATAR_HUES,

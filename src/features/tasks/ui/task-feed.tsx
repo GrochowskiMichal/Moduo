@@ -24,6 +24,7 @@ import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import type { AppAvatarKind } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,7 +37,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
-import { isAppActor } from "../../spine/activity";
+import { appActorKind } from "../../spine/activity";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { type CommentThread, useCommentThread } from "../../spine/hooks/use-comment-thread";
@@ -321,7 +322,7 @@ function TrailLine({ item, currentUserId }: { item: FeedItem; currentUserId: str
     );
   }
   if (item.kind === "activity") {
-    const app = isAppActor(item.entry);
+    const app = appActorKind(item.entry);
     return (
       <FeedEvent
         app={app}
@@ -369,7 +370,7 @@ function MergedLine({
     );
   }
   // One actor per merged run (`feed.ts` keys runs on the actor), so the first speaks for all.
-  const app = isAppActor(first);
+  const app = appActorKind(first);
   return (
     <FeedEvent
       app={app}
@@ -392,18 +393,19 @@ function MergedLine({
 
 /**
  * One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem).
- * A change made over an API key or by an agent (`app`) shows the plug mark,
- * not the "?" a former member gets (MOD-149).
+ * A change made over an API key (`app` "app") shows the plug, Moduo's own
+ * (`app` "moduo": a catch-up, a waiting-on that came in) the Moduo mark, never the "?" a
+ * former member gets (MOD-149 and its follow-up).
  */
 function FeedEvent({
   person,
-  app = false,
+  app = null,
   time,
   title,
   children,
 }: {
   person: { id?: string; name: string; avatarUrl: string | null } | null;
-  app?: boolean;
+  app?: AppAvatarKind | null;
   time: string;
   title: string;
   children: React.ReactNode;
