@@ -256,11 +256,35 @@ export function lastSeenMessage(items: readonly StreamItem[], index: number): Ch
   return null;
 }
 
+/**
+ * Where the read mark goes when `seenId` is on screen: past the rows after it
+ * that the stream doesn't draw (replies of a wrapped-up chain, CV-12), so a
+ * conversation whose newest messages are hidden replies can still be read.
+ * Their Catch up items stay open until the chain is read (the server's rule).
+ */
+export function readThroughHidden(
+  rows: readonly ChatMessage[],
+  seenId: string,
+  hidden: ReadonlySet<string>,
+): string {
+  const at = rows.findIndex((m) => m.id === seenId);
+  if (at < 0) return seenId;
+  let out = seenId;
+  for (let i = at + 1; i < rows.length; i += 1) {
+    const m = rows[i]!;
+    if (m.sendState) continue;
+    if (!hidden.has(m.id)) return seenId;
+    out = m.id;
+  }
+  return out;
+}
+
 /** How many messages from others arrived after `afterId` (the floating "N new ↓" chip). */
 export function countNewSince(
   rows: readonly ChatMessage[],
   afterId: string | null,
   selfId: string | null,
+  hidden?: ReadonlySet<string>,
 ): number {
   if (!afterId) return 0;
   let n = 0;
@@ -268,6 +292,8 @@ export function countNewSince(
     const m = rows[i]!;
     if (m.id === afterId) return n;
     if (m.kind === "event" || m.sendState || m.deletedAt || m.authorId === selfId) continue;
+    // A row the stream doesn't draw can't be scrolled to.
+    if (hidden?.has(m.id)) continue;
     n += 1;
   }
   return 0;

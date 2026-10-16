@@ -55,7 +55,7 @@ import {
 import type { ChatWindow, ChatWriteResult } from "../store/store";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
 import { authorName } from "../stream/rows";
-import { wrappedReplyIds } from "../timeline";
+import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
 import { composerLine } from "./composer-state";
@@ -288,7 +288,10 @@ export function ChatScreen({
     if (!ready || !known || !chainId || openedChain.current === chainId) return;
     openedChain.current = chainId;
     openChain(chainId);
-  }, [ready, known, chainId, openChain]);
+    // Let go of `t` once it's open, so the next link to this chain opens it again.
+    if (conversationId)
+      onOpen(conversationId, { messageId: messageId ?? undefined, replace: true });
+  }, [ready, known, chainId, openChain, conversationId, messageId, onOpen]);
   const chainRoots = useReplyChains(
     runtime?.chat ?? null,
     channel?.id ?? null,
@@ -615,28 +618,32 @@ export function ChatScreen({
   );
 
   // Who may wrap up and Reply to… (a mirror of the ops' rules; the server decides).
-  // Role, plan and archive decide; membership doesn't (a manager outside a public
-  // channel may still wrap up). The chain's own box still needs the main box's rule.
+  // Role, plan and archive decide. "Manage any channel" works from outside a public
+  // channel; a listed manager manages only while a member (the server's rule).
+  // The chain's own box still needs the main box's rule.
+  const chainManage =
+    !!channel && (rights.manageAny || (!!member && (managers ?? []).includes(selfId)));
   const chainRights: ChainRights = {
-    canPost: rights.canPost && (!channel?.managersOnly || canManage),
+    canPost: rights.canPost && (!channel?.managersOnly || chainManage),
     paused: snap.paused,
-    canManage,
+    canManage: chainManage,
     selfId,
   };
-  const canWriteHere =
-    !!channel &&
-    composerLine({
-      channel,
-      member,
-      selfId,
-      personOf,
-      paused: snap.paused,
-      isOwner: role === "owner",
-      ownerName,
-      canPost: rights.canPost,
-      canManage,
-    }) === null &&
-    !managersPending;
+  // The box's line (why you can't write here, if you can't): one rule for both boxes.
+  const composerRefusal = channel
+    ? composerLine({
+        channel,
+        member,
+        selfId,
+        personOf,
+        paused: snap.paused,
+        isOwner: role === "owner",
+        ownerName,
+        canPost: rights.canPost,
+        canManage,
+      })
+    : null;
+  const canWriteHere = !!channel && composerRefusal === null && !managersPending;
   const canWrapUp = (root: ChatMessage) => !!channel && mayWrap(root, channel, chainRights);
 
   let center: React.ReactNode;
@@ -689,18 +696,8 @@ export function ChatScreen({
   } else {
     const title = conversationTitle(channel, selfId, personOf);
     const others = channel.kind === "dm" ? dmPeople(channel, selfId) : [];
-    const line = composerLine({
-      channel,
-      member,
-      selfId,
-      personOf,
-      paused: snap.paused,
-      isOwner: role === "owner",
-      ownerName,
-      canPost: rights.canPost,
-      canManage,
-    });
-    const canWrite = line === null && !managersPending;
+    const line = composerRefusal;
+    const canWrite = canWriteHere;
     const typingNames = typing.entries
       .filter((t) => t.channelId === channel.id && t.parentId === null && t.userId !== selfId)
       .map((t) => personOf(t.userId)?.name ?? "Someone");
@@ -770,7 +767,9 @@ export function ChatScreen({
           onLoadOlder={() => void store?.loadOlder(channel.id)}
           onLoadNewer={() => void store?.loadNewer(channel.id)}
           onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
-          onSeen={(id) => store?.markSeen(channel.id, id)}
+          onSeen={(id) =>
+            store?.markSeen(channel.id, readThroughHidden(streamWin?.rows ?? [], id, streamHidden))
+          }
           onStartEdit={(m) => setEditingId(m.id)}
           renderEditor={(m) => (
             <ChatComposer
@@ -1165,7 +1164,15 @@ export function ChatScreen({
         onOpenChange={(open) => {
           if (!open) setAttachFor(null);
         }}
-        choices={attachFor ? replyToChoices(attachFor, streamWin?.rows ?? []) : []}
+        choices={
+          attachFor
+            ? replyToChoices(
+                attachFor,
+                // Only what the stream draws (no wrapped replies, no deletes inside their Undo).
+                (streamWin?.rows ?? []).filter((m) => !streamHidden.has(m.id)),
+              )
+            : []
+        }
         personOf={personOf}
         onPick={(target) => {
           const m = attachFor;

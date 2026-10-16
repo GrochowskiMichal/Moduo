@@ -120,6 +120,16 @@ test.describe("stream quotes, chain panel, Reply chains", () => {
     // Jana replied in the chain, so Sofia's reply waits in her Catch up.
     await expect.poll(async () => (await openCatchup(rootId)).length).toBeGreaterThan(0);
 
+    const stream = page.getByTestId("message-stream");
+    // The reader is at the newest message: where it ends must not jump when replies leave.
+    const lastBottom = async () => {
+      const box = await stream.locator('[role="article"]').last().boundingBox();
+      return box ? box.y + box.height : -1;
+    };
+    const fromEnd = () => stream.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+    // Measured before the dialog opens: a modal dialog hides the stream from role queries.
+    const endBefore = await lastBottom();
+
     // AC8.3: Wrap up asks which reply settled it (the last one picked).
     await panel(page).getByRole("button", { name: "Wrap up" }).click();
     const dialog = page.getByRole("dialog", { name: "Which reply settled it?" });
@@ -131,8 +141,39 @@ test.describe("stream quotes, chain panel, Reply chains", () => {
     await dialog.getByRole("button", { name: "Wrap up" }).click();
     await expect(dialog).toHaveCount(0);
 
+    // The toast's Undo brings the replies back in place, with no "Reopened by".
+    await expect(
+      stream.getByRole("article").filter({ hasText: `I'll ask her today ${tag}` }),
+    ).toHaveCount(0, { timeout: 15_000 });
+    await page.getByRole("button", { name: "Undo" }).click();
+    // Both replies are back (the second quotes the first).
+    await expect(
+      stream.getByRole("article").filter({ hasText: `I'll ask her today ${tag}` }),
+    ).toHaveCount(2, { timeout: 15_000 });
+    await expect(
+      stream.getByRole("article").filter({ hasText: `Got them both ${tag}` }),
+    ).toHaveCount(1);
+    await expect(root.locator('[data-slot="chain-replies"]')).toContainText("3 replies");
+    await expect(root.locator('[data-slot="chain-reopened"]')).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const rows = await rest<Array<{ wrapped_at: string | null; reopened_at: string | null }>>(
+          "service",
+          `chat_messages?id=eq.${rootId}&select=wrapped_at,reopened_at`,
+        );
+        return `${rows[0]?.wrapped_at ?? "-"}|${rows[0]?.reopened_at ?? "-"}`;
+      })
+      .toBe("-|-");
+
+    // Wrap it up again, from the root's ⋯ this time.
+    await root.hover();
+    await root.getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: "Wrap up" }).click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Wrap up" }).click();
+    await expect(dialog).toHaveCount(0);
+
     // The replies leave the stream; the root says who wrapped it up and what settled it.
-    const stream = page.getByTestId("message-stream");
     await expect(
       stream.getByRole("article").filter({ hasText: `I'll ask her today ${tag}` }),
     ).toHaveCount(0, { timeout: 15_000 });
@@ -143,6 +184,11 @@ test.describe("stream quotes, chain panel, Reply chains", () => {
       stream.getByRole("article").filter({ hasText: `Got them both ${tag}` }),
     ).toHaveCount(1); // only the root, quoting the settled reply
     await expect(row(page, `Standup moved ${tag}`)).toBeVisible();
+    // The stream still ends where it did: no jump.
+    await expect.poll(fromEnd).toBeLessThanOrEqual(2);
+    await expect
+      .poll(async () => Math.abs((await lastBottom()) - endBefore))
+      .toBeLessThanOrEqual(2);
     await expect(root.locator('[data-slot="chain-wrapped"]')).toContainText("Wrapped up by you");
     await expect(root.locator('[data-slot="chain-wrapped"]')).toContainText(`Got them both ${tag}`);
     await expect(chainItem(page).locator('[data-slot="chain-settled"]')).toHaveText("Settled it");
@@ -160,6 +206,44 @@ test.describe("stream quotes, chain panel, Reply chains", () => {
       .toBe(true);
     await page.waitForTimeout(1_000);
     expect((await openCatchup(rootId)).length).toBeGreaterThan(0);
+
+    // Jana reads the stream to the end: the wrapped replies aren't drawn, so her
+    // chain item stays open; opening the chain on the right closes it.
+    const janaContext = await page.context().browser()!.newContext();
+    const jana = await janaContext.newPage();
+    try {
+      await signInPage(jana, room.member, room.ws);
+      await jana.goto(`/chat?c=${room.general}`);
+      const janaRoot = row(jana, `Logo SVGs from Anna ${tag}?`).first();
+      await expect(janaRoot.locator('[data-slot="chain-wrapped"]')).toBeVisible({
+        timeout: 20_000,
+      });
+      await jana
+        .getByTestId("message-stream")
+        .evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+      // The read mark reaches the newest message, past any hidden replies at the end …
+      const [newest] = await rest<Array<{ id: string }>>(
+        "service",
+        `chat_messages?channel_id=eq.${room.general}&kind=eq.message&order=created_at.desc,id.desc&limit=1&select=id`,
+      );
+      await expect
+        .poll(async () => {
+          const rows = await rest<Array<{ last_read_id: string | null }>>(
+            "service",
+            `chat_members?channel_id=eq.${room.general}&user_id=eq.${room.member.user.id}&select=last_read_id`,
+          );
+          return rows[0]?.last_read_id ?? null;
+        })
+        .toBe(newest?.id ?? "none");
+      await jana.waitForTimeout(1_500);
+      // … and the chain still waits in her Catch up.
+      expect((await openCatchup(rootId)).length).toBeGreaterThan(0);
+      await janaRoot.locator('[data-slot="chain-wrapped"]').click();
+      await expect(jana.locator('[data-slot="chain-item"]')).toContainText(`Got them both ${tag}`);
+      await expect.poll(async () => (await openCatchup(rootId)).length).toBe(0);
+    } finally {
+      await janaContext.close();
+    }
   });
 
   test("Reply chains lists open chains first, wrapped ones below", async ({ page }) => {

@@ -21,10 +21,10 @@ export function mayWrap(
   channel: Pick<ChatChannel, "kind" | "archivedAt">,
   r: ChainRights,
 ): boolean {
-  if (r.paused || channel.archivedAt) return false;
-  // Managing the channel is enough (even from outside a public one); else you must post here.
+  // Your role must post (managers too: the server asks for it); managing the
+  // channel then lets you wrap up anyone's chain, even from outside a public one.
+  if (!r.canPost || r.paused || channel.archivedAt) return false;
   if (r.canManage) return true;
-  if (!r.canPost) return false;
   return channel.kind === "dm" || (root.authorKind === "user" && root.authorId === r.selfId);
 }
 
@@ -34,11 +34,10 @@ export function mayAttach(
   channel: Pick<ChatChannel, "archivedAt">,
   r: ChainRights,
 ): boolean {
-  if (r.paused || channel.archivedAt) return false;
+  if (!r.canPost || r.paused || channel.archivedAt) return false;
   // A message with replies of its own stays a root (the op refuses it).
   if (m.kind !== "message" || m.deletedAt || m.replyCount > 0) return false;
-  if (r.canManage) return true;
-  return r.canPost && m.authorKind === "user" && m.authorId === r.selfId;
+  return r.canManage || (m.authorKind === "user" && m.authorId === r.selfId);
 }
 
 /** One line of a message's words. */

@@ -452,7 +452,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       return () => document.removeEventListener("visibilitychange", onVisible);
     }, [reportSeen]);
 
-    const fresh = atEnd || win.hasNewer ? 0 : countNewSince(win.rows, baseline, selfId);
+    const fresh = atEnd || win.hasNewer ? 0 : countNewSince(win.rows, baseline, selfId, hidden);
 
     // The polite live region names a new message from someone else.
     const [announce, setAnnounce] = useState("");

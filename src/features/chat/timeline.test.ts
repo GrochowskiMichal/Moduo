@@ -11,6 +11,7 @@ import {
   localDay,
   mergeMessages,
   normalizeChannelName,
+  readThroughHidden,
   type SidebarEntry,
   toggleReaction,
   upsertMessage,
@@ -367,6 +368,16 @@ describe("read mark, New pill, page boundaries", () => {
     expect(countNewSince(rows, "a", ME)).toBe(2);
     expect(countNewSince(rows, "c", ME)).toBe(0);
     expect(countNewSince(rows, null, ME)).toBe(0);
+    // Hidden replies of a wrapped-up chain can't be scrolled to.
+    expect(countNewSince(rows, "a", ME, new Set(["c"]))).toBe(1);
+  });
+
+  it("the read mark passes the hidden replies after the last row drawn (CV-12)", () => {
+    const rows = [msg("a", T(0)), msg("b", T(1)), msg("c", T(2)), msg("d", T(3))];
+    expect(readThroughHidden(rows, "b", new Set(["c", "d"]))).toBe("d");
+    expect(readThroughHidden(rows, "b", new Set(["c"]))).toBe("b");
+    expect(readThroughHidden(rows, "b", new Set())).toBe("b");
+    expect(readThroughHidden(rows, "x", new Set(["c"]))).toBe("x");
   });
 
   it("emoji-only messages draw large", () => {

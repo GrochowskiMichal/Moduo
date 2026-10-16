@@ -33,9 +33,13 @@ describe("who may wrap up and Reply to… (§12)", () => {
   });
 
   it("a manager or admin outside a public channel may still wrap up and attach others'", () => {
-    const outside: ChainRights = { ...member, canPost: false, canManage: true };
+    const outside: ChainRights = { ...member, canPost: true, canManage: true };
     expect(mayWrap(theirs, channel, outside)).toBe(true);
     expect(mayAttach(m("b", "2026-10-01T10:00:00Z"), channel, outside)).toBe(true);
+    // A manager whose role can't post (a viewer now) can't: the server asks for it.
+    const noPost: ChainRights = { ...outside, canPost: false };
+    expect(mayWrap(theirs, channel, noPost)).toBe(false);
+    expect(mayAttach(m("b", "2026-10-01T10:00:00Z"), channel, noPost)).toBe(false);
     expect(mayWrap(theirs, channel, { ...outside, paused: true })).toBe(false);
     expect(mayWrap(theirs, { ...channel, archivedAt: "x" }, outside)).toBe(false);
   });
