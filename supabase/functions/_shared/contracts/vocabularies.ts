@@ -546,7 +546,16 @@ export const RELATION_KINDS = [
   "works-at", // person → company
   "follow-up", // a follow-up owed on an entity
   "paid-by", // an invoice/payment → the contact who paid it
+  // a chat channel → the project or client it is linked to (CV-13). Written only
+  // by chat_op_link_channel / _create_channel / _start_conversation; the link
+  // ops refuse it, and the mirror always matches chat_channels.linked_type/id.
+  "conversation-of",
 ] as const;
+/** The kinds a person (or the link ops) may set on a link: all but the ones a
+ *  module writes itself (`conversation-of`, chat's). */
+export const USER_RELATION_KINDS = RELATION_KINDS.filter(
+  (k): k is Exclude<RelationKind, "conversation-of"> => k !== "conversation-of",
+);
 export type RelationKind = (typeof RELATION_KINDS)[number];
 export const relationKindSchema = z.enum(RELATION_KINDS);
 export function isRelationKind(value: unknown): value is RelationKind {
@@ -1035,6 +1044,24 @@ export type ChatChannelKind = (typeof CHAT_CHANNEL_KINDS)[number];
 export const chatChannelKindSchema = z.enum(CHAT_CHANNEL_KINDS);
 export function isChatChannelKind(value: unknown): value is ChatChannelKind {
   return typeof value === "string" && (CHAT_CHANNEL_KINDS as readonly string[]).includes(value);
+}
+
+/** What a channel links to (chat_channels.linked_type, CV-13; CHECK
+ *  chat_channels_linked_type_check in …_chat_v2_linked_channels). `bucket` is a
+ *  project; a client is a `company` or a `contact`. */
+export const CHAT_LINK_TARGETS = ["bucket", "company", "contact", "team"] as const;
+export type ChatLinkTarget = (typeof CHAT_LINK_TARGETS)[number];
+export const chatLinkTargetSchema = z.enum(CHAT_LINK_TARGETS);
+export function isChatLinkTarget(value: unknown): value is ChatLinkTarget {
+  return typeof value === "string" && (CHAT_LINK_TARGETS as readonly string[]).includes(value);
+}
+/** Read-side: anything unknown reads as no link. */
+export function normalizeChatLinkTarget(input: unknown): ChatLinkTarget | null {
+  return isChatLinkTarget(input) ? input : null;
+}
+/** Strict parse for write paths. */
+export function parseChatLinkTarget(input: unknown): SafeParseResult<ChatLinkTarget> {
+  return parseOrError(chatLinkTargetSchema, input);
 }
 
 export const CHAT_NOTIFY_LEVELS = ["all", "mentions", "none"] as const;

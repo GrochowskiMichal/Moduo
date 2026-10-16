@@ -24,6 +24,7 @@ import {
   PRIORITY_LEVELS,
   RELATION_KINDS,
   SYNCABLE_PROVIDERS,
+  USER_RELATION_KINDS,
   TASK_STATUSES,
   WAITLIST_ROW_SOURCES,
   WAITLIST_SOURCES,
@@ -79,7 +80,9 @@ describe("vocabulary value sets", () => {
       "works-at",
       "follow-up",
       "paid-by",
+      "conversation-of",
     ]);
+    expect(USER_RELATION_KINDS).toEqual(RELATION_KINDS.filter((k) => k !== "conversation-of"));
     expect(LINK_ORIGINS).toEqual(["manual", "drag", "mention", "ref", "suggest"]);
   });
 
