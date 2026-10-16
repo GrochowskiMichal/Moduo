@@ -239,16 +239,26 @@ describe("a project with only completed work (MOD-148)", () => {
     expect(row("Task a")).toBeTruthy();
     expect(picks).toEqual(["a"]);
     expect(shown.nothing).toBe(false);
-    // The selected one is kept whatever Display says, so the line counts the
-    // other two (TV-U1's rule: the panel never points at a row that isn't there).
-    expect(endLine().textContent).toBe("2 completed · Hide");
+    // The selected one is listed whatever Display says (TV-U1's rule), but
+    // the line still counts it: its count holds still under the cursor.
+    expect(endLine().textContent).toBe("3 completed · Hide");
 
     // Hiding again keeps the selected row (it's never pulled from under you),
     // and nothing flips.
     fireEvent.click(endLine());
     expect(row("Task a")).toBeTruthy();
     expect(row("Task b")).toBeNull();
+    expect(endLine().textContent).toBe("3 completed · Show");
     expect(picks).toEqual(["a"]);
+  });
+
+  it("with its only task done, Show selects it and the line stays to hide it again", () => {
+    const { picks } = renderPage({ tasks: [allDone[0] as Task] });
+    fireEvent.click(endLine());
+    expect(picks).toEqual(["a"]);
+    expect(endLine().textContent).toBe("1 completed · Hide");
+    fireEvent.click(endLine());
+    expect(endLine().textContent).toBe("1 completed · Show");
   });
 });
 

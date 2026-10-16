@@ -34,7 +34,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
-import { type CompletedMode, partitionCompleted } from "../completed";
+import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
 import {
   type OrderDirection,
   orderTasks,
@@ -317,6 +317,12 @@ type ListGroup = {
   all: Task[];
   /** Completed tasks Display hides (the list's end line, or the group's in "7 days"). */
   hidden: Task[];
+  /**
+   * What the group adds to the end line's count (MOD-148): its completed
+   * tasks Display hides, the selected one included, so the count holds still
+   * as the cursor moves and the line never vanishes under Show.
+   */
+  doneCount: number;
   /** Backlog tasks folded behind "Backlog · n". */
   backlog: Task[];
   /** A group the view added (TV-U15): its own header, no drops. */
@@ -489,7 +495,7 @@ export function TaskListView({
           teams,
         });
     if (selection === "today") {
-      return all.map((g) => ({ ...g, all: g.tasks, hidden: [], backlog: [] }));
+      return all.map((g) => ({ ...g, all: g.tasks, hidden: [], backlog: [], doneCount: 0 }));
     }
     // Kept even when done: staying (checked off or opened in this scope); the
     // selected task and its parent (a deep link or the panel must never point
@@ -513,11 +519,18 @@ export function TaskListView({
         groupBy === "status" ? [] : g.tasks.filter((t) => isBacklogTask(t) && !keepOutOfBacklog(t));
       const rest = backlog.length === 0 ? g.tasks : g.tasks.filter((t) => !backlog.includes(t));
       const { shown, hidden } = partitionCompleted(rest, { mode: completed, now, keep });
+      // The end line counts without the selection's keep (a checked-off task
+      // and a parent with open subtasks still show, so they never count).
+      const doneCount = endLine
+        ? rest.filter((t) => isCompletedHidden(t, { mode: completed, now, keep: keepOutOfBacklog }))
+            .length
+        : 0;
       return {
         ...g,
         all: g.tasks,
         tasks: (endLine ? doneShown : revealedGroups.has(g.key)) ? rest : shown,
         hidden,
+        doneCount,
         backlog,
       };
     });
@@ -537,6 +550,7 @@ export function TaskListView({
         all: list,
         tasks: revealedGroups.has(g.key) ? list : list.slice(0, limit),
         hidden: [],
+        doneCount: 0,
         backlog: [],
         extra: g,
         more: list.slice(limit),
@@ -575,9 +589,10 @@ export function TaskListView({
     api.subtasksByParent,
   ]);
   // What the end line counts: every completed task Display hides in the view,
-  // folded groups' too (Show lists them in their groups; a fold stays yours).
+  // folded groups' and the selected one too (Show lists them in their groups;
+  // a fold stays yours).
   const hiddenDone = useMemo(
-    () => (endLine ? groups.reduce((n, g) => n + g.hidden.length, 0) : 0),
+    () => (endLine ? groups.reduce((n, g) => n + g.doneCount, 0) : 0),
     [endLine, groups],
   );
 

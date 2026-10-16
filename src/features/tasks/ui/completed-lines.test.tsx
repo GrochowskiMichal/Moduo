@@ -22,6 +22,7 @@ import type { CompletedMode } from "../completed";
 import { resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Bucket, ProjectStatus, Section, Task } from "../model";
+import type { ListGrouping } from "./list-extensions";
 import { TaskBoardView } from "./task-board-view";
 import { TaskListView } from "./task-list-view";
 
@@ -270,6 +271,19 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(onSelectTask).toHaveBeenLastCalledWith("b");
   });
 
+  it("its count holds still while the cursor walks onto a finished task", () => {
+    renderList();
+    const grid = screen.getByRole("grid");
+    fireEvent.click(endButton());
+    fireEvent.keyDown(grid, { key: "j", code: "KeyJ" });
+    // d1 is selected: it stays listed whatever Display says, and still counts.
+    expect(endButton().textContent).toBe("6 completed · Hide");
+    fireEvent.click(endButton());
+    expect(row("Task d1")).toBeTruthy();
+    expect(row("Task d2")).toBeNull();
+    expect(endButton().textContent).toBe("6 completed · Show");
+  });
+
   it("counts a folded group's hidden tasks too, and its fold stays yours", () => {
     renderList();
     fireEvent.click(screen.getByRole("button", { name: /^Visual/ }));
@@ -279,21 +293,50 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(row("Task d2")).toBeTruthy();
   });
 
-  it("ends with a new scope or a new Completed choice, and never saves Display", () => {
+  it("ends with a new scope, grouping or Completed choice, and never saves Display", () => {
     const { rerender } = renderList();
-    fireEvent.click(endButton());
-    expect(row("Task d1")).toBeTruthy();
+    const showThenAway = (away: ListProps) => {
+      fireEvent.click(endButton());
+      expect(row("Task d1")).toBeTruthy();
+      rerender(away);
+      rerender({});
+      expect(row("Task d1")).toBeNull();
+      expect(endButton().textContent).toBe("6 completed · Show");
+    };
     // Display → Completed: 7 days, then back: hidden again.
-    rerender({ completed: "week" });
-    rerender({ completed: "hidden" });
-    expect(row("Task d1")).toBeNull();
-    expect(endButton().textContent).toBe("6 completed · Show");
+    showThenAway({ completed: "week" });
+    // Another scope (All), then back to the project.
+    showThenAway({ selection: "all" });
+    // Group by Status, then back to Section.
+    showThenAway({ groupBy: "status" });
   });
 
   it("an ungrouped list ends with the same one line", () => {
     renderList({ groupBy: "none", onAddSection: undefined });
     expect(groupLines()).toHaveLength(0);
     expect(endButton().textContent).toBe("6 completed · Show");
+  });
+
+  it("a view's own grouping (Upcoming's days) ends with the same one line", () => {
+    const day = (t: Task) => (t.sectionId ? "tue" : "mon");
+    const grouping: ListGrouping = {
+      groups: (list) =>
+        (["mon", "tue"] as const).map((key) => ({
+          key,
+          label: key === "mon" ? "Mon" : "Tue",
+          tasks: list.filter((t) => day(t) === key),
+        })),
+      keyOf: day,
+      header: (g) => ({ count: g.tasks.length }),
+      accepts: () => true,
+      onDrop: () => {},
+      addState: () => ({ kind: "none" }),
+    };
+    renderList({ selection: "upcoming", grouping, onAddSection: undefined });
+    expect(groupLines()).toHaveLength(0);
+    expect(endButton().textContent).toBe("6 completed · Show");
+    fireEvent.click(endButton());
+    expect(row("Task d4")).toBeTruthy();
   });
 
   it("with nothing completed hidden there is no line", () => {
@@ -328,7 +371,12 @@ describe("the List in 7 days and All (unchanged)", () => {
 type BoardProps = Partial<Parameters<typeof TaskBoardView>[0]>;
 
 function renderBoard(over: BoardProps = {}, tasks: Task[] = DOGFOOD) {
-  return render(
+  const view = render(boardOf(over, tasks));
+  return { rerender: (props: BoardProps) => view.rerender(boardOf(props, tasks)) };
+}
+
+function boardOf(over: BoardProps, tasks: Task[]) {
+  return (
     <TooltipProvider>
       <TaskBoardView
         tasks={tasks}
@@ -347,7 +395,7 @@ function renderBoard(over: BoardProps = {}, tasks: Task[] = DOGFOOD) {
         api={apiOf(tasks) as never}
         {...over}
       />
-    </TooltipProvider>,
+    </TooltipProvider>
   );
 }
 
@@ -380,6 +428,26 @@ describe("the Board while Completed is Hidden (MOD-148)", () => {
     expect(boardEnd().getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(boardEnd());
     expect(card("Task d2")).toBeNull();
+  });
+
+  it("its count holds still with a finished card selected", () => {
+    renderBoard({ selectedTaskId: "d2" });
+    // d2 shows (the selection always does) and still counts.
+    expect(card("Task d2")).toBeTruthy();
+    expect(card("Task d3")).toBeNull();
+    expect(boardEnd().textContent).toBe("6 completed · Show");
+  });
+
+  it("ends with a new grouping or Completed choice", () => {
+    const { rerender } = renderBoard();
+    for (const away of [{ completed: "week" as const }, { boardGroupBy: "status" as const }]) {
+      fireEvent.click(boardEnd());
+      expect(card("Task d2")).toBeTruthy();
+      rerender(away);
+      rerender({});
+      expect(card("Task d2")).toBeNull();
+      expect(boardEnd().textContent).toBe("6 completed · Show");
+    }
   });
 
   it("a Done column whose cards are all hidden still takes drops", () => {

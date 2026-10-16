@@ -34,7 +34,7 @@ import {
   effectiveBoardGroup,
   effectiveLanes,
 } from "../board-columns";
-import { type CompletedMode, partitionCompleted } from "../completed";
+import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
 import {
   type BoardGroupBy,
   type BoardLanes,
@@ -193,6 +193,9 @@ type ViewColumn = BoardColumn & {
   /** Completed cards Display hides: behind the board's end line while
    *  Completed is Hidden (MOD-148), the column's own line in "7 days". */
   hidden: Task[];
+  /** What the column adds to the end line's count: its hidden completed
+   *  cards, the selected one included, so the count holds still. */
+  doneCount: number;
   folded: boolean;
 };
 
@@ -361,8 +364,16 @@ export function TaskBoardView({
       t.id === selectedTaskId ||
       t.id === selectedParentId ||
       (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
+    // The end line counts without the selection's keep, so its count holds
+    // still as the selection moves (MOD-148).
+    const keepUncounted = (t: Task) =>
+      stayingIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     return allColumns.map((c) => {
       const { shown, hidden } = partitionCompleted(c.tasks, { mode: completed, now, keep });
+      const doneCount = endLine
+        ? c.tasks.filter((t) => isCompletedHidden(t, { mode: completed, now, keep: keepUncounted }))
+            .length
+        : 0;
       // A folded column opens for the card you select in it (a deep link,
       // the panel), without changing what you chose (53b).
       const holdsSelection = !!selectedTaskId && c.tasks.some((t) => t.id === selectedTaskId);
@@ -372,6 +383,7 @@ export function TaskBoardView({
         ...c,
         shown: (endLine ? doneShown : revealed.has(c.id)) ? c.tasks : shown,
         hidden,
+        doneCount,
         folded: (folds.get(c.id) ?? c.startsFolded) && !holdsSelection,
       };
     });
@@ -395,9 +407,9 @@ export function TaskBoardView({
   const hiddenEmpty = columns.length - keptColumns.length;
   const visibleColumns = emptyShown ? columns : keptColumns;
   // The end line counts every completed card Display hides on the board,
-  // folded and hidden-empty columns' too.
+  // folded columns' and the selected one too.
   const hiddenDone = useMemo(
-    () => (endLine ? columns.reduce((n, c) => n + c.hidden.length, 0) : 0),
+    () => (endLine ? columns.reduce((n, c) => n + c.doneCount, 0) : 0),
     [endLine, columns],
   );
 

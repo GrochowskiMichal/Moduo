@@ -590,7 +590,9 @@ describe("Done and completed (U1-3)", () => {
     });
     expect(rowOf("Task b")).toBeTruthy();
     expect(onSelectTask).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /completed/ })).toBeNull();
+    // The list's end line still counts it, so the count never moves with the
+    // selection (MOD-148).
+    expect(screen.getByRole("button", { name: "1 completed, show" })).toBeTruthy();
   });
 
   it("a deep link to a done subtask of a done parent lands: the parent stays and expands", () => {
