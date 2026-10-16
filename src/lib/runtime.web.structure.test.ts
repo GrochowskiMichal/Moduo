@@ -118,6 +118,9 @@ describe("project fields (AC4.1)", () => {
       description: "For the hackathon",
     });
     expect(projectFieldsToOp({ description: null })).toEqual({ description: null });
+    // MOD-155: a company client goes as its own key; the op clears the other.
+    expect(projectFieldsToOp({ clientCompanyId: "co1" })).toEqual({ client_company_id: "co1" });
+    expect(projectFieldsToOp({ clientContactId: null })).toEqual({ client_contact_id: null });
   });
 
   it("map back from the row, status read laxly", async () => {

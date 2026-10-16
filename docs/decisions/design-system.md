@@ -2,6 +2,12 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-16 · A picker's group headings use the eyebrow recipe in a popover too, not only in the ⌘K palette** → `CommandGroup` (`src/components/ui/command.tsx`)
+  - Who: the agent's, revisitable, found building MOD-155's client picker (People · Companies): `CommandDialog` styled `[cmdk-group-heading]` with the eyebrow recipe, but a `Command` inside a popover got none, so every popover picker's heading rendered as 16 px body text in full foreground (the Waiting on picker's "People", Focus's hand-off, the Timeline and row date pickers' "Scheduled time" / "Due date").
+  - Decision: the recipe moves onto `CommandGroup` itself (11 px, medium, wide tracking, uppercase, `text-muted-foreground`, `px-2 py-1.5`), so the palette keeps it and every popover picker gets it. A group heading is fixed chrome; `lint:tw`'s small-caps rule still refuses a heading built from someone's words.
+  - Why: one heading look wherever a list is grouped, matching menus (`DropdownMenuLabel` uses the same recipe) and structure.html's menu header (`.mh`: 11 px, 500, .06em, uppercase, the second text level).
+  - Rejected: styling the client picker's groups alone (the same bug stays in five other pickers).
+
 - **2026-10-16 · A small-rung row whose title wraps puts its marks on the first line: `--row-first-line-pad`** → tokens.css §10, `project-panel.tsx` (`FIRST_LINE_ROW`, `FirstLine`); [DESIGN_RULES.md](../DESIGN_RULES.md) R7
   - Who: agent's choice, revisitable, for Maciej's MOD-153 (2026-10-16: the icon and picture "centred on the row, so their position moves with the number of title lines").
   - Decision: `--row-first-line-pad: calc((var(--ctrl-h-sm) - 1lh) / 2)`, declared on `:root, [data-density]` like `--panel-title-top` (the var() is computed where it's declared; `1lh` stays a unit and resolves on the row). A row lays out from the top with this padding, and its icon, picture or time sits in a `flex h-lh items-center` box at the row's own text size (small text goes on a span inside the box, or `lh` is the small line's). The first line is then centred in the rung, so a one-line row is exactly `--ctrl-h-sm` (26 / 24 / 22 px), and every mark centres on the first line however far the title wraps. `ItemCardTitle` already does the mark half of this; it has no rung to keep.
