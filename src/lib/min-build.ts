@@ -116,6 +116,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "user_agent_work",
   // CV-6b: Settings → Preferences → Chat reads your chat settings; CV-7c: your quick reactions.
   "user_chat_prefs",
+  // CV-17: teammates' "now" (statuses, do not disturb, Focusing).
+  "chat_now",
   "user_time_region",
 ]);
 

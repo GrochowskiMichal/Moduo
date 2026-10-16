@@ -35,6 +35,7 @@ import {
   type SavedStatus,
   statusLine,
 } from "@/lib/statuses/model";
+import "@/lib/statuses/live";
 import { refreshPeopleNow, usePeopleNow } from "@/lib/statuses/store";
 import { useTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";

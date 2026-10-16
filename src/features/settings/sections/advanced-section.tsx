@@ -1,5 +1,6 @@
 import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
+import { listSavedStatuses, readMyStatus } from "@/lib/statuses/api";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -73,6 +74,7 @@ function latestSyncAt(): string | null {
 async function gatherExport(
   runtime: ModuoRuntime,
   workspaceId: string,
+  userId: string | null,
 ): Promise<ModuleReadResult[]> {
   const read = async (
     module: ModuleReadResult["module"],
@@ -110,6 +112,11 @@ async function gatherExport(
       const { attachments, truncation } = await runtime.attachments.list(workspaceId);
       return attachmentsManifest(attachments, truncation);
     }),
+    // CV-17: your own status and saved statuses (nobody else's).
+    read("statuses", async () => ({
+      status: userId ? await readMyStatus(userId) : null,
+      saved: await listSavedStatuses(),
+    })),
   ]);
 }
 
@@ -170,7 +177,7 @@ export function AdvancedSection() {
     if (!runtime || !workspaceId || exporting) return;
     setExporting(true);
     try {
-      const results = await gatherExport(runtime, workspaceId);
+      const results = await gatherExport(runtime, workspaceId, userId);
       const meta: ExportMeta = {
         workspaceId,
         workspaceName: selectedWorkspace?.name ?? null,

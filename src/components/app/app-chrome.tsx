@@ -50,7 +50,7 @@ import { Icon } from "../ui/icon";
 import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { UserMenu } from "../user-menu";
+import { StatusMenu } from "./status-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
 import { visibleModuleNavItems } from "./app-chrome-constants";
@@ -614,7 +614,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <NoticeDeliveries chat={chatBadge} />
             {/* Asks once when this device is in another time zone (TV-D14). */}
             <TimeRegionPrompt />
-            <UserMenu
+            {/* Your status and saved ones, Do not disturb, then Settings (CV-17, §15). */}
+            <StatusMenu
+              userId={userId ?? null}
+              workspaceId={selectedWorkspaceId ?? null}
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}
               onOpenSettings={() => dispatchOpenSettings()}

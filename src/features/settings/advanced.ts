@@ -18,7 +18,9 @@ export type ExportModuleKey =
   | "contacts"
   | "calendar"
   | "habits"
-  | "attachments";
+  | "attachments"
+  /** Your own status and saved statuses (chat v2 CV-17, #31); one for every workspace. */
+  | "statuses";
 
 /** One module's read outcome — the impure gather wraps every runtime read in a
  * try/catch and reports failures here rather than throwing the whole export. */
