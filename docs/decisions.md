@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
@@ -147,6 +148,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
+- 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
+- 2026-10-16 · NR-7: clients send nothing over Realtime; the server stamps who is viewing (`notes_live_here`) and hands each saved update to people who may still view the note (`notes-live:<uid>` topics).
 - 2026-10-14 · NR-6 built — agent (MCP) note writes are real Yjs updates: they land live, are attributed, and can be undone.
 - 2026-10-13 · NR-3 built — one markdown converter reads the CRDT back through the real binding, node schemas load without React, and an open note paints from its cache.
 - 2026-10-13 · NR-2 built — New Notes ships behind a synced per-user switch, and a new note is a device-only draft until its first character.

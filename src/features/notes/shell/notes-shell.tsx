@@ -27,6 +27,7 @@ import { type CaptureSource, useCaptureSource } from "../../../lib/capture-sourc
 import type { EntityRef } from "../../../lib/entity-links";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
 import { ShareMenu } from "../../sharing/share-menu";
+import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import { useNotesExperience } from "../experience";
 import { useNoteLinkDrop } from "../hooks/use-note-link-drop";
@@ -34,11 +35,11 @@ import { useNoteRealtime } from "../hooks/use-note-realtime";
 import { useTrashWithTaskDetach } from "../hooks/use-trash-with-task-detach";
 import { noteEditorName } from "../note-meta";
 import { shapeNoteSearchResults } from "../search";
-import { nameFromEmail } from "../sync/notes-realtime";
 import { displayTitle } from "../title";
 import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
 import { buildBreadcrumb, type CrumbSection } from "./breadcrumb";
+import { createLinkedNote } from "./create-linked-note";
 import { MoveToDialog } from "./move-to-dialog";
 import { NoteView } from "./note-view";
 import { NotesRightPanel } from "./notes-right-panel";
@@ -51,17 +52,8 @@ import { useShellTasks } from "./use-shell-tasks";
 
 export function NotesShell() {
   const shell = useNotesShell();
-  const {
-    runtime,
-    userId,
-    userEmail,
-    workspace,
-    workspaceId,
-    module,
-    selectedId,
-    selectedNote,
-    draft,
-  } = shell;
+  const { runtime, userId, workspace, workspaceId, module, selectedId, selectedNote, draft } =
+    shell;
   const { notes, favorites, engine, canEdit, degraded, loading } = module;
   const [, setExperience] = useNotesExperience();
   const [importOpen, setImportOpen] = useState(false);
@@ -117,8 +109,23 @@ export function NotesShell() {
       openNote: (id) => shell.select(id),
       createChildNote: () => (liveNote ? module.createNote(liveNote.id) : null),
       tasks: tasks.taskBridge,
+      listNotes: () => notes,
+      createLinkedNote: (title) =>
+        engine && canEdit
+          ? createLinkedNote({ engine, materializeDraft: module.materializeDraft, title })
+          : null,
+      openComments: () => shell.showPanelVariant("comments"),
     }),
-    [notes, shell.select, liveNote, module, tasks.taskBridge],
+    [
+      notes,
+      shell.select,
+      shell.showPanelVariant,
+      liveNote,
+      module,
+      tasks.taskBridge,
+      engine,
+      canEdit,
+    ],
   );
 
   const canRender = Boolean(
@@ -128,13 +135,16 @@ export function NotesShell() {
       !shell.configError &&
       workspace.modulePermissions.notes !== "none",
   );
-  const selfName = useMemo(() => nameFromEmail(userEmail), [userEmail]);
+  const people = useCommentPeople();
   const { viewers } = useNoteRealtime({
+    notes: runtime?.notesV2 ?? null,
     engine: engine ?? null,
-    noteId: liveNote?.id ?? null,
+    // A draft isn't on the server yet: nobody can view it, and you aren't
+    // viewing the note you had open before it.
+    noteId: liveNoteId,
     enabled: canRender,
     selfUserId: userId,
-    selfName,
+    personOf: people.personOf,
   });
 
   const onDragEnd = useNoteLinkDrop({ runtime, workspaceId, canEdit });

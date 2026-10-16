@@ -69,6 +69,14 @@ export type NotesEditorBridge = {
   createChildNote: () => string | null;
   /** Task lines (NO-5). */
   tasks: NotesTaskBridge;
+  /** Every note the `[[` picker and the link dialog may offer (NR-4). Absent:
+   * `[[` stays plain text. */
+  listNotes?: () => readonly Note[];
+  /** Create a root note titled `title` for `[[Create …]]` (NR-4). `created`
+   * settles true once its server row exists (links wait for it). */
+  createLinkedNote?: (title: string) => { id: string; created: Promise<boolean> } | null;
+  /** Open the Comments panel (the block menu's Comment, NR-4). */
+  openComments?: () => void;
 };
 
 export const NotesEditorBridgeContext = createContext<NotesEditorBridge | null>(null);
