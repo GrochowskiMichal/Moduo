@@ -68,6 +68,49 @@ describe("SegmentedControl raised plate", () => {
     expect(current.className).not.toMatch(/data-\[state=on\]/);
   });
 
+  it("xs is the header switch: the chip rung and the title's 13 px, not the control rung's 14 (MOD-157)", () => {
+    render(
+      <TooltipProvider>
+        <SegmentedControl
+          aria-label="Show"
+          size="xs"
+          value="comments"
+          onValueChange={() => {}}
+          items={[
+            { value: "all", label: "All" },
+            { value: "comments", label: "Comments" },
+          ]}
+        />
+      </TooltipProvider>,
+    );
+    const track = screen.getByRole("radiogroup", { name: "Show" });
+    expect(track.getAttribute("data-size")).toBe("xs");
+    expect(track.style.height).toBe("var(--ctrl-h-xs)");
+    const segment = screen.getByRole("radio", { name: "All" });
+    expect(segment.className).toContain("text-sm");
+    expect(segment.className).not.toContain("text-base");
+    expect(segment.className).toContain("px-2");
+  });
+
+  it("sm and default stay on the control rung's text-base (R1)", () => {
+    render(
+      <TooltipProvider>
+        <SegmentedControl
+          aria-label="Group"
+          size="sm"
+          value="a"
+          onValueChange={() => {}}
+          items={[
+            { value: "a", label: "A" },
+            { value: "b", label: "B" },
+          ]}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("radiogroup", { name: "Group" }).style.height).toBe("var(--ctrl-h-sm)");
+    expect(screen.getByRole("radio", { name: "A" }).className).toContain("text-base");
+  });
+
   it("plate lighter than track on dark, on every shade", async () => {
     const blocks = cssBlocks(
       await fs.readFile(path.join(process.cwd(), "src/styles/tokens.css"), "utf8"),

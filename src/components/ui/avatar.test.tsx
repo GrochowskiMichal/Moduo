@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, render, waitFor } from "@testing-library/react";
 
 import {
+  AppAvatar,
   AVATAR_HUES,
   avatarHue,
   initialsOf,
@@ -94,6 +95,31 @@ describe("PersonAvatar and TeamMark", () => {
     expect(mark.textContent).toBe("DS");
     rerender(<TeamMark name="Design" id="t1" letters="dx" />);
     expect(container.textContent).toBe("DX");
+  });
+});
+
+describe("AppAvatar (MOD-149)", () => {
+  it("a connected app is the gray circle with a plug, never the former member's ?", () => {
+    const { container } = render(<AppAvatar />);
+    const root = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(root.getAttribute("data-kind")).toBe("app");
+    expect(root.getAttribute("data-label")).toBe("gray");
+    expect(root.getAttribute("data-size")).toBe("icon");
+    expect(root.getAttribute("aria-hidden")).toBe("true");
+    expect(root.className).toContain("rounded-avatar");
+    expect(container.textContent).toBe("");
+    const glyph = container.querySelector("svg") as SVGElement;
+    expect(glyph.getAttribute("class")).toContain("lucide-plug");
+    expect(glyph.getAttribute("class")).toContain("size-2.5");
+    // Neutral, like the initials: no hue and no accent (brand decision 40a).
+    const fallback = container.querySelector("[data-slot=avatar-fallback]") as HTMLElement;
+    expect(fallback.className).toContain("bg-label-fill");
+    expect(fallback.className).not.toMatch(/primary|accent/);
+  });
+
+  it("scales its plug with the rung", () => {
+    const { container } = render(<AppAvatar size="lg" />);
+    expect(container.querySelector("svg")?.getAttribute("class")).toContain("size-5");
   });
 });
 

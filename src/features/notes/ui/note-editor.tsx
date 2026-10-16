@@ -59,8 +59,12 @@ import {
   type NotesEditorBridge,
   NotesEditorBridgeContext,
 } from "../editor/notes-editor-bridge";
+import { BlockHandlePlugin } from "../editor/plugins/block-handle-plugin";
+import { CommentMarksPlugin } from "../editor/plugins/comment-marks-plugin";
 import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
+import { LinkDialogPlugin } from "../editor/plugins/link-dialog-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
+import { NoteLinkPlugin } from "../editor/plugins/note-link-plugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
 import { NOTE_EDITOR_NODES } from "../editor/schema/nodes";
@@ -318,8 +322,8 @@ function InsertEntityChipPlugin({ noteId, editable }: { noteId: string; editable
 
 /** One-shot self-teaching content for a fresh workspace's welcome note
  * (DESIGN_BRIEF §4). Canonical Lexical nodes → syncs like any typed content.
- * Task lines/chips join the demo as their blocks land (NO-4/NO-5). */
-function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
+ * The new Notes' version teaches `/task`, `[[`, `/contact` and the handles (NR-4). */
+function WelcomeSeedPlugin({ enabled, writing }: { enabled: boolean; writing: boolean }) {
   const [editor] = useLexicalComposerContext();
   useEffect(() => {
     if (!enabled) return;
@@ -340,7 +344,9 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
         const p2 = $createParagraphNode();
         p2.append(
           $createTextNode(
-            "Type / for blocks (headings, lists, checkboxes), or @ to mention a teammate. Notes nest: create a child page from the sidebar's + and drag rows to organize.",
+            writing
+              ? "Type / for blocks (headings, lists, checkboxes) and @ to mention a teammate. Hover a line and drag its ⋮⋮ handle to move it, or press ⌥⇧↑ / ⌥⇧↓."
+              : "Type / for blocks (headings, lists, checkboxes), or @ to mention a teammate. Notes nest: create a child page from the sidebar's + and drag rows to organize.",
           ),
         );
         // Teach the task-line gesture without minting a demo task into the
@@ -348,7 +354,9 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
         const p3 = $createParagraphNode();
         p3.append(
           $createTextNode(
-            "Checkboxes below stay humble checkboxes. When a line is real work, type /task (or hover a checkbox and press ⌘⇧T) — the line becomes a live task, synced with Tasks both ways.",
+            writing
+              ? "When a line is real work, type /task — it becomes a live task, synced with Tasks both ways. Type [[ to link another note (or create one by name), and /contact to bring in a person's card. Select text and press ⌘K to link it."
+              : "Checkboxes below stay humble checkboxes. When a line is real work, type /task (or hover a checkbox and press ⌘⇧T) — the line becomes a live task, synced with Tasks both ways.",
           ),
         );
         const list = $createListNode("check");
@@ -363,7 +371,7 @@ function WelcomeSeedPlugin({ enabled }: { enabled: boolean }) {
       });
     }, 120);
     return () => clearTimeout(id);
-  }, [editor, enabled]);
+  }, [editor, enabled, writing]);
   return null;
 }
 
@@ -382,6 +390,9 @@ export function NoteEditor({
   footer,
 }: Props) {
   const { userId, runtime } = useAuth();
+  // The new Notes' writing surface (NR-4): block handles, `[[`, ⌘K links.
+  // Classic Notes is frozen, and a view-only note gets none of them.
+  const writing = bare && editable;
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
   // Mount as soon as the local copy has loaded (NR-3 honest provider): the
   // cached doc paints and edits at once while the pull runs underneath. An
@@ -457,6 +468,7 @@ export function NoteEditor({
         tableRow: "notes-table-row",
         tableCell: "notes-table-cell",
         tableCellHeader: "notes-table-cell-header",
+        mark: "notes-comment-mark",
       },
     }),
     [noteId, editable],
@@ -514,7 +526,25 @@ export function NoteEditor({
               runtime={runtime}
               source={{ type: "note", id: noteId }}
               sourceLabel={titleForLabel || "Untitled"}
+              noteLinks={writing}
             />
+            {writing ? (
+              <>
+                <NoteLinkPlugin
+                  workspaceId={workspaceId}
+                  runtime={runtime}
+                  noteId={noteId}
+                  sourceLabel={titleForLabel || "Untitled"}
+                />
+                <LinkDialogPlugin
+                  workspaceId={workspaceId}
+                  runtime={runtime}
+                  noteId={noteId}
+                  sourceLabel={titleForLabel || "Untitled"}
+                />
+                <BlockHandlePlugin doc={session.doc} />
+              </>
+            ) : null}
             <MentionMenuPlugin
               workspaceId={workspaceId ?? null}
               runtime={runtime}
@@ -542,7 +572,19 @@ export function NoteEditor({
               format while typing. ⌘B/⌘I ride Lexical's built-in rich-text
               bindings; the floating toolbar makes them discoverable. */}
             <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
-            <FormatToolbarPlugin editable={editable} />
+            {bare ? (
+              <CommentMarksPlugin
+                noteId={noteId}
+                editable={editable}
+                runtime={runtime}
+                workspaceId={workspaceId ?? null}
+              />
+            ) : null}
+            <FormatToolbarPlugin
+              editable={editable}
+              link={writing}
+              comment={writing && Boolean(bridge.openComments)}
+            />
             <TaskLinePlugin editable={editable} noteId={noteId} />
             <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
             <InsertEntityChipPlugin noteId={noteId} editable={editable} />
@@ -554,7 +596,7 @@ export function NoteEditor({
             />
             <SyncFromYjsPlugin doc={session.doc} />
             <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
-            <WelcomeSeedPlugin enabled={seedWelcome && editable && booted} />
+            <WelcomeSeedPlugin enabled={seedWelcome && editable && booted} writing={writing} />
             {autoFocus && editable ? <AutoFocusPlugin /> : null}
             {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
           </LexicalComposer>

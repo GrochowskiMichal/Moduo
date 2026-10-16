@@ -1,4 +1,5 @@
 import { cva } from "class-variance-authority";
+import { Plug } from "lucide-react";
 import { Avatar as AvatarPrimitive } from "radix-ui";
 import type * as React from "react";
 
@@ -208,6 +209,47 @@ function PersonAvatar({
   );
 }
 
+// The plug sits a little under the initials' size on each rung: two letters
+// fill about 60% of the circle, one glyph reads at about the same weight.
+const APP_GLYPH: Record<IdentitySize, string> = {
+  icon: "size-2.5",
+  sm: "size-3.5",
+  default: "size-4",
+  lg: "size-5",
+};
+
+/**
+ * A connected app, not a person (MOD-149): what an API key or an agent wrote
+ * through the connector. The same gray circle a former member gets, with a
+ * small plug instead of "?", so an app never reads as a missing person. No
+ * colour and no AI badge (brand decision 40a): the words beside it name the
+ * app ("Claude Code (app)", "Maciej · via Claude Code"). Decorative by
+ * default, like `PersonAvatar`.
+ */
+function AppAvatar({
+  size = "icon",
+  className,
+  "aria-hidden": ariaHidden = true,
+  ...props
+}: Omit<React.ComponentProps<typeof AvatarPrimitive.Root>, "children"> & {
+  size?: IdentitySize;
+}) {
+  return (
+    <Avatar
+      size={size}
+      data-kind="app"
+      data-label="gray"
+      aria-hidden={ariaHidden}
+      className={className}
+      {...props}
+    >
+      <AvatarFallback className="bg-label-fill text-foreground">
+        <Plug aria-hidden className={APP_GLYPH[size]} />
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
 type TeamMarkProps = Omit<React.ComponentProps<"span">, "children" | "color"> & {
   /** The team's name. */
   name: string;
@@ -256,6 +298,7 @@ function TeamMark({
 
 export type { AvatarHue, PersonAvatarProps, TeamMarkProps };
 export {
+  AppAvatar,
   AVATAR_HUES,
   Avatar,
   AvatarBadge,

@@ -81,3 +81,29 @@ describe("the space between panels (MOD-162)", () => {
     expect(remPx(declarations(declaring[0]).get("--panel-gap"))).toBe(8);
   });
 });
+
+describe("a wrapping row's first line (MOD-153)", () => {
+  it("is derived on every density scope, so a one-line row stays the small rung tall", async () => {
+    const blocks = await tokenBlocks();
+    const declaring = blocks.filter((b) => declarations(b).has("--row-first-line-pad"));
+    expect(declaring.map((b) => b.prelude)).toEqual([":root, [data-density]"]);
+    expect(declarations(declaring[0]).get("--row-first-line-pad")).toBe(
+      "calc((var(--ctrl-h-sm) - 1lh) / 2)",
+    );
+
+    // Worked out from the density blocks, as above (jsdom resolves neither
+    // var() nor lh; measured live in the MOD-153 report): the overview's rows
+    // set 14 px text on a 21 px line, so 1lh + 2 × pad is the rung (26 / 24 /
+    // 22), the height a one-line row had before.
+    const pads = DENSITIES.map((density) => {
+      const block = blocksWithSelectors(
+        blocks,
+        density === "comfortable"
+          ? [":root", '[data-density="comfortable"]']
+          : [`[data-density="${density}"]`],
+      );
+      return (remPx(declarations(block[0]).get("--ctrl-h-sm")) - 21) / 2;
+    });
+    expect(pads).toEqual([2.5, 1.5, 0.5]);
+  });
+});

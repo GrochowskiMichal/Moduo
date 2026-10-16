@@ -4,7 +4,7 @@
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
-import { TagChip, TagChipList } from "./tag-chip";
+import { TagAddButton, TagChip, TagChipList } from "./tag-chip";
 import { TooltipProvider } from "./ui/tooltip";
 
 beforeAll(() => {
@@ -199,5 +199,32 @@ describe("TagChipList", () => {
   it("renders nothing without tags", () => {
     const { container } = render(<TagChipList tags={[]} />);
     expect(container.innerHTML).toBe("");
+  });
+});
+
+describe("TagAddButton (MOD-158)", () => {
+  it("is a round, quiet + at the md chip's 22 px, with a 24 px hit area", () => {
+    render(
+      <TooltipProvider>
+        <TagAddButton />
+      </TooltipProvider>,
+    );
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("data-slot")).toBe("tag-add");
+    for (const cls of ["size-5.5", "rounded-full", "hit-min", "text-muted-foreground"]) {
+      expect(add.className).toContain(cls);
+    }
+    // Never the property value's 26 px square.
+    expect(add.className).not.toMatch(/ctrl-h|rounded-md/);
+    expect(add.querySelector("svg")?.getAttribute("class")).toContain("size-icon-sm");
+  });
+
+  it("matches the sm chip's 18 px beside rows' chips", () => {
+    render(
+      <TooltipProvider>
+        <TagAddButton size="sm" label="Tag it" />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Tag it" }).className).toContain("size-4.5");
   });
 });

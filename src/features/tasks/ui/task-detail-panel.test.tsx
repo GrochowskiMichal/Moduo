@@ -51,7 +51,7 @@ import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/w
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task } from "../model";
+import type { ActivityEntry, Bucket, Tag, Task } from "../model";
 import { BulkPanel } from "./bulk-panel";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskFullPage } from "./task-full-page";
@@ -65,10 +65,16 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
   Element.prototype.hasPointerCapture ??= () => false;
 });
+/** Where the feed remembers your All · Comments pick (u1 is "you" here). */
+const FEED_FILTER_KEY = "moduo:task-feed-filter:u1";
+/** The feed opens on Comments (MOD-157); a test about the trail picks All first. */
+const pickAll = () => localStorage.setItem(FEED_FILTER_KEY, "all");
+
 afterEach(() => {
   cleanup();
   clearTaskTimeShares();
   setRunClaims(null, new Map());
+  localStorage.removeItem(FEED_FILTER_KEY);
 });
 
 const INBOX: Bucket = {
@@ -710,6 +716,7 @@ describe("comments on a task (U3-2)", () => {
         },
       ],
     });
+    pickAll();
     renderPanel(task(), api(task()), runtime);
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     await waitFor(() => expect(within(feed).getByText("Mike")).toBeTruthy());
@@ -854,6 +861,7 @@ describe("the activity reads like a thread, its box always in reach (MOD-129)", 
 
   it('drops the "Created by · Updated" line: the trail already says both', async () => {
     const { runtime } = fakeRuntime();
+    pickAll();
     renderPanel(task(), api(task()), runtime);
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     await waitFor(() => expect(within(feed).getByText(/created this/)).toBeTruthy());
@@ -867,6 +875,105 @@ describe("the activity reads like a thread, its box always in reach (MOD-129)", 
     const slot = document.querySelector('[data-slot="task-composer"]') as HTMLElement;
     expect(slot.childElementCount).toBe(0);
     expect(slot.className).toContain("empty:hidden");
+  });
+});
+
+describe("the feed opens on Comments, its switch at the title's size (MOD-157)", () => {
+  const COMMENT: SpineComment = {
+    id: "c1",
+    workspaceId: "w",
+    entityType: "task",
+    entityId: "t1",
+    body: "Rail counts first",
+    createdBy: "u2",
+    authorKind: "user",
+    authorLabel: null,
+    createdAt: "2026-10-07T20:02:00Z",
+    updatedAt: "2026-10-07T20:02:00Z",
+    deletedAt: null,
+    editedAt: null,
+    reactions: [],
+  };
+  const feed = () => screen.getByRole("region", { name: "Comments and activity" });
+  const shown = (name: "All" | "Comments") =>
+    within(feed()).getByRole("radio", { name }).getAttribute("aria-checked");
+
+  it("shows only the talk until you pick All", async () => {
+    const { runtime } = fakeRuntime({ comments: [COMMENT] });
+    renderPanel(task(), api(task()), runtime);
+    await waitFor(() => expect(within(feed()).getByText("Rail counts first")).toBeTruthy());
+    expect(shown("Comments")).toBe("true");
+    expect(shown("All")).toBe("false");
+    // The trail's lines (its creation line here) wait behind All.
+    expect(within(feed()).queryByText(/created this/)).toBeNull();
+  });
+
+  it("a task with changes but no comments says so in one quiet line, and keeps its box", async () => {
+    const { runtime } = fakeRuntime();
+    const t = task();
+    const changed: ActivityEntry = {
+      id: "a1",
+      workspaceId: "w",
+      module: "tasks",
+      entityType: "task",
+      entityId: "t1",
+      op: "tasks.update",
+      actorType: "user",
+      actorId: "u2",
+      actorLabel: "Mike",
+      payload: { fields: ["priority"] },
+      createdAt: "2026-10-07T09:00:00Z",
+    };
+    const loadActivity = rs.fn(async () => [changed]);
+    renderPanel(t, api(t, { loadActivity }), runtime);
+    await waitFor(() => expect(within(feed()).getByText("No comments yet.")).toBeTruthy());
+    expect(loadActivity).toHaveBeenCalled();
+    // The change waits behind All.
+    expect(within(feed()).queryByText("Mike")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Comment on this task" })).toBeTruthy();
+  });
+
+  it("when the comments don't load, says that, never 'No comments yet.' too", async () => {
+    const { runtime, spine } = fakeRuntime();
+    spine.listComments = rs.fn(async () => {
+      throw new Error("offline");
+    });
+    renderPanel(task(), api(task()), runtime);
+    await waitFor(() => expect(within(feed()).getByText(/didn’t load/)).toBeTruthy());
+    expect(within(feed()).queryByText("No comments yet.")).toBeNull();
+  });
+
+  it("All brings the changes back, and stays picked on this device", async () => {
+    const { runtime } = fakeRuntime({ comments: [COMMENT] });
+    renderPanel(task(), api(task()), runtime);
+    fireEvent.click(within(feed()).getByRole("radio", { name: "All" }));
+    await waitFor(() => expect(within(feed()).getByText(/created this/)).toBeTruthy());
+    expect(localStorage.getItem(FEED_FILTER_KEY)).toBe("all");
+    cleanup();
+    renderPanel(task(), api(task()), runtime);
+    expect(shown("All")).toBe("true");
+  });
+
+  it("an earlier Comments pick, or anything but All, reads as Comments", () => {
+    for (const stored of ["comments", "bogus"]) {
+      localStorage.setItem(FEED_FILTER_KEY, stored);
+      const { runtime } = fakeRuntime();
+      renderPanel(task(), api(task()), runtime);
+      expect(shown("Comments")).toBe("true");
+      cleanup();
+    }
+    // The control: a stored All is read, so the cases above came from storage.
+    pickAll();
+    renderPanel(task(), api(task()), fakeRuntime().runtime);
+    expect(shown("All")).toBe("true");
+  });
+
+  it("draws the switch on the quiet header size, not the control rung", () => {
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task()), runtime);
+    const sw = within(feed()).getByRole("radiogroup", { name: "Show" });
+    expect(sw.getAttribute("data-size")).toBe("xs");
+    expect(within(sw).getByRole("radio", { name: "All" }).className).toContain("text-sm");
   });
 });
 
@@ -1042,5 +1149,149 @@ describe("reordering subtasks (TV-U10)", () => {
     renderPanel(parent, a, null, false);
     moveUp("Second step");
     expect(dropTask).not.toHaveBeenCalled();
+  });
+});
+
+describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", () => {
+  const change = (over: Partial<ActivityEntry>): ActivityEntry => ({
+    id: "a1",
+    workspaceId: "w",
+    module: "tasks",
+    entityType: "task",
+    entityId: "t1",
+    op: "tasks.update",
+    actorType: "user",
+    actorId: "u2",
+    actorLabel: "Mike",
+    payload: { fields: ["priority"] },
+    createdAt: "2026-10-07T09:00:00Z",
+    ...over,
+  });
+  const feed = () => screen.getByRole("region", { name: "Comments and activity" });
+  /** The avatar on the feed line or card that says `text`. */
+  const avatarBy = (text: string) => {
+    let el: HTMLElement | null = within(feed()).getAllByText(text)[0] ?? null;
+    while (el && !el.querySelector("[data-slot=avatar]")) el = el.parentElement;
+    return el?.querySelector("[data-slot=avatar]") as HTMLElement;
+  };
+
+  it("in the trail: a key's change and an agent's show the plug; someone gone shows ?", async () => {
+    pickAll();
+    const activity = [
+      // The key's id, never a member's: no person to find for it.
+      change({
+        id: "a1",
+        actorType: "api_key",
+        actorId: "k1",
+        actorLabel: "Mike · via Claude Code",
+      }),
+      change({
+        id: "a2",
+        op: "tasks.set_status",
+        actorType: "agent",
+        actorId: null,
+        actorLabel: "Moduo",
+        createdAt: "2026-10-07T10:00:00Z",
+      }),
+      change({ id: "a3", actorId: "u9", actorLabel: "Ola", createdAt: "2026-10-07T11:00:00Z" }),
+    ];
+    const { runtime } = fakeRuntime();
+    renderPanel(task(), api(task(), { loadActivity: async () => activity }), runtime);
+    await waitFor(() => expect(within(feed()).getByText("Ola")).toBeTruthy());
+    for (const who of ["Mike · via Claude Code", "Moduo"]) {
+      const mark = avatarBy(who);
+      expect(mark.getAttribute("data-kind")).toBe("app");
+      expect(mark.querySelector("svg.lucide-plug")).toBeTruthy();
+      expect(mark.textContent).toBe("");
+    }
+    const gone = avatarBy("Ola");
+    expect(gone.hasAttribute("data-kind")).toBe(false);
+    expect(gone.getAttribute("data-label")).toBe("gray");
+    expect(gone.textContent).toBe("?");
+  });
+
+  it("on a comment: an app's shows the plug beside its name, a person's their initials", async () => {
+    const byKey: SpineComment = {
+      id: "c1",
+      workspaceId: "w",
+      entityType: "task",
+      entityId: "t1",
+      body: "Filed from the connector",
+      // A key's comment belongs to its creator but reads as the app.
+      createdBy: "u2",
+      authorKind: "api_key",
+      authorLabel: "Claude Code",
+      createdAt: "2026-10-07T20:02:00Z",
+      updatedAt: "2026-10-07T20:02:00Z",
+      deletedAt: null,
+      editedAt: null,
+      reactions: [],
+    };
+    const byMike: SpineComment = {
+      ...byKey,
+      id: "c2",
+      body: "Thanks",
+      authorKind: "user",
+      authorLabel: null,
+      createdAt: "2026-10-07T20:05:00Z",
+    };
+    const { runtime } = fakeRuntime({ comments: [byKey, byMike] });
+    renderPanel(task(), api(task()), runtime);
+    await waitFor(() => expect(within(feed()).getByText("Claude Code (app)")).toBeTruthy());
+    expect(avatarBy("Claude Code (app)").getAttribute("data-kind")).toBe("app");
+    const mike = avatarBy("Mike");
+    expect(mike.hasAttribute("data-kind")).toBe(false);
+    expect(mike.textContent).toBe("MI");
+  });
+});
+
+describe("the tags' + ends the chips, at their height (MOD-158)", () => {
+  const tag = (id: string, name: string): Tag => ({
+    id,
+    workspaceId: "w",
+    ownerId: "u1",
+    name,
+    color: "pink",
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  });
+  const TAGS = [tag("g1", "shell"), tag("g2", "visual")];
+  const withTags = (tags: Tag[]) =>
+    api(task(), { tags: TAGS, tagsByTask: new Map([["t1", tags]]) });
+
+  it("rides with the last chip as the round 22 px +, never the 26 px value square", () => {
+    renderPanel(task(), withTags(TAGS));
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("data-slot")).toBe("tag-add");
+    expect(add.className).toContain("size-5.5");
+    // In one group with the last chip, so it can't wrap onto a line alone.
+    const group = add.parentElement as HTMLElement;
+    const chips = group.querySelectorAll('[data-slot="tag-chip"]');
+    expect(chips).toHaveLength(1);
+    expect(chips[0]?.textContent).toBe("visual");
+    expect(group.lastElementChild).toBe(add);
+  });
+
+  it("opens the tag picker through both its triggers (popover and tooltip)", async () => {
+    renderPanel(task(), withTags(TAGS));
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(add);
+    expect(await screen.findByPlaceholderText("Filter or create…")).toBeTruthy();
+    expect(add.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("with no tags yet, the value still reads Add tag", () => {
+    renderPanel(task(), withTags([]));
+    const add = screen.getByRole("button", { name: "Add tag" });
+    expect(add.getAttribute("data-slot")).toBe("property-value");
+    expect(add.textContent).toContain("Add tag");
+  });
+
+  it("read-only: the chips and no +", () => {
+    renderPanel(task(), withTags(TAGS), null, false);
+    expect(screen.queryByRole("button", { name: "Add tag" })).toBeNull();
+    expect(document.querySelectorAll('[data-slot="tag-chip"]')).toHaveLength(2);
   });
 });

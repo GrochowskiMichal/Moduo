@@ -68,7 +68,7 @@ export function useNotesShell() {
       setDraft(step.draft);
       for (const effect of step.effects) {
         if (effect.type === "discard") void engine?.discardDraft(effect.id);
-        else module.materializeDraft(effect.draft);
+        else void module.materializeDraft(effect.draft);
       }
     },
     [engine, module.materializeDraft],
