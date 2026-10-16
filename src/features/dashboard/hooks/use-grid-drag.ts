@@ -12,7 +12,7 @@
 //   • the SAME engine call (`resolveDrag`) drives the live preview and the commit,
 //     so what you see is exactly what lands (WYSIWYG).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { commitLayout, resolveDrag } from "../engine/grid-engine";
 import type { WidgetInstance } from "../engine/types";
@@ -31,6 +31,8 @@ const SLOP_PX = 6;
 const LONG_PRESS_MS = 450;
 
 interface Gesture {
+  /** The page pressed on; the gesture commits only while it is still the active page. */
+  pageId: string;
   widgetId: string;
   pointerId: number;
   downX: number;
@@ -59,6 +61,8 @@ export interface DragRender {
 }
 
 export interface UseGridDragArgs {
+  /** The page `widgets` belong to. A gesture never outlives its page: if the page changes mid-gesture it is dropped, uncommitted (MOD-163). */
+  pageId: string;
   widgets: WidgetInstance[];
   editing: boolean;
   /** Commit a new layout after a successful drop (skipped when the drop changes nothing). */
@@ -73,6 +77,8 @@ export interface UseGridDragResult {
   drag: DragRender | null;
   /** Wire to each draggable widget's `onPointerDown`. */
   startWidgetDrag: (widgetId: string, event: React.PointerEvent) => void;
+  /** True from the press until release, including the armed window before a drag passes slop. */
+  isGestureLive: () => boolean;
 }
 
 /** Same id → same {x,y,size}? Used to skip a no-op commit (the byte-identical snap-back contract). */
@@ -93,6 +99,7 @@ function isInteractiveTarget(el: EventTarget | null): boolean {
 }
 
 export function useGridDrag({
+  pageId,
   widgets,
   editing,
   onCommit,
@@ -108,6 +115,7 @@ export function useGridDrag({
   const editingRef = useRef(editing);
   const onCommitRef = useRef(onCommit);
   const onLongPressRef = useRef(onLongPress);
+  const pageIdRef = useRef(pageId);
   useEffect(() => {
     widgetsRef.current = widgets;
     editingRef.current = editing;
@@ -147,8 +155,9 @@ export function useGridDrag({
       // `preview === preDrag` (by reference) means every target was rejected — a
       // non-fitting drop must leave the layout byte-identical (AC3) and never
       // commit. When a valid preview exists, `samePlacement` still skips the
-      // no-op case (dragged out and back to the exact start).
-      if (commit && g && g.started && g.preview !== g.preDrag) {
+      // no-op case (dragged out and back to the exact start). A gesture whose
+      // page is no longer the active one never commits (MOD-163).
+      if (commit && g?.started && g.preview !== g.preDrag && g.pageId === pageIdRef.current) {
         const next = commitLayout(g.preview);
         if (!samePlacement(next, g.preDrag)) onCommitRef.current(next);
       }
@@ -156,6 +165,19 @@ export function useGridDrag({
     },
     [teardown],
   );
+
+  // MOD-163: a gesture belongs to the page it started on. If another page
+  // becomes active mid-gesture, drop it uncommitted: its preview was resolved
+  // against the old page's widgets, and `onCommit` now targets the new page, so
+  // committing would overwrite the new page with them. A layout effect, so no
+  // pointerup can land between the page change and the drop.
+  useLayoutEffect(() => {
+    pageIdRef.current = pageId;
+    const g = gestureRef.current;
+    if (g && g.pageId !== pageId) endGesture(false);
+  }, [pageId, endGesture]);
+
+  const isGestureLive = useCallback(() => gestureRef.current !== null, []);
 
   const startWidgetDrag = useCallback(
     (widgetId: string, event: React.PointerEvent) => {
@@ -175,6 +197,7 @@ export function useGridDrag({
 
       const isEditing = editingRef.current;
       const gesture: Gesture = {
+        pageId: pageIdRef.current,
         widgetId,
         pointerId: event.pointerId,
         downX: event.clientX,
@@ -273,5 +296,5 @@ export function useGridDrag({
   // Safety net: tear down any live gesture if the hook unmounts mid-drag.
   useEffect(() => teardown, [teardown]);
 
-  return { gridRef, drag, startWidgetDrag };
+  return { gridRef, drag, startWidgetDrag, isGestureLive };
 }

@@ -121,6 +121,41 @@ describe("AppAvatar (MOD-149)", () => {
     const { container } = render(<AppAvatar size="lg" />);
     expect(container.querySelector("svg")?.getAttribute("class")).toContain("size-5");
   });
+
+  it("Moduo's own work is the gray circle with the Moduo mark, not the plug (follow-up)", () => {
+    const { container } = render(<AppAvatar kind="moduo" />);
+    const root = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(root.getAttribute("data-kind")).toBe("moduo");
+    expect(root.getAttribute("data-label")).toBe("gray");
+    expect(root.getAttribute("aria-hidden")).toBe("true");
+    expect(root.className).toContain("rounded-avatar");
+    // The mark, decorative (no title, no img role) and in the foreground colour.
+    expect(container.querySelector(".lucide-plug")).toBeNull();
+    const mark = container.querySelector("svg") as SVGElement;
+    expect(mark.getAttribute("viewBox")).toBe("0 0 1000 1000");
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.getAttribute("role")).toBeNull();
+    expect(mark.querySelector("title")).toBeNull();
+    expect(mark.querySelectorAll("path").length).toBeGreaterThan(0);
+    expect(mark.getAttribute("class")).toContain("text-foreground");
+    expect(mark.getAttribute("class")).toContain("size-icon-sm");
+    expect(container.textContent).toBe("");
+    // Neutral as the plug: no hue, no accent (brand decision 40a).
+    const fallback = container.querySelector("[data-slot=avatar-fallback]") as HTMLElement;
+    expect(fallback.className).toContain("bg-label-fill");
+    expect(fallback.className).not.toMatch(/primary|accent/);
+  });
+
+  it("scales the Moduo mark with the rung", () => {
+    const sizes = { sm: "size-5", default: "size-7", lg: "size-9" } as const;
+    for (const [size, glyph] of Object.entries(sizes)) {
+      const { container, unmount } = render(
+        <AppAvatar kind="moduo" size={size as keyof typeof sizes} />,
+      );
+      expect(container.querySelector("svg")?.getAttribute("class")).toContain(glyph);
+      unmount();
+    }
+  });
 });
 
 // MOD-96: a person's profile photo when they have one, the initials on their

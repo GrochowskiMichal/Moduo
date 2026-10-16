@@ -58,6 +58,34 @@ test.describe("north-star kit at three densities", () => {
     }
   });
 
+  test("a collection header: the count on the tertiary level, 4 px over its rows (MOD-152)", async ({
+    page,
+  }) => {
+    await openStory(page, "components-ui-collection-header--default");
+    const read = (testId: string) =>
+      page.getByTestId(testId).evaluate((section) => {
+        const header = section.querySelector("[data-slot=collection-header]") as HTMLElement;
+        const count = header.children[1] as HTMLElement;
+        // The token as the browser resolves it, on a probe beside the count.
+        const probe = document.createElement("span");
+        probe.style.color = "var(--subtle-foreground)";
+        section.append(probe);
+        const subtle = getComputedStyle(probe).color;
+        probe.remove();
+        const next = header.nextElementSibling as HTMLElement;
+        return {
+          count: getComputedStyle(count).color,
+          subtle,
+          gap: next.getBoundingClientRect().top - header.getBoundingClientRect().bottom,
+        };
+      });
+    const rows = await read("with-rows");
+    expect(rows.count).toBe(rows.subtle);
+    expect(rows.gap).toBe(4);
+    // An empty collection ends at its header.
+    expect((await read("empty")).gap).toBe(0);
+  });
+
   test("a menu opened at a density takes it (DisplayMenu)", async ({ page }) => {
     await openStory(page, "components-ui-display-menu--densities");
     const rows = page.getByRole("dialog", { name: "Display options" });

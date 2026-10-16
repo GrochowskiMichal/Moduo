@@ -23,17 +23,42 @@ const meta: Meta<typeof CollectionHeader> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Label · count · one action, on the small control rung. */
+/** A few plain rows to sit under a header. */
+function Rows({ items }: { items: readonly string[] }) {
+  return (
+    <ul className="flex flex-col">
+      {items.map((item) => (
+        <li key={item} className="flex min-h-(--ctrl-h-sm) items-center px-1 font-sans text-base">
+          {item}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Label · count (the tertiary level) · one action, on the small control rung,
+ * 4 px over its rows (MOD-152). An empty collection ends at its header: the
+ * 4 px only come with rows under it.
+ */
 export const Default: Story = {
   render: () => (
-    <div className="flex flex-col gap-3">
-      <CollectionHeader
-        label="Subtasks"
-        count="1/3"
-        action={<IconButton icon={Plus} label="Add a subtask" />}
-      />
-      <CollectionHeader label="Linked" count={4} />
-      <CollectionHeader label="Attachments" />
+    <div className="flex flex-col gap-4">
+      <section data-testid="with-rows">
+        <CollectionHeader
+          label="Subtasks"
+          count="1/3"
+          action={<IconButton icon={Plus} label="Add a subtask" />}
+        />
+        <Rows items={["Write the interview script", "Book three calls", "Send the notes"]} />
+      </section>
+      <section data-testid="empty">
+        <CollectionHeader label="Linked" count={0} />
+        <Rows items={[]} />
+      </section>
+      <section>
+        <CollectionHeader label="Attachments" />
+      </section>
     </div>
   ),
 };
@@ -42,11 +67,14 @@ export const Default: Story = {
 export const Densities: Story = {
   render: () => (
     <AtThreeDensities>
-      <CollectionHeader
-        label="Subtasks"
-        count="1/3"
-        action={<IconButton icon={Plus} label="Add a subtask" />}
-      />
+      <div>
+        <CollectionHeader
+          label="Subtasks"
+          count="1/3"
+          action={<IconButton icon={Plus} label="Add a subtask" />}
+        />
+        <Rows items={["Write the interview script", "Book three calls"]} />
+      </div>
     </AtThreeDensities>
   ),
 };

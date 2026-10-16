@@ -1,8 +1,9 @@
 // The project overview's words (MOD-139): what happened in the project reads
 // "Recently", not "Lately". Its title row's ⋯ holds Statuses… (MOD-150), its
 // optional fields come from the task details' "+" line (MOD-151), a row's
-// icon, picture and time sit on its title's first line (MOD-153), and the
-// actions at its foot stack (MOD-154).
+// icon, picture and time sit on its title's first line (MOD-153), the
+// actions at its foot stack (MOD-154), and it shares the task details'
+// title, headers, gap and divider, with Waiting where Next up was (MOD-152).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -27,7 +28,7 @@ rs.mock("../../../lib/runtime", () => ({
 import { TitleActionsScope } from "../../../components/app/title-actions";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { makeTask } from "../helpers";
-import type { Bucket, Task } from "../model";
+import type { Bucket, Section, Task, TaskWaitingEntry } from "../model";
 import { ProjectPanel } from "./project-panel";
 
 beforeAll(() => {
@@ -67,6 +68,44 @@ const TASK: Task = {
   id: "t1",
   creatorId: "u1",
   createdAt: "2026-10-14T09:00:00Z",
+};
+
+const DONE: Task = {
+  ...makeTask({
+    workspaceId: "w",
+    bucketId: "p1",
+    title: "Pick the domain",
+    position: "b",
+  }),
+  id: "t2",
+  status: "done",
+  statusCategory: "done",
+  creatorId: "u1",
+  createdAt: "2026-10-13T09:00:00Z",
+};
+
+const WAIT: TaskWaitingEntry = {
+  id: "w1",
+  workspaceId: "w",
+  taskId: "t1",
+  kind: "text",
+  ref: null,
+  label: "the copy",
+  since: "2026-10-15T09:00:00Z",
+  createdBy: "u1",
+  updatedAt: "2026-10-15T09:00:00Z",
+};
+
+const SECTION: Section = {
+  id: "s1",
+  workspaceId: "w",
+  projectId: "p1",
+  name: "Launch",
+  position: 0,
+  startsOn: null,
+  endsOn: null,
+  createdAt: "2026-10-01T00:00:00Z",
+  updatedAt: "2026-10-01T00:00:00Z",
 };
 
 const pointer = { button: 0, pointerType: "mouse" } as const;
@@ -245,13 +284,13 @@ describe("the optional fields' + line (MOD-151)", () => {
 describe("a row's first line (MOD-153)", () => {
   // jsdom lays nothing out: these pin the structure the browser lines up
   // (measured live in the MOD-153 report).
-  it("puts Next up's status, date and picture on the title's first line", () => {
+  it("puts Waiting's status and who it waits on on the title's first line", () => {
     render(
       <TooltipProvider>
-        <ProjectPanel project={PROJECT} tasks={[TASK]} sections={[]} />
+        <ProjectPanel project={PROJECT} tasks={[TASK]} sections={[]} waiting={[WAIT]} />
       </TooltipProvider>,
     );
-    const row = within(sectionOf("Next up")).getByRole("button", {
+    const row = within(sectionOf("Waiting")).getByRole("button", {
       name: /Draft the launch post/,
     });
     expect(row.className).toContain("items-start");
@@ -259,12 +298,37 @@ describe("a row's first line (MOD-153)", () => {
     expect(row.className).toContain("py-(--row-first-line-pad)");
     const title = within(row).getByText("Draft the launch post");
     const sides = [...row.children].filter((c) => c !== title);
-    // The status, the date and the picture, each in a box one line tall.
-    expect(sides).toHaveLength(3);
+    // The status, then "on the copy · Yesterday", each in a box one line tall.
+    expect(sides).toHaveLength(2);
     for (const box of sides) expect(box.className).toContain("h-lh");
-    // The small date sits inside its box, so the box keeps the row's line.
+    // The small words sit inside their box, so the box keeps the row's line.
     expect(sides[1].className).not.toContain("text-xs");
     expect(sides[1].firstElementChild?.className).toContain("text-xs");
+    expect(sides[1].textContent).toMatch(/^on the copy · \S/);
+    // A long label gives way, cut short, once the title is down to 10
+    // characters; the day never does (MOD-152).
+    expect(title.className).toContain("min-w-[min(10ch,100%)]");
+    expect(sides[1].className).toContain("min-w-0");
+    expect(within(row).getByText("on the copy").className).toContain("truncate");
+    const day = sides[1].firstElementChild?.lastElementChild as HTMLElement;
+    expect(day.textContent?.startsWith(" · ")).toBe(true);
+    expect(day.className).toContain("shrink-0");
+  });
+
+  it('keeps "+1" with the day when a task waits on more than one thing', () => {
+    const more: TaskWaitingEntry = { ...WAIT, id: "w2", label: "the logo files" };
+    render(
+      <TooltipProvider>
+        <ProjectPanel project={PROJECT} tasks={[TASK]} sections={[]} waiting={[WAIT, more]} />
+      </TooltipProvider>,
+    );
+    const row = within(sectionOf("Waiting")).getByRole("button", {
+      name: /Draft the launch post/,
+    });
+    // The label may be cut short; the count of the others never is.
+    expect(within(row).getByText("on the copy").className).toContain("truncate");
+    const tail = within(row).getByText(/^\+1 · /);
+    expect(tail.className).toContain("shrink-0");
   });
 
   it("puts Recently's day at the top, on the first line", () => {
@@ -311,6 +375,97 @@ describe("the actions at the foot (MOD-154)", () => {
       expect(b.className).toContain("w-full");
       expect(b.className).toContain("justify-start");
       expect(b.dataset.variant).toBe("ghost");
+    }
+  });
+});
+
+describe("one hierarchy with the task details (MOD-152)", () => {
+  const renderFull = () =>
+    render(
+      <TooltipProvider>
+        <ProjectPanel
+          project={{ ...PROJECT, leadId: "u1" }}
+          tasks={[TASK, DONE]}
+          sections={[SECTION]}
+          waiting={[WAIT]}
+        />
+      </TooltipProvider>,
+    );
+
+  it("has no Next up: Waiting takes its place, right after Progress", () => {
+    renderFull();
+    expect(screen.queryByRole("heading", { name: "Next up" })).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 4 }).map((h) => h.textContent)).toEqual([
+      "Progress",
+      "Waiting",
+      "Sections",
+      "People",
+      "Recently",
+    ]);
+  });
+
+  it("starts every section, and the actions, on the details' hairline, 16 px either side", () => {
+    renderFull();
+    const record = screen.getByRole("heading", { level: 3, name: "Website" });
+    const column = record.closest(".pane-scroll") as HTMLElement;
+    expect(column.className).toContain("gap-4");
+    const blocks = [...column.children];
+    const lines = blocks.filter((b) => b.getAttribute("data-slot") === "separator");
+    // Progress, Waiting, Sections, People, Recently and the actions.
+    expect(lines).toHaveLength(6);
+    for (const line of lines) {
+      expect(line.className).toContain("bg-hairline");
+      const next = line.nextElementSibling as HTMLElement;
+      expect(next.tagName === "SECTION" || next.dataset.slot === "project-actions").toBe(true);
+    }
+    // Every section follows a line; the record (title, properties,
+    // description) opens the view without one.
+    for (const section of column.querySelectorAll(":scope > section")) {
+      expect(section.previousElementSibling?.getAttribute("data-slot")).toBe("separator");
+    }
+    expect(blocks[0].getAttribute("data-slot")).not.toBe("separator");
+  });
+
+  it('heads Progress with "1 of 2 done" and keeps the rest as meta, without repeating it', () => {
+    renderFull();
+    const header = screen
+      .getByRole("heading", { name: "Progress" })
+      .closest("[data-slot=collection-header]") as HTMLElement;
+    expect(header.textContent).toBe("Progress1 of 2 done");
+    const lines = [
+      ...(document.querySelector("[data-slot=project-progress]") as HTMLElement).querySelectorAll(
+        "p",
+      ),
+    ];
+    expect(lines.map((l) => l.textContent)).toEqual(["1 open", "Done this month · 0"]);
+    for (const line of lines) {
+      expect(line.className).toContain("text-xs");
+      expect(line.className).toContain("text-muted-foreground");
+    }
+  });
+
+  it("names the project in the task title's style", () => {
+    renderFull();
+    const title = screen.getByRole("heading", { level: 3, name: "Website" });
+    expect(title.dataset.slot).toBe("detail-title");
+    for (const c of ["text-lg", "font-semibold", "leading-snug", "tracking-tight", "break-words"])
+      expect(title.className).toContain(c);
+  });
+
+  it("still lists the open tasks in Copy as text", async () => {
+    const writeText = rs.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    try {
+      renderFull();
+      fireEvent.click(screen.getByRole("button", { name: "Copy as text" }));
+      await act(async () => {});
+      expect(writeText).toHaveBeenCalledTimes(1);
+      const text = writeText.mock.calls[0][0];
+      expect(text).toContain("1 of 2 done · 1 open");
+      expect(text).toContain("- [ ] Draft the launch post");
+      expect(text).not.toContain("Pick the domain");
+    } finally {
+      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
     }
   });
 });

@@ -15,9 +15,10 @@ import {
 /**
  * Tasks v3 TV-U16 — a project's overview (spec §3, REPLAN 16 and 78, AC6.6),
  * against the local stack: someone opening a prepared project sees its
- * description, "Done this month · 1 · 45m" and what's next; editing the
- * description saves it; marking it Done with open work asks "Won't do · Move ·
- * Keep" first.
+ * description, its Progress ("1 of 2 done", "1 open") and "Done this month ·
+ * 1 · 45m" (no Next up since MOD-152: the List beside it has the open tasks);
+ * editing the description saves it; marking it Done with open work asks
+ * "Won't do · Move · Keep" first.
  *   bun run local:up
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8141
  *   E2E_BASE_URL=http://127.0.0.1:8141 bunx playwright test --project=e2e tests/project-overview.spec.ts
@@ -90,15 +91,19 @@ test("the overview orients a newcomer, edits the description, and asks before Do
   await page.getByRole("button", { name: /^Panel view:/ }).click({ timeout: 20_000 });
   await page.getByRole("menuitemradio", { name: /Project/ }).click();
 
-  // What it is, how far it is (AC6.6) and what's next. The first line waits for
-  // the store: until it has loaded the page is the Inbox's "Loading tasks"
-  // skeleton and the panel says "No project here".
-  const nextUp = page.getByRole("button", { name: `To do Pick a problem ${tag}`, exact: true });
+  // What it is and how far it is (AC6.6), under its Progress header (MOD-152).
+  // The first line waits for the store: until it has loaded the page is the
+  // Inbox's "Loading tasks" skeleton and the panel says "No project here".
+  const progress = page.locator("[data-slot=project-progress]");
+  const stillOpen = progress.getByText("1 open", { exact: true });
   await expect(page.getByText("Judging on Sunday.", { exact: false })).toBeVisible({
     timeout: 20_000,
   });
-  await expect(page.getByText("Done this month · 1 · 45m")).toBeVisible();
-  await expect(nextUp).toBeVisible();
+  await expect(progress.getByRole("heading", { name: "Progress" })).toBeVisible();
+  await expect(progress.getByText("1 of 2 done")).toBeVisible();
+  await expect(stillOpen).toBeVisible();
+  await expect(progress.getByText("Done this month · 1 · 45m")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Next up" })).toHaveCount(0);
 
   // The description saves through the op.
   await page.getByRole("button", { name: "Edit description" }).click();
@@ -134,5 +139,5 @@ test("the overview orients a newcomer, edits the description, and asks before Do
     })
     .toBe("done");
   // Keep leaves the open task open (Done never hides or closes tasks).
-  await expect(nextUp).toBeVisible();
+  await expect(stillOpen).toBeVisible();
 });

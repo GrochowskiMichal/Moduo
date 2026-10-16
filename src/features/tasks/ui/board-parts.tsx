@@ -1,9 +1,10 @@
 // The Board's furniture (TV-U11; tasks-v3 §5, calls 22a, 53a, 53b, defaults
 // n and o): a column's header (its mark, name as typed, count, the "+" that
 // stays visible, and its ⋯), the folded button that stands in for a column,
-// a lane's header, the "n hidden" and "N completed" lines (MOD-148), and
-// "+ Add status" / "+ Add section". The UI says "section", never "column" (22a). Kept out of
-// task-board-view.tsx so the view stays the layout and the drag wiring.
+// a lane's header, the board's "n hidden" and one "N completed" line
+// (MOD-148), and "+ Add status" / "+ Add section". The UI says "section",
+// never "column" (22a). Kept out of task-board-view.tsx so the view stays
+// the layout and the drag wiring.
 
 import { ChevronRight, ListChecks, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -20,7 +21,7 @@ import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import type { BoardMark } from "../board-columns";
-import { completedLabel } from "../completed";
+import { type CompletedMode, completedLabel } from "../completed";
 import type { GroupAdd, GroupAddState } from "../list-group-add";
 import { bucketDotColor } from "../sidebar";
 import { StatusIcon } from "./status-icon";
@@ -259,19 +260,24 @@ export function HiddenColumnsLine({
   );
 }
 
-/** "12 completed · Show" at the board's end while Display hides completed
- *  cards (MOD-148): every column's, in place, until "Hide". */
+/** The board's one completed line, at its end, while Display hides completed
+ *  cards (MOD-148 and its follow-up): "12 completed · Show" in Hidden, "5
+ *  older completed · Show" in "7 days"; every column's, in place, until
+ *  "Hide". No column or lane cell has its own. */
 export function CompletedCardsLine({
   count,
   shown,
   onToggle,
+  mode,
 }: {
   count: number;
   shown: boolean;
   onToggle: () => void;
+  /** Display → Completed, for the words. */
+  mode: CompletedMode;
 }) {
   if (count <= 0) return null;
-  const label = completedLabel(count);
+  const label = completedLabel(count, mode);
   return (
     <Button
       variant="ghost"

@@ -77,7 +77,8 @@ export function DashboardPage() {
   const { goToIndex, activeIndex, addPage, removePage } = dash;
   const pageCount = dash.layout.pages.length;
 
-  const { gridRef, drag, startWidgetDrag } = useGridDrag({
+  const { gridRef, drag, startWidgetDrag, isGestureLive } = useGridDrag({
+    pageId: activePage.id,
     widgets: activePage.widgets,
     editing,
     onCommit: (next) => dash.commitWidgets(activePage.id, next),
@@ -132,14 +133,15 @@ export function DashboardPage() {
   useEffect(() => {
     const onAction = (e: Event) => {
       const action = (e as CustomEvent<DashboardPageAction>).detail;
-      if (!action) return;
+      // The page never changes under a held widget (MOD-163).
+      if (!action || isGestureLive()) return;
       if (action.type === "goto") goToIndex(action.index);
       else if (action.type === "add") addPage();
       else if (action.type === "remove") removePage(activePageId);
     };
     window.addEventListener(DASHBOARD_PAGE_ACTION_EVENT, onAction);
     return () => window.removeEventListener(DASHBOARD_PAGE_ACTION_EVENT, onAction);
-  }, [goToIndex, addPage, removePage, activePageId]);
+  }, [goToIndex, addPage, removePage, activePageId, isGestureLive]);
 
   // ←/→ turn pages (AC5) — ignored while typing or with a modifier held.
   useEffect(() => {
@@ -149,11 +151,12 @@ export function DashboardPage() {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
       e.preventDefault();
+      if (isGestureLive()) return; // not under a held widget (MOD-163)
       goToIndex(activeIndex + (e.key === "ArrowRight" ? 1 : -1));
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [goToIndex, activeIndex]);
+  }, [goToIndex, activeIndex, isGestureLive]);
 
   return (
     <DashboardDataProvider layout={dash.layout} workspaceId={selectedWorkspaceId}>
@@ -177,7 +180,10 @@ export function DashboardPage() {
                     onWidgetPointerDown={startWidgetDrag}
                     onRemove={onRemove}
                     onResize={onResize}
-                    onPage={(dir) => dash.goToIndex(dash.activeIndex + dir)}
+                    onPage={(dir) => {
+                      // A swipe never turns the page under a held widget (MOD-163).
+                      if (!isGestureLive()) dash.goToIndex(dash.activeIndex + dir);
+                    }}
                   />
                 )}
               </div>

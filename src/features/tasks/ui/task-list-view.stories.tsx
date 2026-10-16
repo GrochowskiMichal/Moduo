@@ -187,10 +187,23 @@ export const BySectionMostlyDone: Story = {
   },
 };
 
-/** The same project in Display → Completed: 7 days: each section keeps its
- *  own line for the work finished before the last seven days (MOD-148). */
+/** The same project in Display → Completed: 7 days, three pieces finished
+ *  yesterday: those show in Build, struck through, and no section has a line
+ *  of its own; one "6 older completed · Show" ends the list for the work
+ *  finished before the last seven days (MOD-148 follow-up). */
+const YESTERDAY = new Date(Date.now() - 86_400_000).toISOString();
+const MOSTLY_DONE_RECENT: Task[] = MOSTLY_DONE.map((t) =>
+  t.id === "finished-6" || t.id === "finished-7" || t.id === "finished-8"
+    ? { ...t, updatedAt: YESTERDAY, completedAt: YESTERDAY }
+    : t,
+);
 export const BySectionSevenDays: Story = {
-  args: { ...BySectionMostlyDone.args, completed: "week" },
+  args: {
+    ...BySectionMostlyDone.args,
+    completed: "week",
+    tasks: MOSTLY_DONE_RECENT,
+    api: stubApi(MOSTLY_DONE_RECENT, { sections: SECTIONS }),
+  },
 };
 
 /** A late row (REPLAN 23): muted, never red; hover or select it for

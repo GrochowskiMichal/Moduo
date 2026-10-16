@@ -23,7 +23,12 @@ import {
 } from "react";
 import { toast } from "sonner";
 
-import { AppAvatar, PersonAvatar as KitPersonAvatar, TeamMark } from "@/components/ui/avatar";
+import {
+  AppAvatar,
+  type AppAvatarKind,
+  PersonAvatar as KitPersonAvatar,
+  TeamMark,
+} from "@/components/ui/avatar";
 import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -56,22 +61,23 @@ import { Reference } from "../references/ui/reference";
  * A comment author's (or a mentioned person's) small avatar: the kit's two
  * initials on a stable colour (DS-6, call 43), keyed on the person's id when
  * known so it matches every other surface. Decorative: a name always sits
- * beside it. A connected app (`app`: an API key's comment, an agent's change)
- * is the gray circle with a plug (MOD-149); someone the app can't resolve (a
+ * beside it. A connected app (`app` "app": an API key's comment or change) is
+ * the gray circle with a plug, Moduo's own change (`app` "moduo") the gray
+ * circle with the Moduo mark (MOD-149); someone the app can't resolve (a
  * former member) is a gray "?", like an unknown assignee; never the empty
  * "unassigned" ring.
  */
 export function PersonAvatar({
   person,
-  app = false,
+  app = null,
   className,
 }: {
   person: (Pick<CommentPerson, "name" | "avatarUrl" | "unnamed"> & { id?: string }) | null;
-  /** Written by a connected app, not a person: the plug, whoever the person is. */
-  app?: boolean;
+  /** Written by an app, not a person: its mark, whoever the person is. */
+  app?: AppAvatarKind | null;
   className?: string;
 }) {
-  if (app) return <AppAvatar size="icon" className={className} />;
+  if (app) return <AppAvatar kind={app} size="icon" className={className} />;
   return (
     <KitPersonAvatar
       name={person && !person.unnamed ? person.name || "?" : "?"}
@@ -254,7 +260,7 @@ export function CommentCard({
 }) {
   return (
     <FeedCard
-      avatar={<PersonAvatar person={author} app={app} />}
+      avatar={<PersonAvatar person={author} app={app ? "app" : null} />}
       author={authorName}
       time={time}
       timeTitle={timeTitle}
