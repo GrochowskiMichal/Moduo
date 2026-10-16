@@ -215,6 +215,33 @@ export function buildStream(
 }
 
 /**
+ * Replies whose chain is wrapped up (CV-12): the stream doesn't draw them (a
+ * drawing rule on the root; they stay rows for unread, Catch up, search and
+ * export). The root is read from the window first (your pending Wrap up shows
+ * at once), then from what the store holds; a reply whose root isn't held
+ * stays drawn, and so do your unsent sends. Joined with the ids deleted
+ * inside their Undo: same path.
+ */
+export function wrappedReplyIds(
+  rows: readonly ChatMessage[],
+  rowById: (id: string) => ChatMessage | undefined,
+  base?: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const inWindow = new Map<string, ChatMessage>();
+  for (const m of rows) inWindow.set(m.id, m);
+  let out: Set<string> | null = null;
+  for (const m of rows) {
+    if (!m.parentId || m.sendState) continue;
+    const root = inWindow.get(m.parentId) ?? rowById(m.parentId);
+    // A reply after the wrap-up reopened it (CH54): it shows before the root's change arrives.
+    if (!root?.wrappedAt || m.createdAt > root.wrappedAt) continue;
+    out ??= new Set(base);
+    out.add(m.id);
+  }
+  return out ?? base ?? new Set();
+}
+
+/**
  * The read mark's candidate: the newest server message at or above `index`
  * (the last row on screen). Unsent sends and event lines never count; null
  * when nothing on screen is a message.
@@ -229,11 +256,36 @@ export function lastSeenMessage(items: readonly StreamItem[], index: number): Ch
   return null;
 }
 
+/**
+ * Where the read mark goes when `seenId` is on screen: past the rows after it
+ * that the stream doesn't draw (replies of a wrapped-up chain, CV-12), so a
+ * conversation whose newest messages are hidden replies can still be read.
+ * Their Catch up items stay open until the chain is read (the server's rule).
+ */
+export function readThroughHidden(
+  rows: readonly ChatMessage[],
+  seenId: string,
+  hidden: ReadonlySet<string>,
+): string {
+  const at = rows.findIndex((m) => m.id === seenId);
+  if (at < 0) return seenId;
+  let out = seenId;
+  for (let i = at + 1; i < rows.length; i += 1) {
+    const m = rows[i]!;
+    // Unsent sends and event lines are never the mark; they don't stop it either.
+    if (m.sendState || m.kind === "event") continue;
+    if (!hidden.has(m.id)) return seenId;
+    out = m.id;
+  }
+  return out;
+}
+
 /** How many messages from others arrived after `afterId` (the floating "N new ↓" chip). */
 export function countNewSince(
   rows: readonly ChatMessage[],
   afterId: string | null,
   selfId: string | null,
+  hidden?: ReadonlySet<string>,
 ): number {
   if (!afterId) return 0;
   let n = 0;
@@ -241,6 +293,8 @@ export function countNewSince(
     const m = rows[i]!;
     if (m.id === afterId) return n;
     if (m.kind === "event" || m.sendState || m.deletedAt || m.authorId === selfId) continue;
+    // A row the stream doesn't draw can't be scrolled to.
+    if (hidden?.has(m.id)) continue;
     n += 1;
   }
   return 0;

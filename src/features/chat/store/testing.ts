@@ -96,6 +96,11 @@ export function message(
     replyCount: 0,
     lastReplyAt: null,
     replyUserIds: [],
+    wrappedAt: null,
+    wrappedBy: null,
+    settledId: null,
+    reopenedAt: null,
+    reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
     editedAt: null,
@@ -132,6 +137,8 @@ export class FakeChatServer {
   /** A request held until released (the device copy shows first). */
   hold: Map<string, Pending> = new Map();
   marks: { channelId: string; messageId: string }[] = [];
+  /** Chains I stopped following. */
+  muted = new Set<string>();
 
   now(): string {
     this.clock += 1000;
@@ -341,6 +348,59 @@ export class FakeChatServer {
             pinnedBy: pinned ? ME : null,
           })),
         ),
+      wrapUp: ({ rootId, settledId }) =>
+        this.gate("wrapUp", () =>
+          this.mine(rootId, () => ({
+            wrappedAt: this.now(),
+            wrappedBy: ME,
+            settledId,
+            reopenedAt: null,
+            reopenedBy: null,
+          })),
+        ),
+      reopen: (rootId) =>
+        this.gate("reopen", () =>
+          this.mine(rootId, () => ({
+            wrappedAt: null,
+            wrappedBy: null,
+            settledId: null,
+            reopenedAt: this.now(),
+            reopenedBy: ME,
+          })),
+        ),
+      attachToChain: ({ messageId, replyToId }) =>
+        this.gate("attachToChain", () => {
+          const target = this.rows.get(replyToId);
+          const root = target?.parentId ?? replyToId;
+          const old = this.rows.get(messageId)?.parentId ?? null;
+          const res = this.mine(messageId, () => ({ parentId: root, replyToId }));
+          const recount = (id: string | null) => {
+            if (!id || !this.rows.has(id)) return;
+            const n = [...this.rows.values()].filter(
+              (r) => r.parentId === id && !r.deletedAt,
+            ).length;
+            this.change(id, { replyCount: n });
+          };
+          recount(old);
+          recount(root);
+          return res;
+        }),
+      chainRead: () => this.gate("chainRead", () => ok(null)),
+      chains: (channelId) =>
+        this.gate("chains", () =>
+          ok(
+            this.readableRows(channelId)
+              .filter((r) => !r.parentId && r.replyCount > 0 && !r.deletedAt)
+              .sort((a, b) => (b.lastReplyAt ?? "").localeCompare(a.lastReplyAt ?? "")),
+          ),
+        ),
+      chainFollowing: (rootId) => this.thrown("chainFollowing", () => !this.muted.has(rootId)),
+      followChain: (rootId, following) =>
+        this.gate("followChain", () => {
+          if (following) this.muted.delete(rootId);
+          else this.muted.add(rootId);
+          return ok(null);
+        }),
       markRead: (args) =>
         this.gate("markRead", () => {
           this.marks.push(args);

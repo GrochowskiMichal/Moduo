@@ -1,15 +1,15 @@
 // Chat's screen (specs/chat-v2.md §2–§3, §12, prototype frames 1, 3–7), on
 // the v2 store (CV-3). Three panels, nothing else (Tasks 48b): left =
 // conversations, centre = the open conversation (or Browse channels), right =
-// the panel's views (Details now; Reply chains and Files with CV-12 / CV-9)
-// with its "← item" stack (a person, a message in context). The page
-// (`routes/pages/chat-page.tsx`) is a thin adapter for `/chat?c=&m=&view=`.
+// the panel's views (Details, Reply chains; Files with CV-9) with its
+// "← item" stack (a person, a message in context, a reply chain). The page
+// (`routes/pages/chat-page.tsx`) is a thin adapter for `/chat?c=&m=&t=&view=`.
 //
 // Page-level keys: ⌥↑ / ⌥↓ previous / next conversation, ⌥⇧↑ / ⌥⇧↓ previous /
 // next unread one.
 
 import type { WorkspaceRole } from "@contracts/vocabularies";
-import { Loader2, MessageSquareText, MessagesSquare, User } from "lucide-react";
+import { CornerUpLeft, Loader2, MessageSquareText, MessagesSquare, User, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { onCreateNew } from "@/components/app/create-events";
@@ -22,16 +22,29 @@ import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layou
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import {
+  type ChainRights,
+  chainGroups,
+  chainsStamp,
+  excerptOf,
+  mayAttach,
+  mayWrap,
+  replyToChoices,
+} from "../chains";
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
+import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
 import { MessageInContext } from "../panel/message-in-context";
 import { PersonCard } from "../panel/person-card";
+import { ReplyChainsView } from "../panel/reply-chains-view";
 import { useConversationDetails } from "../panel/use-conversation-details";
+import { useReplyChains } from "../panel/use-reply-chains";
 import {
   chatTypingStore,
   useChatPresence,
@@ -42,6 +55,7 @@ import {
 import type { ChatWindow, ChatWriteResult } from "../store/store";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
 import { authorName } from "../stream/rows";
+import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
 import { composerLine } from "./composer-state";
@@ -52,6 +66,8 @@ import { useChannelManagers, useChatRights } from "./use-chat-rights";
 
 /** "Deleted · Undo" stays this long; then the server deletes (§6 #10). */
 const DELETE_UNDO_MS = 8000;
+/** "Wrapped up · Undo" stays this long (§5). */
+const WRAP_UNDO_MS = 8000;
 
 const EMPTY_WINDOW: ChatWindow = {
   rows: [],
@@ -69,7 +85,8 @@ export type ChatScreenPerson = ChatPerson;
 /** What the right panel's "← item" stack holds (spec #10): items, not views. */
 type ChatPanelEntry =
   | { key: string; type: "person"; id: string }
-  | { key: string; type: "message"; id: string; channelId: string; author: string };
+  | { key: string; type: "message"; id: string; channelId: string; author: string }
+  | { key: string; type: "chain"; id: string };
 
 function typingLine(names: string[]): string | null {
   if (names.length === 0) return null;
@@ -108,6 +125,8 @@ export type ChatScreenProps = {
   conversationId: string | null;
   /** A message the link names (`m`): the stream lands on it. */
   messageId: string | null;
+  /** A reply chain the link names (`t`): it opens on the right (CV-12). */
+  chainId?: string | null;
   /** The centre shows Browse channels (`view=browse`). */
   browsing?: boolean;
   /** Open Browse channels. */
@@ -115,7 +134,7 @@ export type ChatScreenProps = {
   /** Open a conversation (null: none named, so Chat lands on General). */
   onOpen: (
     conversationId: string | null,
-    /** `chainId`: a reply chain's root (the link's `t`; its panel is CV-12's). */
+    /** `chainId`: a reply chain's root (the link's `t`: it opens on the right). */
     opts?: { messageId?: string; chainId?: string; replace?: boolean },
   ) => void;
 };
@@ -131,6 +150,7 @@ export function ChatScreen({
   ownerName,
   conversationId,
   messageId,
+  chainId = null,
   browsing = false,
   onOpen,
   onBrowse,
@@ -254,6 +274,45 @@ export function ChatScreen({
       }),
     [openInPanel, personOf],
   );
+  const openChain = useCallback(
+    (rootId: string) => openInPanel({ key: `chain:${rootId}`, type: "chain", id: rootId }),
+    [openInPanel],
+  );
+  const loadChain = useCallback((rootId: string) => void store?.openChain(rootId), [store]);
+  const rowById = useCallback((id: string) => store?.rowById(id), [store]);
+  // A link's chain (`t`) opens on the right once the conversation is there.
+  const openedChain = useRef<string | null>(null);
+  useEffect(() => {
+    // The link let go of its chain: the same `t` opens it again later.
+    if (!chainId) openedChain.current = null;
+    if (!ready || !known || !chainId || openedChain.current === chainId) return;
+    openedChain.current = chainId;
+    openChain(chainId);
+    // Let go of `t` once it's open, so the next link to this chain opens it again.
+    if (conversationId)
+      onOpen(conversationId, { messageId: messageId ?? undefined, replace: true });
+  }, [ready, known, chainId, openChain, conversationId, messageId, onOpen]);
+  const chainRoots = useReplyChains(
+    runtime?.chat ?? null,
+    channel?.id ?? null,
+    chainsStamp(streamWin?.rows),
+    rowById,
+  );
+  const chainList = useMemo(() => {
+    if (!chainRoots) return null;
+    const held = new Map<string, ChatMessage[]>();
+    for (const m of streamWin?.rows ?? []) {
+      if (!m.parentId) continue;
+      const list = held.get(m.parentId) ?? [];
+      list.push(m);
+      held.set(m.parentId, list);
+    }
+    return chainGroups(chainRoots, {
+      selfId,
+      lastReadAt: member?.lastReadAt ?? null,
+      repliesOf: (id) => held.get(id) ?? [],
+    });
+  }, [chainRoots, streamWin?.rows, selfId, member?.lastReadAt]);
   const details = useConversationDetails(
     runtime?.chat ?? null,
     workspaceId,
@@ -408,6 +467,55 @@ export function ChatScreen({
     [store, unhide],
   );
 
+  // Wrapped-up chains: their replies leave the stream (a drawing rule, CV-12),
+  // on the same path as the deletes inside their Undo.
+  const streamHidden = useMemo(
+    () => wrappedReplyIds(streamWin?.rows ?? [], rowById, hidden),
+    [streamWin?.rows, rowById, hidden],
+  );
+
+  // Reply (R, the toolbar): the main box answers a message ("Replying to …").
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  useEffect(() => setReplyingTo(null), [conversationId]);
+
+  // Wrap up ("Which reply settled it?") and Reply to… (CV-12).
+  const [wrapFor, setWrapFor] = useState<string | null>(null);
+  const [attachFor, setAttachFor] = useState<ChatMessage | null>(null);
+  const askWrapUp = useCallback(
+    (rootId: string) => {
+      void store?.openChain(rootId);
+      setWrapFor(rootId);
+    },
+    [store],
+  );
+  const wrapUp = useCallback(
+    (rootId: string, settledId: string) => {
+      if (!store) return;
+      setWrapFor(null);
+      void store.wrapUp(rootId, settledId).then((res) => {
+        if (failed(res, "Couldn't wrap it up.")) return;
+        toast("Wrapped up", {
+          id: `chat-wrap-${rootId}`,
+          duration: WRAP_UNDO_MS,
+          action: {
+            label: "Undo",
+            onClick: () =>
+              void store.reopen(rootId).then((r) => failed(r, "Couldn't undo the wrap-up.")),
+          },
+        });
+      });
+    },
+    [store],
+  );
+  const reopen = useCallback(
+    (rootId: string) =>
+      void store?.reopen(rootId).then((res) => {
+        if (!failed(res, "Couldn't reopen it.")) toast("Reopened");
+      }),
+    [store],
+  );
+
   // T / "Make a task": the app's capture opens as Task with the message's words (AC2.7).
   const makeTaskFrom = useCallback((m: ChatMessage) => {
     const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
@@ -509,6 +617,35 @@ export function ChatScreen({
     />
   );
 
+  // Who may wrap up and Reply to… (a mirror of the ops' rules; the server decides).
+  // Role, plan and archive decide. "Manage any channel" works from outside a public
+  // channel; a listed manager manages only while a member (the server's rule).
+  // The chain's own box still needs the main box's rule.
+  const chainManage =
+    !!channel && (rights.manageAny || (!!member && (managers ?? []).includes(selfId)));
+  const chainRights: ChainRights = {
+    canPost: rights.canPost && (!channel?.managersOnly || chainManage),
+    paused: snap.paused,
+    canManage: chainManage,
+    selfId,
+  };
+  // The box's line (why you can't write here, if you can't): one rule for both boxes.
+  const composerRefusal = channel
+    ? composerLine({
+        channel,
+        member,
+        selfId,
+        personOf,
+        paused: snap.paused,
+        isOwner: role === "owner",
+        ownerName,
+        canPost: rights.canPost,
+        canManage,
+      })
+    : null;
+  const canWriteHere = !!channel && composerRefusal === null && !managersPending;
+  const canWrapUp = (root: ChatMessage) => !!channel && mayWrap(root, channel, chainRights);
+
   let center: React.ReactNode;
   if (browsing) {
     center = (
@@ -559,18 +696,8 @@ export function ChatScreen({
   } else {
     const title = conversationTitle(channel, selfId, personOf);
     const others = channel.kind === "dm" ? dmPeople(channel, selfId) : [];
-    const line = composerLine({
-      channel,
-      member,
-      selfId,
-      personOf,
-      paused: snap.paused,
-      isOwner: role === "owner",
-      ownerName,
-      canPost: rights.canPost,
-      canManage,
-    });
-    const canWrite = line === null && !managersPending;
+    const line = composerRefusal;
+    const canWrite = canWriteHere;
     const typingNames = typing.entries
       .filter((t) => t.channelId === channel.id && t.parentId === null && t.userId !== selfId)
       .map((t) => personOf(t.userId)?.name ?? "Someone");
@@ -622,8 +749,8 @@ export function ChatScreen({
           window={streamWin ?? EMPTY_WINDOW}
           selfId={selfId}
           personOf={personOf}
-          rowById={(id) => store?.rowById(id)}
-          hidden={hidden}
+          rowById={rowById}
+          hidden={streamHidden}
           editingId={editingId}
           canWrite={canWrite}
           // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
@@ -640,7 +767,9 @@ export function ChatScreen({
           onLoadOlder={() => void store?.loadOlder(channel.id)}
           onLoadNewer={() => void store?.loadNewer(channel.id)}
           onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
-          onSeen={(id) => store?.markSeen(channel.id, id)}
+          onSeen={(id) =>
+            store?.markSeen(channel.id, readThroughHidden(streamWin?.rows ?? [], id, streamHidden))
+          }
           onStartEdit={(m) => setEditingId(m.id)}
           renderEditor={(m) => (
             <ChatComposer
@@ -689,8 +818,34 @@ export function ChatScreen({
               ?.markUnread(m.channelId, m.id)
               .then((res) => failed(res, "Couldn't mark as unread."));
           }}
-          // Reply chains are CV-12's: until then a chain opens at its first message.
-          onOpenChain={(m) => onOpen(m.channelId, { chainId: m.parentId ?? m.id })}
+          onOpenChain={(m) => openChain(m.parentId ?? m.id)}
+          onReply={(m) => {
+            if (!canWrite) {
+              openChain(m.parentId ?? m.id);
+              return;
+            }
+            setReplyingTo(m);
+            composerRef.current?.focus();
+          }}
+          onJumpTo={(m) => {
+            // A reply of a wrapped chain isn't drawn: its chain opens instead.
+            if (streamHidden.has(m.id)) {
+              openChain(m.parentId ?? m.id);
+              return;
+            }
+            if (streamRef.current?.jumpTo(m.id)) return;
+            void store?.openAt(m.channelId, m.id).then((at) => {
+              if (!at) toast("That message isn't available.");
+            });
+          }}
+          wrapUpFor={(m) =>
+            !m.parentId && m.replyCount > 0 && !m.wrappedAt && canWrapUp(m)
+              ? () => askWrapUp(m.id)
+              : undefined
+          }
+          replyToFor={(m) =>
+            mayAttach(m, channel, chainRights) ? () => setAttachFor(m) : undefined
+          }
           onRetry={(m) => store?.retry(m.id)}
           onDiscard={(m) => store?.discard(m.id)}
           onPersonClick={openPerson}
@@ -737,6 +892,35 @@ export function ChatScreen({
               >
                 {typingLine(typingNames)}
               </p>
+              {replyingTo ? (
+                <div
+                  data-slot="replying-to"
+                  className="flex h-(--row-h-sm) min-w-0 items-center gap-2 px-3 text-xs text-muted-foreground"
+                >
+                  <CornerUpLeft aria-hidden className="size-icon-xs shrink-0" />
+                  <span className="shrink-0">
+                    Replying to{" "}
+                    <b className="font-medium text-foreground">
+                      {authorName(
+                        replyingTo,
+                        replyingTo.authorId ? personOf(replyingTo.authorId) : undefined,
+                      )}
+                    </b>
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">· {excerptOf(replyingTo)}</span>
+                  <button
+                    type="button"
+                    aria-label="Cancel reply"
+                    className="shrink-0 rounded-sm p-0.5 hover:bg-state-hover hover:text-foreground"
+                    onClick={() => {
+                      setReplyingTo(null);
+                      returnToComposer();
+                    }}
+                  >
+                    <X aria-hidden className="size-icon-xs" />
+                  </button>
+                </div>
+              ) : null}
               <ChatComposer
                 key={channel.id}
                 ref={composerRef}
@@ -750,27 +934,39 @@ export function ChatScreen({
                 note={channelNote?.note ?? null}
                 onSend={(body) => {
                   if (!store || !body.trim()) return false;
+                  const replyRoot = replyingTo ? (replyingTo.parentId ?? replyingTo.id) : null;
                   const id = store.send({
                     channelId: channel.id,
                     body,
-                    replyToId: null,
+                    replyToId: replyingTo?.id ?? null,
                     format: "v2",
                   });
-                  typingStore?.send(channel.id, null, true);
+                  setReplyingTo(null);
+                  typingStore?.send(channel.id, replyRoot, true);
                   setChannelNote(mentionsOf(parseStored(body)).channel ? { id, note: null } : null);
                   streamRef.current?.showLatest();
                   return true;
                 }}
                 onDraftChange={(stored) => store?.setDraft(channel.id, null, stored)}
-                onTyping={(active) => typingStore?.send(channel.id, null, !active)}
+                onTyping={(active) =>
+                  typingStore?.send(
+                    channel.id,
+                    replyingTo ? (replyingTo.parentId ?? replyingTo.id) : null,
+                    !active,
+                  )
+                }
                 onEditLast={() =>
                   editLast(
                     // The row past the window's edge isn't drawn; ids inside their Undo are gone.
                     (streamWin?.hasOlder ? streamWin.rows.slice(1) : streamWin?.rows) ?? [],
-                    hidden,
+                    streamHidden,
                   )
                 }
-                onEscapeEmpty={() => streamRef.current?.focusLast()}
+                onEscapeEmpty={() => {
+                  // Esc first lets go of the reply, then steps into the stream.
+                  if (replyingTo) setReplyingTo(null);
+                  else streamRef.current?.focusLast();
+                }}
               />
             </>
           )}
@@ -795,6 +991,57 @@ export function ChatScreen({
             online={entry.id === selfId || online(entry.id)}
             canMessage={canStart}
             onMessage={(uid) => openDmWith([uid])}
+          />
+        ),
+      };
+    }
+    if (entry.type === "chain") {
+      const chain = snap.chains[entry.id];
+      const root = chain?.root;
+      return {
+        key: entry.key,
+        title: "Reply chain",
+        icon: MessagesSquare,
+        render: () => (
+          <ChainItem
+            chat={runtime?.chat ?? null}
+            rootId={entry.id}
+            chain={chain}
+            selfId={selfId}
+            personOf={personOf}
+            onLoad={loadChain}
+            onPersonClick={openPerson}
+            onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
+            onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
+            renderComposer={
+              channel && canWriteHere && root?.channelId === channel.id
+                ? (placeholder) => (
+                    <ChatComposer
+                      key={`chain:${entry.id}`}
+                      runtime={runtime}
+                      workspaceId={workspaceId}
+                      selfId={selfId}
+                      people={people}
+                      placeholder={placeholder}
+                      initial={store?.draft(channel.id, entry.id) ?? ""}
+                      onSend={(body) => {
+                        if (!store || !body.trim()) return false;
+                        store.send({
+                          channelId: channel.id,
+                          body,
+                          replyToId: entry.id,
+                          format: "v2",
+                        });
+                        typingStore?.send(channel.id, entry.id, true);
+                        return true;
+                      }}
+                      onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
+                      onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
+                      onEscapeEmpty={panelStack.back}
+                    />
+                  )
+                : undefined
+            }
           />
         ),
       };
@@ -867,6 +1114,17 @@ export function ChatScreen({
             }
             onOpenPerson={openPerson}
             onOpenMessage={openMessageInPanel}
+            chains={chainList}
+            onOpenChain={(root) => openChain(root.id)}
+          />
+        ),
+        chains: () => (
+          <ReplyChainsView
+            groups={chainList}
+            selfId={selfId}
+            personOf={personOf}
+            rowById={rowById}
+            onOpen={(root) => openChain(root.id)}
           />
         ),
       }}
@@ -878,6 +1136,10 @@ export function ChatScreen({
     />
   ) : undefined;
 
+  const wrapReplies = (wrapFor ? snap.chains[wrapFor]?.replies : undefined)?.filter(
+    (r) => !r.deletedAt && !r.sendState,
+  );
+
   return (
     <>
       <FeaturePanelsShell
@@ -887,6 +1149,40 @@ export function ChatScreen({
         flushCenter
         center={center}
         right={right}
+      />
+      <WrapUpDialog
+        open={!!wrapFor}
+        onOpenChange={(open) => {
+          if (!open) setWrapFor(null);
+        }}
+        replies={wrapReplies ?? []}
+        loaded={!!wrapFor && !!snap.chains[wrapFor]?.loaded}
+        personOf={personOf}
+        onConfirm={(settledId) => wrapFor && wrapUp(wrapFor, settledId)}
+      />
+      <ReplyToDialog
+        open={!!attachFor}
+        onOpenChange={(open) => {
+          if (!open) setAttachFor(null);
+        }}
+        choices={
+          attachFor
+            ? replyToChoices(
+                attachFor,
+                // Only what the stream draws (no wrapped replies, no deletes inside their Undo).
+                (streamWin?.rows ?? []).filter((m) => !streamHidden.has(m.id)),
+              )
+            : []
+        }
+        personOf={personOf}
+        onPick={(target) => {
+          const m = attachFor;
+          setAttachFor(null);
+          if (!store || !m) return;
+          void store.attachToChain(m.id, target.id).then((res) => {
+            if (!failed(res, "Couldn't add it to the chain.")) toast("Added to the chain");
+          });
+        }}
       />
       <NewConversationDialog
         open={newOpen}

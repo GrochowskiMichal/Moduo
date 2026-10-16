@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatAge, formatDate, formatStamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
+import type { ChainEntry } from "../chains";
 import { messageTree, toBodyText } from "../markup-v2";
 import type {
   ChatChannel,
@@ -37,6 +38,7 @@ import type {
 import { NOTIFY_LEVEL_COPY } from "../shell/conversation-toolbar";
 import { detailsPeople } from "./details-model";
 import { PresenceAvatar } from "./person-card";
+import { DetailsChainRows } from "./reply-chains-view";
 
 /** History shows this many lines until "Show all". */
 const HISTORY_FIRST = 6;
@@ -59,6 +61,9 @@ export type DetailsViewProps = {
   onLeave: () => void;
   onOpenPerson: (userId: string) => void;
   onOpenMessage: (message: ChatMessage) => void;
+  /** The conversation's reply chains, open then wrapped (null while they load). */
+  chains: { open: ChainEntry[]; wrapped: ChainEntry[] } | null;
+  onOpenChain: (root: ChatMessage) => void;
 };
 
 export function DetailsView({
@@ -77,6 +82,8 @@ export function DetailsView({
   onLeave,
   onOpenPerson,
   onOpenMessage,
+  chains,
+  onOpenChain,
 }: DetailsViewProps) {
   const isChannel = channel.kind === "channel";
   const people = members ? detailsPeople(members, selfId, personOf, online) : null;
@@ -172,9 +179,22 @@ export function DetailsView({
         </Section>
       ) : null}
 
-      {/* Open chains, then wrapped ones: CV-12 fills this. */}
-      <Section title="Reply chains">
-        <Quiet data-slot="details-chains">No reply chains yet.</Quiet>
+      {/* Open chains, then wrapped ones (CV-12): the Reply chains view's read. */}
+      <Section
+        title="Reply chains"
+        count={chains ? chains.open.length + chains.wrapped.length || undefined : undefined}
+      >
+        {chains && chains.open.length + chains.wrapped.length > 0 ? (
+          <DetailsChainRows
+            groups={chains}
+            selfId={selfId}
+            personOf={personOf}
+            onOpen={onOpenChain}
+            rowClassName={ROW_BUTTON}
+          />
+        ) : (
+          <Quiet data-slot="details-chains">{chains ? "No reply chains yet." : "Loading…"}</Quiet>
+        )}
       </Section>
 
       {/* Marked decisions: CV-14 fills this. */}

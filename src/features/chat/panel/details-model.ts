@@ -115,8 +115,16 @@ export function detailsStamp(rows: readonly ChatMessage[] | undefined): string {
   if (!rows) return "";
   let out = "";
   for (const r of rows) {
-    if (r.pinnedAt || r.editedAt || r.deletedAt || r.kind === "event") {
-      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""};`;
+    // A wrap-up or a reopen (CV-12) is a line in the history too.
+    if (
+      r.pinnedAt ||
+      r.editedAt ||
+      r.deletedAt ||
+      r.wrappedAt ||
+      r.reopenedAt ||
+      r.kind === "event"
+    ) {
+      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""}:${r.wrappedAt ?? ""}:${r.reopenedAt ?? ""};`;
     }
   }
   return out;
