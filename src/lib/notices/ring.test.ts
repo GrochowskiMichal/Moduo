@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 import type { ChatMember } from "../../features/chat/model";
+import { validateChatSearch } from "../../features/chat/search";
 import { catchupCount } from "../../features/chat/shell/chat-tab";
 import { titleWithCount } from "./app-badge";
 import { noticesOffInBrowser, shouldAskChat } from "./chat-ask";
@@ -153,6 +154,15 @@ describe("switches, sound and the landing", () => {
     expect(chatNoticeTarget("/chat")).toBeNull();
     expect(chatNoticeTarget("/tasks?id=t1")).toBeNull();
     expect(chatNoticeTarget(null)).toBeNull();
+  });
+
+  it('lands the Focus summary ("3 messages while you focused") on Catch up', () => {
+    // The server writes the summary with this link (CV-18); Moduo coming to
+    // the front after it rang is the click, and the page reads the search.
+    const target = chatNoticeTarget("/chat?view=catchup");
+    expect(target).toEqual({ view: "catchup" });
+    expect(validateChatSearch(target as Record<string, unknown>)).toEqual({ view: "catchup" });
+    expect(chatNoticeTarget("/chat?view=browse")).toBeNull();
   });
 });
 

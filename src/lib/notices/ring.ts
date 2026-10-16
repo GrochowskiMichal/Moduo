@@ -126,12 +126,19 @@ export function chatNoticeSwitch(
   }
 }
 
-/** The conversation and message a chat notice's link points at (`/chat?c=…&m=…`). */
-export function chatNoticeTarget(url: string | null): { c: string; m?: string } | null {
+/** Where a chat notice lands: a conversation (and message), or Catch up. */
+export type ChatNoticeTarget = { c: string; m?: string } | { view: "catchup" };
+
+/**
+ * The conversation and message a chat notice's link points at
+ * (`/chat?c=…&m=…`), or Catch up for "3 messages while you focused"
+ * (`/chat?view=catchup`, CV-18).
+ */
+export function chatNoticeTarget(url: string | null): ChatNoticeTarget | null {
   if (!url?.startsWith("/chat")) return null;
-  const query = new URLSearchParams(url.slice(url.indexOf("?") + 1));
+  const query = new URLSearchParams(url.includes("?") ? url.slice(url.indexOf("?") + 1) : "");
   const c = query.get("c");
-  if (!c) return null;
+  if (!c) return query.get("view") === "catchup" ? { view: "catchup" } : null;
   const m = query.get("m");
   return m ? { c, m } : { c };
 }

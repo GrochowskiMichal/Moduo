@@ -12,8 +12,9 @@
 --      columns op-only, like the zone.
 --   2. time_region__quiet_now(user, at) → (quiet, back_at), in the person's
 --      saved zone (UTC when unknown).
---   3. Pausing a workspace: workspace_members.notices_paused_at, written only by
---      workspace_op_pause_notices(ws, paused) on the caller's own row.
+--   3. Pausing a workspace: user_notice_pauses (person, workspace), read only
+--      by its person, written only by workspace_op_pause_notices(ws, paused)
+--      for the caller (a member or the owner); leaving forgets it.
 --   4. The gate's rules (notice__gate): drop while the workspace is paused, in
 --      quiet hours or on do not disturb; hold chat kinds while a Focus run is
 --      running (in its work phase, seen in the last 3 minutes, any
@@ -31,7 +32,9 @@
 --      disturb, and stamps what waits then (nothing pings when it ends).
 --   8. Focus ending (a run leaving running): that person's held notices close
 --      and one chat_focus_summary goes through the gate ("3 messages while
---      you focused").
+--      you focused"); nothing there ever stops Focus from ending. A Focus
+--      that never ended (no running run seen for 10 minutes) is released by
+--      a job every 5 minutes.
 --   9. chat_now gains quiet_now and back_at ("Sofia's quiet hours · back
 --      9:00"); people in quiet hours are listed.
 --  10. Setting or clearing a status is limited to 30 changes in 10 minutes.
@@ -221,34 +224,48 @@ END;
 $$;
 
 -- ── 3. Pausing a workspace ──────────────────────────────────────────────────
+-- A person's pauses are their own: a table of (person, workspace) that only
+-- they read, written only by workspace_op_pause_notices. Leaving a workspace
+-- forgets its pause; erasing the person or the workspace removes the rows.
 
-ALTER TABLE public.workspace_members
-  ADD COLUMN IF NOT EXISTS notices_paused_at timestamptz;
+CREATE TABLE IF NOT EXISTS public.user_notice_pauses (
+  user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  paused_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, workspace_id)
+);
+CREATE INDEX IF NOT EXISTS user_notice_pauses_workspace_idx ON public.user_notice_pauses (workspace_id);
+ALTER TABLE public.user_notice_pauses ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.user_notice_pauses FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.user_notice_pauses TO authenticated;
+GRANT ALL ON public.user_notice_pauses TO service_role;
+DROP POLICY IF EXISTS user_notice_pauses_own_read ON public.user_notice_pauses;
+CREATE POLICY user_notice_pauses_own_read ON public.user_notice_pauses
+  FOR SELECT TO authenticated
+  USING (user_id = (SELECT auth.uid()));
 
--- Only the op writes it (a direct write keeps what was there).
-CREATE OR REPLACE FUNCTION public.workspace_members__pause_guard()
+-- Leaving a workspace forgets its pause (a rejoin starts unpaused).
+CREATE OR REPLACE FUNCTION public.workspace_members__forget_pause()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path TO ''
 AS $$
 BEGIN
-  IF current_user NOT IN ('authenticated', 'anon') THEN
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'INSERT' THEN
-    NEW.notices_paused_at := NULL;
-  ELSE
-    NEW.notices_paused_at := OLD.notices_paused_at;
-  END IF;
-  RETURN NEW;
+  DELETE FROM public.user_notice_pauses p
+   WHERE p.user_id = OLD.user_id AND p.workspace_id = OLD.workspace_id
+     AND NOT EXISTS (SELECT 1 FROM public.workspaces w
+                      WHERE w.id = OLD.workspace_id AND w.owner_id = OLD.user_id);
+  RETURN NULL;
 END;
 $$;
-DROP TRIGGER IF EXISTS workspace_members__pause_guard ON public.workspace_members;
-CREATE TRIGGER workspace_members__pause_guard
-  BEFORE INSERT OR UPDATE ON public.workspace_members
-  FOR EACH ROW EXECUTE FUNCTION public.workspace_members__pause_guard();
+DROP TRIGGER IF EXISTS workspace_members__forget_pause ON public.workspace_members;
+CREATE TRIGGER workspace_members__forget_pause
+  AFTER DELETE ON public.workspace_members
+  FOR EACH ROW EXECUTE FUNCTION public.workspace_members__forget_pause();
 
--- "Pause notifications from this workspace": the caller's own row, nobody else's.
+-- "Pause notifications from this workspace": the caller's own pause, nobody
+-- else's. A member, or the workspace's owner.
 CREATE OR REPLACE FUNCTION public.workspace_op_pause_notices(p_workspace_id uuid, p_paused boolean)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -265,13 +282,23 @@ BEGIN
   IF p_workspace_id IS NULL OR p_paused IS NULL THEN
     RAISE EXCEPTION 'Pick a workspace and whether to pause it.' USING ERRCODE = '22023';
   END IF;
-  UPDATE public.workspace_members m
-     SET notices_paused_at = CASE WHEN p_paused THEN coalesce(m.notices_paused_at, now()) END
-   WHERE m.workspace_id = p_workspace_id AND m.user_id = v_user
-     AND EXISTS (SELECT 1 FROM public.workspaces w WHERE w.id = m.workspace_id AND w.deleted_at IS NULL)
-  RETURNING m.notices_paused_at INTO v_at;
-  IF NOT FOUND THEN
+  IF NOT EXISTS (
+       SELECT 1 FROM public.workspaces w
+        WHERE w.id = p_workspace_id AND w.deleted_at IS NULL
+          AND (w.owner_id = v_user
+               OR EXISTS (SELECT 1 FROM public.workspace_members m
+                           WHERE m.workspace_id = w.id AND m.user_id = v_user))) THEN
     RAISE EXCEPTION 'You''re not in that workspace.' USING ERRCODE = '42501';
+  END IF;
+  IF p_paused THEN
+    INSERT INTO public.user_notice_pauses (user_id, workspace_id)
+    VALUES (v_user, p_workspace_id)
+    ON CONFLICT (user_id, workspace_id) DO NOTHING;
+    SELECT p.paused_at INTO v_at FROM public.user_notice_pauses p
+     WHERE p.user_id = v_user AND p.workspace_id = p_workspace_id;
+  ELSE
+    DELETE FROM public.user_notice_pauses p
+     WHERE p.user_id = v_user AND p.workspace_id = p_workspace_id;
   END IF;
   RETURN jsonb_build_object('workspace_id', p_workspace_id, 'paused', v_at IS NOT NULL, 'paused_at', v_at);
 END;
@@ -285,9 +312,9 @@ STABLE
 SECURITY DEFINER
 SET search_path TO ''
 AS $$
-  SELECT coalesce(jsonb_agg(m.workspace_id ORDER BY m.workspace_id), '[]'::jsonb)
-    FROM public.workspace_members m
-   WHERE m.user_id = auth.uid() AND m.notices_paused_at IS NOT NULL
+  SELECT coalesce(jsonb_agg(p.workspace_id ORDER BY p.workspace_id), '[]'::jsonb)
+    FROM public.user_notice_pauses p
+   WHERE p.user_id = auth.uid()
      AND public.module_api_key_id() IS NULL
 $$;
 
@@ -307,9 +334,8 @@ AS $$
     WHEN p_kind = ANY ('{}'::text[]) THEN 'send'
     -- A paused workspace (CH46).
     WHEN p_workspace_id IS NOT NULL AND EXISTS (
-           SELECT 1 FROM public.workspace_members m
-            WHERE m.workspace_id = p_workspace_id AND m.user_id = p_user
-              AND m.notices_paused_at IS NOT NULL) THEN 'drop'
+           SELECT 1 FROM public.user_notice_pauses np
+            WHERE np.user_id = p_user AND np.workspace_id = p_workspace_id) THEN 'drop'
     -- A status with do not disturb on (by hand, Out sick, On vacation), in every workspace.
     WHEN EXISTS (
            SELECT 1 FROM public.user_statuses s
@@ -424,6 +450,41 @@ $n$    -- Nothing while paused, in quiet hours or on do not disturb (CV-18): wha
 $n$);
 
 -- ── 8. Focus ends: held pings close into one summary ────────────────────────
+-- Releasing: that person's held notices are acknowledged and, when asked, one
+-- summary goes through the gate (the trigger on notice_deliveries): "3
+-- messages while you focused", in the given workspace; the items are in
+-- Catch up. Returns how many messages it counted.
+CREATE OR REPLACE FUNCTION public.focus__release_held(p_user uuid, p_workspace_id uuid,
+                                                      p_tag text, p_summary boolean)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+DECLARE
+  v_n integer;
+BEGIN
+  WITH closed AS (
+    UPDATE public.notice_deliveries d SET acked_at = now()
+     WHERE d.user_id = p_user AND d.held_for_focus AND d.acked_at IS NULL
+    RETURNING d.id, d.channel_id, d.message_id)
+  SELECT count(DISTINCT coalesce(c.message_id, c.id)) INTO v_n
+    FROM closed c
+   WHERE c.channel_id IS NULL OR public.chat__can_read_channel_as(c.channel_id, p_user);
+  v_n := coalesce(v_n, 0);
+  IF p_summary AND v_n > 0 AND p_workspace_id IS NOT NULL THEN
+    INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title, url, tag, push_after)
+    VALUES (p_user, p_workspace_id, 'chat_focus_summary',
+            v_n || CASE WHEN v_n = 1 THEN ' message' ELSE ' messages' END || ' while you focused',
+            '/chat?view=catchup', p_tag, now());
+  END IF;
+  RETURN v_n;
+END;
+$$;
+
+-- A run leaving running (ended or paused), or a running run deleted. Nothing
+-- here ever stops Focus from ending: any failure is a warning, the held rows
+-- stay held, and the stale sweep below releases them.
 CREATE OR REPLACE FUNCTION public.focus_runs__release_held()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -431,31 +492,16 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $$
 DECLARE
-  v_run public.focus_runs := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
-  v_n integer;
+  v_run public.focus_runs;
 BEGIN
-  -- Another run still running holds on (one open run per person; belt and braces).
-  IF EXISTS (SELECT 1 FROM public.focus_runs f
-              WHERE f.user_id = v_run.user_id AND f.id <> v_run.id AND f.status = 'running') THEN
-    RETURN NULL;
-  END IF;
-  WITH closed AS (
-    UPDATE public.notice_deliveries d SET acked_at = now()
-     WHERE d.user_id = v_run.user_id AND d.held_for_focus AND d.acked_at IS NULL
-    RETURNING d.id, d.channel_id, d.message_id)
-  SELECT count(DISTINCT coalesce(c.message_id, c.id)) INTO v_n
-    FROM closed c
-   WHERE c.channel_id IS NULL OR public.chat__can_read_channel_as(c.channel_id, v_run.user_id);
-  IF TG_OP = 'DELETE' OR coalesce(v_n, 0) = 0 THEN
-    RETURN NULL;
-  END IF;
-  -- One summary, through the gate (the trigger on notice_deliveries); the
-  -- items are in Catch up. A failure never stops Focus from ending.
   BEGIN
-    INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title, url, tag, push_after)
-    VALUES (v_run.user_id, v_run.workspace_id, 'chat_focus_summary',
-            v_n || CASE WHEN v_n = 1 THEN ' message' ELSE ' messages' END || ' while you focused',
-            '/chat?view=catchup', 'chat:focus:' || v_run.id, now());
+    v_run := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+    -- Another run still running holds on (one open run per person; belt and braces).
+    IF NOT EXISTS (SELECT 1 FROM public.focus_runs f
+                    WHERE f.user_id = v_run.user_id AND f.id <> v_run.id AND f.status = 'running') THEN
+      PERFORM public.focus__release_held(v_run.user_id, v_run.workspace_id,
+                                         'chat:focus:' || v_run.id, TG_OP <> 'DELETE');
+    END IF;
   EXCEPTION WHEN OTHERS THEN
     RAISE WARNING 'focus_runs__release_held: %', SQLERRM;
   END;
@@ -472,6 +518,60 @@ CREATE TRIGGER focus_runs_release_held_gone
   AFTER DELETE ON public.focus_runs
   FOR EACH ROW WHEN (OLD.status = 'running')
   EXECUTE FUNCTION public.focus_runs__release_held();
+
+-- A Focus that never ended (the app closed, a release that failed): held
+-- rows of a person with no running run seen in the last 10 minutes are
+-- released, with the summary, in the workspace of their latest run. Runs
+-- every 5 minutes, so "3 held until Focus ends" clears within 15 minutes.
+CREATE OR REPLACE FUNCTION public.focus_runs__release_stale(p_now timestamptz)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $$
+DECLARE
+  r record;
+  v_n integer := 0;
+BEGIN
+  FOR r IN
+    SELECT d.user_id,
+           (SELECT f.id FROM public.focus_runs f WHERE f.user_id = d.user_id
+             ORDER BY f.started_at DESC, f.id LIMIT 1) AS run_id,
+           coalesce((SELECT f.workspace_id FROM public.focus_runs f WHERE f.user_id = d.user_id
+                      ORDER BY f.started_at DESC, f.id LIMIT 1),
+                    (array_agg(d.workspace_id ORDER BY d.created_at DESC)
+                       FILTER (WHERE d.workspace_id IS NOT NULL))[1]) AS workspace_id
+      FROM public.notice_deliveries d
+     WHERE d.held_for_focus AND d.acked_at IS NULL
+       AND NOT EXISTS (SELECT 1 FROM public.focus_runs f
+                        WHERE f.user_id = d.user_id AND f.status = 'running'
+                          AND f.seen_at > p_now - interval '10 minutes')
+     GROUP BY d.user_id
+  LOOP
+    BEGIN
+      PERFORM public.focus__release_held(r.user_id, r.workspace_id,
+                                         'chat:focus:' || coalesce(r.run_id::text, 'stale'), true);
+      v_n := v_n + 1;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'focus_runs__release_stale: %', SQLERRM;
+    END;
+  END LOOP;
+  RETURN v_n;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'focus-release-stale-holds') THEN
+    PERFORM cron.unschedule('focus-release-stale-holds');
+  END IF;
+END;
+$$;
+SELECT cron.schedule(
+  'focus-release-stale-holds',
+  '*/5 * * * *',
+  $cron$SELECT public.focus_runs__release_stale(now());$cron$
+);
 
 -- ── 9. chat_now: quiet hours ────────────────────────────────────────────────
 -- (One step at a time, each one a body that compiles.)
@@ -569,7 +669,9 @@ BEGIN
     'chat__notify_devices(public.chat_channels, public.chat_messages, uuid, text, uuid[])',
     'chat__queue_waiting_emails(timestamptz)',
     'focus_runs__release_held()',
-    'workspace_members__pause_guard()',
+    'focus__release_held(uuid, uuid, text, boolean)',
+    'focus_runs__release_stale(timestamptz)',
+    'workspace_members__forget_pause()',
     'user_statuses__rate(uuid)',
     'user_preferences__time_region_guard()'
   ] LOOP

@@ -1,7 +1,8 @@
 // "Pause notifications from this workspace" (CV-18, spec §15, CH46): the
 // workspaces whose notifications you paused. Read with
 // `workspace_notice_pauses()`; changed only through
-// `workspace_op_pause_notices(ws, paused)` on your own membership. The server
+// `workspace_op_pause_notices(ws, paused)`. Your pauses are yours alone (a
+// table only you read, not your membership row). The server
 // does the pausing (its notice gate and the email job); this copy only draws
 // the switcher. A sign-out forgets it.
 

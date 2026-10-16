@@ -551,17 +551,47 @@ BEGIN
   PERFORM test.ok(test.send('A', 'L', 'p1', format('%s paused?', test.uri('person', test.id('B')))) = 'ok 1', 'sent: ' || 'p1');
   PERFORM test.ok(test.notice('B', 'p1') = 'none' AND test.held('B', 'p1'),
     'pause: no notice; the item waits in Catch up, held');
+  -- A person's pause is their own: nobody else reads it, directly or with
+  -- the workspace's member list (listMembers reads workspace_members' rows).
+  PERFORM test.ok(test.value_as('B', 'SELECT count(*)::text FROM public.user_notice_pauses') = '1'
+                  AND test.value_as('A', 'SELECT count(*)::text FROM public.user_notice_pauses') = '0'
+                  AND test.value_as('O', 'SELECT count(*)::text FROM public.user_notice_pauses') = '0'
+                  AND test.value_as('A', format($q$SELECT to_jsonb(m)::text FROM public.workspace_members m
+                                                   WHERE m.workspace_id = %L AND m.user_id = %L$q$,
+                                                 test.id('W'), test.id('B'))) NOT LIKE '%pause%'
+                  AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_schema = 'public' AND table_name = 'workspace_members'
+                                     AND column_name LIKE '%pause%'),
+    'pause: only B reads B''s pause; teammates (and the owner) see nothing of it, nor in the member list');
+  PERFORM test.ok(test.try('B', format($q$INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (%L, %L)$q$,
+                                       test.id('B'), test.id('W2'))) LIKE '42501%'
+                  AND test.try('B', 'DELETE FROM public.user_notice_pauses') LIKE '42501%'
+                  AND test.try('A', format($q$INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (%L, %L)$q$,
+                                       test.id('B'), test.id('W2'))) LIKE '42501%',
+    'pause: only the op writes pauses (direct writes are refused)');
   v := test.as_user('A', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W')));
-  PERFORM test.ok((SELECT notices_paused_at IS NOT NULL FROM public.workspace_members WHERE workspace_id = test.id('W') AND user_id = test.id('A'))
+  PERFORM test.ok((SELECT count(*) FROM public.user_notice_pauses WHERE workspace_id = test.id('W')) = 2
+                  AND EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE workspace_id = test.id('W') AND user_id = test.id('A'))
                   AND test.try('X', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W'))) LIKE '42501%'
                   AND test.as_key('K', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W'))) LIKE '42501%',
-    'pause: the op changes only the caller''s own row; a non-member and an API key are refused', v);
-  v := test.as_user('A', format($q$UPDATE public.workspace_members SET notices_paused_at = NULL WHERE workspace_id = %L$q$, test.id('W')));
-  PERFORM test.ok((SELECT notices_paused_at IS NOT NULL FROM public.workspace_members WHERE workspace_id = test.id('W') AND user_id = test.id('B')),
-    'pause: nobody writes the column directly', v);
+    'pause: the op changes only the caller''s own pause; a non-member and an API key are refused', v);
   PERFORM test.as_user('A', format($q$SELECT public.workspace_op_pause_notices(%L, false)$q$, test.id('W')));
+  -- The owner pauses too, even without a member row (P owns workspace W3).
+  PERFORM test.person('P');
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W3'), test.id('P'), 'Own');
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W3') AND user_id = test.id('P');
+  v := test.as_user('P', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W3')));
+  PERFORM test.ok(v = 'ok 1' AND public.notice__gate(test.id('P'), test.id('W3'), 'chat_mention', now()) = 'drop',
+    'pause: the workspace''s owner pauses it without a member row', v);
+  -- Leaving a workspace forgets its pause.
+  PERFORM test.as_user('B', format($q$SELECT public.workspace_op_pause_notices(%L, true)$q$, test.id('W2')));
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W2') AND user_id = test.id('B');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W2')),
+    'pause: leaving a workspace forgets its pause');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W2'), test.id('B'), 'member');
   v := test.as_user('B', format($q$SELECT public.workspace_op_pause_notices(%L, false)$q$, test.id('W')));
-  PERFORM test.ok(public.notice__gate(test.id('B'), test.id('W'), 'chat_mention', now()) = 'send',
+  PERFORM test.ok(public.notice__gate(test.id('B'), test.id('W'), 'chat_mention', now()) = 'send'
+                  AND NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('B')),
     'pause: resuming sends again', v);
 
   -- Chat's switches hold server-side: no notice, no email (CV-6b's switches).
@@ -605,6 +635,60 @@ BEGIN
   PERFORM test.ok((SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary') = 1,
     'focus: a run that held nothing writes no summary');
 
+  -- Nothing stops Focus from ending: a release that fails leaves the run ended.
+  CREATE FUNCTION test.boom() RETURNS trigger LANGUAGE plpgsql AS $b$
+  BEGIN
+    RAISE EXCEPTION 'forced failure';
+  END;
+  $b$;
+  CREATE TRIGGER test_boom BEFORE UPDATE ON public.notice_deliveries
+    FOR EACH ROW WHEN (OLD.held_for_focus AND NEW.acked_at IS NOT NULL) EXECUTE FUNCTION test.boom();
+  -- (Runs in one transaction share now(): their starts are set apart by hand.)
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B3'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '1 minute');
+  PERFORM test.ok(test.send('A', 'D', 'f3', 'held, then a failure') = 'ok 1', 'sent: ' || 'f3');
+  v := test.as_op('B', format($q$UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = %L$q$, test.id('run:B3')));
+  PERFORM test.ok(v = 'ok 1'
+                  AND (SELECT status FROM public.focus_runs WHERE id = test.id('run:B3')) = 'ended'
+                  AND test.notice('B', 'f3') LIKE 'chat_message|%|t'
+                  AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B') AND d.kind = 'chat_focus_summary') = 1,
+    'focus: a failing release never stops Focus from ending (the rows stay held)', v);
+  DROP TRIGGER test_boom ON public.notice_deliveries;
+
+  -- A Focus that never ended: released once no running run was seen for 10 minutes.
+  i := public.focus_runs__release_stale(now());
+  PERFORM test.ok(i >= 1
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B3')) = '1 message while you focused',
+    'focus: held rows of a Focus that is over are released by the sweep, with one summary', i::text);
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B4'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '2 minutes');
+  PERFORM test.ok(test.send('A', 'D', 'f4', 'app closed mid-Focus') = 'ok 1', 'sent: ' || 'f4');
+  PERFORM public.focus_runs__release_stale(now());
+  PERFORM test.ok(test.notice('B', 'f4') LIKE 'chat_message|%|t',
+    'focus: a Focus seen recently keeps holding (the sweep leaves it)');
+  UPDATE public.focus_runs SET seen_at = now() - interval '20 minutes' WHERE id = test.id('run:B4');
+  i := public.focus_runs__release_stale(now());
+  PERFORM test.ok(i >= 1
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND test.value_as('B', $q$SELECT count(*)::text FROM public.notice_deliveries WHERE held_for_focus AND acked_at IS NULL$q$) = '0',
+    'focus: a running Focus not seen for 10 minutes (the app closed) is released; "held until Focus ends" clears');
+  -- The next Focus start ends a run still running, which releases what it held.
+  UPDATE public.focus_runs SET seen_at = now() WHERE id = test.id('run:B4');
+  PERFORM test.ok(test.send('A', 'D', 'f5', 'before the next Focus') = 'ok 1', 'sent: ' || 'f5');
+  v := test.as_user('B', format($q$SELECT public.focus_op_run_start(%L, 'db-test-device-2', 'per_task')$q$, test.id('W')));
+  PERFORM test.ok(v = 'ok 1'
+                  AND (SELECT status FROM public.focus_runs WHERE id = test.id('run:B4')) = 'ended'
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')),
+    'focus: starting the next Focus releases what the last one held', v);
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE user_id = test.id('B') AND status <> 'ended';
+
   -- Statuses: at most 30 changes in 10 minutes.
   FOR i IN 1..30 LOOP
     v := test.as_user('C', format($q$SELECT public.user_op_set_status('{"emoji": "☕", "text": "Break %s"}')$q$, i));
@@ -620,7 +704,14 @@ BEGIN
                   AND NOT has_function_privilege('authenticated', 'public.chat__notice_switch_on(uuid, text)', 'EXECUTE')
                   AND NOT has_function_privilege('authenticated', 'public.notice_deliveries__gate()', 'EXECUTE')
                   AND NOT has_function_privilege('authenticated', 'public.focus_runs__release_held()', 'EXECUTE')
-                  AND NOT has_function_privilege('authenticated', 'public.workspace_members__pause_guard()', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.workspace_members__forget_pause()', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.focus__release_held(uuid, uuid, text, boolean)', 'EXECUTE')
+                  AND NOT has_function_privilege('authenticated', 'public.focus_runs__release_stale(timestamptz)', 'EXECUTE')
+                  AND NOT has_table_privilege('authenticated', 'public.user_notice_pauses', 'INSERT')
+                  AND NOT has_table_privilege('authenticated', 'public.user_notice_pauses', 'UPDATE')
+                  AND NOT has_table_privilege('authenticated', 'public.user_notice_pauses', 'DELETE')
+                  AND NOT has_table_privilege('anon', 'public.user_notice_pauses', 'SELECT')
+                  AND EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'focus-release-stale-holds' AND schedule = '*/5 * * * *')
                   AND NOT has_function_privilege('authenticated', 'public.user_statuses__rate(uuid)', 'EXECUTE')
                   AND NOT has_function_privilege('anon', 'public.workspace_op_pause_notices(uuid, boolean)', 'EXECUTE')
                   AND NOT has_function_privilege('anon', 'public.workspace_notice_pauses()', 'EXECUTE')
