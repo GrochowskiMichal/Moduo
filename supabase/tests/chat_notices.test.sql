@@ -453,6 +453,7 @@ DECLARE
   v text;
   i int;
   v_emails int;
+  v_b4 int;
 BEGIN
   UPDATE public.chat_members SET notify_level = 'mentions'
    WHERE channel_id IN (test.ref('D'), test.ref('L')) AND user_id = test.id('B');
@@ -661,7 +662,7 @@ BEGIN
                   AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
                                     AND d.held_for_focus AND d.acked_at IS NULL)
                   AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
-                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B3')) = '1 message while you focused',
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B3') || ':stale') = '1 message while you focused',
     'focus: held rows of a Focus that is over are released by the sweep, with one summary', i::text);
   INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
   VALUES (test.id('run:B4'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '2 minutes');
@@ -679,15 +680,40 @@ BEGIN
   -- The next Focus start ends a run still running, which releases what it held.
   UPDATE public.focus_runs SET seen_at = now() WHERE id = test.id('run:B4');
   PERFORM test.ok(test.send('A', 'D', 'f5', 'before the next Focus') = 'ok 1', 'sent: ' || 'f5');
+  PERFORM test.ok(test.notice('B', 'f5') LIKE 'chat_message|%|t',
+    'focus: the last Focus still running holds f5', test.notice('B', 'f5'));
+  -- The sweep's summary above has its own tag (…:stale); count the run's own.
+  SELECT count(*) INTO v_b4 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+     AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4');
   v := test.as_user('B', format($q$SELECT public.focus_op_run_start(%L, 'db-test-device-2', 'per_task')$q$, test.id('W')));
   PERFORM test.ok(v = 'ok 1'
                   AND (SELECT status FROM public.focus_runs WHERE id = test.id('run:B4')) = 'ended'
                   AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
                                     AND d.held_for_focus AND d.acked_at IS NULL)
-                  AND EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
-                                AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')),
-    'focus: starting the next Focus releases what the last one held', v);
+                  AND (SELECT count(*) FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')) = v_b4 + 1
+                  AND (SELECT d.title FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                         AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B4')
+                       ORDER BY d.created_at DESC, d.id LIMIT 1) = '1 message while you focused',
+    'focus: starting the next Focus releases what the last one held (one more summary for that run)', v);
   UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE user_id = test.id('B') AND status <> 'ended';
+
+  -- A summary that comes while the gate drops (here a pause; quiet hours and
+  -- do not disturb alike) is dropped too: the holds still close and the items
+  -- wait in Catch up (agent's choice, CV-18).
+  INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, started_at)
+  VALUES (test.id('run:B6'), test.id('W'), test.id('B'), 'running', 'per_task', 'db-test-device', now() + interval '4 minutes');
+  PERFORM test.ok(test.send('A', 'D', 'f6', 'held, then paused') = 'ok 1', 'sent: ' || 'f6');
+  INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES (test.id('B'), test.id('W'));
+  UPDATE public.focus_runs SET status = 'ended', ended_at = now() WHERE id = test.id('run:B6');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                AND d.kind = 'chat_focus_summary' AND d.tag = 'chat:focus:' || test.id('run:B6'))
+                  AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d WHERE d.user_id = test.id('B')
+                                    AND d.held_for_focus AND d.acked_at IS NULL)
+                  AND EXISTS (SELECT 1 FROM public.chat_catchup k WHERE k.user_id = test.id('B')
+                                AND k.message_id = test.mid('f6') AND k.done_at IS NULL),
+    'focus: a summary the gate drops writes nothing; the holds close and the item waits in Catch up');
+  DELETE FROM public.user_notice_pauses WHERE user_id = test.id('B') AND workspace_id = test.id('W');
 
   -- Statuses: at most 30 changes in 10 minutes.
   FOR i IN 1..30 LOOP

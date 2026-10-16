@@ -450,6 +450,10 @@ $n$    -- Nothing while paused, in quiet hours or on do not disturb (CV-18): wha
 $n$);
 
 -- ── 8. Focus ends: held pings close into one summary ────────────────────────
+-- The release and the stale sweep find a person's open holds by this index.
+CREATE INDEX IF NOT EXISTS notice_deliveries_held_open
+  ON public.notice_deliveries (user_id) WHERE held_for_focus AND acked_at IS NULL;
+
 -- Releasing: that person's held notices are acknowledged and, when asked, one
 -- summary goes through the gate (the trigger on notice_deliveries): "3
 -- messages while you focused", in the given workspace; the items are in
@@ -550,7 +554,8 @@ BEGIN
   LOOP
     BEGIN
       PERFORM public.focus__release_held(r.user_id, r.workspace_id,
-                                         'chat:focus:' || coalesce(r.run_id::text, 'stale'), true);
+                                         -- Its own tag: never replaces the run's own summary on a device.
+                                         'chat:focus:' || coalesce(r.run_id::text, 'none') || ':stale', true);
       v_n := v_n + 1;
     EXCEPTION WHEN OTHERS THEN
       RAISE WARNING 'focus_runs__release_stale: %', SQLERRM;
