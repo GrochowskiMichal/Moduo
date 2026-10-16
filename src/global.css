@@ -3,6 +3,7 @@
 @import "tailwindcss/utilities.css";
 @import "./styles/tokens.css";
 @import "./styles/notes-prose.css";
+@import "./styles/description-prose.css";
 
 /* Body + display fonts.
    Token strings reference "Geist" and "Fraunces" (see tokens.css §9), but the

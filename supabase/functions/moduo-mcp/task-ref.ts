@@ -14,11 +14,15 @@ export const TASK_NOT_FOUND = "Task not found in this workspace.";
 /** A task's handle, `MOD-142` (TV-D8: the workspace's key + the task's number). */
 export const HANDLE = /^([A-Za-z]{2,5})-(\d{1,9})$/;
 
-/** The workspace's task key (TV-D8), or null before that migration. */
+/**
+ * The workspace's task key (TV-D8), or null while it has none. A failed read
+ * throws, as the other reads do, so a handle never reads as "not there"
+ * because a lookup failed.
+ */
 export async function workspaceTaskKey(ctx: ToolContext): Promise<string | null> {
   const { data, error } = await ctx.db.from("workspaces").select("task_key")
     .eq("id", ctx.key.workspaceId).maybeSingle();
-  if (error) return null;
+  if (error) throw new Error(error.message);
   return typeof data?.task_key === "string" ? data.task_key : null;
 }
 

@@ -48,6 +48,8 @@
     "supabase/functions/_shared/standard-webhooks.test.ts",
     "supabase/functions/_shared/service-rpc.ts",
     "supabase/functions/_shared/service-rpc.test.ts",
+    "supabase/functions/_shared/description-markdown.ts",
+    "supabase/functions/_shared/description-markdown.test.ts",
     "supabase/functions/email-worker/handler.ts",
     "supabase/functions/email-worker/handler.test.ts"
   ],

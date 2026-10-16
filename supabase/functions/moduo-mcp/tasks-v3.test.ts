@@ -12,7 +12,19 @@ import { describe, expect, it, rs } from "@rstest/core";
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
+import { createHeadlessEditor } from "@lexical/headless";
+import { $isLinkNode } from "@lexical/link";
+import { $getRoot, $isElementNode, type LexicalNode } from "lexical";
+
+// The app's own description reader, to check what a stored description shows.
+import {
+  $exportDescription,
+  $importDescription,
+  DESCRIPTION_MARKDOWN_NODES,
+} from "../../../src/features/spine/editor/description-markdown";
+import { $isReferenceNode } from "../../../src/features/spine/editor/entity-ref-schema";
 import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
+import { descriptionReferences, readsAsModuoAddress } from "../_shared/description-markdown.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import { toolAllowed, type KeyContext, type ToolContext } from "./registry.ts";
 
@@ -630,6 +642,267 @@ describe("writes go through the ops, checked before anything is written", () => 
       p_task_id: "t-open",
       p_patch: { recurrence: null },
       p_with: { tags_add: ["x"], tags_remove: ["y"] },
+    });
+  });
+
+  it("a description is taken as Markdown; HTML an agent sends is read as Markdown, not stored as tags (call #15)", async () => {
+    const { ctx, rpcCalls } = setup({ rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] } });
+    await call("tasks_update", { task_id: "MOD-1", description: "<p>Hello <b>bold</b> &amp; more</p><ul><li>one</li></ul>" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "- [ ] **Check** it" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "<https://moduo.app> is a link" }, ctx);
+    const patches = rpcCalls.filter((c) => c.fn === "tasks_op_update_with").map((c) => c.args.p_patch);
+    expect(patches).toEqual([
+      { description: "Hello **bold** & more\n\n- one" },
+      { description: "- [ ] **Check** it" },
+      { description: "<https://moduo.app> is a link" },
+    ]);
+  });
+
+  it("a description's references resolve for the key: a handle to its uuid, an unreachable item to its words, and links are made (call #15)", async () => {
+    const SEEN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const SECRET = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const { ctx, rpcCalls, tables } = setup({
+      scopes: { tasks: "edit", links: "edit" },
+      rpcs: {
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+        tasks_op_create_with: (a) => ({ action: "created", task: { ...(a.p_task as Row), id: "t-new", number: 99 } }),
+        perm_can_see_entity: (a) => a.p_id === SEEN,
+        links_op_create: () => [{ id: "link-1" }],
+      },
+    });
+    tables.tasks!.push(task(SEEN, 50), task(SECRET, 51));
+    const description =
+      "See [Fix login](moduo://task/MOD-50) and [Board secret](moduo://task/MOD-51), " +
+      "[x](moduo://note/not-a-uuid) and [Oct 17](moduo://date/2026-10-17).";
+    await call("tasks_update", { task_id: "MOD-1", description }, ctx);
+    const patch = rpcCalls.find((c) => c.fn === "tasks_op_update_with")?.args.p_patch as Row;
+    expect(patch.description).toBe(
+      `See [task](moduo://task/${SEEN}) and Board secret, x and [Oct 17](moduo://date/2026-10-17).`,
+    );
+    expect(patch.description).not.toContain("Fix login");
+    const links = rpcCalls.filter((c) => c.fn === "links_op_create").map((c) => c.args);
+    expect(links).toEqual([
+      expect.objectContaining({
+        p_source_type: "task",
+        p_source_id: "t-open",
+        p_target_type: "task",
+        p_target_id: SEEN,
+        p_relation_kind: "mentions",
+        p_origin: "mention",
+      }),
+    ]);
+    // tasks_create links from the new task the same way.
+    await call("tasks_create", { title: "New", description: `Re [it](moduo://task/MOD-50)` }, ctx);
+    const created = rpcCalls.find((c) => c.fn === "tasks_op_create_with")?.args.p_task as Row;
+    expect(created.description).toBe(`Re [task](moduo://task/${SEEN})`);
+    expect(rpcCalls.filter((c) => c.fn === "links_op_create").at(-1)?.args).toEqual(
+      expect.objectContaining({ p_source_id: "t-new", p_target_id: SEEN }),
+    );
+  });
+
+  describe("a description's references through the connector: only what the key reaches is stored as one or linked", () => {
+    const SEEN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const SECRET = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const ELSEWHERE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const NOTE = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const TAG = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+    function described(scopes: Record<string, string> = { tasks: "edit", links: "edit" }) {
+      const made = setup({
+        scopes,
+        rpcs: {
+          tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+          tasks_op_create_with: (a) => ({ action: "created", task: { ...(a.p_task as Row), id: "t-new", number: 99 } }),
+          // The person can see SEEN, and ELSEWHERE's id too (it's another workspace's).
+          perm_can_see_entity: (a) => a.p_id === SEEN || a.p_id === ELSEWHERE || a.p_id === NOTE,
+          links_op_create: () => [{ id: "link-1" }],
+        },
+      });
+      made.tables.tasks!.push(task(SEEN, 50), task(SECRET, 51), task(ELSEWHERE, 52, { workspace_id: "other-ws" }));
+      made.tables.notes = [{ id: NOTE, workspace_id: WS, deleted_at: null }];
+      const write = async (description: string): Promise<string> => {
+        await call("tasks_update", { task_id: "MOD-1", description }, made.ctx);
+        const patch = made.rpcCalls.filter((c) => c.fn === "tasks_op_update_with").at(-1)?.args.p_patch as Row;
+        return patch.description as string;
+      };
+      const linked = () =>
+        made.rpcCalls.filter((c) => c.fn === "links_op_create").map((c) => `${c.args.p_target_type}:${c.args.p_target_id}`);
+      return { ...made, write, linked };
+    }
+
+    /**
+     * Every reference the app's editor shows for a stored description, read
+     * and saved three times over (each save read back), and what the readers
+     * outside the editor (`descriptionReferences`) find in what was stored
+     * and in every save. A moduo: plain link counts, however it's spelled.
+     */
+    function shownReferences(stored: string): string[] {
+      const seen = new Set<string>();
+      let value = stored;
+      for (let round = 0; round < 3; round++) {
+        for (const ref of descriptionReferences(value)) seen.add(`${ref.type}:${ref.id}`);
+        const editor = createHeadlessEditor({
+          nodes: DESCRIPTION_MARKDOWN_NODES,
+          onError: (error) => {
+            throw error;
+          },
+        });
+        editor.update(() => $importDescription(value), { discrete: true });
+        value = editor.getEditorState().read(() => {
+          const walk = (node: LexicalNode) => {
+            if ($isReferenceNode(node)) seen.add(`${node.exportJSON().entityType}:${node.exportJSON().entityId}`);
+            if ($isLinkNode(node) && readsAsModuoAddress(node.getURL())) seen.add(`link:${node.getURL()}`);
+            if ($isElementNode(node)) for (const child of node.getChildren()) walk(child);
+          };
+          walk($getRoot());
+          return $exportDescription();
+        });
+      }
+      for (const ref of descriptionReferences(value)) seen.add(`${ref.type}:${ref.id}`);
+      return [...seen];
+    }
+
+    it("an item the key's person can't see, another workspace's id, another workspace's handle, a module the key can't open, a tag: words, never linked", async () => {
+      const { write, linked } = described();
+      const stored = await write(
+        `[a](moduo://task/${SECRET}) [b](moduo://task/MOD-51) [c](moduo://task/${ELSEWHERE}) ` +
+          `[d](moduo://task/ENG-50) [e](moduo://note/${NOTE}) [f](moduo://tag/${TAG}) ` +
+          `[g](moduo://constructor/x) [h](moduo://task/MOD-50)`,
+      );
+      expect(stored).toBe(`a b c d e f g [task](moduo://task/${SEEN})`);
+      expect(shownReferences(stored)).toEqual([`task:${SEEN}`]);
+      expect(linked()).toEqual([`task:${SEEN}`]);
+    });
+
+    it("a key without Links at Edit stores the references it reaches and makes no link", async () => {
+      for (const scopes of [{ tasks: "edit" }, { tasks: "edit", links: "view" }]) {
+        const { write, linked } = described(scopes);
+        expect(await write(`See [it](moduo://task/MOD-50)`)).toBe(`See [task](moduo://task/${SEEN})`);
+        expect(linked()).toEqual([]);
+      }
+    });
+
+    it("a reference inside code is written as checked (never the agent's spelling) and links nothing", async () => {
+      const { write, linked } = described();
+      const inline = `Run \`[it](moduo://task/MOD-50)\` and see [it](moduo://task/MOD-50)`;
+      expect(await write(inline)).toBe(
+        `Run \`[task](moduo://task/${SEEN})\` and see [task](moduo://task/${SEEN})`,
+      );
+      expect(linked()).toEqual([`task:${SEEN}`]);
+      const { write: writeFenced, linked: linkedFenced } = described();
+      expect(await writeFenced(`\`\`\`\n[it](moduo://task/MOD-50)\n\`\`\``)).toBe(
+        `\`\`\`\n[task](moduo://task/${SEEN})\n\`\`\``,
+      );
+      expect(linkedFenced()).toEqual([]);
+      // An unreachable one in code still goes to its words.
+      const { write: writeHidden } = described();
+      expect(await writeHidden(`\`[x](moduo://task/${SECRET})\``)).toBe("`x`");
+      // What the editor doesn't read as code (a ~~~ fence, an escaped backtick)
+      // is no code here either: written as checked, and linked.
+      for (const notCode of [
+        `~~~\n[it](moduo://task/MOD-50)\n~~~`,
+        `\\\`[it](moduo://task/MOD-50)\``,
+      ]) {
+        const { write: writeNot, linked: linkedNot } = described();
+        expect(await writeNot(notCode), notCode).toContain(`[task](moduo://task/${SEEN})`);
+        expect(linkedNot(), notCode).toEqual([`task:${SEEN}`]);
+      }
+    });
+
+    it("a malformed task reference is words", async () => {
+      const { write, linked } = described();
+      expect(await write("See [it](moduo://task/abc) and [x](moduo://task/MOD-0)")).toBe("See it and x");
+      expect(linked()).toEqual([]);
+    });
+
+    it("a workspace read that fails fails a handle's write, never turning it into words", async () => {
+      const made = setup({
+        scopes: { tasks: "edit", links: "edit" },
+        rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] },
+      });
+      const from = made.ctx.db.from.bind(made.ctx.db);
+      (made.ctx.db as { from: unknown }).from = (table: string) =>
+        table === "workspaces"
+          ? {
+              select: () => ({
+                eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "timeout" } }) }),
+              }),
+            }
+          : from(table);
+      await expect(
+        call("tasks_update", { task_id: "t-open", description: "See [it](moduo://task/MOD-50)" }, made.ctx),
+      ).rejects.toThrow("timeout");
+      expect(made.rpcCalls.some((c) => c.fn === "tasks_op_update_with")).toBe(false);
+    });
+
+    it("a lookup that fails fails the write, never turning a reference into words", async () => {
+      const made = setup({
+        scopes: { tasks: "edit", links: "edit" },
+        rpcs: {
+          tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+          perm_can_see_entity: () => {
+            throw new Error("connection reset");
+          },
+          links_op_create: () => [{ id: "link-1" }],
+        },
+      });
+      made.tables.tasks!.push(task(SEEN, 50));
+      await expect(
+        call("tasks_update", { task_id: "MOD-1", description: `See [it](moduo://task/MOD-50)` }, made.ctx),
+      ).rejects.toThrow("connection reset");
+      expect(made.rpcCalls.some((c) => c.fn === "tasks_op_update_with")).toBe(false);
+    });
+
+    it("no nesting, join, spelling or HTML makes a reference out of an unchecked id", async () => {
+      const crafted = [
+        `[[x](moduo://task/MOD-51)](moduo://task/${SECRET})`,
+        `[x]([moduo://task/${SECRET}](moduo://task/MOD-51))`,
+        `[x](moduo:[//task/${SECRET}](moduo://task/MOD-51))`,
+        `[x](moduo:/[/task/${SECRET}](moduo://task/${SECRET}))`,
+        `[[task](moduo://task/MOD-50)](moduo://task/${SECRET})`,
+        `[[x](moduo://date/2026-10-17)](moduo://task/${SECRET})`,
+        `[x](moduo://task/${SECRET} "title")`,
+        `[x](MODUO://task/${SECRET})`,
+        `[x](<moduo://task/${SECRET}>)`,
+        `[x]( moduo://task/${SECRET})`,
+        `[x]&#40;moduo://task/${SECRET})`,
+        `**[x]&#40;moduo://task/${SECRET})**`,
+        `[x]\\(moduo://task/${SECRET})`,
+        `[[a]&#40;moduo://task/${SECRET})](https://example.com)`,
+        `\`[x](moduo://task/${SECRET})\``,
+        `<p>See <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${SECRET}">Board secret</span> ` +
+          `and <a href="moduo://task/${SECRET}">x</a> and <a href="moduo://task/${SECRET} &quot;chip&quot;">y</a></p>`,
+        `<p>[x]&#40;moduo://task/${SECRET}) <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="MOD-50">t</span></p>`,
+        // An address spelled so only a decoding reader sees moduo: (validator, call #15).
+        `See [task](moduo\\://task/${SECRET}) here`,
+        `[task](moduo&#58;//task/${SECRET})`,
+        `[task](&#109;oduo://task/${SECRET})`,
+        `[task](moduo&#58;&#47;&#47;task&#47;${SECRET})`,
+        `[task](moduo&#x3A;//task/${SECRET})`,
+        `[task](mo\\duo://task/${SECRET})`,
+        `[task](<moduo\\://task/${SECRET}>)`,
+        `[task]( moduo\\://task/${SECRET})`,
+        `[task](${" ".repeat(300)}moduo\\://task/${SECRET})`,
+        `[note](moduo\\://note/${SECRET} "card")`,
+        `[task](MoDuO\\://task/${SECRET} (chip))`,
+        `<p><a href="moduo&amp;#58;//task/${SECRET}">x</a></p>`,
+        `<p><a href="moduo\\://task/${SECRET}">x</a></p>`,
+        // Checkbox and card forms, named and double-encoded references (security review).
+        `- [ ] [task](moduo\\://task/${SECRET})`,
+        `- [x] see [task](&#109;oduo://task/${SECRET})`,
+        `[note](moduo&#58;//note/${SECRET} "card")`,
+        `[task](moduo&colon;//task/${SECRET})`,
+        `[task](moduo&amp;#58;//task/${SECRET})`,
+        `<p><a href="moduo&#38;#58;//task/${SECRET}">x</a></p>`,
+        `<ul><li><a href="moduo&amp;colon;//task/${SECRET}">x</a></li></ul>`,
+        `<p><a href="moduo://task/${SECRET}">x</a></p>`,
+      ];
+      for (const description of crafted) {
+        const { write, linked } = described();
+        const stored = await write(description);
+        expect(shownReferences(stored).filter((r) => r !== `task:${SEEN}`), `${description} → ${stored}`).toEqual([]);
+        expect(linked().filter((r) => r !== `task:${SEEN}`), description).toEqual([]);
+      }
     });
   });
 
