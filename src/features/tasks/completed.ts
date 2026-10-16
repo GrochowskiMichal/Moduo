@@ -1,9 +1,11 @@
 // Completed tasks in lists and boards (tasks-v2 §6, TV-U1 U1-3).
 //
-// Display → Completed: Hidden (default) · 7 days · All. Hidden completed tasks
-// leave each list or group behind a quiet "N completed · show" line. A task
-// you check off stays where it is, struck through, until you change scope or
-// reload, so its Undo is still one click away.
+// Display → Completed: Hidden (default) · 7 days · All. Hidden means hidden:
+// no group or column has a line of its own, and one quiet "N completed ·
+// Show" ends the whole List or Board, showing them in place for the session
+// (MOD-148). "7 days" leaves the older ones behind each group's own
+// "N completed · show". A task you check off stays where it is, struck
+// through, until you change scope or reload, so its Undo is one click away.
 
 import { useState } from "react";
 import type { Task, TaskStatus } from "./model";

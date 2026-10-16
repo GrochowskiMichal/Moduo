@@ -547,15 +547,17 @@ describe("Done and completed (U1-3)", () => {
     task("new-done", { status: "done", updatedAt: new Date().toISOString() }),
   ];
 
-  it('hides completed tasks by default behind "N completed · show"', () => {
+  it('hides completed tasks by default behind the list\'s one "N completed · Show" (MOD-148)', () => {
     renderList(tasks());
     expect(screen.getAllByRole("row")).toHaveLength(1);
     const line = screen.getByRole("button", { name: "2 completed, show" });
-    expect(line.textContent).toBe("2 completed · show");
+    expect(line.textContent).toBe("2 completed · Show");
 
     fireEvent.click(line);
     expect(screen.getAllByRole("row")).toHaveLength(3);
-    expect(screen.getByRole("button", { name: "2 completed, hide" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "2 completed, hide" }).textContent).toBe(
+      "2 completed · Hide",
+    );
   });
 
   it('"7 days" lists the recent ones; "All" lists every one', () => {
@@ -588,7 +590,9 @@ describe("Done and completed (U1-3)", () => {
     });
     expect(rowOf("Task b")).toBeTruthy();
     expect(onSelectTask).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /completed/ })).toBeNull();
+    // The list's end line still counts it, so the count never moves with the
+    // selection (MOD-148).
+    expect(screen.getByRole("button", { name: "1 completed, show" })).toBeTruthy();
   });
 
   it("a deep link to a done subtask of a done parent lands: the parent stays and expands", () => {
@@ -758,7 +762,7 @@ describe("Board (U1-4)", () => {
     expect(card("Task a").textContent).not.toContain("#");
   });
 
-  it("done cards fade, and completed cards hide behind each column's line", () => {
+  it("done cards fade, and completed cards hide behind the board's one line (MOD-148)", () => {
     renderBoard([task("a"), task("d", { status: "done" })]);
     expect(screen.queryByText("Task d")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "1 completed, show" }));
