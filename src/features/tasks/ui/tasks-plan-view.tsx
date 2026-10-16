@@ -55,6 +55,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
+import { DecisionLines } from "../../chat/decisions";
 import { ConversationLines } from "../../chat/mentioned-in";
 import { useStartConversation } from "../../chat/start-conversation";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
@@ -2319,6 +2320,7 @@ export function TasksPlanView({
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
       chat={{
         conversation: <ConversationLines entityType="project" entityId={panelProject.id} />,
+        decisions: <DecisionLines entityType="project" entityId={panelProject.id} />,
       }}
     />
   ) : null;

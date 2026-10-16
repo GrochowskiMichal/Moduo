@@ -137,6 +137,8 @@ export type MessageStreamProps = {
   onDelete: (m: ChatMessage) => void;
   onReact: (m: ChatMessage, key: string, on: boolean) => void;
   onPin: (m: ChatMessage) => void;
+  /** ⋯ → Mark as decision and ⇧D (CV-14): absent, no item. */
+  onDecision?: (m: ChatMessage) => void;
   onTask: (m: ChatMessage) => void;
   /** ⋯ → Remind me… and H (CV-11): absent, no item. */
   onRemind?: (m: ChatMessage) => void;
@@ -555,6 +557,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onEdit: canWrite && own(m) ? () => p.onStartEdit(m) : undefined,
         onDelete: canWrite && own(m) ? () => p.onDelete(m) : undefined,
         onPin: canWrite ? () => p.onPin(m) : undefined,
+        onDecision: p.onDecision && canWrite && !m.sendState ? () => p.onDecision?.(m) : undefined,
         onCopyLink: () => p.onCopyLink(m),
         onMarkUnread: () => p.onMarkUnread(m),
         onCustomize: () => dispatchOpenSettings({ section: "chat" }),
@@ -637,6 +640,13 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         case "T":
           e.preventDefault();
           verbs.onTask();
+          return;
+        // ⇧D marks a decision; a bare d stays unbound in Chat (spec §16), so it types.
+        case "D":
+          if (e.shiftKey && verbs.onDecision) {
+            e.preventDefault();
+            verbs.onDecision();
+          } else if (canWrite) typeIntoComposer(e);
           return;
         case "h":
         case "H":

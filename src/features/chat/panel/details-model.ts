@@ -125,13 +125,14 @@ export function detailsStamp(rows: readonly ChatMessage[] | undefined): string {
     // A wrap-up or a reopen (CV-12) is a line in the history too.
     if (
       r.pinnedAt ||
+      r.decisionAt ||
       r.editedAt ||
       r.deletedAt ||
       r.wrappedAt ||
       r.reopenedAt ||
       r.kind === "event"
     ) {
-      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""}:${r.wrappedAt ?? ""}:${r.reopenedAt ?? ""};`;
+      out += `${r.id}:${r.pinnedAt ?? ""}:${r.editedAt ?? ""}:${r.deletedAt ?? ""}:${r.wrappedAt ?? ""}:${r.reopenedAt ?? ""}:${r.decisionAt ?? ""};`;
     }
   }
   return out;

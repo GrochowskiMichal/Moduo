@@ -152,7 +152,7 @@ $function$;
 -- ── 4. Decisions on an item ─────────────────────────────────────────────────
 DROP FUNCTION IF EXISTS public.chat_decisions_for_item(text, uuid);
 CREATE FUNCTION public.chat_decisions_for_item(p_type text, p_id uuid)
- RETURNS TABLE(message_id uuid, channel_id uuid, workspace_id uuid, channel_kind text,
+ RETURNS TABLE(message_id uuid, parent_id uuid, channel_id uuid, workspace_id uuid, channel_kind text,
                channel_name text, with_names text[], decision_at timestamptz, decision_by uuid,
                author_id uuid, author_kind text, author_label text, excerpt text,
                created_at timestamptz)
@@ -191,7 +191,7 @@ AS $function$
        AND public.perm_can_see_entity(v.workspace_id, item.t, p_id)
      GROUP BY c.id
   )
-  SELECT m.id, c.id, c.workspace_id, c.kind,
+  SELECT m.id, m.parent_id, c.id, c.workspace_id, c.kind,
          CASE WHEN c.kind = 'channel' THEN c.name END,
          CASE WHEN c.kind = 'dm' THEN ARRAY(
            SELECT coalesce(nullif(btrim(p.display_name), ''), 'Someone')

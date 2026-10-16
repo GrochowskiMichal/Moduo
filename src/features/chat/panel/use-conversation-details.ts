@@ -1,5 +1,5 @@
 // What Details reads beyond the store (CV-8b): the conversation's people, its
-// pinned messages and its quiet history. Each read again when `refresh`
+// pinned messages, its decisions (CV-14) and its quiet history. Each read again when `refresh`
 // changes (the screen folds the channel's stamp, your membership and the
 // window's pins and edits into it), so Details follows what happens in the
 // conversation without a subscription of its own.
@@ -11,10 +11,12 @@ export type ConversationDetails = {
   /** null while the first read is on its way. */
   members: ChatMember[] | null;
   pinned: ChatMessage[] | null;
+  /** Marked decisions (CV-14). */
+  decisions: ChatMessage[] | null;
   history: ChatHistoryEntry[] | null;
 };
 
-const NONE: ConversationDetails = { members: null, pinned: null, history: null };
+const NONE: ConversationDetails = { members: null, pinned: null, decisions: null, history: null };
 
 export function useConversationDetails(
   chat: ChatRuntime | null,
@@ -47,6 +49,10 @@ export function useConversationDetails(
       .listPinned(channelId)
       .then((rows) => settle("pinned", rows))
       .catch(() => settle("pinned", []));
+    void chat
+      .listDecisions(channelId)
+      .then((rows) => settle("decisions", rows))
+      .catch(() => settle("decisions", []));
     void chat
       .history({ workspaceId, channelId })
       .then((rows) => settle("history", rows))

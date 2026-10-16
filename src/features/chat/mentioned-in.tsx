@@ -14,6 +14,7 @@ import { formatDate } from "@/lib/time-format";
 import { useAuth } from "@/providers/auth-provider";
 import { resolveEntityIcon } from "../spine/icon-map";
 import { WorkspaceContext } from "../workspaces/workspace-context";
+import { DecisionLines } from "./decisions";
 import type { ChatItemConversation } from "./model";
 
 /** What a line reads after "Mentioned in": the channel's name, or "a direct message". */
@@ -144,7 +145,9 @@ export function MentionedInLines({
   entityId: string;
 }) {
   const { linked, mentioned } = itemConversationLines(useItemConversations(entityType, entityId));
-  if (linked.length === 0 && mentioned.length === 0) return null;
+  // The item's decisions (CV-14) follow its conversations.
+  const decisions = <DecisionLines entityType={entityType} entityId={entityId} />;
+  if (linked.length === 0 && mentioned.length === 0) return decisions;
   const now = new Date();
   return (
     <div className="flex flex-col gap-0.5">
@@ -170,6 +173,7 @@ export function MentionedInLines({
           })}
         </ul>
       ) : null}
+      {decisions}
     </div>
   );
 }

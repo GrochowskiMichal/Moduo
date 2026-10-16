@@ -15,6 +15,7 @@ import type {
   ChatChannel,
   ChatDeletedChannel,
   ChatHistoryEntry,
+  ChatItemDecision,
   ChatMember,
   ChatMessage,
   ChatPerson,
@@ -156,6 +157,8 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     reopenedBy: str(r.reopened_by),
     pinnedAt: str(r.pinned_at),
     pinnedBy: str(r.pinned_by),
+    decisionAt: str(r.decision_at),
+    decisionBy: str(r.decision_by),
     editedAt: str(r.edited_at),
     deletedAt: str(r.deleted_at),
     clientId: str(r.client_id),
@@ -227,6 +230,28 @@ export function mapSyncRow(raw: unknown): ChatSyncRow | null {
     id: str(r.id),
     conversationId: str(r.conversation_id),
     checkedAt,
+  };
+}
+
+/** A decision shown on an item (`chat_decisions_for_item`, CV-14). */
+export function mapItemDecision(raw: unknown): ChatItemDecision | null {
+  const r = asRow(raw);
+  const messageId = str(r?.message_id);
+  const channelId = str(r?.channel_id);
+  const workspaceId = str(r?.workspace_id);
+  const decisionAt = str(r?.decision_at);
+  if (!r || !messageId || !channelId || !workspaceId || !decisionAt) return null;
+  return {
+    messageId,
+    parentId: str(r.parent_id),
+    channelId,
+    workspaceId,
+    channelKind: r.channel_kind === "dm" ? "dm" : "channel",
+    channelName: str(r.channel_name),
+    withNames: strArr(r.with_names),
+    decisionAt,
+    excerpt: str(r.excerpt) ?? "",
+    createdAt: str(r.created_at) ?? decisionAt,
   };
 }
 

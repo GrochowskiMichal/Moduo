@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Clock,
   CornerDownRight,
+  Flag,
   MessageSquare,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -487,10 +488,24 @@ export function MessageRow({
               onOpenChain={() => handlers.onOpenChain?.(message)}
             />
           )}
+          {message.decisionAt && !editor ? <DecisionLabel /> : null}
           {editor ? null : <MadeFromLine messageId={message.id} />}
         </div>
         {toolbar}
       </div>
+    </div>
+  );
+}
+
+/** The quiet "Decision" label under a message marked as one (CV-14, §8). */
+export function DecisionLabel() {
+  return (
+    <div
+      data-slot="message-decision"
+      className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground"
+    >
+      <Flag className="size-icon-xs shrink-0" aria-hidden />
+      Decision
     </div>
   );
 }

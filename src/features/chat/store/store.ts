@@ -501,6 +501,8 @@ export class ChatStore {
       reopenedBy: null,
       pinnedAt: null,
       pinnedBy: null,
+      decisionAt: null,
+      decisionBy: null,
       editedAt: null,
       deletedAt: null,
       clientId: null,
@@ -1860,12 +1862,36 @@ export class ChatStore {
   }
 
   /** Wrap up a chain (CV-12): its replies leave the stream (a drawing rule on the root). */
-  wrapUp(rootId: string, settledId: string): Promise<ChatWriteResult> {
+  async wrapUp(rootId: string, settledId: string, markDecision = false): Promise<ChatWriteResult> {
     const at = new Date().toISOString();
-    return this.write(
+    const res = await this.write(
       rootId,
       (row) => ({ ...row, wrappedAt: at, wrappedBy: this.userId, settledId }),
-      () => this.transport.wrapUp({ rootId, settledId }),
+      () => this.transport.wrapUp({ rootId, settledId, markDecision }),
+    );
+    // "Also mark as decision" (CV-14): the settling reply changed on the server too.
+    if (res.ok && markDecision) {
+      const settled = await this.transport.message(settledId);
+      if (settled.data) {
+        this.landRow(settled.data);
+        this.chainCache.clear();
+        this.notify();
+      }
+    }
+    return res;
+  }
+
+  /** Mark or unmark a message as a decision (CV-14). */
+  markDecision(id: string, on: boolean): Promise<ChatWriteResult> {
+    const at = new Date().toISOString();
+    return this.write(
+      id,
+      (row) => ({
+        ...row,
+        decisionAt: on ? (row.decisionAt ?? at) : null,
+        decisionBy: on ? (row.decisionBy ?? this.userId) : null,
+      }),
+      () => this.transport.markDecision({ id, on }),
     );
   }
 

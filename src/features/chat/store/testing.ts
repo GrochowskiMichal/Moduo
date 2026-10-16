@@ -104,6 +104,8 @@ export function message(
     reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
+    decisionAt: null,
+    decisionBy: null,
     editedAt: null,
     deletedAt: null,
     clientId: null,
@@ -360,16 +362,27 @@ export class FakeChatServer {
             pinnedBy: pinned ? ME : null,
           })),
         ),
-      wrapUp: ({ rootId, settledId }) =>
-        this.gate("wrapUp", () =>
-          this.mine(rootId, () => ({
+      markDecision: ({ id, on }) =>
+        this.gate("markDecision", () =>
+          this.mine(id, () => ({
+            decisionAt: on ? this.now() : null,
+            decisionBy: on ? ME : null,
+          })),
+        ),
+      wrapUp: ({ rootId, settledId, markDecision }) =>
+        this.gate("wrapUp", () => {
+          // "Also mark as decision" (CV-14) marks the settling reply.
+          if (markDecision && !this.rows.get(settledId)?.decisionAt) {
+            this.mine(settledId, () => ({ decisionAt: this.now(), decisionBy: ME }));
+          }
+          return this.mine(rootId, () => ({
             wrappedAt: this.now(),
             wrappedBy: ME,
             settledId,
             reopenedAt: null,
             reopenedBy: null,
-          })),
-        ),
+          }));
+        }),
       reopen: (rootId) =>
         this.gate("reopen", () =>
           this.mine(rootId, () => ({

@@ -169,5 +169,7 @@ describe("when Details reads again", () => {
     expect(detailsStamp([...base, row("c", { pinnedAt: "t" })])).not.toBe(detailsStamp(base));
     expect(detailsStamp([...base, row("c", { editedAt: "t" })])).not.toBe(detailsStamp(base));
     expect(detailsStamp([...base, row("c", { kind: "event" })])).not.toBe(detailsStamp(base));
+    // CV-14: a decision marked in the window reads Details again.
+    expect(detailsStamp([...base, row("c", { decisionAt: "t" })])).not.toBe(detailsStamp(base));
   });
 });

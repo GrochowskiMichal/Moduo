@@ -27,6 +27,7 @@ import {
   mapChannel,
   mapDeletedChannel,
   mapHistory,
+  mapItemDecision,
   mapMember,
   mapMessage,
   mapPerson,
@@ -266,6 +267,14 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return rowResult(data, error, "pin");
       }),
 
+    markDecision: ({ id, on }) =>
+      attempt(async () => {
+        const { data, error } = await db()
+          .rpc("chat_op_mark_decision", { p_message_id: id, p_on: on })
+          .select(MESSAGE_COLUMNS);
+        return rowResult(data, error, "decision");
+      }),
+
     wrapUp: ({ rootId, settledId, markDecision }) =>
       attempt(async () => {
         const { data, error } = await db()
@@ -485,6 +494,19 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         .not("pinned_at", "is", null)
         .is("deleted_at", null)
         .order("pinned_at", { ascending: false })
+        .limit(100);
+      fail(error);
+      return mapRows(data, mapMessage);
+    },
+
+    async listDecisions(channelId) {
+      const { data, error } = await db()
+        .from("chat_messages")
+        .select(MESSAGE_COLUMNS)
+        .eq("channel_id", channelId)
+        .not("decision_at", "is", null)
+        .is("deleted_at", null)
+        .order("decision_at", { ascending: false })
         .limit(100);
       fail(error);
       return mapRows(data, mapMessage);
@@ -750,6 +772,15 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         unread: typeof r.unread === "number" && r.unread > 0 ? r.unread : 0,
         archived: r.archived === true,
       }));
+    },
+
+    async decisionsForItem(type, id) {
+      const { data, error } = await db().rpc("chat_decisions_for_item", {
+        p_type: type,
+        p_id: id,
+      });
+      fail(error);
+      return mapRows(data, mapItemDecision);
     },
 
     async madeFrom(messageIds) {

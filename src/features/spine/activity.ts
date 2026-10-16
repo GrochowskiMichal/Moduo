@@ -334,6 +334,9 @@ export function spineActivityLine(
       return "wrapped up a reply chain";
     case "chat.reopen":
       return p.undo === true ? "undid a wrap-up" : "reopened a reply chain";
+    // Decisions (CV-14): ids only.
+    case "chat.decision":
+      return p.on === false ? "took back a decision" : "marked a decision";
     case "chat.react":
       return p.on === false ? "took back a reaction" : "reacted to a message";
     default:
@@ -347,7 +350,7 @@ export function spineActivityLine(
  * person by name, never `moduo://person/<id>`), CV-11. An excerpt the server
  * cut inside a reference loses that half reference.
  */
-function chatExcerptText(
+export function chatExcerptText(
   value: unknown,
   referenceName: ((ref: ReferenceRef) => string) | undefined,
 ): string | null {

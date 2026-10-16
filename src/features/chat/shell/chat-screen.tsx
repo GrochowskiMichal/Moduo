@@ -570,18 +570,25 @@ export function ChatScreen({
     [store],
   );
   const wrapUp = useCallback(
-    (rootId: string, settledId: string) => {
+    (rootId: string, settledId: string, markDecision: boolean) => {
       if (!store) return;
       setWrapFor(null);
-      void store.wrapUp(rootId, settledId).then((res) => {
+      // "Also mark as decision" (CV-14): Undo takes back only a decision this wrap-up made.
+      const newDecision = markDecision && !store.rowById(settledId)?.decisionAt;
+      void store.wrapUp(rootId, settledId, markDecision).then((res) => {
         if (failed(res, "Couldn't wrap it up.")) return;
-        toast("Wrapped up", {
+        toast(newDecision ? "Wrapped up · marked as a decision" : "Wrapped up", {
           id: `chat-wrap-${rootId}`,
           duration: WRAP_UNDO_MS,
           action: {
             label: "Undo",
             onClick: () =>
-              void store.reopen(rootId).then((r) => failed(r, "Couldn't undo the wrap-up.")),
+              void store.reopen(rootId).then((r) => {
+                if (failed(r, "Couldn't undo the wrap-up.") || !newDecision) return;
+                void store
+                  .markDecision(settledId, false)
+                  .then((d) => failed(d, "Couldn't take back the decision."));
+              }),
           },
         });
       });
@@ -1066,6 +1073,15 @@ export function ChatScreen({
                 }
               });
             }}
+            onDecision={(m) => {
+              if (!store) return;
+              const on = !m.decisionAt;
+              void store.markDecision(m.id, on).then((res) => {
+                if (!failed(res, "Couldn't update the decision.")) {
+                  toast(on ? "Marked as a decision" : "No longer a decision");
+                }
+              });
+            }}
             onTask={makeTaskFrom}
             onRemind={(m) => setRemindFor({ messageId: m.id })}
             onReplyPrivately={
@@ -1359,6 +1375,7 @@ export function ChatScreen({
             statusOf={statusOf}
             members={details.members}
             pinned={details.pinned}
+            decisions={details.decisions}
             history={details.history}
             canArchive={
               channel.kind === "channel" &&
@@ -1485,8 +1502,9 @@ export function ChatScreen({
         }}
         replies={wrapReplies ?? []}
         loaded={!!wrapFor && !!snap.chains[wrapFor]?.loaded}
+        linked={!!channel?.link}
         personOf={personOf}
-        onConfirm={(settledId) => wrapFor && wrapUp(wrapFor, settledId)}
+        onConfirm={(settledId, markDecision) => wrapFor && wrapUp(wrapFor, settledId, markDecision)}
       />
       <ReplyToDialog
         open={!!attachFor}

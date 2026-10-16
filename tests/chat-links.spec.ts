@@ -168,6 +168,11 @@ test("from the project's ⋯ and the company's hub: Start a conversation, then t
   await page.getByRole("menuitem", { name: "Start a conversation" }).click();
   await expect(page).toHaveURL(/\/chat/, { timeout: 20_000 });
   await expect(page.locator("[data-slot='link-chip']")).toContainText(launch);
+  // CV-14 (AC5.2): a decision in the linked channel reaches the project's overview.
+  const launchChannel = new URL(page.url()).searchParams.get("c") ?? "";
+  expect(launchChannel).toBeTruthy();
+  const decisionId = await sendAs(room.owner, launchChannel, `we go with Stripe ${tag}`);
+  await rpc(room.owner, "chat_op_mark_decision", { p_message_id: decisionId, p_on: true });
 
   // Back on the project: its overview shows "Conversation: Launch …".
   await page.goto(`/tasks?id=${launchId}`);
@@ -175,6 +180,11 @@ test("from the project's ⋯ and the company's hub: Start a conversation, then t
   await page.getByRole("menuitem", { name: "Project details" }).click();
   await expect(page.locator("[data-slot='item-conversation']").first()).toContainText(
     `Conversation: ${launch}`,
+    { timeout: 20_000 },
+  );
+  // …and the decision: "Decided in Launch … · Oct 16: we go with Stripe …".
+  await expect(page.locator("[data-slot='item-decisions']").first()).toContainText(
+    new RegExp(`Decided in .+ · .+: we go with Stripe ${tag}`),
     { timeout: 20_000 },
   );
 
