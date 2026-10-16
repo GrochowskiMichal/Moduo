@@ -230,7 +230,8 @@ BEGIN
   -- A person picks at most 100; an Undo names every id the move took
   -- (chains included), which the move itself capped at 500.
   IF cardinality(v_sel) > (CASE WHEN coalesce(p_undo, false) THEN 500 ELSE 100 END) THEN
-    RAISE EXCEPTION 'Move at most 100 messages at a time.' USING ERRCODE = '22023';
+    RAISE EXCEPTION 'Move at most % messages at a time.',
+      (CASE WHEN coalesce(p_undo, false) THEN 500 ELSE 100 END) USING ERRCODE = '22023';
   END IF;
 
   -- Every picked message exists and sits in a conversation you can read; any
@@ -276,6 +277,9 @@ BEGIN
   PERFORM 1 FROM public.chat_messages m
    WHERE m.id = ANY (v_sel) OR m.parent_id = ANY (v_sel)
       OR m.id IN (SELECT p.parent_id FROM public.chat_messages p WHERE p.id = ANY (v_sel))
+      -- and the messages that quote them (a move drops those quotes)
+      OR m.reply_to_id = ANY (v_sel)
+      OR m.reply_to_id IN (SELECT c.id FROM public.chat_messages c WHERE c.parent_id = ANY (v_sel))
    ORDER BY m.id FOR UPDATE;
   -- (A deleted reply rides along with its picked root: an Undo names it.)
   IF EXISTS (SELECT 1 FROM public.chat_messages m
@@ -311,9 +315,36 @@ BEGIN
     IF NOT public.chat__can_post(v_target, v_me) AND NOT public.chat__can_manage(v_target, v_me) THEN
       RAISE EXCEPTION 'You can''t post in that conversation.' USING ERRCODE = '42501';
     END IF;
+    -- What the restore points at again (the chains and quotes they left),
+    -- locked in id order.
+    PERFORM 1 FROM public.chat_messages m
+     WHERE m.id IN (SELECT (d ->> 'parent_id')::uuid FROM jsonb_array_elements(coalesce(v_out.event -> 'detached', '[]'::jsonb)) d
+                    UNION
+                    SELECT (d ->> 'reply_to_id')::uuid FROM jsonb_array_elements(coalesce(v_out.event -> 'detached', '[]'::jsonb)) d)
+     ORDER BY m.id FOR UPDATE;
+    -- A chain or quote a moved message took up where it went stays there: it
+    -- leaves that chain (which counts again, and reopens if it settled it).
+    SELECT array_agg(DISTINCT m.parent_id) FILTER (WHERE m.parent_id IS NOT NULL AND NOT m.parent_id = ANY (v_all))
+      INTO v_roots
+      FROM public.chat_messages m WHERE m.id = ANY (v_all);
+    SELECT array_agg(p.id) INTO v_settled
+      FROM public.chat_messages p
+     WHERE p.id = ANY (coalesce(v_roots, '{}'::uuid[])) AND p.settled_id = ANY (v_all);
+    UPDATE public.chat_messages m
+       SET parent_id = CASE WHEN m.parent_id = ANY (v_all) THEN m.parent_id END,
+           reply_to_id = CASE WHEN m.reply_to_id = ANY (v_all) THEN m.reply_to_id END
+     WHERE m.id = ANY (v_all)
+       AND ((m.parent_id IS NOT NULL AND NOT m.parent_id = ANY (v_all))
+            OR (m.reply_to_id IS NOT NULL AND NOT m.reply_to_id = ANY (v_all)));
     UPDATE public.chat_messages m
        SET channel_id = v_target.id, moved_at = NULL, moved_by = NULL, moved_from_channel_id = NULL
      WHERE m.id = ANY (v_all);
+    FOR r IN SELECT unnest(coalesce(v_roots, '{}'::uuid[])) AS id LOOP
+      PERFORM public.chat__chain_refresh(r.id);
+    END LOOP;
+    FOR r IN SELECT p FROM public.chat_messages p WHERE p.id = ANY (coalesce(v_settled, '{}'::uuid[])) LOOP
+      PERFORM public.chat__reopen_chain(r.p, v_me, v_now);
+    END LOOP;
     -- Chains and quotes as they were.
     FOR r IN SELECT d ->> 'id' AS id, d ->> 'parent_id' AS parent_id, d ->> 'reply_to_id' AS reply_to_id
                FROM jsonb_array_elements(coalesce(v_out.event -> 'detached', '[]'::jsonb)) d LOOP
@@ -494,6 +525,7 @@ DECLARE
   v_teams uuid[];
   v_everyone boolean;
   v_files integer;
+  v_root_id uuid;
 BEGIN
   IF p_id IS NULL THEN
     RAISE EXCEPTION 'A message needs its id.' USING ERRCODE = '22023';
@@ -552,8 +584,9 @@ BEGIN
     -- The quoted message and its chain's root, locked in id order (as a move
     -- locks them), then read again: a move or a delete that got there first
     -- leaves nothing to answer here.
+    v_root_id := coalesce(v_quoted.parent_id, v_quoted.id);
     PERFORM 1 FROM public.chat_messages
-     WHERE id IN (v_quoted.id, coalesce(v_quoted.parent_id, v_quoted.id))
+     WHERE id IN (v_quoted.id, v_root_id)
      ORDER BY id FOR UPDATE;
     SELECT * INTO v_quoted FROM public.chat_messages WHERE id = p_reply_to_id;
     SELECT * INTO v_root FROM public.chat_messages WHERE id = coalesce(v_quoted.parent_id, v_quoted.id);
@@ -561,7 +594,8 @@ BEGIN
        OR v_root.id IS NULL OR v_root.channel_id <> p_channel_id THEN
       RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
     END IF;
-    IF v_root.id <> coalesce(v_quoted.parent_id, v_quoted.id) OR v_root.parent_id IS NOT NULL THEN
+    -- It joined another chain before the lock: that root isn't locked.
+    IF v_root.id <> v_root_id OR v_root.parent_id IS NOT NULL THEN
       RAISE EXCEPTION 'That conversation just changed. Try again.' USING ERRCODE = '40001';
     END IF;
   END IF;

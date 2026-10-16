@@ -725,3 +725,26 @@ BEGIN
   UPDATE public.chat_messages SET channel_id = test.ref('Q') WHERE id = test.mid('k');
 END;
 $$;
+
+-- ── Undo leaves behind a chain the message joined where it went ─────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.rewind();
+  PERFORM test.ok(test.post('B', 'D', 'd0') LIKE 'ok %', 'B posts d0 in the direct message D');
+  PERFORM test.ok(test.post('B', 'Q', 'u') LIKE 'ok %', 'B posts u in Q');
+  v := test.mv('B', ARRAY['u'], 'D');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'B moves u to D', v);
+  v := test.as_user('B', format($q$SELECT id FROM public.chat_op_attach_to_chain(%L::uuid, %L::uuid)$q$,
+    test.mid('u'), test.mid('d0')));
+  PERFORM test.ok(v LIKE 'ok %' AND (test.msg('u')).parent_id = test.mid('d0')
+              AND (test.msg('d0')).reply_count = 1, 'in D, B makes u a reply to d0', v);
+  v := test.mv('B', ARRAY['u'], 'Q', false, true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone', 'B undoes the move', v);
+  PERFORM test.ok((test.msg('u')).channel_id = test.ref('Q') AND (test.msg('u')).parent_id IS NULL
+              AND (test.msg('u')).reply_to_id IS NULL,
+    'u is back in Q with no chain or quote pointing into D');
+  PERFORM test.ok((test.msg('d0')).reply_count = 0, 'd0''s chain counts it out');
+END;
+$$;
