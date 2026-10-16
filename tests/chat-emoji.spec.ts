@@ -66,6 +66,8 @@ test("custom emoji in the picker, reactions and comments", async ({ page }) => {
     mimeType: "image/gif",
     buffer: ANIMATED_GIF,
   });
+  // Named once the image is read (reading it fills the name from the file's).
+  await expect(dialog.getByRole("button", { name: "Choose another image" })).toBeVisible();
   await dialog.getByLabel("Name").fill(name);
   await dialog.getByRole("button", { name: "Add" }).click();
   await expect(dialog).toBeHidden({ timeout: 20_000 });
@@ -78,6 +80,7 @@ test("custom emoji in the picker, reactions and comments", async ({ page }) => {
     mimeType: "image/gif",
     buffer: ANIMATED_GIF,
   });
+  await expect(dialog.getByRole("button", { name: "Choose another image" })).toBeVisible();
   await dialog.getByLabel("Name").fill("tada");
   await dialog.getByRole("button", { name: "Add" }).click();
   await expect(dialog).toContainText(":tada: is a standard emoji");
