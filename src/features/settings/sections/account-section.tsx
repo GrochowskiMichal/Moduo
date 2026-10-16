@@ -329,7 +329,7 @@ export function AccountSection() {
           <button
             type="button"
             onClick={() => avatarInputRef.current?.click()}
-            className="relative h-16 w-16 overflow-hidden rounded-full border border-border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+            className="relative h-16 w-16 overflow-hidden rounded-full border border-border bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             aria-label="Change profile picture"
           >
             <img

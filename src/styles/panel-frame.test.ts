@@ -70,6 +70,18 @@ describe("the panel frame (MOD-121)", () => {
   });
 });
 
+// MOD-162 (Maciej, 2026-10-16): half the space between two panels, the same
+// 16 px from the window's edge. The gap is a frame token, so density never
+// moves it either.
+describe("the space between panels (MOD-162)", () => {
+  it("is 8, on :root only", async () => {
+    const blocks = await tokenBlocks();
+    const declaring = blocks.filter((b) => declarations(b).has("--panel-gap"));
+    expect(declaring.map((b) => b.prelude)).toEqual([":root"]);
+    expect(remPx(declarations(declaring[0]).get("--panel-gap"))).toBe(8);
+  });
+});
+
 describe("a wrapping row's first line (MOD-153)", () => {
   it("is derived on every density scope, so a one-line row stays the small rung tall", async () => {
     const blocks = await tokenBlocks();

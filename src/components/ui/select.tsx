@@ -38,6 +38,9 @@ function SelectTrigger({
       data-size={size}
       className={cn(
         fieldShellVariants({ variant }),
+        // A trigger is a button, focus-visible only from the keyboard, so it
+        // also takes the controls' ring (MOD-160).
+        "focus-visible:ring-2 focus-visible:ring-ring/50",
         "flex w-fit items-center justify-between gap-2 px-3 whitespace-nowrap",
         "data-[placeholder]:text-muted-foreground",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-icon-sm [&_svg:not([class*='text-'])]:text-muted-foreground",

@@ -84,7 +84,7 @@ export function WorkspaceMarkPicker({
             type="button"
             disabled={busy}
             aria-label="Change workspace icon"
-            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card disabled:opacity-50"
+            className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
           >
             <WorkspaceMark name={name} icon={icon} logoUrl={logoUrl} className={className} />
           </button>

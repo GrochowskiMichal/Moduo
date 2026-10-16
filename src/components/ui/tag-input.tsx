@@ -1,5 +1,7 @@
 import { type ClipboardEvent, type KeyboardEvent, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Badge } from "./badge";
+import { FIELD_FOCUS_WITHIN } from "./field-shell";
 
 type Props = {
   tags: string[];
@@ -73,7 +75,12 @@ export function TagInput({
 
   return (
     <div
-      className={`rounded-md border border-border bg-muted px-2 py-2 focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:ring-offset-card ${className}`}
+      // A field's focus edge on the box (MOD-160), not shadcn's offset ring.
+      className={cn(
+        "rounded-md border border-border bg-input px-2 py-2 transition-[border-color] duration-(--motion-fade) ease-(--ease-out)",
+        FIELD_FOCUS_WITHIN,
+        className,
+      )}
     >
       <div className="flex flex-wrap items-center gap-2">
         {safeTags.map((tag, index) => (
@@ -83,7 +90,7 @@ export function TagInput({
               <button
                 type="button"
                 aria-label={`Remove ${tag}`}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 onClick={() => removeTag(index)}
               >
                 ×

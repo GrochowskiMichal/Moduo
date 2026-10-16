@@ -737,6 +737,39 @@ describe("areas: create, rename, reorder, delete (TV-D10's ops)", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(calls.onCreateBucket).toHaveBeenCalledWith("Docs", "product");
   });
+
+  // MOD-159: each name field takes the row it stands in for, so nothing moves.
+  // Measured live at every density: same height and top, the text on the
+  // label's pixels, the icon where it was.
+  it("names in the shape of the row it becomes", async () => {
+    renderRail();
+    const box = (placeholder: string) =>
+      screen
+        .getByPlaceholderText(placeholder)
+        .closest('[data-slot="nav-row-field"]') as HTMLElement;
+
+    // "+ New project" becomes its field in place: its margin, its + slot.
+    fireEvent.click(main(/^New project$/));
+    await settle();
+    const project = box("Project name — Enter to add");
+    for (const c of ["h-(--row-h)", "mt-1"]) expect(project.classList).toContain(c);
+    expect(project.querySelector('[data-slot="nav-row-icon"] svg')).toBeTruthy();
+    fireEvent.keyDown(screen.getByPlaceholderText("Project name — Enter to add"), {
+      key: "Escape",
+    });
+    await settle();
+
+    // An area's rename is the header's shape.
+    fireEvent.contextMenu(
+      screen
+        .getByRole("button", { name: /^Clients,/ })
+        .closest('[data-slot="nav-section-header"]') as Element,
+    );
+    await settle();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await settle();
+    expect(box("Area name — Enter").classList).toContain("h-(--row-h-sm)");
+  });
 });
 
 describe("drift and drag", () => {
