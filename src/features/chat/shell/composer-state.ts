@@ -3,7 +3,7 @@
 // replaces the box; never a disabled box (AC1.8). The server decides every
 // write; this only keeps the screen honest about what it will refuse.
 
-import type { ChatChannel, ChatMember, ChatPerson } from "../model";
+import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../model";
 import { dmPeople } from "./sidebar-model";
 
 export type ComposerLine =
@@ -26,8 +26,14 @@ export function composerLine(input: {
   ownerName: string | null;
   /** Your role may post in chat (a viewer may not). */
   canPost: boolean;
-  /** You manage this channel (announcements, unarchive). */
+  /** You manage this channel (unarchive): a manager in effect or an admin. */
   canManage: boolean;
+  /**
+   * You're one of its managers (in it, in a role that posts). An announcement
+   * channel takes posts only from them, not from an admin who isn't one
+   * (§12 footnote 1: an admin can make themselves one). Defaults to canManage.
+   */
+  isManager?: boolean;
 }): ComposerLine | null {
   const { channel, member, paused, canPost, canManage } = input;
   if (channel.archivedAt) return { kind: "archived", canUnarchive: canManage && !paused };
@@ -44,7 +50,25 @@ export function composerLine(input: {
     }
   }
   if (!member) return { kind: "join" };
-  if (channel.managersOnly && !canManage) return { kind: "announcement" };
+  if (channel.managersOnly && !(input.isManager ?? canManage)) return { kind: "announcement" };
+  return null;
+}
+
+/**
+ * The post "Reply privately" answers from the announcement line (CH50): the
+ * newest top-level message in view by someone else (a person, not an app).
+ */
+export function newestPost(
+  rows: readonly ChatMessage[] | undefined,
+  selfId: string,
+): ChatMessage | null {
+  if (!rows) return null;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const m = rows[i];
+    if (!m || m.kind !== "message" || m.parentId || m.deletedAt || m.sendState) continue;
+    if (m.authorKind !== "user" || !m.authorId || m.authorId === selfId) continue;
+    return m;
+  }
   return null;
 }
 

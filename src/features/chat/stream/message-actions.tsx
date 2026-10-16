@@ -14,6 +14,7 @@ import {
   CheckSquare,
   CornerUpLeft,
   Link2,
+  MessageSquareLock,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -40,6 +41,8 @@ export type MessageVerbs = {
   /** The full picker (CV-7b's seam). Absent: no ☺ button. */
   onAnyEmoji?: () => void;
   onReply: () => void;
+  /** An announcement channel you can't post in: a direct message to the author (CH50). */
+  onReplyPrivately?: () => void;
   /** "Reply to…": attach this message to an earlier one's chain (absent: no item). */
   onReplyTo?: () => void;
   /** Wrap up this root's chain (absent: no item). */
@@ -109,6 +112,12 @@ function ActionsMenu({
           Reply
           <DropdownMenuShortcut>R</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {verbs.onReplyPrivately ? (
+          <DropdownMenuItem onSelect={verbs.onReplyPrivately}>
+            <MessageSquareLock aria-hidden />
+            Reply privately
+          </DropdownMenuItem>
+        ) : null}
         {verbs.onReplyTo ? (
           <DropdownMenuItem onSelect={verbs.onReplyTo}>
             <CornerUpLeft aria-hidden />

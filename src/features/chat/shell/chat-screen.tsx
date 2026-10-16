@@ -34,9 +34,16 @@ import {
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
+import {
+  AddPeopleDialog,
+  ConfirmDialog,
+  EditChannelDialog,
+  makePrivateCopy,
+  RecentlyDeletedDialog,
+} from "../dialogs/channel-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
-import type { ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
+import type { ChatChannel, ChatMessage, ChatNotifyLevel, ChatPerson } from "../model";
 import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
@@ -57,16 +64,24 @@ import {
   useChatTypingSnapshot,
 } from "../store/react";
 import type { ChatWindow, ChatWriteResult } from "../store/store";
+import { MadeFromScope, useMadeFrom } from "../stream/made-from";
 import { MessageStream, type MessageStreamHandle } from "../stream/message-stream";
 import { authorName } from "../stream/rows";
 import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
-import { composerLine } from "./composer-state";
+import { composerLine, newestPost } from "./composer-state";
 import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
 import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
-import { useChannelManagers, useChatRights } from "./use-chat-rights";
+import {
+  managesChannel,
+  mergePeople,
+  personPosts,
+  rightsFrom,
+  useChannelManagers,
+  useChatCapsRows,
+} from "./use-chat-rights";
 
 /** "Deleted · Undo" stays this long; then the server deletes (§6 #10). */
 const DELETE_UNDO_MS = 8000;
@@ -169,16 +184,20 @@ export function ChatScreen({
     [runtime, userId],
   );
   const typing = useChatTypingSnapshot(typingStore);
-  const rights = useChatRights(workspaceId, role, readOnly);
+  const capsRows = useChatCapsRows(workspaceId);
+  const rights = rightsFrom(capsRows, role, readOnly);
 
   // ── people ────────────────────────────────────────────────────────────────
-  const peopleById = useMemo(() => {
-    const out: Record<string, ChatPerson> = {};
-    for (const p of members) out[p.userId] = p;
-    for (const p of Object.values(snap.people)) out[p.userId] = { ...out[p.userId], ...p };
-    return out;
-  }, [members, snap.people]);
+  const peopleById = useMemo(
+    () => mergePeople(members, Object.values(snap.people)),
+    [members, snap.people],
+  );
   const personOf = useCallback((id: string) => peopleById[id], [peopleById]);
+  // Only someone whose role posts can be made a manager (the server's rule).
+  const canBeManager = useCallback(
+    (id: string) => personPosts(capsRows, peopleById[id]),
+    [capsRows, peopleById],
+  );
   const people = useMemo(
     () =>
       Object.values(peopleById)
@@ -206,10 +225,21 @@ export function ChatScreen({
   const channel = conversationId ? snap.channels[conversationId] : undefined;
   const member = conversationId ? snap.mine[conversationId] : undefined;
   const streamWin = conversationId ? snap.windows[conversationId] : undefined;
-  const managers = useChannelManagers(channel?.id ?? null, channel?.kind ?? null);
-  const canManage = !!channel && (rights.manageAny || (managers ?? []).includes(selfId));
+  const managers = useChannelManagers(
+    channel?.id ?? null,
+    channel?.kind ?? null,
+    channel?.rosterAt ?? null,
+  );
+  // A manager in effect (in it, a role that posts) or an admin; someone demoted loses it at once.
+  const { canManage: managesIt, isManager } = managesChannel({
+    selfId,
+    managers,
+    inChannel: !!member,
+    rights,
+  });
+  const canManage = !!channel && managesIt;
   // An announcement channel's line waits for its managers (a manager never sees "Only managers post").
-  const managersPending = managers === null && !!channel?.managersOnly && !rights.manageAny;
+  const managersPending = managers === null && !!channel?.managersOnly;
 
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
@@ -327,6 +357,7 @@ export function ChatScreen({
       channel?.archivedAt,
       channel?.isPrivate,
       channel?.managersOnly,
+      channel?.rosterAt,
       member ? member.joinedAt : "-",
       detailsStamp(streamWin?.rows),
     ].join("|"),
@@ -334,6 +365,13 @@ export function ChatScreen({
 
   // ── New conversation (⌘N, the bottom bar's +, the left panel's row) ───────
   const [newOpen, setNewOpen] = useState(false);
+  // ── A manager's dialogs (CV-15) ─────────────────────────────────────────────
+  const [lifecycleDialog, setLifecycleDialog] = useState<
+    "add" | "edit" | "private" | "delete" | "deleted" | null
+  >(null);
+  const closeLifecycle = (open: boolean) => {
+    if (!open) setLifecycleDialog(null);
+  };
   const canStart = rights.canPost && !snap.paused;
   useEffect(
     () =>
@@ -536,13 +574,52 @@ export function ChatScreen({
   );
 
   // T / "Make a task": the app's capture opens as Task with the message's words (AC2.7).
-  const makeTaskFrom = useCallback((m: ChatMessage) => {
-    const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 200);
-    dispatchOpenCapture({ type: "task", draft: text });
-  }, []);
+  // With a removable "From: Sofia's message in Acme" chip that links the task
+  // to the message, and "Became a task" under the message once made (CV-10).
+  // The messages on screen: the stream's and the open reply chains' (a wrapped
+  // chain's replies show only in the panel).
+  const madeFromIds = useMemo(() => {
+    const ids = new Set<string>();
+    const take = (m: ChatMessage | null | undefined) => {
+      if (m && !m.sendState && m.kind === "message") ids.add(m.id);
+    };
+    for (const m of streamWin?.rows ?? []) take(m);
+    for (const chain of Object.values(snap.chains)) {
+      if (chain.root?.channelId !== conversationId) continue;
+      take(chain.root);
+      for (const r of chain.replies) take(r);
+    }
+    return [...ids];
+  }, [streamWin?.rows, snap.chains, conversationId]);
+  const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
+  const addMadeFrom = madeFrom.add;
+  const makeTaskFrom = useCallback(
+    (m: ChatMessage) => {
+      const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200);
+      const chat = runtime?.chat;
+      dispatchOpenCapture({
+        type: "task",
+        draft: text,
+        source:
+          chat && !m.sendState
+            ? {
+                kind: "message",
+                label: messageSourceLabel(m, snap.channels[m.channelId], selfId, personOf),
+                resolve: () => chat.registerMessage(m.id).catch(() => null),
+              }
+            : null,
+        // Only a task carries the From link; the line drops one the server
+        // never shows (the chip removed, a template, a failed link).
+        onCreated: (ref) => {
+          if (ref.type === "task") addMadeFrom(m.id, { type: ref.type, id: ref.id });
+        },
+      });
+    },
+    [runtime, snap.channels, selfId, personOf, addMadeFrom],
+  );
 
   const copyLink = useCallback((m: ChatMessage) => {
     const params = new URLSearchParams({ c: m.channelId, m: m.id });
@@ -559,6 +636,24 @@ export function ChatScreen({
       void store
         .openDm(others)
         .then((c) => onOpen(c.id))
+        .catch((err: unknown) => toast(errorText(err, "Couldn't open the conversation.")));
+    },
+    [store, selfId, onOpen],
+  );
+
+  // Reply privately (CH50): a direct message to the author with the post in
+  // the draft, as its link (CV-10 draws it as a card), ready to add your words.
+  const replyPrivately = useCallback(
+    (m: ChatMessage) => {
+      if (!store || !m.authorId || m.authorId === selfId) return;
+      void store
+        .openDm([m.authorId])
+        .then((dm) => {
+          const quote = `moduo://chat_message/${m.id} `;
+          const draft = store.draft(dm.id);
+          if (!draft.includes(quote.trim())) store.setDraft(dm.id, null, `${quote}${draft}`);
+          onOpen(dm.id);
+        })
         .catch((err: unknown) => toast(errorText(err, "Couldn't open the conversation.")));
     },
     [store, selfId, onOpen],
@@ -627,6 +722,9 @@ export function ChatScreen({
       onOpen={(id) => onOpen(id)}
       onNewConversation={canStart ? () => setNewOpen(true) : undefined}
       onBrowse={onBrowse}
+      onRecentlyDeleted={
+        rights.canPost && !snap.paused ? () => setLifecycleDialog("deleted") : undefined
+      }
       onOpenCatchup={() => {
         // Catch up's own view is CV-11's: until then, the first conversation waiting for you.
         const all = [...model.pinned, ...model.channels, ...model.dms];
@@ -660,6 +758,7 @@ export function ChatScreen({
         ownerName,
         canPost: rights.canPost,
         canManage,
+        isManager,
       })
     : null;
   const canWriteHere = !!channel && composerRefusal === null && !managersPending;
@@ -777,97 +876,120 @@ export function ChatScreen({
             )
           }
         />
-        <MessageStream
-          key={channel.id}
-          ref={streamRef}
-          conversationId={channel.id}
-          window={streamWin ?? EMPTY_WINDOW}
-          selfId={selfId}
-          personOf={personOf}
-          rowById={rowById}
-          hidden={streamHidden}
-          editingId={editingId}
-          canWrite={canWrite}
-          // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
-          canUseTools={!channel.archivedAt}
-          intro={
-            <ConversationStart
-              channel={channel}
-              title={title}
-              people={others}
-              personOf={personOf}
-              workspaceName={workspaceName}
-            />
-          }
-          onLoadOlder={() => void store?.loadOlder(channel.id)}
-          onLoadNewer={() => void store?.loadNewer(channel.id)}
-          onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
-          onSeen={(id) =>
-            store?.markSeen(channel.id, readThroughHidden(streamWin?.rows ?? [], id, streamHidden))
-          }
-          onStartEdit={(m) => setEditingId(m.id)}
-          renderEditor={(m) => (
-            <ChatComposer
-              mode="edit"
-              className="mt-0.5"
-              runtime={runtime}
-              workspaceId={workspaceId}
-              selfId={selfId}
-              people={people}
-              placeholder="Edit message"
-              initial={m.body}
-              autoFocus
-              onCancel={() => {
-                setEditingId(null);
-                returnToComposer();
-              }}
-              onSend={(body) => {
-                setEditingId(null);
-                returnToComposer();
-                void store?.edit(m.id, body, "v2").then((res) => {
-                  if (!res.ok) toast(res.offline ? "Offline" : res.message);
-                });
-              }}
-            />
-          )}
-          onDelete={deleteWithUndo}
-          onReact={(m, key, on) => {
-            if (!store || m.sendState) return;
-            void store
-              .react(m.id, key, on)
-              .then((res) => failed(res, "Couldn't add the reaction."));
-          }}
-          onPin={(m) => {
-            if (!store) return;
-            const pinned = !m.pinnedAt;
-            void store.pin(m.id, pinned).then((res) => {
-              if (!failed(res, "Couldn't update the pin.")) {
-                toast(pinned ? "Pinned to the conversation" : "Unpinned");
+        <MadeFromScope value={madeFrom}>
+          <MessageStream
+            key={channel.id}
+            ref={streamRef}
+            conversationId={channel.id}
+            window={streamWin ?? EMPTY_WINDOW}
+            selfId={selfId}
+            personOf={personOf}
+            rowById={rowById}
+            hidden={streamHidden}
+            editingId={editingId}
+            canWrite={canWrite}
+            // Readers keep the message tools (AC10.9, §1 paused); the server decides each.
+            canUseTools={!channel.archivedAt}
+            intro={
+              <ConversationStart
+                channel={channel}
+                title={title}
+                people={others}
+                personOf={personOf}
+                workspaceName={workspaceName}
+              />
+            }
+            onLoadOlder={() => void store?.loadOlder(channel.id)}
+            onLoadNewer={() => void store?.loadNewer(channel.id)}
+            onJumpToLatest={() => void store?.jumpToLatest(channel.id)}
+            onSeen={(id) =>
+              store?.markSeen(
+                channel.id,
+                readThroughHidden(streamWin?.rows ?? [], id, streamHidden),
+              )
+            }
+            onStartEdit={(m) => setEditingId(m.id)}
+            renderEditor={(m) => (
+              <ChatComposer
+                mode="edit"
+                className="mt-0.5"
+                runtime={runtime}
+                workspaceId={workspaceId}
+                selfId={selfId}
+                people={people}
+                placeholder="Edit message"
+                initial={m.body}
+                autoFocus
+                onCancel={() => {
+                  setEditingId(null);
+                  returnToComposer();
+                }}
+                onSend={(body) => {
+                  setEditingId(null);
+                  returnToComposer();
+                  void store?.edit(m.id, body, "v2").then((res) => {
+                    if (!res.ok) toast(res.offline ? "Offline" : res.message);
+                  });
+                }}
+              />
+            )}
+            onDelete={deleteWithUndo}
+            onReact={(m, key, on) => {
+              if (!store || m.sendState) return;
+              void store
+                .react(m.id, key, on)
+                .then((res) => failed(res, "Couldn't add the reaction."));
+            }}
+            onPin={(m) => {
+              if (!store) return;
+              const pinned = !m.pinnedAt;
+              void store.pin(m.id, pinned).then((res) => {
+                if (!failed(res, "Couldn't update the pin.")) {
+                  toast(pinned ? "Pinned to the conversation" : "Unpinned");
+                }
+              });
+            }}
+            onTask={makeTaskFrom}
+            onReplyPrivately={
+              channel.kind === "channel" && channel.managersOnly && !isManager && rights.canPost
+                ? replyPrivately
+                : undefined
+            }
+            onCopyLink={copyLink}
+            onMarkUnread={(m) => {
+              void store
+                ?.markUnread(m.channelId, m.id)
+                .then((res) => failed(res, "Couldn't mark as unread."));
+            }}
+            onOpenChain={(m) => openChain(m.parentId ?? m.id)}
+            onReply={(m) => {
+              if (!canWrite) {
+                openChain(m.parentId ?? m.id);
+                return;
               }
-            });
-          }}
-          onTask={makeTaskFrom}
-          onCopyLink={copyLink}
-          onMarkUnread={(m) => {
-            void store
-              ?.markUnread(m.channelId, m.id)
-              .then((res) => failed(res, "Couldn't mark as unread."));
-          }}
-          onOpenChain={(m) => openChain(m.parentId ?? m.id)}
-          onReply={(m) => {
-            if (!canWrite) {
-              openChain(m.parentId ?? m.id);
-              return;
+              setReplyingTo(m);
+              composerRef.current?.focus();
+            }}
+            onJumpTo={(m) => {
+              // A reply of a wrapped chain isn't drawn: its chain opens instead.
+              if (streamHidden.has(m.id)) {
+                openChain(m.parentId ?? m.id);
+                return;
+              }
+              if (streamRef.current?.jumpTo(m.id)) return;
+              void store?.openAt(m.channelId, m.id).then((at) => {
+                if (!at) toast("That message isn't available.");
+              });
+            }}
+            wrapUpFor={(m) =>
+              !m.parentId && m.replyCount > 0 && !m.wrappedAt && canWrapUp(m)
+                ? () => askWrapUp(m.id)
+                : undefined
             }
-            setReplyingTo(m);
-            composerRef.current?.focus();
-          }}
-          onJumpTo={(m) => {
-            // A reply of a wrapped chain isn't drawn: its chain opens instead.
-            if (streamHidden.has(m.id)) {
-              openChain(m.parentId ?? m.id);
-              return;
+            replyToFor={(m) =>
+              mayAttach(m, channel, chainRights) ? () => setAttachFor(m) : undefined
             }
+<<<<<<< HEAD
             if (streamRef.current?.jumpTo(m.id)) return;
             void store?.openAt(m.channelId, m.id).then((at) => {
               if (!at) toast("That message isn't available.");
@@ -898,6 +1020,25 @@ export function ChatScreen({
           onReturnToComposer={returnToComposer}
           renderFiles={renderFiles}
         />
+=======
+            onRetry={(m) => store?.retry(m.id)}
+            onDiscard={(m) => store?.discard(m.id)}
+            onPersonClick={openPerson}
+            personPreview={(id) => (
+              <PersonCard
+                compact
+                userId={id}
+                person={personOf(id)}
+                self={id === selfId}
+                online={id === selfId || online(id)}
+                canMessage={canStart}
+                onMessage={(uid) => openDmWith([uid])}
+              />
+            )}
+            onReturnToComposer={returnToComposer}
+          />
+        </MadeFromScope>
+>>>>>>> origin/t/maciej/chat-v2-build
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
           {managersPending ? null : line ? (
@@ -910,9 +1051,13 @@ export function ChatScreen({
                 )
               }
               onChoosePlan={() => dispatchOpenSettings({ section: "billing" })}
-              onReplyPrivately={
-                managers?.some((id) => id !== selfId) ? () => openDmWith(managers) : undefined
-              }
+              onReplyPrivately={(() => {
+                // The newest post in view: Reply privately goes to its author with it in the draft (CH50).
+                const post = newestPost(streamWin?.rows, selfId);
+                if (post) return () => replyPrivately(post);
+                const manager = managers?.find((id) => id !== selfId);
+                return manager ? () => openDmWith([manager]) : undefined;
+              })()}
               onJoin={() =>
                 guarded(
                   () => store?.join(channel.id) ?? Promise.resolve(),
@@ -1044,46 +1189,48 @@ export function ChatScreen({
         title: "Reply chain",
         icon: MessagesSquare,
         render: () => (
-          <ChainItem
-            chat={runtime?.chat ?? null}
-            rootId={entry.id}
-            chain={chain}
-            selfId={selfId}
-            personOf={personOf}
-            onLoad={loadChain}
-            onPersonClick={openPerson}
-            onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
-            onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
-            renderComposer={
-              channel && canWriteHere && root?.channelId === channel.id
-                ? (placeholder) => (
-                    <ChatComposer
-                      key={`chain:${entry.id}`}
-                      runtime={runtime}
-                      workspaceId={workspaceId}
-                      selfId={selfId}
-                      people={people}
-                      placeholder={placeholder}
-                      initial={store?.draft(channel.id, entry.id) ?? ""}
-                      onSend={(body) => {
-                        if (!store || !body.trim()) return false;
-                        store.send({
-                          channelId: channel.id,
-                          body,
-                          replyToId: entry.id,
-                          format: "v2",
-                        });
-                        typingStore?.send(channel.id, entry.id, true);
-                        return true;
-                      }}
-                      onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
-                      onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
-                      onEscapeEmpty={panelStack.back}
-                    />
-                  )
-                : undefined
-            }
-          />
+          <MadeFromScope value={madeFrom}>
+            <ChainItem
+              chat={runtime?.chat ?? null}
+              rootId={entry.id}
+              chain={chain}
+              selfId={selfId}
+              personOf={personOf}
+              onLoad={loadChain}
+              onPersonClick={openPerson}
+              onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
+              onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
+              renderComposer={
+                channel && canWriteHere && root?.channelId === channel.id
+                  ? (placeholder) => (
+                      <ChatComposer
+                        key={`chain:${entry.id}`}
+                        runtime={runtime}
+                        workspaceId={workspaceId}
+                        selfId={selfId}
+                        people={people}
+                        placeholder={placeholder}
+                        initial={store?.draft(channel.id, entry.id) ?? ""}
+                        onSend={(body) => {
+                          if (!store || !body.trim()) return false;
+                          store.send({
+                            channelId: channel.id,
+                            body,
+                            replyToId: entry.id,
+                            format: "v2",
+                          });
+                          typingStore?.send(channel.id, entry.id, true);
+                          return true;
+                        }}
+                        onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
+                        onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
+                        onEscapeEmpty={panelStack.back}
+                      />
+                    )
+                  : undefined
+              }
+            />
+          </MadeFromScope>
         ),
       };
     }
@@ -1109,12 +1256,14 @@ export function ChatScreen({
       ),
     };
   });
+  const channelTitle = channel ? conversationTitle(channel, selfId, personOf) : "";
   const right = channel ? (
     <RightPanel
       module="chat"
       views={{
         details: () => (
           <DetailsView
+            canBeManager={canBeManager}
             channel={channel}
             member={member ?? null}
             selfId={selfId}
@@ -1129,6 +1278,34 @@ export function ChatScreen({
               !snap.paused &&
               (!channel.isDefault || !!channel.archivedAt)
             }
+            managers={managers}
+            canManage={canManage && !snap.paused}
+            canAddPeople={
+              !snap.paused &&
+              (channel.isPrivate ? canManage : rights.canPost && (canManage || !!member))
+            }
+            onAddPeople={() => setLifecycleDialog("add")}
+            onRemovePerson={(userId) =>
+              guarded(async () => {
+                await store?.removeMember(channel.id, userId);
+                toast(`Removed ${personOf(userId)?.name ?? "them"} from ${channelTitle}`);
+              }, "Couldn't remove them.")
+            }
+            onSetManager={(userId, on) =>
+              guarded(
+                () => store?.setManager(channel.id, userId, on) ?? Promise.resolve(),
+                "Couldn't change the managers.",
+              )
+            }
+            onSetAnnouncement={(on) =>
+              guarded(
+                () => store?.setAnnouncement(channel.id, on) ?? Promise.resolve(),
+                "Couldn't change who posts.",
+              )
+            }
+            onMakePrivate={() => setLifecycleDialog("private")}
+            onEditChannel={() => setLifecycleDialog("edit")}
+            onDelete={channel.isDefault ? undefined : () => setLifecycleDialog("delete")}
             onNotify={(notifyLevel) =>
               guarded(
                 () => store?.setPrefs(channel.id, { notifyLevel }) ?? Promise.resolve(),
@@ -1254,6 +1431,101 @@ export function ChatScreen({
         onCaptureNote={() => dispatchOpenCapture({ type: "note" })}
         onBrowse={() => onBrowse?.()}
       />
+      {channel && channel.kind === "channel" ? (
+        <>
+          <AddPeopleDialog
+            open={lifecycleDialog === "add"}
+            onOpenChange={closeLifecycle}
+            channelName={channelTitle}
+            people={people.filter(
+              (p) => !(details.members ?? []).some((m) => m.userId === p.userId),
+            )}
+            onAdd={async (ids) => {
+              const added = (await store?.addMembers(channel.id, ids)) ?? 0;
+              // The server skips anyone already in it or no longer in the workspace,
+              // and (for someone who isn't a manager) anyone a manager removed.
+              if (added < ids.length) {
+                const why = canManage
+                  ? "the rest are already in it or have left the workspace."
+                  : "only a manager can add back someone who was removed.";
+                toast(
+                  added === 0
+                    ? `Nobody was added: ${why}`
+                    : `Added ${added} of ${ids.length}: ${why}`,
+                );
+              }
+            }}
+          />
+          <EditChannelDialog
+            open={lifecycleDialog === "edit"}
+            onOpenChange={closeLifecycle}
+            channel={channel}
+            canRename={canManage}
+            onSave={async (patch) => {
+              if (patch.name === undefined && patch.topic === undefined) return;
+              await store?.updateChannel(channel.id, patch);
+            }}
+          />
+          <ConfirmDialog
+            slot="make-private"
+            open={lifecycleDialog === "private"}
+            onOpenChange={closeLifecycle}
+            {...(() => {
+              const copy = makePrivateCopy(channelTitle, details.members?.length ?? 0);
+              return { title: copy.title, body: copy.body };
+            })()}
+            action="Make private"
+            onConfirm={() =>
+              guarded(
+                () => store?.makePrivate(channel.id) ?? Promise.resolve(),
+                "Couldn't make it private.",
+              )
+            }
+          />
+          <ConfirmDialog
+            slot="delete-channel"
+            open={lifecycleDialog === "delete"}
+            onOpenChange={closeLifecycle}
+            title={`Delete ${channelTitle}?`}
+            body="It goes to Recently deleted for 30 days, where its managers and admins can restore it. After that it's gone for good."
+            action="Delete"
+            destructive
+            onConfirm={() =>
+              guarded(async () => {
+                await store?.deleteChannel(channel.id);
+                onOpen(null, { replace: true });
+                toast(`Deleted ${channelTitle}`);
+              }, "Couldn't delete the channel.")
+            }
+          />
+        </>
+      ) : null}
+      <RecentlyDeletedDialog
+        open={lifecycleDialog === "deleted"}
+        onOpenChange={closeLifecycle}
+        load={() => store?.recentlyDeleted() ?? Promise.resolve([])}
+        onRestore={async (id) => {
+          if (!store) return;
+          const restored = await store.restoreChannel(id);
+          toast(`Restored ${restored.name ?? "the channel"}`);
+        }}
+      />
     </>
   );
+}
+
+/** The capture's "From:" chip for a message: "Sofia's message in Acme". */
+export function messageSourceLabel(
+  m: ChatMessage,
+  where: ChatChannel | undefined,
+  selfId: string,
+  personOf: (id: string) => ChatPerson | undefined,
+): string {
+  const author =
+    m.authorId && m.authorId === selfId
+      ? "Your"
+      : `${authorName(m, m.authorId ? personOf(m.authorId) : undefined)}'s`;
+  return where
+    ? `${author} message in ${conversationTitle(where, selfId, personOf)}`
+    : `${author} message`;
 }
