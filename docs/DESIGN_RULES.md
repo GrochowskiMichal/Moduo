@@ -15,6 +15,8 @@ A control "rung" (sm / md / lg) is a **fixed bundle**, so any two controls on th
 
 Put control rows in `Toolbar`; keep every child on one rung. Bind a control's SVG default to the rung — don't hardcode `size-4`.
 
+**One exception: a switch inside a section header is not a toolbar control.** `SegmentedControl size="xs"` sits on the chip rung (`--ctrl-h-xs`, 24 / 22 / 20) with the header's own type (`text-sm`, 13 px medium), so "All · Comments" reads as part of the "Activity" line rather than a control beside it (Maciej, 2026-10-16, MOD-157). The prototypes do the same (round-2b `.shead .fseg` at 24 px, `.strip .seg` at 12 px). Never put an `xs` control in a `Toolbar` row.
+
 ## R2 — Radius scales with size/role  [lint+review]
 Radius grows with element size: `--radius-sm` < `--radius`/`--radius-md` < `--radius-lg` < `--radius-xl` (the `sharp`/`soft`/`round` variant sets all of them; `soft` = 4 / 8 / 12 / 16). **Role map:** buttons, inputs and rows → `rounded-md`; cards and panels inside a shell panel → `rounded-lg`; the shell's three panels and dialogs → `rounded-xl`; avatars, pills, status dots → `rounded-full`. Never `rounded-[Npx]`. The shell panels stay `rounded-xl` (16 on `soft`) rather than the prototypes' `--radius-lg`, because with the 8 px frame (R7) a `rounded-md` row sits concentric in them (16 − 8 = 8, R3) on every radius setting (Maciej, 2026-10-15, MOD-121). *(lint catches arbitrary radius; the role map is review.)*
 
