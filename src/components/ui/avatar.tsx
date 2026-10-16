@@ -114,7 +114,7 @@ function PresenceBadge({
         "flex shrink-0 items-center justify-center rounded-full ring-2 ring-card",
         inline ? "relative" : "absolute -right-0.5 -bottom-0.5",
         size === "lg" ? "size-3" : "size-2.5",
-        state === "reachable" && "bg-success",
+        state === "reachable" && "bg-presence-reachable",
         (state === "dnd" || state === "in_call") && "bg-muted-foreground",
         (state === "away" || state === "focusing") && "border-2 border-muted-foreground bg-card",
         className,
