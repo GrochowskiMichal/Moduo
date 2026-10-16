@@ -17,7 +17,7 @@
 
 import { CodeHighlightNode, CodeNode } from "@lexical/code";
 import { $isLinkNode, LinkNode } from "@lexical/link";
-import { $isListItemNode, ListItemNode, ListNode } from "@lexical/list";
+import { $isListItemNode, $isListNode, ListItemNode, ListNode } from "@lexical/list";
 import {
   $convertToMarkdownString,
   $generateNodesFromMarkdownString,
@@ -39,7 +39,7 @@ import {
   type Transformer,
   UNORDERED_LIST,
 } from "@lexical/markdown";
-import { QuoteNode } from "@lexical/rich-text";
+import { $isQuoteNode, QuoteNode } from "@lexical/rich-text";
 import { $findMatchingParent } from "@lexical/utils";
 import {
   $applyNodeReplacement,
@@ -360,7 +360,7 @@ type Block = {
 };
 
 const FENCE_OPEN = /^[ \t]*(`{3,})(.*)$/;
-const LIST_LINE = /^[ \t]*(?:[-*+]|\d{1,9}\.)[ \t]/;
+const LIST_LINE = /^\s*(?:[-*+]|\d+\.)\s/;
 
 /** The description's blocks: runs of lines between blank lines; a code fence is a block of its own. */
 function markdownBlocks(markdown: string): Block[] {
@@ -487,11 +487,78 @@ export function $importDescription(value: string): void {
   if (root.getChildrenSize() === 0) root.append($createParagraphNode());
 }
 
+/** A line that is only a list or quote marker (`-`, `2.`, `- [ ]`, `>`), spaces aside. */
+const MARKER_LINE = /^\s*(?:(?:[-*+]|\d+\.)(?:\s+\[(?:\s|[xX])?\])?|>)\s*$/;
+
+/** The deepest last item of a list (a nested list sits in an item of its own). */
+function $lastLeafItem(list: ListNode): ListItemNode | null {
+  let item = list.getLastChild();
+  while ($isListItemNode(item)) {
+    const only = item.getChildrenSize() === 1 ? item.getFirstChild() : null;
+    if (!$isListNode(only)) return item;
+    item = only.getLastChild();
+  }
+  return null;
+}
+
+/**
+ * How many lines at the end of the saved Markdown are empty list items or an
+ * empty quote, counted on the tree (⏎ for a new bullet, then a click away):
+ * the last blocks while they are an empty quote or a list's empty last items.
+ */
+function $trailingEmptyItemLines(): number {
+  let lines = 0;
+  let block = $getRoot().getLastChild();
+  while (block) {
+    if ($isQuoteNode(block) && block.getTextContent().trim() === "") {
+      lines++;
+      block = block.getPreviousSibling();
+      continue;
+    }
+    if (!$isListNode(block)) break;
+    let item = $lastLeafItem(block);
+    let all = true;
+    while (item) {
+      if (item.getTextContent().trim() !== "" || item.getChildren().some($isListNode)) {
+        all = false;
+        break;
+      }
+      lines++;
+      const before = item.getPreviousSibling();
+      item = $isListItemNode(before) ? before : null;
+    }
+    if (!all) break;
+    block = block.getPreviousSibling();
+  }
+  return lines;
+}
+
+/**
+ * The saved Markdown without the empty list items and quotes that end it.
+ * Trimmed alone, `- ` lost its space and read back as the words "-" (a
+ * checklist grew a line on every save); dropped, the list reads back as it
+ * looked. Only lines the tree says are empty items go, so a paragraph's own
+ * last "-" stays.
+ */
+function $withoutTrailingEmptyItems(markdown: string): string {
+  const lines = markdown.trimEnd().split("\n");
+  let drop = $trailingEmptyItemLines();
+  while (lines.length > 0) {
+    const last = lines[lines.length - 1] as string;
+    if (last.trim() === "") lines.pop();
+    else if (drop > 0 && MARKER_LINE.test(last)) {
+      lines.pop();
+      drop--;
+    } else break;
+  }
+  return lines.join("\n").trimEnd();
+}
+
 /** The editor's content as the Markdown a description stores ("" when empty). */
 export function $exportDescription(): string {
   loneBacktickBlocks = new Map();
   try {
-    const markdown = $convertToMarkdownString(DESCRIPTION_TRANSFORMERS).trimEnd();
+    const markdown = $withoutTrailingEmptyItems($convertToMarkdownString(DESCRIPTION_TRANSFORMERS));
     return markdown.trim() ? guardMarkdownStart(markdown) : "";
   } finally {
     loneBacktickBlocks = null;

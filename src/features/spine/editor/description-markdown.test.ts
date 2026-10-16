@@ -7,8 +7,8 @@
 import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes } from "@lexical/html";
 import { $createLinkNode, $isLinkNode } from "@lexical/link";
-import { $isListItemNode, $isListNode } from "@lexical/list";
-import { $isQuoteNode } from "@lexical/rich-text";
+import { $createListItemNode, $createListNode, $isListItemNode, $isListNode } from "@lexical/list";
+import { $createQuoteNode, $isQuoteNode } from "@lexical/rich-text";
 import { describe, expect, it } from "@rstest/core";
 import {
   $createLineBreakNode,
@@ -361,6 +361,114 @@ describe("words are escaped only where Markdown would read them (call #15's revi
         .filter($isTextNode)
         .every((n) => reread.getEditorState().read(() => n.getFormat() === 0)),
     ).toBe(true);
+    expect(save(reread)).toBe(saved);
+  });
+});
+
+describe("what ends a description and what starts its lines (validator, call #15)", () => {
+  const paragraphs = (editor: ReturnType<typeof markdownEditor>) =>
+    editor.getEditorState().read(() =>
+      $getRoot()
+        .getChildren()
+        .filter($isParagraphNode)
+        .map((p) => p.getTextContent()),
+    );
+
+  for (const [name, build, expected] of [
+    ["an empty bullet", () => $createListNode("bullet"), "- a"],
+    ["an empty number", () => $createListNode("number"), "1. a"],
+    ["an empty checkbox", () => $createListNode("check"), "- [ ] a"],
+  ] as const) {
+    it(`a list ending in ${name} (⏎, then a click away) saves without it, and reads back the same`, () => {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          const list = build().append(
+            $createListItemNode(name === "an empty checkbox" ? false : undefined).append(
+              $createTextNode("a"),
+            ),
+            $createListItemNode(name === "an empty checkbox" ? false : undefined),
+          );
+          $getRoot().clear().append(list);
+        },
+        { discrete: true },
+      );
+      const saved = save(editor);
+      expect(saved).toBe(expected);
+      const reread = load(saved);
+      expect(paragraphs(reread)).toEqual([]);
+      expect(save(reread)).toBe(saved);
+    });
+  }
+
+  it("a description ending in an empty quote saves without it", () => {
+    const editor = markdownEditor();
+    editor.update(
+      () => {
+        $getRoot()
+          .clear()
+          .append($createParagraphNode().append($createTextNode("Notes")), $createQuoteNode());
+      },
+      { discrete: true },
+    );
+    const saved = save(editor);
+    expect(saved).toBe("Notes");
+    expect(save(load(saved))).toBe("Notes");
+  });
+
+  it("a paragraph's own trailing -, 2. or > stays its words", () => {
+    for (const words of ["a\n-", "a\n2.", "a\n>"]) {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          const [first, second] = words.split("\n");
+          $getRoot()
+            .clear()
+            .append(
+              $createParagraphNode().append(
+                $createTextNode(first ?? ""),
+                $createLineBreakNode(),
+                $createTextNode(second ?? ""),
+              ),
+            );
+        },
+        { discrete: true },
+      );
+      const reread = load(save(editor));
+      expect(reread.getEditorState().read(() => $getRoot().getTextContent())).toBe(words);
+    }
+  });
+
+  it("a paragraph starting like a list with a non-breaking space or a long number stays a paragraph", () => {
+    for (const words of ["- not a bullet", "12345678901. not a number", "[x] not a box", "1. no"]) {
+      const editor = markdownEditor();
+      editor.update(
+        () => {
+          $getRoot()
+            .clear()
+            .append($createParagraphNode().append($createTextNode(words)));
+        },
+        { discrete: true },
+      );
+      const reread = load(save(editor));
+      expect(paragraphs(reread), words).toEqual([words]);
+    }
+  });
+
+  it("words that spell a character reference stay those words", () => {
+    const words = "use &#40; for ( and &#38; for &";
+    const editor = markdownEditor();
+    editor.update(
+      () => {
+        $getRoot()
+          .clear()
+          .append($createParagraphNode().append($createTextNode(words)));
+      },
+      { discrete: true },
+    );
+    const saved = save(editor);
+    const reread = load(saved);
+    expect(reread.getEditorState().read(() => $getRoot().getTextContent())).toBe(words);
     expect(save(reread)).toBe(saved);
   });
 });

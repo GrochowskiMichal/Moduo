@@ -74,7 +74,79 @@ export function referenceMarkdown(type: string, id: string, display?: string | n
 /** A piece of a description's Markdown: words, or a link DESCRIPTION_LINK reads (a reference or a date chip). */
 export type DescriptionToken =
   | { kind: "text"; text: string }
-  | { kind: "link"; label: string; type: string; id: string; display: string | undefined };
+  | {
+      kind: "link";
+      label: string;
+      type: string;
+      id: string;
+      display: string | undefined;
+      /** The link as written. */
+      raw: string;
+      /** Inside a fenced block or an inline code span, where the editor shows it as code. */
+      inCode: boolean;
+    };
+
+const FENCE_LINE = /^[ \t]*(`{3,}|~{3,})/;
+
+/**
+ * Where a description's code is, as [start, end) offsets in order: fenced
+ * blocks (to their closing fence, or the end) and inline code spans (a run of
+ * backticks to the next run as long, on one line). One pass: each length's
+ * runs are looked through once.
+ */
+export function codeRanges(markdown: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let offset = 0;
+  let fence: { char: string; length: number; start: number } | null = null;
+  for (const line of markdown.split("\n")) {
+    const lineEnd = offset + line.length;
+    const open = FENCE_LINE.exec(line);
+    if (fence) {
+      if (open && open[1]?.[0] === fence.char && (open[1]?.length ?? 0) >= fence.length && line.trim() === open[1]) {
+        ranges.push([fence.start, lineEnd]);
+        fence = null;
+      }
+    } else if (open) {
+      fence = { char: open[1]?.[0] ?? "`", length: open[1]?.length ?? 3, start: offset };
+    } else if (line.includes("`")) {
+      const runs: Array<[number, number]> = [];
+      for (let i = 0; i < line.length; ) {
+        if (line[i] !== "`") {
+          i++;
+          continue;
+        }
+        let j = i;
+        while (line[j] === "`") j++;
+        runs.push([i, j - i]);
+        i = j;
+      }
+      const byLength = new Map<number, number[]>();
+      runs.forEach(([, length], k) => {
+        const list = byLength.get(length);
+        if (list) list.push(k);
+        else byLength.set(length, [k]);
+      });
+      const next = new Map<number, number>();
+      for (let k = 0; k < runs.length; ) {
+        const [pos, length] = runs[k] as [number, number];
+        const list = byLength.get(length) as number[];
+        let p = next.get(length) ?? 0;
+        while (p < list.length && (list[p] as number) <= k) p++;
+        next.set(length, p);
+        if (p >= list.length) {
+          k++;
+          continue;
+        }
+        const close = list[p] as number;
+        ranges.push([offset + pos, offset + (runs[close] as [number, number])[0] + length]);
+        k = close + 1;
+      }
+    }
+    offset = lineEnd + 1;
+  }
+  if (fence) ranges.push([fence.start, markdown.length]);
+  return ranges.sort((a, b) => a[0] - b[0]);
+}
 
 /**
  * A description's Markdown cut into words and the `moduo://` links in it, in
@@ -82,15 +154,28 @@ export type DescriptionToken =
  * import matches the same pattern, leftmost first). Whatever writes a
  * description on someone's behalf checks these links, writes back only the
  * ones that passed as links, and passes every other word through
- * `defuseReferences`.
+ * `defuseReferences`. A link inside code (`inCode`) is shown as code, so it
+ * links nothing.
  */
 export function descriptionTokens(markdown: string): DescriptionToken[] {
   const out: DescriptionToken[] = [];
+  const code = codeRanges(markdown);
+  let range = 0;
   let at = 0;
   for (const m of markdown.matchAll(new RegExp(DESCRIPTION_LINK.source, "g"))) {
     const start = m.index ?? 0;
+    while (range < code.length && (code[range] as [number, number])[1] <= start) range++;
+    const inCode = range < code.length && (code[range] as [number, number])[0] <= start;
     if (start > at) out.push({ kind: "text", text: markdown.slice(at, start) });
-    out.push({ kind: "link", label: m[1] ?? "", type: m[2] ?? "", id: m[3] ?? "", display: m[4] });
+    out.push({
+      kind: "link",
+      label: m[1] ?? "",
+      type: m[2] ?? "",
+      id: m[3] ?? "",
+      display: m[4],
+      raw: m[0],
+      inCode,
+    });
     at = start + m[0].length;
   }
   if (at < markdown.length) out.push({ kind: "text", text: markdown.slice(at) });
@@ -102,7 +187,7 @@ export function descriptionReferences(value: string | null | undefined): Array<{
   const seen = new Set<string>();
   const out: Array<{ type: string; id: string }> = [];
   for (const token of descriptionTokens(descriptionToMarkdown(value))) {
-    if (token.kind !== "link") continue;
+    if (token.kind !== "link" || token.inCode) continue;
     const { type, id } = token;
     if (!type || !id || type === "date" || seen.has(`${type}:${id}`)) continue;
     seen.add(`${type}:${id}`);
@@ -206,7 +291,8 @@ const BLANK = /\s/;
  * - `*` with a space on both sides (`5 * 3`) can't either;
  * - a single `~` can't strike through (it takes two);
  * - a backtick stays bare when it's the only one in its block (`lonelyBacktick`);
- * - `\` is escaped only before punctuation, where it would escape it.
+ * - `\` is escaped only before punctuation, where it would escape it;
+ * - `&` that starts a character reference (`&#40;`) is written `&#38;`.
  * The text's own edges count as "could be anything", so a character there is
  * escaped: the words around it may sit in another run.
  */
@@ -232,6 +318,16 @@ export function escapeMarkdownText(text: string, opts: { lonelyBacktick?: boolea
       case "`":
         out += opts.lonelyBacktick ? "`" : "\\`";
         break;
+      case "&": {
+        // `&#40;` typed as words stays those words: a reader would decode it.
+        let j = i + 1;
+        if (text[j] === "#") {
+          j++;
+          while (j < text.length && /\d/.test(text[j] as string)) j++;
+        }
+        out += j > i + 2 && text[j] === ";" ? "&#38;" : "&";
+        break;
+      }
       default:
         out += ch;
     }
@@ -244,16 +340,18 @@ export function escapeMarkdownText(text: string, opts: { lonelyBacktick?: boolea
  * `[ ] `) keeps that start escaped, as `*` is, so the next read gives the
  * paragraph back, not a list, a quote or a checkbox ("2026. Q4 plan" stays
  * words). Each line counts: a line break inside the paragraph starts a line.
+ * The patterns are the editor's own (any space, a non-breaking one too, and
+ * any number of digits), so nothing it reads as a block start slips through.
  */
 export function escapeBlockStarts(markdown: string): string {
   return markdown
     .split("\n")
     .map((line) =>
       line
-        .replace(/^([ \t]*)([-+])(?=[ \t])/, "$1\\$2")
-        .replace(/^([ \t]*)(\d{1,9})\.(?=[ \t])/, "$1$2\\.")
-        .replace(/^([ \t]*)>/, "$1\\>")
-        .replace(/^([ \t]*)\[([ xX]?)\](?=[ \t])/, "$1\\[$2]"),
+        .replace(/^(\s*)([-+])(?=\s)/, "$1\\$2")
+        .replace(/^(\s*)(\d+)\.(?=\s)/, "$1$2\\.")
+        .replace(/^(\s*)>/, "$1\\>")
+        .replace(/^(\s*)\[(\s|[xX])?\](?=\s)/, "$1\\[$2]"),
     )
     .join("\n");
 }
@@ -562,6 +660,12 @@ function textContent(node: Node): string {
   return typeof node === "string" ? node : node.children.map(textContent).join("");
 }
 
+/** A `<pre>`'s text as written: its line breaks kept, a `<br>` as one. */
+function preText(node: Node): string {
+  if (typeof node === "string") return node;
+  return node.tag === "br" ? "\n" : node.children.map(preText).join("");
+}
+
 function linkUrl(href: string): string {
   return /[\s<>]/.test(href) ? `<${href.replace(/[<>]/g, "")}>` : href.replace(/[()\\]/g, "\\$&");
 }
@@ -693,13 +797,25 @@ function blocksMarkdown(nodes: Node[]): string[] {
       const lines = listMarkdown(node, "");
       if (lines.length) blocks.push(lines.join("\n"));
     } else if (node.tag === "blockquote") {
-      const inner = blocksMarkdown(node.children).join("\n\n");
-      if (inner) blocks.push(inner.split("\n").map((line) => (line ? `> ${line}` : ">")).join("\n"));
+      // One quote: its paragraphs are its lines (a bare ">" line would read
+      // back as the words ">", and nest on the next save).
+      const inner = blocksMarkdown(node.children).join("\n");
+      const lines = inner.split("\n").filter((line) => line.trim() !== "");
+      if (lines.length) blocks.push(lines.map((line) => `> ${line}`).join("\n"));
+    } else if (node.tag === "pre") {
+      // Code as written, in a fence longer than any run of backticks in it.
+      const code = preText(node).replace(/\n$/, "");
+      if (code.trim()) {
+        let longest = 0;
+        for (const run of code.match(/`+/g) ?? []) longest = Math.max(longest, run.length);
+        const fence = "`".repeat(Math.max(3, longest + 1));
+        blocks.push(`${fence}\n${code}\n${fence}`);
+      }
     } else if (node.tag === "li") {
       const text = escapeBlockStarts(inlineMarkdown(node.children));
       if (text) blocks.push(`- ${text}`);
     } else {
-      // p, div, h1–h6, pre: a paragraph (a div holding blocks is read through).
+      // p, div, h1–h6: a paragraph (a div holding blocks is read through).
       if (node.children.some(isBlock)) blocks.push(...blocksMarkdown(node.children));
       else paragraph(inlineMarkdown(node.children));
     }

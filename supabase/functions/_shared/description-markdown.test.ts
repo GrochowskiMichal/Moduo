@@ -7,6 +7,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   CONVERT_LIMIT,
+  codeRanges,
   dateMarkdown,
   defuseReferences,
   descriptionTokens,
@@ -193,9 +194,9 @@ describe("the reference syntax", () => {
     const tokens = descriptionTokens(md);
     expect(tokens).toEqual([
       { kind: "text", text: "a " },
-      { kind: "link", label: "x", type: "task", id: TASK, display: undefined },
+      { kind: "link", label: "x", type: "task", id: TASK, display: undefined, raw: `[x](moduo://task/${TASK})`, inCode: false },
       { kind: "text", text: " b " },
-      { kind: "link", label: "Oct 1", type: "date", id: "2026-10-01", display: undefined },
+      { kind: "link", label: "Oct 1", type: "date", id: "2026-10-01", display: undefined, raw: "[Oct 1](moduo://date/2026-10-01)", inCode: false },
     ]);
     // Nested brackets: the inner link is the one read, the rest is words.
     expect(descriptionTokens(`[[x](moduo://task/${TASK})](moduo://task/${NOTE})`).map((t) => t.kind)).toEqual([
@@ -248,6 +249,42 @@ describe("the reference syntax", () => {
       expect(md, href).toBe("see the plan");
     }
     expect(htmlToMarkdown(`${P}<a href="https://example.com">docs</a></p>`)).toBe("[docs](https://example.com)");
+  });
+
+  it("a quote's paragraphs are one quote's lines; <pre> is a fenced block, as written", () => {
+    expect(htmlToMarkdown("<blockquote><p>a</p><p>b</p></blockquote>")).toBe("> a\n> b");
+    expect(htmlToMarkdown("<pre><code>const a = 1;\nif (a &lt; 2) { x_y(`t`); }\n</code></pre>")).toBe(
+      "```\nconst a = 1;\nif (a < 2) { x_y(`t`); }\n```",
+    );
+    expect(htmlToMarkdown("<pre>a ``` b</pre>")).toBe("````\na ``` b\n````");
+  });
+
+  it("knows which links sit in code (fenced, inline), and finds no references there", () => {
+    const md = [
+      `See [a](moduo://task/${TASK}) and \`[b](moduo://task/${NOTE})\`.`,
+      "```",
+      `[c](moduo://note/${NOTE})`,
+      "```",
+      `\`\`not code [d](moduo://note/${TASK}) \``,
+    ].join("\n");
+    const links = descriptionTokens(md).flatMap((t) => (t.kind === "link" ? [[t.label, t.inCode]] : []));
+    expect(links).toEqual([
+      ["a", false],
+      ["b", true],
+      ["c", true],
+      ["d", false],
+    ]);
+    expect(descriptionReferences(md)).toEqual([
+      { type: "task", id: TASK },
+      { type: "note", id: TASK },
+    ]);
+  });
+
+  it("finds code in one pass", () => {
+    const text = Array.from({ length: 4_000 }, (_, i) => `${"`".repeat((i % 50) + 1)} x`).join(" ");
+    const start = performance.now();
+    codeRanges(text);
+    expect(performance.now() - start).toBeLessThan(500);
   });
 
   it("defuses a long crafted run in one pass", () => {

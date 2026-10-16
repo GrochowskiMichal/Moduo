@@ -316,7 +316,7 @@ export function commandEntries(
               `Reminder ${formatDayTime(at, now)}`,
               {
                 kind: "token",
-                token: { kind: "remind", at, label: `Remind ${formatDayTime(at, now)}` },
+                token: { kind: "remind", at, label: `Reminder ${formatDayTime(at, now)}` },
               },
               { icon: Bell },
             )

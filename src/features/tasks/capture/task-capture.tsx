@@ -288,11 +288,13 @@ export function TaskCaptureBody({
   const descriptionApi = useRef<EntityTextEditorApi | null>(null);
   /**
    * People `@`-mentioned in the description: told once the task exists. The
-   * draft keeps their ids only (no names on the device), so a restored one
-   * has no label until it's read off the member list at create.
+   * draft keeps each one's label (the words the menu wrote into the
+   * description, which the draft holds anyway: a name, or an email for
+   * someone without one); an older draft's id-only entry reads its name off
+   * the member list at create.
    */
   const [mentioned, setMentioned] = useState<Array<{ id: string; label: string | null }>>(() =>
-    (initial.draft.mentions ?? []).map((id) => ({ id, label: null })),
+    initial.draft.mentions ?? [],
   );
   const onDescriptionTyped = (value: string) => {
     descriptionNow.current = value;
@@ -350,7 +352,7 @@ export function TaskCaptureBody({
       subtasks,
       fields,
       pasted,
-      mentions: mentioned.map((p) => p.id),
+      mentions: mentioned,
     });
   }, [owner, segments, keep, description, subtasks, fields, pasted, mentioned]);
 
@@ -929,7 +931,7 @@ export function TaskCaptureBody({
     description,
     subtasks,
     fields,
-    mentions: mentioned.map((p) => p.id),
+    mentions: mentioned,
   });
 
   // A capture the server refused comes back: straight into this capture when
@@ -945,7 +947,7 @@ export function TaskCaptureBody({
     titleApi.current?.setSegments(kept.segments);
     setKeep(kept.keep);
     setDescription(kept.description);
-    setMentioned((kept.mentions ?? []).map((id) => ({ id, label: null })));
+    setMentioned(kept.mentions ?? []);
     setSubtasks(kept.subtasks);
     setFields(kept.fields);
     setPasted(kept.pasted ?? null);

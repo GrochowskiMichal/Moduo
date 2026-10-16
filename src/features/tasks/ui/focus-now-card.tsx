@@ -332,7 +332,7 @@ export function NowCard({
  * description shows through its one editor, read-only (call #15): its Markdown
  * formatted, references live per reader.
  */
-function FoldedDescription({
+export function FoldedDescription({
   description,
   runtime,
   workspaceId,
@@ -345,7 +345,9 @@ function FoldedDescription({
   const [expanded, setExpanded] = useState(false);
   const [folds, setFolds] = useState(false);
   // Measured again whenever the text's height changes: the editor fills
-  // itself after it mounts.
+  // itself after it mounts. A new description mounts a new editor (its key),
+  // so the observer moves to the new content.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed description replaces the observed element
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || expanded) return;
@@ -356,7 +358,7 @@ function FoldedDescription({
     const content = box.firstElementChild;
     if (content) observer.observe(content);
     return () => observer.disconnect();
-  }, [expanded]);
+  }, [expanded, description]);
   return (
     <div>
       <div

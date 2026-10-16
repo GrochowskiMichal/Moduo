@@ -79,4 +79,11 @@ describe("capture's pills name you as the app does (call #27)", () => {
     expect(document.body.innerHTML).toContain("Reminder at…");
     expect(document.body.innerHTML).not.toContain("Remind me");
   });
+
+  it("a set reminder's chip reads Reminder <when>, as the / menu does", () => {
+    pills([person(ME, "Alex Rivera", "Alex Rivera", true)], {
+      remindAt: new Date(2030, 0, 8, 9).toISOString(),
+    });
+    expect(screen.getByText(/^Reminder \S/)).toBeTruthy();
+  });
 });

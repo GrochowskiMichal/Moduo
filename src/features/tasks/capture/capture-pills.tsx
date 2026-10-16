@@ -391,7 +391,7 @@ function MoreChips({
     chips.push({
       key: "remind",
       icon: Bell,
-      label: `Remind ${formatDayTime(values.remindAt)}`,
+      label: `Reminder ${formatDayTime(values.remindAt)}`,
       clear: () => onChange({ field: "remind", value: null }),
     });
   if (values.estimateMinutes)

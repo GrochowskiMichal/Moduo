@@ -13,7 +13,7 @@ import type { ResolveContext } from "../../spine/references/resolvers";
 import type { ReferencePreviewApi } from "../../spine/references/rows";
 import { ReferenceStore } from "../../spine/references/store";
 import type { Bucket, Task, Team } from "../model";
-import { EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
+import { type CaptureDraft, EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
 import {
   type CaptureAttachmentHandler,
   type CaptureTemplateProvider,
@@ -805,7 +805,7 @@ describe("The description: one editor, Markdown, ⏎ creates (call #15, MOD-117)
   });
   rangeProto.getClientRects ??= () => [];
 
-  async function openWith(description: string, mentions: string[] = []) {
+  async function openWith(description: string, mentions: CaptureDraft["mentions"] = []) {
     saveDraft(ME, WS, {
       segments: [{ text: "Fix the login screen" }],
       keep: [],
@@ -871,7 +871,22 @@ describe("The description: one editor, Markdown, ⏎ creates (call #15, MOD-117)
   });
 
   it("a restored draft still tells the people its description @-mentions", async () => {
-    const box = await openWith("Ask @Sam Ortiz about it", [SAM]);
+    const box = await openWith("Ask @Sam Ortiz about it", [{ id: SAM, label: null }]);
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    await waitFor(() =>
+      expect(fake.runtime.tasks.mentionInTask).toHaveBeenCalledWith({
+        workspaceId: WS,
+        taskId: fake.saved[0]?.id,
+        userIds: [SAM],
+      }),
+    );
+  });
+
+  it("a restored draft tells someone mentioned by email (no name set) too", async () => {
+    const box = await openWith("Ask @sam@example.com about it", [
+      { id: SAM, label: "sam@example.com" },
+    ]);
     fireEvent.keyDown(box, { key: "Enter" });
     await waitFor(() => expect(fake.saved.length).toBe(1));
     await waitFor(() =>

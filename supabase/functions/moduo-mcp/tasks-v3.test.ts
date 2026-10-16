@@ -782,6 +782,40 @@ describe("writes go through the ops, checked before anything is written", () => 
       }
     });
 
+    it("a reference inside code is kept as written (checked all the same) and links nothing", async () => {
+      const { write, linked } = described();
+      const inline = `Run \`[it](moduo://task/MOD-50)\` and see [it](moduo://task/MOD-50)`;
+      expect(await write(inline)).toBe(
+        `Run \`[it](moduo://task/MOD-50)\` and see [task](moduo://task/${SEEN})`,
+      );
+      expect(linked()).toEqual([`task:${SEEN}`]);
+      const { write: writeFenced, linked: linkedFenced } = described();
+      const fenced = `\`\`\`\n[it](moduo://task/${SEEN})\n\`\`\``;
+      expect(await writeFenced(fenced)).toBe(fenced);
+      expect(linkedFenced()).toEqual([]);
+      // An unreachable one in code still goes to its words.
+      const { write: writeHidden } = described();
+      expect(await writeHidden(`\`[x](moduo://task/${SECRET})\``)).toBe("`x`");
+    });
+
+    it("a lookup that fails fails the write, never turning a reference into words", async () => {
+      const made = setup({
+        scopes: { tasks: "edit", links: "edit" },
+        rpcs: {
+          tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+          perm_can_see_entity: () => {
+            throw new Error("connection reset");
+          },
+          links_op_create: () => [{ id: "link-1" }],
+        },
+      });
+      made.tables.tasks!.push(task(SEEN, 50));
+      await expect(
+        call("tasks_update", { task_id: "MOD-1", description: `See [it](moduo://task/MOD-50)` }, made.ctx),
+      ).rejects.toThrow("connection reset");
+      expect(made.rpcCalls.some((c) => c.fn === "tasks_op_update_with")).toBe(false);
+    });
+
     it("no nesting, join, spelling or HTML makes a reference out of an unchecked id", async () => {
       const crafted = [
         `[[x](moduo://task/MOD-51)](moduo://task/${SECRET})`,

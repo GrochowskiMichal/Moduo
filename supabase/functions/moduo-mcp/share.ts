@@ -39,7 +39,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * the owner-only types). The ops themselves only guard the module.
  */
 export async function canReach(ctx: ToolContext, type: string, id: string): Promise<boolean> {
-  const table = ENTITY_TABLES[type];
+  const table = Object.hasOwn(ENTITY_TABLES, type) ? ENTITY_TABLES[type] : undefined;
   if (!table || !UUID.test(id) || !keyCanSeeEntityType(ctx.key.scopes, type)) return false;
   const { data, error } = await ctx.db
     .from(table)
@@ -67,23 +67,36 @@ export async function canReach(ctx: ToolContext, type: string, id: string): Prom
  */
 export async function assertReach(ctx: ToolContext, type: string, ref: string): Promise<string> {
   const module = entityTypeKeyModule(type);
-  if (!module || !ENTITY_TABLES[type]) {
+  if (!module || !Object.hasOwn(ENTITY_TABLES, type)) {
     throw new Error(`Agents can't work with "${type}" items.`);
   }
   if (!keyCanSeeEntityType(ctx.key.scopes, type)) {
     throw new Error(`This API key has no access to ${MCP_KEY_MODULE_LABELS[module]}.`);
   }
-  const notFound = `No ${type.replace("_", " ")} with that id in this workspace.`;
+  const id = await reachOrNull(ctx, type, ref);
+  if (id === null) throw new Error(`No ${type.replace("_", " ")} with that id in this workspace.`);
+  return id;
+}
+
+/**
+ * assertReach's check, answering null for every refusal (a type agents can't
+ * point at, a module outside the key, an item that isn't there or that its
+ * person can't see) and throwing only when the lookup itself fails, so a
+ * passing outage never reads as "not reachable".
+ */
+export async function reachOrNull(ctx: ToolContext, type: string, ref: string): Promise<string | null> {
+  if (!entityTypeKeyModule(type) || !Object.hasOwn(ENTITY_TABLES, type)) return null;
+  if (!keyCanSeeEntityType(ctx.key.scopes, type)) return null;
   let id = ref.trim();
   if (type === "task") {
     try {
       id = await resolveTaskRef(ctx, id);
     } catch (err) {
-      throw err instanceof Error && err.message === TASK_NOT_FOUND ? new Error(notFound) : err;
+      if (err instanceof Error && err.message === TASK_NOT_FOUND) return null;
+      throw err;
     }
   }
-  if (!(await canReach(ctx, type, id))) throw new Error(notFound);
-  return id;
+  return (await canReach(ctx, type, id)) ? id : null;
 }
 
 /**

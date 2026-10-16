@@ -66,7 +66,7 @@ import {
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { assertReach, entityComments, visibleIds } from "../share.ts";
+import { entityComments, reachOrNull, visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -122,11 +122,12 @@ function reachType(type: string): string {
  * rest. Then the Markdown is read for references once (`descriptionTokens`,
  * the pattern the editor reads them with) and written back from that one
  * reading:
- * - a reference is resolved and checked for the key (`assertReach`: the key's
+ * - a reference is resolved and checked for the key (`reachOrNull`, assertReach's check: the key's
  *   scope, the item live in this workspace, its person able to see it); a
  *   task's handle (`moduo://task/MOD-12`) becomes its uuid; only a reference
  *   that passed is written as one (labelled with its kind, RF-1), and only
- *   those are answered as the items to link;
+ *   those are answered as the items to link (one inside code is kept as
+ *   written and links nothing); a failed lookup fails the write;
  * - anything else (an item the key can't reach or that isn't there, a kind
  *   agents can't point at, a tag, past MAX_DESCRIPTION_REFERENCES) goes back
  *   to its label as plain words;
@@ -148,11 +149,8 @@ async function describeForWrite(
       checked.set(key, null);
       continue;
     }
-    try {
-      checked.set(key, await assertReach(ctx, reachType(token.type), token.id));
-    } catch {
-      checked.set(key, null);
-    }
+    // assertReach's check; a refusal is words, a failed lookup fails the write.
+    checked.set(key, await reachOrNull(ctx, reachType(token.type), token.id));
   }
   const refs: Array<{ type: string; id: string }> = [];
   const linked = new Set<string>();
@@ -172,6 +170,11 @@ async function describeForWrite(
       const uuid = checked.get(`${token.type}\u0000${token.id}`) ?? null;
       if (!uuid) {
         words += escapeMarkdownText(token.label);
+        continue;
+      }
+      // In code it's shown as code: kept as written (checked all the same), linked to nothing.
+      if (token.inCode) {
+        live(token.raw);
         continue;
       }
       live(referenceMarkdown(token.type, uuid, token.display));
