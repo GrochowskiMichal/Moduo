@@ -156,6 +156,8 @@ export type ChatCatchupItem = {
   returnedAt: string | null;
   /** The list's order: its newest message, or when it came back. */
   at: string;
+  /** The conversation's name as stored with the item (a "removed you" line's private channel you can no longer read). */
+  channelName?: string | null;
 };
 
 /** A workspace person as chat renders them. */

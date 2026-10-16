@@ -321,3 +321,31 @@ SELECT test.ok(test.as_user('B', format($q$SELECT public.chat_op_set_prefs(%L::u
 SELECT test.ok(test.as_user('A', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('n1'))) LIKE 'ok %'
                AND test.listed('B', 'n1') = '',
   'list: a deleted message''s item isn''t listed');
+
+-- ── A chain whose newest reply was deleted still lists, on a live reply ─────
+SELECT test.ok(test.as_user('A', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('a2'))) LIKE 'ok %'
+               AND test.listed('B', 'a1') = 'reply' AND test.listed('B', 'a2') = ''
+               AND test.catchup('B', 'G') = '1',
+  'list: the chain''s newest reply deleted, the item lists on the reply still there (as the count keeps it)');
+
+-- ── Access lost before the time: nothing comes back, no notice ──────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.chat_op_add_members(%L::uuid, ARRAY[%L]::uuid[])$q$, test.ref('P'), test.id('B')));
+  v := v || ' ' || test.send('A', 'P', 'p9', 'secret for ' || 'moduo://person/' || test.id('B'), 30);
+  PERFORM test.ok(v LIKE 'ok% ok 1' AND test.item('B', 'p9', 'mention') = 'open+bell', 'setup: B joins P and is mentioned there', v);
+  PERFORM test.ok(test.remind('B', 'p9', NULL, now() + interval '1 hour') = 'ok 1', 'setup: B puts it off an hour');
+  v := test.as_user('A', format($q$SELECT public.chat_op_remove_member(%L::uuid, %L::uuid)$q$, test.ref('P'), test.id('B')));
+  PERFORM test.ok(v LIKE 'ok%', 'setup: A removes B from P', v);
+END;
+$$;
+SELECT test.ok(test.fire(interval '61 minutes') >= 0
+               AND test.notices('B', 'p9') = 0 AND test.listed('B', 'p9') = ''
+               AND test.item('B', 'p9', 'mention') LIKE '%-hidden',
+  'access lost: the put-off item fires no notice, isn''t listed and its bell row stays hidden');
+SELECT test.ok(test.value_as('B', format(
+    $q$SELECT coalesce(string_agg(coalesce(channel_name, '?'), ','), '') FROM public.chat_catchup_open(%L)
+        WHERE reason = 'removed' AND channel_id = %L$q$, test.id('W'), test.ref('P'))) = 'Secret',
+  'list: "A removed you from Secret" is listed for the private channel B can''t read, with its stored name');

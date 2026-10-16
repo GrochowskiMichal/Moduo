@@ -180,6 +180,8 @@ export class CatchupStore {
       if (res.error) {
         for (const id of ids) this.hidden.delete(id);
         this.notify();
+        // Earlier batches may have closed: the list says which.
+        if (i > 0) void this.load();
         return writeResult(res.error);
       }
     }
@@ -221,8 +223,12 @@ export class CatchupStore {
       if (hide.length) this.notify();
       return writeResult(res.error);
     }
-    if (this.watchers > 0) void this.load();
+    if (this.watchers > 0) await this.load();
     else this.stale = true;
+    // Shown again if the server still lists it (it put off something else,
+    // e.g. the chain had moved on): never hidden for the rest of the session.
+    for (const id of hide) this.hidden.delete(id);
+    if (hide.length) this.notify();
     return { ok: true };
   }
 

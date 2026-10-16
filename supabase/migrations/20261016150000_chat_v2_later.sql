@@ -189,68 +189,78 @@ BEGIN
      LIMIT greatest(least(coalesce(p_limit, 500), 5000), 1)
      FOR UPDATE OF k SKIP LOCKED
   LOOP
-    v_n := v_n + 1;
-    v_msg := NULL;
-    SELECT c.* INTO v_channel FROM public.chat_channels c WHERE c.id = r.channel_id;
-    v_readable := public.chat__can_read_channel_as(r.channel_id, r.user_id);
+    -- One item at a time: an item that fails comes back without a notice
+    -- (and is logged) instead of holding up everyone's due items each minute.
+    <<one_item>>
+    BEGIN
+      v_n := v_n + 1;
+      v_msg := NULL;
+      v_newest := NULL;
+      SELECT c.* INTO v_channel FROM public.chat_channels c WHERE c.id = r.channel_id;
+      v_readable := public.chat__can_read_channel_as(r.channel_id, r.user_id);
 
-    -- A conversation's reminder brings back its newest message (unless you
-    -- already keep a reminder on that one: then it stays the conversation's).
-    IF r.message_id IS NULL AND r.reason = 'reminder' AND v_readable THEN
-      SELECT m.id INTO v_newest FROM public.chat_messages m
-       WHERE m.channel_id = r.channel_id AND m.kind = 'message' AND m.deleted_at IS NULL
-       ORDER BY m.created_at DESC, m.id DESC LIMIT 1;
-      IF v_newest IS NOT NULL AND NOT EXISTS (
-           SELECT 1 FROM public.chat_catchup o
-            WHERE o.user_id = r.user_id AND o.message_id = v_newest AND o.reason = 'reminder') THEN
-        r.message_id := v_newest;
+      -- A conversation's reminder brings back its newest message (unless you
+      -- already keep a reminder on that one: then it stays the conversation's).
+      IF r.message_id IS NULL AND r.reason = 'reminder' AND v_readable THEN
+        SELECT m.id INTO v_newest FROM public.chat_messages m
+         WHERE m.channel_id = r.channel_id AND m.kind = 'message' AND m.deleted_at IS NULL
+         ORDER BY m.created_at DESC, m.id DESC LIMIT 1;
+        IF v_newest IS NOT NULL AND NOT EXISTS (
+             SELECT 1 FROM public.chat_catchup o
+              WHERE o.user_id = r.user_id AND o.message_id = v_newest AND o.reason = 'reminder') THEN
+          r.message_id := v_newest;
+        END IF;
       END IF;
-    END IF;
 
-    UPDATE public.chat_catchup k
-       SET later_notified_at = p_now, message_id = r.message_id
-     WHERE k.id = r.id;
+      UPDATE public.chat_catchup k
+         SET later_notified_at = p_now, message_id = r.message_id
+       WHERE k.id = r.id;
 
-    -- Its bell twin shows again.
-    IF r.activity_id IS NOT NULL THEN
-      UPDATE public.notification_state ns SET dismissed_at = NULL
-       WHERE ns.user_id = r.user_id AND ns.activity_id = r.activity_id AND ns.dismissed_at IS NOT NULL;
-    END IF;
-
-    IF r.message_id IS NOT NULL THEN
-      SELECT m.* INTO v_msg FROM public.chat_messages m WHERE m.id = r.message_id;
-      v_readable := v_msg.id IS NOT NULL AND v_msg.deleted_at IS NULL
-                    AND public.chat__can_read_channel_as(v_msg.channel_id, r.user_id);
-      IF v_readable AND v_msg.channel_id <> v_channel.id THEN
-        SELECT c.* INTO v_channel FROM public.chat_channels c WHERE c.id = v_msg.channel_id;
+      IF r.message_id IS NOT NULL THEN
+        SELECT m.* INTO v_msg FROM public.chat_messages m WHERE m.id = r.message_id;
+        v_readable := v_msg.id IS NOT NULL AND v_msg.deleted_at IS NULL
+                      AND public.chat__can_read_channel_as(v_msg.channel_id, r.user_id);
+        IF v_readable AND v_msg.channel_id <> v_channel.id THEN
+          SELECT c.* INTO v_channel FROM public.chat_channels c WHERE c.id = v_msg.channel_id;
+        END IF;
       END IF;
-    END IF;
 
-    -- One notice, through the gate; nothing about what they can't read.
-    CONTINUE WHEN NOT v_readable OR v_channel.id IS NULL;
-    v_gate := public.notice__gate(r.user_id, v_channel.workspace_id, 'chat_reminder', p_now);
-    CONTINUE WHEN v_gate NOT IN ('send', 'hold');
+      -- One notice, through the gate; nothing about what they can't read.
+      EXIT one_item WHEN NOT v_readable OR v_channel.id IS NULL;
 
-    v_where := CASE WHEN v_channel.kind <> 'dm' AND nullif(btrim(v_channel.name), '') IS NOT NULL
-                    THEN '#' || left(btrim(v_channel.name), 80) ELSE 'Direct message' END;
-    SELECT left(nullif(btrim(w.name), ''), 80) INTO v_ws
-      FROM public.workspaces w WHERE w.id = v_channel.workspace_id;
+      -- Its bell twin shows again (only for what they can still read).
+      IF r.activity_id IS NOT NULL THEN
+        UPDATE public.notification_state ns SET dismissed_at = NULL
+         WHERE ns.user_id = r.user_id AND ns.activity_id = r.activity_id AND ns.dismissed_at IS NOT NULL;
+      END IF;
 
-    INSERT INTO public.notice_deliveries
-      (user_id, workspace_id, kind, title, body, url, channel_id, message_id, tag, push_after, held_for_focus)
-    SELECT r.user_id, v_channel.workspace_id, 'chat_reminder',
-           left('Reminder · '
-                || CASE WHEN v_msg.id IS NOT NULL
-                        THEN public.chat__sender_label(v_msg, v_msg.author_id) || ' · ' ELSE '' END
-                || v_where || coalesce(' · ' || v_ws, ''), 300),
-           CASE WHEN v_msg.id IS NOT NULL AND coalesce(up.notice_show_text, true)
-                THEN left(public.chat__notice_text(v_msg.body, v_channel.workspace_id, r.user_id), 500) END,
-           '/chat?c=' || v_channel.id || coalesce('&m=' || v_msg.id, ''),
-           v_channel.id, v_msg.id,
-           'chat:' || v_channel.id || ':remind:' || r.id,
-           p_now, v_gate = 'hold'
-      FROM (SELECT 1) one
-      LEFT JOIN public.user_preferences up ON up.user_id = r.user_id;
+      v_gate := public.notice__gate(r.user_id, v_channel.workspace_id, 'chat_reminder', p_now);
+      EXIT one_item WHEN v_gate NOT IN ('send', 'hold');
+
+      v_where := CASE WHEN v_channel.kind <> 'dm' AND nullif(btrim(v_channel.name), '') IS NOT NULL
+                      THEN '#' || left(btrim(v_channel.name), 80) ELSE 'Direct message' END;
+      SELECT left(nullif(btrim(w.name), ''), 80) INTO v_ws
+        FROM public.workspaces w WHERE w.id = v_channel.workspace_id;
+
+      INSERT INTO public.notice_deliveries
+        (user_id, workspace_id, kind, title, body, url, channel_id, message_id, tag, push_after, held_for_focus)
+      SELECT r.user_id, v_channel.workspace_id, 'chat_reminder',
+             left('Reminder · '
+                  || CASE WHEN v_msg.id IS NOT NULL
+                          THEN public.chat__sender_label(v_msg, v_msg.author_id) || ' · ' ELSE '' END
+                  || v_where || coalesce(' · ' || v_ws, ''), 300),
+             CASE WHEN v_msg.id IS NOT NULL AND coalesce(up.notice_show_text, true)
+                  THEN left(public.chat__notice_text(v_msg.body, v_channel.workspace_id, r.user_id), 500) END,
+             '/chat?c=' || v_channel.id || coalesce('&m=' || v_msg.id, ''),
+             v_channel.id, v_msg.id,
+             'chat:' || v_channel.id || ':remind:' || r.id,
+             p_now, v_gate = 'hold'
+        FROM (SELECT 1) one
+        LEFT JOIN public.user_preferences up ON up.user_id = r.user_id;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'chat__fire_later: item % failed: %', r.id, SQLERRM;
+      UPDATE public.chat_catchup k SET later_notified_at = p_now WHERE k.id = r.id;
+    END;
   END LOOP;
   RETURN v_n;
 END;
@@ -263,7 +273,8 @@ $function$;
 -- items (CH40: "waits here silently") and quiet lines are listed (not
 -- counted). `at` orders the list: the newest message, or when it came back.
 
-CREATE OR REPLACE FUNCTION public.chat_catchup_open(p_workspace_id uuid)
+DROP FUNCTION IF EXISTS public.chat_catchup_open(uuid);
+CREATE FUNCTION public.chat_catchup_open(p_workspace_id uuid)
 RETURNS TABLE (
   id uuid,
   channel_id uuid,
@@ -274,7 +285,8 @@ RETURNS TABLE (
   created_at timestamptz,
   later_until timestamptz,
   returned_at timestamptz,
-  at timestamptz
+  at timestamptz,
+  channel_name text
 )
 LANGUAGE plpgsql
 STABLE
@@ -288,22 +300,48 @@ BEGIN
     RAISE EXCEPTION 'Sign in first.' USING ERRCODE = '42501';
   END IF;
   RETURN QUERY
-  SELECT k.id, coalesce(m.channel_id, k.channel_id), k.message_id, k.chain_root_id, k.reason, k.actor_id,
+  SELECT k.id, coalesce(m.channel_id, k.channel_id),
+         -- A chain or Every-message line whose newest message was deleted shows
+         -- its newest live message from someone else (the count keeps it too).
+         CASE WHEN m.deleted_at IS NULL THEN k.message_id ELSE alive.id END,
+         k.chain_root_id, k.reason, k.actor_id,
          k.created_at, k.later_until, k.later_notified_at,
-         greatest(coalesce(m.created_at, k.created_at), coalesce(k.later_notified_at, '-infinity'::timestamptz))
+         greatest(coalesce(CASE WHEN m.deleted_at IS NULL THEN m.created_at ELSE alive.created_at END,
+                           k.created_at),
+                  coalesce(k.later_notified_at, '-infinity'::timestamptz)),
+         k.channel_name
     FROM public.chat_catchup k
     LEFT JOIN public.chat_messages m ON m.id = k.message_id
     LEFT JOIN public.chat_members mem
       ON mem.channel_id = coalesce(m.channel_id, k.channel_id) AND mem.user_id = v_me AND mem.left_at IS NULL
+    LEFT JOIN public.chat_messages rm ON rm.id = mem.last_read_id
+    LEFT JOIN LATERAL (
+      SELECT x.id, x.created_at FROM public.chat_messages x
+       WHERE m.deleted_at IS NOT NULL AND k.reason IN ('reply', 'every_message')
+         AND x.channel_id = m.channel_id AND x.kind = 'message' AND x.deleted_at IS NULL
+         AND x.author_id IS DISTINCT FROM v_me
+         AND (k.reason = 'every_message' OR x.parent_id = k.chain_root_id)
+         AND (x.created_at, x.id) < (m.created_at, m.id)
+         -- still unread (past your read mark), as chat_unread_counts keeps it
+         AND (mem.channel_id IS NULL
+              OR CASE WHEN rm.id IS NULL THEN x.created_at > coalesce(mem.last_read_at, '-infinity'::timestamptz)
+                      ELSE (x.created_at, x.id) > (rm.created_at, rm.id) END)
+       ORDER BY x.created_at DESC, x.id DESC
+       LIMIT 1
+    ) alive ON true
    WHERE k.user_id = v_me AND k.workspace_id = p_workspace_id AND k.done_at IS NULL
      AND (k.later_until IS NULL OR k.later_notified_at IS NOT NULL OR k.later_until <= now())
-     AND (k.message_id IS NULL OR (m.id IS NOT NULL AND m.deleted_at IS NULL))
+     AND (k.message_id IS NULL OR (m.id IS NOT NULL AND (m.deleted_at IS NULL OR alive.id IS NOT NULL)))
      AND NOT (k.reason = 'team_mention' AND public.chat__team_muted(v_me))
      AND NOT (k.reason = 'every_message' AND coalesce(mem.notify_level, '') <> 'all')
      AND NOT (k.reason = 'reply' AND EXISTS (
            SELECT 1 FROM public.chat_chain_mutes cm
             WHERE cm.user_id = v_me AND cm.root_id = k.chain_root_id))
-     AND public.chat__can_read_channel_as(coalesce(m.channel_id, k.channel_id), v_me)
+     -- Readable conversations only; "X removed you from Q" is the one line
+     -- about a conversation you can no longer read (no message, its stored name).
+     AND (public.chat__can_read_channel_as(coalesce(m.channel_id, k.channel_id), v_me)
+          OR (k.reason = 'removed' AND k.message_id IS NULL
+              AND public.chat__reads_workspace(p_workspace_id, v_me)))
    ORDER BY 10 DESC, k.id DESC
    LIMIT 2000;
 END;

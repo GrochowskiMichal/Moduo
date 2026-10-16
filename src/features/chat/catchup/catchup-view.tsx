@@ -40,7 +40,7 @@ import type {
   ChatUnread,
 } from "../model";
 import { MessageInContext } from "../panel/message-in-context";
-import { dmPeople } from "../shell/sidebar-model";
+import { conversationTitle, dmPeople } from "../shell/sidebar-model";
 import type { ChatStore } from "../store/store";
 import { authorName } from "../stream/rows";
 import { useCatchup } from "./catchup-store";
@@ -149,6 +149,10 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
     onFocusReply,
   } = input;
   const { catchup, snapshot } = useCatchup(active ? store : null);
+  // The screen's callbacks are new on every render: read them through a ref so
+  // the keys and the bottom bar's mode stay put (its owner wants a stable object).
+  const actions = useRef({ onOpenConversation, onLeave, onMakeTask, onFocusReply });
+  actions.current = { onOpenConversation, onLeave, onMakeTask, onFocusReply };
   const [order, setOrder] = useState<CatchupOrder>(readOrder);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [later, setLater] = useState<CatchupRow | null>(null);
@@ -267,13 +271,13 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
         case "reply":
           if (!m) return;
           showRight();
-          onFocusReply?.();
+          actions.current.onFocusReply?.();
           return;
         case "done":
           done(row);
           return;
         case "task":
-          if (m) onMakeTask(m);
+          if (m) actions.current.onMakeTask(m);
           return;
         case "later":
           if (!row.quiet) setLater(row);
@@ -282,14 +286,14 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
           showRight();
           return;
         case "go":
-          onOpenConversation(row.item.channelId, row.item.messageId);
+          actions.current.onOpenConversation(row.item.channelId, row.item.messageId);
           return;
         case "done-all":
           doneAll(row.item.channelId);
           return;
       }
     },
-    [snapshot.messages, showRight, done, onMakeTask, onOpenConversation, doneAll, onFocusReply],
+    [snapshot.messages, showRight, done, doneAll],
   );
 
   // ── keys (§16): R · Space · T · H · ⏎ · ↑↓ · Esc ──────────────────────────
@@ -334,12 +338,12 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
       event.preventDefault();
       if (action === "down") move(1);
       else if (action === "up") move(-1);
-      else if (action === "leave") onLeave();
+      else if (action === "leave") actions.current.onLeave();
       else run(action);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [active, run, select, onLeave]);
+  }, [active, run, select]);
 
   // ── the bottom bar's mode row ─────────────────────────────────────────────
   const count = rows.length;
@@ -433,7 +437,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
               </span>
               {order === "newest" && !group ? (
                 <span className="truncate text-subtle-foreground">
-                  · {channelTitleFor(channels, row.item.channelId, selfId, personOf)}
+                  · {channelTitleFor(channels, row.item, selfId, personOf)}
                 </span>
               ) : null}
             </span>
@@ -584,7 +588,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
   const right = selected ? (
     <CatchupContext
       key={selected.item.id}
-      title={channelTitleFor(channels, selected.item.channelId, selfId, personOf)}
+      title={channelTitleFor(channels, selected.item, selfId, personOf)}
       line={selected.quiet || !selected.item.messageId ? selected.why : null}
       chat={chat}
       messageId={selected.item.messageId}
@@ -611,17 +615,13 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
 
 function channelTitleFor(
   channels: Readonly<Record<string, ChatChannel>>,
-  id: string,
+  item: ChatCatchupItem,
   selfId: string,
   personOf: (id: string) => ChatPerson | undefined,
 ): string {
-  const c = channels[id];
-  if (!c) return "a conversation";
-  if (c.kind === "dm") {
-    const names = dmPeople(c, selfId).map((p) => personOf(p)?.name ?? "Former member");
-    return names.join(", ") || "Direct message";
-  }
-  return c.name ?? "Channel";
+  const c = channels[item.channelId];
+  if (c) return conversationTitle(c, selfId, personOf);
+  return item.channelName?.trim() || "A conversation";
 }
 
 /** The right side in Catch up (frame 1): "In Acme" · Open conversation, the message in context, the reply box. */

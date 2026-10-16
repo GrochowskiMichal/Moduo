@@ -296,13 +296,14 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
 
     messages: (ids) =>
       attempt(async () => {
+        // PostgREST puts the ids in the URL: 100 at a time, side by side.
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+        const results = await Promise.all(
+          chunks.map((chunk) => db().from("chat_messages").select(MESSAGE_COLUMNS).in("id", chunk)),
+        );
         const out: ChatMessage[] = [];
-        // PostgREST puts the ids in the URL: 100 at a time.
-        for (let i = 0; i < ids.length; i += 100) {
-          const { data, error } = await db()
-            .from("chat_messages")
-            .select(MESSAGE_COLUMNS)
-            .in("id", ids.slice(i, i + 100));
+        for (const { data, error } of results) {
           if (error) return bad(chatError(error));
           out.push(...mapRows(data, mapMessage));
         }

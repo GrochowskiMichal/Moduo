@@ -643,7 +643,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
           if (verbs.onRemind) {
             e.preventDefault();
             verbs.onRemind();
-          }
+          } else if (canWrite) typeIntoComposer(e);
           return;
         default:
           if (canWrite) typeIntoComposer(e);

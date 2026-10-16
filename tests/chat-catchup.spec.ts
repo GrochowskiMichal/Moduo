@@ -85,16 +85,18 @@ test.afterAll(async () => {
 });
 
 test("the mode row and keys", async ({ page }) => {
+  // Your own send reads the conversation: post the chain's root first.
+  const root = await sendAs(room.owner, room.general, `Which fonts ${tag}?`);
   const m1 = await sendAs(room.member, room.general, `${you()} can you check the logo ${tag}`);
   const m2 = await sendAs(room.member, room.general, `${you()} and the tagline ${tag}`);
-  const root = await sendAs(room.owner, room.general, `Which fonts ${tag}?`);
   await sendAs(room.member, room.general, `Inter for body ${tag}`, root);
   const newest = await sendAs(room.member, room.general, `and Fraunces for titles ${tag}`, root);
   const d1 = await sendAs(room.member, dm, `Quick one about the tagline ${tag}`);
   for (const n of [1, 2, 3]) await sendAs(room.member, busy, `busy news ${n} ${tag}`);
 
   await signInPage(page, room.owner, room.ws);
-  await page.goto(`/chat?c=${room.general}`);
+  // Start on Browse: opening General would read it and close its items.
+  await page.goto("/chat?view=browse");
   // The left panel's Catch up row opens the mode.
   await page.locator('[data-nav-id="catchup"]').click();
   await expect(page).toHaveURL(/view=catchup/);
@@ -109,20 +111,6 @@ test("the mode row and keys", async ({ page }) => {
   await expect(item(page, `Quick one about the tagline ${tag}`)).toBeVisible();
   await expect(list(page).locator(`[data-catchup-group="${room.general}"]`)).toBeVisible();
   await expect(modeRow(page)).toContainText("5 left · Esc");
-
-  // ⏎ opens the selected item as the message in context, with a reply box.
-  await item(page, `and Fraunces for titles ${tag}`).click();
-  await page.keyboard.press("Enter");
-  await expect(context(page).locator(`[data-message-id="${newest}"][data-current]`)).toBeVisible();
-
-  // R replies from the right; the chain's item closes (sending reads it).
-  await page.keyboard.press("r");
-  const box = context(page).locator('[data-slot="catchup-reply"] [contenteditable="true"]');
-  await expect(box).toBeFocused();
-  await page.keyboard.type(`Fraunces it is ${tag}`);
-  await page.keyboard.press("Enter");
-  await expect(page.getByText("Replied")).toBeVisible();
-  await expect(item(page, `and Fraunces for titles ${tag}`)).toHaveCount(0, { timeout: 15_000 });
 
   // Space clears (and Undo would bring it back).
   await item(page, `and the tagline ${tag}`).click();
@@ -149,6 +137,21 @@ test("the mode row and keys", async ({ page }) => {
   await later.getByRole("button", { name: /In 1 hour/ }).click();
   await expect(item(page, `can you check the logo ${tag}`)).toHaveCount(0);
   await expect.poll(async () => (await ownerItem(m1))?.later_until ?? null).not.toBeNull();
+
+  // ⏎ opens the selected item as the message in context, with a reply box.
+  await item(page, `and Fraunces for titles ${tag}`).click();
+  await page.keyboard.press("Enter");
+  await expect(context(page).locator(`[data-message-id="${newest}"][data-current]`)).toBeVisible();
+
+  // R replies from the right; the chain's item closes (sending reads the
+  // conversation, so it goes after the other General steps).
+  await page.keyboard.press("r");
+  const box = context(page).locator('[data-slot="catchup-reply"] [contenteditable="true"]');
+  await expect(box).toBeFocused();
+  await page.keyboard.type(`Fraunces it is ${tag}`);
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Replied")).toBeVisible();
+  await expect(item(page, `and Fraunces for titles ${tag}`)).toHaveCount(0, { timeout: 15_000 });
 
   // "Done all in this conversation" (More ▾) with Undo.
   await item(page, `Busy ${tag} · 3 new`).click();

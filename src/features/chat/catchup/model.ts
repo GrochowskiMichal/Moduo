@@ -70,9 +70,10 @@ export function buildCatchup(input: {
   order: CatchupOrder;
 }): CatchupGroup[] {
   const { items, channels, unread, selfId, personOf, authorOf, order } = input;
-  const titleOf = (id: string) => {
+  const titleOf = (id: string, stored?: string | null) => {
     const c = channels[id];
-    return c ? conversationTitle(c, selfId, personOf) : "A conversation";
+    if (c) return conversationTitle(c, selfId, personOf);
+    return stored?.trim() ? stored.trim() : "A conversation";
   };
   const rowOf = (item: ChatCatchupItem): CatchupRow => {
     const quiet = QUIET_REASONS.has(item.reason);
@@ -87,7 +88,11 @@ export function buildCatchup(input: {
     return {
       item,
       who,
-      why: catchupWhy(item, titleOf(item.channelId), unread[item.channelId]?.unread ?? 0),
+      why: catchupWhy(
+        item,
+        titleOf(item.channelId, item.channelName),
+        unread[item.channelId]?.unread ?? 0,
+      ),
       quiet,
     };
   };
@@ -105,7 +110,7 @@ export function buildCatchup(input: {
     if (!g) {
       g = {
         channelId: item.channelId,
-        title: titleOf(item.channelId),
+        title: titleOf(item.channelId, item.channelName),
         kind: channels[item.channelId]?.kind ?? "channel",
         rows: [],
       };

@@ -61,6 +61,16 @@ const build = (items: ChatCatchupItem[], order: "grouped" | "newest" = "grouped"
   });
 
 describe("Catch up's list (frame 1)", () => {
+  it("names a private channel you were removed from by its stored name", () => {
+    const gone = uuid(12);
+    const groups = build([
+      item(4, gone, "removed", 45, { messageId: null, actorId: YOU, channelName: "Secret" }),
+    ]);
+    expect(groups[0]?.title).toBe("Secret");
+    expect(groups[0]?.rows[0]?.why).toBe("removed you from Secret");
+    expect(groups[0]?.rows[0]?.who).toBe("Sofia Ortiz");
+  });
+
   it("groups by conversation, the newest group first, newest item first in each", () => {
     const groups = build([
       item(1, ACME, "mention", 41),

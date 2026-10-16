@@ -671,14 +671,23 @@ export function ChatScreen({
     },
     // A reply from Catch up joins the message's chain, like Reply in the stream.
     renderReply: (m) => {
+      // The stream's rule (composerLine). Managers of an announcement channel
+      // aren't loaded here, so its box stays hidden (Open conversation posts).
       const c = snap.channels[m.channelId];
       const canReply =
         !!c &&
-        !!snap.mine[m.channelId] &&
-        !c.archivedAt &&
-        !c.managersOnly &&
-        rights.canPost &&
-        !snap.paused;
+        composerLine({
+          channel: c,
+          member: snap.mine[m.channelId],
+          selfId,
+          personOf,
+          paused: snap.paused,
+          isOwner: role === "owner",
+          ownerName,
+          canPost: rights.canPost,
+          canManage: false,
+          isManager: false,
+        }) === null;
       if (!canReply) return null;
       const rootId = m.parentId ?? m.id;
       const who = authorName(m, m.authorId ? personOf(m.authorId) : undefined);

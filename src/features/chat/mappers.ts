@@ -174,6 +174,7 @@ export function mapCatchupItem(raw: unknown): ChatCatchupItem | null {
     laterUntil: str(r.later_until),
     returnedAt: str(r.returned_at),
     at: str(r.at) ?? createdAt,
+    channelName: str(r.channel_name),
   };
 }
 
