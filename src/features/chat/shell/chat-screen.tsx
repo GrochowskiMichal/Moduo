@@ -191,7 +191,7 @@ export function ChatScreen({
   );
   const online = useCallback((id: string) => presence.online.has(id), [presence.online]);
   // CV-17: the shapes and "now" lines from presence plus chat_now.
-  const peopleNow = usePeopleNow(workspaceId);
+  const peopleNow = usePeopleNow(userId, workspaceId);
   const nowOf = useCallback((id: string) => peopleNow.people.get(id), [peopleNow.people]);
   const stateOf = useCallback(
     (id: string): PresenceState => {

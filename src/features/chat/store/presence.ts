@@ -142,6 +142,16 @@ export class ChatPresenceStore {
     });
   }
 
+  hasSelf(self: PresenceSelf | null): boolean {
+    return this.self === self;
+  }
+
+  /** Leave now, whoever still holds it (sign-out). */
+  dispose(): void {
+    this.refs = 0;
+    this.close();
+  }
+
   private topic(): string {
     return `chat:${this.workspaceId}`;
   }
@@ -170,9 +180,17 @@ export function chatPresence(
 ): ChatPresenceStore {
   const key = `${selfId}:${workspaceId}`;
   let store = stores.get(key);
-  if (!store) {
+  // A store made for an earlier "me" (signed out, then back) is never reused.
+  if (!store || !store.hasSelf(self)) {
+    store?.dispose();
     store = new ChatPresenceStore(socket, workspaceId, selfId, self);
     stores.set(key, store);
   }
   return store;
+}
+
+/** Sign-out: leave every presence topic and forget the stores. */
+export function forgetChatPresenceStores(): void {
+  for (const store of stores.values()) store.dispose();
+  stores.clear();
 }

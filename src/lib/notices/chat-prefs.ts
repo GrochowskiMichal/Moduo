@@ -3,7 +3,9 @@
 // away", and (CV-17) "Show me as online" and "Show what I'm focusing on".
 // Read with `user_chat_prefs()`, changed only through
 // `user_op_set_chat_prefs(patch)` (the columns are op-only). The last read is
-// kept for the tab, so presence can follow "Show me as online".
+// kept for the tab, for the signed-in person only, so presence can follow
+// "Show me as online"; a change in one tab tells the person's other tabs.
+// A sign-out forgets it.
 
 import { supabaseClient } from "../runtime.web";
 
@@ -34,33 +36,64 @@ export function chatServerPrefsFromRow(raw: unknown): ChatServerPrefs {
   };
 }
 
-// ── the tab's copy ──────────────────────────────────────────────────────────
+// ── the tab's copy, for one person ──────────────────────────────────────────
 
-let current: ChatServerPrefs | null = null;
+let current: { userId: string; prefs: ChatServerPrefs } | null = null;
 const listeners = new Set<() => void>();
+const CHANNEL = "moduo-chat-prefs";
+let tabs: BroadcastChannel | null = null;
 
-function keep(prefs: ChatServerPrefs): ChatServerPrefs {
-  current = prefs;
+function notify(): void {
   for (const fn of listeners) fn();
+}
+
+async function sessionUserId(): Promise<string | null> {
+  const { data } = await supabaseClient.auth.getSession();
+  return data.session?.user?.id ?? null;
+}
+
+function keep(userId: string | null, prefs: ChatServerPrefs): ChatServerPrefs {
+  if (userId) {
+    current = { userId, prefs };
+    notify();
+  }
   return prefs;
 }
 
-/** The last prefs read or saved in this tab (null until the first read). */
-export function currentChatServerPrefs(): ChatServerPrefs | null {
-  return current;
+/** The person's prefs as last read or saved in this tab (null until read, or
+ *  when they were read for someone else). */
+export function currentChatServerPrefs(userId: string | null): ChatServerPrefs | null {
+  return current && userId && current.userId === userId ? current.prefs : null;
 }
 
 export function subscribeChatServerPrefs(fn: () => void): () => void {
   listeners.add(fn);
+  listenToOtherTabs();
   return () => {
     listeners.delete(fn);
   };
 }
 
+/** Forget the copy (sign-out, account switch). */
+export function forgetChatServerPrefs(): void {
+  current = null;
+  notify();
+}
+
+/** Another tab changed them: read again (for whoever is signed in now). */
+function listenToOtherTabs(): void {
+  if (tabs || typeof BroadcastChannel === "undefined") return;
+  tabs = new BroadcastChannel(CHANNEL);
+  tabs.onmessage = () => {
+    if (current) void readChatServerPrefs().catch(() => undefined);
+  };
+}
+
 export async function readChatServerPrefs(): Promise<ChatServerPrefs> {
+  const userId = await sessionUserId();
   const { data, error } = await supabaseClient.rpc("user_chat_prefs");
   if (error) throw new Error(error.message);
-  return keep(chatServerPrefsFromRow(data));
+  return keep(userId, chatServerPrefsFromRow(data));
 }
 
 export async function setChatServerPrefs(
@@ -71,7 +104,11 @@ export async function setChatServerPrefs(
   if (patch.emailWhenAway !== undefined) body.email_when_away = patch.emailWhenAway;
   if (patch.showOnline !== undefined) body.show_online = patch.showOnline;
   if (patch.showFocusTask !== undefined) body.show_focus_task = patch.showFocusTask;
+  const userId = await sessionUserId();
   const { data, error } = await supabaseClient.rpc("user_op_set_chat_prefs", { p_patch: body });
   if (error) throw new Error(error.message);
-  return keep(chatServerPrefsFromRow(data));
+  const prefs = keep(userId, chatServerPrefsFromRow(data));
+  listenToOtherTabs();
+  tabs?.postMessage("changed");
+  return prefs;
 }

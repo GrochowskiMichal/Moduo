@@ -39,11 +39,23 @@ export class PeopleNowStore {
   private stops: Array<() => void> = [];
   private reading: Promise<void> | null = null;
   private again = false;
+  /** Bumped by dispose(): a read begun before it is dropped. */
+  private gen = 0;
 
   constructor(
     readonly workspaceId: string,
     private readonly deps: PeopleNowDeps,
   ) {}
+
+  /** Stop everything and forget what was read (sign-out). */
+  dispose(): void {
+    this.gen += 1;
+    this.again = false;
+    this.refs = 0;
+    this.stop();
+    this.snapshot = EMPTY;
+    for (const fn of this.listeners) fn();
+  }
 
   subscribe = (fn: () => void): (() => void) => {
     this.listeners.add(fn);
@@ -61,10 +73,12 @@ export class PeopleNowStore {
       this.again = true;
       return this.reading;
     }
+    const gen = this.gen;
     this.reading = this.deps
       .read(this.workspaceId)
       .then(
         (people) => {
+          if (gen !== this.gen) return;
           this.snapshot = { people, loaded: true };
           for (const fn of this.listeners) fn();
         },
@@ -72,7 +86,7 @@ export class PeopleNowStore {
       )
       .finally(() => {
         this.reading = null;
-        if (this.again) {
+        if (this.again && gen === this.gen) {
           this.again = false;
           void this.refresh();
         }
@@ -121,29 +135,41 @@ export function setDefaultPeopleNowDeps(make: () => PeopleNowDeps): void {
   defaultDeps = make;
 }
 
+/** One store per person and workspace: what one person may see never shows
+ *  for the next one signed in on this tab. */
 const stores = new Map<string, PeopleNowStore>();
 
-export function peopleNowStore(workspaceId: string): PeopleNowStore | null {
-  let store = stores.get(workspaceId);
+export function peopleNowStore(userId: string, workspaceId: string): PeopleNowStore | null {
+  const key = `${userId}:${workspaceId}`;
+  let store = stores.get(key);
   if (!store) {
     if (!defaultDeps) return null;
     store = new PeopleNowStore(workspaceId, defaultDeps());
-    stores.set(workspaceId, store);
+    stores.set(key, store);
   }
   return store;
 }
 
 /** Re-read a workspace's "now" (after setting your own status). */
-export function refreshPeopleNow(workspaceId: string | null): void {
-  if (workspaceId) void stores.get(workspaceId)?.refresh();
+export function refreshPeopleNow(userId: string | null, workspaceId: string | null): void {
+  if (userId && workspaceId) void stores.get(`${userId}:${workspaceId}`)?.refresh();
+}
+
+/** Sign-out: stop every store's feed and forget what it read. */
+export function forgetPeopleNow(): void {
+  for (const store of stores.values()) store.dispose();
+  stores.clear();
 }
 
 const noSubscribe = () => () => {};
 const empty = () => EMPTY;
 
 /** Everyone's "now" in the workspace, held while mounted. */
-export function usePeopleNow(workspaceId: string | null): PeopleNowSnapshot {
-  const store = useMemo(() => (workspaceId ? peopleNowStore(workspaceId) : null), [workspaceId]);
+export function usePeopleNow(userId: string | null, workspaceId: string | null): PeopleNowSnapshot {
+  const store = useMemo(
+    () => (userId && workspaceId ? peopleNowStore(userId, workspaceId) : null),
+    [userId, workspaceId],
+  );
   useEffect(() => store?.acquire(), [store]);
   return useSyncExternalStore(
     store ? store.subscribe : noSubscribe,

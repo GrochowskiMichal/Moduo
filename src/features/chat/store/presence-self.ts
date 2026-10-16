@@ -99,6 +99,60 @@ export class PresenceSelfWatcher implements PresenceSelf {
   }
 }
 
+/** Where "Show me as online" comes from: the signed-in person's prefs. */
+export type ShowOnlineSource = {
+  /** Their switch, or null while it isn't known (then nothing is tracked). */
+  get: (userId: string) => boolean | null;
+  subscribe: (fn: () => void) => () => void;
+  /** Ask for it (once per person). */
+  load: () => void;
+};
+
+/**
+ * The tab's one "me", for one person at a time. Asking for another person (an
+ * account switch) or `forget()` (sign-out) disposes the previous one, so no
+ * earlier person's switch, idle timer or listener stays behind. A new person
+ * tracks nothing until their own switch is read.
+ */
+export class PresenceSelfRegistry {
+  private held: { userId: string; self: PresenceSelfWatcher; stop: () => void } | null = null;
+
+  constructor(
+    private readonly source: ShowOnlineSource,
+    private readonly deps: PresenceSelfDeps = {},
+  ) {}
+
+  for(userId: string): PresenceSelfWatcher {
+    if (this.held?.userId === userId) return this.held.self;
+    this.forget();
+    const known = this.source.get(userId);
+    const self = new PresenceSelfWatcher(known ?? false, this.deps);
+    const stop = this.source.subscribe(() => {
+      const on = this.source.get(userId);
+      // Someone else's prefs (or none yet) never turn tracking on.
+      self.setShowOnline(on ?? false);
+    });
+    if (known === null) this.source.load();
+    this.held = { userId, self, stop };
+    return self;
+  }
+
+  /** The person this tab holds, if any. */
+  get userId(): string | null {
+    return this.held?.userId ?? null;
+  }
+
+  forget(): void {
+    const held = this.held;
+    this.held = null;
+    if (!held) return;
+    held.stop();
+    // Untrack anywhere it was tracked, then stop the timers.
+    held.self.setShowOnline(false);
+    held.self.dispose();
+  }
+}
+
 /** The browser's input events, for `onInput`. */
 export function windowInput(fn: () => void): () => void {
   if (typeof window === "undefined") return () => {};

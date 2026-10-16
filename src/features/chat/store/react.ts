@@ -13,11 +13,13 @@ import { supabaseClient } from "@/lib/runtime.web";
 import { postgresChangesSource } from "../realtime";
 import {
   currentChatServerPrefs,
+  forgetChatServerPrefs,
   readChatServerPrefs,
   subscribeChatServerPrefs,
 } from "@/lib/notices/chat-prefs";
-import { type ChatPresenceSnapshot, chatPresence } from "./presence";
-import { PresenceSelfWatcher, windowInput } from "./presence-self";
+import { forgetPeopleNow } from "@/lib/statuses/store";
+import { type ChatPresenceSnapshot, chatPresence, forgetChatPresenceStores } from "./presence";
+import { PresenceSelfRegistry, windowInput } from "./presence-self";
 import "@/lib/statuses/live";
 import {
   type ChatSnapshot,
@@ -73,7 +75,7 @@ export function useChatPresence(
   const store = useMemo(
     () =>
       enabled && workspaceId && userId
-        ? chatPresence(supabaseClient, workspaceId, userId, tabPresenceSelf())
+        ? chatPresence(supabaseClient, workspaceId, userId, tabPresenceSelf(userId))
         : null,
     [enabled, workspaceId, userId],
   );
@@ -85,21 +87,28 @@ export function useChatPresence(
   );
 }
 
-let tabSelf: PresenceSelfWatcher | null = null;
+/** This tab's "me" on presence (CV-17), for the signed-in person only: it
+ *  tracks nothing until their own "Show me as online" is read, follows it
+ *  (another tab's change too), and is away after 10 minutes without input. */
+const presenceSelves = new PresenceSelfRegistry(
+  {
+    get: (userId) => currentChatServerPrefs(userId)?.showOnline ?? null,
+    subscribe: subscribeChatServerPrefs,
+    load: () => void readChatServerPrefs().catch(() => undefined),
+  },
+  { onInput: windowInput },
+);
 
-/** This tab's "me" on presence (CV-17): tracks nothing until your "Show me as
- *  online" is read, then follows it; away after 10 minutes without input. */
-function tabPresenceSelf(): PresenceSelfWatcher {
-  if (tabSelf) return tabSelf;
-  const known = currentChatServerPrefs();
-  const self = new PresenceSelfWatcher(known?.showOnline ?? false, { onInput: windowInput });
-  subscribeChatServerPrefs(() => {
-    const prefs = currentChatServerPrefs();
-    if (prefs) self.setShowOnline(prefs.showOnline);
-  });
-  if (!known) void readChatServerPrefs().catch(() => undefined);
-  tabSelf = self;
-  return self;
+function tabPresenceSelf(userId: string) {
+  return presenceSelves.for(userId);
+}
+
+/** Sign-out: no presence "me", switch or status copy outlives the person. */
+export function forgetChatPresence(): void {
+  forgetChatPresenceStores();
+  presenceSelves.forget();
+  forgetChatServerPrefs();
+  forgetPeopleNow();
 }
 
 const typingStores = new Map<string, ChatTypingStore>();

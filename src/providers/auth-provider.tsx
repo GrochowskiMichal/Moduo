@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { forgetChatPresence } from "../features/chat/store/react";
 import { attachChatUser, wipeChatCopies } from "../features/chat/store/store";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachRunUser } from "../features/focus/run";
@@ -155,6 +156,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const uid = event === "SIGNED_OUT" ? null : (nextSession?.user?.id ?? null);
       const previousUser = sessionUser.current;
       sessionUser.current = uid;
+      // Another person (or nobody): no presence, "Show me as online" or
+      // statuses read for the one before stay in this tab (CV-17).
+      if (previousUser && previousUser !== uid) forgetChatPresence();
 
       if (event === "TOKEN_REFRESHED") {
         console.debug("[auth] token refreshed", {
@@ -253,6 +257,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // SIGNED_OUT event follows) (TV-D11a).
     void wipeSyncCopies();
     void wipeChatCopies();
+    forgetChatPresence();
     forgetRememberedWorkspaces();
     forgetCaptureDrafts();
     clearTemplates();

@@ -9,7 +9,7 @@ import { describe, expect, it } from "@rstest/core";
 import { presenceStateOf } from "@/lib/statuses/model";
 import type { ChatSocket } from "./realtime";
 import { ChatPresenceStore, presenceSets } from "./store/presence";
-import { AWAY_AFTER_MS, PresenceSelfWatcher } from "./store/presence-self";
+import { AWAY_AFTER_MS, PresenceSelfRegistry, PresenceSelfWatcher } from "./store/presence-self";
 
 type FakeChannel = {
   status: ((s: string) => void) | null;
@@ -148,6 +148,57 @@ describe('"Show me as online"', () => {
     });
     expect([...online].sort()).toEqual(["ana", "bo", "cy"]);
     expect([...away]).toEqual(["bo"]);
+  });
+
+  it("another person on this tab starts untracked: nothing of the one before stays", () => {
+    const prefs = new Map<string, boolean>([["ana", true]]);
+    const listeners = new Set<() => void>();
+    const loads: string[] = [];
+    const registry = new PresenceSelfRegistry(
+      {
+        get: (id) => prefs.get(id) ?? null,
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        load: () => loads.push("load"),
+      },
+      fakeTime(),
+    );
+    const { socket, channels } = fakeSocket();
+    const anaSelf = registry.for("ana");
+    const ana = new ChatPresenceStore(socket, WS, "ana", anaSelf);
+    ana.acquire();
+    channels[0]!.status?.("SUBSCRIBED");
+    expect(channels[0]!.calls).toEqual([
+      { op: "track", state: expect.objectContaining({ away: false }) },
+    ]);
+
+    // Bo signs in on the same tab: Ana's "me" untracks and lets go.
+    const boSelf = registry.for("bo");
+    expect(boSelf).not.toBe(anaSelf);
+    expect(channels[0]!.calls.at(-1)).toEqual({ op: "untrack" });
+    expect(listeners.size).toBe(1);
+    expect(loads).toEqual(["load"]);
+    // Ana's switch ("on") never turns Bo's tracking on.
+    for (const fn of listeners) fn();
+    const bo = new ChatPresenceStore(socket, WS, "bo", boSelf);
+    bo.acquire();
+    channels[1]!.status?.("SUBSCRIBED");
+    expect(channels[1]!.calls).toEqual([]);
+    // Bo's own switch, once read, does.
+    prefs.set("bo", true);
+    for (const fn of listeners) fn();
+    expect(channels[1]!.calls.at(-1)).toEqual({
+      op: "track",
+      state: expect.objectContaining({ away: false }),
+    });
+
+    // Sign-out: nothing tracked, no listener left.
+    registry.forget();
+    expect(channels[1]!.calls.at(-1)).toEqual({ op: "untrack" });
+    expect(listeners.size).toBe(0);
+    expect(registry.userId).toBeNull();
   });
 
   it("a refused join is an error, never everyone offline (AC1.9)", () => {
