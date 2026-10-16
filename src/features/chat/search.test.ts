@@ -28,4 +28,9 @@ describe("validateChatSearch", () => {
     });
     expect(validateChatSearch({ q: "zolw", from: ID })).toEqual({});
   });
+
+  it("keeps Catch up as a view, with or without a conversation (CV-11)", () => {
+    expect(validateChatSearch({ view: "catchup" })).toEqual({ view: "catchup" });
+    expect(validateChatSearch({ c: ID, view: "catchup" })).toEqual({ c: ID, view: "catchup" });
+  });
 });

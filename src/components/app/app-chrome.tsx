@@ -50,7 +50,6 @@ import { Icon } from "../ui/icon";
 import { IconButton } from "../ui/icon-button";
 import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { UserMenu } from "../user-menu";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
 import { visibleModuleNavItems } from "./app-chrome-constants";
@@ -64,6 +63,7 @@ import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
 import { NoticeDeliveries } from "./notice-deliveries";
+import { StatusMenu } from "./status-menu";
 import { TasksSyncStatus } from "./sync-status";
 import { TimeRegionPrompt } from "./time-region-prompt";
 import { useUnknownRouteRedirect } from "./use-unknown-route-redirect";
@@ -614,7 +614,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             <NoticeDeliveries chat={chatBadge} />
             {/* Asks once when this device is in another time zone (TV-D14). */}
             <TimeRegionPrompt />
-            <UserMenu
+            {/* Your status and saved ones, Do not disturb, then Settings (CV-17, §15). */}
+            <StatusMenu
+              userId={userId ?? null}
+              workspaceId={selectedWorkspaceId ?? null}
               avatarDataUrl={avatarDataUrl}
               profileInitial={derivedInitial}
               onOpenSettings={() => dispatchOpenSettings()}

@@ -76,6 +76,7 @@ import {
   offersChannel,
   overLimit,
   peopleFor,
+  remindMatches,
 } from "./grammar";
 import { HandleChipPlugin } from "./handle-chip";
 import {
@@ -135,6 +136,8 @@ export type ChatComposerProps = {
   /** Typing started (true, at most every few seconds by the caller) or stopped (false). */
   onTyping?: (active: boolean) => void;
   onEditLast?: () => void;
+  /** `/remind` (CV-11): remind me about this conversation (absent: not offered). */
+  onRemind?: () => void;
   onEscapeEmpty?: () => void;
   onCancel?: () => void;
   /** A line under the box (the `@channel` note after a send). */
@@ -262,6 +265,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     onDraftChange,
     onTyping,
     onEditLast,
+    onRemind,
     onEscapeEmpty,
     onCancel,
     note,
@@ -508,6 +512,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
   const slashCandidates = useCallback(
     (query: string, found: MentionCandidate[]): MentionCandidate[] => [
+      ...(onRemind && remindMatches(query)
+        ? [
+            {
+              kind: "action",
+              id: "remind",
+              label: "/remind",
+              hint: "Remind me about this conversation",
+            } satisfies MentionCandidate,
+          ]
+        : []),
       ...createCommandsFor(query)
         .filter((c) => canCreate(c.id))
         .map(
@@ -522,10 +536,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         ),
       ...found,
     ],
-    [canCreate],
+    [canCreate, onRemind],
   );
   const slashPick = useCallback(
     (candidate: MentionCandidate) => {
+      if (candidate.kind === "action" && candidate.id === "remind") {
+        return (api: { removeQuery: () => void }) => {
+          api.removeQuery();
+          queueMicrotask(() => onRemind?.());
+        };
+      }
       if (candidate.kind !== "action" || !candidate.id.startsWith("create:")) return null;
       const command = candidate.id.slice("create:".length) as CreateCommand;
       const title = candidate.label.match(/“(.*)”$/)?.[1] ?? "";
@@ -536,7 +556,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         queueMicrotask(() => openCreate(command, title, saved));
       };
     },
-    [openCreate],
+    [openCreate, onRemind],
   );
 
   const drawPerson = useCallback(

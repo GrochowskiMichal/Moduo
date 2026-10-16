@@ -206,6 +206,25 @@ describe("runCapture through the shared store", () => {
     expect(runtime.spine.createLink).toHaveBeenCalledTimes(1);
   });
 
+  it("a mention of a conversation or a message stays text: no link, nothing failed", async () => {
+    const { store } = fakeStore();
+    const runtime = fakeRuntime();
+    const t = item({
+      title: "Ask in acme",
+      links: [
+        { ref: { type: "chat_channel", id: "c1" }, label: "acme" },
+        { ref: { type: "chat_message", id: "m1" }, label: "" },
+        { ref: { type: "note", id: "n1" }, label: "N" },
+      ],
+    });
+    const result = await runCapture(plan([t]), { runtime: runtime as never, userId: ME, store });
+    expect(result.extrasFailed).toBe(0);
+    expect(runtime.spine.createLink).toHaveBeenCalledTimes(1);
+    expect(runtime.spine.createLink).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { type: "note", id: "n1" } }),
+    );
+  });
+
   it("a subtask whose parent waits on the device waits behind it, in the outbox", async () => {
     const { store, enqueued, raw } = fakeStore({ offline: true });
     const runtime = fakeRuntime();

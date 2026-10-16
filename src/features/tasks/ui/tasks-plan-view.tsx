@@ -55,6 +55,8 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useWorkspaceStore } from "../../../lib/sync/react";
 import { UNDO_TOAST_MS, undoToast } from "../../../lib/undo-toast";
 import { readViewPrefs, writeViewPrefs } from "../../../lib/view-prefs";
+import { ConversationLines } from "../../chat/mentioned-in";
+import { useStartConversation } from "../../chat/start-conversation";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../focus/view-request";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
@@ -569,6 +571,8 @@ export function TasksPlanView({
     if (api.archivedBuckets.some((b) => b.id === selection)) return;
     if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
   }, [selection, buckets, inboxId, api.archivedBuckets, openViewId, openView, api.reachedServer]);
+  /** Chat's "Start a conversation for X" (CV-13), null when chat is off for you. */
+  const startConversation = useStartConversation();
   /** The archived project open now (read-only), if any. */
   const archivedProject = useMemo(
     () => api.archivedBuckets.find((b) => b.id === place) ?? null,
@@ -1610,6 +1614,11 @@ export function TasksPlanView({
             canEdit && !archivedProject
               ? () => setStatusesEditor({ projectId: titleProjectId })
               : undefined,
+          // Chat's "Start a conversation for X" (CV-13): the server checks edit rights.
+          onStartConversation:
+            startConversation && canEdit && !archivedProject
+              ? () => startConversation("bucket", titleProjectId)
+              : undefined,
         }
       : undefined,
   };
@@ -2308,6 +2317,9 @@ export function TasksPlanView({
       }}
       onArchive={requestArchive}
       onDuplicate={offersTemplates ? templateActions.requestDuplicate : undefined}
+      chat={{
+        conversation: <ConversationLines entityType="project" entityId={panelProject.id} />,
+      }}
     />
   ) : null;
   // Nothing selected inside a project, or a task in the centre: the panel

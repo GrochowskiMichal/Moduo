@@ -63,7 +63,7 @@ export type Resolver = (
 ) => Promise<Map<string, ReferenceResolution>>;
 
 /** Answer every id: rows that came back by their state, the rest private. */
-function answer<R extends { id: string; deletedAt: string | null }>(
+function answer<R extends { id: string; deletedAt: string | null; archivedAt?: string | null }>(
   ids: readonly string[],
   rows: readonly R[],
   facts: (row: R) => ReferenceFacts,
@@ -74,6 +74,7 @@ function answer<R extends { id: string; deletedAt: string | null }>(
     const row = byId.get(id);
     if (!row) out.set(id, { status: "private" });
     else if (row.deletedAt) out.set(id, { status: "deleted" });
+    else if (row.archivedAt) out.set(id, { status: "archived", title: facts(row).title });
     else out.set(id, { status: "ready", facts: facts(row) });
   }
   return out;

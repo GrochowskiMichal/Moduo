@@ -23,6 +23,18 @@ import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import {
+  composerHoldLine,
+  nowLine,
+  type PresenceState,
+  presenceStateOf,
+} from "@/lib/statuses/model";
+import { usePeopleNow } from "@/lib/statuses/store";
+import { useTimeRegion } from "@/lib/time-region";
+import { catchupStoreFor } from "../catchup/catchup-store";
+import { useCatchupScreen } from "../catchup/catchup-view";
+import { LaterDialog } from "../catchup/later-dialog";
+import { laterHint } from "../catchup/later-times";
+import {
   type ChainRights,
   chainGroups,
   chainsStamp,
@@ -45,6 +57,7 @@ import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { ChatSearchView } from "../find/chat-search-view";
 import { FindBar } from "../find/find-bar";
 import type { SearchParams } from "../find/model";
+import { captureDestination, useLinkFilesHere } from "../linking";
 import { mentionsOf, messageTree, parseStored, toBodyText } from "../markup-v2";
 import type {
   ChatChannel,
@@ -56,6 +69,7 @@ import type {
 import { ChainItem } from "../panel/chain-item";
 import { detailsStamp } from "../panel/details-model";
 import { DetailsView } from "../panel/details-view";
+import { ChannelLinkSection, LinkChip } from "../panel/link-section";
 import { MessageInContext } from "../panel/message-in-context";
 import { PersonCard } from "../panel/person-card";
 import { ReplyChainsView } from "../panel/reply-chains-view";
@@ -76,7 +90,7 @@ import { readThroughHidden, wrappedReplyIds } from "../timeline";
 import { BrowseChannels } from "./browse-channels";
 import { ChatSidebar, useCollapsedSections } from "./chat-sidebar";
 import { composerLine, newestPost } from "./composer-state";
-import { ComposerLineView, ConversationStart, OfflineLine } from "./conversation-states";
+import { ComposerLineView, ConversationStart, HoldLine, OfflineLine } from "./conversation-states";
 import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
 import {
@@ -153,6 +167,12 @@ export type ChatScreenProps = {
   chainId?: string | null;
   /** The centre shows Browse channels (`view=browse`). */
   browsing?: boolean;
+  /** Catch up is the page's mode (`view=catchup`, CV-11). */
+  catchup?: boolean;
+  /** Open Catch up (the left panel's row). */
+  onOpenCatchup?: () => void;
+  /** Leave Catch up (Esc). */
+  onLeaveCatchup?: () => void;
   /** Open Browse channels. */
   onBrowse?: () => void;
   /** The centre shows Chat's Search with these words and filters (`view=search`, CV-19). */
@@ -180,16 +200,19 @@ export function ChatScreen({
   messageId,
   chainId = null,
   browsing = false,
+  catchup = false,
   onOpen,
   onBrowse,
   search = null,
   onSearch,
+  onOpenCatchup,
+  onLeaveCatchup,
 }: ChatScreenProps) {
   const selfId = userId ?? "";
   const store = useChatStore(runtime, userId, workspaceId);
   const snap = useChatSnapshot(store);
   const ready = snap.status === "ready";
-  const presence = useChatPresence(workspaceId, userId, ready && !snap.paused);
+  const presence = useChatPresence(workspaceId, userId, ready);
   const typingStore = useMemo(
     () => (runtime && userId ? chatTypingStore(runtime, userId) : null),
     [runtime, userId],
@@ -217,6 +240,25 @@ export function ChatScreen({
     [peopleById],
   );
   const online = useCallback((id: string) => presence.online.has(id), [presence.online]);
+  // CV-17: the shapes and "now" lines from presence plus chat_now.
+  const peopleNow = usePeopleNow(userId, workspaceId);
+  const nowOf = useCallback((id: string) => peopleNow.people.get(id), [peopleNow.people]);
+  const stateOf = useCallback(
+    (id: string): PresenceState => {
+      const n = peopleNow.people.get(id);
+      return presenceStateOf({
+        online: presence.online.has(id),
+        away: presence.away.has(id),
+        dnd: n?.dnd,
+        focusing: n?.focusing,
+      });
+    },
+    [peopleNow.people, presence.online, presence.away],
+  );
+  const statusOf = useCallback(
+    (id: string) => nowLine(peopleNow.people.get(id), stateOf(id)),
+    [peopleNow.people, stateOf],
+  );
 
   // ── the left panel ────────────────────────────────────────────────────────
   const model = useMemo(
@@ -294,11 +336,11 @@ export function ChatScreen({
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
   useEffect(() => {
-    if (!ready || conversationId || browsing || search) return;
+    if (!ready || conversationId || browsing || catchup || search) return;
     const general = Object.values(snap.channels).find((c) => c.isDefault && !c.archivedAt);
     const first = general ?? ordered[0]?.channel;
     if (first) onOpen(first.id, { replace: true });
-  }, [ready, conversationId, browsing, search, snap.channels, ordered, onOpen]);
+  }, [ready, conversationId, browsing, catchup, search, snap.channels, ordered, onOpen]);
 
   // Open once per conversation (re-opening would drop a window around a linked message).
   const known = !!conversationId && !!snap.channels[conversationId];
@@ -628,6 +670,8 @@ export function ChatScreen({
   }, [streamWin?.rows, snap.chains, conversationId]);
   const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
   const addMadeFrom = madeFrom.add;
+  // A linked project you may add to is capture's destination (CV-13), else the Inbox.
+  const filesHere = useLinkFilesHere(runtime?.chat ?? null, channel ?? null);
   const makeTaskFrom = useCallback(
     (m: ChatMessage) => {
       const text = toBodyText(messageTree(m.id, m.updatedAt, m.body))
@@ -635,9 +679,11 @@ export function ChatScreen({
         .trim()
         .slice(0, 200);
       const chat = runtime?.chat;
+      const from = snap.channels[m.channelId];
       dispatchOpenCapture({
         type: "task",
         draft: text,
+        destination: captureDestination(from, filesHere && from?.id === channel?.id),
         source:
           chat && !m.sendState
             ? {
@@ -653,8 +699,105 @@ export function ChatScreen({
         },
       });
     },
-    [runtime, snap.channels, selfId, personOf, addMadeFrom],
+    [runtime, snap.channels, selfId, personOf, addMadeFrom, filesHere, channel?.id],
   );
+
+  // ── Remind me (CV-11): a message's ⋯ / H, and `/remind` for the conversation ──
+  const [remindFor, setRemindFor] = useState<{ messageId: string } | { channelId: string } | null>(
+    null,
+  );
+  const remindRegion = useTimeRegion();
+  const remind = useCallback(
+    (target: { messageId: string } | { channelId: string }, at: string) => {
+      setRemindFor(null);
+      if (!store) return;
+      void catchupStoreFor(store)
+        .remind(target, at)
+        .then((res) => {
+          if (failed(res, "Couldn't set the reminder.")) return;
+          const when = laterHint(
+            new Date(at),
+            new Date(),
+            remindRegion.timeZone,
+            remindRegion.hour12,
+          );
+          toast(`I'll bring it back to Catch up ${when}`);
+        });
+    },
+    [store, remindRegion.timeZone, remindRegion.hour12],
+  );
+
+  // ── Catch up (CV-11): the page's mode ─────────────────────────────────────
+  const catchupReplyRef = useRef<ChatComposerHandle | null>(null);
+  const catchupUi = useCatchupScreen({
+    active: catchup && ready,
+    store,
+    chat: runtime?.chat ?? null,
+    channels: snap.channels,
+    mine: snap.mine,
+    unread: snap.unread,
+    selfId,
+    personOf,
+    onPersonClick: undefined,
+    onOpenConversation: (channelId, messageId) => onOpen(channelId, messageId ? { messageId } : {}),
+    onLeave: () => onLeaveCatchup?.(),
+    onMakeTask: makeTaskFrom,
+    // The panel may be opening: try for a few frames until the box is there.
+    onFocusReply: () => {
+      let tries = 0;
+      const attempt = () => {
+        if (catchupReplyRef.current) {
+          catchupReplyRef.current.focus();
+          return;
+        }
+        tries += 1;
+        if (tries < 20) requestAnimationFrame(attempt);
+      };
+      attempt();
+    },
+    // A reply from Catch up joins the message's chain, like Reply in the stream.
+    renderReply: (m) => {
+      // The stream's rule (composerLine). Managers of an announcement channel
+      // aren't loaded here, so its box stays hidden (Open conversation posts).
+      const c = snap.channels[m.channelId];
+      const canReply =
+        !!c &&
+        composerLine({
+          channel: c,
+          member: snap.mine[m.channelId],
+          selfId,
+          personOf,
+          paused: snap.paused,
+          isOwner: role === "owner",
+          ownerName,
+          canPost: rights.canPost,
+          canManage: false,
+          isManager: false,
+        }) === null;
+      if (!canReply) return null;
+      const rootId = m.parentId ?? m.id;
+      const who = authorName(m, m.authorId ? personOf(m.authorId) : undefined);
+      return (
+        <ChatComposer
+          ref={catchupReplyRef}
+          key={`catchup:${m.id}`}
+          runtime={runtime}
+          workspaceId={workspaceId}
+          selfId={selfId}
+          people={people}
+          placeholder={`Reply to ${who}`}
+          initial={store?.draft(m.channelId, rootId) ?? ""}
+          onSend={(body) => {
+            if (!store || !body.trim()) return false;
+            store.send({ channelId: m.channelId, body, replyToId: rootId, format: "v2" });
+            toast("Replied");
+            return true;
+          }}
+          onDraftChange={(stored) => store?.setDraft(m.channelId, rootId, stored)}
+        />
+      );
+    },
+  });
 
   const copyLink = useCallback((m: ChatMessage) => {
     const params = new URLSearchParams({ c: m.channelId, m: m.id });
@@ -749,23 +892,19 @@ export function ChatScreen({
   const left = (
     <ChatSidebar
       model={model}
-      activeId={browsing || search ? null : conversationId}
+      activeId={browsing || catchup || search ? null : conversationId}
       personOf={personOf}
-      online={online}
+      online={stateOf}
       collapsed={collapsed}
       onToggleSection={toggleSection}
       onOpen={(id) => onOpen(id)}
       onNewConversation={canStart ? () => setNewOpen(true) : undefined}
       onBrowse={onBrowse}
+      catchupCurrent={catchup}
+      onOpenCatchup={() => onOpenCatchup?.()}
       onRecentlyDeleted={
         rights.canPost && !snap.paused ? () => setLifecycleDialog("deleted") : undefined
       }
-      onOpenCatchup={() => {
-        // Catch up's own view is CV-11's: until then, the first conversation waiting for you.
-        const all = [...model.pinned, ...model.channels, ...model.dms];
-        const waiting = all.find((r) => r.count > 0) ?? all.find((r) => r.unread);
-        if (waiting) onOpen(waiting.channel.id);
-      }}
     />
   );
 
@@ -816,6 +955,8 @@ export function ChatScreen({
         selfId={selfId}
       />
     );
+  } else if (catchup) {
+    center = catchupUi.center;
   } else if (browsing) {
     center = (
       <BrowseChannels
@@ -865,6 +1006,11 @@ export function ChatScreen({
   } else {
     const title = conversationTitle(channel, selfId, personOf);
     const others = channel.kind === "dm" ? dmPeople(channel, selfId) : [];
+    // CV-17: a one-to-one direct message to someone on do not disturb.
+    const other = others.length === 1 ? others[0]! : null;
+    const holdLine = other
+      ? composerHoldLine((personOf(other)?.name ?? "They").split(/\s+/)[0]!, nowOf(other))
+      : null;
     const line = composerRefusal;
     const canWrite = canWriteHere;
     const typingNames = typing.entries
@@ -880,10 +1026,16 @@ export function ChatScreen({
           row={{ channel, people: others, title }}
           member={member}
           personOf={personOf}
-          online={online}
+          online={stateOf}
+          statusText={
+            channel.kind === "dm" && others.length === 1
+              ? nowLine(nowOf(others[0]!), stateOf(others[0]!), new Date(), { task: true })
+              : undefined
+          }
           peopleCount={peopleCount}
           canManage={canManage}
           paused={snap.paused}
+          linked={channel.link ? <LinkChip channel={channel} runtime={runtime} /> : undefined}
           onSearch={() => setFinding((v) => !v)}
           onPin={(starred) =>
             guarded(
@@ -995,6 +1147,7 @@ export function ChatScreen({
               });
             }}
             onTask={makeTaskFrom}
+            onRemind={(m) => setRemindFor({ messageId: m.id })}
             onReplyPrivately={
               channel.kind === "channel" && channel.managersOnly && !isManager && rights.canPost
                 ? replyPrivately
@@ -1043,7 +1196,8 @@ export function ChatScreen({
                 userId={id}
                 person={personOf(id)}
                 self={id === selfId}
-                online={id === selfId || online(id)}
+                state={stateOf(id)}
+                now={nowOf(id)}
                 canMessage={canStart}
                 onMessage={(uid) => openDmWith([uid])}
               />
@@ -1053,6 +1207,7 @@ export function ChatScreen({
         </MadeFromScope>
         <div data-chat-composer className="shrink-0 px-3 pb-3">
           {snap.offline ? <OfflineLine /> : null}
+          {holdLine ? <HoldLine text={holdLine} /> : null}
           {managersPending ? null : line ? (
             <ComposerLineView
               line={line}
@@ -1148,6 +1303,7 @@ export function ChatScreen({
                     !active,
                   )
                 }
+                onRemind={() => setRemindFor({ channelId: channel.id })}
                 onEditLast={() =>
                   editLast(
                     // The row past the window's edge isn't drawn; ids inside their Undo are gone.
@@ -1181,7 +1337,8 @@ export function ChatScreen({
             userId={entry.id}
             person={person}
             self={entry.id === selfId}
-            online={entry.id === selfId || online(entry.id)}
+            state={stateOf(entry.id)}
+            now={nowOf(entry.id)}
             canMessage={canStart}
             onMessage={(uid) => openDmWith([uid])}
           />
@@ -1264,7 +1421,9 @@ export function ChatScreen({
     };
   });
   const channelTitle = channel ? conversationTitle(channel, selfId, personOf) : "";
-  const right = channel ? (
+  const right = catchup ? (
+    (catchupUi.right ?? undefined)
+  ) : channel ? (
     <RightPanel
       module="chat"
       views={{
@@ -1276,6 +1435,8 @@ export function ChatScreen({
             selfId={selfId}
             personOf={personOf}
             online={online}
+            stateOf={stateOf}
+            statusOf={statusOf}
             members={details.members}
             pinned={details.pinned}
             history={details.history}
@@ -1341,6 +1502,28 @@ export function ChatScreen({
             onOpenMessage={openMessageInPanel}
             chains={chainList}
             onOpenChain={(root) => openChain(root.id)}
+            linkSection={
+              <ChannelLinkSection
+                key={channel.id}
+                channel={channel}
+                runtime={runtime}
+                canLink={
+                  !!member &&
+                  rights.canPost &&
+                  (!channel.managersOnly || canManage) &&
+                  !channel.archivedAt &&
+                  !snap.paused
+                }
+                canAddPeople={
+                  !channel.archivedAt &&
+                  !snap.paused &&
+                  (channel.isPrivate ? canManage : rights.canPost)
+                }
+                memberIds={new Set((details.members ?? []).map((m) => m.userId))}
+                onLink={(link) => store?.linkChannel(channel.id, link) ?? Promise.resolve()}
+                onAddPeople={(ids) => store?.addMembers(channel.id, ids) ?? Promise.resolve()}
+              />
+            }
           />
         ),
         chains: () => (
@@ -1428,6 +1611,20 @@ export function ChatScreen({
         }}
         onCaptureNote={() => dispatchOpenCapture({ type: "note" })}
         onBrowse={() => onBrowse?.()}
+        runtime={runtime}
+        workspaceId={workspaceId}
+      />
+      {catchupUi.dialogs}
+      <LaterDialog
+        open={!!remindFor}
+        title={
+          remindFor && "channelId" in remindFor
+            ? "Remind me about this conversation"
+            : "Remind me about this message"
+        }
+        description="It comes back to the top of Catch up at that time, with one notice."
+        onPick={(at) => remindFor && remind(remindFor, at)}
+        onClose={() => setRemindFor(null)}
       />
       {channel && channel.kind === "channel" ? (
         <>

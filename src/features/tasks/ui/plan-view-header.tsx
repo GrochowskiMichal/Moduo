@@ -5,6 +5,7 @@ import {
   Ellipsis,
   FolderKanban,
   List,
+  MessageSquare,
   Plus,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -54,6 +55,8 @@ export type PlanHeaderControls = {
     onOpenDetails: () => void;
     /** ⋯ → Statuses… (TV-D9); absent without edit access. */
     onEditStatuses?: () => void;
+    /** ⋯ → Start a conversation (Chat, CV-13); absent without chat or edit access. */
+    onStartConversation?: () => void;
   };
 };
 
@@ -208,6 +211,12 @@ function ProjectMenu({ project }: { project: NonNullable<PlanHeaderControls["pro
           <DropdownMenuItem onSelect={project.onEditStatuses}>
             <CircleDashed aria-hidden />
             Statuses…
+          </DropdownMenuItem>
+        ) : null}
+        {project.onStartConversation ? (
+          <DropdownMenuItem onSelect={project.onStartConversation}>
+            <MessageSquare aria-hidden />
+            Start a conversation
           </DropdownMenuItem>
         ) : null}
       </DropdownMenuContent>

@@ -4,11 +4,14 @@
 
 import {
   isChatChannelKind,
+  normalizeChatCatchupReason,
+  normalizeChatLinkTarget,
   normalizeChatMessageKind,
   normalizeChatNotifyLevel,
   normalizeContentAuthorKind,
 } from "@contracts/vocabularies";
 import type {
+  ChatCatchupItem,
   ChatChannel,
   ChatDeletedChannel,
   ChatHistoryEntry,
@@ -55,6 +58,7 @@ export function mapChannel(raw: unknown): ChatChannel | null {
     lastMessageAt: str(r.last_message_at),
     isDefault: r.is_default === true,
     managersOnly: r.managers_only === true,
+    link: mapLink(r.linked_type, r.linked_id),
     rosterAt: str(r.roster_at),
   };
 }
@@ -73,6 +77,13 @@ export function mapDeletedChannel(raw: unknown): ChatDeletedChannel | null {
     deletedBy: str(r.deleted_by),
     purgeAt: str(r.purge_at) ?? deletedAt,
   };
+}
+
+/** A channel's link (CV-13): both halves or nothing. */
+function mapLink(type: unknown, id: unknown): ChatChannel["link"] {
+  const t = normalizeChatLinkTarget(type);
+  const i = str(id);
+  return t && i ? { type: t, id: i } : null;
 }
 
 /** A membership row stamped by leaving or a removal (CV-2b): no membership. */
@@ -152,6 +163,28 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     createdAt,
     // A row read before CV-1's stamp (none on the server now) falls back to its time.
     updatedAt: str(r.updated_at) ?? createdAt,
+  };
+}
+
+export function mapCatchupItem(raw: unknown): ChatCatchupItem | null {
+  const r = asRow(raw);
+  const id = str(r?.id);
+  const channelId = str(r?.channel_id);
+  const reason = normalizeChatCatchupReason(r?.reason);
+  if (!r || !id || !channelId || !reason) return null;
+  const createdAt = str(r.created_at) ?? EPOCH;
+  return {
+    id,
+    channelId,
+    messageId: str(r.message_id),
+    chainRootId: str(r.chain_root_id),
+    reason,
+    actorId: str(r.actor_id),
+    createdAt,
+    laterUntil: str(r.later_until),
+    returnedAt: str(r.returned_at),
+    at: str(r.at) ?? createdAt,
+    channelName: str(r.channel_name),
   };
 }
 

@@ -6,5 +6,5 @@ export { forgetMessageTree, messageTree } from "./cache";
 export { canonicalBlocks, isAllowedHref } from "./canonical";
 export { parseInline, parseStored } from "./parse";
 export { serializeBlocks } from "./serialize";
-export { type Mentions, mentionsOf, toBodyText } from "./text";
+export { type Mentions, mentionsOf, toBodyText, toExcerptText } from "./text";
 export * from "./types";

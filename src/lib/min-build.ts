@@ -93,6 +93,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_caps_get",
   // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
   "chat_conversations_for_item",
+  // CV-13: whether capture from a linked channel files into its project.
+  "chat_link_files_here",
   "chat_message_refs",
   // CV-3: the chat store's access check and its people.
   "chat_people",
@@ -101,6 +103,7 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_search",
   "chat_sync_ids",
   "chat_unread_counts",
+  "chat_catchup_open",
   "chat_workspace_enabled",
   "contact_merge_candidates",
   "focus_claims",
@@ -122,6 +125,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "user_agent_work",
   // CV-6b: Settings → Preferences → Chat reads your chat settings; CV-7c: your quick reactions.
   "user_chat_prefs",
+  // CV-17: teammates' "now" (statuses, do not disturb, Focusing).
+  "chat_now",
   "user_time_region",
 ]);
 

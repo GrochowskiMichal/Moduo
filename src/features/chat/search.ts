@@ -11,8 +11,8 @@ export type ChatSearch = {
   /** Message to scroll to + flash. */
   m?: string;
   /** A centre surface other than the conversation: Browse channels (CV-8b),
-   *  Chat's Search (CV-19). */
-  view?: "browse" | "search";
+   *  Catch up (CV-11), Chat's Search (CV-19). */
+  view?: "browse" | "catchup" | "search";
   /** Chat's Search: the words (at most 256 characters, as the server reads). */
   q?: string;
   /** Chat's Search filters: from a person, in a conversation, has a file, a date range. */
@@ -33,8 +33,8 @@ export function validateChatSearch(search: Record<string, unknown>): ChatSearch 
   const t = c ? pick(search.t) : undefined;
   const m = c ? pick(search.m) : undefined;
   const view =
-    search.view === "browse" || search.view === "search"
-      ? (search.view as "browse" | "search")
+    search.view === "browse" || search.view === "catchup" || search.view === "search"
+      ? (search.view as "browse" | "catchup" | "search")
       : undefined;
   // Chat's Search keeps its words and filters only while it is the view.
   const searching = view === "search";

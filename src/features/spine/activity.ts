@@ -7,6 +7,7 @@
 import { normalizeChatMentionReason } from "@contracts/vocabularies";
 import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
 import { dayShort, time24 } from "../calendar/booking/sentence";
+import { parseStored, toExcerptText } from "../chat/markup-v2";
 import { referenceTextToPlain } from "./references/text";
 import type { ReferenceRef } from "./references/types";
 
@@ -270,7 +271,10 @@ export function spineActivityLine(
               : reason === "everyone"
                 ? "mentioned everyone"
                 : "mentioned you";
-      const excerpt = excerptText(p.excerpt);
+      const excerpt =
+        p.format_version === 2
+          ? chatExcerptText(p.excerpt, opts.referenceName)
+          : excerptText(p.excerpt);
       return excerpt ? `${verb} ${where}: “${excerpt}”` : `${verb} ${where}`;
     }
     case "chat.channel_create": {
@@ -296,6 +300,13 @@ export function spineActivityLine(
     }
     case "chat.member_remove":
       return "removed someone";
+    // CV-13: ids only, so the line names the kind, not the item.
+    case "chat.channel_link": {
+      const t = str(p.linked_type);
+      if (!t) return "unlinked this channel";
+      const what = t === "bucket" ? "a project" : t === "team" ? "a team" : "a client";
+      return `linked this channel to ${what}`;
+    }
     // Lifecycle (CV-15): ids only.
     case "chat.manager_add":
       return "made someone a manager";
@@ -328,4 +339,24 @@ export function spineActivityLine(
     default:
       return entry.op;
   }
+}
+
+/**
+ * A chat excerpt in the stored form (`payload.format_version = 2`, CV-1) as
+ * one line of words: marks dropped, references named for this reader (a
+ * person by name, never `moduo://person/<id>`), CV-11. An excerpt the server
+ * cut inside a reference loses that half reference.
+ */
+function chatExcerptText(
+  value: unknown,
+  referenceName: ((ref: ReferenceRef) => string) | undefined,
+): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const cut = value.replace(/moduo:\/?\/?[a-z_-]*\/?[A-Za-z0-9-]*$/, (rest) =>
+    /^moduo:\/\/[a-z][a-z_-]*\/[0-9a-fA-F-]{36}$/.test(rest) ? rest : "…",
+  );
+  const text = toExcerptText(parseStored(cut), (type, id) =>
+    referenceName ? referenceName({ type, id }) : "a linked item",
+  );
+  return text || null;
 }
