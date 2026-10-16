@@ -138,6 +138,17 @@ test("the mode row and keys", async ({ page }) => {
   await expect(item(page, `can you check the logo ${tag}`)).toHaveCount(0);
   await expect.poll(async () => (await ownerItem(m1))?.later_until ?? null).not.toBeNull();
 
+  // "Done all in this conversation" (More ▾) with Undo.
+  await item(page, `Busy ${tag} · 3 new`).click();
+  await modeRow(page).getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Done all in this conversation" }).click();
+  await expect(item(page, `Busy ${tag} · 3 new`)).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(item(page, `Busy ${tag} · 3 new`)).toHaveCount(1, { timeout: 15_000 });
+
+  // The toaster hands focus back when its last toast leaves: let them go first.
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0, { timeout: 15_000 });
+
   // ⏎ opens the selected item as the message in context, with a reply box.
   await item(page, `and Fraunces for titles ${tag}`).click();
   await page.keyboard.press("Enter");
@@ -150,16 +161,8 @@ test("the mode row and keys", async ({ page }) => {
   await expect(box).toBeFocused();
   await page.keyboard.type(`Fraunces it is ${tag}`);
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Replied")).toBeVisible();
+  await expect(page.getByText("Replied", { exact: true })).toBeVisible();
   await expect(item(page, `and Fraunces for titles ${tag}`)).toHaveCount(0, { timeout: 15_000 });
-
-  // "Done all in this conversation" (More ▾) with Undo.
-  await item(page, `Busy ${tag} · 3 new`).click();
-  await modeRow(page).getByRole("button", { name: "More" }).click();
-  await page.getByRole("menuitem", { name: "Done all in this conversation" }).click();
-  await expect(item(page, `Busy ${tag} · 3 new`)).toHaveCount(0);
-  await page.getByRole("button", { name: "Undo" }).click();
-  await expect(item(page, `Busy ${tag} · 3 new`)).toHaveCount(1, { timeout: 15_000 });
 
   // The direct message, then the line: all done → the zero state.
   await item(page, `Quick one about the tagline ${tag}`).click();
