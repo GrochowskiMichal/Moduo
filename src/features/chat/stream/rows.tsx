@@ -373,7 +373,6 @@ export function MessageRow({
               className={pending ? "opacity-60" : undefined}
             />
           )}
-          {editor ? null : <MadeFromLine messageId={message.id} />}
           <SendState
             message={message}
             onRetry={() => handlers.onRetry?.(message)}
@@ -386,6 +385,7 @@ export function MessageRow({
             onReact={(key, on) => handlers.onReact?.(message, key, on)}
           />
           <RepliesLine message={message} onOpenChain={() => handlers.onOpenChain?.(message)} />
+          {editor ? null : <MadeFromLine messageId={message.id} />}
         </div>
         {toolbar}
       </div>

@@ -6,6 +6,7 @@
 // again when a capture made from one of them is created, and when the window
 // regains focus.
 
+import { CornerDownRight } from "lucide-react";
 import {
   createContext,
   type ReactNode,
@@ -131,6 +132,7 @@ export function MadeFromLine({ messageId }: { messageId: string }) {
       data-slot="made-from"
       className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground"
     >
+      <CornerDownRight className="size-icon-xs shrink-0" aria-hidden />
       <span>{becameLabel(items)}:</span>
       {items.map((it) => (
         <Reference key={`${it.type}:${it.id}`} type={it.type} id={it.id} display="chip" />
