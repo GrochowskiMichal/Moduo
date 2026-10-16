@@ -185,24 +185,33 @@ export class ReferenceStore {
    * again after a minute (access can be granted, a task can be created).
    */
   resolveHandle(handle: string): Promise<string | null> {
+    return this.lookupHandle(handle).catch(() => null);
+  }
+
+  /**
+   * The same, except that a lookup that couldn't answer (offline, a server
+   * error) rejects instead of reading as "not found": a deep link must never
+   * drop a task it merely couldn't reach (MOD-28). Failures aren't kept.
+   */
+  lookupHandle(handle: string): Promise<string | null> {
     const key = handle.trim().toUpperCase();
     const cached = this.handles.get(key);
     if (cached && (cached.found || this.now() - cached.at < HANDLE_MISS_TTL_MS)) {
       return cached.answer;
     }
     const ctx = this.opts.context();
-    if (!ctx) return Promise.resolve(null);
+    if (!ctx) return Promise.reject(new Error("No workspace to look the handle up in."));
     const entry = { at: this.now(), found: false, answer: Promise.resolve<string | null>(null) };
-    entry.answer = ctx.previews
-      .resolveHandle({ workspaceId: ctx.workspaceId, handle: key })
-      .then((id) => {
+    entry.answer = ctx.previews.resolveHandle({ workspaceId: ctx.workspaceId, handle: key }).then(
+      (id) => {
         entry.found = id !== null;
         return id;
-      })
-      .catch(() => {
-        this.handles.delete(key);
-        return null;
-      });
+      },
+      (error: unknown) => {
+        if (this.handles.get(key) === entry) this.handles.delete(key);
+        throw error;
+      },
+    );
     this.handles.set(key, entry);
     return entry.answer;
   }

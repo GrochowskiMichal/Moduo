@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { Constants } from "@/types/supabase";
@@ -53,6 +55,9 @@ import {
   planTierSchema,
   relationKindSchema,
   taskStatusSchema,
+  GUEST_REMINDER_MINUTES,
+  normalizeGuestReminderMinutes,
+  parseGuestReminderMinutes,
 } from "./index.ts";
 
 // ---------------------------------------------------------------------------
@@ -64,6 +69,21 @@ describe("vocabulary value sets", () => {
     expect(TASK_STATUSES).toEqual(["todo", "in_progress", "done", "archived"]);
     expect(ENERGY_LEVELS).toEqual(["low", "medium", "high"]);
     expect(PRIORITY_LEVELS).toEqual(["low", "medium", "high"]);
+  });
+
+  it("guest reminder minutes mirror the exposed_slot_links CHECK (TX-6)", () => {
+    expect(GUEST_REMINDER_MINUTES).toEqual([60, 1440]);
+    const sql = readFileSync(
+      new URL("../../../migrations/20261014170000_tx6_booking_reminders.sql", import.meta.url),
+      "utf8",
+    );
+    expect(sql).toContain(
+      `CHECK (guest_reminder_minutes IS NULL OR guest_reminder_minutes IN (${GUEST_REMINDER_MINUTES.join(", ")}))`,
+    );
+    expect(normalizeGuestReminderMinutes(null)).toBeNull();
+    expect(normalizeGuestReminderMinutes(30)).toBe(1440);
+    expect(parseGuestReminderMinutes(60)).toBe(60);
+    expect(() => parseGuestReminderMinutes(30)).toThrow();
   });
 
   it("actor types mirror the module_activity CHECK", () => {
@@ -729,5 +749,60 @@ describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
     // A row from before TV-D9 has no category: its legacy status decides.
     expect(v.taskCategoryOf({ status: "archived" })).toBe("wont_do");
     expect(v.taskCategoryOf({ status: "todo", statusCategory: null })).toBe("todo");
+  });
+});
+
+describe("onboarding roles (TV-U17, MOD-111: kept in preferences JSON, no CHECK)", () => {
+  it("are the role question's six answers, in its order", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.TASKS_ROLES).toEqual(["student", "developer", "pm", "founder", "client_work", "creator"]);
+  });
+
+  it("parse strictly, normalize unknown to no answer, and guard", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.parseTasksRole("pm").success).toBe(true);
+    expect(v.parseTasksRole("designer").success).toBe(false);
+    expect(v.normalizeTasksRole("founder")).toBe("founder");
+    expect(v.normalizeTasksRole("designer")).toBeNull();
+    expect(v.normalizeTasksRole(undefined)).toBeNull();
+    expect(v.isTasksRole("creator")).toBe(true);
+    expect(v.isTasksRole(3)).toBe(false);
+  });
+});
+
+describe("label hues and a new tag's colour (MOD-93: one rule for the app and the connector)", () => {
+  it("are the eight token names, gray last", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.LABEL_COLORS).toEqual(["blue", "green", "amber", "red", "violet", "teal", "pink", "gray"]);
+    expect(v.DEFAULT_LABEL_COLOR).toBe("gray");
+  });
+
+  it("the app's palette is this one", async () => {
+    const v = await import("./vocabularies.ts");
+    const app = await import("@/components/tag-colors");
+    expect(app.LABEL_COLORS).toBe(v.LABEL_COLORS);
+    expect(app.pickTagColor).toBe(v.pickTagColor);
+  });
+
+  it("normalize known hues through, anything else to the default; parse strictly", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeLabelColor("blue")).toBe("blue");
+    expect(v.normalizeLabelColor("pink")).toBe("pink");
+    expect(v.normalizeLabelColor(null)).toBe(v.DEFAULT_LABEL_COLOR);
+    expect(v.normalizeLabelColor(undefined)).toBe(v.DEFAULT_LABEL_COLOR);
+    expect(v.normalizeLabelColor("#ff0000")).toBe(v.DEFAULT_LABEL_COLOR);
+    expect(v.parseLabelColor("teal").success).toBe(true);
+    expect(v.parseLabelColor("#ff0000").success).toBe(false);
+  });
+
+  it("pickTagColor: the least-used hue, palette order breaking ties, gray only when every hue is used", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.pickTagColor([])).toBe(v.LABEL_COLORS[0]);
+    expect(v.pickTagColor([{ color: "blue" }])).toBe(v.LABEL_COLORS[1]);
+    const mixed = [{ color: "blue" }, { color: "green" }, { color: "blue" }];
+    expect(v.pickTagColor(mixed)).toBe(v.pickTagColor(mixed));
+    expect(v.pickTagColor([{ color: "blue" }, { color: "green" }])).not.toBe("gray");
+    const colored = v.LABEL_COLORS.filter((c) => c !== "gray");
+    expect(v.pickTagColor(colored.map((color) => ({ color })))).toBe("gray");
   });
 });

@@ -136,7 +136,10 @@ export function CompanyHub({
         {/* Header */}
         <div className="flex items-start gap-3">
           <Avatar size="lg" className="shrink-0">
-            {company.avatarUrl ? <AvatarImage src={company.avatarUrl} alt="" /> : null}
+            {/* A logo keeps its shape: contained, not cropped like a face. */}
+            {company.avatarUrl ? (
+              <AvatarImage src={company.avatarUrl} alt="" className="object-contain" />
+            ) : null}
             <AvatarFallback>{initials(company.name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">

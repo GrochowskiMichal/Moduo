@@ -52,9 +52,10 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Kbd } from "../../../components/ui/kbd";
+import { NavRowDot } from "../../../components/ui/nav-row";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { taskHandle } from "../../../lib/task-handle";
+import { taskHandle, taskLinkId } from "../../../lib/task-handle";
 import { cn } from "../../../lib/utils";
 import { taskUrl } from "../../../lib/web-origin";
 import { useTaskClaim } from "../../focus/claims";
@@ -68,6 +69,7 @@ import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { importedFromLine } from "../importers/plan";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
+import { bucketDotColor } from "../sidebar";
 import { ClaimAvatar, useClaimNames, withoutPeopleOnIt } from "./queue-toggle";
 
 type Props = {
@@ -241,7 +243,9 @@ export function TaskDetailHeader({
               <GitBranch aria-hidden />
               Copy branch name
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => copy(taskUrl(task.id), "Link copied")}>
+            <DropdownMenuItem
+              onSelect={() => copy(taskUrl(taskLinkId(taskKey, task)), "Link copied")}
+            >
               <Link2 aria-hidden />
               Copy link
             </DropdownMenuItem>
@@ -373,7 +377,8 @@ function ProjectCrumb({
             {bucket?.isSystem ? (
               <Inbox className="size-icon-xs shrink-0" aria-hidden />
             ) : bucket ? (
-              <span aria-hidden className="size-2 shrink-0 rounded-full bg-muted-foreground/60" />
+              // The project's own colour, as its sidebar row shows it (MOD-130).
+              <NavRowDot color={bucketDotColor(bucket)} />
             ) : (
               <Lock className="size-icon-xs shrink-0" aria-hidden />
             )}
@@ -399,7 +404,12 @@ function ProjectCrumb({
                       if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
                     }}
                   >
-                    {b.isSystem ? <Inbox className="text-muted-foreground" aria-hidden /> : null}
+                    {/* Each project's dot, as in the bulk Move to (MOD-130). */}
+                    {b.isSystem ? (
+                      <Inbox className="text-muted-foreground" aria-hidden />
+                    ) : (
+                      <NavRowDot color={bucketDotColor(b)} />
+                    )}
                     <span className="min-w-0 flex-1 break-words">{b.name}</span>
                     {area ? (
                       <span className="shrink-0 font-sans text-xs text-muted-foreground">

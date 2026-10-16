@@ -70,7 +70,7 @@ function zoneLabel(zone: string): string {
 
 /**
  * Settings → Time & region (TV-D14, REPLAN 76): one personal setting every
- * module reads, saved on the server so it follows the person; plus "Share my
+ * module reads, saved on the server so it follows the person; plus "Share your
  * tracked time with the workspace owner" (REPLAN 75).
  */
 export function TimeRegionSection() {
@@ -221,14 +221,14 @@ export function TimeRegionSection() {
         description="A task's total always counts everyone's time. Who tracked what stays private unless you share it."
       >
         <PrefRow
-          title="Share my tracked time with the workspace owner"
+          title="Share your tracked time with the workspace owner"
           description="Owners see your entries (length, day and note) in their time reports, only on tasks they can see. In every workspace you're in."
         >
           <Switch
             checked={saved.shareTimeWithOwner}
             disabled={busy}
             onCheckedChange={(on) => save({ shareTimeWithOwner: on })}
-            aria-label="Share my tracked time with the workspace owner"
+            aria-label="Share your tracked time with the workspace owner"
           />
         </PrefRow>
       </PrefGroup>

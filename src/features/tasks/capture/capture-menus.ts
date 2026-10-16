@@ -22,6 +22,7 @@ import {
 
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import type { MentionActionCandidate, MentionCandidate } from "../../spine/mention";
+import { SELF_NAME } from "../assignee-options";
 import type { Bucket, PriorityLevel, Section, Tag, Team } from "../model";
 import { parseCapture } from "../parse/capture-parser";
 import { type CaptureToken, localDay } from "../parse/capture-tokens";
@@ -42,7 +43,15 @@ export type EntryEffect =
 
 export type MenuEntries = { candidates: MentionCandidate[]; effects: Map<string, EntryEffect> };
 
-export type CapturePerson = { userId: string; name: string; isMe: boolean };
+export type CapturePerson = {
+  userId: string;
+  name: string;
+  isMe: boolean;
+  /** Their own name, for the avatar's initials; empty when unset ("?"). */
+  fullName?: string;
+  /** Their profile photo, for the menu's avatar (MOD-96). */
+  avatarUrl?: string | null;
+};
 
 const includesWord = (name: string, query: string) => {
   const q = query.trim().toLowerCase();
@@ -51,9 +60,12 @@ const includesWord = (name: string, query: string) => {
   return lower.startsWith(q) || lower.split(/\s+/).some((w) => w.startsWith(q));
 };
 
-/** How a person reads in the menu: "Alex Rivera (you)" for you. */
+/** How a person reads in the menu: "Alex Rivera (you)" for you, "You" while
+ *  you have no name, never "You (you)" (MOD-137, `assigneeListName`). */
 export function personLabel(person: CapturePerson): string {
-  return person.isMe ? `${person.name || "You"} (you)` : person.name;
+  if (!person.isMe) return person.name;
+  const own = person.fullName ?? person.name;
+  return own && own !== SELF_NAME ? `${own} (you)` : SELF_NAME;
 }
 
 function action(
@@ -81,7 +93,14 @@ export function mentionEntries(
   const effects = new Map<string, EntryEffect>();
   const out: MentionCandidate[] = [];
   for (const p of ctx.people.filter((p) => includesWord(p.name, query)).slice(0, 3)) {
-    out.push({ kind: "person", memberId: p.userId, label: personLabel(p), icon: null });
+    out.push({
+      kind: "person",
+      memberId: p.userId,
+      label: personLabel(p),
+      icon: null,
+      name: (p.fullName ?? p.name) || "?",
+      avatarUrl: p.avatarUrl ?? null,
+    });
   }
   for (const t of ctx.teams.filter((t) => includesWord(t.name, query)).slice(0, 2)) {
     out.push({
@@ -294,17 +313,17 @@ export function commandEntries(
           ? action(
               effects,
               `remind:${at}`,
-              `Remind me ${formatDayTime(at, now)}`,
+              `Reminder ${formatDayTime(at, now)}`,
               {
                 kind: "token",
-                token: { kind: "remind", at, label: `Remind ${formatDayTime(at, now)}` },
+                token: { kind: "remind", at, label: `Reminder ${formatDayTime(at, now)}` },
               },
               { icon: Bell },
             )
           : action(
               effects,
               "open:remind",
-              "Remind me…",
+              "Reminder…",
               { kind: "open", field: "remind" },
               { icon: Bell },
             ),

@@ -8,6 +8,7 @@ import {
   clearAccountDeletedMarker,
   isAccountDeletedMarked,
 } from "@/features/settings/delete-account";
+import { takePendingJoin } from "@/features/workspaces/invite-join";
 import { ignoredAuthLink } from "@/lib/auth-url";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -38,9 +39,8 @@ export function AuthPage() {
     if (window.sessionStorage.getItem("moduo:auth_resolving") === "1") return;
 
     // Resume a workspace invite the user opened while signed out (DF-24).
-    const pendingJoin = window.localStorage.getItem("moduo:pending_join");
+    const pendingJoin = takePendingJoin();
     if (pendingJoin) {
-      window.localStorage.removeItem("moduo:pending_join");
       void navigate({ to: "/join", search: { invite: pendingJoin }, replace: true });
       return;
     }

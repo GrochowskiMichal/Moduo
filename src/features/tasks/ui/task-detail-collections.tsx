@@ -42,6 +42,7 @@ import { MentionedInLines } from "../../chat/mentioned-in";
 import { EntityLinkPicker } from "../../contacts/ui/entity-link-picker";
 import { Reference } from "../../spine/references/ui/reference";
 import type { HubRow } from "../../spine/rollup";
+import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { onBreakDown, takeBreakDown } from "../break-down";
 import { wouldCreateCycle } from "../helpers";
@@ -312,7 +313,7 @@ export function WaitingSection({
                         .map((a) => (
                           <CommandItem
                             key={a.userId}
-                            value={`${a.name} ${a.fullName} ${a.userId}`}
+                            value={`${a.name} ${a.fullName} ${a.isMe ? SELF_KEYWORDS.join(" ") : ""} ${a.userId}`}
                             onSelect={() => {
                               api.addWaiting(task.id, { kind: "person", ref: a.userId });
                               setOpen(false);
@@ -320,7 +321,7 @@ export function WaitingSection({
                           >
                             <AssigneeAvatar assignee={a} size="icon" />
                             <span className="min-w-0 flex-1 break-words">
-                              {a.fullName || a.name}
+                              {assigneeListName(a)}
                             </span>
                           </CommandItem>
                         ))}
@@ -355,7 +356,7 @@ export function WaitingSection({
         const person = entry.kind === "person" ? byId(entry.ref) : null;
         const label =
           entry.kind === "person"
-            ? ((person?.fullName || person?.name) ?? "Former member")
+            ? (person?.name ?? "Former member")
             : entry.kind === "text"
               ? (entry.label ?? "Something")
               : entry.kind === "email"

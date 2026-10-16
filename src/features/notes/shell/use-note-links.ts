@@ -11,23 +11,32 @@ import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
 import {
+  type AgentEditMark,
   type BacklinkGroup,
   type NoteMetaLine,
   shapeBacklinks,
   shapeNoteMetaLine,
 } from "../note-meta";
 
-const EMPTY_LINE: NoteMetaLine = { chips: [], edited: null };
+const EMPTY_LINE: NoteMetaLine = { chips: [], edited: null, undoable: false };
 
 export function useNoteLinks({
   runtime,
   workspaceId,
   note,
+  editedBy = null,
+  agentEdit = null,
+  canUndoAgent = false,
 }: {
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
   /** The open note, or null for a draft (a draft has no links yet). */
   note: Note | null;
+  /** Display name of the note's last human editor (NR-6). */
+  editedBy?: string | null;
+  /** The latest agent write and whether this session can undo it (NR-6). */
+  agentEdit?: AgentEditMark | null;
+  canUndoAgent?: boolean;
 }): { line: NoteMetaLine; backlinks: BacklinkGroup[] } {
   const noteId = note?.id ?? null;
   const focus = useMemo(() => (noteId ? { type: "note", id: noteId } : null), [noteId]);
@@ -69,10 +78,14 @@ export function useNoteLinks({
         ? shapeNoteMetaLine({
             sections: ready ? sections : [],
             updatedAt: note.updatedAt,
+            editedAt: note.editedAt ?? null,
+            editedBy,
+            agentEdit,
+            canUndoAgent,
             now: new Date(),
           })
         : EMPTY_LINE,
-    [note, ready, sections],
+    [note, ready, sections, editedBy, agentEdit, canUndoAgent],
   );
   const backlinks = useMemo(
     () => (ready && noteId ? shapeBacklinks(noteId, sections) : []),

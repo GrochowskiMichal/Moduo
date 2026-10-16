@@ -14,7 +14,14 @@ import {
 } from "@testing-library/react";
 
 const PEOPLE = {
-  u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  u1: {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   u2: { userId: "u2", name: "Mike", avatarUrl: null, isMe: false, canTakeTasks: true },
 } as const;
 
@@ -150,7 +157,7 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     ]);
   });
 
-  it("tags show as a quiet `# N` count after the title, never as chips", () => {
+  it("tags show as a quiet tag icon + count after the title, never as chips or a #", async () => {
     const tags = [
       { id: "t1", name: "ui" },
       { id: "t2", name: "notes" },
@@ -158,12 +165,49 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     ];
     renderList([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
     const row = rowOf("Task a");
-    expect(screen.getByText("3 tags").className).toContain("sr-only");
-    expect(row.textContent).not.toContain("ui");
-    expect(row.querySelector('[data-slot="tag-chip"], .tag-chip')).toBeNull();
-    // The count sits in the title cell, right after the title.
+    const spoken = screen.getByText("3 tags: ui, notes, bug");
+    expect(spoken.className).toContain("sr-only");
+    // The same icon size and colour as files, comments and subtasks (MetaCount).
+    // (Its tooltip trigger takes over the span's data-slot.)
+    const count = spoken.parentElement as HTMLElement;
+    expect(count.querySelector("svg")?.getAttribute("class")).toContain("lucide-tag");
+    expect(count.querySelector("svg")?.getAttribute("class")).toContain("size-icon-xs");
+    expect(count.className).toContain("text-muted-foreground");
+    expect(count.textContent).toBe("33 tags: ui, notes, bug");
+    expect(row.querySelector('[data-slot="tag-chip"]')).toBeNull();
+    expect(row.textContent).not.toContain("#");
+    // Hovering names them as words, in the kit tooltip.
+    fireEvent.pointerMove(count, { pointerType: "mouse" });
+    expect((await screen.findByRole("tooltip")).textContent).toBe("ui, notes, bug");
+    // The count sits in the title cell, in the row's details (MOD-138).
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
-    expect(title.querySelector('[data-slot="meta-counts"]')).not.toBeNull();
+    expect(title.querySelector('[data-slot="row-details"]')?.contains(count)).toBe(true);
+  });
+
+  it("Detailed rows show two tags as dot chips, then +n, never a # (MOD-97)", async () => {
+    const tags = [
+      { id: "t1", name: "ui", color: "blue" },
+      { id: "t2", name: "notes", color: "green" },
+      { id: "t3", name: "bug", color: "red" },
+    ];
+    renderList([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    const title = rowOf("Task a").querySelector('[data-slot="row-title"]') as HTMLElement;
+    const names = title.querySelector('[data-slot="row-tag-names"]') as HTMLElement;
+    const chips = [...names.querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
+    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes"]);
+    expect(chips.map((c) => c.dataset.label)).toEqual(["blue", "green"]);
+    expect(chips[0]?.className).toContain("h-4.5");
+    // The names stay at full width, so each chip is capped: the title keeps its room.
+    expect(names.className).toContain("shrink-0");
+    for (const chip of chips) expect(chip.className).toContain("max-w-24");
+    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+      chips[0] as HTMLElement,
+    );
+    const more = names.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.textContent).toBe("+1");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("bug");
+    expect(names.textContent).not.toContain("#");
   });
 
   it("counts subtasks as done/total and marks blocked and repeating tasks", () => {
@@ -262,6 +306,27 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(projectShown(a)).toBe(true);
   });
 
+  it("Display → Columns turns Detailed's own columns off, header and rows (MOD-128, MOD-136)", () => {
+    // A project's defaults: no Project (the page's title), no Updated.
+    renderList(rows, {
+      rows: "detailed",
+      detailedColumns: ["handle", "status", "time", "waiting"],
+    });
+    const a = rowOf("Task a");
+    expect(cols(a)).toEqual(["status", "due", "time", "assignee", "queue"]);
+    expect(projectShown(a)).toBe(false);
+    const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
+    expect(within(header).queryByText("Project")).toBeNull();
+    expect(within(header).queryByRole("button", { name: /updated/i })).toBeNull();
+  });
+
+  it("Detailed with every own column off is still Detailed, not Standard's date (MOD-128)", () => {
+    renderList(rows, { rows: "detailed", detailedColumns: [] });
+    // Due stays Detailed's own cell; Standard's one date never comes back.
+    expect(cols(rowOf("Task a"))).toEqual(["due", "assignee", "queue"]);
+    expect(document.querySelector('[data-slot="task-list-header"]')).not.toBeNull();
+  });
+
   it("Detailed names the section after the project, and the handle before the title", () => {
     const withSection = [task("a", { sectionId: "s1", number: 142 })];
     renderList(
@@ -276,6 +341,19 @@ describe("Display → Rows: Standard · Detailed", () => {
     // Before the title, like Linear's ID.
     const title = a.querySelector('[data-slot="row-title"]') as HTMLElement;
     expect(handle.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("Detailed's ID header sorts by the number and says which way (MOD-144)", () => {
+    const onSort = rs.fn();
+    const numbered = [task("a", { number: 10 }), task("b", { number: 2 })];
+    renderList(numbered, { rows: "detailed", taskKey: "MOD", onSort, order: "id" });
+    const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
+    const id = within(header).getByRole("button", { name: "ID, sorted ascending" });
+    fireEvent.click(id);
+    expect(onSort).toHaveBeenCalledWith("id");
+    // In number order: MOD-2 before MOD-10.
+    const titles = screen.getAllByRole("row").map((r) => r.getAttribute("data-task-id"));
+    expect(titles.filter(Boolean)).toEqual(["b", "a"]);
   });
 
   it("Detailed has sortable column headers on the rows' widths", () => {
@@ -308,6 +386,157 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(title.className).toContain("flex-1");
     const columns = rowOf("Task a").querySelector('[data-slot="row-columns"]') as HTMLElement;
     expect(columns.className).toContain("shrink-0");
+  });
+});
+
+describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
+  const working = {
+    id: "s1",
+    workspaceId: "w",
+    taskId: "a",
+    userId: "someone",
+    agent: "Claude",
+    state: "needs_you",
+    note: null,
+    step: null,
+    steps: null,
+    links: [],
+    earlier: [],
+    summaryAt: null,
+    summaryPostedAt: null,
+    startedAt: OLD,
+    updatedAt: OLD,
+    stoppedAt: null,
+  };
+  const detailsOf = (row: HTMLElement) =>
+    row.querySelector('[data-slot="row-details"]') as HTMLElement | null;
+  const titleCell = (row: HTMLElement) =>
+    row.querySelector('[data-slot="row-title"]') as HTMLElement;
+
+  it("Standard: the agent's mark and the counts are one group at the title cell's end", () => {
+    renderList(
+      [task("a", { title: "Hero banner for the homepage" })],
+      { selection: "all", scopeTitle: "All" },
+      {
+        commentCounts: new Map([["a", 3]]),
+        attachmentCounts: new Map([["a", 2]]),
+        agentSessions: [working],
+      },
+    );
+    const row = rowOf("Hero banner for the homepage");
+    const details = detailsOf(row) as HTMLElement;
+    // The last thing in the title cell, pushed to its end, so it never moves
+    // with the title's length; the project's name stays with the title.
+    expect(titleCell(row).lastElementChild).toBe(details);
+    expect(details.className).toContain("ms-auto");
+    const project = row.querySelector(
+      '[data-slot="row-title"] button[aria-label^="Project"]',
+    ) as HTMLElement;
+    expect(
+      project.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // The agent first, then the counts (round-2b `.ind`).
+    const agent = details.querySelector('[data-slot="row-agent"]') as HTMLElement;
+    const counts = details.querySelector('[data-slot="row-details-counts"]') as HTMLElement;
+    expect(agent.compareDocumentPosition(counts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(counts.textContent).toContain("2 files");
+    expect(counts.textContent).toContain("3 comments");
+    // The agent's words give way first: it starts at nothing and grows to
+    // its words, never under its dot.
+    expect(agent.className).toContain("basis-0");
+    expect(agent.className).toContain("max-w-max");
+    expect(agent.className).toContain("min-w-3");
+    // Then the counts, whole and from their start: laid out from the end,
+    // each count an item of its own, in its own order (tags, files, comments).
+    expect(counts.className).toContain("flex-row-reverse");
+    expect(counts.className).toContain("flex-wrap");
+    expect(counts.className).toContain("overflow-hidden");
+    const spoken = [...counts.children].map((c) => c.querySelector(".sr-only")?.textContent);
+    expect(spoken).toEqual(["2 files", "3 comments"]);
+    // Nothing inside spills over the columns.
+    expect((details.lastElementChild as HTMLElement).className).toContain("overflow-x-clip");
+  });
+
+  it("the title gives way first, never below about ten characters", () => {
+    renderList([
+      task("a", { title: "Hero banner for the homepage" }),
+      task("b", { title: "Pay rent" }),
+    ]);
+    const long = rowOf("Hero banner for the homepage").querySelector(
+      "[data-row-title]",
+    ) as HTMLElement;
+    expect(long.className).toContain("min-w-[min(10ch,100%)]");
+    // From its floor it grows to its own width, never past its words.
+    expect(long.className).toContain("max-w-max");
+    expect(long.className).toContain("truncate");
+    // A short title keeps its whole width.
+    const short = rowOf("Pay rent").querySelector("[data-row-title]") as HTMLElement;
+    expect(short.className).toContain("shrink-0");
+    expect(short.className).not.toContain("min-w-[min(10ch,100%)]");
+    // The cell is a container, so the details can say less when it's narrow.
+    expect(titleCell(rowOf("Pay rent")).className).toContain("@container/title");
+  });
+
+  it("the agent's mark is a dot, its agent and what it does, shorter as the cell narrows", async () => {
+    renderList([task("a", { title: "Hero banner" })], {}, { agentSessions: [working] });
+    const agent = rowOf("Hero banner").querySelector('[data-slot="row-agent"]') as HTMLElement;
+    // Needs you reads in the text colour (round-1c `.agent.needs`).
+    expect(agent.dataset.tone).toBe("loud");
+    expect(agent.className).toContain("text-foreground");
+    expect(agent.querySelector("span[aria-hidden]")?.className).toContain("rounded-full");
+    expect(agent.textContent).toBe("A teammate's Claude · needs you");
+    // Under 16rem the state goes, under 12rem the agent too: still read aloud.
+    const words = agent.lastElementChild as HTMLElement;
+    expect(words.className).toContain("@max-[12rem]/title:sr-only");
+    expect((words.lastElementChild as HTMLElement).className).toContain("@max-3xs/title:sr-only");
+    fireEvent.pointerMove(agent, { pointerType: "mouse" });
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "A teammate's Claude · needs you",
+    );
+  });
+
+  it("an agent's dot always keeps its room beside the title's floor (MOD-125)", () => {
+    renderList(
+      [task("a", { title: "Hero banner for the homepage" })],
+      {},
+      { agentSessions: [working] },
+    );
+    const row = rowOf("Hero banner for the homepage");
+    const title = row.querySelector("[data-row-title]") as HTMLElement;
+    // The floor leaves the dot and its gap (12 + 10 px) when the cell is tiny.
+    expect(title.className).toContain("min-w-[min(10ch,calc(100%-1.375rem))]");
+    expect((detailsOf(row) as HTMLElement).className).toContain("min-w-3");
+  });
+
+  it("Detailed keeps them right after the title", () => {
+    renderList(
+      [task("a", { title: "Hero banner" })],
+      { rows: "detailed" },
+      { commentCounts: new Map([["a", 3]]) },
+    );
+    const row = rowOf("Hero banner");
+    const details = detailsOf(row) as HTMLElement;
+    expect(details.className).not.toContain("ms-auto");
+    const title = row.querySelector("[data-row-title]") as HTMLElement;
+    expect(title.nextElementSibling).toBe(details);
+    // Whole counts here too, but what's left sits right after the title.
+    const counts = details.querySelector('[data-slot="row-details-counts"]') as HTMLElement;
+    expect(counts.className).toContain("flex-row-reverse");
+    expect(counts.className).toContain("justify-end");
+  });
+
+  it("a late row's fixes sit beside the details, never over them", () => {
+    renderList(
+      [task("a", { title: "Hero banner", dueOn: "2020-01-01", dueDate: "2020-01-01T00:00:00Z" })],
+      {},
+      { commentCounts: new Map([["a", 3]]), setTaskStatus: rs.fn() },
+    );
+    const details = detailsOf(rowOf("Hero banner")) as HTMLElement;
+    const fixes = details.querySelector('[data-slot="row-late-fixes"]')?.parentElement
+      ?.parentElement as HTMLElement;
+    // Anchored to the group's start, outside its clipped box.
+    expect(fixes.className).toContain("end-full");
+    expect(fixes.parentElement).toBe(details);
   });
 });
 
@@ -422,8 +651,12 @@ describe("useJustCompleted", () => {
 });
 
 describe("Board (U1-4)", () => {
-  function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
-    const api = viewApi(tasks);
+  function renderBoard(
+    tasks: Task[],
+    extra: Record<string, unknown> = {},
+    apiExtra: Record<string, unknown> = {},
+  ) {
+    const api = viewApi(tasks, apiExtra);
     render(
       <TooltipProvider>
         <TaskBoardView
@@ -448,12 +681,23 @@ describe("Board (U1-4)", () => {
   }
   const card = (title: string) => screen.getByText(title).closest("[data-task-id]") as HTMLElement;
 
-  it("cards keep one fixed width per density, and so do their columns (default o, TV-U11)", () => {
+  it("columns keep one fixed width per density, and their cards fill them (default o, TV-U11)", () => {
     renderBoard([task("a")]);
     const column = card("Task a").closest("section") as HTMLElement;
     expect(column.className).toContain("w-(--board-col-w)");
     expect(column.className).toContain("shrink-0");
-    expect(card("Task a").className).toContain("w-(--board-card-w)");
+    // A card as wide as the column overflowed it by the scrollbar's width
+    // once the column scrolled, so the column scrolled sideways (MOD-143).
+    expect(card("Task a").className).toContain("w-full");
+    expect(card("Task a").className).not.toContain("w-(--board-card-w)");
+    const scroller = column.children[1] as HTMLElement;
+    expect(scroller.className).toContain("overflow-x-hidden");
+    expect(scroller.className).toContain("overflow-y-auto");
+  });
+
+  it("a long title wraps to three lines at most (MOD-143)", () => {
+    renderBoard([task("a")]);
+    expect(screen.getByText("Task a").className).toContain("line-clamp-3");
   });
 
   it("a card has one quiet meta line, and selection is the tint", () => {
@@ -471,6 +715,47 @@ describe("Board (U1-4)", () => {
     expect(meta).not.toBeNull();
     expect(meta.contains(screen.getByLabelText("High priority"))).toBe(true);
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);
+  });
+
+  it("Standard cards count tags with the tag icon, as rows do (MOD-97)", () => {
+    const tags = [
+      { id: "t1", name: "ui", color: "blue" },
+      { id: "t2", name: "notes", color: "green" },
+    ];
+    renderBoard([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
+    const spoken = within(card("Task a")).getByText("2 tags: ui, notes");
+    expect(spoken.parentElement?.querySelector("svg")?.getAttribute("class")).toContain(
+      "lucide-tag",
+    );
+    expect(card("Task a").querySelector('[data-slot="tag-chip"]')).toBeNull();
+    expect(card("Task a").textContent).not.toContain("#");
+  });
+
+  it("Detailed cards show three tags as dot chips on the second line, layout-neutral (MOD-97)", async () => {
+    const tags = ["ui", "notes", "bug", "copy"].map((name, i) => ({
+      id: `t${i}`,
+      name,
+      color: "violet",
+    }));
+    renderBoard([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    const chips = [...card("Task a").querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
+    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes", "bug"]);
+    const more = card("Task a").querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
+    expect(more.textContent).toBe("+1");
+    act(() => more.focus());
+    expect((await screen.findByRole("tooltip")).textContent).toBe("copy");
+    // 18 px chips in a 16 px text line: the list takes -1 px top and bottom,
+    // so the card keeps its height.
+    const list = chips[0]?.closest('[data-slot="tag-chip-list"]') as HTMLElement;
+    expect(list.className).toContain("-my-px");
+    expect(list.closest('[data-slot="item-card-meta"]')).not.toBeNull();
+    // One line, never wrapping: long names shorten instead (full name on hover).
+    expect(list.className).not.toContain("flex-wrap");
+    for (const chip of chips) expect(chip.className).toContain("max-w-24");
+    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+      chips[0] as HTMLElement,
+    );
+    expect(card("Task a").textContent).not.toContain("#");
   });
 
   it("done cards fade, and completed cards hide behind each column's line", () => {

@@ -1,50 +1,54 @@
-// CV-19 · ⌘K's Chat half: a failed conversation search says "Search isn't
-// available", never "No results."; a direct message is named by its people, a
-// note-to-self by your name (or "You"), as the sidebar names them.
+// MOD-144 — the ⌘K palette finds a task by its ID ("MOD-99", "mod-99",
+// "mod 99") from the workspace's Tasks copy, first and before the registry
+// answers, and every task result says its ID.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
-import type { ChatConversationFound } from "../../features/chat/model";
-
-// Stable objects, as the real providers give: a new runtime each render would
-// re-run every search effect.
-const h = rs.hoisted(() => {
-  const h = {
-    messages: { data: [] as unknown[], error: null as unknown },
-    conversations: { data: [] as unknown[], error: null as unknown },
-    auth: null as unknown,
-    workspace: {
-      selectedWorkspaceId: "w1",
-      modulePermissions: { chat: "edit", tasks: "edit", notes: "edit", contacts: "edit" },
-      members: [
-        { userId: "me", displayName: "Maja Nowak" },
-        { userId: "u2", displayName: "Bożena Wróbel" },
-        { userId: "u3", displayName: "Cezary Kot" },
-      ],
+const h = rs.hoisted(() => ({
+  perms: {
+    notes: "edit",
+    tasks: "edit",
+    calendar: "edit",
+    contacts: "edit",
+    chat: "edit",
+  } as Record<string, string>,
+  search: [] as Array<Record<string, unknown>>,
+  tasks: [] as Array<Record<string, unknown>>,
+  // One runtime object, as the real provider keeps (a new one each render
+  // would restart the palette's search effect forever).
+  runtime: {
+    spine: { searchEntities: async () => [] as unknown[] },
+    // Chat's half of ⌘K (CV-19) answers with nothing here.
+    chat: {
+      search: async () => ({ data: [], error: null }),
+      findConversations: async () => ({ data: [], error: null }),
     },
-  };
-  h.auth = {
-    userId: "me",
-    runtime: {
-      chat: {
-        search: async () => h.messages,
-        findConversations: async () => h.conversations,
-      },
-      spine: { searchEntities: async () => [] },
-    },
-  };
-  return h;
-});
+  },
+}));
+h.runtime.spine.searchEntities = async () => h.search;
 
 rs.mock("@tanstack/react-router", () => ({ useNavigate: () => () => {} }));
-rs.mock("../../providers/auth-provider", () => ({ useAuth: () => h.auth }));
-rs.mock("../../providers/workspace-provider", () => ({ useWorkspace: () => h.workspace }));
+rs.mock("../../providers/workspace-provider", () => ({
+  useWorkspace: () => ({
+    selectedWorkspaceId: "w1",
+    selectedWorkspace: { id: "w1", taskKey: "MOD" },
+    modulePermissions: h.perms,
+    members: [],
+  }),
+}));
+rs.mock("../../providers/auth-provider", () => ({
+  useAuth: () => ({ runtime: h.runtime, userId: "me" }),
+}));
+rs.mock("../../lib/sync/store", () => ({
+  findWorkspaceStore: () => ({
+    getSnapshot: () => ({
+      bundle: { tasks: h.tasks, archivedTasks: [], archivedBuckets: [] },
+      attachmentCounts: new Map(),
+    }),
+  }),
+}));
 
-import {
-  dispatchOpenPalette,
-  foundConversationName,
-  GlobalCommandPalette,
-} from "./global-command-palette";
+import { dispatchOpenPalette, GlobalCommandPalette } from "./global-command-palette";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -56,64 +60,64 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  h.messages = { data: [], error: null };
-  h.conversations = { data: [], error: null };
+  h.perms = { notes: "edit", tasks: "edit", calendar: "edit", contacts: "edit", chat: "edit" };
+  h.search = [];
+  h.tasks = [
+    { id: "t99", number: 99, title: "Fix the login" },
+    { id: "t990", number: 990, title: "Write the changelog" },
+  ];
 });
 afterEach(cleanup);
 
-async function typeInPalette(words: string) {
-  render(<GlobalCommandPalette />);
-  act(() => dispatchOpenPalette());
-  const input = await screen.findByPlaceholderText(/Search messages/);
-  fireEvent.change(input, { target: { value: words } });
+function record(id: string, label: string) {
+  return { workspaceId: "w1", type: "task", id, label, icon: null, deletedAt: null };
 }
 
-const dm = (people: string[]): ChatConversationFound => ({
-  channelId: `dm-${people.join("-") || "self"}`,
-  kind: "dm",
-  name: null,
-  people,
-  archived: false,
-});
+function openAndType(query: string) {
+  render(<GlobalCommandPalette />);
+  act(() => dispatchOpenPalette());
+  const input = screen.getByPlaceholderText(/tasks, notes, contacts/);
+  fireEvent.change(input, { target: { value: query } });
+}
 
-describe("⌘K's Chat half (CV-19)", () => {
-  it("a failed conversation search says Search isn't available, never No results.", async () => {
-    h.conversations = { data: [], error: { message: "timeout" } };
-    await typeInPalette("qqzzx");
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toBe("Search isn't available"),
-    );
-    expect(screen.queryByText("No results.")).toBeNull();
+const optionNames = () => screen.queryAllByRole("option").map((o) => o.textContent ?? "");
+
+describe("⌘K finds a task by its ID (MOD-144)", () => {
+  for (const query of ["MOD-99", "mod-99", "mod 99"]) {
+    it(`"${query}" lists that task first, with its ID, before the registry answers`, () => {
+      openAndType(query);
+      const first = screen
+        .getAllByRole("option")
+        .find((o) => o.textContent?.includes("Fix the login"));
+      expect(first).toBeDefined();
+      expect(within(first as HTMLElement).getByText("MOD-99")).toBeDefined();
+      // Not the task whose ID merely starts the same.
+      expect(optionNames().some((n) => n.includes("Write the changelog"))).toBe(false);
+    });
+  }
+
+  it("leads the registry's results and never lists the task twice", async () => {
+    h.search = [record("t990", "Write the changelog"), record("t99", "Fix the login")];
+    openAndType("MOD-99");
+    await screen.findByText("Write the changelog", undefined, { timeout: 2000 });
+    const tasks = optionNames().filter((n) => n.includes("Task"));
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0]).toContain("Fix the login");
+    expect(tasks[1]).toContain("MOD-990");
   });
 
-  it("with both halves answering and nothing found, nothing says it failed", async () => {
-    await typeInPalette("qqzzx");
-    await waitFor(() => expect(screen.getByText("See all in Chat")).toBeTruthy());
-    await act(async () => new Promise((r) => setTimeout(r, 250)));
-    expect(screen.queryByRole("alert")).toBeNull();
+  it("names every task result's ID, read from the Tasks copy", async () => {
+    h.search = [record("t990", "Write the changelog")];
+    openAndType("changelog");
+    const row = (
+      await screen.findByText("Write the changelog", undefined, { timeout: 2000 })
+    ).closest('[role="option"]') as HTMLElement;
+    expect(within(row).getByText("MOD-990").getAttribute("data-slot")).toBe("palette-task-id");
   });
 
-  it("names a direct message by its people and a note-to-self by your name", async () => {
-    h.conversations = { data: [dm(["u2", "u3"]), dm([])], error: null };
-    await typeInPalette("nowak");
-    await waitFor(() => expect(screen.getByText("Bożena Wróbel, Cezary Kot")).toBeTruthy());
-    expect(screen.getByText("Maja Nowak")).toBeTruthy();
-  });
-});
-
-describe("foundConversationName (CV-19)", () => {
-  const nameOf = (id: string) => ({ me: "Maja", u2: "Bożena" })[id];
-  it("follows the sidebar: people, someone gone, a note-to-self", () => {
-    expect(foundConversationName(dm(["u2"]), "me", nameOf)).toBe("Bożena");
-    expect(foundConversationName(dm(["u2", "gone"]), "me", nameOf)).toBe("Bożena, Former member");
-    expect(foundConversationName(dm([]), "me", nameOf)).toBe("Maja");
-    expect(foundConversationName(dm([]), "stranger", nameOf)).toBe("You");
-    expect(
-      foundConversationName(
-        { channelId: "c", kind: "channel", name: "plans", people: [], archived: false },
-        "me",
-        nameOf,
-      ),
-    ).toBe("plans");
+  it("finds nothing by ID without Tasks access", () => {
+    h.perms = { ...h.perms, tasks: "none" };
+    openAndType("mod 99");
+    expect(optionNames().some((n) => n.includes("Fix the login"))).toBe(false);
   });
 });

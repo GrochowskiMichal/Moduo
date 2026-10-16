@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { CircleDashed, Flag, Hash, Lock, Plus, UserRound } from "lucide-react";
+import { CircleDashed, Flag, Lock, Plus, Tag, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./button";
 import { FilterBar, FilterButton, FilterMenu } from "./filter-bar";
@@ -23,7 +23,7 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 function TagDot({ color }: { color: string }) {
-  return <span data-label={color} className="tag-dot size-2.5 rounded-full" aria-hidden />;
+  return <span data-label={color} className="tag-dot size-1.5 rounded-full" aria-hidden />;
 }
 
 /** A Tasks-shaped registry: the module maps its fields to dimensions. */
@@ -33,7 +33,8 @@ const DIMENSIONS: FilterDimension[] = [
     label: "Assignee",
     icon: UserRound,
     options: [
-      { value: "me", label: "Me" },
+      // You: "Alex Rivera (you)" in the picker, "You" on the chip (MOD-137).
+      { value: "me", label: "Alex Rivera (you)", chipLabel: "You", keywords: ["me"] },
       { value: "ola", label: "Ola", keywords: ["ola@moduo.app"] },
       { value: "mike", label: "Mike" },
       { value: "none", label: "Unassigned" },
@@ -42,7 +43,7 @@ const DIMENSIONS: FilterDimension[] = [
   {
     id: "tag",
     label: "Tag",
-    icon: Hash,
+    icon: Tag,
     options: [
       { value: "ui", label: "UI", leading: <TagDot color="blue" />, count: 12 },
       { value: "fix", label: "fix", leading: <TagDot color="red" />, count: 4 },

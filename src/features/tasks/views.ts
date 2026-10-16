@@ -9,7 +9,7 @@
 // In the sidebar a view is the selection `view:<id>`; Pinned holds it the
 // same way (`preferences.tasksSidebar.pinned[ws]`, beside project ids).
 
-import type { TaskViewScope } from "@contracts/vocabularies";
+import type { TasksRole, TaskViewScope } from "@contracts/vocabularies";
 import type { FilterCondition } from "../../components/ui/filter-model";
 import {
   displayOf,
@@ -19,7 +19,6 @@ import {
   tasksViewDefaults,
 } from "./display";
 import { NONE_VALUE, WAITING_ANY } from "./filters";
-import type { TasksRole } from "./onboarding";
 import type { RowPreset } from "./row-layout";
 import type { TaskView } from "./view-row";
 
@@ -62,7 +61,10 @@ export function viewScopeOf(
 /** A view's Filter and Display as the page uses them: read through the same
  *  sanitiser as a place's own, against its place's defaults (a choice that
  *  place doesn't offer falls back). */
-export function viewPrefsOf(view: TaskView, rows: RowPreset = "standard"): TasksViewPrefs {
+export function viewPrefsOf(
+  view: Pick<TaskView, "scope" | "projectId" | "filters" | "display">,
+  rows: RowPreset = "standard",
+): TasksViewPrefs {
   const place = viewPlace(view);
   const display = view.display && typeof view.display === "object" ? view.display : {};
   return sanitizeTasksView(
@@ -70,6 +72,15 @@ export function viewPrefsOf(view: TaskView, rows: RowPreset = "standard"): Tasks
     tasksViewDefaults(place, undefined, rows),
     place,
   );
+}
+
+/**
+ * A new view's starting Filter and Display (MOD-142, the Views header's +):
+ * a blank view over All, as a saved view with no choices reads, so nothing
+ * from All's own Filter comes along.
+ */
+export function newViewPrefs(rows: RowPreset = "standard"): TasksViewPrefs {
+  return viewPrefsOf({ scope: "all", projectId: null, filters: [], display: {} }, rows);
 }
 
 /** What a view stores for the page's Filter and Display. */

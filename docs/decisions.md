@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, each worktree on its own dev-server port (agent's choice).
 - 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED).
@@ -156,6 +157,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-15 · Connector gaps (MOD-92…113, agent's choices): `tasks_list` answers a short row by default (`fields: "full"` for the old shape), agents read comments with Links: View (`comments_list`), a task handle works in the link tools, connector-made tags get the app's colour, and a tool's listing and parser can't drift apart.
 - 2026-10-09 · API keys can expire (optional, 90 days by default in the picker) and Settings flags expired and unused keys; no per-key rate limit.
 - 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
 - 2026-10-08 · A key's tool list is honest per module: tools that also touch another module need it too, and None means none across modules.
@@ -189,6 +191,10 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
+- 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
+- 2026-10-16 · NR-7: clients send nothing over Realtime; the server stamps who is viewing (`notes_live_here`) and hands each saved update to people who may still view the note (`notes-live:<uid>` topics).
+- 2026-10-14 · NR-6 built — agent (MCP) note writes are real Yjs updates: they land live, are attributed, and can be undone.
 - 2026-10-13 · NR-3 built — one markdown converter reads the CRDT back through the real binding, node schemas load without React, and an open note paints from its cache.
 - 2026-10-13 · NR-2 built — New Notes ships behind a synced per-user switch, and a new note is a device-only draft until its first character.
 - 2026-10-13 · NR-1 built — the Inbox is stored, favorites are per user, and filing a sub-note never hides it.
@@ -270,6 +276,27 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-16 · The app calls the reader "you", app-wide (Maciej, dogfood call #27, MOD-137): a value reads "You", a people list "Maciej Grzywacz (you)", a sentence "you"; "my" labels say "your" and "Remind me" loses the pronoun; "My tasks" and typed `@me` stay; capture followed on 2026-10-16 ("Reminder at…"); rejected: "Me" everywhere → decisions/tasks.md call #27
+- 2026-10-15 · ⏎ in quick capture's description creates the task, ⇧⏎ starts a new line (Maciej, 2026-10-15, dogfood call #14, MOD-117) · open `@ # /` menus keep ⏎ for their pick; the panel and full page keep ⏎ = new line · ⏎ there did nothing · rejected: ⏎ = new line in capture → decisions/tasks.md call 14
+- 2026-10-15 · One description editor everywhere, stored as Markdown (Maciej, 2026-10-15, dogfood call #15, MOD-98/120) · capture, panel, full page and Focus share the Lexical editor with `@ # /`; Markdown renders as you type; references are `[task](moduo://task/<id>)` (+ `"card"`/`"link"`), dates `[Oct 17](moduo://date/…)`; old HTML read as Markdown everywhere and saved as Markdown on its next edit · raw markup reached agents and capture had no menus · rejected: a bulk migration, HTML storage → decisions/tasks.md call 15
+- 2026-10-15 · Tasks in the one panel frame (Maciej, 2026-10-15, dogfood call #28, MOD-121) · "Details ▾" is a row tall, its fill where the Inbox row's is, its text on the details' column; the List's focus on load no longer rings the list (agent's fix) · the chip crossed the panel's border at Dense · rejected: a control-height chip, not focusing on load → decisions/tasks.md call 28
+- 2026-10-15 · A + on the Views header opens a new blank view over All, "Untitled view" until it's named on Save; while your view has unsaved changes the toolbar shows a clear Save (▾: Save as new view…, Revert changes) instead of the 12px line (Maciej, dogfood call #19, MOD-142; agent's layout, revisitable) → decisions/tasks.md
+- 2026-10-15 · Filter gets Project wherever more than one project shows (All, My tasks, Upcoming, Won't do, views over them), never inside one; "Inbox" is each reader's own; views save it (server keeps only projects the saver sees; migration 20261015215031, live on prod 2026-10-15) (Maciej, dogfood call #20, MOD-141) → decisions/tasks.md
+- 2026-10-15 · Each person keeps their own order of projects in the sidebar, synced in their preferences; a drag never moves anyone else's, a drop into another area still files it for everyone (edit only); sections and areas keep one shared order (Maciej, dogfood call #21, MOD-38) → decisions/tasks.md
+- 2026-10-15 · Archived and Recently deleted are two quiet items side by side at the bottom of the sidebar, icons alone when it's narrow, out of the ⋯ (Maciej, dogfood call #18, MOD-140; supersedes 98); built once as the shared `SidebarFooter` → decisions/tasks.md
+- 2026-10-15 · A task's link and the address bar name it by its handle, `/tasks?id=MOD-142` (Maciej, dogfood call #24, MOD-28): Copy link everywhere and the selection mirror write the handle (the id while a task has none); old id links still open; server-written notice URLs stay ids (rejected: a migration for them) → decisions/tasks.md call #24
+- 2026-10-15 · "This week / this month / today" for completions and tracked time follow the saved time zone and turn over at its midnight (Maciej, dogfood call #29, MOD-110): Done this month, the time report's periods, Home's time widget; due dates and the filters stay the device's (D14-2, agent's line) → decisions/tasks.md call #29
+- 2026-10-15 · An image already small is its own preview, stored once (Maciej, dogfood call #26, MOD-132): a still JPEG/PNG/WebP ≤ 1280 px and ≤ 100 KB gets no preview and tiles show the original (signed 1 h); every other image keeps its preview (rejected: no previews at all) → decisions/tasks.md call #26
+- 2026-10-15 · Display → Columns for the Detailed list (Maciej, dogfood call #5, MOD-128/136): ID, Project, Status, Time, Waiting on, Updated switch per view; Project off inside a project (and the Inbox), Updated off everywhere; stored in the view prefs and saved views; rejected: hiding Project with no switch → decisions/tasks.md
+- 2026-10-15 · A Standard row's agent mark and counts sit at its end and the title keeps about ten characters (Maciej, dogfood call #6, MOD-138/125): narrow rows say less (dot, then counts whole, tags first), Detailed keeps them after the title; rejected: the drawn place right after the title → decisions/tasks.md
+- 2026-10-15 · IDs sort in number order and find a task in ⌘K (Maciej, dogfood call #7, MOD-144): Order by ID and Detailed's ID header; "MOD-99", "mod-99", "mod 99" lead ⌘K and every task result shows its ID; rejected: text order and a second handle parser → decisions/tasks.md
+- 2026-10-15 · The activity reads like a thread (Maciej, 2026-10-15, dogfood call #9, MOD-129) · no "Created by · Updated" line, oldest first, the panel's comment box pinned under its body (ending the activity on the full page), the latest five changes shown after the last comment · the footer repeated the log and the box drifted out of reach · rejected: newest first with the box on top → decisions/tasks.md call 9
+- 2026-10-15 · A long description folds at about eight lines (Maciej, 2026-10-15, dogfood call #10, MOD-36) · in the panel `8.5lh` then "Show more" / "Show less", the full page always whole, never for short or empty text · it pushed the properties and activity far down · rejected: a fixed 192 px → decisions/tasks.md call 10
+- 2026-10-15 · "Recently", not "Lately", in the project overview (Maciej, 2026-10-15, dogfood call #11, MOD-139) · the plainer word · rejected: "Lately" → decisions/tasks.md call 11
+- 2026-10-15 · Every List group folded shows the project in the panel; a closed Backlog line stays closed (Maciej, 2026-10-15, dogfood call #12, MOD-123/124) · the selection stays, the page's backstop picks only rows the List shows, a line you closed on the selection stays closed for it · a hidden task in the panel was odd, and the backstop reopened lines · rejected: clearing the selection (MOD-122's loop) → decisions/tasks.md call 12
+- 2026-10-15 · A multi-selection's panel title reads "4 tasks ▾" (Maciej, 2026-10-15, dogfood call #13, MOD-109) · the ▾ still switches views, the bulk panel's own heading goes, a `RightPanel` `title` any module can set · "Details ▾" over "4 tasks" said it twice · rejected: a title in the panel registry → decisions/tasks.md call 13
+- 2026-10-15 · An unset priority in the details draws the faint bars (MOD-134 follow-up, 2026-10-15) · as capture's pill, the menu's None too · one priority, one look · rejected: the flag → decisions/tasks.md MOD-134 follow-up
+- 2026-10-14 · People show their profile photo (Maciej, dogfood MOD-96): the photo when set, the two initials on their stable colour as the fallback (no photo, loading, failed); supersedes call 43's initials only; the capture's pills and tokens and the `@` menus now get the photo too → decisions/tasks.md MOD-96
 - 2026-10-14 · The task's actions sit in the panel's title row, right of "Details ▾" (Maciej, dogfood MOD-118 follow-up): the breadcrumb line holds only the crumbs and the handle; the full page's header holds them after ↑ ↓; ▶ Focus on this moves into ⋯ (⇧F), the Focus toggle stays an icon (agent's choice); any panel view can use the slot (`TitleActions`).
 - 2026-10-14 · Task details match the approved prototypes (Maciej, dogfood MOD-116/114/118/115/119/95): the description and its files sit above the properties (supersedes U13-5's order); the breadcrumb and the "+" property line stay on one line and shorten ("+n"), every other panel value still wraps (AC1.16 amended); no files, no strip (Attach files… in ⋯); the agent line never widens its column; a project's title opens its overview, with a ⋯, and keeps its room in a narrow toolbar.
 - 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 (agent's choices): Home's Upcoming fills its cell and its "+n more" opens Upcoming (`?place=upcoming`); Timeline hover labels shut during a drag, a zoom holds Today, a month's name never shows as a fragment, a mixed move names the tasks it skipped; plain-text Markdown bullets read as "•" lines; the `@ # /` menu keeps inside its dialog; an unsaved task reads nothing by its temporary id; small ones (client row, Storage's task link, the Board's "+n", Move's toast after the moves, teaching tasks only in a new workspace, numbered Trello members, no stray entry script) → decisions/tasks.md PL2-1…PL2-9
@@ -351,6 +378,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-16 · The panel frame, corrected after dogfooding (Maciej, 2026-10-16; the scroller fix is the agent's) · the "Details ▾" chip is `--row-h-sm` (28 / 26 / 24) beside 26 / 24 / 22 buttons, as round-2b frame 7 draws it; a side panel's `.pane-scroll` reserves no gutter, so fills sit 9 / 9 px from both edges with classic bars · a full-row chip dwarfed its buttons; the reserved strip made the left panel's right inset 20 against 9 · rejected: a control-height chip, a both-edges gutter → decisions/design-system.md
+- 2026-10-15 · One panel frame, fixed across densities (Maciej, 2026-10-15, dogfood call #28, MOD-121) · `--panel-pad` 8 to a fill at a panel's edge, `--panel-inset` 16 to the text column, the centre's top derived so its title line centres on the side panels' first row; the right panel's title row and chip are a row tall; bottom bar 16, top bar 20; panels stay `rounded-xl` (R2 amended) · the inset scaled with density while the radii didn't, so fills drifted off the corner and the chip crossed the border · rejected: a 12 px corner, density-scaled padding → decisions/design-system.md
+- 2026-10-15 · Tags are dot chips (MOD-97, option C): a neutral pill, a 6 px dot in the tag's hue, the name, no "#"; Standard rows and cards count tags with a tag icon + number, Detailed rows and cards show the chips.
 - 2026-10-10 · The running Focus timer (now with pause) and a Help menu sit in the top bar; the bottom bar's centre is Search · Quick capture · New.
 - 2026-10-08 · DS-3 landed: NavRow (count ⇄ ⋯ in one slot, one menu for ⋯ and right-click) and MetaCount; the Tasks rail runs on NavRow and hands focus back to itself when a row dialog closes.
 - 2026-10-08 · DS-4 landed: FilterBar, DisplayMenu, the drag visuals and the view-prefs helper are generic primitives; Tasks adopts them in TV-U2/TV-U4.
@@ -377,6 +407,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-15 · TX-7: workspace emails are queued by the database, the inviter is whoever is signed in, and the daily cap counts queued emails
+- 2026-10-14 · TX-6: reminders and the host's cancel are queued by Postgres triggers from an email context saved on the booking
 - 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
 - 2026-10-10 · TX-4: invite-only is a before-user-created hook over three allow sources, a waitlist invite is one queued B1, and a build-updates request outlives the waitlist row
 - 2026-10-09 · TX-3: the outbox queues, retries and suppresses, and the worker's secret lives only in Vault

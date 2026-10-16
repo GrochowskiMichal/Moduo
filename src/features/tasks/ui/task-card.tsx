@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CornerDownRight } from "lucide-react";
 import { memo, useCallback } from "react";
+import { TagChipList } from "../../../components/tag-chip";
 import { TeamMark } from "../../../components/ui/avatar";
 import { DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { ItemCard, ItemCardMeta, ItemCardTitle } from "../../../components/ui/item-card";
@@ -171,8 +172,11 @@ function TaskCardView({
         if (canEdit) onStartEdit(task.id);
       }}
       className={cn(
-        // `group` too: the Focus mark reveals on the card's hover (R6).
-        "group w-(--board-card-w) select-none",
+        // `group` too: the Focus mark reveals on the card's hover (R6). It
+        // fills its column, whose width is the fixed one: a card of the
+        // column's width overflowed it by the scrollbar's once the column
+        // scrolled, and the column scrolled sideways (MOD-143).
+        "group w-full select-none",
         canEdit && !editing && "cursor-grab active:cursor-grabbing",
         dropTarget && DROP_TARGET,
       )}
@@ -326,7 +330,13 @@ export function CardBody({
             onCancel={onEndEdit}
           />
         ) : (
-          <span className={cn("font-sans", closed && "line-through decoration-subtle-foreground")}>
+          // A long title wraps to three lines at most (MOD-143).
+          <span
+            className={cn(
+              "line-clamp-3 font-sans",
+              closed && "line-through decoration-subtle-foreground",
+            )}
+          >
             {task.title || "Untitled"}
           </span>
         )}
@@ -446,12 +456,9 @@ export function CardBody({
       {second ? (
         <ItemCardMeta>
           {tagNames ? (
-            <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
-              {facts.tags.slice(0, 3).map((t) => (
-                <span key={t.id}>#{t.name}</span>
-              ))}
-              {facts.tags.length > 3 ? <span>+{facts.tags.length - 3}</span> : null}
-            </span>
+            // Dot chips (MOD-97). The 18 px chips sit in a 16 px text line, so
+            // -my-px keeps the line, and the card, at its height.
+            <TagChipList tags={facts.tags} max={3} className="-my-px" />
           ) : null}
           {time ? <span className="shrink-0 whitespace-nowrap">{time}</span> : null}
           {facts.waiting ? (

@@ -149,8 +149,16 @@ type Props = {
    */
   multiSelect?: MultiSelect;
   /** Filled with the task ids in the order drawn (folded groups left out): the
-   *  page's Inbox cursor and a selection's order read it (TV-U12). */
+   *  page's Inbox cursor, a selection's order and the page's backstop read it
+   *  (TV-U12, MOD-124). */
   orderRef?: { current: readonly string[] };
+  /**
+   * Told when the List goes from showing rows to showing none while it has
+   * tasks (every group that holds them folded) and back, and `false` when it
+   * goes away: the page's panel then shows what it shows with nothing
+   * selected, not a task you can't see (MOD-123).
+   */
+  onShowsNothing?: (nothing: boolean) => void;
   /** The toolbar's search, Filter, Display and count (built by the page). */
   header?: PlanHeaderControls;
   /** A filter is narrowing the scope: an empty result reads "No tasks match". */
@@ -164,6 +172,9 @@ type Props = {
   properties?: readonly string[];
   /** Display → Rows: Standard · Detailed. */
   rows?: RowPreset;
+  /** Display → Columns: Detailed's own columns that are on (MOD-128,
+   *  MOD-136). Every one when absent. */
+  detailedColumns?: readonly string[];
   /**
    * Display → Order by, inside each group. The Queue keeps its line-up. Only
    * Manual takes a drag reorder; a sorted list shows a quiet note instead of
@@ -252,6 +263,8 @@ const NO_TEAMS: readonly Team[] = [];
 const NO_STATUS_NAMES: ReadonlyMap<string, ProjectStatus> = new Map<string, ProjectStatus>();
 const NO_EXTRA_GROUPS: readonly ListExtraGroup[] = [];
 const NO_ADD: GroupAddState = { kind: "none" };
+/** Keys that only hold a modifier down: not keyboard use on their own (MOD-121). */
+const MODIFIER_KEYS: ReadonlySet<string> = new Set(["Meta", "Control", "Alt", "Shift"]);
 
 /**
  * One line of the List as drawn (TV-D11b): the groups flattened, so the
@@ -316,6 +329,7 @@ export function TaskListView({
   onSelectTask,
   multiSelect,
   orderRef,
+  onShowsNothing,
   header,
   filterActive = false,
   onClearFilters,
@@ -323,6 +337,7 @@ export function TaskListView({
   completed = "hidden",
   properties = DEFAULT_ROW_PROPERTIES,
   rows: rowPreset = "standard",
+  detailedColumns,
   order = "manual",
   orderDir = "asc",
   onSort,
@@ -419,6 +434,10 @@ export function TaskListView({
   // folded Backlog was opened; both reset when the scope or grouping changes.
   const [revealedGroups, setRevealedGroups] = useState<ReadonlySet<string>>(NO_IDS);
   const [openBacklogs, setOpenBacklogs] = useState<ReadonlySet<string>>(NO_IDS);
+  // The Backlog line you closed on the selection, with nowhere else to move
+  // it: that line doesn't open again for it until the selection moves or you
+  // open it yourself (MOD-124).
+  const closedOnRef = useRef<{ key: string; id: string } | null>(null);
 
   // Completed tasks Display hides drop out of each group, behind its
   // "N completed · show" line (tasks-v2 §6), and Backlog tasks behind
@@ -572,26 +591,12 @@ export function TaskListView({
     setExpandedParents(new Set());
     setRevealedGroups(NO_IDS);
     setOpenBacklogs(NO_IDS);
+    closedOnRef.current = null;
   }, [viewSignature]);
 
   const toggleRevealGroup = useCallback((key: string) => {
     setRevealedGroups((prev) => toggled(prev, key));
   }, []);
-  const toggleBacklog = useCallback(
-    (key: string) => {
-      // Closing a line that holds the selection: the selection steps up to the
-      // row above the line (else the list's first), or the line would open
-      // straight back for it.
-      const group = openBacklogs.has(key) ? groups.find((g) => g.key === key) : undefined;
-      if (group && selectedId) {
-        const parentId = taskById.get(selectedId)?.parentId ?? null;
-        const holds = group.backlog.some((t) => t.id === selectedId || t.id === parentId);
-        if (holds) setSelectedId(group.tasks[group.tasks.length - 1]?.id ?? null);
-      }
-      setOpenBacklogs((prev) => toggled(prev, key));
-    },
-    [openBacklogs, groups, selectedId, taskById, setSelectedId],
-  );
 
   // ── the facts rows show (row-facts.ts, TV-D11b) ─────────────────────────────
   const sectionNames = useMemo(
@@ -599,8 +604,9 @@ export function TaskListView({
     [api.sections],
   );
   // Ages ("5m", "3h") move on by the minute where they show: Detailed's
-  // Updated and the waiting lines.
-  const ageTick = useMinuteTick(detailed || (api.waiting?.length ?? 0) > 0);
+  // Updated (while Display → Columns has it on, MOD-136) and the waiting lines.
+  const showsUpdated = detailed && (detailedColumns?.includes("updated") ?? true);
+  const ageTick = useMinuteTick(showsUpdated || (api.waiting?.length ?? 0) > 0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: ageTick re-reads the ages each minute.
   const waitingLabels = useMemo(
     () =>
@@ -702,6 +708,7 @@ export function TaskListView({
       rowColumns(listedRows, {
         properties,
         rows: rowPreset,
+        detailedColumns,
         showAssignee: showAssignee && assignees.length > 1,
         canEdit,
         isQueued: (id) => api.queuedTaskIds.has(id),
@@ -715,6 +722,7 @@ export function TaskListView({
       listedRows,
       properties,
       rowPreset,
+      detailedColumns,
       showAssignee,
       assignees.length,
       canEdit,
@@ -864,6 +872,37 @@ export function TaskListView({
     return out;
   }, [groups, collapsed, rowsOf, expandedParents, nest, api.subtasksByParent]);
 
+  const toggleBacklog = useCallback(
+    (key: string) => {
+      // Closing a line that holds the selection: the selection steps up to the
+      // row above the line, else to the first row still shown outside it; with
+      // none, it stays where it is (MOD-124). Never nothing: the page's
+      // backstop would pick again, and its pick could be in this very line.
+      const group = openBacklogs.has(key) ? groups.find((g) => g.key === key) : undefined;
+      if (group && selectedId) {
+        const parentId = taskById.get(selectedId)?.parentId ?? null;
+        const holds = group.backlog.some((t) => t.id === selectedId || t.id === parentId);
+        if (holds) {
+          const closing = new Set(group.backlog.map((t) => t.id));
+          const next =
+            group.tasks[group.tasks.length - 1] ??
+            visibleTasks.find((t) => !closing.has(t.id) && !closing.has(t.parentId ?? ""));
+          if (next) setSelectedId(next.id);
+          else {
+            // It stays, inside the line you closed: the line mustn't open for it.
+            closedOnRef.current = { key, id: selectedId };
+            setOpenBacklogs((prev) => toggled(prev, key));
+            return;
+          }
+        }
+      }
+      // Opening that same line again is yours to do; another line leaves it shut.
+      if (closedOnRef.current?.key === key) closedOnRef.current = null;
+      setOpenBacklogs((prev) => toggled(prev, key));
+    },
+    [openBacklogs, groups, selectedId, taskById, visibleTasks, setSelectedId],
+  );
+
   // Keep the selection valid as tasks change. A selected subtask under a
   // visible-but-collapsed parent isn't stolen — its parent expands into view
   // instead (the detail panel's subtask list navigates selection this way).
@@ -881,6 +920,10 @@ export function TaskListView({
         ? revealRequest
         : null;
     if (reveal) consumedRevealSeqRef.current = reveal.seq;
+    // The line you closed on the selection stays closed for it, until the
+    // selection moves (MOD-124).
+    const closedOn = closedOnRef.current?.id === selectedId ? closedOnRef.current : null;
+    if (!closedOn) closedOnRef.current = null;
     if (selectedId && visibleTasks.some((t) => t.id === selectedId)) return;
     if (selectedId) {
       const parentId = taskById.get(selectedId)?.parentId;
@@ -898,9 +941,14 @@ export function TaskListView({
           return;
         }
       }
-      // A selected task in a folded Backlog line: the line opens for it.
+      // A selected task in a folded Backlog line (a search, a link, its status
+      // set to Backlog): the line opens for it, unless you just closed it on it.
       const inBacklog = groups.find(
-        (g) => !collapsed.has(g.key) && !openBacklogs.has(g.key) && g.backlog.some(holds),
+        (g) =>
+          !collapsed.has(g.key) &&
+          !openBacklogs.has(g.key) &&
+          g.backlog.some(holds) &&
+          (reveal || closedOn?.key !== g.key),
       );
       if (inBacklog) {
         setOpenBacklogs((prev) => new Set(prev).add(inBacklog.key));
@@ -908,8 +956,9 @@ export function TaskListView({
       }
     }
     // Nothing to show (every group with tasks folded): the page's own choice
-    // stands. Its backstop picks the first task in scope, so clearing it here
-    // flipped the selection back and forth until React gave up (MOD-122).
+    // stands. Its backstop picked again whenever this cleared it, and the two
+    // flipped the selection back and forth until React gave up (MOD-122); the
+    // page's panel shows the project meanwhile (`onShowsNothing`, MOD-123).
     if (visibleTasks.length === 0) return;
     setSelectedId(visibleTasks[0].id);
   }, [
@@ -927,9 +976,16 @@ export function TaskListView({
 
   // Keyboard-first: focus the list once on mount so j/k work immediately —
   // unless focus is already somewhere intentional (an input, an open dialog).
+  // Quietly: a browser counts a script's focus on a fresh load as keyboard
+  // focus and would ring the whole list, so the ring waits for a key on the
+  // list or for focus to come back by keyboard (MOD-121; onKeyDown, onBlur).
   useEffect(() => {
     const active = document.activeElement;
-    if (!active || active === document.body) containerRef.current?.focus();
+    const list = containerRef.current;
+    if (!list || (active && active !== document.body)) return;
+    list.focus();
+    // Same task as the focus, so no frame paints the ring in between.
+    if (document.activeElement === list) list.dataset.quietFocus = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -954,6 +1010,25 @@ export function TaskListView({
     selectionRef.current = { multiSelect, visibleOrder };
     if (orderRef) orderRef.current = visibleOrder;
   });
+  // No row shown while there are tasks (every group that holds them folded):
+  // the page's panel shows the project, not a task you can't see (MOD-123).
+  // Said only when it changes, so the page draws once more only then, and
+  // taken back when the List goes away.
+  const showsNothing = api.loaded && tasks.length > 0 && visibleOrder.length === 0;
+  const saidNothingRef = useRef(false);
+  const onShowsNothingRef = useRef(onShowsNothing);
+  useLayoutEffect(() => {
+    onShowsNothingRef.current = onShowsNothing;
+    if (saidNothingRef.current === showsNothing) return;
+    saidNothingRef.current = showsNothing;
+    onShowsNothing?.(showsNothing);
+  });
+  useLayoutEffect(
+    () => () => {
+      if (saidNothingRef.current) onShowsNothingRef.current?.(false);
+    },
+    [],
+  );
   const onRowSelect = useCallback(
     (id: string, mods?: SelectMods) => {
       const { multiSelect: multi, visibleOrder: order } = selectionRef.current;
@@ -1121,6 +1196,10 @@ export function TaskListView({
 
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Any key but a lone modifier is keyboard use, the list's own ⌘A and
+      // ⌥⇧↑ included: the mount's quiet focus shows its ring from here on
+      // (MOD-121). A shortcut that leaves the list (⌘K) blurs it anyway.
+      if (!MODIFIER_KEYS.has(e.key)) delete e.currentTarget.dataset.quietFocus;
       // While inline-editing a title, the Input stops propagation. During a
       // keyboard reorder the dnd sensor owns the arrows — don't also move the cursor.
       if (editingId || reordering) return;
@@ -1812,6 +1891,7 @@ export function TaskListView({
                 }
               : null
           }
+          self={groupBy === "assignee" && !!currentUserId && group.key === currentUserId}
         />
       );
     }
@@ -1997,6 +2077,14 @@ export function TaskListView({
               ref={containerRef}
               tabIndex={0}
               onKeyDown={onKeyDown}
+              // Once the mount's quiet focus leaves for somewhere else on the page,
+              // a later focus rings as usual. The window losing focus (another app)
+              // isn't a move: coming back restores the same quiet focus.
+              onBlur={(e) => {
+                if (e.target === e.currentTarget && document.hasFocus()) {
+                  delete e.currentTarget.dataset.quietFocus;
+                }
+              }}
               {...fileDrop.handlers}
               // Chromium focuses a clicked button; after a mouse click on a row's
               // button, hand focus back to the list (as desktop WebKit does), so the
@@ -2012,7 +2100,7 @@ export function TaskListView({
               }}
               role="grid"
               aria-label={`${scopeTitle} tasks`}
-              className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring data-[quiet-focus]:focus-visible:ring-0"
             >
               {!api.loaded ? (
                 <TaskListSkeleton />

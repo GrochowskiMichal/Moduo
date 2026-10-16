@@ -6,10 +6,12 @@
 //   was open (93, linked by default).
 // - The title with live tokens (`@` people · teams · projects · things, `#`
 //   tags, `/` commands; date words marked), a description that grows to about
-//   six lines, subtasks typed inline, four pills and More.
+//   six lines (the one description editor, Markdown, call #15), subtasks
+//   typed inline, four pills and More.
 // - ⏎ creates, ⌘⏎ creates more (keeps the pills and the destination), ⇧⏎ goes
-//   to the description; Esc closes a menu, then undoes the last recognition,
-//   then closes and keeps the draft.
+//   to the description; in the description ⏎ creates too and ⇧⏎ starts a new
+//   line (MOD-117). Esc closes a menu, then undoes the last recognition, then
+//   closes and keeps the draft.
 // - A team needs a project its members can see (94): the team's default fills
 //   in, else Create waits for one. `@person` with no project keeps it unfiled
 //   and shows the empty project slot (20a).
@@ -32,7 +34,10 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
+import {
+  descriptionPlainText,
+  descriptionReferences,
+} from "../../../../supabase/functions/_shared/description-markdown";
 import { Button } from "../../../components/ui/button";
 import { Chip } from "../../../components/ui/chip";
 import {
@@ -44,7 +49,6 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
-import { Textarea } from "../../../components/ui/textarea";
 import { dispatchOpenCapture } from "../../../lib/capture-open";
 import type { CaptureBodyProps } from "../../../lib/capture-registry";
 import type { CaptureSourceKind } from "../../../lib/capture-source";
@@ -56,7 +60,8 @@ import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import { dragHasFiles, filesFromDataTransfer, pastedFiles } from "../../attachments/files";
+import { dragHasFiles, filesFromDataTransfer } from "../../attachments/files";
+import { EntityTextEditor, type EntityTextEditorApi } from "../../spine/editor/entity-text-editor";
 import type { MenuPickApi } from "../../spine/editor/mention-menu-plugin";
 import { dateCommandDay } from "../../spine/grammar";
 import { resolveEntityIcon } from "../../spine/icon-map";
@@ -68,7 +73,9 @@ import { positionsAfter } from "../helpers";
 import type { Bucket, Task } from "../model";
 import {
   type CaptureToken,
+  type ClearedDateField,
   captureDates,
+  keepOnClear,
   resolveTitle,
   SINGLE_VALUE_KINDS,
   segmentsFromLine,
@@ -80,6 +87,7 @@ import {
   type CapturePlan,
   type CaptureResult,
   type CaptureTaskPlan,
+  mentionsStillIn,
   newTaskId,
   runCapture,
   undoCapture,
@@ -109,7 +117,7 @@ import {
 } from "./capture-menus";
 import { CapturePills, type OpenPill, type PillChange, type PillValues } from "./capture-pills";
 import { $tokensToText, type MenuPick, TitleEditor, type TitleEditorApi } from "./title-editor";
-import { $createCaptureTokenNode } from "./token-node";
+import { $createCaptureTokenNode, type TokenPerson, TokenPersonContext } from "./token-node";
 
 const SOURCE_ICON: Record<CaptureSourceKind, typeof Mail> = {
   email: Mail,
@@ -347,7 +355,32 @@ export function TaskCaptureBody({
   const [segments, setSegments] = useState<TitleSegment[]>(initial.draft.segments);
   const [segmentKeys, setSegmentKeys] = useState<Array<NodeKey | null>>([]);
   const [keep, setKeep] = useState<string[]>(initial.draft.keep);
-  const [description, setDescription] = useState(initial.draft.description);
+  // The description is Markdown, typed in the one description editor (call
+  // #15). What it holds right now is read through a ref: ⏎ in it creates
+  // before React has re-rendered the last keystroke (MOD-117).
+  const [description, setTypedDescription] = useState(initial.draft.description);
+  const descriptionNow = useRef(description);
+  const descriptionApi = useRef<EntityTextEditorApi | null>(null);
+  /**
+   * People `@`-mentioned in the description: told once the task exists. The
+   * draft keeps each one's label (the words the menu wrote into the
+   * description, which the draft holds anyway: a name, or an email for
+   * someone without one); an older draft's id-only entry reads its name off
+   * the member list at create.
+   */
+  const [mentioned, setMentioned] = useState<Array<{ id: string; label: string | null }>>(
+    () => initial.draft.mentions ?? [],
+  );
+  const onDescriptionTyped = (value: string) => {
+    descriptionNow.current = value;
+    setTypedDescription(value);
+  };
+  /** Put a description in from outside the editor (a restored draft, a clear). */
+  const setDescription = (value: string) => {
+    onDescriptionTyped(value);
+    descriptionApi.current?.setValue(value);
+    if (!value) setMentioned([]);
+  };
   const [subtasks, setSubtasks] = useState<string[]>(initial.draft.subtasks);
   const [fields, setFields] = useState<DraftFields>(initial.draft.fields);
   const [destination, setDestination] = useState<{
@@ -379,7 +412,6 @@ export function TaskCaptureBody({
   const templateOn = useRef(false);
   templateOn.current = Boolean(templateProvider) && !template;
   const titleApi = useRef<TitleEditorApi | null>(null);
-  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const subtaskRefs = useRef<Array<HTMLInputElement | null>>([]);
   const createListRef = useRef<HTMLButtonElement>(null);
   /** The token just recognised: Esc right after turns it back into words. */
@@ -388,10 +420,10 @@ export function TaskCaptureBody({
 
   // Keep the draft on the device as it changes (a prefilled open: in its own).
   useEffect(() => {
-    const now = { segments, keep, description, subtasks, fields, pasted };
+    const now = { segments, keep, description, subtasks, fields, pasted, mentions: mentioned };
     if (held) held.current = now;
     else saveDraft(owner.userId, owner.workspaceId, now);
-  }, [owner, held, segments, keep, description, subtasks, fields, pasted]);
+  }, [owner, held, segments, keep, description, subtasks, fields, pasted, mentioned]);
 
   // The title takes the caret once the dialog has settled.
   useEffect(() => {
@@ -428,11 +460,20 @@ export function TaskCaptureBody({
       assignees.map((a) => ({
         userId: a.userId,
         name: a.isMe ? a.fullName || "You" : a.name,
+        fullName: a.fullName,
+        avatarUrl: a.avatarUrl,
         isMe: a.isMe,
         canTakeTasks: a.canTakeTasks,
       })),
     [assignees],
   );
+  // The title's person tokens look their photo and own name up here (MOD-96).
+  const tokenPerson = useMemo(() => {
+    const byId = new Map<string, TokenPerson>(
+      assignees.map((a) => [a.userId, { avatarUrl: a.avatarUrl, name: a.fullName || "?" }]),
+    );
+    return (id: string) => byId.get(id) ?? null;
+  }, [assignees]);
   const menuPeople = useMemo<CapturePerson[]>(() => people.filter((p) => p.canTakeTasks), [people]);
 
   // ── a restored draft's names, looked up again (it keeps ids only) ─────────
@@ -730,6 +771,16 @@ export function TaskCaptureBody({
   };
 
   // ── hand picks ────────────────────────────────────────────────────────────
+  /**
+   * A date cleared by hand stays cleared (MOD-133): the words that would set
+   * it again on the next read (its token's, the date words it came from) are
+   * kept as words, as Esc keeps a highlight.
+   */
+  const keepCleared = (field: ClearedDateField) => {
+    const phrases = keepOnClear(titleSegments, field, { keep, manualDates });
+    if (phrases.length === 0) return;
+    setKeep((k) => [...k, ...phrases.filter((p) => !k.includes(p))]);
+  };
   const onPillChange = (change: PillChange) => {
     const api = titleApi.current;
     const words = (kind: CaptureToken["kind"]) => api?.tokensToText((t) => t.kind === kind);
@@ -743,14 +794,17 @@ export function TaskCaptureBody({
         setFields((f) => ({ ...f, teamId: change.value }));
         return;
       case "due":
+        if (change.value === null) keepCleared("due");
         words("due");
         setFields((f) => ({ ...f, dueDay: change.value }));
         return;
       case "schedule":
+        if (change.value === null) keepCleared("schedule");
         words("schedule");
         setFields((f) => ({ ...f, scheduledAt: change.value }));
         return;
       case "repeat":
+        if (change.value === null) keepCleared("repeat");
         words("repeat");
         setFields((f) => ({ ...f, recurrence: change.value }));
         return;
@@ -763,6 +817,7 @@ export function TaskCaptureBody({
         setFields((f) => ({ ...f, estimateMinutes: change.value }));
         return;
       case "remind":
+        if (change.value === null) keepCleared("remind");
         words("remind");
         setFields((f) => ({ ...f, remindAt: change.value }));
         return;
@@ -941,7 +996,14 @@ export function TaskCaptureBody({
     return { title: read.title || line, facts };
   };
 
-  const currentDraft = (): CaptureDraft => ({ segments, keep, description, subtasks, fields });
+  const currentDraft = (): CaptureDraft => ({
+    segments,
+    keep,
+    description,
+    subtasks,
+    fields,
+    mentions: mentioned,
+  });
 
   // A capture the server refused comes back: straight into this capture when
   // it's open and empty; otherwise it's kept in its own slot on the device
@@ -956,6 +1018,7 @@ export function TaskCaptureBody({
     titleApi.current?.setSegments(kept.segments);
     setKeep(kept.keep);
     setDescription(kept.description);
+    setMentioned(kept.mentions ?? []);
     setSubtasks(kept.subtasks);
     setFields(kept.fields);
     setPasted(kept.pasted ?? null);
@@ -1172,10 +1235,17 @@ export function TaskCaptureBody({
     }
     // "" is your Inbox; the position is set on the way, first in its list.
     const bucketId = projectId ?? "";
+    const describedAs = descriptionNow.current.trim();
+    // What the description references links from the task once it exists,
+    // like the title's things (a `#tag` is text there, as in the panel).
+    const titleThings = new Set(resolved.things.map((t) => `${t.ref.type}:${t.ref.id}`));
+    const describedThings = descriptionReferences(describedAs).filter(
+      (ref) => ref.type !== "tag" && !titleThings.has(`${ref.type}:${ref.id}`),
+    );
     const main: CaptureTaskPlan = {
       id: newTaskId(),
       title,
-      description: description.trim(),
+      description: describedAs,
       projectId: bucketId,
       sectionId,
       teamId: values.teamId,
@@ -1188,7 +1258,19 @@ export function TaskCaptureBody({
       priority: values.priority,
       estimateMinutes: values.estimateMinutes,
       tags: values.tags,
-      links: resolved.things.map((t) => ({ ref: t.ref, label: t.label })),
+      links: [
+        ...resolved.things.map((t) => ({ ref: t.ref, label: t.label })),
+        ...describedThings.map((ref) => ({ ref, label: "" })),
+      ],
+      // A person whose "@Name" was taken out again isn't told.
+      mentions: mentionsStillIn(
+        mentioned.flatMap((p) => {
+          // A restored draft's person: their name as the members list has it.
+          const label = p.label ?? assignees.find((a) => a.userId === p.id)?.fullName ?? null;
+          return label ? [{ id: p.id, label }] : [];
+        }),
+        descriptionPlainText(describedAs),
+      ),
       fromSource: sourceOn && Boolean(context?.source),
       remindAt: values.remindAt,
       waitingOn: values.waitingOn,
@@ -1387,7 +1469,10 @@ export function TaskCaptureBody({
       ...segments,
       { text: segments.length ? ` ${one.title}` : one.title },
     ]);
-    if (one.description) setDescription((d) => (d ? `${d}\n${one.description}` : one.description));
+    if (one.description) {
+      const d = descriptionNow.current;
+      setDescription(d ? `${d}\n${one.description}` : one.description);
+    }
     titleApi.current?.focus();
   };
 
@@ -1415,6 +1500,8 @@ export function TaskCaptureBody({
     }
     const api = titleApi.current;
     if (api?.closeMenu()) return true;
+    // The description's `@ # /` menus close first too (call #15).
+    if (descriptionApi.current?.closeMenu()) return true;
     if (!api?.hasFocus()) return false;
     const just = justInserted.current;
     if (just) {
@@ -1470,6 +1557,12 @@ export function TaskCaptureBody({
         if (dragHasFiles(e.dataTransfer)) e.preventDefault();
       }}
       onDrop={(e) => {
+        // The description's editor takes a drop on its text (to `onFiles`,
+        // marking it handled) and lets the event bubble on: one drop attaches
+        // once. A drop on the box around it is still this one's.
+        const inDescription =
+          e.target instanceof Element && e.target.closest("[data-capture-description]");
+        if (inDescription && e.nativeEvent.defaultPrevented) return;
         // Folders are left out (AT-3); a drop of only folders does nothing.
         const dropped = filesFromDataTransfer(e.dataTransfer);
         if (dropped.length === 0) return;
@@ -1558,28 +1651,30 @@ export function TaskCaptureBody({
       </div>
 
       <div className="flex flex-col gap-1 px-4 pt-1">
-        <TitleEditor
-          apiRef={titleApi}
-          initial={initial.draft.segments}
-          runtime={runtime}
-          workspaceId={workspaceId}
-          placeholder="Task title"
-          mentionCandidates={mentionCandidates}
-          tagCandidates={tagCandidates}
-          commandCandidates={commandCandidates}
-          onPick={onPick}
-          onChange={onTitleChange}
-          onSubmit={submit}
-          onShiftEnter={() => descriptionRef.current?.focus()}
-          onPaste={(text, pastedFiles) => {
-            if (pastedFiles.length > 0 && takeFiles(pastedFiles)) return true;
-            if (!isPastedList(text)) return false;
-            setPasted(text);
-            return true;
-          }}
-          highlights={highlights}
-          segmentKeys={segmentKeys}
-        />
+        <TokenPersonContext value={tokenPerson}>
+          <TitleEditor
+            apiRef={titleApi}
+            initial={initial.draft.segments}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            placeholder="Task title"
+            mentionCandidates={mentionCandidates}
+            tagCandidates={tagCandidates}
+            commandCandidates={commandCandidates}
+            onPick={onPick}
+            onChange={onTitleChange}
+            onSubmit={submit}
+            onShiftEnter={() => descriptionApi.current?.focus()}
+            onPaste={(text, pastedFiles) => {
+              if (pastedFiles.length > 0 && takeFiles(pastedFiles)) return true;
+              if (!isPastedList(text)) return false;
+              setPasted(text);
+              return true;
+            }}
+            highlights={highlights}
+            segmentKeys={segmentKeys}
+          />
+        </TokenPersonContext>
 
         {pickingTemplate && templateProvider ? (
           <TemplatePickPanel
@@ -1623,28 +1718,38 @@ export function TaskCaptureBody({
 
         {template ? null : (
           <>
-            <Textarea
-              ref={descriptionRef}
-              value={description}
-              placeholder="Add a description…"
-              aria-label="Description"
-              onChange={(e) => setDescription(e.target.value)}
-              onPaste={(e) => {
-                // A screenshot pasted here becomes a file chip too (AT3-2);
-                // text stays a text paste.
-                const pastedHere = pastedFiles(e.clipboardData);
-                if (pastedHere.length > 0 && takeFiles(pastedHere)) e.preventDefault();
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  e.preventDefault();
-                  submit(true);
-                }
-              }}
-              rows={1}
-              // Grows with its words to about six lines, then scrolls (56).
-              className="field-sizing-content max-h-36 min-h-0 resize-none border-0 bg-transparent px-0 py-1 font-sans text-base shadow-none focus-visible:ring-0"
-            />
+            {/* The one description editor (call #15): Markdown as you type,
+                `@ # /` like the panel's. ⏎ creates and ⇧⏎ starts a new line
+                (MOD-117); ⌘⏎ creates more. Grows with its words to about six
+                lines, then scrolls (56); a pasted screenshot becomes a file
+                chip (AT3-2). Nothing exists to link from yet: what it
+                references links once the task is made, and the people it
+                mentions are told then. */}
+            <div data-capture-description="" className="max-h-36 overflow-y-auto py-1">
+              <EntityTextEditor
+                apiRef={descriptionApi}
+                value={description}
+                editable
+                format="markdown"
+                runtime={runtime}
+                workspaceId={workspaceId}
+                source={null}
+                currentUserId={userId}
+                ariaLabel="Description"
+                placeholder="Add a description…"
+                surface="bare"
+                className="min-h-0 font-sans text-base"
+                placeholderClassName="font-sans text-base"
+                onChange={onDescriptionTyped}
+                onEnter={submit}
+                onFiles={(dropped) => {
+                  takeFiles(dropped);
+                }}
+                onMentionPerson={(memberId, label) => {
+                  setMentioned((prev) => [...prev, { id: memberId, label }]);
+                }}
+              />
+            </div>
 
             <Subtasks
               lines={subtasks}

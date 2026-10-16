@@ -1386,8 +1386,8 @@ export function EmailPageView({
               open={followUpOpen}
               onOpenChange={setFollowUpOpen}
               onPick={doFollowUp}
-              title="Remind me if no reply"
-              confirmLabel="Remind me"
+              title="Follow up if no reply"
+              confirmLabel="Set reminder"
             >
               <span aria-hidden className="pointer-events-none absolute left-2/3 top-2 h-0 w-0" />
             </EmailSnoozePicker>

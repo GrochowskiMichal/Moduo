@@ -9,7 +9,13 @@ import { describe, expect, it } from "@rstest/core";
 import type { BoardTarget } from "../board-columns";
 import { makeTask } from "../helpers";
 import type { ProjectStatus, Task } from "../model";
-import { type BoardCellRef, planBoardDrop, targetAccepts, targetLabel } from "./board-drop";
+import {
+  type BoardCellRef,
+  planBoardDrop,
+  targetAccepts,
+  targetLabel,
+  targetName,
+} from "./board-drop";
 
 function task(id: string, position: string, fields: Partial<Task> = {}): Task {
   return { ...makeTask({ workspaceId: "w", bucketId: "p1", title: id, position }), id, ...fields };
@@ -212,7 +218,7 @@ describe("planBoardDrop", () => {
       "To do",
       status("todo"),
       [A, B],
-      lane("u1", "Me", "u1"),
+      lane("u1", "You", "u1"),
     );
     const sams = cell(
       "col:status:todo|lane:u2",
@@ -251,5 +257,28 @@ describe("planBoardDrop", () => {
     );
     expect(targetLabel({ field: "team", value: null }, "No team")).toBe("Team cleared");
     expect(targetLabel({ field: "priority", value: null }, "Unset")).toBe("Priority cleared");
+  });
+
+  it("names you 'you' in the toast, though your column reads You (MOD-137)", () => {
+    const yours = cell("col:assignee:u1", "You", { field: "assignee", value: "u1" }, []);
+    const waitsOnYou = cell(
+      "col:waiting:person:u1",
+      "You",
+      { field: "waiting", kind: "person", ref: "u1", label: null },
+      [],
+    );
+    const self = { ...ctx, selfId: "u1" };
+    expect(plan({ dest: yours, overId: null, order: "none", ctx: self })).toMatchObject({
+      kind: "write",
+      write: { assigneeId: "u1" },
+      label: "Assigned to you",
+    });
+    expect(plan({ dest: waitsOnYou, overId: null, order: "none", ctx: self })).toMatchObject({
+      kind: "waiting",
+      label: "Waiting on you",
+    });
+    // Someone else's column keeps its name; no reader leaves the label alone.
+    expect(targetName({ field: "assignee", value: "u2" }, "Sam", "u1")).toBe("Sam");
+    expect(targetName({ field: "assignee", value: "u1" }, "You", null)).toBe("You");
   });
 });

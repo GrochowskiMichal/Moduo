@@ -36,9 +36,22 @@ import {
   isTaskStatus,
   normalizeTaskStatusCategory,
 } from "../../_shared/contracts/vocabularies.ts";
+import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
+import {
+  dateMarkdown,
+  defuseReferences,
+  descriptionTokens,
+  escapeMarkdownText,
+  guardMarkdownStart,
+  htmlToMarkdown,
+  isHtmlDescription,
+  referenceMarkdown,
+} from "../../_shared/description-markdown.ts";
 import { assigneeCandidates, resolveAssigneeArg } from "../../_shared/task-people.ts";
 import {
+  LIST_PAGE,
   MAX_PAGE,
+  type SummaryNames,
   filterByAssignee,
   focusSettingsFrom,
   isDrifted,
@@ -46,11 +59,14 @@ import {
   pageOf,
   parseAssignee,
   rowTaskState,
+  shapeComment,
   shapeTask,
+  shapeTaskSummary,
+  TASK_GET_COMMENTS,
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { visibleIds } from "../share.ts";
+import { entityComments, reachOrNull, visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -62,6 +78,7 @@ import {
   archivedBucketIds,
   callOp,
   clampLimit,
+  colourBareTags,
   dayOrThrow,
   fetchProject,
   fetchTask,
@@ -81,11 +98,131 @@ import {
 
 const DEPRECATED = "Deprecated (kept until TV-D7):";
 
+/**
+ * A description is Markdown, read and written (call #15, MOD-120): what the
+ * app's editor types and saves, and what an older (HTML) description reads
+ * as. References keep no title (RF-1), only the item's kind.
+ */
+const DESCRIPTION_MARKDOWN =
+  'Markdown: **bold**, *italic*, `code`, ``` fenced code ```, [links](https://…), "- " bullets, "1. " numbers, "- [ ] " checkboxes, "> " quotes (HTML is converted). Reference an item as [task](moduo://task/<uuid or handle, e.g. MOD-12>) (or note, contact, company, email_thread, event, project; it shows by name to whoever can open it, an item you cannot reach stays as its words, and with Links at Edit each one is linked from the task), a date as [Oct 17](moduo://date/2026-10-17).';
+
+/** How many different items one description written through the connector may reference. */
+const MAX_DESCRIPTION_REFERENCES = 50;
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A description reference's type as the reach check knows it (the app also says project and email). */
+function reachType(type: string): string {
+  return type === "project" ? "bucket" : type === "email" ? "email_thread" : type;
+}
+
+/**
+ * A description written through the connector, as the app stores it (call
+ * #15). HTML sent by an agent is read as Markdown first (the converter the
+ * reads use), so whatever it can turn into a reference is checked like the
+ * rest. Then the Markdown is read for references once (`descriptionTokens`,
+ * the pattern the editor reads them with) and written back from that one
+ * reading:
+ * - a reference is resolved and checked for the key (`reachOrNull`, assertReach's check: the key's
+ *   scope, the item live in this workspace, its person able to see it); a
+ *   task's handle (`moduo://task/MOD-12`) becomes its uuid; only a reference
+ *   that passed is written as one (labelled with its kind, RF-1), and only
+ *   those are answered as the items to link (one inside code, shown as
+ *   code, links nothing); a failed lookup fails the write;
+ * - anything else (an item the key can't reach or that isn't there, a kind
+ *   agents can't point at, a tag, past MAX_DESCRIPTION_REFERENCES) goes back
+ *   to its label as plain words;
+ * - every word between them passes through `defuseReferences`, so no word,
+ *   label or join of the two reads as a reference later;
+ * - words that would read as HTML keep their first `<` escaped.
+ */
+async function describeForWrite(
+  ctx: ToolContext,
+  value: string,
+): Promise<{ markdown: string; refs: Array<{ type: string; id: string }> }> {
+  const tokens = descriptionTokens(isHtmlDescription(value) ? htmlToMarkdown(value) : value);
+  const checked = new Map<string, string | null>();
+  for (const token of tokens) {
+    if (token.kind !== "link" || token.type === "date") continue;
+    const key = `${token.type}\u0000${token.id}`;
+    if (checked.has(key)) continue;
+    if (checked.size >= MAX_DESCRIPTION_REFERENCES) {
+      checked.set(key, null);
+      continue;
+    }
+    // assertReach's check; a refusal is words, a failed lookup fails the write.
+    checked.set(key, await reachOrNull(ctx, reachType(token.type), token.id));
+  }
+  const refs: Array<{ type: string; id: string }> = [];
+  const linked = new Set<string>();
+  let out = "";
+  let words = "";
+  const live = (markdown: string) => {
+    out += defuseReferences(words) + markdown;
+    words = "";
+  };
+  for (const token of tokens) {
+    if (token.kind === "text") {
+      words += token.text;
+    } else if (token.type === "date") {
+      if (ISO_DAY.test(token.id)) live(dateMarkdown(token.id, token.label));
+      else words += escapeMarkdownText(token.label);
+    } else {
+      const uuid = checked.get(`${token.type}\u0000${token.id}`) ?? null;
+      if (!uuid) {
+        words += escapeMarkdownText(token.label);
+        continue;
+      }
+      // Written the same in code or out of it (as checked, never the agent's
+      // own spelling); one in code is shown as code, so it links nothing.
+      live(referenceMarkdown(token.type, uuid, token.display));
+      if (token.inCode) continue;
+      const target = reachType(token.type);
+      if (!linked.has(`${target}:${uuid}`)) {
+        linked.add(`${target}:${uuid}`);
+        refs.push({ type: target, id: uuid });
+      }
+    }
+  }
+  live("");
+  return { markdown: guardMarkdownStart(out), refs };
+}
+
+/**
+ * Link a task to what its description references, as quick capture does
+ * (`mentions`, origin `mention`), through the links op. Only a key with Links
+ * at Edit makes links; the references were checked by `describeForWrite`.
+ * Quiet: the reference is in the text either way.
+ */
+async function linkDescribed(
+  ctx: ToolContext,
+  taskId: string,
+  refs: ReadonlyArray<{ type: string; id: string }>,
+): Promise<void> {
+  if (!keyScopeAllows(ctx.key.scopes, "links", "edit")) return;
+  for (const ref of refs) {
+    if (ref.type === "task" && ref.id === taskId) continue;
+    try {
+      // An error comes back in the answer (not thrown) and is let go.
+      await ctx.db.rpc("links_op_create", {
+        p_workspace_id: ctx.key.workspaceId,
+        p_source_type: "task",
+        p_source_id: taskId,
+        p_target_type: ref.type,
+        p_target_id: ref.id,
+        p_relation_kind: "mentions",
+        p_origin: "mention",
+      });
+    } catch {
+      // Quiet, as above.
+    }
+  }
+}
+
 /** The fields tasks_create / tasks_update take, as the ops want them. */
 function taskFieldsFromArgs(args: Row): Row {
   const fields: Row = {};
   if (typeof args.title === "string") fields.title = str(args, "title");
-  if (typeof args.description === "string") fields.description = args.description;
+  // The description is prepared apart (`describeForWrite`): it reads the database.
   if ("due_on" in args) fields.due_on = args.due_on === null ? null : dayOrThrow(str(args, "due_on"), "due_on");
   if ("due_time" in args) fields.due_time = args.due_time ?? null;
   for (const name of ["due_date", "scheduled_at"]) {
@@ -396,7 +533,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_list",
       description:
-        "Tasks with computed drift/blocked state, subtasks (parent_id, subtask_count), handle, status and its category, assignee and creator, project, section, team, tags and repeat. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
+        "Tasks, a short row each (fields: summary, the default): handle, id, title, status (its category; status_name when the project calls it something else), priority, assignee's name (none = Unassigned), project (when the list spans projects), section, tags, due (YYYY-MM-DD, with HH:MM when timed), and blocked, drifted, queued_by_me, subtasks (a count) and parent only when they apply. fields: full gives each task's full shape instead (ids, people, description excerpt, dates, estimate, repeat, …); tasks_get reads one in full. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -431,7 +568,15 @@ export const tasksConnectorModule: ConnectorModule = {
             type: "boolean",
             description: "Also tasks in archived projects, marked project_archived: true. Default false.",
           },
-          limit: { type: "number", description: `Max tasks per page (default 100, max ${MAX_PAGE}).` },
+          fields: {
+            type: "string",
+            enum: ["summary", "full"],
+            description: "summary (default): the short row. full: every task's full shape (much longer; default page 25).",
+          },
+          limit: {
+            type: "number",
+            description: `Max tasks per page (default ${LIST_PAGE.summary}, or ${LIST_PAGE.full} with fields: full; max ${MAX_PAGE}).`,
+          },
           offset: { type: "number", description: "Skip this many tasks (default 0). A page shorter than limit is the last." },
         },
       },
@@ -473,11 +618,39 @@ export const tasksConnectorModule: ConnectorModule = {
           const inArea = new Set(buckets.filter((b) => b.area_id === areaId).map((b) => b.id));
           list = list.filter((t) => inArea.has(t.bucket_id));
         }
-        list = pageOf(orderByBucket(list, buckets), args.offset, clampLimit(args, 100, MAX_PAGE));
-        return list.map((t) => ({
-          ...shapeTask(t, data, now),
-          ...(archivedIds.has(t.id) ? { project_archived: true } : {}),
-        }));
+        const full = args.fields === "full";
+        list = pageOf(
+          orderByBucket(list, buckets),
+          args.offset,
+          clampLimit(args, full ? LIST_PAGE.full : LIST_PAGE.summary, MAX_PAGE),
+        );
+        const archivedMark = (t: Row) => (archivedIds.has(t.id) ? { project_archived: true } : {});
+        if (full) return list.map((t) => ({ ...shapeTask(t, data, now), ...archivedMark(t) }));
+        // MOD-113: names for the short rows, read only for what's on the page,
+        // and only from projects the person can see (a task shared on its own
+        // doesn't name its project, as in tasks_time_report).
+        const sectionIds = [...new Set(list.map((t) => t.section_id).filter(Boolean))];
+        const statusIds = [...new Set(list.map((t) => t.status_id).filter(Boolean))];
+        const [seenProjects, sections, statuses] = await Promise.all([
+          visibleIds(ctx, "bucket"),
+          sectionIds.length
+            ? rows(ctx.db.from("sections").select("id, name, project_id")
+              .eq("workspace_id", ctx.key.workspaceId).in("id", sectionIds))
+            : Promise.resolve([] as Row[]),
+          statusIds.length
+            ? rows(ctx.db.from("project_statuses").select("id, name, project_id")
+              .eq("workspace_id", ctx.key.workspaceId).in("id", statusIds))
+            : Promise.resolve([] as Row[]),
+        ]);
+        const named = (x: Row) => !x.project_id || seenProjects.has(x.project_id);
+        const names: SummaryNames = {
+          sections: new Map(sections.filter(named).map((x) => [x.id, x.name])),
+          statuses: new Map(statuses.filter(named).map((x) => [x.id, x.name])),
+          ...(projectId
+            ? {}
+            : { projects: new Map(buckets.filter((b) => seenProjects.has(b.id)).map((b) => [b.id, b.name])) }),
+        };
+        return list.map((t) => ({ ...shapeTaskSummary(t, data, now, names), ...archivedMark(t) }));
       },
     },
     {
@@ -595,14 +768,14 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_get",
       description:
-        "One task in full: properties, tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, and its recent attributed activity trail.",
+        "One task in full: properties (its description as Markdown, references as moduo:// links), tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, with Links: View its latest comments (up to 20, the newest last; earlier_comments counts the rest, which comments_list reads), and its recent attributed activity trail.",
       access: "view",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         const taskId = task.id as string;
         const ws = ctx.key.workspaceId;
-        const [data, activity, sessions, reminders, waiting, agents] = await Promise.all([
+        const [data, activity, sessions, reminders, waiting, agents, comments] = await Promise.all([
           loadWorkspace(ctx),
           rows(
             ctx.db.from("module_activity")
@@ -619,6 +792,11 @@ export const tasksConnectorModule: ConnectorModule = {
           rows(ctx.db.from("task_waiting").select("id, kind, ref, label, since")
             .eq("workspace_id", ws).eq("task_id", taskId).is("deleted_at", null)),
           unwrap<Row[] | null>(ctx.db.rpc("tasks_agent_sessions", { p_workspace_id: ws, p_task_id: taskId })),
+          // Comments are the Links module's (the key card says so): none without
+          // it. A failed comment read leaves them out instead of failing the task.
+          keyScopeAllows(ctx.key.scopes, "links", "view")
+            ? entityComments(ctx, "task", taskId, TASK_GET_COMMENTS).catch(() => null)
+            : null,
         ]);
         const now = new Date();
         const titled = (id: string) => {
@@ -647,6 +825,15 @@ export const tasksConnectorModule: ConnectorModule = {
             since: w.since,
           })),
           agent_sessions: agents ?? [],
+          // MOD-94: what people answered here (the trail has no comments).
+          ...(comments
+            ? {
+                comments: comments.comments.map((c) => shapeComment(c, data.names)),
+                ...(comments.total > comments.comments.length
+                  ? { earlier_comments: comments.total - comments.comments.length }
+                  : {}),
+              }
+            : {}),
           activity,
         };
       },
@@ -756,7 +943,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_activity",
       description:
-        "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity.",
+        "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity. Comments aren't in it: read them with comments_list (or tasks_get).",
       access: "view",
       inputSchema: {
         type: "object",
@@ -930,7 +1117,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "tasks_create",
       description:
-        "Create a task in one go: filed into a project and section (default: the key creator's Inbox), with a status (a category word, the project's status name or id), assignee (a member, \"me\", or null; default the key's creator), team, due date and time, estimate, priority, tags (by name; new ones are made), a repeat (RRULE), reminders, work sessions and a parent (one level). With imported_from {source, key} it remembers where it came from; sending a key you already used on a live task of yours updates that task instead (a re-run). Inside an import run (import_id), it is recorded for imports_undo. Nothing is written if any part is refused. It gets its handle (e.g. MOD-142), shows in search at once, and the trail reads \"<person> · via <key name>\".",
+        "Create a task in one go: filed into a project and section (default: the key creator's Inbox), with a status (a category word, the project's status name or id), assignee (a member, \"me\", or null; default the key's creator), team, due date and time, estimate, priority, tags (by name; new ones are made and coloured as the app colours them), a repeat (RRULE), reminders, work sessions and a parent (one level). With imported_from {source, key} it remembers where it came from; sending a key you already used on a live task of yours updates that task instead (a re-run). Inside an import run (import_id), it is recorded for imports_undo. Nothing is written if any part is refused. It gets its handle (e.g. MOD-142), shows in search at once, and the trail reads \"<person> · via <key name>\".",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -940,7 +1127,7 @@ export const tasksConnectorModule: ConnectorModule = {
           bucket_id: { type: "string", description: "Older name for project_id." },
           section_id: { type: "string", description: "Section uuid in that project (see sections_list)." },
           parent_id: { type: "string", description: "Make it a subtask of this task (handle or uuid; one level only)." },
-          description: { type: "string", description: "Longer notes (plain text or Markdown)." },
+          description: { type: "string", description: `Longer notes. ${DESCRIPTION_MARKDOWN}` },
           status: { type: "string", description: "backlog · todo · in_progress · done · wont_do, or the project's status name or id. Default: to do." },
           assignee_id: { type: ["string", "null"], description: "Member uuid (see tasks_list_assignees), \"me\", or null for Unassigned." },
           team_id: { type: ["string", "null"], description: "Route it to this team (see teams_list); nobody's until someone takes it." },
@@ -971,6 +1158,9 @@ export const tasksConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         const task: Row = { ...taskFieldsFromArgs(args) };
+        const described =
+          typeof args.description === "string" ? await describeForWrite(ctx, args.description) : null;
+        if (described) task.description = described.markdown;
         const projectId = projectArg(args);
         if (projectId) task.bucket_id = (await fetchProject(ctx, projectId)).id;
         const parent = str(args, "parent_id", false);
@@ -987,6 +1177,13 @@ export const tasksConnectorModule: ConnectorModule = {
           p_task: task,
           p_with: extras,
         }));
+        // A tag name new to the workspace became a tag with no colour (MOD-93).
+        if (Array.isArray(extras.tags) && extras.tags.length) await colourBareTags(ctx);
+        // What the description references links from the task (call #15).
+        const createdId = (out.task as Row | undefined)?.id;
+        if (described?.refs.length && typeof createdId === "string") {
+          await linkDescribed(ctx, createdId, described.refs);
+        }
         return {
           action: out.action,
           ...(await shapeOne(ctx, out.task as Row)),
@@ -1009,7 +1206,7 @@ export const tasksConnectorModule: ConnectorModule = {
           bucket_id: { type: "string", description: "Older name for project_id." },
           section_id: { type: ["string", "null"], description: "Section uuid in its project, or null." },
           parent_id: { type: ["string", "null"], description: "Parent task (handle or uuid), or null for top level." },
-          description: { type: "string", description: "New description." },
+          description: { type: "string", description: `New description (replaces it whole). ${DESCRIPTION_MARKDOWN}` },
           status: { type: "string", description: "A category word, or the project's status name or id." },
           team_id: { type: ["string", "null"], description: "Team uuid, or null." },
           due_on: { type: ["string", "null"], description: "YYYY-MM-DD, or null to clear." },
@@ -1029,6 +1226,9 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         const patch: Row = taskFieldsFromArgs(args);
+        const described =
+          typeof args.description === "string" ? await describeForWrite(ctx, args.description) : null;
+        if (described) patch.description = described.markdown;
         const projectId = projectArg(args);
         if (projectId) patch.bucket_id = (await fetchProject(ctx, projectId)).id;
         if ("parent_id" in args) {
@@ -1045,8 +1245,10 @@ export const tasksConnectorModule: ConnectorModule = {
           p_patch: patch,
           p_with: extras,
         }));
+        if (extras.tags_add) await colourBareTags(ctx); // MOD-93, as in tasks_create
         const row = Array.isArray(answered) ? answered[0] : answered;
         if (!row) throw new Error("The operation returned nothing.");
+        if (described?.refs.length) await linkDescribed(ctx, task.id as string, described.refs);
         // Finishing through an edit finishes its open subtasks too (call 87).
         const also =
           typeof patch.status === "string"
@@ -1688,6 +1890,7 @@ export const tasksConnectorModule: ConnectorModule = {
             p_template_id: str(args, "template_id"),
             p_fields: fields,
           }));
+          await colourBareTags(ctx); // a template's tags come by name (MOD-93)
           const tasks = (made?.tasks as Row[] | undefined) ?? [];
           const top = tasks.find((t) => !t.parent_id) ?? tasks[0];
           return { task: top ? await shapeOne(ctx, top) : null, tasks: tasks.length };
@@ -1699,6 +1902,7 @@ export const tasksConnectorModule: ConnectorModule = {
           p_template_id: str(args, "template_id"),
           p_fields: fields,
         }));
+        await colourBareTags(ctx);
         const project = (made?.buckets as Row[] | undefined)?.[0];
         return {
           project: project ? { id: project.id, name: project.name } : null,

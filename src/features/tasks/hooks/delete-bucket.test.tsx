@@ -572,7 +572,9 @@ describe("colours and areas (TV-D10's ops)", () => {
     });
     expect(made).toBe(ids.area);
     expect(result.current.areas.map((a) => a.name)).toEqual(["Clients"]);
-    act(() => result.current.moveBucketToArea(ids.x, ids.area));
+    act(() => {
+      void result.current.moveBucketToArea(ids.x, ids.area);
+    });
     await settle();
     const call = runtime.tasks.updateProject.mock.calls.at(-1)?.[0] as {
       patch: { areaId: string; position: string };

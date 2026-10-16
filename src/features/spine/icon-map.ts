@@ -55,6 +55,10 @@ export const FALLBACK_ENTITY_ICON: LucideIcon = Link2;
  * then to a neutral link glyph.
  */
 export function resolveEntityIcon(entityType: string, iconHint?: string | null): LucideIcon {
-  if (iconHint && ENTITY_TYPE_ICONS[iconHint]) return ENTITY_TYPE_ICONS[iconHint];
-  return ENTITY_TYPE_ICONS[entityType] ?? FALLBACK_ENTITY_ICON;
+  // Own keys only: a type can come from stored text (a description's
+  // `moduo://constructor/…` link would otherwise hand back Object as an icon).
+  if (iconHint && Object.hasOwn(ENTITY_TYPE_ICONS, iconHint)) return ENTITY_TYPE_ICONS[iconHint];
+  return Object.hasOwn(ENTITY_TYPE_ICONS, entityType)
+    ? ENTITY_TYPE_ICONS[entityType]
+    : FALLBACK_ENTITY_ICON;
 }

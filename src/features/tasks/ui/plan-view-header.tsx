@@ -44,8 +44,12 @@ export type PlanHeaderControls = {
   /** "Sorted by due date · Back to manual order", when a project view is
    *  sorted (`SortedOrderLine`, default m). */
   sortedNote?: ReactNode;
-  /** An open saved view whose Filter or Display changed: Save · Revert (TV-U8). */
-  viewChanges?: ReactNode;
+  /**
+   * An open saved view whose Filter or Display changed, or a new view not
+   * saved yet: the toolbar's Save (MOD-142; TV-U8's quiet line under the
+   * toolbar went unnoticed). Sits right after Search · Filter · Display.
+   */
+  viewSave?: ReactNode;
   /**
    * The project this view shows (MOD-95, round-2b): its title opens Project
    * details in the right panel, and a ⋯ beside it offers the project's own
@@ -86,7 +90,7 @@ export function PlanViewHeader({
   canEdit: boolean;
   onRequestCapture: () => void;
 }) {
-  const { count, search, filter, display, more, activeFilters, sortedNote, viewChanges, project } =
+  const { count, search, filter, display, more, activeFilters, sortedNote, viewSave, project } =
     controls;
   return (
     // A container, so the controls read its width: under 36rem (576 px) Filter
@@ -100,13 +104,13 @@ export function PlanViewHeader({
             instead of squeezing it away. */}
         <div data-slot="plan-title" className="flex min-w-0 grow basis-40 items-baseline gap-2">
           {project ? (
-            <h1 className="min-w-0 font-display text-lg text-foreground">
+            <h1 className="-mx-1 min-w-0 font-display text-lg text-foreground">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
                     type="button"
                     onClick={project.onOpenDetails}
-                    className="-mx-1 block max-w-full truncate rounded-md px-1 text-left outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
+                    className="block max-w-full truncate rounded-md px-1 text-left outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     {title}
                   </button>
@@ -133,9 +137,18 @@ export function PlanViewHeader({
           <Toolbar.Group gap="snug">
             {search}
             {filter}
-            {display}
+            {/* Found by the view's Save (MOD-142): focus lands here when it goes. */}
+            <span data-slot="plan-display" className="contents">
+              {display}
+            </span>
             {more}
           </Toolbar.Group>
+          {viewSave ? (
+            <>
+              <ToolbarSeparator />
+              {viewSave}
+            </>
+          ) : null}
           <ToolbarSeparator />
           <ViewSwitcher view={view} onViewChange={onViewChange} />
           {/* Read-only views have no New (research §9: no add in that project). */}
@@ -153,7 +166,6 @@ export function PlanViewHeader({
         </Toolbar.Group>
       </Toolbar>
       {activeFilters}
-      {viewChanges}
       {sortedNote}
     </div>
   );

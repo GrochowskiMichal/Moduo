@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "@rstest/core";
 
 import {
@@ -207,6 +211,33 @@ describe("tasks connector helpers", () => {
     expect("queued_by_me" in shapeTask(tasks[0]!, shapeData(tasks), now)).toBe(false);
   });
 
+  it("answers descriptions as Markdown, an older HTML one too, and cuts an excerpt before a link (call #15, MOD-120)", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const html =
+      '<p class="mb-2 last:mb-0"><span style="white-space: pre-wrap;">Currently reads as asterisks. </span><b><strong class="font-semibold" style="white-space: pre-wrap;">Example</strong></b><span style="white-space: pre-wrap;"> attached.</span></p>' +
+      `<p class="mb-2 last:mb-0"><span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${id}">Secret title</span></p>`;
+    const markdown = "**Adding an issue**\n- Put it in **Triage**.";
+    const long = `${"x".repeat(270)} [task](moduo://task/${id}) more`;
+    const tasks = [
+      task("html", { description: html }),
+      task("md", { description: markdown }),
+      task("long", { description: long }),
+    ];
+    const data = shapeData(tasks);
+    const now = new Date("2026-10-15T12:00:00Z");
+    const full = shapeTask(tasks[0]!, data, now, true);
+    expect(full.description).toBe(
+      `Currently reads as asterisks. **Example** attached.\n\n[task](moduo://task/${id})`,
+    );
+    expect(full.description).not.toContain("<");
+    expect(full.description).not.toContain("Secret");
+    // Markdown is answered as it is stored.
+    expect(shapeTask(tasks[1]!, data, now, true).description).toBe(markdown);
+    // tasks_list's excerpt (280) never ends in half a reference.
+    expect(shapeTask(tasks[2]!, data, now).description).toBe("x".repeat(270));
+    expect(shapeTask(tasks[2]!, data, now, true).description).toBe(long);
+  });
+
   it("fills Focus settings with the app's defaults", () => {
     expect(focusSettingsFrom({})).toEqual(DEFAULT_FOCUS_SETTINGS);
     expect(focusSettingsFrom(null)).toEqual(DEFAULT_FOCUS_SETTINGS);
@@ -218,5 +249,166 @@ describe("tasks connector helpers", () => {
       long_break_minutes: 180,
       auto_start_next: true,
     });
+  });
+});
+
+describe("tasks_list's summary row (MOD-113)", () => {
+  const now = new Date("2030-01-10T12:00:00Z");
+  const names2 = {
+    sections: new Map([["s1", "Design"]]),
+    statuses: new Map([
+      ["st-review", "In review"],
+      ["st-doing", "In progress"],
+    ]),
+    projects: new Map([["b1", "Launch"]]),
+  };
+  const rows = [
+    task("parent", {
+      number: 1,
+      title: "Ship",
+      status: "in_progress",
+      status_category: "in_progress",
+      status_id: "st-review",
+      priority: "high",
+      section_id: "s1",
+      due_on: "2030-01-12",
+      due_time: "09:30:00",
+      description: "x".repeat(500),
+    }),
+    task("sub", {
+      number: 2,
+      title: "Write",
+      parent_id: "parent",
+      status: "in_progress",
+      status_category: "in_progress",
+      status_id: "st-doing",
+      assignee_id: null,
+      scheduled_at: "2030-01-09T09:00:00Z",
+      due_date: "2030-01-15T12:00:00Z",
+    }),
+    task("old", { number: 3, title: "Old row", status: "archived", assignee_id: "gone" }),
+  ];
+  const data = {
+    ...shapeData(rows),
+    blockedIds: new Set(["parent"]),
+    taskTags: new Map([["parent", ["mcp"]]]),
+    queuedByMe: new Set(["sub"]),
+    taskKey: "MOD",
+  };
+
+  it("names things, keeps flags only when true, and leaves the long fields out", async () => {
+    const { shapeTaskSummary } = await import("./tasks-connector.ts");
+    expect(shapeTaskSummary(rows[0]!, data, now, names2)).toEqual({
+      handle: "MOD-1",
+      id: "parent",
+      title: "Ship",
+      status: "in_progress",
+      status_name: "In review",
+      priority: "high",
+      assignee: "Ada",
+      project: "Launch",
+      section: "Design",
+      tags: ["mcp"],
+      due: "2030-01-12 09:30",
+      blocked: true,
+      subtasks: 1,
+    });
+    // A default status name isn't repeated; Unassigned has no assignee; an
+    // older due date reads as its day; the parent is named by its handle.
+    expect(shapeTaskSummary(rows[1]!, data, now, names2)).toEqual({
+      handle: "MOD-2",
+      id: "sub",
+      title: "Write",
+      status: "in_progress",
+      project: "Launch",
+      due: "2030-01-15",
+      drifted: true,
+      queued_by_me: true,
+      parent: "MOD-1",
+    });
+    // A legacy row reads its status as a category; a former member keeps their tasks.
+    expect(shapeTaskSummary(rows[2]!, data, now, { ...names2, projects: undefined })).toEqual({
+      handle: "MOD-3",
+      id: "old",
+      title: "Old row",
+      status: "wont_do",
+      assignee: FORMER_MEMBER,
+    });
+  });
+
+  it("is a fraction of the full shape", async () => {
+    const { shapeTaskSummary } = await import("./tasks-connector.ts");
+    const size = (x: unknown) => JSON.stringify(x, null, 2).length;
+    const summary = rows.map((t) => shapeTaskSummary(t, data, now, names2));
+    const full = rows.map((t) => shapeTask(t, data, now));
+    expect(size(summary) * 2).toBeLessThan(size(full));
+  });
+});
+
+describe("a due day from a due instant: the server's tasks__due_on_of rule", () => {
+  it("keeps a local midnight on its own date across a UTC midnight, and noon UTC on its date", async () => {
+    const { dueDayOfInstant, dueDayOfRow } = await import("./tasks-connector.ts");
+    // Jan 15's local midnight in UTC+1 is still Jan 14 in UTC.
+    expect(dueDayOfInstant("2030-01-14T23:00:00Z")).toBe("2030-01-15");
+    // Noon UTC, due_on's mirror, is its own date.
+    expect(dueDayOfInstant("2030-01-15T12:00:00Z")).toBe("2030-01-15");
+    // Jan 15's local midnight in UTC-5.
+    expect(dueDayOfInstant("2030-01-15T05:00:00Z")).toBe("2030-01-15");
+    expect(dueDayOfInstant("2030-01-15T00:00:00Z")).toBe("2030-01-15");
+    expect(dueDayOfInstant("not a date")).toBeNull();
+    expect(dueDayOfInstant(null)).toBeNull();
+    // due_on leads when it's there.
+    expect(dueDayOfRow({ due_on: "2030-01-20", due_date: "2030-01-14T23:00:00Z" })).toBe("2030-01-20");
+  });
+
+  it("a timed task with only a due_date shows its day across a UTC midnight", async () => {
+    const { shapeTaskSummary } = await import("./tasks-connector.ts");
+    const row = task("t", { number: 9, title: "x", status: "todo", due_date: "2030-01-14T23:00:00Z", due_time: "18:00:00" });
+    const data = { ...shapeData([row]), taskKey: "MOD" };
+    const out = shapeTaskSummary(row, data, new Date("2030-01-01T00:00:00Z"), {
+      sections: new Map(),
+      statuses: new Map(),
+    });
+    expect(out.due).toBe("2030-01-15 18:00");
+  });
+
+  it("is the rule the migration states", () => {
+    const sql = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../migrations/20261010171000_tasks_completion_due_on.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("WHEN (p_at AT TIME ZONE 'UTC')::time = time '12:00' THEN (p_at AT TIME ZONE 'UTC')::date");
+    expect(sql).toContain("ELSE ((p_at + interval '12 hours') AT TIME ZONE 'UTC')::date");
+  });
+});
+
+describe("a task's comments as agents read them (MOD-94)", () => {
+  it("names a person, marks an app, says when it was edited", async () => {
+    const { commentsInOrder, shapeComment } = await import("./tasks-connector.ts");
+    const at = "2030-01-01T10:00:00Z";
+    expect(shapeComment({ id: "c1", created_by: "u2", author_kind: "user", body: "Yes", created_at: at }, names))
+      .toEqual({ id: "c1", author: "Bea", at, body: "Yes" });
+    const app = {
+      id: "c2",
+      created_by: "u1",
+      author_kind: "api_key",
+      author_label: "Claude Code",
+      body: "Q?",
+      created_at: at,
+      edited_at: at,
+    };
+    expect(shapeComment(app, names)).toEqual({ id: "c2", author: "Claude Code (app)", at, edited: true, body: "Q?" });
+    expect(shapeComment({ id: "c3", created_by: "gone", body: null, created_at: at }, names)).toEqual({
+      id: "c3",
+      author: FORMER_MEMBER,
+      at,
+      body: "",
+    });
+    const ordered = commentsInOrder([
+      { id: "b", created_at: "2030-01-02" },
+      { id: "a", created_at: "2030-01-02" },
+      { id: "z", created_at: "2030-01-01" },
+    ]);
+    expect(ordered.map((c) => c.id)).toEqual(["z", "a", "b"]);
   });
 });

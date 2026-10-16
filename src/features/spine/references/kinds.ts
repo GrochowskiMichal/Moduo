@@ -22,7 +22,10 @@ const KIND_BY_TYPE: Record<string, ReferenceKind> = {
 
 /** The reference kind for an entity type; anything unknown is `other`. */
 export function referenceKind(type: string): ReferenceKind {
-  return KIND_BY_TYPE[type] ?? "other";
+  // Own keys only: a type comes from stored or typed text (a description's
+  // `moduo://` link, call #15), and "constructor" or "__proto__" must not
+  // reach Object.prototype.
+  return Object.hasOwn(KIND_BY_TYPE, type) ? KIND_BY_TYPE[type] : "other";
 }
 
 /** The stable cache key of a reference: its kind and id (`email_thread:x` = `email:x`). */
@@ -47,12 +50,12 @@ const NOUN: Record<ReferenceKind, string> = {
 
 /** The word for one of these: "task", "email", "item". */
 export function referenceNoun(kind: ReferenceKind): string {
-  return NOUN[kind];
+  return Object.hasOwn(NOUN, kind) ? NOUN[kind] : NOUN.other;
 }
 
 /** A deleted item's whole label: "Deleted task", "Deleted note" (no title, call 55). */
 export function deletedLabel(kind: ReferenceKind): string {
-  return `Deleted ${NOUN[kind]}`;
+  return `Deleted ${referenceNoun(kind)}`;
 }
 
 /** An archived item's tombstone: "Website · archived" (its noun when it has no name). */

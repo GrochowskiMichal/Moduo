@@ -8,8 +8,9 @@
 // panel), its attachments (AT-2: files pasted or dropped anywhere on the task
 // attach to it), the Done / Won't do line with the properties, the
 // collections (Subtasks, Waiting on, Blocked by, Blocks, Linked), then one
-// feed. On the full page the properties take a column of their own on the
-// right once there's room, and the description never folds.
+// feed, its comment box pinned under the scrolling body (MOD-129). On the full
+// page the properties take a column of their own on the right once there's
+// room, the comment box ends the feed, and the description never folds.
 //
 // States: nothing selected (inside a project the page shows the Project
 // view instead), a deleted task ("Deleted task", Restore when you can edit),
@@ -303,6 +304,9 @@ function DetailBody({
       ) : null}
     </div>
   );
+  // In the panel the comment box is pinned under the scrolling body, always in
+  // reach (MOD-129); on the full page it ends the feed.
+  const [composerSlot, setComposerSlot] = useState<HTMLDivElement | null>(null);
   const feed = (
     <TaskFeed
       task={task}
@@ -310,6 +314,7 @@ function DetailBody({
       runtime={readRuntime}
       workspaceId={workspaceId}
       canRemoveAny={canRemoveAny}
+      composerSlot={layout === "panel" ? composerSlot : undefined}
     />
   );
   const header = (
@@ -424,6 +429,13 @@ function DetailBody({
           {feed}
         </div>
       </div>
+      {/* The feed's comment box, pinned (MOD-129; round-1c's docked composer):
+          the same 4 px inset as the body above, for its focus ring. */}
+      <div
+        ref={setComposerSlot}
+        data-slot="task-composer"
+        className="shrink-0 px-1 pt-1 empty:hidden"
+      />
     </section>
   );
 }

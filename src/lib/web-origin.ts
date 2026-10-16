@@ -7,7 +7,11 @@ export function webOrigin(): string {
   return configured || (typeof window !== "undefined" ? window.location.origin : "");
 }
 
-/** The deep link that opens a task selected in Tasks (DF-1's `?id=`). */
-export function taskUrl(taskId: string): string {
-  return `${webOrigin()}/tasks?id=${encodeURIComponent(taskId)}`;
+/**
+ * The deep link that opens a task selected in Tasks (DF-1's `?id=`). Pass
+ * `taskLinkId(taskKey, task)` so it reads `/tasks?id=MOD-142` (MOD-28); a
+ * task's id still works for one without a handle yet.
+ */
+export function taskUrl(target: string): string {
+  return `${webOrigin()}/tasks?id=${encodeURIComponent(target)}`;
 }

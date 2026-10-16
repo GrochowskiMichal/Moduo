@@ -83,6 +83,10 @@ import {
   type TrackTimeInput,
 } from "../features/tasks/model";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
+import {
+  InviteEmailMismatchError,
+  isInviteEmailMismatch,
+} from "../features/workspaces/invite-join";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 // Any missing table (develop's deploy-gap guard); task-rows' version names the table.
@@ -125,6 +129,7 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { createTasksAgents } from "./runtime.web.agents";
+import { joinNoteLive } from "./runtime.web.notes-live";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
@@ -843,6 +848,8 @@ export const webRuntime: ModuoRuntime = {
       });
       if (error) {
         const message = error.message ?? "";
+        // Signed in with another address than the invite's (TX-7, S1).
+        if (isInviteEmailMismatch(message)) throw new InviteEmailMismatchError(error.hint);
         if (/already a member/i.test(message)) {
           throw new Error("You're already a member of this workspace.");
         }
@@ -1144,6 +1151,8 @@ export const webRuntime: ModuoRuntime = {
       // NR-1 columns ride on top of v2; until that migration is applied the
       // v2 read still works fully (not degraded) and sections derive Inbox.
       const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
+      // NR-6: the last human editor, for the header's "Edited … by …".
+      const NR6_COLS = `${NR1_COLS}, edited_by, edited_at`;
       const LEGACY_COLS =
         "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
@@ -1159,18 +1168,20 @@ export const webRuntime: ModuoRuntime = {
               .or(`deleted_at.is.null,deleted_at.gt.${cutoff}`),
           order: (q) => q.order("position").order("id"),
         });
-      const { res, tier } = await selectFirstDeployedTier([NR1_COLS, V2_COLS, LEGACY_COLS], query);
+      const tiers = [NR6_COLS, NR1_COLS, V2_COLS, LEGACY_COLS];
+      const { res, tier } = await selectFirstDeployedTier(tiers, query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
       if (res.error) throw new Error(res.error.message);
       return {
         notes: mapKnownRows(res.rows, mapNoteRow),
-        degraded: tier === 2,
+        // Only the legacy column set (the last tier) means the v2 ops are missing.
+        degraded: tier === tiers.length - 1,
         truncated: collectTruncations(res.truncation),
       };
     },
 
-    async pullDoc({ workspaceId, noteId, sinceUpdateId }) {
+    async pullDoc({ workspaceId, noteId, sinceUpdateId, knownDocVersion }) {
       // Log FIRST, snapshot SECOND. A concurrent compaction between the two
       // reads then only ever makes the snapshot NEWER than the log we hold —
       // applying both stays lossless (Yjs is idempotent). The reverse order
@@ -1178,20 +1189,41 @@ export const webRuntime: ModuoRuntime = {
       // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
       // ceiling, so a long log silently lost its tail. A failed page fails
       // the pull rather than returning a partial log the cursor would skip.
-      const updRes = await readAfterCursor({
-        after: sinceUpdateId ?? 0,
-        idOf: (row: { id: number | string }) => Number(row.id),
-        page: async (after, limit) =>
-          supabaseClient
-            .from("note_updates")
-            .select("id, client_id, client_seq, update_b64")
-            .eq("note_id", noteId)
-            .gt("id", after)
-            .order("id", { ascending: true })
-            .limit(limit),
-      });
+      // NR-6 adds who wrote each row; until that migration is applied the
+      // select 42703s, so retry once with the original columns.
+      const readLog = (cols: string) =>
+        readAfterCursor({
+          after: sinceUpdateId ?? 0,
+          idOf: (row: { id: number | string }) => Number(row.id),
+          page: async (after, limit) =>
+            supabaseClient
+              .from("note_updates")
+              .select<string, { id: number | string }>(cols)
+              .eq("note_id", noteId)
+              .gt("id", after)
+              .order("id", { ascending: true })
+              .limit(limit),
+        });
+      let updRes = await readLog("id, client_id, client_seq, update_b64, origin, actor_key_id");
+      if (updRes.error && (updRes.error as { code?: string }).code === "42703") {
+        updRes = await readLog("id, client_id, client_seq, update_b64");
+      }
       if (updRes.error) throw new Error(updRes.error.message);
       const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
+
+      // Every snapshot change (compaction, seed) bumps doc_version, so an
+      // unchanged version means the snapshot adds nothing to what we hold.
+      if (knownDocVersion != null) {
+        const ver = await supabaseClient
+          .from("notes")
+          .select("doc_version")
+          .eq("id", noteId)
+          .eq("workspace_id", workspaceId)
+          .single();
+        if (!ver.error && ver.data?.doc_version === knownDocVersion) {
+          return { snapshotB64: null, docVersion: knownDocVersion, updates };
+        }
+      }
 
       const noteRes = await supabaseClient
         .from("notes")
@@ -1450,7 +1482,15 @@ export const webRuntime: ModuoRuntime = {
       };
     },
 
-    async saveSnapshot({ workspaceId, noteId, snapshotB64, uptoUpdateId, bodyText, bodyMd }) {
+    async saveSnapshot({
+      workspaceId,
+      noteId,
+      snapshotB64,
+      uptoUpdateId,
+      bodyText,
+      bodyMd,
+      expectedDocVersion,
+    }) {
       const { data, error } = await supabaseClient.rpc("notes_op_save_snapshot", {
         p_workspace_id: workspaceId,
         p_note_id: noteId,
@@ -1458,11 +1498,13 @@ export const webRuntime: ModuoRuntime = {
         p_upto_update_id: uptoUpdateId,
         p_body_text: bodyText ?? null,
         p_body_md: bodyMd ?? null,
+        p_expected_doc_version: expectedDocVersion ?? undefined,
       });
       if (error) throw new Error(error.message);
       return {
         folded: Number(data?.folded ?? 0),
         docVersion: Number(data?.doc_version ?? 0),
+        refused: data?.refused === true,
       };
     },
 
@@ -1579,6 +1621,10 @@ export const webRuntime: ModuoRuntime = {
         title: (r.title as string) ?? "",
         bodyMd: (r.body_md as string) ?? "",
       }));
+    },
+
+    joinLive(input) {
+      return joinNoteLive(supabaseClient, input);
     },
   },
 
@@ -3375,20 +3421,41 @@ export const webRuntime: ModuoRuntime = {
       mentionedUserIds,
       entityLabel,
       entityIcon,
+      anchorId,
     }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_add", {
-        p_workspace_id: workspaceId,
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_body: body,
-        p_mentioned_user_ids: mentionedUserIds ?? [],
-        p_entity_label: entityLabel ?? null,
-        p_entity_icon: entityIcon ?? null,
-      });
+      const { data, error } = anchorId
+        ? await supabaseClient.rpc("comments_op_add_anchored", {
+            p_workspace_id: workspaceId,
+            p_entity_id: entityId,
+            p_anchor_id: anchorId,
+            p_body: body,
+            p_mentioned_user_ids: mentionedUserIds ?? [],
+            p_entity_label: entityLabel ?? null,
+            p_entity_icon: entityIcon ?? null,
+          })
+        : await supabaseClient.rpc("comments_op_add", {
+            p_workspace_id: workspaceId,
+            p_entity_type: entityType,
+            p_entity_id: entityId,
+            p_body: body,
+            p_mentioned_user_ids: mentionedUserIds ?? [],
+            p_entity_label: entityLabel ?? null,
+            p_entity_icon: entityIcon ?? null,
+          });
       if (error) throw new Error(error.message);
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
+    },
+
+    async resolveCommentThread({ workspaceId, noteId, anchorId, resolved }) {
+      const { error } = await supabaseClient.rpc("comments_op_resolve", {
+        p_workspace_id: workspaceId,
+        p_entity_id: noteId,
+        p_anchor_id: anchorId,
+        p_resolved: resolved,
+      });
+      if (error) throw new Error(error.message);
     },
 
     async getCommentExcerpts({ workspaceId, commentIds }) {
@@ -5052,6 +5119,8 @@ function commentRowToModel(raw: unknown): SpineComment {
     deletedAt: r.deleted_at ?? null,
     editedAt: r.edited_at ?? null,
     reactions: reactionMarks(r.comment_reactions ?? []),
+    anchorId: r.anchor_id ?? null,
+    resolvedAt: r.resolved_at ?? null,
   };
 }
 

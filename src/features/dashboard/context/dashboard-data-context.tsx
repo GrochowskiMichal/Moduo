@@ -285,8 +285,9 @@ export function DashboardDataProvider({
   // teammate's save on a shared task) or Time & region changes.
   const wantsTime = has("timetracking") && tasksVisible;
   const region = useTimeRegion();
-  // A new day (a new week) reads again even when nothing was tracked.
-  const today = useToday();
+  // A new day (a new week) reads again even when nothing was tracked: the
+  // saved zone's day, the one the report dates entries in (MOD-110).
+  const today = useToday(region.timeZone);
   const trackedStamp = useMemo(() => {
     if (!wantsTime || !store) return 0;
     let sum = 0;
@@ -298,7 +299,13 @@ export function DashboardDataProvider({
     workspaceId,
     [],
     async (rt, ws) => {
-      const range = reportRange("this_week", new Date(), region.weekStartsOn);
+      const range = reportRange(
+        "this_week",
+        new Date(),
+        region.weekStartsOn,
+        null,
+        region.timeZone,
+      );
       const res = await rt.tasks.timeReport({
         workspaceId: ws,
         from: range.from,

@@ -2,7 +2,8 @@
 // Replaces the old segmented RightPanelSwitcher. The title row names the open
 // view and switches it: "Details ▾" opens the module's views from the registry
 // (lib/panel-registry.ts), *about this* above a hairline, *alongside* below,
-// each with its ⌥ shortcut. A reference opened in the panel is an item, not a
+// each with its ⌥ shortcut; a page may name the open view otherwise ("4 tasks
+// ▾" on a multi-selection, MOD-109). A reference opened in the panel is an item, not a
 // view: the title becomes the item's name with a back arrow to the view you
 // were on ("← item"), and items stack. Collapse and expand stay in the bottom
 // bar (72a), so the header has no close button. The row's right end is the
@@ -62,6 +63,12 @@ type Props = {
   views: Readonly<Record<string, (() => ReactNode) | undefined>>;
   activeId: string;
   onChange: (id: string) => void;
+  /**
+   * What the title row says for the open view when it isn't the view's name:
+   * Tasks' "4 tasks" over a multi-selection (MOD-109). The ▾ still lists the
+   * views, the open one checked. Any module's page can set it.
+   */
+  title?: string;
   /** The "← item" stack, top last. Empty or absent shows the active view. */
   items?: readonly PanelItem[];
   /** Pops the top item (the back arrow, Esc). */
@@ -122,6 +129,7 @@ export function RightPanel({
   views,
   activeId,
   onChange,
+  title,
   items = [],
   onBack,
   onClearItems,
@@ -209,7 +217,11 @@ export function RightPanel({
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
-      <div ref={titleRowRef} className="flex min-h-(--ctrl-h) shrink-0 items-center gap-1">
+      {/* One row tall, like the left panel's first row, so the first lines
+          share a centre (MOD-121). The chip's fill starts at the panel's edge
+          padding and its text 8 in; the body's 4 plus a view's own 4 put the
+          body's text on that same 16 px column. */}
+      <div ref={titleRowRef} className="flex min-h-(--row-h) shrink-0 items-center gap-1">
         {item ? (
           <ItemTitle
             item={item}
@@ -217,13 +229,19 @@ export function RightPanel({
             onBack={onBack}
           />
         ) : listed.length > 1 ? (
-          <ViewMenu listed={listed} active={active} isMac={isMac} onPick={pick} />
+          <ViewMenu
+            listed={listed}
+            active={active}
+            title={title ?? active.label}
+            isMac={isMac}
+            onPick={pick}
+          />
         ) : (
           <h2
             tabIndex={-1}
-            className="min-w-0 flex-1 font-display text-base font-medium text-foreground outline-none"
+            className="min-w-0 flex-1 px-2 font-display text-base font-medium text-foreground outline-none"
           >
-            {active.label}
+            {title ?? active.label}
           </h2>
         )}
         {/* The body's own actions, right-aligned; hidden while it has none. */}
@@ -241,7 +259,7 @@ export function RightPanel({
           />
         ) : null}
       </div>
-      <div key={bodyKey} className={cn("min-h-0 flex-1", crossfade && "motion-view")}>
+      <div key={bodyKey} className={cn("min-h-0 flex-1 px-1", crossfade && "motion-view")}>
         <TitleActionsScope slot={actionsSlot}>{body}</TitleActionsScope>
       </div>
     </div>
@@ -251,11 +269,14 @@ export function RightPanel({
 function ViewMenu({
   listed,
   active,
+  title,
   isMac,
   onPick,
 }: {
   listed: PanelViewDef[];
   active: PanelViewDef;
+  /** What the row says: the view's name, or the page's override (MOD-109). */
+  title: string;
   isMac: boolean;
   onPick: (id: string) => void;
 }) {
@@ -265,10 +286,19 @@ function ViewMenu({
         <Button
           variant="ghost"
           size="sm"
-          aria-label={`Panel view: ${active.label}`}
-          className="-ml-2.5 gap-1 font-medium"
+          // The open view's name first, then what the row says instead.
+          aria-label={
+            title === active.label
+              ? `Panel view: ${active.label}`
+              : `Panel view: ${active.label}, ${title}`
+          }
+          className="gap-1 px-2 font-medium"
+          // A small row tall, not a full one: 2 px over the 26 px buttons
+          // beside it, as round-2b frame 7 draws it (.vpick 28). Button sets
+          // its height inline, so the override is inline too.
+          style={{ height: "var(--row-h-sm)" }}
         >
-          {active.label}
+          {title}
           <ChevronDown className="text-muted-foreground" aria-hidden />
         </Button>
       </DropdownMenuTrigger>
@@ -309,7 +339,7 @@ function ItemTitle({
         label={`Back to ${backTo}`}
         onClick={onBack}
         disabled={!onBack}
-        className="-ml-1.5 shrink-0"
+        className="shrink-0"
       />
       <h2
         className={cn(

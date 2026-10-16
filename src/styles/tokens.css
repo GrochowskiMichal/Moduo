@@ -157,6 +157,10 @@
      keeps 3:1 on the card in both themes. */
   --presence-reachable: var(--status-success);
 
+  /* Comment highlight on anchored text (NR-8): a soft wash, stronger when its thread is open. */
+  --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 22%, transparent);
+  --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 45%, transparent);
+
   --success-foreground: oklch(0.12 0 0);
   --warning-foreground: oklch(0.12 0 0);
   --danger-foreground:  oklch(0.97 0 0);
@@ -426,7 +430,8 @@
  *     bg-state-active-hover · bg-state-selected · ring-state-selected (the 32%
  *     ring) · ring-state-selected-edge (the row hairline switch) ·
  *     border-hairline (also bg-/ring-/divide-hairline) · bg-control-raised
- *     with shadow-control-raised. --scroll-thumb / --scroll-thumb-hover are
+ *     with shadow-control-raised · bg-tag-chip-surface (a tag's dot chip,
+ *     MOD-97). --scroll-thumb / --scroll-thumb-hover are
  *     var()-only (global.css scrollbars, the ScrollArea thumb).
  * ==========================================================================*/
 
@@ -445,6 +450,12 @@
      accent the tint alone sits close to --state-active, so it ships on. */
   --state-selected-edge: var(--state-selected-ring);
   --hairline:            color-mix(in oklab, var(--foreground) 10%, transparent);
+  /* A tag's dot chip (dogfood MOD-97, option C): a quiet neutral pill that
+     never changes with the tag's hue; the 6 px dot carries the colour. A rest
+     surface, not a state, so it sits between hover (5%) and active (9%) and
+     never answers the pointer. 7% on dark; the light block below sets 6%.
+     Utility: bg-tag-chip-surface. */
+  --tag-chip-surface:    color-mix(in oklab, var(--foreground) 7%, transparent);
   /* The third readable text level (tasks-v3 call 38, DS-6): timestamps, hints,
      counts. Three readable levels for every module — foreground (primary),
      --muted-foreground (secondary, ~8.5:1) and this one (tertiary, ~6:1, never
@@ -486,11 +497,14 @@
 /* Light: the raised plate is the white card lifted by --shadow-control-raised
    (§11) — foreground-over-muted would paint it darker than its track. The
    descendant forms cover a scoped wrapper inside a light document, which the
-   block above would otherwise reset to the dark formula. */
+   block above would otherwise reset to the dark formula. The tag chip's
+   surface steps down a point: near-black at 7% reads heavier on white than
+   near-white does on black. */
 [data-theme="light"],
 [data-theme="light"] [data-shade],
 [data-theme="light"] [data-accent] {
   --control-raised: var(--card);
+  --tag-chip-surface: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
 
 /* ============================================================================
@@ -724,6 +738,15 @@
   --width-content-max:    65rem;   /* 1040 — center column cap */
   --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
   --notes-meta-line-space: 2.25rem; /* 36 — room under a note's title for its meta line */
+  /* Shell panels (MOD-121): one inset system for the three panels, fixed
+     across densities (density changes row and control heights, never the
+     frame). --panel-pad is a panel's edge → any fill that touches it (a nav
+     row, the right panel's title chip): 8 = radius-xl − radius-md, so a
+     rounded-md fill sits concentric in the rounded-xl panel (soft 16 − 8 = 8,
+     round 24 − 8 = 16, sharp 0). --panel-inset is a panel's edge → its text
+     column: --panel-pad plus a row's own 8. */
+  --panel-pad:            0.5rem;  /* 8   — panel edge → a fill (nav row, title chip) */
+  --panel-inset:          1rem;    /* 16  — panel edge → the text column */
   --tree-indent:          0.875rem; /* 14  — one level of a nested tree (notes sidebar) */
 
   --bp-sm: 640px;
@@ -731,6 +754,14 @@
   --bp-lg: 1024px;
   --bp-xl: 1280px;
   --bp-2xl: 1536px;
+}
+
+/* The centre's top padding: its 28 px title line (text-lg) centres on the same
+   line as a side panel's first --row-h row (--panel-pad + --row-h / 2), at
+   every density: 12 / 10 / 8. Re-declared wherever a density is scoped. */
+:root,
+[data-density] {
+  --panel-title-top: calc(var(--panel-pad) + (var(--row-h) - 1.75rem) / 2);
 }
 
 /* ============================================================================
@@ -853,9 +884,11 @@
 /* ============================================================================
  * 13b. Label colors — tag chips (cross-module).
  *      Eight named hues reusing the raw accent palette bases. Each
- *      [data-label="…"] sets two vars consumed by .tag-chip / .tag-dot
- *      (global.css): `--label` (solid hue → the dot + ring) and
- *      `--label-surface` (a faint tint → the chip background). Surfaces are
+ *      [data-label="…"] sets two vars: `--label` (solid hue → the tag chip's
+ *      dot and its active ring, .tag-dot / .tag-chip-active in global.css,
+ *      plus project, account and team dots) and `--label-surface` (a faint
+ *      tint → external calendar chips, .cal-chip-external). A tag chip's own
+ *      pill is neutral, --tag-chip-surface (§5b, MOD-97). Surfaces are
  *      precomputed oklch-with-alpha (kept here, the sanctioned color file, so
  *      component code stays hex/arbitrary-free per the design-system rules).
  *      `gray` is the default / fallback when a tag has no stored color.
@@ -937,6 +970,7 @@
   --ring-color-state-selected-edge: var(--state-selected-edge);
   --color-hairline:             var(--hairline);
   --color-control-raised:       var(--control-raised);
+  --color-tag-chip-surface:     var(--tag-chip-surface);
   /* The Timeline (TV-TL1): bg-timeline-band, border-timeline-outline, … */
   --color-timeline-grid:        var(--timeline-grid);
   --color-timeline-grid-strong: var(--timeline-grid-strong);

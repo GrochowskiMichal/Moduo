@@ -48,10 +48,10 @@
     "supabase/functions/_shared/standard-webhooks.test.ts",
     "supabase/functions/_shared/service-rpc.ts",
     "supabase/functions/_shared/service-rpc.test.ts",
+    "supabase/functions/_shared/description-markdown.ts",
+    "supabase/functions/_shared/description-markdown.test.ts",
     "supabase/functions/email-worker/handler.ts",
-    "supabase/functions/email-worker/handler.test.ts",
-    "supabase/functions/send-workspace-invite/email.ts",
-    "supabase/functions/send-workspace-invite/email.test.ts"
+    "supabase/functions/email-worker/handler.test.ts"
   ],
   "exclude": ["node_modules", "dist", "src-tauri"]
 }

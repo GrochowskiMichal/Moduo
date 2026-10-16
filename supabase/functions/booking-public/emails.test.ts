@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { type BookingFacts, bookEmails, cancelEmails, guestTimeZone } from "./emails.ts";
+import { type BookingFacts, bookEmails, cancelEmails, emailContext, guestTimeZone } from "./emails.ts";
 
 const FACTS: BookingFacts = {
   bookingId: "b1",
@@ -112,5 +112,18 @@ describe("booking-public · cancel enqueue", () => {
     expect(enqueue.find((r) => r.kind === "booking_host_guest_cancelled")?.payload.googleInvites).toBe(false);
     const ok = cancelEmails(FACTS, { rebookUrl: "x", nowMs: BEFORE, googleDropped: true });
     expect(ok.enqueue.find((r) => r.kind === "booking_host_guest_cancelled")?.payload.googleInvites).toBe(true);
+  });
+});
+
+describe("booking-public · email context (TX-6)", () => {
+  it("saves what C6/C7 need, in the guest's zone, with the cancel and rebook links", () => {
+    const ctx = emailContext(FACTS, { cancelUrl: "https://moduo.app/book/cancel?token=t", rebookUrl: "https://moduo.app/book/anna" });
+    expect(ctx.zone).toBe("America/New_York");
+    expect(ctx.hostName).toBe("Anna Carter");
+    expect(ctx.hostEmail).toBe("anna@northwind.studio");
+    expect(ctx.cancelUrl).toBe("https://moduo.app/book/cancel?token=t");
+    expect(ctx.rebookUrl).toBe("https://moduo.app/book/anna");
+    expect(ctx.guests).toEqual(FACTS.guests);
+    expect(ctx.note).toBeUndefined();
   });
 });

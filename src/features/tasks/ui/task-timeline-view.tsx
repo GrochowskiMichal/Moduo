@@ -339,8 +339,12 @@ export function TaskTimelineView({
       }),
     [completed, stayingIds],
   );
+  // A group header is a value: your own reads "You", as on the List (MOD-137).
   const personName = useCallback(
-    (id: string) => personById(id)?.fullName || "Someone",
+    (id: string) => {
+      const person = personById(id);
+      return person?.isMe ? person.name : person?.fullName || "Someone";
+    },
     [personById],
   );
   const showUndated = show.has("undated");
@@ -1203,7 +1207,8 @@ export function TaskTimelineView({
               />
             </div>
 
-            <div className="relative -mx-(--pad-x) -mb-(--pad-x) min-h-0 flex-1 border-t border-hairline">
+            {/* Out to the centre's edges: its sides and foot are --panel-inset (MOD-121). */}
+            <div className="relative -mx-(--panel-inset) -mb-(--panel-inset) min-h-0 flex-1 border-t border-hairline">
               <TimelineGeometryContext.Provider value={geometry}>
                 <TimelineWindowContext.Provider value={drawn}>
                   <TimelineViewportContext.Provider value={viewport}>

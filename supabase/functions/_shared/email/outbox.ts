@@ -45,6 +45,7 @@ import { BOOKING_QUEUED } from "./templates/booking.ts";
 import { chatWaitingEmail, parseChatWaitingPayload } from "./templates/chat-waiting.ts";
 import { opsAlertEmail, parseOpsAlertPayload } from "./templates/ops-alert.ts";
 import { parseWaitlistInvitePayload, waitlistInviteEmail } from "./templates/waitlist-invite.ts";
+import { WORKSPACE_QUEUED } from "./templates/workspace.ts";
 
 export const OUTBOX_MAX_ATTEMPTS = 5;
 /** Wait before attempt n+1, after attempt n failed (n = 1…4). */
@@ -98,6 +99,7 @@ export const OUTBOX_TEMPLATES: Partial<Record<EmailKind, QueuedTemplate>> = {
   ops_alert: (payload) => ({ doc: opsAlertEmail(parseOpsAlertPayload(payload)) }),
   chat_waiting: (payload) => ({ doc: chatWaitingEmail(parseChatWaitingPayload(payload)) }),
   ...BOOKING_QUEUED,
+  ...WORKSPACE_QUEUED,
 };
 
 /** The run lease: `email_outbox__run_start` / `email_outbox__run_stop`. */

@@ -277,4 +277,10 @@ export {
   type WaitlistSource,
   type WaitlistStatus,
   type WorkspaceRole,
+  GUEST_REMINDER_MINUTES,
+  type GuestReminderMinute,
+  guestReminderMinuteSchema,
+  isGuestReminderMinute,
+  normalizeGuestReminderMinutes,
+  parseGuestReminderMinutes,
 } from "./vocabularies.ts";

@@ -43,7 +43,13 @@ import {
   type SubtaskMode,
   type TaskOrder,
 } from "../display";
-import { type BoardCellRef, planBoardDrop, targetAccepts } from "../dnd/board-drop";
+import {
+  type BoardCellRef,
+  isSelfTarget,
+  planBoardDrop,
+  targetAccepts,
+  targetName,
+} from "../dnd/board-drop";
 import { positionNextTo } from "../dnd/drop-mode";
 import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
@@ -258,7 +264,7 @@ export function TaskBoardView({
 
   const inboxId = inbox?.id ?? null;
   const today = useToday();
-  const { assignees, byId } = useAssignees();
+  const { assignees, byId, currentUserId } = useAssignees();
   const detailed = rows === "detailed";
 
   // Subtasks whose parent is on this board stay off it — the parent card
@@ -633,6 +639,7 @@ export function TaskBoardView({
     inboxId,
     statusesFor,
     parent: task.parentId ? (taskById.get(task.parentId) ?? null) : null,
+    selfId: currentUserId,
   });
 
   // Screen readers hear titles and column names, never ids (standalone
@@ -689,7 +696,12 @@ export function TaskBoardView({
         multi && multi.ids.size >= 2 && multi.ids.has(task.id)
           ? inViewOrder(multi.ids, selectionRef.current.order)
           : [task.id];
-      void api.bulkWaiting(ids, decision.entry, dest.column.label, api.waiting);
+      void api.bulkWaiting(
+        ids,
+        decision.entry,
+        targetName(dest.column.target, dest.column.label, currentUserId),
+        api.waiting,
+      );
     } else if (decision.kind === "write") {
       // A card of a selection carries the selection (TV-U12): one write, one Undo.
       const multi = selectionRef.current.multiSelect;
@@ -759,7 +771,12 @@ export function TaskBoardView({
       });
       if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
       if (decision.kind === "waiting") {
-        void api.bulkWaiting([task.id], decision.entry, column.label, api.waiting);
+        void api.bulkWaiting(
+          [task.id],
+          decision.entry,
+          targetName(column.target, column.label, currentUserId),
+          api.waiting,
+        );
       }
       return;
     }
@@ -958,6 +975,7 @@ export function TaskBoardView({
         onFold={() => setFold(column.id, true)}
         section={sectionEdits(column)}
         onEditStatuses={canEdit && column.statusId ? onEditStatuses : null}
+        self={isSelfTarget(column.target, currentUserId)}
       />
     );
 
@@ -1220,7 +1238,8 @@ function BoardColumnView({
         className={cn(
           // Linear-quiet: columns are transparent on the canvas; cards carry the
           // elevation (bg-card + hairline). Only a drag-over state lights up.
-          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
+          // It scrolls down only: sideways is the board's (MOD-143).
+          "flex min-h-0 flex-1 flex-col gap-1.5 overflow-x-hidden overflow-y-auto rounded-md p-1 transition-colors duration-(--motion-fade) ease-(--ease-out)",
           accepting ? DROP_TARGET : "bg-transparent",
         )}
       >

@@ -24,3 +24,31 @@ describe("the right panel's floor", () => {
     expect(props).toMatch(/maxSize=\{resizable \? "40%" : RIGHT_MIN\}/);
   });
 });
+
+// MOD-121 (dogfood call #28): one frame for the three panels, which density
+// never moves. The token values and where they live are pinned in
+// src/styles/panel-frame.test.ts.
+describe("the panels' padding", () => {
+  it("holds the side panels' fills --panel-pad from the edge", async () => {
+    expect(await read()).toMatch(/const RAIL_PAD = \{ padding: "var\(--panel-pad\)" \} as const;/);
+  });
+
+  it("puts the centre's text column --panel-inset in, under the derived title top", async () => {
+    expect(await read()).toMatch(
+      /const CENTER_PAD = \{\s*padding: "var\(--panel-title-top\) var\(--panel-inset\) var\(--panel-inset\)",\s*\} as const;/,
+    );
+  });
+
+  it("reads no density padding (--pad-*) for the frame", async () => {
+    expect(await read()).not.toMatch(/var\(--pad-/);
+  });
+
+  it("puts the bottom bar on the panels' 16 px edge line, and keeps the top bar at 20", async () => {
+    const chrome = await fs.readFile(
+      path.join(process.cwd(), "src/components/app/app-chrome.tsx"),
+      "utf8",
+    );
+    expect(chrome).toMatch(/"relative flex flex-row items-center bg-background px-4"/);
+    expect(chrome).toMatch(/"relative grid w-full items-center bg-background px-5"/);
+  });
+});

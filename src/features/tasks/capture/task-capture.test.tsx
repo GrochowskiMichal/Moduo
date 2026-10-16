@@ -5,6 +5,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { $createParagraphNode, $createTextNode, $getRoot, type LexicalEditor } from "lexical";
 import { Toaster } from "sonner";
 
 import { CAPTURE_OPEN_EVENT } from "../../../lib/capture-open";
@@ -14,7 +15,7 @@ import type { ResolveContext } from "../../spine/references/resolvers";
 import type { ReferencePreviewApi } from "../../spine/references/rows";
 import { ReferenceStore } from "../../spine/references/store";
 import type { Bucket, Task, Team } from "../model";
-import { EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
+import { type CaptureDraft, EMPTY_FIELDS, loadDraft, saveDraft } from "./capture-draft";
 import {
   type CaptureAttachmentHandler,
   type CaptureTemplateProvider,
@@ -139,6 +140,7 @@ function fakeRuntime() {
       addWaiting: rs.fn(async () => []),
       opQueueAdd: rs.fn(async () => []),
       attachTag: rs.fn(async () => ({})),
+      mentionInTask: rs.fn(async () => {}),
     },
     spine: {
       createLink: rs.fn(async (input: unknown) => {
@@ -425,6 +427,47 @@ describe("a team task (54, 94)", () => {
     expect(mock.bucketId).toBe("p-requests");
     // ...unless a line names its own person.
     expect(review.assigneeId).toBe(SAM);
+    // Nobody picked: the pill says the team's, never "You" (MOD-135).
+    expect(screen.getByRole("button", { name: /^Assign:\s*Design · unclaimed$/ })).toBeTruthy();
+  });
+});
+
+// The pill's name joins its hidden "Assign: " and the value without the space.
+const pillName = (label: string, value: string) => new RegExp(`^${label}:\\s*${value}$`);
+
+describe("the pills say what the task will get (MOD-134, MOD-135)", () => {
+  const draftWith = (fields: Record<string, unknown>) =>
+    saveDraft(ME, WS, {
+      segments: [{ text: "Draw the poster" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: { ...EMPTY_FIELDS, ...fields },
+    });
+
+  it("Assign shows you, with your avatar, while the task will be yours", async () => {
+    renderBody();
+    const pill = await screen.findByRole("button", { name: pillName("Assign", "You") });
+    expect(pill.querySelector('[data-slot="avatar"]')).toBeTruthy();
+  });
+
+  it("Assign says Unassigned once that's picked", async () => {
+    draftWith({ assigneeId: null });
+    renderBody();
+    expect(
+      await screen.findByRole("button", { name: pillName("Assign", "Unassigned") }),
+    ).toBeTruthy();
+  });
+
+  it("Priority shows the app's three bars: all faint unset, the level's once set", async () => {
+    renderBody();
+    const unset = await screen.findByRole("button", { name: "Priority" });
+    expect(unset.querySelector('svg[data-level="0"]')).toBeTruthy();
+    cleanup();
+    draftWith({ priority: "high" });
+    renderBody();
+    const set = await screen.findByRole("button", { name: pillName("Priority", "High") });
+    expect(set.querySelector('svg[data-level="3"]')).toBeTruthy();
   });
 });
 
@@ -437,6 +480,22 @@ describe("a group's + (TV-U10)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
     await waitFor(() => expect(fake.saved.length).toBe(1));
     expect(fake.saved[0]?.statusCategory).toBe("in_progress");
+  });
+});
+
+describe("a date cleared by hand (MOD-133)", () => {
+  it("its × keeps the date words as words: the chip stays gone, the title keeps them", async () => {
+    renderBody({}, referenceStore({}), "Ring the framer tomorrow 3pm");
+    const clear = await screen.findByRole("button", { name: /^Clear Tomorrow/ });
+    fireEvent.click(clear);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /^Clear Tomorrow/ })).toBeNull(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    const [task] = fake.saved;
+    expect(task.title).toBe("Ring the framer tomorrow 3pm");
+    expect(task.scheduledAt ?? null).toBeNull();
   });
 });
 
@@ -622,6 +681,19 @@ describe("From template (`/template`, More → Template…, TV-D15)", () => {
   });
 });
 
+// The description is a Lexical editor (call #15). jsdom has no ClipboardEvent
+// or DragEvent, and Lexical tells them apart by class name: stand-ins, and
+// events built on their prototypes (docs/gotchas/notes.md, AT-2).
+const events = globalThis as Record<string, unknown>;
+events.ClipboardEvent ??= class ClipboardEvent extends Event {};
+events.DragEvent ??= class DragEvent extends Event {};
+function dispatchAs(kind: "ClipboardEvent" | "DragEvent", el: Element, type: string, data: object) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.assign(event, data);
+  Object.setPrototypeOf(event, (events[kind] as typeof Event).prototype);
+  el.dispatchEvent(event);
+}
+
 describe("Files on a capture (AT-3, AT3-2)", () => {
   const shot = () => new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
   const clipboard = (files: File[], text = "") => ({
@@ -632,6 +704,11 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
       getData: (type: string) => (type === "text/plain" ? text : ""),
     },
   });
+  const paste = (el: Element, data: object) =>
+    act(async () => {
+      dispatchAs("ClipboardEvent", el, "paste", data);
+      await new Promise((r) => setTimeout(r, 0));
+    });
   let handled: Array<Parameters<CaptureAttachmentHandler>[0]>;
   beforeEach(() => {
     handled = [];
@@ -654,7 +731,7 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
 
   it("a screenshot pasted into the description becomes a chip; Create sends it with the new task", async () => {
     await openWithTitle();
-    fireEvent.paste(description(), clipboard([shot()]));
+    await paste(description(), clipboard([shot()]));
     expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     expect(document.querySelector('[data-slot="capture-files"]')?.textContent).toContain(
       "shot.png",
@@ -673,7 +750,7 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
       throw new Error("You can't add tasks here.");
     });
     await openWithTitle();
-    fireEvent.paste(description(), clipboard([shot()]));
+    await paste(description(), clipboard([shot()]));
     await screen.findByRole("button", { name: "Remove shot.png" });
     fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
     await waitFor(() => expect(loadDraft(ME, WS, "refused")).not.toBeNull());
@@ -686,28 +763,45 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
 
   it("text pasted into the description stays text", async () => {
     await openWithTitle();
-    fireEvent.paste(description(), clipboard([], "notes"));
+    await paste(description(), clipboard([], "notes"));
     expect(screen.queryByRole("button", { name: /^Remove / })).toBeNull();
+  });
+
+  const dropOf = (files: File[]) => ({
+    dataTransfer: {
+      types: ["Files"],
+      files,
+      items: files.map((f) => ({
+        kind: "file",
+        getAsFile: () => f,
+        webkitGetAsEntry: () => ({ isDirectory: false }),
+      })),
+    },
   });
 
   it("files dropped on the capture become chips; a chip comes off again", async () => {
     await openWithTitle();
-    fireEvent.drop(description(), {
-      dataTransfer: {
-        types: ["Files"],
-        files: [shot()],
-        items: [
-          {
-            kind: "file",
-            getAsFile: () => shot(),
-            webkitGetAsEntry: () => ({ isDirectory: false }),
-          },
-        ],
-      },
-    });
+    fireEvent.drop(screen.getByRole("button", { name: "Destination: Inbox" }), dropOf([shot()]));
     expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Remove shot.png" }));
     expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
+  });
+
+  it("a file dropped on the description's text becomes one chip (its editor takes the drop)", async () => {
+    await openWithTitle();
+    await act(async () => {
+      dispatchAs("DragEvent", description(), "drop", dropOf([shot()]));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(await screen.findAllByRole("button", { name: "Remove shot.png" })).toHaveLength(1);
+  });
+
+  it("a file dropped on the box around the description's text becomes a chip too", async () => {
+    await openWithTitle();
+    const box = document.querySelector("[data-capture-description]");
+    if (!box) throw new Error("no description box");
+    fireEvent.drop(box, dropOf([shot()]));
+    expect(await screen.findAllByRole("button", { name: "Remove shot.png" })).toHaveLength(1);
   });
 
   it("a folder dropped on the capture is left out", async () => {
@@ -725,6 +819,124 @@ describe("Files on a capture (AT-3, AT3-2)", () => {
   });
 });
 
+describe("The description: one editor, Markdown, ⏎ creates (call #15, MOD-117)", () => {
+  const TASK_ID = "11111111-1111-4111-8111-111111111111";
+  // A focused editor measures its caret; jsdom's Range can't.
+  const rangeProto = Range.prototype as unknown as Record<string, unknown>;
+  rangeProto.getBoundingClientRect ??= () => ({
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: 0,
+    height: 0,
+  });
+  rangeProto.getClientRects ??= () => [];
+
+  async function openWith(description: string, mentions: CaptureDraft["mentions"] = []) {
+    saveDraft(ME, WS, {
+      segments: [{ text: "Fix the login screen" }],
+      keep: [],
+      description,
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+      mentions,
+    });
+    renderBody();
+    await screen.findByText(/Draft restored/);
+    const box = screen.getByRole("textbox", { name: "Description" });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // The caret at the end of the text, where Lexical reads it on a key.
+    box.focus();
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    let last: Node | null = null;
+    while (walker.nextNode()) last = walker.currentNode;
+    const range = document.createRange();
+    range.setStart(last ?? box, last ? (last.textContent?.length ?? 0) : 0);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    act(() => {
+      (box as HTMLElement & { __lexicalEditor: LexicalEditor }).__lexicalEditor.update(
+        () => $getRoot().selectEnd(),
+        { discrete: true },
+      );
+    });
+    return box;
+  }
+
+  it("shows its Markdown formatted, and ⏎ in it creates the task with that Markdown", async () => {
+    const box = await openWith(`Check **this** with [task](moduo://task/${TASK_ID})`);
+    expect(box.querySelector("strong")?.textContent).toBe("this");
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.title).toBe("Fix the login screen");
+    expect(fake.saved[0]?.description).toBe(`Check **this** with [task](moduo://task/${TASK_ID})`);
+    // What it references links once the task exists, as the title's things do.
+    await waitFor(() =>
+      expect(fake.links).toContainEqual(
+        expect.objectContaining({
+          target: { type: "task", id: TASK_ID },
+          relationKind: "mentions",
+        }),
+      ),
+    );
+  });
+
+  it("a draft with a crafted description comes back quickly, and creates with it (security review)", async () => {
+    const crafted = [
+      "*a".repeat(2_500),
+      Array.from({ length: 20 }, () => `- ${"*a".repeat(2_400)}`).join("\n"),
+      "[x](".repeat(15_000),
+    ].join("\n\n");
+    const start = performance.now();
+    const box = await openWith(crafted);
+    expect(performance.now() - start).toBeLessThan(4000);
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    expect(fake.saved[0]?.description).toBe(crafted);
+  });
+
+  it("a restored draft still tells the people its description @-mentions", async () => {
+    const box = await openWith("Ask @Sam Ortiz about it", [{ id: SAM, label: null }]);
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    await waitFor(() =>
+      expect(fake.runtime.tasks.mentionInTask).toHaveBeenCalledWith({
+        workspaceId: WS,
+        taskId: fake.saved[0]?.id,
+        userIds: [SAM],
+      }),
+    );
+  });
+
+  it("a restored draft tells someone mentioned by email (no name set) too", async () => {
+    const box = await openWith("Ask @sam@example.com about it", [
+      { id: SAM, label: "sam@example.com" },
+    ]);
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(fake.saved.length).toBe(1));
+    await waitFor(() =>
+      expect(fake.runtime.tasks.mentionInTask).toHaveBeenCalledWith({
+        workspaceId: WS,
+        taskId: fake.saved[0]?.id,
+        userIds: [SAM],
+      }),
+    );
+  });
+
+  it("⇧⏎ in it starts a new line and creates nothing", async () => {
+    const box = await openWith("First line");
+    fireEvent.keyDown(box, { key: "Enter", shiftKey: true });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(fake.saved).toHaveLength(0);
+    expect(box.querySelectorAll("p")).toHaveLength(2);
+  });
+});
+
 describe("taskForFiles (the file seam's task, AT3-2)", () => {
   it("made: the files go now; waiting offline: they wait with it; refused: nothing to attach to", async () => {
     const made = Promise.resolve({ created: [{ id: "t1" }], queued: [] as string[] });
@@ -738,6 +950,25 @@ describe("taskForFiles (the file seam's task, AT3-2)", () => {
 });
 
 describe("a prefilled open (chat's T and /task, CV-7b)", () => {
+  /** Types into the description (one Lexical editor since call #15, MOD-117). */
+  const typeDescription = async (text: string) => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const box = screen.getByRole("textbox", { name: "Description" });
+    act(() => {
+      (box as HTMLElement & { __lexicalEditor: LexicalEditor }).__lexicalEditor.update(
+        () => {
+          const root = $getRoot();
+          root.clear();
+          root.append($createParagraphNode().append($createTextNode(text)));
+        },
+        { discrete: true },
+      );
+    });
+  };
+  /** The description's words as shown. */
+  const descriptionText = () => screen.getByRole("textbox", { name: "Description" }).textContent;
   const KEPT_SEGMENTS = [
     { text: "Kept with Esc " },
     { token: { kind: "person" as const, userId: SAM, label: "" } },
@@ -845,9 +1076,7 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     normal.unmount();
     const first = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
     await waitFor(() => expect(document.body.textContent).toContain("From chat"));
-    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
-      target: { value: "typed in the prefilled capture" },
-    });
+    await typeDescription("typed in the prefilled capture");
     first.unmount();
     keptIsThere();
     // The shell gives the line back as it was before the prefill: the stored
@@ -856,9 +1085,7 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     await waitFor(() => expect(document.body.textContent).toContain("Kept with Esc"));
     expect(document.querySelector('[data-capture-token="person"]')).toBeTruthy();
     expect(document.body.textContent).not.toContain("From chat");
-    expect(
-      (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
-    ).toBe("kept description");
+    expect(descriptionText()).toBe("kept description");
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
@@ -876,16 +1103,17 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     render(<Toaster />);
     const first = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
     const shot = new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
-    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
-      target: { value: "the refused one's words" },
-    });
-    fireEvent.paste(screen.getByRole("textbox", { name: "Description" }), {
-      clipboardData: {
-        types: ["Files"],
-        files: [shot],
-        items: [{ kind: "file", getAsFile: () => shot }],
-        getData: () => "",
-      },
+    await typeDescription("the refused one's words");
+    await act(async () => {
+      dispatchAs("ClipboardEvent", screen.getByRole("textbox", { name: "Description" }), "paste", {
+        clipboardData: {
+          types: ["Files"],
+          files: [shot],
+          items: [{ kind: "file", getAsFile: () => shot }],
+          getData: () => "",
+        },
+      });
+      await new Promise((r) => setTimeout(r, 0));
     });
     await screen.findByRole("button", { name: "Remove shot.png" });
     await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
@@ -915,9 +1143,7 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     expect(request).toMatchObject({ type: "task", draft: "From chat", fromRefused: true });
     const second = renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
     await waitFor(() => expect(document.body.textContent).toContain("From chat"));
-    expect(
-      (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
-    ).toBe("the refused one's words");
+    expect(descriptionText()).toBe("the refused one's words");
     expect(screen.getByRole("button", { name: "Remove shot.png" })).toBeTruthy();
     expect(document.body.textContent).not.toContain("Kept with Esc");
     // Esc: both stay kept, files too.
@@ -985,11 +1211,11 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
     const second = renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
     await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
     fireEvent.click(createButton(/^Create more/));
-    await waitFor(() =>
-      expect(
-        (screen.getByRole("textbox", { name: "Description" }) as HTMLTextAreaElement).value,
-      ).toBe("the refused one's words"),
-    );
+    // The description editor empties a beat after the click, so wait for the
+    // refusal itself (50 ms above) before reading what came back. Outside
+    // `act`: inside it React would hold the emptied title until the end.
+    await new Promise((r) => setTimeout(r, 150));
+    await waitFor(() => expect(descriptionText()).toBe("the refused one's words"));
     second.unmount();
     expect(loadDraft(ME, WS, "refused")?.description).toBe("the refused one's words");
     keptIsThere();
@@ -1047,9 +1273,7 @@ describe("a prefilled open (chat's T and /task, CV-7b)", () => {
 
   it("a normal open keeps today's draft: what's typed is kept on the device", async () => {
     const first = renderBody({}, referenceStore({}), "");
-    fireEvent.change(screen.getByRole("textbox", { name: "Description" }), {
-      target: { value: "normal words" },
-    });
+    await typeDescription("normal words");
     await waitFor(() => expect(loadDraft(ME, WS)?.description).toBe("normal words"));
     first.unmount();
     expect(loadDraft(ME, WS)?.description).toBe("normal words");

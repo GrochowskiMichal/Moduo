@@ -52,7 +52,7 @@ export const WithSeparator: Story = {
       <SelectContent>
         <SelectGroup>
           <SelectLabel>People</SelectLabel>
-          <SelectItem value="me">Me</SelectItem>
+          <SelectItem value="me">Maya Brooks (you)</SelectItem>
           <SelectItem value="alex">Alex</SelectItem>
           <SelectItem value="sam">Sam</SelectItem>
         </SelectGroup>

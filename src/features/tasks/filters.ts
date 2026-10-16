@@ -6,7 +6,7 @@
 // they need the workspace's members and tags.
 //
 // Operators: is / is not / any of, AND across dimensions. Yes/no dimensions
-// (In my Focus, Blocked, …) offer only "is".
+// (In your Focus, Blocked, …) offer only "is".
 
 import { TASK_STATUSES } from "@contracts/vocabularies";
 import {
@@ -22,6 +22,8 @@ import type { PriorityLevel, Task, TaskStatus } from "./model";
 import { type StatusKey, statusKeyOf } from "./statuses";
 
 export const TASK_FILTER_DIMENSIONS = [
+  // MOD-141: the project a task is in, where more than one shows.
+  "project",
   "assignee",
   // TV-D13: the team a task is routed to.
   "team",
@@ -47,6 +49,21 @@ export type TaskFilterDimension = (typeof TASK_FILTER_DIMENSIONS)[number];
 /** The value for "nobody" / "no level" / "no tag" on a dimension. */
 export const NONE_VALUE = "none";
 
+/**
+ * Project's value for the reader's own Inbox (MOD-141): a word, not the
+ * Inbox's id, so a shared view "Project is Inbox" shows each reader their own.
+ */
+export const INBOX_VALUE = "inbox";
+
+/**
+ * The places where Filter offers Project (MOD-141): those that show more
+ * than one project's tasks (All, My tasks, Upcoming, Won't do, and the views
+ * over them). Never inside one project or the Inbox.
+ */
+export function offersProjectFilter(place: string): boolean {
+  return place === "all" || place === "mine" || place === "upcoming" || place === "wontdo";
+}
+
 const YES_NO_DIMENSIONS: ReadonlySet<string> = new Set([
   "queued",
   "blocked",
@@ -56,6 +73,7 @@ const YES_NO_DIMENSIONS: ReadonlySet<string> = new Set([
 ]);
 
 export const TASK_FILTER_LABELS: Record<TaskFilterDimension, string> = {
+  project: "Project",
   assignee: "Assignee",
   team: "Team",
   creator: "Creator",
@@ -66,7 +84,8 @@ export const TASK_FILTER_LABELS: Record<TaskFilterDimension, string> = {
   energy: "Energy",
   due: "Due date",
   scheduled: "Scheduled",
-  queued: "In my Focus",
+  // "your", never "my" (MOD-137).
+  queued: "In your Focus",
   blocked: "Blocked",
   waiting: "Waiting on",
   recurring: "Recurring",
@@ -124,6 +143,8 @@ export type TaskFilterContext = {
   attachmentCount: (taskId: string) => number;
   /** What a task waits on (the kinds of its live Waiting on… entries). */
   waitingKindsOf?: (taskId: string) => readonly string[];
+  /** The reader's own Inbox: its tasks read as Project `inbox`. */
+  inboxId?: string | null;
 };
 
 /** Waiting on's "anything" value: a task with at least one entry. */
@@ -138,6 +159,9 @@ export function taskFilterValues(
   ctx: TaskFilterContext,
 ): readonly string[] {
   switch (dimension as TaskFilterDimension) {
+    case "project":
+      // Every task is in a project or an Inbox: no "none".
+      return [ctx.inboxId && task.bucketId === ctx.inboxId ? INBOX_VALUE : task.bucketId];
     case "assignee":
       return [task.assigneeId ?? NONE_VALUE];
     case "team":
@@ -260,15 +284,33 @@ export type CaptureSeed = {
   /** Absent = the capture's own default (me); null = Unassigned. */
   assigneeId?: string | null;
   priority?: PriorityLevel | null;
+  /**
+   * Where a Project filter files the task (MOD-141): absent = it names none;
+   * null = the reader's Inbox; else a project id. The page turns it into the
+   * capture's destination (`seededProject`), never part of the seed itself.
+   */
+  projectId?: string | null;
 };
+
+/**
+ * The project New files into under a Project filter (MOD-141), so the new
+ * task stays in the filtered list: the one the filter names when the reader
+ * holds it (`projectIds`, their live projects). Null leaves the capture's own
+ * default, the reader's Inbox: what "Project is Inbox" asks for, and the
+ * answer when no Project filter applies or its project is gone.
+ */
+export function seededProject(seed: CaptureSeed, projectIds: readonly string[]): string | null {
+  const id = seed.projectId;
+  return id && projectIds.includes(id) ? id : null;
+}
 
 const PRIORITIES: readonly string[] = ["low", "medium", "high"];
 
 /**
  * What New pre-fills inside a filtered scope (U2-5), so the task you create
- * shows where you are: the tag, assignee and priority a filter asks for. An
- * "is" condition gives its value; "is any of" gives its first. "Is not" gives
- * nothing (it says what the task isn't, not what it is).
+ * shows where you are: the tag, assignee, priority and project (MOD-141) a
+ * filter asks for. An "is" condition gives its value; "is any of" gives its
+ * first. "Is not" gives nothing (it says what the task isn't, not what it is).
  */
 export function captureSeed(conditions: readonly FilterCondition[]): CaptureSeed {
   const seed: CaptureSeed = { tagIds: [] };
@@ -283,6 +325,8 @@ export function captureSeed(conditions: readonly FilterCondition[]): CaptureSeed
     } else if (c.dimension === "priority") {
       if (first === NONE_VALUE) seed.priority = null;
       else if (PRIORITIES.includes(first)) seed.priority = first as PriorityLevel;
+    } else if (c.dimension === "project") {
+      if (first !== NONE_VALUE) seed.projectId = first === INBOX_VALUE ? null : first;
     }
   }
   return seed;

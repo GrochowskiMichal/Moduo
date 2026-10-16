@@ -116,6 +116,8 @@ const NAMED_WRITE_RPCS = new Set([
   "contact_group_add",
   "contact_group_create",
   "contact_merge",
+  // NR-7: the live heartbeat records "I have this note open".
+  "notes_live_here",
   "share_defaults_set",
   "workspace_api_keys_create",
   "workspace_api_keys_revoke",

@@ -48,7 +48,14 @@ import {
   zoomMeetingIdFromLink,
 } from "../_shared/zoom.ts";
 import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
-import { type BookingFacts, bookEmails, cancelEmails, type EnqueueRequest, guestTimeZone } from "./emails.ts";
+import {
+  type BookingFacts,
+  bookEmails,
+  cancelEmails,
+  type EnqueueRequest,
+  emailContext,
+  guestTimeZone,
+} from "./emails.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
@@ -542,6 +549,20 @@ Deno.serve(async (req: Request) => {
     // Google's invite: only Google can take it back, and our calendar file can't.
     const googleCreated = row.meeting_id != null;
     if (row.status !== "confirmed") return json({ ok: true, status: row.status, googleInvites: googleCreated });
+    // Marked first, before Google and Zoom are touched: a calendar sync that
+    // lands in between then sees a cancelled booking, never a host's cancel
+    // (TX-6's event trigger would otherwise email the guests "<host> canceled").
+    const cancelledAt = new Date();
+    const claimed = await db
+      .from("slot_bookings")
+      .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
+      .eq("id", row.id)
+      .eq("status", "confirmed")
+      .select("id");
+    if (!claimed.error && (claimed.data ?? []).length === 0) {
+      // Another cancel got there first.
+      return json({ ok: true, status: "cancelled", googleInvites: googleCreated });
+    }
     const access = link ? await googleAccess(db, link.owner_user_id).catch(() => null) : null;
     let googleDropped = false;
     if (access && row.meeting_id) {
@@ -559,11 +580,12 @@ Deno.serve(async (req: Request) => {
         p_event_id: row.calendar_event_id,
       });
     }
-    const cancelledAt = new Date();
-    await db
-      .from("slot_bookings")
-      .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
-      .eq("id", row.id);
+    if (claimed.error) {
+      await db
+        .from("slot_bookings")
+        .update({ status: "cancelled", updated_at: cancelledAt.toISOString() })
+        .eq("id", row.id);
+    }
     // Whether the guest gets our calendar update (not after the meeting started,
     // and only for an event Google didn't create).
     let emailed = false;
@@ -829,21 +851,9 @@ Deno.serve(async (req: Request) => {
   }
   const ids = committed.data as { event_id?: string; contact_id?: string };
 
-  await db
-    .from("slot_bookings")
-    .update({
-      status: "confirmed",
-      meeting_id: meet.eventId,
-      meeting_link: meet.meetLink,
-      calendar_event_id: ids.event_id ?? null,
-      contact_id: ids.contact_id ?? null,
-      calendar_synced: true,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", bookingId);
-
   // Never from the request: body.origin only picks one of our own hosts.
-  const cancelUrl = bookingCancelUrl(bookingOrigin(body.origin), cancelToken);
+  const origin = bookingOrigin(body.origin);
+  const cancelUrl = bookingCancelUrl(origin, cancelToken);
   // Google created the event with sendUpdates=all, so it invites everyone itself.
   const googleInvites = meet.eventId != null;
   const facts: BookingFacts = {
@@ -861,6 +871,40 @@ Deno.serve(async (req: Request) => {
     googleInvites,
     at: new Date().toISOString(),
   };
+
+  // Confirming queues the reminders (TX-6, a trigger), which render from the
+  // email context saved with the booking, so both go in one update.
+  const confirmed = {
+    status: "confirmed",
+    meeting_id: meet.eventId,
+    meeting_link: meet.meetLink,
+    calendar_event_id: ids.event_id ?? null,
+    contact_id: ids.contact_id ?? null,
+    calendar_synced: true,
+    updated_at: new Date().toISOString(),
+  };
+  const context = emailContext(facts, { cancelUrl, rebookUrl: `${origin}/book/${encodeURIComponent(link.slug)}` });
+  const withContext = {
+    ...(await db
+      .from("slot_bookings")
+      .update({ ...confirmed, email_context: context })
+      .eq("id", bookingId)),
+    context,
+  };
+  if (withContext.error) {
+    console.error("[booking-public] confirm with email context failed:", withContext.error.code, withContext.error.message);
+    const missingColumn =
+      (withContext.error.code === "PGRST204" || withContext.error.code === "42703") &&
+      withContext.error.message.includes("email_context");
+    // Deployed before its migration: confirm without the context. Anything
+    // else: try the same update once more, so a passing hiccup keeps it.
+    const retry = await db
+      .from("slot_bookings")
+      .update(missingColumn ? confirmed : { ...confirmed, email_context: withContext.context })
+      .eq("id", bookingId);
+    if (retry.error) await db.from("slot_bookings").update(confirmed).eq("id", bookingId);
+  }
+
   await queueEmails(
     db,
     bookEmails(facts, {

@@ -34,7 +34,7 @@ export type TimeRegion = {
   weekStart: number | null;
   hourCycle: HourCycle | null;
   dateOrder: DateOrder | null;
-  /** "Share my tracked time with the workspace owner" (REPLAN 75). */
+  /** "Share your tracked time with the workspace owner" (REPLAN 75). */
   shareTimeWithOwner: boolean;
   /** Quiet hours (CV-18): every module's device notices wait; "HH:MM" in `timeZone`. */
   quietHours: QuietHours;

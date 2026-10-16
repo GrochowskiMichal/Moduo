@@ -39,7 +39,7 @@ import type { ModuoRuntime } from "../../../../lib/runtime.types";
 import type { ImportRun } from "../../../../lib/runtime.web.agents";
 import { formatDate } from "../../../../lib/time-format";
 import { getResolvedTimeRegion } from "../../../../lib/time-region";
-import { type Assignee, UNASSIGNED } from "../../assignee-options";
+import { type Assignee, assigneeListName, UNASSIGNED } from "../../assignee-options";
 import { CATEGORY_LABELS } from "../../statuses";
 import {
   choosePlan,
@@ -619,13 +619,16 @@ function PreviewStep({
                   }
                 >
                   <SelectTrigger aria-label={`Assignee for ${p.label}`} className="w-40">
-                    <SelectValue />
+                    {/* The menu lists "Name (you)"; the picked value reads "You" (MOD-137). */}
+                    <SelectValue>
+                      {takers.find((a) => a.userId === assigneeOf.get(p.key))?.name ?? "Unassigned"}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
                     {takers.map((a) => (
                       <SelectItem key={a.userId} value={a.userId}>
-                        {a.name}
+                        {assigneeListName(a)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -652,9 +655,10 @@ function PreviewStep({
             <Checkbox
               checked={assignNobodyToMe}
               onCheckedChange={(v) => setAssignNobodyToMe(v === true)}
-              aria-label="Assign tasks nobody is on to me"
+              aria-label="Assign tasks nobody is on to you"
             />
-            Assign the {plural(resolved.counts.nobodyOnIt, "task")} nobody is on to me
+            {/* "to you", never "to me" (MOD-137). */}
+            Assign the {plural(resolved.counts.nobodyOnIt, "task")} nobody is on to you
           </Label>
         ) : null}
       </div>

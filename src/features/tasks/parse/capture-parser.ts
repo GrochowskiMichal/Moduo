@@ -190,11 +190,16 @@ function withMonthDay(text: string, match: RecurrenceMatch | null): RecurrenceMa
   };
 }
 
+/** chrono's "now" ("right now" too): a word in a sentence, never a date (MOD-133). */
+const NOW_WORD = /^now$/i;
+
 /**
  * A clear date phrase names a day, a weekday or a clock time. A month on its
- * own ("Send March report") or a year isn't one, so those words stay text.
+ * own ("Send March report") or a year isn't one, so those words stay text,
+ * and so does "now" ("Call back now"), which chrono reads as this minute.
  */
 function isClearDate(result: chrono.ParsedResult): boolean {
+  if (NOW_WORD.test(result.text.trim())) return false;
   const s = result.start;
   return s.isCertain("day") || s.isCertain("weekday") || s.isCertain("hour");
 }
@@ -294,15 +299,26 @@ function mergeRanges(ranges: ReadonlyArray<readonly [number, number]>): Array<[n
   return out;
 }
 
-/** Every occurrence of the kept phrases in `text` (any case, whole words). */
+const WORD_CHAR = /[\p{L}\p{N}]/u;
+
+/**
+ * Every occurrence of the kept phrases in `text` (any case, whole words): a
+ * cleared pill keeps a weekday's "Mon" (MOD-133), which must leave "every
+ * month" and "next Monday" readable.
+ */
 function keptRanges(text: string, keep: readonly string[]): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   const lower = text.toLowerCase();
+  const wordAt = (i: number) => i >= 0 && i < lower.length && WORD_CHAR.test(lower[i]);
   for (const phrase of keep) {
     const needle = phrase.trim().toLowerCase();
     if (!needle) continue;
+    const opensWord = WORD_CHAR.test(needle[0]);
+    const closesWord = WORD_CHAR.test(needle[needle.length - 1]);
     for (let i = lower.indexOf(needle); i !== -1; i = lower.indexOf(needle, i + 1)) {
-      out.push([i, i + needle.length]);
+      const end = i + needle.length;
+      if ((opensWord && wordAt(i - 1)) || (closesWord && wordAt(end))) continue;
+      out.push([i, end]);
     }
   }
   return out;

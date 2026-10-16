@@ -337,7 +337,11 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
         .filter((m) => m.teamId === team.id)
         .map((m) => {
           const member = workspaceMembers.find((w) => w.userId === m.userId);
-          return { userId: m.userId, name: member ? memberLabel(member) : "Former member" };
+          return {
+            userId: m.userId,
+            name: member ? memberLabel(member) : "Former member",
+            avatarUrl: member?.avatarUrl ?? null,
+          };
         })
         .sort((a, b) => a.name.localeCompare(b.name)),
     [teams.members, team.id, workspaceMembers],
@@ -539,11 +543,11 @@ export function TeamEditor({ team, teams }: { team: Team; teams: WorkspaceTeams 
                 key={p.userId}
                 className="flex min-h-(--row-h) items-center gap-2 rounded-md px-1 text-sm"
               >
-                <PersonAvatar name={p.name} id={p.userId} size="sm" />
+                <PersonAvatar name={p.name} id={p.userId} src={p.avatarUrl} size="sm" />
                 <span className="min-w-0 flex-1 truncate">
                   {p.name}
                   {p.userId === userId ? (
-                    <span className="text-muted-foreground"> · You</span>
+                    <span className="text-muted-foreground"> (you)</span>
                   ) : null}
                 </span>
                 {p.userId === userId ? (

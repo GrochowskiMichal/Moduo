@@ -246,6 +246,15 @@ describe("cross-runtime drift guards", () => {
     );
   });
 
+  it("CONTENT_AUTHOR_KINDS matches note_updates_origin_check (NR-6)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261014120000_notes_agent_writes.sql"),
+      "utf8",
+    );
+    const inList = CONTENT_AUTHOR_KINDS.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (origin IN (${inList}))`);
+  });
+
   it("time entry kinds, actions and answers match the TV-D14 re-cut of the TV-D3 migration", () => {
     const base = readFileSync(
       resolve(MIGRATIONS_DIR, "20261008225500_tasks_time_entries.sql"),
@@ -469,8 +478,21 @@ describe("cross-runtime drift guards", () => {
     const opList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`CHECK (scope IN (${inList(TASK_VIEW_SCOPES)}))`);
     expect(sql).toContain(`v_scope NOT IN (${opList(TASK_VIEW_SCOPES)})`);
-    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_ID_DIMENSIONS)})`);
-    expect(sql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_WORD_DIMENSIONS)})`);
+    // The filter's dimensions: the newest cut of task_views__check_filters
+    // (MOD-141 added Project).
+    const filtersFile = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .filter((f) =>
+        readFileSync(resolve(MIGRATIONS_DIR, f), "utf8").includes(
+          "FUNCTION public.task_views__check_filters(\n",
+        ),
+      )
+      .pop();
+    expect(filtersFile).toBeDefined();
+    const filtersSql = readFileSync(resolve(MIGRATIONS_DIR, filtersFile as string), "utf8");
+    expect(filtersSql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_ID_DIMENSIONS)})`);
+    expect(filtersSql).toContain(`v_dim NOT IN (${opList(TASK_VIEW_WORD_DIMENSIONS)})`);
   });
 
   it("the booking busy read leaves out the closed categories (TV-D10-fix)", () => {

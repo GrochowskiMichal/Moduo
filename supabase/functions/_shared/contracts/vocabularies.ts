@@ -867,6 +867,30 @@ export function isEmailKind(input: unknown): input is EmailKind {
 }
 
 /**
+ * Booking links' "Remind guests" (TX-6): minutes before the meeting. Off is
+ * NULL in `exposed_slot_links.guest_reminder_minutes`; the CHECK lists these.
+ */
+export const GUEST_REMINDER_MINUTES = [60, 1440] as const;
+export type GuestReminderMinute = (typeof GUEST_REMINDER_MINUTES)[number];
+export const guestReminderMinuteSchema = z.union([z.literal(60), z.literal(1440)]);
+
+export function isGuestReminderMinute(input: unknown): input is GuestReminderMinute {
+  return guestReminderMinuteSchema.safeParse(input).success;
+}
+
+/** Strict, for writes: a saved reminder or null (off); anything else throws. */
+export function parseGuestReminderMinutes(input: unknown): GuestReminderMinute | null {
+  if (input === null) return null;
+  return guestReminderMinuteSchema.parse(input);
+}
+
+/** Lax, for reads: null stays off, an unknown or missing value reads as the 24-hour default. */
+export function normalizeGuestReminderMinutes(input: unknown): GuestReminderMinute | null {
+  if (input === null) return null;
+  return isGuestReminderMinute(input) ? input : 1440;
+}
+
+/**
  * Which sender and reputation an email goes out on (T2): the account stream
  * from hello@moduo.app, build updates from updates@news.moduo.app. CHECK on
  * public.email_outbox.stream (20261008160000_email_outbox.sql).
@@ -1197,9 +1221,10 @@ export function parseChatMentionReason(input: unknown): SafeParseResult<ChatMent
 }
 
 // ---------------------------------------------------------------------------
-// Content authors — who wrote a chat message or a comment. Mirrors
-// chat_messages_author_kind_check (20261006160000_chat_agent_access) and
-// comments_author_kind_check (20261008123000_key_writes_act_as_creator).
+// Content authors — who wrote a chat message, a comment or a note update.
+// Mirrors chat_messages_author_kind_check (20261006160000_chat_agent_access),
+// comments_author_kind_check (20261008123000_key_writes_act_as_creator) and
+// note_updates_origin_check (20261014120000_notes_agent_writes, NR-6).
 // `api_key` = an app over MCP, shown by the key's name and marked as an app
 // (an "App" badge in chat, "<key name> (app)" on a comment), never as a person.
 // ---------------------------------------------------------------------------
@@ -1473,6 +1498,35 @@ export function normalizeStarterTemplate(input: unknown): StarterTemplate | null
 }
 
 // ---------------------------------------------------------------------------
+// Onboarding roles (TV-U17, REPLAN §3) — the answers to "What will you run in
+// Moduo?". Kept only in the synced preferences JSON
+// (user_preferences.tasks_onboarding.role), never in a column, so there is no
+// Postgres CHECK to mirror. A role sets defaults only (src/features/tasks/
+// onboarding.ts ROLE_DEFAULTS); an unknown one reads as no answer.
+// ---------------------------------------------------------------------------
+
+export const TASKS_ROLES = [
+  "student",
+  "developer",
+  "pm",
+  "founder",
+  "client_work",
+  "creator",
+] as const;
+export type TasksRole = (typeof TASKS_ROLES)[number];
+export const tasksRoleSchema = z.enum(TASKS_ROLES);
+export function isTasksRole(value: unknown): value is TasksRole {
+  return typeof value === "string" && (TASKS_ROLES as readonly string[]).includes(value);
+}
+export function parseTasksRole(input: unknown): SafeParseResult<TasksRole> {
+  return parseOrError(tasksRoleSchema, input);
+}
+/** Lax read: a role this build doesn't know reads as no answer (null). */
+export function normalizeTasksRole(input: unknown): TasksRole | null {
+  return isTasksRole(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
 // Saved views (TV-U8, REPLAN 29d) — mirrors the CHECK on task_views.scope and
 // task_views_op_create's guard in <stamp>_task_views. A view keeps one base
 // scope: All, My tasks, Upcoming (each reader's own) or one project. Focus
@@ -1496,11 +1550,13 @@ export function normalizeTaskViewScope(input: unknown): TaskViewScope | null {
 /**
  * The Filter dimensions a saved view may keep (mirrors
  * task_views__check_filters). An id dimension holds "none" or the id of a
- * person, team or tag of the same workspace; a word dimension holds short
- * words. The app's Filter offers exactly these (TASK_FILTER_DIMENSIONS in
- * features/tasks/filters.ts, held to them by a test).
+ * person, team or tag of the same workspace, or of a project the saver can
+ * see (Project also takes "inbox", each reader's own; MOD-141); a word
+ * dimension holds short words. The app's Filter offers exactly these
+ * (TASK_FILTER_DIMENSIONS in features/tasks/filters.ts, held to them by a
+ * test).
  */
-export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag"] as const;
+export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag", "project"] as const;
 export const TASK_VIEW_WORD_DIMENSIONS = [
   "status",
   "completed",
@@ -1612,3 +1668,57 @@ export const STATUS_PRESET_DEFAULTS: Readonly<
 export const STATUS_TEXT_MAX = 100;
 export const STATUS_EMOJI_MAX = 16;
 export const SAVED_STATUSES_MAX = 20;
+
+// ---------------------------------------------------------------------------
+// Label hues — the shared palette for workspace tags (and the hue a calendar
+// or mail account shows). Each name maps 1:1 to a [data-label="…"] token in
+// src/styles/tokens.css (§13b), so a stored hue stays token-routed and
+// theme-safe. Stored as a name in tags.color (and in account prefs), read
+// laxly: tags.color has no CHECK, and an unknown or missing value shows as
+// the default hue. The app (src/components/tag-colors.ts re-exports these)
+// and the MCP connector colour a new tag with the same rule (MOD-93).
+// ---------------------------------------------------------------------------
+
+export const LABEL_COLORS = ["blue", "green", "amber", "red", "violet", "teal", "pink", "gray"] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+export const labelColorSchema = z.enum(LABEL_COLORS);
+export function isLabelColor(value: unknown): value is LabelColor {
+  return typeof value === "string" && (LABEL_COLORS as readonly string[]).includes(value);
+}
+export function parseLabelColor(input: unknown): SafeParseResult<LabelColor> {
+  return parseOrError(labelColorSchema, input);
+}
+
+/** Used when a tag has no stored color, or an unknown one. */
+export const DEFAULT_LABEL_COLOR: LabelColor = "gray";
+
+/** Coerce any stored value to a known hue (fallback: {@link DEFAULT_LABEL_COLOR}). */
+export function normalizeLabelColor(color: unknown): LabelColor {
+  return isLabelColor(color) ? color : DEFAULT_LABEL_COLOR;
+}
+
+/**
+ * Auto-assign a hue for a new tag: the least-used color among `existing`, with
+ * ties broken by palette order. Deterministic (no randomness) so the same set of
+ * tags always colors the same way, and colors spread evenly as tags accumulate.
+ * `gray` is reserved as a fallback and only chosen once every hue is in use.
+ */
+export function pickTagColor(existing: ReadonlyArray<{ color: string | null }>): LabelColor {
+  const counts = new Map<LabelColor, number>(LABEL_COLORS.map((c) => [c, 0]));
+  for (const tag of existing) {
+    const c = normalizeLabelColor(tag.color);
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  // Prefer the colored hues; only fall back to gray when everything else is used
+  // at least as much (it sorts last in LABEL_COLORS, so the tie-break handles it).
+  let best: LabelColor = LABEL_COLORS[0];
+  let bestCount = Number.POSITIVE_INFINITY;
+  for (const color of LABEL_COLORS) {
+    const count = counts.get(color) ?? 0;
+    if (count < bestCount) {
+      best = color;
+      bestCount = count;
+    }
+  }
+  return best;
+}

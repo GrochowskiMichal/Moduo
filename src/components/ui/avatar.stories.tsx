@@ -147,6 +147,55 @@ export const Identity: Story = {
   ),
 };
 
+/** An 8 × 8 PNG, inline so the story (and its visual test) needs no network. */
+const PHOTO_FIXTURE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mOIqjiBFTEMLQkA8ZFmgbB74tkAAAAASUVORK5CYII=";
+/** A photo that can't load: a PNG header with nothing after it. */
+const BROKEN_PHOTO = "data:image/png;base64,iVBORw0KGgo=";
+
+/**
+ * A person with a profile photo shows it, round, at every size (MOD-96). The
+ * initials on their colour stand in while it loads, and stay when it fails
+ * (second row: a photo that can't load) or when there is none (third row).
+ * tests/visual/avatars.spec.ts reads the three rows.
+ */
+export const PersonWithPhoto: Story = {
+  render: () => {
+    const sizes = ["icon", "sm", "default", "lg"] as const;
+    return (
+      <div className="flex flex-col gap-3">
+        <div data-row="photo" className="flex items-end gap-3">
+          {sizes.map((size) => (
+            <PersonAvatar
+              key={size}
+              name="Mike Grochowski"
+              id="u-mike"
+              src={PHOTO_FIXTURE}
+              size={size}
+            />
+          ))}
+        </div>
+        <div data-row="broken" className="flex items-end gap-3">
+          {sizes.map((size) => (
+            <PersonAvatar
+              key={size}
+              name="Mike Grochowski"
+              id="u-mike"
+              src={BROKEN_PHOTO}
+              size={size}
+            />
+          ))}
+        </div>
+        <div data-row="none" className="flex items-end gap-3">
+          {sizes.map((size) => (
+            <PersonAvatar key={size} name="Mike Grochowski" id="u-mike" size={size} />
+          ))}
+        </div>
+      </div>
+    );
+  },
+};
+
 /** The icon rung scales with density: 16 / 15 / 14 px, two letters still fit. */
 export const Densities: Story = {
   render: () => (

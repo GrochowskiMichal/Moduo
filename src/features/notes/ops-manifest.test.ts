@@ -34,7 +34,7 @@ describe("notes manifest (AC13)", () => {
     );
     const byOp = Object.fromEntries(notesModuleManifest.ops.map((o) => [o.op, o.rpc]));
     // Create rides notes_op_import (writes body_md + registers the entity);
-    // append/update ride notes_op_apply_updates (body-only write, no CRDT);
+    // append/update ride notes_op_apply_updates (a real Yjs update, NR-6);
     // link rides the spine's links_op_create.
     expect(byOp["notes.create"]).toBe("notes_op_import");
     expect(byOp["notes.append"]).toBe("notes_op_apply_updates");

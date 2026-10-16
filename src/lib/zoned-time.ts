@@ -78,3 +78,16 @@ export function fromFloating(floating: Date, zone: string | null | undefined): D
   if (okAfter) return new Date(after);
   return new Date(before);
 }
+
+/** The calendar day an instant falls on in `zone` ("2026-11-01"); UTC's
+ *  when no zone is given. */
+export function zonedDay(at: Date, zone: string | null | undefined): string {
+  return toFloating(at, zone).toISOString().slice(0, 10);
+}
+
+/** The instant the next day starts in `zone`: its next midnight (MOD-110). */
+export function nextZonedMidnight(at: Date, zone: string | null | undefined): Date {
+  const wall = toFloating(at, zone);
+  const next = new Date(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate() + 1));
+  return fromFloating(next, zone);
+}

@@ -25,7 +25,7 @@ import {
   problemRetriesItself,
   type UploadProblem,
 } from "./errors";
-import type { PreparedUpload } from "./pipeline";
+import { originalIsItsOwnPreview, type PreparedUpload } from "./pipeline";
 
 export type UploadTarget =
   | { workspaceId: string; entityType: "task"; entityId: string }
@@ -84,7 +84,13 @@ export type UploadItem = {
   createdAt: number;
 };
 
-export type UploadView = Omit<UploadItem, "original"> & { loaded: number; total: number };
+export type UploadView = Omit<UploadItem, "original"> & {
+  loaded: number;
+  total: number;
+  /** What its tile shows while it uploads: the preview, or a small image
+   *  itself, which has none (MOD-132). */
+  thumbnail?: Blob | null;
+};
 
 export type UploadSnapshot = {
   items: readonly UploadView[];
@@ -264,9 +270,10 @@ export class UploadQueue {
   private emit() {
     const items = [...this.items.values()]
       .sort((a, b) => a.createdAt - b.createdAt)
-      .map(({ original: _original, ...rest }) => {
+      .map(({ original, ...rest }) => {
         const p = this.progress.get(rest.id);
-        return { ...rest, loaded: p?.loaded ?? 0, total: p?.total ?? rest.sizeBytes };
+        const thumbnail = rest.preview ?? (originalIsItsOwnPreview(rest) ? original : null);
+        return { ...rest, thumbnail, loaded: p?.loaded ?? 0, total: p?.total ?? rest.sizeBytes };
       });
     this.snapshot = { items, almostFull: { ...this.almostFull } };
     for (const fn of this.listeners) fn();

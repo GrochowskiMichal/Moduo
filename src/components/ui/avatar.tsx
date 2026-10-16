@@ -31,7 +31,7 @@ function AvatarImage({ className, ...props }: React.ComponentProps<typeof Avatar
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
-      className={cn("aspect-square size-full", className)}
+      className={cn("aspect-square size-full object-cover", className)}
       {...props}
     />
   );
@@ -223,16 +223,20 @@ type PersonAvatarProps = Omit<React.ComponentProps<typeof AvatarPrimitive.Root>,
   name: string | null;
   /** Their id: keys the colour, so a rename keeps it. Defaults to the name. */
   id?: string | null;
-  /** A photo, when they have one. The initials show until it loads. */
+  /** Their profile photo, when they have one. The initials show while it
+   *  loads, and stay when it fails (Radix mounts the img only once loaded). */
   src?: string | null;
   size?: PersonSize;
 };
 
 /**
- * A person: two initials on a stable colour, round (call 43). Decorative by
- * default (`aria-hidden`), since a name almost always sits beside it and the
- * initials would otherwise join that row's accessible name (gotchas §UI). Pass
- * `aria-hidden={false}` with an `aria-label` when it stands alone.
+ * A person, round: their profile photo when they have one (MOD-96), else two
+ * initials on a stable colour (call 43), which also stand in while the photo
+ * loads or when it can't. Pass `src` wherever the person's photo is known;
+ * the colour is keyed on the id either way. Decorative by default (`aria-hidden`),
+ * since a name almost always sits beside it and the initials would otherwise
+ * join that row's accessible name (gotchas §UI). Pass `aria-hidden={false}`
+ * with an `aria-label` when it stands alone.
  */
 function PersonAvatar({
   name,

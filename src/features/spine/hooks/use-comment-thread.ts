@@ -25,6 +25,8 @@ export type CommentThread = {
     body: string;
     mentionedUserIds: string[];
     mentionedTeamIds?: string[];
+    /** A note's text thread (NR-8); absent = the entity's own thread. */
+    anchorId?: string | null;
   }) => Promise<void>;
   /** Edit your own comment; shown at once, put back if refused. Throws on failure. */
   edit: (input: {
@@ -122,10 +124,12 @@ export function useCommentThread({
       body,
       mentionedUserIds,
       mentionedTeamIds = [],
+      anchorId = null,
     }: {
       body: string;
       mentionedUserIds: string[];
       mentionedTeamIds?: string[];
+      anchorId?: string | null;
     }) => {
       if (!runtime || !workspaceId) throw new Error("Not signed in.");
       const saved = await runtime.spine.addComment({
@@ -136,6 +140,7 @@ export function useCommentThread({
         mentionedUserIds,
         entityLabel: labelRef.current.trim() || "Untitled",
         entityIcon,
+        ...(anchorId ? { anchorId } : {}),
       });
       tellTeams(runtime, saved.id, mentionedTeamIds);
       await read();

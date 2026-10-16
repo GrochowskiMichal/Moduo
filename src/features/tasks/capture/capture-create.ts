@@ -3,8 +3,9 @@
 // under an id minted here, and when the connection is gone it waits on the
 // device under that id and is sent once it's back (default g; no duplicate).
 // Then, per task once it exists: its tags, its links (the linked things in
-// its title and the "From:" item), its reminder, what it's waiting on, and a
-// place at the top of Up next when asked.
+// its title and description, and the "From:" item), the people its
+// description mentions, its reminder, what it's waiting on, and a place at
+// the top of Up next when asked.
 
 import { legacyTaskStatus, type TaskStatusCategory } from "@contracts/vocabularies";
 import type { CaptureSource } from "../../../lib/capture-source";
@@ -39,11 +40,13 @@ export type CaptureTaskPlan = {
   estimateMinutes: number | null;
   /** Tags by id, and new ones by name. */
   tags: Array<{ id: string | null; name: string }>;
-  /** Linked things from the title (they stay as words, 92). */
+  /** Linked things from the title (they stay as words, 92) and the description (call #15). */
   links: Array<{ ref: EntityRef; label: string }>;
+  /** People `@`-mentioned in the description: told once the task exists, as the panel's description tells them (TV-D12, call #15). */
+  mentions?: string[];
   /** Link the "From:" item (93). */
   fromSource: boolean;
-  /** "Remind me at…" (ISO), yours. */
+  /** The reminder ("Reminder at…", ISO), yours. */
   remindAt: string | null;
   /** Waiting on these people. */
   waitingOn: string[];
@@ -61,6 +64,31 @@ export type CapturePlan = {
   /** Put the top-level tasks at the top of my Up next (⌘N in Focus), in order. */
   queueTop: boolean;
 };
+
+/**
+ * The people `@`-mentioned in a capture's description whose "@Name" is still
+ * in its words (one taken out again isn't told), each once. A name counts
+ * whole: "@Anna" doesn't keep "Ann".
+ */
+export function mentionsStillIn(
+  mentioned: ReadonlyArray<{ id: string; label: string }>,
+  words: string,
+): string[] {
+  const out = new Set<string>();
+  for (const person of mentioned) {
+    const name = `@${person.label}`;
+    let at = words.indexOf(name);
+    while (at >= 0) {
+      const next = words[at + name.length];
+      if (next === undefined || !/[\p{L}\p{N}_]/u.test(next)) {
+        out.add(person.id);
+        break;
+      }
+      at = words.indexOf(name, at + 1);
+    }
+  }
+  return [...out];
+}
 
 /** A new id for a task (the create op takes the client's). */
 export function newTaskId(): string {
@@ -268,6 +296,10 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
           sourceIcon: "task",
         });
       });
+    }
+    if (item.mentions?.length) {
+      const userIds = item.mentions;
+      await extra(() => runtime.tasks.mentionInTask({ workspaceId, taskId, userIds }));
     }
     if (item.remindAt) {
       const at = item.remindAt;

@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { IconButton } from "@/components/ui/icon-button";
 import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
 import { formatBytes } from "@/lib/uploads/errors";
-import { fileIconFor, isPreviewableImage, saveBlob, toPng } from "../files";
+import { fileIconFor, isPreviewableImage, saveBlob, thumbnailPath, toPng } from "../files";
 import { signPaths } from "../signed-urls";
 
 export type AttachmentViewerProps = {
@@ -56,7 +56,9 @@ export function AttachmentViewer({
     }
   }, [index, records.length, onIndexChange]);
 
-  const image = !!rec && isPreviewableImage(rec.mime) && !!rec.previewPath;
+  // A small image without a preview shows too: it is its own (MOD-132).
+  const thumb = rec ? thumbnailPath(rec) : null;
+  const image = !!rec && isPreviewableImage(rec.mime) && !!thumb;
   const objectPath = rec?.objectPath ?? null;
   useEffect(() => {
     setOriginalUrl(null);
@@ -115,7 +117,7 @@ export function AttachmentViewer({
     }
   };
 
-  const previewUrl = rec?.previewPath ? (previews.get(rec.previewPath) ?? null) : null;
+  const previewUrl = thumb ? (previews.get(thumb) ?? null) : null;
   const Icon = rec ? fileIconFor(rec.mime) : null;
 
   return (

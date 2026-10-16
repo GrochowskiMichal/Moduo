@@ -11,13 +11,10 @@ import type { ModuleManifest } from "../../lib/module-manifest";
  * (the three-module gotcha). Keep this in lockstep with
  * supabase/functions/moduo-mcp/modules/notes.ts descriptions.
  *
- * Materialization note (assumption 10): the connector writes `body_md`, not the
- * Yjs CRDT — a headless Deno Yjs builder was deliberately NOT attempted (the
- * `root-v2` XML shape is experimental/fragile; see gotchas). A connector-created
- * or -appended note is immediately listable / gettable-as-markdown / searchable
- * / exportable / publishable; the live editor materializes its CRDT on first
- * open (the recorded cross-device gap). The real CRDT write path is the MCP-1
- * follow-up.
+ * Writes are real CRDT changes (NR-6, closing MCP-1's notes half): the
+ * connector rebuilds the note's Yjs doc with the app's own headless editor
+ * (a prebuilt bundle), pushes the edit's update, and derives `body_md` with
+ * the same converter the app uses. A created note is stored with its doc.
  */
 export const notesModuleManifest: ModuleManifest = {
   module: "notes",
@@ -30,35 +27,38 @@ export const notesModuleManifest: ModuleManifest = {
       op: "notes.create",
       rpc: "notes_op_import",
       summary:
-        "Create a note from markdown (optionally under a parent) — registers it so it's immediately linkable/@mentionable and searchable. Body materializes in the live editor on first open.",
+        "Create a note from markdown (optionally under a parent) — registers it so it's immediately linkable/@mentionable and searchable. The connector builds its document up front, so it opens complete.",
       args: {
         p_workspace_id: "workspace uuid",
-        p_rows: "a single-element array: [{ id?, parentId?, title, bodyMd, position? }]",
+        p_rows:
+          "a single-element array: [{ id?, parentId?, title, bodyMd, bodyText, docStateB64, position? }]",
       },
     },
     {
       op: "notes.append",
       rpc: "notes_op_apply_updates",
-      summary: "Append markdown to a note's body (adds to the read/search/publish source).",
+      summary:
+        "Append markdown to a note as a real document change (NR-6): it appears live in open editors, is attributed to the key, and can be undone.",
       args: {
         p_workspace_id: "workspace uuid",
         p_note_id: "the note uuid",
-        p_client_id: "writer id (the connector uses 'mcp')",
-        p_updates: "null — the connector writes derived body only, not CRDT updates",
-        p_body_md: "the full new markdown body (existing + appended)",
+        p_client_id: "writer id (the connector uses a fresh 'agent:<uuid>' per write)",
+        p_updates: "[{ clientSeq: 1, updateB64 }] — the edit's own Yjs update",
+        p_body_md: "the markdown derived from the edited document",
         p_body_text: "the derived plain text for FTS",
       },
     },
     {
       op: "notes.update",
       rpc: "notes_op_apply_updates",
-      summary: "Replace a note's markdown body wholesale.",
+      summary:
+        "Replace a note's body wholesale as a real document change (NR-6), attributed and undoable like an append.",
       args: {
         p_workspace_id: "workspace uuid",
         p_note_id: "the note uuid",
-        p_client_id: "writer id ('mcp')",
-        p_updates: "null",
-        p_body_md: "the replacement markdown body",
+        p_client_id: "writer id ('agent:<uuid>')",
+        p_updates: "[{ clientSeq: 1, updateB64 }] — the edit's own Yjs update",
+        p_body_md: "the markdown derived from the edited document",
         p_body_text: "the derived plain text for FTS",
       },
     },

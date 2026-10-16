@@ -8,6 +8,10 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { applyAgentEdit } from "../editor/agent-write";
+import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
+import { buildDocStateFromMarkdown } from "../editor/materialize";
+import { encodeUint8ToBase64 } from "../utils/base64";
 import { NotesSyncEngineV2 } from "./engine-v2";
 
 rs.mock("y-indexeddb", () => ({
@@ -149,5 +153,193 @@ describe("honest provider (NR-3)", () => {
     await engine.flushNote("d2");
     const push = runtime.notesV2.pushUpdates as unknown as { mock: { calls: unknown[][] } };
     expect(push.mock.calls.at(-1)![0]).toMatchObject({ bodyMd: "capture" });
+  });
+});
+
+describe("agent writes reach an open note (NR-6)", () => {
+  function agentScenario() {
+    const base = buildDocStateFromMarkdown("n9", "# Plan\n\nHello")!;
+    const server = new Y.Doc();
+    server.get(NOTES_DOC_ROOT, Y.XmlElement);
+    Y.applyUpdate(server, Uint8Array.from(Buffer.from(base.docStateB64, "base64")));
+    const before = Y.encodeStateVector(server);
+    applyAgentEdit(server, { kind: "append", markdown: "From the agent" });
+    const agentRow = {
+      id: 7,
+      clientId: "agent:x",
+      clientSeq: 1,
+      updateB64: encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before)),
+      origin: "api_key",
+      actorKeyId: "key-1",
+    };
+    let rows: (typeof agentRow)[] = [];
+    const pullDoc = rs.fn(async () => ({
+      snapshotB64: base.docStateB64,
+      docVersion: 1,
+      updates: rows,
+    }));
+    const pushUpdates = rs.fn(async (_input: { updates: unknown[]; bodyMd?: string | null }) => ({
+      inserted: 1,
+      duplicates: 0,
+      maxUpdateId: 8,
+    }));
+    const runtime = { notesV2: { pullDoc, pushUpdates } } as unknown as ModuoRuntime;
+    return { runtime, pushUpdates, agentRow, setRows: (r: (typeof agentRow)[]) => (rows = r) };
+  }
+
+  it("a live agent row lands, is not pushed back, re-saves the merged body, and Undo reverts it", async () => {
+    const { runtime, pushUpdates, agentRow, setRows } = agentScenario();
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("n9");
+    await session.booted;
+
+    // A view-only session (no local edits) never re-saves a body.
+    setRows([agentRow]);
+    await engine.pullNote("n9");
+    await tick();
+    await engine.flushNote("n9");
+    expect(pushUpdates).not.toHaveBeenCalled();
+    expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
+    const undo = engine.agentUndo("n9")!;
+    expect(undo.canUndo()).toBe(true);
+
+    undo.undo();
+    await tick();
+    await engine.flushNote("n9");
+    await tick();
+    expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello");
+    const last = pushUpdates.mock.calls.at(-1)?.[0];
+    expect(last?.updates.length).toBeGreaterThan(0);
+    expect(last?.bodyMd).toBe("# Plan\n\nHello");
+  });
+
+  it("agent rows in the first pull are history: shown, never offered for Undo", async () => {
+    const { runtime, agentRow, setRows } = agentScenario();
+    setRows([agentRow]);
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("n9");
+    await session.booted;
+    expect(deriveNoteBody(session.doc).md).toBe("# Plan\n\nHello\n\nFrom the agent");
+    expect(engine.agentUndo("n9")!.canUndo()).toBe(false);
+  });
+});
+
+describe("agent body re-save (NR-6)", () => {
+  it("an editing session re-saves the merged body after an agent write, without echoing it", async () => {
+    const base = buildDocStateFromMarkdown("n8", "# Plan\n\nHello")!;
+    const server = new Y.Doc();
+    server.get(NOTES_DOC_ROOT, Y.XmlElement);
+    Y.applyUpdate(server, Uint8Array.from(Buffer.from(base.docStateB64, "base64")));
+    const before = Y.encodeStateVector(server);
+    applyAgentEdit(server, { kind: "append", markdown: "From the agent" });
+    const agentB64 = encodeUint8ToBase64(Y.encodeStateAsUpdate(server, before));
+    let rows: unknown[] = [];
+    const pullDoc = rs.fn(async () => ({
+      snapshotB64: base.docStateB64,
+      docVersion: 1,
+      updates: rows,
+    }));
+    const pushUpdates = rs.fn(async (_i: { updates: unknown[]; bodyMd?: string | null }) => ({
+      inserted: 1,
+      duplicates: 0,
+      maxUpdateId: 9,
+    }));
+    engine = new NotesSyncEngineV2(
+      { notesV2: { pullDoc, pushUpdates } } as unknown as ModuoRuntime,
+      "ws1",
+    );
+    const session = engine.getOrCreateSession("n8");
+    await session.booted;
+    applyAgentEdit(session.doc, { kind: "append", markdown: "Mine" });
+    await tick();
+    await engine.flushNote("n8");
+    const localPushes = pushUpdates.mock.calls.length;
+    expect(localPushes).toBeGreaterThan(0);
+
+    rows = [
+      {
+        id: 8,
+        clientId: "agent:y",
+        clientSeq: 1,
+        updateB64: agentB64,
+        origin: "api_key",
+        actorKeyId: "k",
+      },
+    ];
+    await engine.pullNote("n8");
+    await new Promise((r) => setTimeout(r, 1700));
+    await engine.flushNote("n8");
+    const later = pushUpdates.mock.calls.slice(localPushes).map(([c]) => c);
+    expect(later.length).toBeGreaterThan(0);
+    for (const c of later) expect(c.updates).toEqual([]);
+    expect(later.at(-1)?.bodyMd).toContain("From the agent");
+    expect(later.at(-1)?.bodyMd).toContain("Mine");
+  });
+});
+
+describe("compaction against a newer snapshot", () => {
+  it("is refused when another client folded since the pull, then pulls and folds on top", async () => {
+    let serverVersion = 3;
+    const pullDoc = rs.fn(async () => ({
+      snapshotB64: null,
+      docVersion: serverVersion,
+      updates: [],
+    }));
+    const pushUpdates = rs.fn(async () => ({ inserted: 0 }));
+    const saveSnapshot = rs.fn(
+      async ({ expectedDocVersion }: { expectedDocVersion?: number | null }) => {
+        if (expectedDocVersion !== serverVersion) {
+          return { folded: 0, docVersion: serverVersion, refused: true };
+        }
+        serverVersion += 1;
+        return { folded: 5, docVersion: serverVersion, refused: false };
+      },
+    );
+    const runtime = { notesV2: { pullDoc, pushUpdates, saveSnapshot } } as unknown as ModuoRuntime;
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("c1");
+    await session.booted;
+    // biome-ignore lint/suspicious/noExplicitAny: driving the private fold directly
+    const internal = engine as any;
+    const s = internal.sessions.get("c1");
+    s.state = { ...s.state, updatesSinceCompact: 50 };
+
+    // Another client folds between our compaction's pull and its save.
+    pullDoc.mockImplementationOnce(async () => {
+      const res = { snapshotB64: null, docVersion: serverVersion, updates: [] };
+      serverVersion += 1;
+      return res;
+    });
+    await internal.compact(s);
+    expect(saveSnapshot).toHaveBeenCalledTimes(1);
+    expect(saveSnapshot.mock.calls[0]![0]).toMatchObject({ expectedDocVersion: 3 });
+    // Refused: we pulled the newer snapshot and still owe a fold.
+    expect(s.docVersion).toBe(4);
+    expect(s.state.updatesSinceCompact).toBe(50);
+
+    await internal.compact(s);
+    expect(saveSnapshot).toHaveBeenCalledTimes(2);
+    expect(saveSnapshot.mock.calls[1]![0]).toMatchObject({ expectedDocVersion: 4 });
+    expect(s.docVersion).toBe(5);
+    expect(s.state.updatesSinceCompact).toBe(0);
+  });
+
+  it("never folds while no pull has told it the server's version", async () => {
+    const pullDoc = rs.fn(async () => {
+      throw new Error("Failed to fetch");
+    });
+    const pushUpdates = rs.fn(async () => ({ inserted: 0 }));
+    const saveSnapshot = rs.fn(async () => ({ folded: 0, docVersion: 1, refused: false }));
+    const runtime = { notesV2: { pullDoc, pushUpdates, saveSnapshot } } as unknown as ModuoRuntime;
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.getOrCreateSession("c2");
+    await session.booted;
+    // biome-ignore lint/suspicious/noExplicitAny: driving the private fold directly
+    const internal = engine as any;
+    const s = internal.sessions.get("c2");
+    s.state = { ...s.state, updatesSinceCompact: 50 };
+    await internal.compact(s);
+    expect(s.docVersion).toBeNull();
+    expect(saveSnapshot).not.toHaveBeenCalled();
   });
 });

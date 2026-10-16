@@ -629,8 +629,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           <Outlet />
         </div>
 
+        {/* 16, on the panels' edge line (round-2a/2b's .bbar, MOD-121); the top bar keeps 20. */}
         <div
-          className="relative flex flex-row items-center bg-background px-5"
+          className="relative flex flex-row items-center bg-background px-4"
           style={{ height: "var(--bar-h)" }}
         >
           <div className="flex flex-1 flex-row items-center justify-start gap-2">

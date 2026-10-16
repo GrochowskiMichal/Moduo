@@ -12,6 +12,19 @@ import { describe, expect, it, rs } from "@rstest/core";
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
+import { createHeadlessEditor } from "@lexical/headless";
+import { $isLinkNode } from "@lexical/link";
+import { $getRoot, $isElementNode, type LexicalNode } from "lexical";
+
+// The app's own description reader, to check what a stored description shows.
+import {
+  $exportDescription,
+  $importDescription,
+  DESCRIPTION_MARKDOWN_NODES,
+} from "../../../src/features/spine/editor/description-markdown";
+import { $isReferenceNode } from "../../../src/features/spine/editor/entity-ref-schema";
+import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
+import { descriptionReferences, readsAsModuoAddress } from "../_shared/description-markdown.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import { toolAllowed, type KeyContext, type ToolContext } from "./registry.ts";
 
@@ -28,16 +41,32 @@ const A_BEAS = "88888888-8888-4888-8888-888888888888";
 const A_SHARED = "99999999-9999-4999-8999-999999999999";
 const TEAM = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-type Filter = { op: "eq" | "neq"; column: string; value: unknown };
+type Filter = { op: "eq" | "neq" | "in" | "notnull"; column: string; value: unknown };
 
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown>) {
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  const updates: Array<{ table: string; values: Row; ids: unknown[] }> = [];
   function from(table: string) {
     const filters: Filter[] = [];
     let window: [number, number] | null = null;
     let cap: number | null = null;
+    let patch: Row | null = null;
+    let counted = false;
+    const orders: Array<{ column: string; ascending: boolean }> = [];
     const query = {
-      select: () => query,
+      select: (_cols?: string, opts?: { count?: string }) => {
+        if (opts?.count) counted = true;
+        return query;
+      },
+      not: (column: string, op: string, value: unknown) => {
+        if (op !== "is" || value !== null) throw new Error(`fake: not(${column}, ${op})`);
+        filters.push({ op: "notnull", column, value });
+        return query;
+      },
+      update: (values: Row) => {
+        patch = values;
+        return query;
+      },
       eq: (column: string, value: unknown) => {
         filters.push({ op: "eq", column, value });
         return query;
@@ -50,8 +79,15 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
         filters.push({ op: "neq", column, value });
         return query;
       },
+      in: (column: string, value: unknown[]) => {
+        filters.push({ op: "in", column, value });
+        return query;
+      },
       or: () => query,
-      order: () => query,
+      order: (column: string, opts?: { ascending?: boolean }) => {
+        orders.push({ column, ascending: opts?.ascending !== false });
+        return query;
+      },
       limit: (n: number) => {
         cap = n;
         return query;
@@ -62,18 +98,39 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       },
       maybeSingle: () =>
         query.then((r: { data: Row[] }) => ({ data: r.data[0] ?? null, error: null })),
-      then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
+      then<T>(resolve: (result: { data: Row[]; error: null; count?: number }) => T) {
         const value = (row: Row, column: string): unknown => {
           const json = column.match(/^(\w+)->>(\w+)$/);
           if (json) return ((row[json[1]!] as Row | null) ?? {})[json[2]!] ?? null;
           return row[column] ?? null;
         };
-        let all = (tables[table] ?? []).filter((row) =>
-          filters.every((f) => (f.op === "eq" ? value(row, f.column) === f.value : value(row, f.column) !== f.value)),
-        );
+        const holds = (row: Row, f: Filter) =>
+          f.op === "eq"
+            ? value(row, f.column) === f.value
+            : f.op === "in"
+              ? (f.value as unknown[]).includes(value(row, f.column))
+              : f.op === "notnull"
+                ? value(row, f.column) !== null
+                : value(row, f.column) !== f.value;
+        let all = (tables[table] ?? []).filter((row) => filters.every((f) => holds(row, f)));
+        const total = all.length;
+        if (orders.length) {
+          all = [...all].sort((a, b) => {
+            for (const o of orders) {
+              const x = String(value(a, o.column) ?? "");
+              const y = String(value(b, o.column) ?? "");
+              if (x !== y) return (x < y ? -1 : 1) * (o.ascending ? 1 : -1);
+            }
+            return 0;
+          });
+        }
         if (window) all = all.slice(window[0], window[1] + 1);
         if (cap !== null) all = all.slice(0, cap);
-        return Promise.resolve({ data: all, error: null }).then(resolve);
+        if (patch) {
+          for (const row of all) Object.assign(row, patch);
+          updates.push({ table, values: patch, ids: all.map((r) => r.id) });
+        }
+        return Promise.resolve({ data: all, error: null, ...(counted ? { count: total } : {}) }).then(resolve);
       },
     };
     return query;
@@ -88,7 +145,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       return { data: null, error: { message: (e as Error).message } };
     }
   }
-  return { db: { from, rpc }, rpcCalls };
+  return { db: { from, rpc }, rpcCalls, updates };
 }
 
 const task = (id: string, n: number, extra: Row = {}): Row => ({
@@ -193,10 +250,14 @@ function setup(opts: { rpcs?: Record<string, (args: Row) => unknown>; scopes?: R
   return { ctx, tables, ...fake };
 }
 
+/** A tool call as index.ts makes it: the arguments go through the tool's
+ *  parser first, so a field the parser drops never reaches the handler. */
 function call(name: string, args: Row, ctx: ToolContext): Promise<any> {
   const t = tasksConnectorModule.tools.find((x) => x.name === name);
   if (!t) throw new Error(`${name} is not registered`);
-  return t.handler(args, ctx) as Promise<any>;
+  const parsed = parseToolArgs(name, args);
+  if (!parsed.success) return Promise.reject(new Error(parsed.message));
+  return t.handler(parsed.data, ctx) as Promise<any>;
 }
 
 describe("handles: every task argument takes MOD-142 or a uuid", () => {
@@ -223,6 +284,93 @@ describe("handles: every task argument takes MOD-142 or a uuid", () => {
     expect(got.agent_sessions).toEqual([{ id: "s1", agent: "Claude", state: "working", mine: true }]);
     expect(rpcCalls.find((c) => c.fn === "tasks_agent_sessions")?.args).toEqual({ p_workspace_id: WS, p_task_id: "t-open" });
     expect(got.subtasks).toEqual([]);
+  });
+});
+
+describe("comments in tasks_get (MOD-94): Links: View reads them", () => {
+  const comment = (id: string, at: string, extra: Row = {}): Row => ({
+    id,
+    workspace_id: WS,
+    entity_type: "task",
+    entity_id: "t-open",
+    body: `body ${id}`,
+    created_by: BEA,
+    author_kind: "user",
+    author_label: null,
+    created_at: at,
+    edited_at: null,
+    deleted_at: null,
+    ...extra,
+  });
+  const withLinks = { tasks: "edit", links: "view" };
+
+  function withComments(scopes: Record<string, string> = withLinks) {
+    const s = setup({ scopes });
+    s.tables.comments = [
+      comment("c-2", "2030-01-02T10:00:00Z", { edited_at: "2030-01-02T11:00:00Z" }),
+      comment("c-1", "2030-01-01T10:00:00Z", { created_by: ME, author_kind: "api_key", author_label: "Claude Code" }),
+      comment("c-3", "2030-01-03T10:00:00Z", { created_by: "gone-user" }),
+      comment("c-deleted", "2030-01-04T10:00:00Z", { deleted_at: "2030-01-05T00:00:00Z" }),
+      comment("c-other", "2030-01-04T10:00:00Z", { entity_id: "t-done" }),
+      comment("c-note", "2030-01-04T10:00:00Z", { entity_type: "note" }),
+    ];
+    return s;
+  }
+
+  it("carries the task's live comments, the newest last, with who wrote each", async () => {
+    const { ctx } = withComments();
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.comments).toEqual([
+      { id: "c-1", author: "Claude Code (app)", at: "2030-01-01T10:00:00Z", body: "body c-1" },
+      { id: "c-2", author: "Bea", at: "2030-01-02T10:00:00Z", edited: true, body: "body c-2" },
+      { id: "c-3", author: "Former member", at: "2030-01-03T10:00:00Z", body: "body c-3" },
+    ]);
+    expect(got).not.toHaveProperty("earlier_comments");
+  });
+
+  it("keeps the latest 20 and counts the earlier ones", async () => {
+    const { ctx, tables } = setup({ scopes: withLinks });
+    tables.comments = Array.from({ length: 23 }, (_, i) =>
+      comment(`c-${String(i).padStart(2, "0")}`, `2030-01-01T10:${String(i).padStart(2, "0")}:00Z`),
+    );
+    const got = await call("tasks_get", { task_id: "t-open" }, ctx);
+    expect(got.comments).toHaveLength(20);
+    expect(got.comments[0].id).toBe("c-03");
+    expect(got.comments.at(-1).id).toBe("c-22");
+    expect(got.earlier_comments).toBe(3);
+  });
+
+  it("a key without Links reads the task but none of its comments", async () => {
+    const { ctx } = withComments({ tasks: "edit" });
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.handle).toBe("MOD-1");
+    expect(got).not.toHaveProperty("comments");
+    expect(got).not.toHaveProperty("earlier_comments");
+    expect(JSON.stringify(got)).not.toContain("body c-");
+  });
+
+  it("a comment read that fails leaves the comments out, never the task", async () => {
+    const { ctx } = withComments();
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      if (t !== "comments") return from(t);
+      const failing: Row = {};
+      for (const m of ["select", "eq", "is", "order", "limit"]) failing[m] = () => failing;
+      failing.then = (resolve: (r: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { message: "column comments.x does not exist" } }).then(resolve);
+      return failing;
+    };
+    const got = await call("tasks_get", { task_id: "MOD-1" }, ctx);
+    expect(got.handle).toBe("MOD-1");
+    expect(got).not.toHaveProperty("comments");
+    expect(got).not.toHaveProperty("earlier_comments");
+  });
+
+  it("a task the key's person can't see reads as missing, comments and all", async () => {
+    const { ctx, tables } = withComments();
+    tables.comments!.push(comment("c-secret", "2030-01-01T00:00:00Z", { entity_id: "t-secret" }));
+    await expect(call("tasks_get", { task_id: "t-secret" }, ctx)).rejects.toThrow("Task not found in this workspace.");
   });
 });
 
@@ -301,6 +449,52 @@ describe("reads never show or count what the key's person can't see", () => {
     expect(await ids({ section_id: "s-1" })).toEqual(["t-team"]);
     expect(await ids({ area_id: A_BEAS })).toEqual([]);
     expect((await ids({ category: "open" })).includes("t-secret")).toBe(false);
+  });
+
+  it("tasks_list answers short rows by default, the full shape on asking (MOD-113)", async () => {
+    const { ctx, tables } = setup();
+    tables.sections = [
+      { id: "s-1", workspace_id: WS, project_id: P_SHARED, name: "Design" },
+      { id: "s-h", workspace_id: WS, project_id: P_HIDDEN, name: "Bea's plans" },
+    ];
+    tables.project_statuses = [{ id: "st-1", workspace_id: WS, project_id: P_SHARED, name: "In review" }];
+    tables.tasks!.find((t) => t.id === "t-team")!.status_id = "st-1";
+    // Shared with me on its own, in a project I can't see: no project or section name.
+    tables.tasks!.push(task("t-alone", 14, { bucket_id: P_HIDDEN, section_id: "s-h" }));
+    const short: Row[] = await call("tasks_list", {}, ctx);
+    const row = (id: string) => short.find((t) => t.id === id)!;
+    expect(row("t-team")).toEqual({
+      handle: "MOD-10",
+      id: "t-team",
+      title: "t-team",
+      status: "todo",
+      status_name: "In review",
+      assignee: "Ada",
+      project: "Launch",
+      section: "Design",
+    });
+    expect(row("t-open")).toMatchObject({ handle: "MOD-1", project: "Launch", tags: ["board"] });
+    expect(row("t-alone")).toEqual({ handle: "MOD-14", id: "t-alone", title: "t-alone", status: "todo", assignee: "Ada" });
+    expect(JSON.stringify(short)).not.toContain("Bea's plans");
+    // One project asked for: its name isn't repeated on every row.
+    const one: Row[] = await call("tasks_list", { project_id: P_SHARED }, ctx);
+    expect(one.some((t) => "project" in t)).toBe(false);
+    // fields: full is the shape tasks_list used to answer.
+    const full: Row[] = await call("tasks_list", { fields: "full" }, ctx);
+    expect(full.find((t) => t.id === "t-team")).toMatchObject({
+      bucket_id: P_SHARED,
+      section_id: "s-1",
+      assignee: { id: ME, name: "Ada" },
+    });
+    await expect(call("tasks_list", { fields: "everything" }, ctx)).rejects.toThrow("fields");
+  });
+
+  it("tasks_list's full rows page by 25 unless asked, the short ones by 100", async () => {
+    const { ctx, tables } = setup();
+    for (let n = 100; n < 160; n += 1) tables.tasks!.push(task(`t-${n}`, n));
+    expect((await call("tasks_list", {}, ctx)).length).toBeGreaterThan(25);
+    expect(await call("tasks_list", { fields: "full" }, ctx)).toHaveLength(25);
+    expect(await call("tasks_list", { fields: "full", limit: 40 }, ctx)).toHaveLength(40);
   });
 
   it("projects_list: the person's Inbox and shared projects, never a hidden one", async () => {
@@ -449,6 +643,388 @@ describe("writes go through the ops, checked before anything is written", () => 
       p_patch: { recurrence: null },
       p_with: { tags_add: ["x"], tags_remove: ["y"] },
     });
+  });
+
+  it("a description is taken as Markdown; HTML an agent sends is read as Markdown, not stored as tags (call #15)", async () => {
+    const { ctx, rpcCalls } = setup({ rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] } });
+    await call("tasks_update", { task_id: "MOD-1", description: "<p>Hello <b>bold</b> &amp; more</p><ul><li>one</li></ul>" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "- [ ] **Check** it" }, ctx);
+    await call("tasks_update", { task_id: "MOD-1", description: "<https://moduo.app> is a link" }, ctx);
+    const patches = rpcCalls.filter((c) => c.fn === "tasks_op_update_with").map((c) => c.args.p_patch);
+    expect(patches).toEqual([
+      { description: "Hello **bold** & more\n\n- one" },
+      { description: "- [ ] **Check** it" },
+      { description: "<https://moduo.app> is a link" },
+    ]);
+  });
+
+  it("a description's references resolve for the key: a handle to its uuid, an unreachable item to its words, and links are made (call #15)", async () => {
+    const SEEN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const SECRET = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const { ctx, rpcCalls, tables } = setup({
+      scopes: { tasks: "edit", links: "edit" },
+      rpcs: {
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+        tasks_op_create_with: (a) => ({ action: "created", task: { ...(a.p_task as Row), id: "t-new", number: 99 } }),
+        perm_can_see_entity: (a) => a.p_id === SEEN,
+        links_op_create: () => [{ id: "link-1" }],
+      },
+    });
+    tables.tasks!.push(task(SEEN, 50), task(SECRET, 51));
+    const description =
+      "See [Fix login](moduo://task/MOD-50) and [Board secret](moduo://task/MOD-51), " +
+      "[x](moduo://note/not-a-uuid) and [Oct 17](moduo://date/2026-10-17).";
+    await call("tasks_update", { task_id: "MOD-1", description }, ctx);
+    const patch = rpcCalls.find((c) => c.fn === "tasks_op_update_with")?.args.p_patch as Row;
+    expect(patch.description).toBe(
+      `See [task](moduo://task/${SEEN}) and Board secret, x and [Oct 17](moduo://date/2026-10-17).`,
+    );
+    expect(patch.description).not.toContain("Fix login");
+    const links = rpcCalls.filter((c) => c.fn === "links_op_create").map((c) => c.args);
+    expect(links).toEqual([
+      expect.objectContaining({
+        p_source_type: "task",
+        p_source_id: "t-open",
+        p_target_type: "task",
+        p_target_id: SEEN,
+        p_relation_kind: "mentions",
+        p_origin: "mention",
+      }),
+    ]);
+    // tasks_create links from the new task the same way.
+    await call("tasks_create", { title: "New", description: `Re [it](moduo://task/MOD-50)` }, ctx);
+    const created = rpcCalls.find((c) => c.fn === "tasks_op_create_with")?.args.p_task as Row;
+    expect(created.description).toBe(`Re [task](moduo://task/${SEEN})`);
+    expect(rpcCalls.filter((c) => c.fn === "links_op_create").at(-1)?.args).toEqual(
+      expect.objectContaining({ p_source_id: "t-new", p_target_id: SEEN }),
+    );
+  });
+
+  describe("a description's references through the connector: only what the key reaches is stored as one or linked", () => {
+    const SEEN = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const SECRET = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const ELSEWHERE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const NOTE = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const TAG = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+
+    function described(scopes: Record<string, string> = { tasks: "edit", links: "edit" }) {
+      const made = setup({
+        scopes,
+        rpcs: {
+          tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+          tasks_op_create_with: (a) => ({ action: "created", task: { ...(a.p_task as Row), id: "t-new", number: 99 } }),
+          // The person can see SEEN, and ELSEWHERE's id too (it's another workspace's).
+          perm_can_see_entity: (a) => a.p_id === SEEN || a.p_id === ELSEWHERE || a.p_id === NOTE,
+          links_op_create: () => [{ id: "link-1" }],
+        },
+      });
+      made.tables.tasks!.push(task(SEEN, 50), task(SECRET, 51), task(ELSEWHERE, 52, { workspace_id: "other-ws" }));
+      made.tables.notes = [{ id: NOTE, workspace_id: WS, deleted_at: null }];
+      const write = async (description: string): Promise<string> => {
+        await call("tasks_update", { task_id: "MOD-1", description }, made.ctx);
+        const patch = made.rpcCalls.filter((c) => c.fn === "tasks_op_update_with").at(-1)?.args.p_patch as Row;
+        return patch.description as string;
+      };
+      const linked = () =>
+        made.rpcCalls.filter((c) => c.fn === "links_op_create").map((c) => `${c.args.p_target_type}:${c.args.p_target_id}`);
+      return { ...made, write, linked };
+    }
+
+    /**
+     * Every reference the app's editor shows for a stored description, read
+     * and saved three times over (each save read back), and what the readers
+     * outside the editor (`descriptionReferences`) find in what was stored
+     * and in every save. A moduo: plain link counts, however it's spelled.
+     */
+    function shownReferences(stored: string): string[] {
+      const seen = new Set<string>();
+      let value = stored;
+      for (let round = 0; round < 3; round++) {
+        for (const ref of descriptionReferences(value)) seen.add(`${ref.type}:${ref.id}`);
+        const editor = createHeadlessEditor({
+          nodes: DESCRIPTION_MARKDOWN_NODES,
+          onError: (error) => {
+            throw error;
+          },
+        });
+        editor.update(() => $importDescription(value), { discrete: true });
+        value = editor.getEditorState().read(() => {
+          const walk = (node: LexicalNode) => {
+            if ($isReferenceNode(node)) seen.add(`${node.exportJSON().entityType}:${node.exportJSON().entityId}`);
+            if ($isLinkNode(node) && readsAsModuoAddress(node.getURL())) seen.add(`link:${node.getURL()}`);
+            if ($isElementNode(node)) for (const child of node.getChildren()) walk(child);
+          };
+          walk($getRoot());
+          return $exportDescription();
+        });
+      }
+      for (const ref of descriptionReferences(value)) seen.add(`${ref.type}:${ref.id}`);
+      return [...seen];
+    }
+
+    it("an item the key's person can't see, another workspace's id, another workspace's handle, a module the key can't open, a tag: words, never linked", async () => {
+      const { write, linked } = described();
+      const stored = await write(
+        `[a](moduo://task/${SECRET}) [b](moduo://task/MOD-51) [c](moduo://task/${ELSEWHERE}) ` +
+          `[d](moduo://task/ENG-50) [e](moduo://note/${NOTE}) [f](moduo://tag/${TAG}) ` +
+          `[g](moduo://constructor/x) [h](moduo://task/MOD-50)`,
+      );
+      expect(stored).toBe(`a b c d e f g [task](moduo://task/${SEEN})`);
+      expect(shownReferences(stored)).toEqual([`task:${SEEN}`]);
+      expect(linked()).toEqual([`task:${SEEN}`]);
+    });
+
+    it("a key without Links at Edit stores the references it reaches and makes no link", async () => {
+      for (const scopes of [{ tasks: "edit" }, { tasks: "edit", links: "view" }]) {
+        const { write, linked } = described(scopes);
+        expect(await write(`See [it](moduo://task/MOD-50)`)).toBe(`See [task](moduo://task/${SEEN})`);
+        expect(linked()).toEqual([]);
+      }
+    });
+
+    it("a reference inside code is written as checked (never the agent's spelling) and links nothing", async () => {
+      const { write, linked } = described();
+      const inline = `Run \`[it](moduo://task/MOD-50)\` and see [it](moduo://task/MOD-50)`;
+      expect(await write(inline)).toBe(
+        `Run \`[task](moduo://task/${SEEN})\` and see [task](moduo://task/${SEEN})`,
+      );
+      expect(linked()).toEqual([`task:${SEEN}`]);
+      const { write: writeFenced, linked: linkedFenced } = described();
+      expect(await writeFenced(`\`\`\`\n[it](moduo://task/MOD-50)\n\`\`\``)).toBe(
+        `\`\`\`\n[task](moduo://task/${SEEN})\n\`\`\``,
+      );
+      expect(linkedFenced()).toEqual([]);
+      // An unreachable one in code still goes to its words.
+      const { write: writeHidden } = described();
+      expect(await writeHidden(`\`[x](moduo://task/${SECRET})\``)).toBe("`x`");
+      // What the editor doesn't read as code (a ~~~ fence, an escaped backtick)
+      // is no code here either: written as checked, and linked.
+      for (const notCode of [
+        `~~~\n[it](moduo://task/MOD-50)\n~~~`,
+        `\\\`[it](moduo://task/MOD-50)\``,
+      ]) {
+        const { write: writeNot, linked: linkedNot } = described();
+        expect(await writeNot(notCode), notCode).toContain(`[task](moduo://task/${SEEN})`);
+        expect(linkedNot(), notCode).toEqual([`task:${SEEN}`]);
+      }
+    });
+
+    it("a malformed task reference is words", async () => {
+      const { write, linked } = described();
+      expect(await write("See [it](moduo://task/abc) and [x](moduo://task/MOD-0)")).toBe("See it and x");
+      expect(linked()).toEqual([]);
+    });
+
+    it("a workspace read that fails fails a handle's write, never turning it into words", async () => {
+      const made = setup({
+        scopes: { tasks: "edit", links: "edit" },
+        rpcs: { tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)] },
+      });
+      const from = made.ctx.db.from.bind(made.ctx.db);
+      (made.ctx.db as { from: unknown }).from = (table: string) =>
+        table === "workspaces"
+          ? {
+              select: () => ({
+                eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: "timeout" } }) }),
+              }),
+            }
+          : from(table);
+      await expect(
+        call("tasks_update", { task_id: "t-open", description: "See [it](moduo://task/MOD-50)" }, made.ctx),
+      ).rejects.toThrow("timeout");
+      expect(made.rpcCalls.some((c) => c.fn === "tasks_op_update_with")).toBe(false);
+    });
+
+    it("a lookup that fails fails the write, never turning a reference into words", async () => {
+      const made = setup({
+        scopes: { tasks: "edit", links: "edit" },
+        rpcs: {
+          tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+          perm_can_see_entity: () => {
+            throw new Error("connection reset");
+          },
+          links_op_create: () => [{ id: "link-1" }],
+        },
+      });
+      made.tables.tasks!.push(task(SEEN, 50));
+      await expect(
+        call("tasks_update", { task_id: "MOD-1", description: `See [it](moduo://task/MOD-50)` }, made.ctx),
+      ).rejects.toThrow("connection reset");
+      expect(made.rpcCalls.some((c) => c.fn === "tasks_op_update_with")).toBe(false);
+    });
+
+    it("no nesting, join, spelling or HTML makes a reference out of an unchecked id", async () => {
+      const crafted = [
+        `[[x](moduo://task/MOD-51)](moduo://task/${SECRET})`,
+        `[x]([moduo://task/${SECRET}](moduo://task/MOD-51))`,
+        `[x](moduo:[//task/${SECRET}](moduo://task/MOD-51))`,
+        `[x](moduo:/[/task/${SECRET}](moduo://task/${SECRET}))`,
+        `[[task](moduo://task/MOD-50)](moduo://task/${SECRET})`,
+        `[[x](moduo://date/2026-10-17)](moduo://task/${SECRET})`,
+        `[x](moduo://task/${SECRET} "title")`,
+        `[x](MODUO://task/${SECRET})`,
+        `[x](<moduo://task/${SECRET}>)`,
+        `[x]( moduo://task/${SECRET})`,
+        `[x]&#40;moduo://task/${SECRET})`,
+        `**[x]&#40;moduo://task/${SECRET})**`,
+        `[x]\\(moduo://task/${SECRET})`,
+        `[[a]&#40;moduo://task/${SECRET})](https://example.com)`,
+        `\`[x](moduo://task/${SECRET})\``,
+        `<p>See <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="${SECRET}">Board secret</span> ` +
+          `and <a href="moduo://task/${SECRET}">x</a> and <a href="moduo://task/${SECRET} &quot;chip&quot;">y</a></p>`,
+        `<p>[x]&#40;moduo://task/${SECRET}) <span data-lexical-entity-ref="true" data-entity-type="task" data-entity-id="MOD-50">t</span></p>`,
+        // An address spelled so only a decoding reader sees moduo: (validator, call #15).
+        `See [task](moduo\\://task/${SECRET}) here`,
+        `[task](moduo&#58;//task/${SECRET})`,
+        `[task](&#109;oduo://task/${SECRET})`,
+        `[task](moduo&#58;&#47;&#47;task&#47;${SECRET})`,
+        `[task](moduo&#x3A;//task/${SECRET})`,
+        `[task](mo\\duo://task/${SECRET})`,
+        `[task](<moduo\\://task/${SECRET}>)`,
+        `[task]( moduo\\://task/${SECRET})`,
+        `[task](${" ".repeat(300)}moduo\\://task/${SECRET})`,
+        `[note](moduo\\://note/${SECRET} "card")`,
+        `[task](MoDuO\\://task/${SECRET} (chip))`,
+        `<p><a href="moduo&amp;#58;//task/${SECRET}">x</a></p>`,
+        `<p><a href="moduo\\://task/${SECRET}">x</a></p>`,
+        // Checkbox and card forms, named and double-encoded references (security review).
+        `- [ ] [task](moduo\\://task/${SECRET})`,
+        `- [x] see [task](&#109;oduo://task/${SECRET})`,
+        `[note](moduo&#58;//note/${SECRET} "card")`,
+        `[task](moduo&colon;//task/${SECRET})`,
+        `[task](moduo&amp;#58;//task/${SECRET})`,
+        `<p><a href="moduo&#38;#58;//task/${SECRET}">x</a></p>`,
+        `<ul><li><a href="moduo&amp;colon;//task/${SECRET}">x</a></li></ul>`,
+        `<p><a href="moduo://task/${SECRET}">x</a></p>`,
+      ];
+      for (const description of crafted) {
+        const { write, linked } = described();
+        const stored = await write(description);
+        expect(shownReferences(stored).filter((r) => r !== `task:${SEEN}`), `${description} → ${stored}`).toEqual([]);
+        expect(linked().filter((r) => r !== `task:${SEEN}`), description).toEqual([]);
+      }
+    });
+  });
+
+  it("a tag the op makes gets the colour the app would pick, oldest bare tag first (MOD-93)", async () => {
+    const tagRow = (id: string, name: string, color: string | null, at: string): Row => ({
+      id, workspace_id: WS, name, color, created_at: at, deleted_at: null,
+    });
+    const { ctx, tables, updates } = setup({
+      rpcs: {
+        perm_can_tag: () => true,
+        // As tasks_op_tag: a new name becomes a tag with no colour.
+        tasks_op_create_with: (a) => {
+          for (const name of (a.p_with as Row).tags as string[]) {
+            if (!tables.tags!.some((t) => t.name === name)) {
+              tables.tags!.push(tagRow(`tag-${name}`, name, null, "2030-02-01T00:00:00Z"));
+            }
+          }
+          return { action: "created", task: task("t-new", 20, a.p_task as Row) };
+        },
+        tasks_op_update_with: (a) => {
+          for (const name of ((a.p_with as Row).tags_add as string[] | undefined) ?? []) {
+            tables.tags!.push(tagRow(`tag-${name}`, name, null, "2030-03-01T00:00:00Z"));
+          }
+          return [task(a.p_task_id as string, 1)];
+        },
+      },
+    });
+    tables.tags = [
+      tagRow("tag-1", "board", null, "2030-01-01T00:00:00Z"),
+      tagRow("tag-blue", "work", "blue", "2029-01-01T00:00:00Z"),
+      tagRow("tag-gone", "old", null, "2029-01-01T00:00:00Z"),
+    ];
+    tables.tags[2]!.deleted_at = "2029-06-01T00:00:00Z";
+    const colour = (id: string) => tables.tags!.find((t) => t.id === id)?.color;
+
+    await call("tasks_create", { title: "x", tags: ["board", "mcp"] }, ctx);
+    // blue is taken, so the bare tags get green, then amber, in the order they were made.
+    expect(colour("tag-1")).toBe("green");
+    expect(colour("tag-mcp")).toBe("amber");
+    expect(colour("tag-blue")).toBe("blue");
+    expect(colour("tag-gone")).toBeNull();
+
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["idea"] }, ctx);
+    expect(colour("tag-idea")).toBe("red");
+    // Only bare tags are written, one at a time, and never a coloured one.
+    expect(updates.map((u) => [u.ids, u.values])).toEqual([
+      [["tag-1"], { color: "green" }],
+      [["tag-mcp"], { color: "amber" }],
+      [["tag-idea"], { color: "red" }],
+    ]);
+
+    // A call that adds no tags colours nothing.
+    await call("tasks_update", { task_id: "MOD-1", title: "y" }, ctx);
+    expect(updates).toHaveLength(3);
+  });
+
+  it("colours a template's tags too, never over a hue a person just picked, and only for someone who may edit tags (MOD-93)", async () => {
+    const bare = (id: string, at: string): Row => ({
+      id, workspace_id: WS, name: id, color: null, created_at: at, deleted_at: null,
+    });
+    let mayTag = true;
+    const { ctx, tables, updates } = setup({
+      rpcs: {
+        perm_can_tag: () => mayTag,
+        task_templates_op_apply: () => {
+          tables.tags!.push(bare("tag-a", "2030-01-01T00:00:00Z"), bare("tag-b", "2030-01-02T00:00:00Z"));
+          return { tasks: [task("t-open", 1)] };
+        },
+      },
+    });
+    tables.tags = [];
+    // Someone picks teal for tag-a just as the connector colours it.
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      const q = from(t);
+      const update = q.update as (v: Row) => Row;
+      q.update = (v: Row) => {
+        const a = tables.tags!.find((x) => x.id === "tag-a");
+        if (a && !a.color) a.color = "teal";
+        return update(v);
+      };
+      return q;
+    };
+    await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
+    expect(tables.tags!.map((x) => [x.id, x.color])).toEqual([
+      ["tag-a", "teal"],
+      // blue went to nobody (tag-a was taken), so tag-b still gets blue.
+      ["tag-b", "blue"],
+    ]);
+    expect(updates.map((u) => u.ids)).toEqual([[], ["tag-b"]]);
+
+    // Someone who may not edit tags colours nothing.
+    mayTag = false;
+    tables.tags!.push(bare("tag-c", "2030-01-03T00:00:00Z"));
+    await call("templates_apply", { template_id: "tt-mine", kind: "task" }, ctx);
+    expect(tables.tags!.find((x) => x.id === "tag-c")?.color).toBeNull();
+  });
+
+  it("with no colourless tag, reads just the (empty) work list, never every tag's hue (MOD-93)", async () => {
+    const { ctx, tables } = setup({
+      rpcs: {
+        perm_can_tag: () => true,
+        tasks_op_update_with: (a) => [task(a.p_task_id as string, 1)],
+      },
+    });
+    tables.tags = [{ id: "tag-1", workspace_id: WS, name: "board", color: "blue", created_at: "2030", deleted_at: null }];
+    let tagReads = 0;
+    const db = ctx.db as unknown as { from: (t: string) => Row };
+    const from = db.from;
+    db.from = (t: string) => {
+      if (t === "tags") tagReads += 1;
+      return from(t);
+    };
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["board"] }, ctx);
+    // loadWorkspace's own read (shaping the answer) plus the work list: no second hue read.
+    const shaped = tagReads;
+    tables.tags.push({ id: "tag-2", workspace_id: WS, name: "new", color: null, created_at: "2031", deleted_at: null });
+    tagReads = 0;
+    await call("tasks_update", { task_id: "MOD-1", tags_add: ["new"] }, ctx);
+    expect(tagReads).toBe(shaped + 2); // + the hues in use, + the guarded update
+    expect(tables.tags.find((x) => x.id === "tag-2")?.color).toBe("green");
   });
 
   it("tasks_session_status sends only the fields given", async () => {

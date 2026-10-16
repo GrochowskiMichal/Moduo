@@ -136,10 +136,33 @@ export type SpineComment = {
   editedAt: string | null;
   /** Who reacted with which emoji (TV-U13; any emoji since CV-7c), oldest first. */
   reactions: CommentReactionMark[];
+  /** The text thread it belongs to (NR-8, notes only); null/absent = note-level. */
+  anchorId?: string | null;
+  /** When its thread was resolved (NR-8). */
+  resolvedAt?: string | null;
 };
 
 /** One person's reaction on a comment. */
 export type CommentReactionMark = { userId: string; reaction: ReactionKey };
+
+/** NR-7: what `notesV2.joinLive` reports to the open editor. Everything
+ * comes from the server; the client sends nothing over Realtime. */
+export type NoteLiveJoin = {
+  noteId: string;
+  selfUserId: string;
+  /** Something was saved (by anyone, agents included), or the socket
+   * rejoined: pull. Messages never carry note content. */
+  onPull(): void;
+  /** Who has the note open right now (user ids, self included), as the
+   * server stamped them; [] when this person may not view it. */
+  onViewers(userIds: string[]): void;
+};
+
+/** NR-7: an open note's live channel. */
+export type NoteLiveChannel = {
+  /** Say goodbye and stop listening for this note. */
+  close(): void;
+};
 
 export type RuntimeSession = {
   access_token: string;
@@ -516,6 +539,10 @@ export type ModuoRuntime = {
       workspaceId: string;
       noteId: string;
       sinceUpdateId?: number | null;
+      /** NR-7: the snapshot version this session already holds. When the
+       * server's is the same the snapshot isn't sent again (`snapshotB64`
+       * null): live pulls after every save stay small. */
+      knownDocVersion?: number | null;
     }): Promise<NoteDocPull>;
     create(input: {
       workspaceId: string;
@@ -599,7 +626,10 @@ export type ModuoRuntime = {
       bodyText?: string | null;
       bodyMd?: string | null;
     }): Promise<{ inserted: number; duplicates: number; maxUpdateId: number | null }>;
-    /** Client-driven compaction: fold the update log into the snapshot. */
+    /** Client-driven compaction: fold the update log into the snapshot.
+     * With `expectedDocVersion`, the server refuses (`refused: true`, nothing
+     * changed, `docVersion` = the current one) when another client folded
+     * since — overwriting its snapshot would lose the rows it folded. */
     saveSnapshot(input: {
       workspaceId: string;
       noteId: string;
@@ -607,7 +637,8 @@ export type ModuoRuntime = {
       uptoUpdateId: number;
       bodyText?: string | null;
       bodyMd?: string | null;
-    }): Promise<{ folded: number; docVersion: number }>;
+      expectedDocVersion?: number | null;
+    }): Promise<{ folded: number; docVersion: number; refused: boolean }>;
     /** ONCE-ONLY materialization of a never-materialized note's CRDT doc
      * (NOTE-FIX-1). Safe to call optimistically: the server refuses (without
      * erroring) the moment the doc exists in any form, so two devices opening
@@ -650,6 +681,13 @@ export type ModuoRuntime = {
       workspaceId: string;
       ids: string[];
     }): Promise<{ id: string; title: string; bodyMd: string }[]>;
+    /**
+     * NR-7: follow an open note live: saved updates from others, and who is
+     * viewing. The server sends both only to people who may view the note,
+     * checked on every save and every heartbeat (`notes_live_here`); a
+     * refusal just means nothing arrives and the editor keeps pulling.
+     */
+    joinLive(input: NoteLiveJoin): NoteLiveChannel;
   };
 
   migration: {
@@ -678,7 +716,7 @@ export type ModuoRuntime = {
     setTimeZone(timeZone: string): Promise<void>;
     /**
      * Time & region (TV-D14): the person's zone, week start, clock, date
-     * order and "Share my tracked time with the workspace owner". Null when
+     * order and "Share your tracked time with the workspace owner". Null when
      * signed out or before the migration.
      */
     getTimeRegion(): Promise<TimeRegion | null>;
@@ -1457,7 +1495,16 @@ export type ModuoRuntime = {
       mentionedUserIds?: string[];
       entityLabel?: string;
       entityIcon?: string | null;
+      /** NR-8: post into this text thread on a note (`comments_op_add_anchored`). */
+      anchorId?: string | null;
     }): Promise<SpineComment>;
+    /** Resolve (or reopen) a note's text thread (NR-8, `comments_op_resolve`). */
+    resolveCommentThread?(input: {
+      workspaceId: string;
+      noteId: string;
+      anchorId: string;
+      resolved: boolean;
+    }): Promise<void>;
     /**
      * The opening words (140 characters) of comments a bell notice names by
      * id (TV-D16: notices carry no comment text). Read through the comments'

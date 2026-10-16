@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
+import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
@@ -40,6 +41,8 @@ type Filter = { op: "eq" | "is" | "in" | "ilike" | "lt" | "gte"; column: string;
 function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) => unknown> = {}) {
   const queries: Array<{ table: string; filters: Filter[] }> = [];
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  /** `.or()` filter strings, as sent (the fake doesn't apply them). */
+  const ors: string[] = [];
   const matches = (row: Row, f: Filter): boolean => {
     const v = row[f.column];
     switch (f.op) {
@@ -61,7 +64,8 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
   };
   function from(table: string) {
     const filters: Filter[] = [];
-    let orderBy: string | null = null;
+    const orders: Array<{ column: string; ascending: boolean }> = [];
+    let counted = false;
     let max = Number.POSITIVE_INFINITY;
     let skip = 0;
     const add = (op: Filter["op"]) => (column: string, value: unknown) => {
@@ -69,15 +73,22 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       return query;
     };
     const query = {
-      select: () => query,
+      select: (_cols?: string, opts?: { count?: string }) => {
+        if (opts?.count) counted = true;
+        return query;
+      },
       eq: add("eq"),
       is: add("is"),
       in: add("in"),
       ilike: add("ilike"),
       lt: add("lt"),
       gte: add("gte"),
-      order: (column: string) => {
-        orderBy = column;
+      or: (expr: string) => {
+        ors.push(expr);
+        return query;
+      },
+      order: (column: string, opts?: { ascending?: boolean }) => {
+        orders.push({ column, ascending: opts?.ascending !== false });
         return query;
       },
       limit: (n: number) => {
@@ -91,12 +102,21 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
       },
       maybeSingle: () =>
         query.then((r: { data: Row[]; error: null }) => ({ data: r.data[0] ?? null, error: r.error })),
-      then<T>(resolve: (result: { data: Row[]; error: null }) => T) {
+      then<T>(resolve: (result: { data: Row[]; error: null; count?: number }) => T) {
         queries.push({ table, filters });
         let data = (tables[table] ?? []).filter((row) => filters.every((f) => matches(row, f)));
-        const by = orderBy;
-        if (by) data = [...data].sort((a, b) => String(a[by]).localeCompare(String(b[by])));
-        return Promise.resolve({ data: data.slice(skip, skip + max), error: null }).then(resolve);
+        const total = data.length;
+        if (orders.length) {
+          data = [...data].sort((a, b) => {
+            for (const o of orders) {
+              const c = String(a[o.column]).localeCompare(String(b[o.column]));
+              if (c) return o.ascending ? c : -c;
+            }
+            return 0;
+          });
+        }
+        const page = data.slice(skip, skip + max);
+        return Promise.resolve({ data: page, error: null, ...(counted ? { count: total } : {}) }).then(resolve);
       },
     };
     return query;
@@ -106,7 +126,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
     const impl = rpcs[fn];
     return impl ? { data: impl(args), error: null } : { data: null, error: { message: `unexpected rpc ${fn}` } };
   }
-  return { db: { from, rpc }, queries, rpcCalls };
+  return { db: { from, rpc }, queries, rpcCalls, ors };
 }
 
 const WS = "11111111-1111-4111-8111-111111111111";
@@ -131,6 +151,12 @@ function tool(module: ConnectorModule, name: string): ToolDef {
   const found = module.tools.find((t) => t.name === name);
   if (!found) throw new Error(`${name} is not registered on ${module.module}`);
   return found;
+}
+/** A tool call as index.ts makes it: the arguments go through the parser first. */
+function callTool(module: ConnectorModule, name: string, args: Row, c: ToolContext): Promise<any> {
+  const parsed = parseToolArgs(name, args);
+  if (!parsed.success) return Promise.reject(new Error(parsed.message));
+  return tool(module, name).handler(parsed.data, c) as Promise<any>;
 }
 
 describe("which tools a key lists and may call", () => {
@@ -253,6 +279,130 @@ describe("reaching one item", () => {
     await expect(assertReach(ctx({ email: "view" }, db), "email_thread", TASK)).rejects.toThrow(
       "No email thread with that id in this workspace.",
     );
+  });
+
+  it("takes a task's handle as well as its uuid, and answers the uuid (MOD-112)", async () => {
+    const tables = { workspaces: [{ id: WS, task_key: "MOD" }], tasks: [{ ...live, number: 142 }] };
+    const { db } = fakeDb(tables, seen(true));
+    const reach = (ref: string) => assertReach(ctx({ tasks: "view" }, db), "task", ref);
+    expect(await reach("MOD-142")).toBe(TASK);
+    expect(await reach("mod-142")).toBe(TASK);
+    expect(await reach(TASK)).toBe(TASK);
+    const missing = "No task with that id in this workspace.";
+    await expect(reach("MOD-9")).rejects.toThrow(missing);
+    await expect(reach("ENG-142")).rejects.toThrow(missing);
+    // A hidden task's handle reads exactly like a missing one.
+    const hidden = fakeDb(tables, seen(false));
+    await expect(assertReach(ctx({ tasks: "view" }, hidden.db), "task", "MOD-142")).rejects.toThrow(missing);
+    // Without Tasks on the key, the handle isn't looked up at all.
+    const none = fakeDb(tables, seen(true));
+    await expect(assertReach(ctx({ links: "edit" }, none.db), "task", "MOD-142")).rejects.toThrow(
+      "This API key has no access to Tasks.",
+    );
+    expect(none.queries).toEqual([]);
+  });
+
+  it("links and comments name a task by its handle; the ops get its uuid (MOD-112)", async () => {
+    const NOTE = "66666666-6666-4666-8666-666666666666";
+    const tables = {
+      workspaces: [{ id: WS, task_key: "MOD" }],
+      tasks: [{ ...live, number: 142 }],
+      notes: [{ id: NOTE, workspace_id: WS, deleted_at: null }],
+      entity_links: [],
+    };
+    const { db, rpcCalls, ors } = fakeDb(tables, {
+      ...seen(true),
+      links_op_create: (a) => ({ id: LINK, ...a }),
+      comments_op_add: () => ({ id: "c-1", created_at: "2030-01-01T00:00:00Z" }),
+      links_suggest: () => [],
+    });
+    const c = ctx({ tasks: "edit", notes: "edit", links: "edit" }, db);
+    const handle = { entity_type: "task", entity_id: "MOD-142" };
+    await callTool(
+      linksConnectorModule,
+      "links_create",
+      { source_type: "task", source_id: "MOD-142", target_type: "note", target_id: NOTE },
+      c,
+    );
+    await callTool(linksConnectorModule, "comments_add", { ...handle, body: "Done?" }, c);
+    await callTool(linksConnectorModule, "links_list", handle, c);
+    await callTool(linksConnectorModule, "links_suggest", handle, c);
+    const sent = (fn: string) => rpcCalls.find((call) => call.fn === fn)?.args;
+    expect(sent("links_op_create")).toMatchObject({ p_source_id: TASK, p_target_id: NOTE });
+    expect(sent("comments_op_add")).toMatchObject({ p_entity_type: "task", p_entity_id: TASK });
+    expect(sent("links_suggest")).toMatchObject({ p_entity_id: TASK });
+    expect(ors).toEqual([
+      `and(source_type.eq.task,source_id.eq.${TASK}),and(target_type.eq.task,target_id.eq.${TASK})`,
+    ]);
+  });
+});
+
+describe("comments_list (MOD-94): Links reads an item's comments, behind the item's own gate", () => {
+  const NOTE = "66666666-6666-4666-8666-666666666666";
+  const comment = (id: string, at: string, extra: Row = {}): Row => ({
+    id,
+    workspace_id: WS,
+    entity_type: "task",
+    entity_id: TASK,
+    body: `body ${id}`,
+    created_by: ME,
+    author_kind: "user",
+    author_label: null,
+    created_at: at,
+    edited_at: null,
+    deleted_at: null,
+    ...extra,
+  });
+  const tables = () => ({
+    workspaces: [{ id: WS, task_key: "MOD" }],
+    tasks: [{ id: TASK, workspace_id: WS, deleted_at: null, number: 142 }],
+    notes: [{ id: NOTE, workspace_id: WS, deleted_at: null }],
+    workspace_members: [{ workspace_id: WS, user_id: ME, perms: [], profiles: { display_name: "Ada" } }],
+    comments: [
+      comment("c-2", "2030-01-02T10:00:00Z", { author_kind: "api_key", author_label: "Claude Code" }),
+      comment("c-1", "2030-01-01T10:00:00Z", { edited_at: "2030-01-01T11:00:00Z" }),
+      comment("c-gone", "2030-01-03T10:00:00Z", { deleted_at: "2030-01-04T00:00:00Z" }),
+      comment("c-other-ws", "2030-01-03T10:00:00Z", { workspace_id: OTHER_WS }),
+      comment("c-note", "2030-01-03T10:00:00Z", { entity_type: "note", entity_id: NOTE }),
+    ],
+  });
+  const seen = (answer: boolean) => ({ perm_can_see_entity: () => answer });
+
+  it("is a Links read: listed at Links: View, never for a key without Links", () => {
+    expect(names(key({ tasks: "view", links: "view" }))).toContain("comments_list");
+    expect(names(key({ tasks: "edit" }))).not.toContain("comments_list");
+    expect(tool(linksConnectorModule, "comments_list").access).toBe("view");
+  });
+
+  it("reads a task's comments by handle, the newest last, with who wrote each", async () => {
+    const { db } = fakeDb(tables(), seen(true));
+    const got = await callTool(linksConnectorModule, "comments_list", { entity_type: "task", entity_id: "MOD-142" },
+      ctx({ tasks: "view", links: "view" }, db));
+    expect(got).toEqual({
+      entity_type: "task",
+      entity_id: TASK,
+      total: 2,
+      comments: [
+        { id: "c-1", author: "Ada", at: "2030-01-01T10:00:00Z", edited: true, body: "body c-1" },
+        { id: "c-2", author: "Claude Code (app)", at: "2030-01-02T10:00:00Z", body: "body c-2" },
+      ],
+    });
+    const last = await callTool(linksConnectorModule, "comments_list",
+      { entity_type: "task", entity_id: TASK, limit: 1 }, ctx({ tasks: "view", links: "view" }, db));
+    expect(last.comments.map((x: Row) => x.id)).toEqual(["c-2"]);
+  });
+
+  it("needs View on the item's module, and an item the person can't open reads as missing", async () => {
+    const open = fakeDb(tables(), seen(true));
+    await expect(callTool(linksConnectorModule, "comments_list", { entity_type: "note", entity_id: NOTE },
+      ctx({ tasks: "view", links: "view" }, open.db))).rejects.toThrow("This API key has no access to Notes.");
+    const notes = await callTool(linksConnectorModule, "comments_list", { entity_type: "note", entity_id: NOTE },
+      ctx({ notes: "view", links: "view" }, open.db));
+    expect(notes.comments.map((x: Row) => x.id)).toEqual(["c-note"]);
+    const hidden = fakeDb(tables(), seen(false));
+    await expect(callTool(linksConnectorModule, "comments_list", { entity_type: "task", entity_id: "MOD-142" },
+      ctx({ tasks: "view", links: "view" }, hidden.db))).rejects.toThrow("No task with that id in this workspace.");
+    expect(hidden.queries.some((q) => q.table === "comments")).toBe(false);
   });
 });
 

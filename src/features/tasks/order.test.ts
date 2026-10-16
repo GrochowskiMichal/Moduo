@@ -37,6 +37,7 @@ describe("manual order inside one project", () => {
     expect(`${sortedByLabel("due")} · ${BACK_TO_MANUAL_ORDER}`).toBe(
       "Sorted by due date · Back to manual order",
     );
+    expect(sortedByLabel("id")).toBe("Sorted by ID");
     // A view across projects has no manual order to go back to.
     expect(showsSortedNote("all", "due")).toBe(false);
     expect(showsSortedNote("mine", "priority")).toBe(false);

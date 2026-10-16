@@ -269,6 +269,9 @@ export const noteRowSchema = z.object({
   // NR-1: stored Inbox + per-note reading width (optional until deployed).
   in_inbox: z.boolean().optional(),
   full_width: z.boolean().optional(),
+  // NR-6: the last human editor (optional until deployed).
+  edited_by: optStr,
+  edited_at: optStr,
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
@@ -288,6 +291,9 @@ export const noteUpdateRowSchema = z.object({
   client_id: z.string().optional(),
   client_seq: z.union([z.number(), z.string()]).optional(),
   update_b64: z.string().optional(),
+  // NR-6: who wrote the update (optional until deployed; absent = "user").
+  origin: z.string().optional(),
+  actor_key_id: optStr,
 });
 export type NoteUpdateRowDto = z.infer<typeof noteUpdateRowSchema>;
 
@@ -494,6 +500,9 @@ export const commentRowSchema = z.object({
   deleted_at: optStr,
   // TV-U13: absent before 20261013100000.
   edited_at: optStr,
+  // NR-8: absent before 20261016180000 (then every comment is note-level).
+  anchor_id: optStr,
+  resolved_at: optStr,
   comment_reactions: z
     .array(z.object({ user_id: z.string(), reaction: z.string() }))
     .nullable()

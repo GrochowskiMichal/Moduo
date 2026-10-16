@@ -22,11 +22,13 @@ import { Snippet } from "../../features/chat/find/snippet";
 import type { ChatConversationFound, ChatSearchHit } from "../../features/chat/model";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
+import { taskIdForHandle } from "../../features/tasks/search";
 import type { EntityRecord } from "../../lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
-import { groupPaletteResults, PALETTE_ENTITY_TYPES } from "../../lib/palette-search";
+import { groupPaletteResults, PALETTE_ENTITY_TYPES, withHandleHit } from "../../lib/palette-search";
 import { formatShortcut, onShortcut, SHORTCUTS } from "../../lib/shortcuts";
 import { findWorkspaceStore } from "../../lib/sync/store";
+import { taskHandle } from "../../lib/task-handle";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import {
@@ -92,7 +94,8 @@ export function dispatchOpenPalette() {
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
   const { runtime, userId } = useAuth();
-  const { selectedWorkspaceId, modulePermissions, members } = useWorkspace();
+  const { selectedWorkspaceId, selectedWorkspace, modulePermissions, members } = useWorkspace();
+  const taskKey = selectedWorkspace?.taskKey ?? null;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<EntityRecord[]>([]);
@@ -223,24 +226,65 @@ export function GlobalCommandPalette() {
     return () => clearTimeout(timer);
   }, [open, trimmed, runtime, selectedWorkspaceId]);
 
-  const resultGroups = useMemo(() => groupPaletteResults(results), [results]);
+  // A task's ID finds it (MOD-144): "MOD-99", "mod-99" or "mod 99", read in
+  // the workspace's Tasks copy (open and archived tasks) with the handle rule
+  // Tasks' own search and links use, and listed first, at once, before the
+  // registry answers. The registry finds "MOD-99" by its handle too, but
+  // never "mod 99".
+  const tasksReachable = modulePermissions.tasks !== "none";
+  const handleHit = useMemo<EntityRecord | null>(() => {
+    if (!open || !trimmed || !taskKey || !tasksReachable || !runtime || !selectedWorkspaceId) {
+      return null;
+    }
+    const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
+    if (!bundle) return null;
+    const tasks = [...bundle.tasks, ...(bundle.archivedTasks ?? [])];
+    const id = taskIdForHandle(trimmed, tasks, taskKey);
+    const task = id ? tasks.find((t) => t.id === id) : null;
+    if (!task) return null;
+    return {
+      workspaceId: selectedWorkspaceId,
+      type: "task",
+      id: task.id,
+      label: task.title,
+      icon: null,
+      deletedAt: null,
+    };
+  }, [open, trimmed, taskKey, tasksReachable, runtime, selectedWorkspaceId]);
+  const shown = useMemo(() => withHandleHit(results, handleHit), [results, handleHit]);
+  const resultGroups = useMemo(() => groupPaletteResults(shown), [shown]);
+  // Every task result says its ID, quieter, as the details header does
+  // (MOD-144), read from the same copy (a task it doesn't hold shows none).
+  const handles = useMemo(() => {
+    if (!taskKey || !runtime || !selectedWorkspaceId || shown.length === 0) return null;
+    const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
+    if (!bundle) return null;
+    const wanted = new Set(shown.filter((r) => r.type === "task").map((r) => r.id));
+    const out = new Map<string, string>();
+    for (const task of [...bundle.tasks, ...(bundle.archivedTasks ?? [])]) {
+      if (!wanted.has(task.id)) continue;
+      const handle = taskHandle(taskKey, task.number);
+      if (handle) out.set(task.id, handle);
+    }
+    return out.size > 0 ? out : null;
+  }, [taskKey, runtime, selectedWorkspaceId, shown]);
   // Archived projects stay findable, labelled (REPLAN 78, TV-U16): the
   // workspace's Tasks copy knows which projects and tasks are archived.
   const archivedIds = useMemo(() => {
-    if (!runtime || !selectedWorkspaceId || results.length === 0) return null;
+    if (!runtime || !selectedWorkspaceId || shown.length === 0) return null;
     const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
     if (!bundle?.archivedBuckets?.length) return null;
     return new Set([
       ...bundle.archivedBuckets.map((b) => b.id),
       ...(bundle.archivedTasks ?? []).map((t) => t.id),
     ]);
-  }, [runtime, selectedWorkspaceId, results]);
+  }, [runtime, selectedWorkspaceId, shown]);
   // A task result's 📎 mark (AT-3), read from the same copy (files you can see).
   const fileCounts = useMemo(() => {
-    if (!runtime || !selectedWorkspaceId || results.length === 0) return null;
+    if (!runtime || !selectedWorkspaceId || shown.length === 0) return null;
     const counts = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().attachmentCounts;
     return counts && counts.size > 0 ? counts : null;
-  }, [runtime, selectedWorkspaceId, results]);
+  }, [runtime, selectedWorkspaceId, shown]);
 
   const go = useCallback(
     (to: string) => () => {
@@ -516,6 +560,15 @@ export function GlobalCommandPalette() {
                   >
                     <Icon />
                     <span className="min-w-0 flex-1 truncate">{record.label || "Untitled"}</span>
+                    {record.type === "task" && handles?.has(record.id) ? (
+                      // The task's ID, as quiet as the details header's (MOD-144).
+                      <span
+                        data-slot="palette-task-id"
+                        className="shrink-0 font-sans text-xs whitespace-nowrap text-subtle-foreground tabular-nums"
+                      >
+                        {handles.get(record.id)}
+                      </span>
+                    ) : null}
                     {record.type === "task" ? (
                       <MetaCount
                         icon={Paperclip}

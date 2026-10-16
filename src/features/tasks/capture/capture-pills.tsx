@@ -11,7 +11,6 @@ import {
   CalendarDays,
   Check,
   CircleDot,
-  Flag,
   Hash,
   Hourglass,
   MoreHorizontal,
@@ -32,12 +31,24 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { isoDay } from "../../spine/grammar";
+import { assigneeInSentence, assigneeListName } from "../assignee-options";
 import type { PriorityLevel, RecurrenceRule, Tag, Team } from "../model";
 import { RECURRENCE_PRESETS, recurrenceFromPreset, recurrenceLabel } from "../parse/recurrence";
 import { CATEGORY_LABELS } from "../statuses";
+import { PriorityIcon } from "../ui/level-icons";
 import { estimateLabel } from "./capture-menus";
 
-export type PillPerson = { userId: string; name: string; isMe: boolean; canTakeTasks: boolean };
+export type PillPerson = {
+  userId: string;
+  name: string;
+  /** Their own name, for the avatar's initials; empty when unset ("?", never
+   *  the "ME" of a "Member" placeholder, call 43). */
+  fullName: string;
+  /** Their profile photo; the avatar shows initials without it (MOD-96). */
+  avatarUrl: string | null;
+  isMe: boolean;
+  canTakeTasks: boolean;
+};
 
 /** What the pills show (tokens and hand picks merged by the body). */
 export type PillValues = {
@@ -105,9 +116,17 @@ const ESTIMATES = [15, 30, 60, 120, 240];
 
 const dayDate = (day: string) => new Date(`${day}T00:00:00`);
 
-function nameOf(people: readonly PillPerson[], id: string | null | undefined): string {
-  return people.find((p) => p.userId === id)?.name ?? "Someone";
+function personOf(people: readonly PillPerson[], id: string | null | undefined) {
+  const p = people.find((x) => x.userId === id);
+  return {
+    name: p?.name ?? "Someone",
+    avatar: p ? avatarName(p) : "?",
+    avatarUrl: p?.avatarUrl ?? null,
+  };
 }
+
+/** The name an avatar's initials come from (call 43). */
+const avatarName = (p: PillPerson) => p.fullName || "?";
 
 export function CapturePills({
   values,
@@ -125,22 +144,33 @@ export function CapturePills({
   const team = teams.find((t) => t.id === values.teamId) ?? null;
   const assigneeId = values.assigneeId === undefined ? me : values.assigneeId;
   const someoneElse = assigneeId && assigneeId !== me ? assigneeId : null;
+  const other = personOf(people, someoneElse);
+  // You: picked or named, or by default unless a team takes it (a team task
+  // with nobody picked is the team's to claim, 54). Said like anyone else,
+  // with your photo, as "You" (MOD-135).
+  const mine =
+    me !== null && (values.assigneeId === me || (values.assigneeId === undefined && !team));
+  const shown = someoneElse
+    ? { id: someoneElse, ...other }
+    : mine && me
+      ? { id: me, ...personOf(people, me), name: "You" }
+      : null;
   const toggle = (pill: Exclude<OpenPill, null>) => (next: boolean) =>
     onOpenChange(next ? pill : null);
 
   // Assign: a person (round), a team (square), or both.
   const assignValue =
-    someoneElse || team ? (
+    shown || team ? (
       <span className="flex min-w-0 items-center gap-1.5">
-        {someoneElse ? <PersonAvatar name={nameOf(people, someoneElse)} id={someoneElse} /> : null}
+        {shown ? <PersonAvatar name={shown.avatar} id={shown.id} src={shown.avatarUrl} /> : null}
         {team ? (
           <TeamMark name={team.name} id={team.id} letters={team.mark || null} color={team.color} />
         ) : null}
         <span className="truncate">
-          {someoneElse
+          {shown
             ? team
-              ? `${nameOf(people, someoneElse)} · ${team.name}`
-              : nameOf(people, someoneElse)
+              ? `${shown.name} · ${team.name}`
+              : shown.name
             : `${team?.name} · unclaimed`}
         </span>
       </span>
@@ -162,7 +192,7 @@ export function CapturePills({
     <div className="flex flex-wrap items-center gap-1.5">
       <PickerPill
         label="Assign"
-        icon={someoneElse || team ? undefined : User}
+        icon={shown || team ? undefined : User}
         value={assignValue}
         open={open === "assign"}
         onOpenChange={toggle("assign")}
@@ -177,8 +207,8 @@ export function CapturePills({
                   onChange({ field: "assignee", value: p.isMe ? undefined : p.userId })
                 }
               >
-                <PersonAvatar name={p.name} id={p.userId} />
-                <span className="truncate">{p.isMe ? `${p.name} (you)` : p.name}</span>
+                <PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />
+                <span className="truncate">{assigneeListName(p)}</span>
                 {assigneeId === p.userId ? <Check className="ms-auto" aria-hidden /> : null}
               </DropdownMenuItem>
             ))}
@@ -283,7 +313,9 @@ export function CapturePills({
           />
           <PickerPill
             label="Priority"
-            icon={Flag}
+            // The app's three bars, as rows and the details show priority:
+            // the level's bars once set, all faint while unset (MOD-134).
+            icon={<PriorityIcon level={values.priority} />}
             value={
               values.priority ? PRIORITIES.find((p) => p.level === values.priority)?.label : null
             }
@@ -296,13 +328,18 @@ export function CapturePills({
                     key={p.level}
                     onSelect={() => onChange({ field: "priority", value: p.level })}
                   >
-                    <Flag className="text-muted-foreground" aria-hidden />
+                    <span className="flex size-icon-sm items-center text-muted-foreground">
+                      <PriorityIcon level={p.level} />
+                    </span>
                     {p.label}
                     {values.priority === p.level ? <Check className="ms-auto" aria-hidden /> : null}
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => onChange({ field: "priority", value: null })}>
+                  <span className="flex size-icon-sm items-center text-muted-foreground">
+                    <PriorityIcon level={null} />
+                  </span>
                   No priority
                 </DropdownMenuItem>
               </>
@@ -354,7 +391,7 @@ function MoreChips({
     chips.push({
       key: "remind",
       icon: Bell,
-      label: `Remind ${formatDayTime(values.remindAt)}`,
+      label: `Reminder ${formatDayTime(values.remindAt)}`,
       clear: () => onChange({ field: "remind", value: null }),
     });
   if (values.estimateMinutes)
@@ -371,13 +408,16 @@ function MoreChips({
       label: capitalise(recurrenceLabel(values.recurrence)),
       clear: () => onChange({ field: "repeat", value: null }),
     });
-  for (const id of values.waitingOn)
+  for (const id of values.waitingOn) {
+    // Said as a sentence: "Waiting on you" for you, never your full name (MOD-137).
+    const person = people.find((p) => p.userId === id);
     chips.push({
       key: `waiting:${id}`,
       icon: Hourglass,
-      label: `Waiting on ${nameOf(people, id)}`,
+      label: `Waiting on ${person ? assigneeInSentence(person) : "someone"}`,
       clear: () => onChange({ field: "waiting", userId: id, on: false }),
     });
+  }
   return (
     <>
       {chips.map((c) => (
@@ -433,7 +473,7 @@ function MorePill({
             icon={<Bell aria-hidden />}
             value={values.remindAt ? new Date(values.remindAt) : null}
             onChange={(d) => onChange({ field: "remind", value: d ? d.toISOString() : null })}
-            placeholder="Remind me at…"
+            placeholder="Reminder at…"
             aria-label="Reminder"
           />
         </div>
@@ -493,7 +533,7 @@ function MorePill({
                     key={p.userId}
                     size="xs"
                     active={on}
-                    icon={<PersonAvatar name={p.name} id={p.userId} />}
+                    icon={<PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />}
                     onClick={() => onChange({ field: "waiting", userId: p.userId, on: !on })}
                   >
                     {p.name}

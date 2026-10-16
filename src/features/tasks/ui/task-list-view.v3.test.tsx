@@ -11,7 +11,14 @@ import { useState } from "react";
 rs.mock("../assignees", () => ({
   useAssignees: () => ({
     assignees: [
-      { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+      {
+        userId: "u1",
+        name: "You",
+        fullName: "Alex Rivera",
+        avatarUrl: null,
+        isMe: true,
+        canTakeTasks: true,
+      },
       { userId: "u2", name: "Mike", avatarUrl: null, isMe: false, canTakeTasks: true },
     ],
     currentUserId: "u1",
@@ -254,6 +261,16 @@ describe("group headers (default n)", () => {
     expect(add.closest('[data-slot="group-header-persistent"]')).not.toBeNull();
     fireEvent.click(add);
     expect(onRequestCapture).toHaveBeenCalledWith({ projectId: "p1", sectionId: "s1" });
+  });
+
+  it("your own group reads You and its + says Add a task to you (MOD-137)", () => {
+    renderList([task("a", { assigneeId: "u1" }), task("b", { assigneeId: "u2" })], {
+      groupBy: "assignee",
+    });
+    expect(screen.getByRole("button", { name: /^You/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a task to you" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add a task to Mike" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add a task to You" })).toBeNull();
   });
 
   it("a project grouped by section ends with + Add section", () => {
