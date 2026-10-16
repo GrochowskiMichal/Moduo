@@ -590,3 +590,138 @@ BEGIN
     'the waiting email to X drops its text; C''s keeps it');
 END;
 $$;
+
+-- Everything this workspace wrote moves an hour back, order kept, so the
+-- sending limit and the move pace start afresh (one now() per test).
+CREATE FUNCTION test.rewind() RETURNS void LANGUAGE sql AS $$
+  UPDATE public.chat_messages SET created_at = created_at - interval '1 hour'
+   WHERE workspace_id = test.id('W')
+$$;
+
+-- ── Undo gives quotes back only inside the conversation they went back to ──
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.rewind();
+  PERFORM test.ok(test.post('A', 'Q', 'w') LIKE 'ok %', 'A asks w in Q');
+  PERFORM test.ok(test.post('B', 'Q', 'w1', 'w') LIKE 'ok %', 'B replies w1');
+  v := test.post('C', 'Q', 'w2', 'w1');
+  PERFORM test.ok(v LIKE 'ok %', 'C replies w2, quoting w1', v);
+  v := test.mv('B', ARRAY['w1'], 'D');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved' AND (test.msg('w2')).reply_to_id IS NULL,
+    'B moves w1 alone to D; w2 loses its quote', v);
+  v := test.mv('C', ARRAY['w2'], 'F');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved' AND (test.msg('w2')).channel_id = test.ref('F'),
+    'C then moves w2 alone to F', v);
+  v := test.mv('B', ARRAY['w1'], 'Q', false, true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone' AND (test.msg('w1')).parent_id = test.mid('w'),
+    'B undoes: w1 is back in its chain in Q', v);
+  PERFORM test.ok((test.msg('w2')).channel_id = test.ref('F') AND (test.msg('w2')).parent_id IS NULL
+              AND (test.msg('w2')).reply_to_id IS NULL AND (test.msg('w')).reply_count = 1,
+    'w2, now in F, gets no chain or quote pointing back into Q');
+END;
+$$;
+
+-- ── Any id you can't read answers like one that doesn't exist ──────────────
+DO $$
+DECLARE
+  v text;
+  ghost text;
+BEGIN
+  PERFORM test.rewind();
+  ghost := test.mv('X', ARRAY['v1', 'never-sent'], 'D');
+  PERFORM test.ok(ghost LIKE 'P0002 %', 'a made-up id among the picks: "no longer exists"', ghost);
+  v := test.mv('X', ARRAY['v1', 'b2'], 'D');
+  PERFORM test.ok(v = ghost,
+    'X picks v1 (Q, readable) with b2 (P, which X can''t read): the same answer, never "two conversations"', v);
+  v := test.mv('X', ARRAY['b2', 'v1'], 'D');
+  PERFORM test.ok(v = ghost, '… in either order', v);
+  v := test.mv('X', ARRAY['b2'], 'Q');
+  PERFORM test.ok(v = ghost, '… and on its own', v);
+
+  -- A conversation in another workspace answers like one that doesn't exist.
+  INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W2'), test.id('O'), 'Elsewhere');
+  v := test.as_user('O', format($q$SELECT public.chat_op_bootstrap(%L)$q$, test.id('W2')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: O''s other workspace has its General', v);
+  INSERT INTO test.ids SELECT 'G2', id FROM public.chat_channels WHERE workspace_id = test.id('W2') LIMIT 1;
+  INSERT INTO test.ids VALUES ('nowhere', test.id('no-such-conversation'));
+  PERFORM test.ok(test.post('O', 'Q', 'o1') LIKE 'ok %', 'O posts o1 in Q');
+  ghost := test.mv('O', ARRAY['o1'], 'nowhere');
+  PERFORM test.ok(ghost LIKE 'P0002 %', 'a made-up destination: "no longer exists"', ghost);
+  v := test.mv('O', ARRAY['o1'], 'G2', true);
+  PERFORM test.ok(v = ghost AND (test.msg('o1')).channel_id = test.ref('Q'),
+    'a destination in another workspace (even one O can read) gets the same answer and nothing moves', v);
+END;
+$$;
+
+-- ── Undo isn't held to the 100-message pick ─────────────────────────────────
+DO $$
+DECLARE
+  v text;
+  names text[] := ARRAY(SELECT 'big' || g FROM generate_series(1, 101) g);
+BEGIN
+  PERFORM test.rewind();
+  -- Written straight in (the sending limit would stop 102 posts).
+  INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body)
+  VALUES (test.mid('big'), test.id('W'), test.ref('F'), test.id('C'), 'big');
+  INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body, parent_id)
+  SELECT test.mid(n), test.id('W'), test.ref('F'), test.id('C'), n, test.mid('big') FROM unnest(names) n;
+  v := test.mv('C', names, 'D');
+  PERFORM test.ok(v LIKE '22023 %', 'picking 101 messages is refused', v);
+  v := test.mv('C', ARRAY['big'], 'D');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved' AND jsonb_array_length((v::jsonb) -> 'ids') = 102,
+    'a root with 101 replies moves as 102 messages', v);
+  v := test.mv('C', ARRAY['big'] || names, 'F', false, true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone'
+              AND NOT EXISTS (SELECT 1 FROM public.chat_messages
+                               WHERE parent_id = test.mid('big') AND channel_id <> test.ref('F')),
+    'Undo names all 102 and puts every one back', v);
+END;
+$$;
+
+-- ── Undo reaches a device that was offline: the access check names the ids ─
+DO $$
+DECLARE
+  v text;
+  away text;
+BEGIN
+  PERFORM test.rewind();
+  PERFORM test.ok(test.post('B', 'P', 'ub') LIKE 'ok %', 'B posts ub in P');
+  v := test.mv('B', ARRAY['ub'], 'Q', true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'B moves ub into Q (confirmed)', v);
+  away := test.value_as('X', format($q$SELECT coalesce(string_agg(id::text, ','), '') FROM public.chat_sync_ids(%L) WHERE kind = 'moved_away'$q$, test.id('W')));
+  PERFORM test.ok(away NOT LIKE '%' || test.mid('ub')::text || '%', 'X reads ub in Q: not named as moved away', away);
+  v := test.mv('B', ARRAY['ub'], 'P', false, true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone', 'B undoes', v);
+  away := test.value_as('X', format($q$SELECT coalesce(string_agg(id::text || '@' || conversation_id::text, ','), '') FROM public.chat_sync_ids(%L) WHERE kind = 'moved_away'$q$, test.id('W')));
+  PERFORM test.ok(away LIKE '%' || test.mid('ub')::text || '@' || test.ref('Q')::text || '%',
+    'X''s next sync names ub as moved away from Q, so an offline copy drops it', away);
+  away := test.value_as('B', format($q$SELECT coalesce(string_agg(id::text, ','), '') FROM public.chat_sync_ids(%L) WHERE kind = 'moved_away'$q$, test.id('W')));
+  PERFORM test.ok(away NOT LIKE '%' || test.mid('ub')::text || '%', 'B, who reads P, keeps it', away);
+END;
+$$;
+
+-- ── A reply never joins a chain that sits in another conversation ──────────
+-- (Two sessions can't interleave in one test transaction: the root is put in
+-- F straight in, as a move landing between the reply's first read and its
+-- lock would leave it.)
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.rewind();
+  PERFORM test.ok(test.post('A', 'Q', 'k') LIKE 'ok %', 'A asks k in Q');
+  PERFORM test.ok(test.post('B', 'Q', 'k1', 'k') LIKE 'ok %', 'B replies k1');
+  PERFORM test.ok(test.post('C', 'Q', 'k2') LIKE 'ok %', 'C posts k2 in Q');
+  UPDATE public.chat_messages SET channel_id = test.ref('F') WHERE id = test.mid('k');
+  v := test.post('C', 'Q', 'k3', 'k1');
+  PERFORM test.ok(v LIKE 'P0002 %' AND test.msg('k3') IS NULL,
+    'a reply to k1 whose root now sits in F is refused and nothing is posted', v);
+  v := test.as_user('C', format($q$SELECT id FROM public.chat_op_attach_to_chain(%L::uuid, %L::uuid)$q$,
+    test.mid('k2'), test.mid('k1')));
+  PERFORM test.ok(v LIKE '22023 %' AND (test.msg('k2')).parent_id IS NULL,
+    'attaching k2 to k1 is refused too: its chain isn''t in this conversation', v);
+  UPDATE public.chat_messages SET channel_id = test.ref('Q') WHERE id = test.mid('k');
+END;
+$$;
