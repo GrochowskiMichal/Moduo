@@ -7,7 +7,14 @@
 // to messages (attachments, custom emoji images) go in as files under
 // `chat/files/` through `files`, the hook the blocks that make them fill.
 
-import type { ChatChannel, ChatKey, ChatMessage, ChatPerson, ChatResult, ChatRuntime } from "./model";
+import type {
+  ChatChannel,
+  ChatKey,
+  ChatMessage,
+  ChatPerson,
+  ChatResult,
+  ChatRuntime,
+} from "./model";
 import { keyOf } from "./store/keys";
 import { channelTitle } from "./timeline";
 
@@ -20,7 +27,10 @@ export type ChatExportReads = Pick<ChatRuntime, "listChannels" | "page" | "chain
 export type ChatExportFile = { path: string; bytes: Uint8Array };
 
 /** A message as the export keeps it: the stored row, no client-only state. */
-export type ChatExportMessage = Omit<ChatMessage, "sendState" | "sendError" | "pending" | "failed" | "clientId">;
+export type ChatExportMessage = Omit<
+  ChatMessage,
+  "sendState" | "sendError" | "pending" | "failed" | "clientId"
+>;
 
 export type ChatExportConversation = {
   channel: ChatChannel;
@@ -95,7 +105,10 @@ export async function readChatExport(
     try {
       conversations.push({ channel, messages: await readConversation(reads, channel.id) });
     } catch (err) {
-      incomplete.push({ channelId: channel.id, error: err instanceof Error ? err.message : String(err) });
+      incomplete.push({
+        channelId: channel.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
       conversations.push({ channel, messages: [] });
     }
   }
@@ -115,7 +128,10 @@ function cleanPart(text: string): string {
 }
 
 function safeStem(text: string): string {
-  const clean = cleanPart(text).replace(/\s+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  const clean = cleanPart(text)
+    .replace(/\s+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
   return clean || "conversation";
 }
 
@@ -167,11 +183,13 @@ export function shapeChatExport(input: {
   const personById = new Map(input.people.map((p) => [p.userId, p]));
   const personOf = (id: string) => personById.get(id);
   const nameOf = (id: string) => personById.get(id)?.name ?? "Former member";
-  const conversations: ChatExportConversation[] = input.conversations.map(({ channel, messages }) => ({
-    channel,
-    title: channelTitle(channel, input.selfId, personOf),
-    messages: messages.map(exportMessage),
-  }));
+  const conversations: ChatExportConversation[] = input.conversations.map(
+    ({ channel, messages }) => ({
+      channel,
+      title: channelTitle(channel, input.selfId, personOf),
+      messages: messages.map(exportMessage),
+    }),
+  );
   const files: Record<string, string | Uint8Array> = {};
   for (const conversation of conversations) {
     const name = `${safeStem(conversation.title)}-${conversation.channel.id.slice(0, 8)}.md`;
@@ -185,7 +203,11 @@ export function shapeChatExport(input: {
   return {
     data: {
       formatVersion: 2,
-      people: input.people.map((p) => ({ userId: p.userId, name: p.name, former: Boolean(p.former) })),
+      people: input.people.map((p) => ({
+        userId: p.userId,
+        name: p.name,
+        former: Boolean(p.former),
+      })),
       conversations,
       incomplete: input.incomplete ?? [],
     },

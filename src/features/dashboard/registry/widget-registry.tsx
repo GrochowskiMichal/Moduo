@@ -3,11 +3,11 @@
 // 9 module widgets ship real bodies; the other 7 render ComingSoonWidget until
 // DB-6/DB-7 replace their entries.
 
+import { ChatNowLine } from "@/features/chat/home/now-line";
 import type { WidgetType } from "../engine/types";
 import { registerTeamNowLine } from "../team-now";
 import { ActivityFeedWidget } from "../ui/widgets/activity-feed-widget";
 import { CalendarTodayWidget } from "../ui/widgets/calendar-today-widget";
-import { ChatNowLine } from "@/features/chat/home/now-line";
 import { CatchupWidget } from "../ui/widgets/catchup-widget";
 import { ClockWidget } from "../ui/widgets/clock-widget";
 import { CountdownWidget } from "../ui/widgets/countdown-widget";

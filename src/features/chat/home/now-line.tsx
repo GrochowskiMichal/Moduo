@@ -13,7 +13,11 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
 /** The line's words: the status, Focusing, Away, or Active when reachable. */
-export function teamNowText(person: PersonNow | undefined, state: PresenceState, now: Date = new Date()): string {
+export function teamNowText(
+  person: PersonNow | undefined,
+  state: PresenceState,
+  now: Date = new Date(),
+): string {
   const line = nowLine(person, state, now, { task: true });
   if (line) return line;
   return state === "reachable" ? "Active" : "";

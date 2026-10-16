@@ -16,8 +16,16 @@ import { rest, rpc, runTag, signInPage } from "./support/local-stack";
 test.use({ locale: "en-US", viewport: { width: 1440, height: 900 } });
 test.describe.configure({ mode: "serial", timeout: 120_000 });
 
-const OWNER = { email: "home-chat-owner@moduo.local", password: "localhomechatowner", name: "Alex Rivera" };
-const MEMBER = { email: "home-chat-member@moduo.local", password: "localhomechatmember", name: "Jana Lind" };
+const OWNER = {
+  email: "home-chat-owner@moduo.local",
+  password: "localhomechatowner",
+  name: "Alex Rivera",
+};
+const MEMBER = {
+  email: "home-chat-member@moduo.local",
+  password: "localhomechatmember",
+  name: "Jana Lind",
+};
 
 let room: ChatRoom;
 let tag: string;
@@ -79,8 +87,12 @@ test("Catch up widget and the Team line", async ({ page }) => {
 
   // The Catch up widget lists the direct message and opens Catch up.
   const widget = page.locator("[data-catchup-widget]");
-  const waiting = widget.getByRole("button", { name: new RegExp(`${MEMBER.name}.*direct message`) });
+  const waiting = widget.getByRole("button", {
+    name: new RegExp(`${MEMBER.name}.*sent you a message`),
+  });
   await expect(waiting).toBeVisible({ timeout: 30_000 });
+  // For comparing with frame 8 (kept with the run's results, not in the repo).
+  await page.screenshot({ path: test.info().outputPath("home.png") });
   await waiting.click();
   await expect(page).toHaveURL(/\/chat\?.*view=catchup/);
   await expect(page.getByRole("heading", { name: "Catch up" })).toBeVisible({ timeout: 20_000 });

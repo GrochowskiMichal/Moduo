@@ -24,7 +24,13 @@ function channel(id: string, extra: Partial<ChatChannel> = {}): ChatChannel {
   };
 }
 
-function item(id: string, channelId: string, reason: ChatCatchupItem["reason"], minute: number, extra: Partial<ChatCatchupItem> = {}): ChatCatchupItem {
+function item(
+  id: string,
+  channelId: string,
+  reason: ChatCatchupItem["reason"],
+  minute: number,
+  extra: Partial<ChatCatchupItem> = {},
+): ChatCatchupItem {
   const at = new Date(Date.UTC(2026, 9, 16, 9, minute)).toISOString();
   return {
     id,
@@ -63,9 +69,17 @@ describe("Catch up widget (AC11.6, AC15.2)", () => {
   const messages = { "m-a": message("m-a", SOFIA), "m-b": message("m-b", SOFIA) };
 
   it("lists what's waiting, newest first, in the Catch up list's words (frame 8)", () => {
-    const view = shapeCatchupWidget({ items, messages, channels: CHANNELS, unread: {}, people: PEOPLE, selfId: ME, limit: 5 });
+    const view = shapeCatchupWidget({
+      items,
+      messages,
+      channels: CHANNELS,
+      unread: {},
+      people: PEOPLE,
+      selfId: ME,
+      limit: 5,
+    });
     expect(view.rows.map((r) => [r.who, r.line])).toEqual([
-      ["Sofia", "direct message"],
+      ["Sofia", "sent you a message"],
       ["Sofia", "added you to acme"],
       ["Sofia", "mentioned you · acme"],
     ]);
@@ -76,7 +90,15 @@ describe("Catch up widget (AC11.6, AC15.2)", () => {
   });
 
   it("keeps to its row budget and says how many more", () => {
-    const view = shapeCatchupWidget({ items, messages, channels: CHANNELS, unread: {}, people: PEOPLE, selfId: ME, limit: 1 });
+    const view = shapeCatchupWidget({
+      items,
+      messages,
+      channels: CHANNELS,
+      unread: {},
+      people: PEOPLE,
+      selfId: ME,
+      limit: 1,
+    });
     expect(view.rows).toHaveLength(1);
     expect(view.more).toBe(2);
   });
@@ -96,7 +118,15 @@ describe("Catch up widget (AC11.6, AC15.2)", () => {
 
   it("is empty when nothing waits", () => {
     expect(
-      shapeCatchupWidget({ items: [], messages: {}, channels: CHANNELS, unread: {}, people: PEOPLE, selfId: ME, limit: 5 }),
+      shapeCatchupWidget({
+        items: [],
+        messages: {},
+        channels: CHANNELS,
+        unread: {},
+        people: PEOPLE,
+        selfId: ME,
+        limit: 5,
+      }),
     ).toEqual({ rows: [], count: 0, more: 0 });
   });
 });

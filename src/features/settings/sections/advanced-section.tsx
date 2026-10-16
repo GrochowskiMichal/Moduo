@@ -127,7 +127,11 @@ async function gatherExport(
         const chat = await readChatExport(runtime.chat, workspaceId, userId);
         return { module: "chat", ok: true, data: chat.data, files: chat.files };
       } catch (err) {
-        return { module: "chat", ok: false, error: err instanceof Error ? err.message : String(err) };
+        return {
+          module: "chat",
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
       }
     })(),
     // CV-22: your own apps and tabs (nobody else's).

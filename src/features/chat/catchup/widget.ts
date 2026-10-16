@@ -26,6 +26,11 @@ export type CatchupWidgetView = {
   more: number;
 };
 
+const HOME_WORDS: Partial<Record<ChatCatchupItem["reason"], string>> = {
+  dm: "sent you a message",
+  reply: "replied in your chain",
+};
+
 export function shapeCatchupWidget(input: {
   items: readonly ChatCatchupItem[];
   messages: Readonly<Record<string, ChatMessage>>;
@@ -37,7 +42,8 @@ export function shapeCatchupWidget(input: {
 }): CatchupWidgetView {
   const { items, messages, channels, unread, people, selfId, limit } = input;
   const personOf = (id: string) => people[id];
-  const messageOf = (item: ChatCatchupItem) => (item.messageId ? messages[item.messageId] : undefined);
+  const messageOf = (item: ChatCatchupItem) =>
+    item.messageId ? messages[item.messageId] : undefined;
   const groups = buildCatchup({
     items,
     channels,
@@ -57,11 +63,13 @@ export function shapeCatchupWidget(input: {
     const channel = channels[item.channelId];
     const conversation = channel ? (channel.kind === "channel" ? channel.name : null) : null;
     const whoId = row.quiet ? item.actorId : (messageOf(item)?.authorId ?? null);
+    // Frame 8's words for a person's own lines; everything else as Catch up says it.
+    const why = !row.who ? row.why : (HOME_WORDS[item.reason] ?? row.why);
     return {
       id: item.id,
       who: row.who,
       whoId: row.who ? whoId : null,
-      line: !named && conversation ? `${row.why} · ${conversation}` : row.why,
+      line: !named && conversation ? `${why} · ${conversation}` : why,
       at: item.at,
       quiet: row.quiet,
     };

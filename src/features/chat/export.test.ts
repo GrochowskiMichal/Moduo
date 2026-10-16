@@ -7,7 +7,12 @@ import type { ChatChannel, ChatKey, ChatMessage, ChatPerson } from "./model";
 const ME = "me-0000-0000";
 const ANA = "ana-0000-0000";
 
-function msg(id: string, channelId: string, createdAt: string, extra: Partial<ChatMessage> = {}): ChatMessage {
+function msg(
+  id: string,
+  channelId: string,
+  createdAt: string,
+  extra: Partial<ChatMessage> = {},
+): ChatMessage {
   return {
     id,
     workspaceId: "w",
@@ -72,23 +77,42 @@ const at = (n: number) => new Date(Date.UTC(2026, 9, 10, 0, 0, n)).toISOString()
 /** A fake of the app's reads: pages newest-first on the wire, returned oldest first. */
 function fakeReads(
   streams: Record<string, ChatMessage[]>,
-  opts: { chains?: Record<string, ChatMessage[]>; refused?: string[]; files?: ChatExportReads["files"] } = {},
+  opts: {
+    chains?: Record<string, ChatMessage[]>;
+    refused?: string[];
+    files?: ChatExportReads["files"];
+  } = {},
 ) {
   const calls = { page: 0, chain: [] as string[] };
   const reads: ChatExportReads = {
     async listChannels() {
       return Object.keys(streams).map((id) =>
-        id.startsWith("dm") ? channel(id, { kind: "dm", name: null, dmKey: [ME, ANA].sort().join(",") }) : channel(id),
+        id.startsWith("dm")
+          ? channel(id, { kind: "dm", name: null, dmKey: [ME, ANA].sort().join(",") })
+          : channel(id),
       );
     },
-    async page({ channelId, before, limit }: { channelId: string; before?: ChatKey | null; limit: number }) {
+    async page({
+      channelId,
+      before,
+      limit,
+    }: {
+      channelId: string;
+      before?: ChatKey | null;
+      limit: number;
+    }) {
       calls.page += 1;
       if (opts.refused?.includes(channelId)) {
-        return { data: null, error: { code: "42501", message: "You can't read this conversation." } };
+        return {
+          data: null,
+          error: { code: "42501", message: "You can't read this conversation." },
+        };
       }
       const all = streams[channelId] ?? [];
       const older = before
-        ? all.filter((m) => m.createdAt < before.at || (m.createdAt === before.at && m.id < before.id))
+        ? all.filter(
+            (m) => m.createdAt < before.at || (m.createdAt === before.at && m.id < before.id),
+          )
         : all;
       return { data: older.slice(-limit), error: null };
     },
@@ -106,7 +130,9 @@ function fakeReads(
 
 describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
   it("holds every conversation the reads return, every page of it, oldest first", async () => {
-    const long = Array.from({ length: 450 }, (_, i) => msg(`g${String(i).padStart(3, "0")}`, "general", at(i)));
+    const long = Array.from({ length: 450 }, (_, i) =>
+      msg(`g${String(i).padStart(3, "0")}`, "general", at(i)),
+    );
     const { reads, calls } = fakeReads({ general: long, "dm-ana": [msg("d1", "dm-ana", at(1))] });
     const out = await readChatExport(reads, "w", ME);
     expect(out.data.conversations.map((c) => c.title)).toEqual(["general", "Ana"]);
@@ -122,7 +148,10 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
     const root = msg("r1", "general", at(1), { replyCount: 2, reactions: { "👍": [ME, ANA] } });
     const reply1 = msg("r1a", "general", at(2), { parentId: "r1", replyToId: "r1", authorId: ME });
     const reply2 = msg("r1b", "general", at(3), { parentId: "r1", replyToId: "r1a" });
-    const { reads, calls } = fakeReads({ general: [root, reply1] }, { chains: { r1: [root, reply1, reply2] } });
+    const { reads, calls } = fakeReads(
+      { general: [root, reply1] },
+      { chains: { r1: [root, reply1, reply2] } },
+    );
     const out = await readChatExport(reads, "w", ME);
     expect(calls.chain).toEqual(["r1"]);
     const messages = out.data.conversations[0]!.messages;
@@ -143,18 +172,27 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
   });
 
   it("a conversation the server refuses is listed as incomplete, never filled in", async () => {
-    const { reads } = fakeReads({ general: [msg("g1", "general", at(1))], secret: [msg("s1", "secret", at(1))] }, {
-      refused: ["secret"],
-    });
+    const { reads } = fakeReads(
+      { general: [msg("g1", "general", at(1))], secret: [msg("s1", "secret", at(1))] },
+      {
+        refused: ["secret"],
+      },
+    );
     const out = await readChatExport(reads, "w", ME);
     const secret = out.data.conversations.find((c) => c.channel.id === "secret")!;
     expect(secret.messages).toEqual([]);
-    expect(out.data.incomplete).toEqual([{ channelId: "secret", error: "You can't read this conversation." }]);
+    expect(out.data.incomplete).toEqual([
+      { channelId: "secret", error: "You can't read this conversation." },
+    ]);
     expect(JSON.stringify(out)).not.toContain("body s1");
   });
 
   it("keeps the stored row, not the app's client-only state; a deleted message keeps no words", () => {
-    const sent = msg("m1", "general", at(1), { sendState: "failed", sendError: "x", pending: true });
+    const sent = msg("m1", "general", at(1), {
+      sendState: "failed",
+      sendError: "x",
+      pending: true,
+    });
     const gone = msg("m2", "general", at(2), { deletedAt: at(3), body: "" });
     const out = shapeChatExport({
       people: PEOPLE,
@@ -162,7 +200,8 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
       selfId: ME,
     });
     const m = out.data.conversations[0]!.messages[0]! as Record<string, unknown>;
-    for (const key of ["sendState", "sendError", "pending", "failed", "clientId"]) expect(key in m).toBe(false);
+    for (const key of ["sendState", "sendError", "pending", "failed", "clientId"])
+      expect(key in m).toBe(false);
     const md = Object.values(out.files)[0] as string;
     expect(md).toContain("_(deleted)_");
   });
@@ -192,7 +231,9 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
       { files: async () => [{ path: "a/b.txt", bytes: new Uint8Array([3]) }] },
     );
     const chat = await readChatExport(reads, "w", ME);
-    const results: ModuleReadResult[] = [{ module: "chat", ok: true, data: chat.data, files: chat.files }];
+    const results: ModuleReadResult[] = [
+      { module: "chat", ok: true, data: chat.data, files: chat.files },
+    ];
     const bundle = buildExportBundle(results, {
       workspaceId: "w",
       exportedAt: "2026-10-16T00:00:00Z",

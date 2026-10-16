@@ -29,7 +29,13 @@ describe("GlobalShortcutsDialog", () => {
     act(() => dispatchOpenShortcuts());
 
     const chat = screen.getByRole("region", { name: "Chat" });
-    for (const scope of ["Anywhere in Chat", "The composer", "A message", "Catch up", "The chain panel"]) {
+    for (const scope of [
+      "Anywhere in Chat",
+      "The composer",
+      "A message",
+      "Catch up",
+      "The chain panel",
+    ]) {
       expect(chat.textContent).toContain(scope);
     }
     const nextUnread = screen.getByText("Next unread conversation").previousElementSibling;

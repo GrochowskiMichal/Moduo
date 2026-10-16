@@ -61,7 +61,10 @@ export function CatchupWidget({ size }: WidgetComponentProps) {
     [snapshot.items, snapshot.messages, chat.channels, chat.unread, chat.people, userId, budget],
   );
 
-  if (snapshot.status === "idle" || (snapshot.status === "loading" && snapshot.items.length === 0)) {
+  if (
+    snapshot.status === "idle" ||
+    (snapshot.status === "loading" && snapshot.items.length === 0)
+  ) {
     return <WidgetLoading />;
   }
   if (snapshot.status === "error" && snapshot.items.length === 0) {

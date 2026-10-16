@@ -22,11 +22,6 @@ import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layou
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { useTimeRegion } from "@/lib/time-region";
-import { catchupStoreFor } from "../catchup/catchup-store";
-import { useCatchupScreen } from "../catchup/catchup-view";
-import { LaterDialog } from "../catchup/later-dialog";
-import { laterHint } from "../catchup/later-times";
 import {
   composerHoldLine,
   nowLine,
@@ -34,6 +29,11 @@ import {
   presenceStateOf,
 } from "@/lib/statuses/model";
 import { usePeopleNow } from "@/lib/statuses/store";
+import { useTimeRegion } from "@/lib/time-region";
+import { catchupStoreFor } from "../catchup/catchup-store";
+import { useCatchupScreen } from "../catchup/catchup-view";
+import { LaterDialog } from "../catchup/later-dialog";
+import { laterHint } from "../catchup/later-times";
 import {
   type ChainRights,
   chainGroups,

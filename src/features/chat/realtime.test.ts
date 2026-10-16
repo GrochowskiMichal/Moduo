@@ -155,12 +155,22 @@ describe("postgresChangesSource", () => {
     // Someone else's row in this workspace.
     fire(members, "postgres_changes", {
       eventType: "UPDATE",
-      new: { channel_id: "general", user_id: "ana", workspace_id: WS, left_at: "2026-10-14T12:00:00Z" },
+      new: {
+        channel_id: "general",
+        user_id: "ana",
+        workspace_id: WS,
+        left_at: "2026-10-14T12:00:00Z",
+      },
     });
     expect(events).toEqual([]);
     fire(members, "postgres_changes", {
       eventType: "UPDATE",
-      new: { channel_id: "general", user_id: ME, workspace_id: WS, left_at: "2026-10-14T12:00:00Z" },
+      new: {
+        channel_id: "general",
+        user_id: ME,
+        workspace_id: WS,
+        left_at: "2026-10-14T12:00:00Z",
+      },
     });
     expect(events).toEqual([{ type: "member-left", channelId: "general" }]);
   });
