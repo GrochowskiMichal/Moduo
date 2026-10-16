@@ -24,7 +24,7 @@ import {
 } from "../../../src/features/spine/editor/description-markdown";
 import { $isReferenceNode } from "../../../src/features/spine/editor/entity-ref-schema";
 import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
-import { descriptionReferences } from "../_shared/description-markdown.ts";
+import { descriptionReferences, readsAsModuoAddress } from "../_shared/description-markdown.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import { toolAllowed, type KeyContext, type ToolContext } from "./registry.ts";
 
@@ -733,12 +733,14 @@ describe("writes go through the ops, checked before anything is written", () => 
     /**
      * Every reference the app's editor shows for a stored description, read
      * and saved three times over (each save read back), and what the readers
-     * outside the editor find in the last save. A moduo:// plain link counts.
+     * outside the editor (`descriptionReferences`) find in what was stored
+     * and in every save. A moduo: plain link counts, however it's spelled.
      */
     function shownReferences(stored: string): string[] {
       const seen = new Set<string>();
       let value = stored;
       for (let round = 0; round < 3; round++) {
+        for (const ref of descriptionReferences(value)) seen.add(`${ref.type}:${ref.id}`);
         const editor = createHeadlessEditor({
           nodes: DESCRIPTION_MARKDOWN_NODES,
           onError: (error) => {
@@ -749,7 +751,7 @@ describe("writes go through the ops, checked before anything is written", () => 
         value = editor.getEditorState().read(() => {
           const walk = (node: LexicalNode) => {
             if ($isReferenceNode(node)) seen.add(`${node.exportJSON().entityType}:${node.exportJSON().entityId}`);
-            if ($isLinkNode(node) && /moduo:/i.test(node.getURL())) seen.add(`link:${node.getURL()}`);
+            if ($isLinkNode(node) && readsAsModuoAddress(node.getURL())) seen.add(`link:${node.getURL()}`);
             if ($isElementNode(node)) for (const child of node.getChildren()) walk(child);
           };
           walk($getRoot());
@@ -814,6 +816,15 @@ describe("writes go through the ops, checked before anything is written", () => 
         `[task](MoDuO\\://task/${SECRET} (chip))`,
         `<p><a href="moduo&amp;#58;//task/${SECRET}">x</a></p>`,
         `<p><a href="moduo\\://task/${SECRET}">x</a></p>`,
+        // Checkbox and card forms, named and double-encoded references (security review).
+        `- [ ] [task](moduo\\://task/${SECRET})`,
+        `- [x] see [task](&#109;oduo://task/${SECRET})`,
+        `[note](moduo&#58;//note/${SECRET} "card")`,
+        `[task](moduo&colon;//task/${SECRET})`,
+        `[task](moduo&amp;#58;//task/${SECRET})`,
+        `<p><a href="moduo&#38;#58;//task/${SECRET}">x</a></p>`,
+        `<ul><li><a href="moduo&amp;colon;//task/${SECRET}">x</a></li></ul>`,
+        `<p><a href="moduo://task/${SECRET}">x</a></p>`,
       ];
       for (const description of crafted) {
         const { write, linked } = described();

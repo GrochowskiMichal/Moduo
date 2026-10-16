@@ -228,6 +228,10 @@ describe("the reference syntax", () => {
       "moduo&#x3A;//task/x",
       "<moduo\\://task/x>",
       "   MoDuO://task/x",
+      "moduo&colon;//task/x",
+      "moduo&amp;#58;//task/x",
+      "moduo&#38;#58;//task/x",
+      "moduo&amp;colon;//task/x",
     ]) {
       expect(readsAsModuoAddress(address), address).toBe(true);
       expect(defuseReferences(`[t](${address})`), address).toBe(`[t]&#40;${address})`);
@@ -236,6 +240,14 @@ describe("the reference syntax", () => {
       expect(readsAsModuoAddress(address), address).toBe(false);
     }
     expect(defuseReferences(`[t](${" ".repeat(500)}moduo\\://task/x)`)).toContain("]&#40;");
+  });
+
+  it("reads an old description's link to a moduo: address as its words, however it's encoded", () => {
+    for (const href of [`moduo://task/${TASK}`, `moduo&#38;#58;//task/${TASK}`, `moduo&amp;colon;//task/${TASK}`]) {
+      const md = htmlToMarkdown(`${P}${span("see ")}<a href="${href}">the plan</a></p>`);
+      expect(md, href).toBe("see the plan");
+    }
+    expect(htmlToMarkdown(`${P}<a href="https://example.com">docs</a></p>`)).toBe("[docs](https://example.com)");
   });
 
   it("defuses a long crafted run in one pass", () => {

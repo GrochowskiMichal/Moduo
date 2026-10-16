@@ -125,15 +125,23 @@ function fromCodePoint(code: number): string {
  * spelled? The editor's link reader decodes an address before it keeps it
  * (backslash escapes, `&#58;`-style character references, a `<…>` form,
  * spaces before it), so this decodes the same and more: every backslash,
- * space and `<` dropped, decimal and hex references decoded, any case.
+ * space and `<` dropped, decimal, hex and the named references that can
+ * spell it (`&colon;`, `&amp;`) decoded, again and again while that changes
+ * anything (double-encoded `&#38;#58;` too), any case.
  */
 export function readsAsModuoAddress(address: string): boolean {
-  const plain = address
-    .slice(0, ADDRESS_LOOK)
-    .replace(/&#[xX]([0-9a-fA-F]+);?/g, (_, hex: string) => fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);?/g, (_, dec: string) => fromCodePoint(Number(dec)))
-    .replace(/[\\\s<]/g, "");
-  return plain.slice(0, 6).toLowerCase() === "moduo:";
+  let plain = address.slice(0, ADDRESS_LOOK);
+  for (let round = 0; round < 4; round++) {
+    const decoded = plain
+      .replace(/&#[xX]([0-9a-fA-F]+);?/g, (_, hex: string) => fromCodePoint(Number.parseInt(hex, 16)))
+      .replace(/&#(\d+);?/g, (_, dec: string) => fromCodePoint(Number(dec)))
+      .replace(/&colon;?/gi, ":")
+      .replace(/&amp;?/gi, "&")
+      .replace(/[\\\s<]/g, "");
+    if (decoded === plain) break;
+    plain = decoded;
+  }
+  return plain.replace(/[\\\s<]/g, "").slice(0, 6).toLowerCase() === "moduo:";
 }
 
 /**
@@ -601,7 +609,9 @@ function inlineRuns(nodes: Node[], format: Format, out: Run[] = []): Run[] {
       else out.push({ text: textContent(node), format });
       continue;
     }
-    if (tag === "a" && node.attrs.href) {
+    // A link to a `moduo:` address, however spelled, is its words: references
+    // come only from the editor's reference spans (and are checked on writes).
+    if (tag === "a" && node.attrs.href && !readsAsModuoAddress(node.attrs.href)) {
       const label = runsToMarkdown(inlineRuns(node.children, PLAIN)).replace(/[[\]]/g, "\\$&");
       out.push({ raw: `[${label || escapeText(node.attrs.href)}](${linkUrl(node.attrs.href)})` });
       continue;
