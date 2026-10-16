@@ -4,7 +4,6 @@ Read before working in `src/features/notes/`, Lexical surfaces, import. Index of
 
 ## Lexical / spine text surfaces
 
-- **A Lexical command handler already runs inside an update: an `editor.update(..., {discrete: true})` inside it is queued, not run.** NR-8's Comment command called a helper that wrapped the selection through `editor.update` and read a flag it set: the flag was still false, the command reported failure, and the queued update then wrapped the text anyway, leaving an orphan mark in the shared doc. Do the `$` work directly in the handler. In a headless test, a `dispatchCommand` made outside an update commits asynchronously: flush with an empty discrete update before reading state. (2026-10-16) → [comment-marks-plugin.tsx](../../src/features/notes/editor/plugins/comment-marks-plugin.tsx)
 - **A portal rendered next to a Lexical editor can't win focus with `autoFocus` — Lexical's post-update focus restore steals it back.** The slash menu's stage-2 picker mounted a cmdk `CommandInput` with autoFocus, but the `editor.update()` that removed the slash token re-focused the contenteditable a beat later → every keystroke went into the NOTE BODY while the picker sat mouse-only (cmdk only handles keys when focus is inside it). Focus such surfaces in a `setTimeout(≈30ms)` AFTER the update settles, and own your dismissal: Escape via the portal's own `onKeyDown` (the editor's `KEY_ESCAPE_COMMAND` only fires while the EDITOR has focus) plus a document-level `pointerdown` outside-check. → [slash-menu-plugin.tsx](../../src/features/notes/editor/plugins/slash-menu-plugin.tsx)
 - **`@lexical/markdown`'s `ELEMENT_TRANSFORMERS` does NOT include `CHECK_LIST`** — spread the defaults and `- [x]` imports as a bullet item with LITERAL "[x]" text, and a byte-stable round-trip test still passes (export re-emits the literal). Add `CHECK_LIST` explicitly BEFORE the list transformers, and pin the STRUCTURE in tests (`"listType":"check"`, no literal marker), not just the bytes. Also: 0.40 ships no HR transformer (`---` needs a custom one), and ordered-list start lives on the LIST node's `start` field, not the items' `value`. → [markdown.ts](../../src/features/notes/editor/markdown.ts)
 
@@ -103,6 +102,21 @@ Read before working in `src/features/notes/`, Lexical surfaces, import. Index of
 - **`@lexical/markdown` 0.52 merges adjacent non-empty lines into one paragraph with a line break**, and drops blank lines after import. Element transformers still see each line on its own, so a line-based transformer (tables) builds across lines by looking at the previous sibling; two tables separated by a blank line still import as two (the empty paragraph sits between them until the end).
 - **The exporter escapes backslashes**: `C:\new` in, `C:\\new` out, then stable. Assert idempotence after one round trip, not byte equality, for text containing `\`.
 
+## Chat editor and the stored form (CV-0 spike 4)
+
+- **Lexical's list transform merges two adjacent lists of one kind in the editor itself.** Any tree that holds two such lists must merge them too, or the editor-to-stored-to-editor round trip stops matching. → [canonical.ts](../../src/features/chat/markup-v2/canonical.ts), [record](../build/chat-v2/CV-0-S4.md)
+- **`editor.read()` is read-only: building nodes inside it (`$createParagraphNode`) throws.** Take the tree in a read, build the nodes in an `update`. → [lexical.ts](../../src/features/chat/markup-v2/lexical.ts)
+- **`KeyboardEventInit` has no `keyCode`, and WebKit's IME-committing Enter is `keyCode` 229 with `isComposing` false.** A test sets `keyCode` with `Object.defineProperty`, and the send-on-⏎ guard must swallow both `isComposing` and 229, or ⏎ sends in the middle of a Japanese composition in Safari and the desktop app. → [enter.ts](../../src/features/chat/markup-v2/enter.ts)
+
+## Chat composer (CV-7b)
+
+- **Lexical command priorities decide who gets ⏎.** The shared menus take ⏎ / Tab at HIGH with no IME check; a chat-only CRITICAL ⏎ handler must swallow the composing ⏎ first, or an IME commit picks a menu item. (CV-7b)
+- **An edit's "unchanged" check compares with the re-exported body, not the stored string:** a non-canonical body would save a phantom "(edited)" (DF-23's trap again). (CV-7b)
+
+## Chat references (CV-10)
+
+- **A reference inline needs a real uuid:** `serializeBlocks` drops a `{t:'ref'}` with a malformed id, and two paragraphs serialize with one newline. (CV-10)
+
 ## Agent writes (NR-6)
 
 - **Edge Functions can't import the app's notes editor directly.** App sources use extensionless relative imports and bare `lexical`/`yjs` specifiers; Deno resolves neither without sloppy imports and a long import map. The connector lazy-loads a prebuilt single-file bundle instead (`bun run build:notes-doc`, built with Lexical's `production` conditions, ~390 KB). Rebuild it whenever anything under `src/features/notes/editor/` (or the spine chip schema, or a bundled package) changes: `modules/notes.test.ts` "notes-doc bundle is current" fails until you do, and also fails on a hand edit (code hash). Loading it needs env access (lib0 reads `process.env`). (2026-10-14)
@@ -112,10 +126,16 @@ Read before working in `src/features/notes/`, Lexical surfaces, import. Index of
 - **A body-only note must be seeded through `notes_op_seed_doc`, never inside another write.** The deterministic seed is identical only within one bundle build, and the web app and `moduo-mcp` deploy separately; only the server's once-only guard prevents two different seeds under one client id. (2026-10-14)
 - **A connector call whose RPC sits in a helper above the tools fails `api-keys.test.ts`.** The key-scope test reads tool bodies for `callOp(ctx, "…")`; a call in a shared helper counts as "preamble" and must not hit a key lane. Keep each `callOp` in the tool handler and have helpers return the arguments. Likewise a new function body may not mention `auth.uid()` directly where a key calls: use `perm_actor_id()` gated on `module_api_key_id() IS NULL`. (2026-10-14)
 - **A column tier added to the front of a `selectFirstDeployedTier` list shifts every index.** `listMeta`'s `degraded: tier === 2` silently started flagging the working v2 tier when NR-6 prepended a tier; compare against `tiers.length - 1`. (2026-10-14)
-- **Never put note content in a Realtime message.** `realtime.send` stores every message in `realtime.messages` until Realtime drops that day's partition, out of reach of account erasure and note purge. NR-7 sends only "note X changed" and peers pull through the access-checked read. (2026-10-16) → [20261016120000_notes_live_channel.sql](../../supabase/migrations/20261016120000_notes_live_channel.sql)
 
 ## Writing UX (NR-4)
 
 - **Never move a Lexical block in a collaborative note with `insertBefore`/`insertAfter`.** The v2 binding diffs the moved range into in-place text rewrites: the Yjs elements stay put and swap contents, so a peer's concurrent typing in the moved block lands in its neighbour (`Bravo two` came back as `Alpha two`). Move on the Yjs doc instead (`moveBlockInDoc`), keeping the moved element and re-creating the ones it jumps over. A headless test binding doesn't observe Yjs, so assert on the doc (`deriveNoteBody`), not on the test editor. (2026-10-16) → [block-move.ts](../../src/features/notes/editor/block-move.ts)
 - **An HTML5 drag inside the editor pane must be handled in the capture phase with `stopPropagation`.** Otherwise Lexical's root drop handling (and the page's entity drop zone) also see the drop. Mark the drag with a custom MIME type and ignore every drag that lacks it, so file and text drops still reach Lexical. (2026-10-16) → [block-handle-plugin.tsx](../../src/features/notes/editor/plugins/block-handle-plugin.tsx)
 
+## Live channel (NR-7)
+
+- **Never put note content in a Realtime message.** `realtime.send` stores every message in `realtime.messages` until Realtime drops that day's partition, out of reach of account erasure and note purge. NR-7 sends only "note X changed" and peers pull through the access-checked read. The "viewers" messages' viewer-id lists stay there too until the partition drops: pseudonymous uuids, an accepted retention, like chat typing. (2026-10-16) → [20261016120000_notes_live_channel.sql](../../supabase/migrations/20261016120000_notes_live_channel.sql)
+
+## Anchored comments (NR-8)
+
+- **A Lexical command handler already runs inside an update: an `editor.update(..., {discrete: true})` inside it is queued, not run.** NR-8's Comment command called a helper that wrapped the selection through `editor.update` and read a flag it set: the flag was still false, the command reported failure, and the queued update then wrapped the text anyway, leaving an orphan mark in the shared doc. Do the `$` work directly in the handler. In a headless test, a `dispatchCommand` made outside an update commits asynchronously: flush with an empty discrete update before reading state. (2026-10-16) → [comment-marks-plugin.tsx](../../src/features/notes/editor/plugins/comment-marks-plugin.tsx)

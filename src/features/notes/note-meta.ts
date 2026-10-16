@@ -30,7 +30,7 @@ export type NoteMetaLine = {
 };
 
 /** The most recent agent write to a note (from its `notes.agent_edit`
- * activity, or the live broadcast that just delivered it). */
+ * activity, or the live pull that just delivered it). */
 export type AgentEditMark = {
   /** The key's name; "Claude" when the key has none. */
   label: string | null;

@@ -1,5 +1,7 @@
 # Review instructions (Moduo)
 
+> **Lean mode (pre-alpha):** `/code-review ultra`, the security scan and per-PR review are paused until beta; only Tier 2 diffs get the `validator`. See [AGENTS.md §Review gates](./AGENTS.md#review-gates-lean-mode-pre-alpha-no-external-users).
+
 Read by `/s3`'s review gate, the `validator` subagent's reviewers, and Claude's managed Code Review if the team moves to a plan that has it. Keep it short: every line here changes what a review reports.
 
 ## What Important means here

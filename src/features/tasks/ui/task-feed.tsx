@@ -6,24 +6,25 @@
 // "Created by · Updated" line under it: the trail's first and last lines say
 // both (MOD-129).
 //
-// - "All · Comments" in the header, remembered per person on this device.
+// - "All · Comments" in the header, a quiet switch at the title's size, on
+//   Comments until you pick All (MOD-157: most people only want the talk);
+//   your pick is remembered per person on this device.
 // - One person's changes within 10 minutes merge ("changed due, priority and
 //   2 more", click to see each); runs of changes between comments fold into
 //   "Show 12 earlier changes", and after the last comment the latest five
 //   show (`TAIL_VISIBLE`).
 // - Comments: edit your own ("edited"), delete with an 8 s Undo and no
-//   tombstone (yours, or anyone's with Full access to the project), six fixed
-//   reactions that never notify (hover says who). No threads.
+//   tombstone (yours, or anyone's with Full access to the project), reactions
+//   (any emoji, your quick row first; CV-7c) that never notify. No threads.
 // Comments go through the spine's ops (`comments_op_*`); the thread re-reads
 // whenever the store sees one of this task's comments change (an edit, a
 // reaction, a delete elsewhere).
 
-import type { CommentReaction } from "@contracts/vocabularies";
-import { COMMENT_REACTIONS } from "@contracts/vocabularies";
-import { Ellipsis, Pencil, SmilePlus, Trash2 } from "lucide-react";
+import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+import type { AppAvatarKind } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,18 +34,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FeedItem as FeedLine } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
-import { cn } from "@/lib/utils";
+import { appActorKind } from "../../spine/activity";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { type CommentThread, useCommentThread } from "../../spine/hooks/use-comment-thread";
-import { groupReactions, REACTION_GLYPHS, REACTION_NAMES, reactedBy } from "../../spine/reactions";
 import { useReferences } from "../../spine/references/context";
 import { referencesInText } from "../../spine/references/text";
+import { useCommentReactions } from "../../spine/ui/comment-reactions";
 import {
   CommentBody,
   CommentCard,
@@ -88,12 +87,13 @@ type Props = {
 
 const FILTER_KEY = "moduo:task-feed-filter";
 
+/** Comments unless you picked All on this device (MOD-157). */
 function readFilter(userId: string | null): FeedFilter {
   try {
     const v = localStorage.getItem(`${FILTER_KEY}:${userId ?? "anon"}`);
-    return v === "comments" ? "comments" : "all";
+    return v === "all" ? "all" : "comments";
   } catch {
-    return "all";
+    return "comments";
   }
 }
 
@@ -258,8 +258,9 @@ export function TaskFeed({
     <section aria-label="Comments and activity" className="flex flex-col gap-2.5">
       <div className="flex min-h-(--ctrl-h-sm) items-center justify-between gap-2">
         <h3 className="font-sans text-sm font-medium text-foreground">Activity</h3>
+        {/* round-2b `.shead .fseg`, at the title's 13 px (MOD-157). */}
         <SegmentedControl
-          size="sm"
+          size="xs"
           aria-label="Show"
           value={filter}
           onValueChange={(v) => setFilter(v === "comments" ? "comments" : "all")}
@@ -270,7 +271,10 @@ export function TaskFeed({
         />
       </div>
       {rows.map(render)}
-      {filter === "comments" && rows.length === 0 && !thread.loading ? (
+      {/* Comments on and none yet (most tasks, MOD-157): one quiet line, so the
+          header doesn't sit over nothing; the changes are a click away on All.
+          Not when the read failed: then the Retry line below says so. */}
+      {filter === "comments" && rows.length === 0 && !thread.loading && !thread.failed ? (
         <p className="font-sans text-xs text-muted-foreground">No comments yet.</p>
       ) : null}
       {thread.failed ? (
@@ -318,9 +322,11 @@ function TrailLine({ item, currentUserId }: { item: FeedItem; currentUserId: str
     );
   }
   if (item.kind === "activity") {
+    const app = appActorKind(item.entry);
     return (
       <FeedEvent
-        person={item.entry.actorId ? people.personOf(item.entry.actorId) : null}
+        app={app}
+        person={!app && item.entry.actorId ? people.personOf(item.entry.actorId) : null}
         time={feedTime(item.at)}
         title={formatTimestamp(item.at)}
       >
@@ -363,9 +369,12 @@ function MergedLine({
       </>
     );
   }
+  // One actor per merged run (`feed.ts` keys runs on the actor), so the first speaks for all.
+  const app = appActorKind(first);
   return (
     <FeedEvent
-      person={first.actorId ? people.personOf(first.actorId) : null}
+      app={app}
+      person={!app && first.actorId ? people.personOf(first.actorId) : null}
       time={feedTime(at)}
       title={formatTimestamp(at)}
     >
@@ -382,20 +391,27 @@ function MergedLine({
   );
 }
 
-/** One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem). */
+/**
+ * One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem).
+ * A change made over an API key (`app` "app") shows the plug, Moduo's own
+ * (`app` "moduo": a catch-up, a waiting-on that came in) the Moduo mark, never the "?" a
+ * former member gets (MOD-149 and its follow-up).
+ */
 function FeedEvent({
   person,
+  app = null,
   time,
   title,
   children,
 }: {
   person: { id?: string; name: string; avatarUrl: string | null } | null;
+  app?: AppAvatarKind | null;
   time: string;
   title: string;
   children: React.ReactNode;
 }) {
   return (
-    <FeedLine avatar={<PersonAvatar person={person} />} time={time} timeTitle={title}>
+    <FeedLine avatar={<PersonAvatar person={person} app={app} />} time={time} timeTitle={title}>
       {children}
     </FeedLine>
   );
@@ -454,13 +470,8 @@ function CommentItem({
       });
   };
 
-  const react = (reaction: CommentReaction, on: boolean) => {
-    void thread.react(comment.id, reaction, on).catch((e: unknown) => {
-      toast.error(e instanceof Error ? e.message : "Couldn’t save the reaction.");
-    });
-  };
-
-  const groups = groupReactions(comment.reactions, currentUserId, people.nameOf);
+  // CV-7c: the kit's reactions with your quick row (any emoji, never a notice).
+  const reactions = useCommentReactions({ comment, thread, currentUserId, nameOf: people.nameOf });
   const author =
     comment.authorKind === "api_key" || !comment.createdBy
       ? null
@@ -496,13 +507,14 @@ function CommentItem({
   return (
     <CommentCard
       author={author}
+      app={comment.authorKind === "api_key"}
       authorName={commentAuthorName(comment, currentUserId, people.nameOf)}
       time={feedTime(comment.createdAt)}
       timeTitle={formatTimestamp(comment.createdAt)}
       meta={comment.editedAt ? <span title={formatTimestamp(comment.editedAt)}>edited</span> : null}
       actions={
         <>
-          <ReactionPicker groups={groups} onPick={(reaction, on) => react(reaction, on)} />
+          {reactions.button}
           {mine || canRemove ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -526,80 +538,14 @@ function CommentItem({
           ) : null}
         </>
       }
-      footer={
-        groups.length > 0 ? (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {groups.map((g) => (
-              <Tooltip key={g.reaction}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-pressed={g.mine}
-                    aria-label={`${REACTION_NAMES[g.reaction]}: ${reactedBy(g.people)}`}
-                    onClick={() => react(g.reaction, !g.mine)}
-                    className={cn(
-                      "hit-min inline-flex h-(--ctrl-h-xs) items-center gap-1 rounded-full border px-1.5 font-sans text-xs tabular-nums",
-                      "transition-colors duration-(--motion-fade) ease-(--ease-out)",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-                      // A pressed toggle is neutral (R5); the accent stays for selection.
-                      g.mine
-                        ? "border-border bg-state-active text-foreground"
-                        : "border-hairline text-muted-foreground hover:bg-state-hover",
-                    )}
-                  >
-                    <span aria-hidden>{REACTION_GLYPHS[g.reaction]}</span>
-                    {g.count}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>{reactedBy(g.people)}</TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-        ) : null
-      }
+      footer={reactions.chips}
     >
-      <CommentBody text={comment.body} mentionNames={mentionNames} selfName={selfName} />
+      <CommentBody
+        text={comment.body}
+        mentionNames={mentionNames}
+        selfName={selfName}
+        workspaceId={comment.workspaceId}
+      />
     </CommentCard>
-  );
-}
-
-/** The six reactions, fixed (REPLAN 88): a click adds or takes back yours. */
-function ReactionPicker({
-  groups,
-  onPick,
-}: {
-  groups: ReturnType<typeof groupReactions>;
-  onPick: (reaction: CommentReaction, on: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const mine = new Set(groups.filter((g) => g.mine).map((g) => g.reaction));
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <IconButton icon={SmilePlus} label="React" size="sm" />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-auto gap-0.5 p-1">
-        {COMMENT_REACTIONS.map((reaction) => (
-          <button
-            key={reaction}
-            type="button"
-            aria-pressed={mine.has(reaction)}
-            aria-label={REACTION_NAMES[reaction]}
-            onClick={() => {
-              onPick(reaction, !mine.has(reaction));
-              setOpen(false);
-            }}
-            className={cn(
-              "flex size-(--ctrl-h-sm) items-center justify-center rounded-md text-base",
-              "transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-              mine.has(reaction) && "bg-state-active",
-            )}
-          >
-            <span aria-hidden>{REACTION_GLYPHS[reaction]}</span>
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
   );
 }

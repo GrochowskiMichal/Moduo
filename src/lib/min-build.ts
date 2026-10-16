@@ -91,7 +91,27 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "booking_google_connected",
   "calendar_busy_blocks",
   "chat_caps_get",
+  // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
+  "chat_conversations_for_item",
+  // CV-14: the decisions an item shows.
+  "chat_decisions_for_item",
+  // CV-9: a conversation's Files view.
+  "chat_files",
+  // CV-19: ⌘K's Conversations by name.
+  "chat_find_conversations",
+  // CV-13: whether capture from a linked channel files into its project.
+  "chat_link_files_here",
+  "chat_message_refs",
+  // CV-3: the chat store's access check and its people.
+  "chat_people",
+  "chat_recently_deleted",
+  // CV-19: ⌘K's Messages, Chat's Search and find in a conversation.
+  "chat_search",
+  "chat_key_readers",
+  "chat_my_keys",
+  "chat_sync_ids",
   "chat_unread_counts",
+  "chat_catchup_open",
   "chat_workspace_enabled",
   "contact_merge_candidates",
   "focus_claims",
@@ -110,7 +130,13 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "tasks_time_report",
   "tasks_time_totals",
   "user_agent_work",
+  // CV-6b: Settings → Preferences → Chat reads your chat settings; CV-7c: your quick reactions.
+  "user_chat_prefs",
+  // CV-17: teammates' "now" (statuses, do not disturb, Focusing).
+  "chat_now",
   "user_time_region",
+  // CV-18: the workspaces whose notifications you paused (the switcher).
+  "workspace_notice_pauses",
 ]);
 
 /**

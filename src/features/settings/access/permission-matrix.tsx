@@ -90,7 +90,7 @@ export function PermissionMatrix({
 }
 
 const cellBase =
-  "grid size-7 place-items-center rounded-md border transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card";
+  "grid size-7 place-items-center rounded-md border transition-colors duration-[var(--motion-fade)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /** A role cell: on/off, optionally disabled with a reason. */
 export function RoleCell({

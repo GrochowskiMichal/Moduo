@@ -272,11 +272,13 @@ Use Tailwind utilities that map to semantic tokens. Common lookups:
 | Card radius | `rounded-lg` |
 | Shell panel radius | `rounded-xl` (`FeaturePanelsShell`) |
 | Panel edge → a fill · → the text column · centre top | `--panel-pad` (8) · `--panel-inset` (16) · `--panel-title-top` (12 / 10 / 8), fixed across densities |
+| Panel ↔ panel · window edge → a panel | `--panel-gap` (8, the resize handle's width) · the shell's `px-4` (16) |
+| Focus | controls: `focus-visible:ring-2 ring-ring/50` · fields: `focus-visible:border-ring/50` (`field-shell.ts`) · never `ring-offset-*` |
 | App font | `font-sans` (body) · `font-display` (structure/labels) |
 
 ## Accessibility
 
-- All interactive elements need visible focus states. The primitives already ship `focus-visible` rings — don't remove them.
+- All interactive elements need visible focus states. The primitives already ship them (the offset-less ring on controls, the focus edge on fields) — don't remove them.
 - Color is never the only signal: pair with icon or label (status dots get a text label on hover/legend).
 - Minimum contrast: body text 4.5:1, large/secondary text 3:1. The token palette is tuned for this — don't invent one-off colors.
 
@@ -317,7 +319,13 @@ Established during the Tasks rebuild; **reusable across modules** (Notes adopts 
   … `size-icon-lg`. Bind control svg defaults to the rung; don't hardcode `size-4`.
 - **Fields:** `FieldShell` cva drives Input/Textarea/SelectTrigger. Variants
   `filled` (default well) · **`ghost`** (borderless-until-focus — detail-panel /
-  inline) · `bare` (plain text). Focus = offset-less `ring-2 ring-ring/50`.
+  inline) · `bare` (plain text). Focus (MOD-160) = the field's own 1 px edge in
+  the focus colour (`border-ring/50`), no halo; `bare` has no edge, so it takes
+  the controls' offset-less `ring-2 ring-ring/50`. A composite field puts the
+  same edge on its box (`FIELD_FOCUS_WITHIN`). Controls (buttons, rows, menu
+  triggers) keep the ring for keyboard focus; no focus ring is ever offset.
+  A rail's inline name field is `NavRowField` / `NavRowInput` (MOD-159): the
+  label's own text in the row's own box.
 - **New primitives in `src/components/ui/`:** `SegmentedControl` (the one toggle —
   no bespoke segmented controls), `IconButton` (required tooltip+label),
   `Toolbar`, `Calendar` + `DateField` (no native `<input type=date>`),

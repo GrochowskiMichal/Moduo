@@ -90,7 +90,8 @@ type Story = StoryObj<typeof meta>;
 /** One bucket: no bucket text (implied), columns line up, completed hidden. */
 export const SingleBucket: Story = {};
 
-/** All, grouped by bucket: each group ends with its own completed line. */
+/** All, grouped by bucket: no group ends with a completed line; the list
+ *  ends with its one "N completed · Show" (MOD-148). */
 export const AllByBucket: Story = {
   args: { tasks: TASKS, scopeTitle: "All", selection: "all", groupBy: "bucket" },
 };
@@ -138,6 +139,70 @@ export const BySection: Story = {
     onAddSection: () => {},
     onRenameSection: () => {},
     onDeleteSection: () => {},
+  },
+};
+
+/** A project grouped by section with mostly finished work (MOD-148, the
+ *  dogfood board): Completed is Hidden, so no section ends with its own
+ *  "N completed · show"; one quiet "9 completed · Show" ends the list after
+ *  "+ Add section" and lists them in place, in their sections, until "Hide".
+ *  Backlog keeps its folded line in its section; Build, all done, keeps its
+ *  header. */
+const DONE_AT = "2026-09-20T00:00:00.000Z";
+const MOSTLY_DONE: Task[] = [
+  ...appTasks.slice(0, 2).map((t, i) => ({
+    ...t,
+    status: "todo" as const,
+    sectionId: i === 0 ? null : "s-design",
+  })),
+  ...appTasks.slice(2, 3).map((t) => ({
+    ...t,
+    status: "todo" as const,
+    statusCategory: "backlog" as const,
+    sectionId: "s-design",
+  })),
+  ...Array.from({ length: 9 }, (_, i) => ({
+    ...(appTasks[i % appTasks.length] as Task),
+    id: `finished-${i}`,
+    title: `Finished piece ${i + 1}`,
+    position: `z${i}`,
+    parentId: null,
+    status: "done" as const,
+    statusCategory: "done" as const,
+    updatedAt: DONE_AT,
+    completedAt: DONE_AT,
+    sectionId: i < 2 ? null : i < 5 ? "s-design" : "s-build",
+  })),
+];
+export const BySectionMostlyDone: Story = {
+  args: {
+    groupBy: "section",
+    sections: SECTIONS,
+    tasks: MOSTLY_DONE,
+    selectedTaskId: MOSTLY_DONE[0]?.id ?? null,
+    onAddSection: () => {},
+    onRenameSection: () => {},
+    onDeleteSection: () => {},
+    api: stubApi(MOSTLY_DONE, { sections: SECTIONS }),
+  },
+};
+
+/** The same project in Display → Completed: 7 days, three pieces finished
+ *  yesterday: those show in Build, struck through, and no section has a line
+ *  of its own; one "6 older completed · Show" ends the list for the work
+ *  finished before the last seven days (MOD-148 follow-up). */
+const YESTERDAY = new Date(Date.now() - 86_400_000).toISOString();
+const MOSTLY_DONE_RECENT: Task[] = MOSTLY_DONE.map((t) =>
+  t.id === "finished-6" || t.id === "finished-7" || t.id === "finished-8"
+    ? { ...t, updatedAt: YESTERDAY, completedAt: YESTERDAY }
+    : t,
+);
+export const BySectionSevenDays: Story = {
+  args: {
+    ...BySectionMostlyDone.args,
+    completed: "week",
+    tasks: MOSTLY_DONE_RECENT,
+    api: stubApi(MOSTLY_DONE_RECENT, { sections: SECTIONS }),
   },
 };
 

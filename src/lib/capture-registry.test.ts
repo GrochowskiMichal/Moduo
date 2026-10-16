@@ -42,7 +42,7 @@ describe("the registered types", () => {
 });
 
 describe("⌘1–7 follow the top bar's order", () => {
-  it("maps 2 → note, 3 → task, 4 → event, 6 → contact", () => {
+  it("maps 2 → note, 3 → task, 4 → event, 6 → contact, 7 → message", () => {
     expect([1, 2, 3, 4, 5, 6, 7].map((d) => typeAt(d))).toEqual([
       null, // Home
       "note",
@@ -50,7 +50,7 @@ describe("⌘1–7 follow the top bar's order", () => {
       "event",
       null, // Email: no type yet
       "contact",
-      null, // Chat: no type yet
+      "message", // Chat (CV-10)
     ]);
   });
 

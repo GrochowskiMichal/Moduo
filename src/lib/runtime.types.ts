@@ -6,8 +6,8 @@
 import type {
   AttachmentPreviewMime,
   AttachmentStatus,
-  CommentReaction,
   ContentAuthorKind,
+  ReactionKey,
 } from "@contracts/vocabularies";
 import type {
   CalendarAccountModel,
@@ -134,7 +134,7 @@ export type SpineComment = {
   deletedAt: string | null;
   /** When its author last edited it (TV-U13); null when never: it reads "edited". */
   editedAt: string | null;
-  /** Who reacted with which of the six (TV-U13, REPLAN 88), oldest first. */
+  /** Who reacted with which emoji (TV-U13; any emoji since CV-7c), oldest first. */
   reactions: CommentReactionMark[];
   /** The text thread it belongs to (NR-8, notes only); null/absent = note-level. */
   anchorId?: string | null;
@@ -143,7 +143,7 @@ export type SpineComment = {
 };
 
 /** One person's reaction on a comment. */
-export type CommentReactionMark = { userId: string; reaction: CommentReaction };
+export type CommentReactionMark = { userId: string; reaction: ReactionKey };
 
 /** NR-7: what `notesV2.joinLive` reports to the open editor. Everything
  * comes from the server; the client sends nothing over Realtime. */
@@ -231,6 +231,8 @@ export type WorkspaceApiKey = {
   lastUsedAt: string | null;
   /** When the key stops working; null = never. An expired key stays listed until revoked. */
   expiresAt: string | null;
+  /** Chat (CV-21): the key also reads the private channels its creator is in. Off by default. */
+  includePrivateChat: boolean;
 };
 
 /**
@@ -328,8 +330,11 @@ export type LargestAttachment = {
 
 export type AttachmentBeginInput = {
   workspaceId: string;
-  entityType: "task";
+  /** A task's file, or a chat message's (CV-9: the id the app minted, before it's sent). */
+  entityType: "task" | "chat_message";
   entityId: string;
+  /** chat_message only: the conversation it will be sent in (who may post decides). */
+  channelId?: string;
   fileName: string;
   mime: string;
   sizeBytes: number;
@@ -498,6 +503,13 @@ export type ModuoRuntime = {
      * from `scopes` keep their level. Only the key's creator can raise a level.
      */
     setApiKeyScopes(keyId: string, scopes: Record<string, string>): Promise<Record<string, string>>;
+    /**
+     * Chat (CV-21): "Include private channels I'm in". Only the key's creator
+     * turns it on; any key manager turns it off. Resolves to the new value.
+     */
+    setApiKeyPrivateChat(keyId: string, on: boolean): Promise<boolean>;
+    /** Chat (CV-21): your own live keys that read chat here (Settings' reply switches). */
+    listMyChatKeys(workspaceId: string): Promise<Array<{ id: string; name: string }>>;
     revokeApiKey(keyId: string): Promise<void>;
     /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
     getMcpEndpoint(): string;
@@ -1530,11 +1542,11 @@ export type ModuoRuntime = {
      * anyone the comment already reached). Call it after posting or editing.
      */
     mentionTeams(input: { commentId: string; teamIds: string[] }): Promise<void>;
-    /** Add (`on`) or take back one of the six reactions; answers the comment's
+    /** Add (`on`) or take back one reaction (any emoji, CV-7c); answers the comment's
      *  reactions after the change. Never notifies (REPLAN 88). */
     reactToComment(input: {
       commentId: string;
-      reaction: CommentReaction;
+      reaction: ReactionKey;
       on: boolean;
     }): Promise<CommentReactionMark[]>;
     /**

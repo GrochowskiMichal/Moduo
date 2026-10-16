@@ -3,24 +3,48 @@
 // the centre (call 32). TV-U16 makes it the project's overview (spec §3,
 // REPLAN 16), ordered for someone opening a prepared project cold: what it is
 // (state, dates, lead, client, description), how far it is ("Done this month
-// · 14 · 22h"), what's next, its sections, who's on it, what waits, its files,
-// what happened recently, and the ways out (time report, copy, duplicate,
-// archive). Everything comes from the reader's own copy, so it shows only what
-// they can see.
+// · 14 · 22h"), what waits, its sections, who's on it, its files, what
+// happened recently, and the ways out (time report, copy, duplicate, archive).
+// No list of what's next: the project's own List sits beside it (MOD-152).
+// Everything comes from the reader's own copy, so it shows only what they can
+// see.
 
 import type { ProjectState } from "@contracts/vocabularies";
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
-import { Archive, Clock, Copy, CopyPlus, FolderKanban, Paperclip, Plus } from "lucide-react";
+import {
+  Archive,
+  CalendarDays,
+  CircleDashed,
+  Clock,
+  Contact,
+  Copy,
+  CopyPlus,
+  Ellipsis,
+  FolderKanban,
+  MessageSquare,
+  Paperclip,
+  UserRound,
+} from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { TitleActions } from "../../../components/app/title-actions";
 import { Button } from "../../../components/ui/button";
 import { Chip } from "../../../components/ui/chip";
 import { CollectionHeader } from "../../../components/ui/collection-header";
+import { DetailTitle } from "../../../components/ui/detail-title";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { IconButton } from "../../../components/ui/icon-button";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Progress } from "../../../components/ui/progress";
 import { PropertyRow } from "../../../components/ui/property-row";
+import { Separator } from "../../../components/ui/separator";
 import { formatDate, formatDay, formatDurationSeconds } from "../../../lib/time-format";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
@@ -29,8 +53,9 @@ import { useAssignees } from "../assignees";
 import { projectOverviewText } from "../list-export";
 import type { Bucket, Section, Task, TaskCompletion, TaskWaitingEntry } from "../model";
 import {
+  clientPatch,
   doneInRange,
-  nextUp,
+  projectClient,
   projectFacts,
   projectPeople,
   recentActivity,
@@ -41,6 +66,7 @@ import {
 import { bucketDotColor } from "../sidebar";
 import { reportRange } from "../time-report";
 import { nowOn, useToday } from "../use-today";
+import { type AddPropertyItem, AddPropertyLine } from "./add-property-line";
 import { AssigneeAvatar } from "./assignee-avatar";
 import {
   ProjectClientValue,
@@ -60,7 +86,9 @@ export type ProjectOverviewPatch = {
   startsOn?: string | null;
   targetOn?: string | null;
   leadId?: string | null;
+  /** A person or a company (MOD-155): the row sends the one that changed. */
   clientContactId?: string | null;
+  clientCompanyId?: string | null;
   description?: string | null;
 };
 
@@ -79,9 +107,17 @@ export type ProjectChatSlots = {
 const NO_COMPLETIONS: readonly TaskCompletion[] = [];
 const NO_WAITING: readonly TaskWaitingEntry[] = [];
 
-/** The quiet optional fields, revealed from the "+" line (hidden until set). */
+/**
+ * The quiet optional fields, hidden until set and revealed from the shared
+ * `AddPropertyLine` (the task details' "+" line and its menu, MOD-151), in
+ * panel order, with the icons their values show.
+ */
 type Optional = "start" | "lead" | "client";
-const OPTIONAL_LABEL: Record<Optional, string> = { start: "Start", lead: "Lead", client: "Client" };
+const OPTIONAL_FIELDS: readonly AddPropertyItem<Optional>[] = [
+  { key: "start", label: "Start", icon: CalendarDays },
+  { key: "lead", label: "Lead", icon: UserRound },
+  { key: "client", label: "Client", icon: Contact },
+];
 
 export function ProjectPanel({
   project,
@@ -95,6 +131,8 @@ export function ProjectPanel({
   onOpenTask,
   onArchive,
   onDuplicate,
+  onEditStatuses,
+  onStartConversation,
   chat,
 }: {
   project: Bucket | null;
@@ -111,6 +149,11 @@ export function ProjectPanel({
   onOpenTask?: (taskId: string) => void;
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
+  /** The title row's ⋯ → Statuses… (TV-D9; MOD-150 moved it here from the
+   *  plan header's ⋯). Shown only to someone who may edit the project. */
+  onEditStatuses?: (project: Bucket) => void;
+  /** The same ⋯ → Start a conversation (Chat, CV-13); absent without chat or edit access. */
+  onStartConversation?: (project: Bucket) => void;
   /** Chat's slots (empty until Chat fills them). */
   chat?: ProjectChatSlots;
 }) {
@@ -138,6 +181,8 @@ export function ProjectPanel({
       onOpenTask={onOpenTask}
       onArchive={onArchive}
       onDuplicate={onDuplicate}
+      onEditStatuses={onEditStatuses}
+      onStartConversation={onStartConversation}
       chat={chat}
     />
   );
@@ -155,6 +200,8 @@ function ProjectOverview({
   onOpenTask,
   onArchive,
   onDuplicate,
+  onEditStatuses,
+  onStartConversation,
   chat,
 }: {
   project: Bucket;
@@ -168,12 +215,22 @@ function ProjectOverview({
   onOpenTask?: (taskId: string) => void;
   onArchive?: (project: Bucket) => void;
   onDuplicate?: (project: Bucket) => void;
+  onEditStatuses?: (project: Bucket) => void;
+  onStartConversation?: (project: Bucket) => void;
   chat?: ProjectChatSlots;
 }) {
   const { byId } = useAssignees();
   const region = useTimeRegion();
   const [reportOpen, setReportOpen] = useState(false);
-  const [revealed, setRevealed] = useState<Optional | null>(null);
+  // Fields picked from the "+" line stay while this project is open, even
+  // empty, and the one just picked opens its editor once, on mount: the task
+  // details' behaviour (MOD-151), so revealing Lead keeps a revealed Start.
+  const [revealed, setRevealed] = useState<ReadonlySet<Optional>>(() => new Set());
+  const [opening, setOpening] = useState<Optional | null>(null);
+  const reveal = (o: Optional) => {
+    setRevealed((prev) => new Set(prev).add(o));
+    setOpening(o);
+  };
   // Tasks edit in the workspace isn't enough: a project can be shared view-only.
   const access = useProjectEditable(project.id, canEdit);
   const allowed = canEdit && access === true;
@@ -182,7 +239,6 @@ function ProjectOverview({
 
   const mine = useMemo(() => tasksOfProject(tasks, project.id), [tasks, project.id]);
   const facts = useMemo(() => projectFacts(tasks, project.id), [tasks, project.id]);
-  const next = useMemo(() => nextUp(tasks, project.id, sections), [tasks, project.id, sections]);
   const parts = useMemo(
     () => sectionProgress(tasks, project.id, sections),
     [tasks, project.id, sections],
@@ -246,13 +302,11 @@ function ProjectOverview({
 
   const state: ProjectState = project.status ?? "active";
   const shows = (o: Optional) =>
-    revealed === o ||
+    revealed.has(o) ||
     (o === "start" && !!project.startsOn) ||
     (o === "lead" && !!project.leadId) ||
-    (o === "client" && !!project.clientContactId);
-  const quiet = editable
-    ? (["start", "lead", "client"] as Optional[]).filter((o) => !shows(o))
-    : [];
+    (o === "client" && !!(project.clientContactId || project.clientCompanyId));
+  const quiet = editable ? OPTIONAL_FIELDS.filter((f) => !shows(f.key)) : [];
 
   const copyText = () => {
     const open = mine.filter((t) => !isClosedTask(t));
@@ -280,13 +334,44 @@ function ProjectOverview({
   };
 
   return (
-    <div className="pane-scroll flex h-full min-h-0 flex-col gap-5 overflow-y-auto px-1 pt-2.5 pb-4">
+    // The task details' rhythm (MOD-152): 16 px between blocks (round-2b
+    // `.dbody`), and each section after the record starts on a hairline.
+    <div className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto px-1 pt-2.5 pb-4">
+      {/* The view's own ⋯ in the panel's title row ("Project ▾ ……… ⋯", as the
+          task's sit beside "Details ▾"): Statuses…, which left the ⋯ beside
+          the centre's title (MOD-150; it changes round-2b's `.pmore`). The
+          title still opens this view in one click (MOD-131), and a Board
+          column's header keeps its own "Edit statuses…". */}
+      {allowed && (onEditStatuses || onStartConversation) ? (
+        <TitleActions>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton icon={Ellipsis} label="Project actions" tooltip={null} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {onEditStatuses ? (
+                <DropdownMenuItem onSelect={() => onEditStatuses(project)}>
+                  <CircleDashed aria-hidden />
+                  Statuses…
+                </DropdownMenuItem>
+              ) : null}
+              {onStartConversation ? (
+                <DropdownMenuItem onSelect={() => onStartConversation(project)}>
+                  <MessageSquare aria-hidden />
+                  Start a conversation
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TitleActions>
+      ) : null}
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <NavRowDot color={bucketDotColor(project)} />
-          <h3 className="min-w-0 flex-1 break-words font-display text-lg font-semibold text-foreground">
-            {project.name}
-          </h3>
+          {/* The task title's style, so the two views share one title (MOD-152). */}
+          <DetailTitle asChild size="lead">
+            <h3 className="min-w-0 flex-1 break-words">{project.name}</h3>
+          </DetailTitle>
           {project.archivedAt ? <Chip>Archived</Chip> : null}
         </div>
 
@@ -305,7 +390,7 @@ function ProjectOverview({
                 label="Start date"
                 placeholder="Set a start"
                 canEdit={editable}
-                defaultOpen={revealed === "start"}
+                defaultOpen={opening === "start"}
                 onChange={(day) => edit({ startsOn: day })}
               />
             </PropertyRow>
@@ -326,7 +411,7 @@ function ProjectOverview({
               <ProjectLeadValue
                 leadId={project.leadId ?? null}
                 canEdit={editable}
-                defaultOpen={revealed === "lead"}
+                defaultOpen={opening === "lead"}
                 onChange={(id) => edit({ leadId: id })}
               />
             </PropertyRow>
@@ -335,37 +420,16 @@ function ProjectOverview({
             <PropertyRow label="Client">
               <ProjectClientValue
                 workspaceId={project.workspaceId}
-                clientId={project.clientContactId ?? null}
+                client={projectClient(project)}
+                companies={project.clientCompanyId !== undefined}
                 canEdit={editable}
-                defaultOpen={revealed === "client"}
-                onChange={(id) => edit({ clientContactId: id })}
+                defaultOpen={opening === "client"}
+                onChange={(next) => edit(clientPatch(project, next))}
               />
             </PropertyRow>
           ) : null}
-          {quiet.length > 0 ? (
-            <div className="flex min-h-(--ctrl-h-sm) items-center gap-2 font-sans text-sm text-muted-foreground">
-              <Plus className="size-icon-sm shrink-0" aria-hidden />
-              <span className="flex min-w-0 flex-wrap items-center">
-                {quiet.map((o, i) => (
-                  <span key={o} className="flex items-center">
-                    {i > 0 ? (
-                      <span aria-hidden className="px-1">
-                        ·
-                      </span>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => setRevealed(o)}
-                      aria-label={`Add ${OPTIONAL_LABEL[o].toLowerCase()}`}
-                      className="rounded-sm whitespace-nowrap transition-colors duration-(--motion-fade) ease-(--ease-out) hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                    >
-                      {OPTIONAL_LABEL[o]}
-                    </button>
-                  </span>
-                ))}
-              </span>
-            </div>
-          ) : null}
+          {/* The task details' "+" line and its menu (MOD-151). */}
+          {quiet.length > 0 ? <AddPropertyLine items={quiet} onPick={reveal} /> : null}
         </div>
 
         <ProjectDescription
@@ -378,218 +442,223 @@ function ProjectOverview({
         {chat?.decisions ?? null}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Progress value={facts.done} max={facts.total} label="Done" />
-        <p className="font-sans text-sm text-muted-foreground tabular-nums">
-          {facts.done} of {facts.total} done · {facts.open} open
-          {facts.inProgress > 0 ? ` · ${facts.inProgress} in progress` : ""}
-          {facts.backlog > 0 ? ` · Backlog ${facts.backlog}` : ""}
-        </p>
-        <p className="font-sans text-sm text-muted-foreground tabular-nums">{doneLine}</p>
-      </div>
+      <Divided>
+        {/* How far it is, under its own header with the count (structure
+            frame 2's `.shead Progress`); the rest as meta (MOD-152). */}
+        <section data-slot="project-progress" className="flex flex-col">
+          <CollectionHeader
+            as="h4"
+            label="Progress"
+            count={`${facts.done} of ${facts.total} done`}
+          />
+          <div className="flex flex-col gap-1.5 px-1">
+            <Progress value={facts.done} max={facts.total} label="Done" />
+            <p className="font-sans text-xs text-muted-foreground tabular-nums">
+              {facts.open} open
+              {facts.inProgress > 0 ? ` · ${facts.inProgress} in progress` : ""}
+              {facts.backlog > 0 ? ` · Backlog ${facts.backlog}` : ""}
+            </p>
+            <p className="font-sans text-xs text-muted-foreground tabular-nums">{doneLine}</p>
+          </div>
+        </section>
+      </Divided>
 
-      <section className="flex flex-col">
-        <CollectionHeader
-          as="h4"
-          label="Next up"
-          count={next.tasks.length + next.rest || undefined}
-        />
-        {next.tasks.length === 0 ? (
-          <p className="px-1 font-sans text-sm text-muted-foreground">Nothing open right now.</p>
-        ) : (
-          <ul className="flex flex-col">
-            {next.tasks.map((t) => (
-              <li key={t.id}>
-                <OverviewTaskButton task={t} onOpen={onOpenTask}>
-                  {t.dueOn || t.dueDate ? (
-                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                      {formatDay(t.dueOn ? `${t.dueOn}T12:00:00` : (t.dueDate as string))}
-                    </span>
-                  ) : null}
-                  {t.assigneeId ? (
-                    <AssigneeAvatar
-                      assignee={byId(t.assigneeId)}
-                      assigneeId={t.assigneeId}
-                      size="icon"
-                      className="shrink-0"
+      {waits.length > 0 ? (
+        <Divided>
+          <section className="flex flex-col">
+            <CollectionHeader as="h4" label="Waiting" count={waits.length} />
+            <ul className="flex flex-col">
+              {waits.map((w) => (
+                <li key={w.task.id}>
+                  <OverviewTaskButton task={w.task} onOpen={onOpenTask}>
+                    <WaitingMeta
+                      who={waitingWho(w.entries[0], sentenceNameOf)}
+                      more={w.entries.length - 1}
+                      day={formatDay(w.since)}
                     />
-                  ) : null}
-                </OverviewTaskButton>
-              </li>
-            ))}
-            {next.rest > 0 ? (
-              <li className="px-1 pt-0.5 font-sans text-sm text-muted-foreground tabular-nums">
-                and {next.rest} more open
-              </li>
-            ) : null}
-          </ul>
-        )}
-      </section>
+                  </OverviewTaskButton>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Divided>
+      ) : null}
 
       {parts.length > 0 ? (
-        <section className="flex flex-col">
-          <CollectionHeader as="h4" label="Sections" count={parts.length} />
-          <ul className="flex flex-col">
-            {parts.map(({ section, done, total }) => (
-              <li
-                key={section.id}
-                className="flex min-h-(--ctrl-h-sm) items-center gap-2 px-1 font-sans text-base"
-              >
-                <span className="min-w-0 flex-1 break-words">{section.name}</span>
-                {section.endsOn ? (
-                  <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                    {formatDate(`${section.endsOn}T12:00:00`)}
+        <Divided>
+          <section className="flex flex-col">
+            <CollectionHeader as="h4" label="Sections" count={parts.length} />
+            <ul className="flex flex-col">
+              {parts.map(({ section, done, total }) => (
+                <li
+                  key={section.id}
+                  className="flex min-h-(--ctrl-h-sm) items-center gap-2 px-1 font-sans text-base"
+                >
+                  <span className="min-w-0 flex-1 break-words">{section.name}</span>
+                  {section.endsOn ? (
+                    <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+                      {formatDate(`${section.endsOn}T12:00:00`)}
+                    </span>
+                  ) : null}
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    {done} of {total}
                   </span>
-                ) : null}
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {done} of {total}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Divided>
       ) : null}
 
       {people.length > 0 ? (
-        <section className="flex flex-col">
-          <CollectionHeader as="h4" label="People" count={people.length} />
-          <ul className="flex flex-col">
-            {people.map((p) => (
-              <li
-                key={p.userId}
-                className="flex min-h-(--ctrl-h-sm) items-center gap-2 px-1 font-sans text-base"
-              >
-                <AssigneeAvatar assignee={byId(p.userId)} assigneeId={p.userId} size="icon" />
-                <span className="min-w-0 flex-1 break-words">{listNameOf(p.userId)}</span>
-                {p.lead ? (
-                  <span className="shrink-0 text-xs text-muted-foreground">Lead</span>
-                ) : null}
-                {p.open > 0 ? (
-                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {p.open} open
-                  </span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      {waits.length > 0 ? (
-        <section className="flex flex-col">
-          <CollectionHeader as="h4" label="Waiting" count={waits.length} />
-          <ul className="flex flex-col">
-            {waits.map((w) => (
-              <li key={w.task.id}>
-                <OverviewTaskButton task={w.task} onOpen={onOpenTask}>
-                  <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                    {waitingWho(w.entries[0], sentenceNameOf)}
-                    {w.entries.length > 1 ? ` +${w.entries.length - 1}` : ""} · {formatDay(w.since)}
-                  </span>
-                </OverviewTaskButton>
-              </li>
-            ))}
-          </ul>
-        </section>
+        <Divided>
+          <section className="flex flex-col">
+            <CollectionHeader as="h4" label="People" count={people.length} />
+            <ul className="flex flex-col">
+              {people.map((p) => (
+                <li
+                  key={p.userId}
+                  className="flex min-h-(--ctrl-h-sm) items-center gap-2 px-1 font-sans text-base"
+                >
+                  <AssigneeAvatar assignee={byId(p.userId)} assigneeId={p.userId} size="icon" />
+                  <span className="min-w-0 flex-1 break-words">{listNameOf(p.userId)}</span>
+                  {p.lead ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">Lead</span>
+                  ) : null}
+                  {p.open > 0 ? (
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {p.open} open
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Divided>
       ) : null}
 
       {files.files.length > 0 ? (
-        <section className="flex flex-col">
-          <CollectionHeader
-            as="h4"
-            label="Files"
-            count={files.partial ? `${files.files.length}+` : files.files.length}
-          />
-          <ul className="flex flex-col">
-            {files.files.slice(0, 5).map((f) => {
-              const task = taskById.get(f.entityId);
-              return (
-                <li key={f.id}>
-                  <button
-                    type="button"
-                    onClick={() => onOpenTask?.(f.entityId)}
-                    disabled={!onOpenTask}
-                    className={cn(ROW_BUTTON, "py-0.5")}
-                  >
-                    <Paperclip
-                      className="size-icon-sm shrink-0 text-muted-foreground"
-                      aria-hidden
-                    />
-                    {/* The name on one line and its task under it, both cut
-                        short: beside each other, a long name got a column
-                        one letter wide (MOD-127). */}
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{f.fileName}</span>
-                      {task ? (
-                        <span className="truncate text-xs text-muted-foreground">
-                          {task.title || "Untitled"}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
+        <Divided>
+          <section className="flex flex-col">
+            <CollectionHeader
+              as="h4"
+              label="Files"
+              count={files.partial ? `${files.files.length}+` : files.files.length}
+            />
+            <ul className="flex flex-col">
+              {files.files.slice(0, 5).map((f) => {
+                const task = taskById.get(f.entityId);
+                return (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenTask?.(f.entityId)}
+                      disabled={!onOpenTask}
+                      className={cn(ROW_BUTTON, "py-0.5")}
+                    >
+                      <Paperclip
+                        className="size-icon-sm shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      {/* The name on one line and its task under it, both cut
+                          short: beside each other, a long name got a column
+                          one letter wide (MOD-127). */}
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">{f.fileName}</span>
+                        {task ? (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {task.title || "Untitled"}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+              {files.files.length > 5 ? (
+                <li className="px-1 pt-0.5 font-sans text-sm text-muted-foreground tabular-nums">
+                  and {files.files.length - 5} more on its tasks
                 </li>
-              );
-            })}
-            {files.files.length > 5 ? (
-              <li className="px-1 pt-0.5 font-sans text-sm text-muted-foreground tabular-nums">
-                and {files.files.length - 5} more on its tasks
-              </li>
-            ) : null}
-          </ul>
-        </section>
+              ) : null}
+            </ul>
+          </section>
+        </Divided>
       ) : null}
 
       {activity.length > 0 ? (
-        <section className="flex flex-col">
-          {/* "Recently", not "Lately" (MOD-139). */}
-          <CollectionHeader as="h4" label="Recently" />
-          <ul className="flex flex-col">
-            {activity.map((a) => (
-              <li key={`${a.kind}:${a.task.id}:${a.at}`}>
-                <button
-                  type="button"
-                  onClick={() => onOpenTask?.(a.task.id)}
-                  disabled={!onOpenTask}
-                  className={ROW_BUTTON}
-                >
-                  <span className="min-w-0 flex-1 break-words">
-                    <span className="text-muted-foreground">
-                      {nameOf(a.userId)} {a.kind === "done" ? "finished" : "added"}{" "}
+        <Divided>
+          <section className="flex flex-col">
+            {/* "Recently", not "Lately" (MOD-139). */}
+            <CollectionHeader as="h4" label="Recently" />
+            <ul className="flex flex-col">
+              {activity.map((a) => (
+                <li key={`${a.kind}:${a.task.id}:${a.at}`}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask?.(a.task.id)}
+                    disabled={!onOpenTask}
+                    className={FIRST_LINE_ROW}
+                  >
+                    <span className="min-w-0 flex-1 break-words">
+                      <span className="text-muted-foreground">
+                        {nameOf(a.userId)} {a.kind === "done" ? "finished" : "added"}{" "}
+                      </span>
+                      {a.task.title || "Untitled"}
                     </span>
-                    {a.task.title || "Untitled"}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                    {formatDay(a.at)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+                    {/* "Today" at the top, on the first line (MOD-153). */}
+                    <FirstLine className="text-xs text-muted-foreground tabular-nums">
+                      {formatDay(a.at)}
+                    </FirstLine>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </Divided>
       ) : null}
 
-      <div className="flex flex-wrap gap-1.5">
-        <Button size="sm" variant="secondary" onClick={() => setReportOpen(true)}>
-          <Clock aria-hidden />
-          Time report
-        </Button>
-        <Button size="sm" variant="ghost" onClick={copyText}>
-          <Copy aria-hidden />
-          Copy as text
-        </Button>
-        {onDuplicate && access === true ? (
-          <Button size="sm" variant="ghost" onClick={() => onDuplicate(project)}>
-            <CopyPlus aria-hidden />
-            Duplicate…
+      <Divided>
+        {/* The ways out, one under another (MOD-154: "we'll need to scroll down
+            there anyway"): full-width quiet rows, icon and label, read like a
+            panel's action list; the icons sit on the rows' status column above. */}
+        <div data-slot="project-actions" className="flex flex-col">
+          <Button
+            size="sm"
+            variant="ghost"
+            className={ACTION_ROW}
+            onClick={() => setReportOpen(true)}
+          >
+            <Clock aria-hidden />
+            Time report
           </Button>
-        ) : null}
-        {allowed && onArchive ? (
-          <Button size="sm" variant="ghost" onClick={() => onArchive(project)}>
-            <Archive aria-hidden />
-            Archive…
+          <Button size="sm" variant="ghost" className={ACTION_ROW} onClick={copyText}>
+            <Copy aria-hidden />
+            Copy as text
           </Button>
-        ) : null}
-      </div>
+          {onDuplicate && access === true ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={ACTION_ROW}
+              onClick={() => onDuplicate(project)}
+            >
+              <CopyPlus aria-hidden />
+              Duplicate…
+            </Button>
+          ) : null}
+          {allowed && onArchive ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className={ACTION_ROW}
+              onClick={() => onArchive(project)}
+            >
+              <Archive aria-hidden />
+              Archive…
+            </Button>
+          ) : null}
+        </div>
+      </Divided>
       <TimeReportSheet
         open={reportOpen}
         onOpenChange={setReportOpen}
@@ -607,6 +676,46 @@ const ROW_BUTTON = cn(
   "disabled:cursor-default disabled:hover:bg-transparent",
 );
 
+/** One of the actions at the foot (MOD-154): the rows' 4 px inset, the label left. */
+const ACTION_ROW = "w-full justify-start gap-2 px-1";
+
+/**
+ * A section after the record (MOD-152): the task details' divider, the
+ * hairline `Separator` before their Activity, then the section. The column's
+ * 16 px gap sits on either side of it, so a section's last row is 33 px from
+ * the next header and the line marks where each section starts.
+ */
+function Divided({ children }: { children: ReactNode }) {
+  return (
+    <>
+      <Separator className="bg-hairline" />
+      {children}
+    </>
+  );
+}
+
+/**
+ * A row whose title wraps (Waiting, Recently; MOD-153): its status,
+ * picture and time sit on the title's first line (`FirstLine`), not the
+ * middle of the box, so where an item starts never moves with its length.
+ * The padding centres that first line in the rung, so a one-line row is the
+ * height it was (ItemCardTitle's way, round-2b's `.card .ct`).
+ */
+const FIRST_LINE_ROW = cn(ROW_BUTTON, "items-start py-(--row-first-line-pad)");
+
+/**
+ * A row's icon, picture or time on the title's first line: a box one of the
+ * row's own lines tall, centred on it. The box takes the row's 14 px line
+ * (`h-lh`), so small text goes on the span inside, never on the box.
+ */
+function FirstLine({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <span className="flex h-lh shrink-0 items-center">
+      {className ? <span className={className}>{children}</span> : children}
+    </span>
+  );
+}
+
 /** One task in an overview list: its status, its title, then its facts. */
 function OverviewTaskButton({
   task,
@@ -622,12 +731,38 @@ function OverviewTaskButton({
       type="button"
       onClick={() => onOpen?.(task.id)}
       disabled={!onOpen}
-      className={ROW_BUTTON}
+      className={FIRST_LINE_ROW}
     >
-      <TaskStatusIcon category={taskCategoryOf(task)} className="shrink-0" />
-      <span className="min-w-0 flex-1 break-words">{task.title || "Untitled"}</span>
+      <FirstLine>
+        <TaskStatusIcon category={taskCategoryOf(task)} className="shrink-0" />
+      </FirstLine>
+      {/* Never narrower than 10 characters (MOD-138's floor): a long
+          "on …" beside it gives way instead. */}
+      <span className="min-w-[min(10ch,100%)] flex-1 break-words">{task.title || "Untitled"}</span>
       {children}
     </button>
+  );
+}
+
+/**
+ * What a waiting task waits on and since when, on its title's first line.
+ * Who or what is cut short once the title is down to its floor, so a long
+ * label ("on the analytics export") no longer squeezes the title into a
+ * column a few letters wide; "+1" (it waits on more) and the day are never
+ * cut (MOD-152, now that Waiting leads the lists).
+ */
+function WaitingMeta({ who, more, day }: { who: string; more: number; day: string }) {
+  return (
+    <span className="flex h-lh min-w-0 items-center">
+      <span className="flex min-w-0 text-xs text-muted-foreground">
+        <span className="truncate" title={who}>
+          {who}
+        </span>
+        <span className="shrink-0 whitespace-pre tabular-nums">
+          {more > 0 ? ` +${more}` : ""} · {day}
+        </span>
+      </span>
+    </span>
   );
 }
 

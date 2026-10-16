@@ -1,9 +1,14 @@
 // Completed tasks in lists and boards (tasks-v2 §6, TV-U1 U1-3).
 //
-// Display → Completed: Hidden (default) · 7 days · All. Hidden completed tasks
-// leave each list or group behind a quiet "N completed · show" line. A task
-// you check off stays where it is, struck through, until you change scope or
-// reload, so its Undo is still one click away.
+// Display → Completed: Hidden (default) · 7 days · All. No group or column
+// has a line of its own in any of them: one quiet line ends the whole List
+// or Board and shows what Display hides in place until the scope, grouping
+// or Completed changes (MOD-148).
+// Hidden hides every completed task ("12 completed · Show"); "7 days" lists
+// the last week's in their groups and hides the older ones ("5 older
+// completed · Show", the follow-up); All hides none and has no line. A task
+// you check off stays where it is, struck through, until you change scope
+// or reload, so its Undo is one click away.
 
 import { useState } from "react";
 import type { Task, TaskStatus } from "./model";
@@ -153,7 +158,12 @@ export function useOpenedHere(
   return next.ids;
 }
 
-/** The quiet line under a list or group: "5 completed". */
-export function completedLabel(count: number): string {
-  return `${count} completed`;
+/**
+ * The end line's count (MOD-148): "12 completed" while Completed is Hidden;
+ * "5 older completed" in "7 days", where the last week's already show in
+ * their groups, so a bare "5 completed" would read as theirs, or as every
+ * completed task (the follow-up).
+ */
+export function completedLabel(count: number, mode: CompletedMode = "hidden"): string {
+  return mode === "week" ? `${count} older completed` : `${count} completed`;
 }

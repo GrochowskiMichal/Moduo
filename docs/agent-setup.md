@@ -5,11 +5,11 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 ## What the repo provides (committed)
 
 - **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `moduo-design-quality`.
-- **Subagent** (`.claude/agents/validator.md`): the skeptical staff review `/s2` runs before a block counts as done.
+- **Subagent** (`.claude/agents/validator.md`): the skeptical staff review; runs on Tier 2 diffs only (see AGENTS.md §Review gates).
 - **Plugins** (enabled in `.claude/settings.json`, installed for you on first trust):
   - `mattpocock-skills`: grilling, prototype, to-tickets, tdd, diagnosing-bugs, handoff, retro, improve-codebase-architecture. Configured through [docs/agents/](./agents/).
   - `supabase` + `postgres-best-practices`: Supabase and Postgres/RLS rules.
-  - `claude-security`: a deep vulnerability scan of a diff or the repo.
+  - `claude-security`: a deep vulnerability scan of a diff or the repo (paused until beta).
   - `security-guidance`: reviews Claude's own edits for security issues.
   - `rust-analyzer-lsp`: Rust diagnostics after every edit.
   - `ts7-lsp` (ours, from `tools/claude-plugins/`, marketplace `moduo-local`): TypeScript 7's own language server (`tsc --lsp`) for go-to-definition, references, hover and symbols. It reports no type errors after edits; `bun run typecheck` does.
@@ -18,10 +18,11 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - `session-start.sh`: stale-base preflight and the reading list. `session-title.sh` applies `.claude/SESSION_TITLE`.
   - `guard-git.sh`: blocks direct pushes to `main`/`develop`/`prod-app`/`staging-app` and bare force-pushes.
   - `guard-secrets.sh`: gitleaks scan of staged changes on every commit.
+  - `guard-prod-db.sh`: asks before any Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`.
   - `guard-design-tokens.sh`: re-runs `lint:tw` + `lint:css` after UI edits, and wakes Claude only on a violation.
   - `notify.sh`: desktop notifications when a block finishes or Claude needs you.
   - Entire capture hooks.
-- **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
+- **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase db query --linked`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
 - **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project), `vercel`. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
 - **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `/s3`.
 
@@ -46,8 +47,8 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 ## The unsupervised flow
 
 1. **Day:** `/s1 <topic>`, the grilling, spec, blocks and Definition-of-Ready gate (read-only; plan mode works).
-2. **Night shift:** one session per block, each in its own worktree (dispatch from `claude agents` or the desktop app). Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
-3. **Morning:** read each report's **Status** line first (Built, not landed · Blocked · Not started), then its **To finish this block** and **❓ Needs you** lists, and run the manual checklist. Then `/s3` runs the review gate the diff's risk calls for, merges into the personal branch, and syncs bigger chunks to `develop`.
+2. **Night shift:** one Claude Code desktop session per block (or a `claude agents` lane), each in its own worktree. Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
+3. **Morning:** read each report's **Status** line first (Built, not landed · Blocked · Not started), then **Changed** and **Test this**, plus **❓ Needs you** / **⚠ Broke** when present. There is no manual checklist file: `/s3` puts Test this in the PR body, runs the validator on Tier 2 diffs only, merges into the personal branch, and syncs bigger chunks to `develop`.
 4. **Large audits and migrations** across many files run as dynamic workflows (put `ultracode` in the prompt). Watch long CI or release runs with `/loop`.
 
 The only two things you manage: **the work plan** and **your plan limits**.

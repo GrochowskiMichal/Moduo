@@ -31,6 +31,7 @@ import {
 } from "../../workspaces/access";
 import type { WorkspaceMember } from "../../workspaces/types";
 import { ExplainStrip, friendlyError, PaneHeader, SaveBar } from "./access-ui";
+import { ChatRightsSection } from "./chat-rights-section";
 import { PermissionMatrix, RoleCell } from "./permission-matrix";
 
 type Draft = {
@@ -353,6 +354,16 @@ export function RoleEditor({
           );
         }}
       />
+
+      {role || isNew ? (
+        <ChatRightsSection
+          workspaceId={selectedWorkspace?.id ?? null}
+          systemKey={role?.systemKey}
+          readOnly={draft.readOnly}
+          editable={editable}
+          roleName={draft.name.trim() || "This role"}
+        />
+      ) : null}
 
       <ExplainStrip>{explain}</ExplainStrip>
 

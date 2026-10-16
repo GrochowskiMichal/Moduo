@@ -251,7 +251,8 @@ export class ReferenceStore {
     const target: ReferenceLevel = level === "card" || e.loaded === "card" ? "card" : "chip";
     const deep = target === "card" ? e.loaded === "card" : e.loaded !== null;
     // A private or deleted answer has nothing deeper to show.
-    const final = e.state.status === "private" || e.state.status === "deleted";
+    const final =
+      e.state.status === "private" || e.state.status === "deleted" || e.state.status === "archived";
     const old = e.fetchedAt > 0 && this.now() - e.fetchedAt > this.maxAgeMs;
     const needed = !deep && !(final && e.loaded !== null);
     if (!needed && !e.stale && !old) return;
@@ -316,7 +317,9 @@ export class ReferenceStore {
           ? { status: "ready", facts: answer.facts }
           : answer.status === "deleted"
             ? { status: "deleted", kind: e.kind }
-            : { status: "private" };
+            : answer.status === "archived"
+              ? { status: "archived", kind: e.kind, title: answer.title }
+              : { status: "private" };
       e.loaded = batch.level === "card" ? "card" : (e.loaded ?? "chip");
       e.fetchedAt = this.now();
       // Changed again while this read was out: show it, and read once more.

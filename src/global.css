@@ -33,6 +33,16 @@ body,
   color: var(--foreground);
 }
 
+/* MOD-161: a sideways swipe that runs out of a scroller (the Board at its
+   end, Home's pages, anything that doesn't scroll sideways) stops at the page.
+   Without this the desktop app's WebKit view rubber-bands the whole window
+   sideways and a browser swipes back a page. The app root and the content
+   area clip instead of scrolling (app-chrome.tsx), so nothing can shift it. */
+html,
+body {
+  overscroll-behavior-x: none;
+}
+
 @font-face {
   font-family: "Pilat Extended";
   src:
@@ -852,4 +862,34 @@ body,
 
 .timeline-grid[data-unit="month"] {
   background-image: none;
+}
+
+/* ═══ Chat's stream (chat v2, CV-7a) ═══
+   One virtualized list (MessageStream). The scroller never anchors by itself
+   (TanStack keeps the reader's row in place, spike 1), and its text fades at
+   both ends (CH29): a mask, so no colour is involved in either theme. The
+   rows are absolutely placed by the virtualizer and contained for layout. */
+.chat-stream {
+  overflow-y: auto;
+  overflow-anchor: none;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black var(--stream-fade-top),
+    black calc(100% - var(--stream-fade-bottom)),
+    transparent 100%
+  );
+}
+
+.chat-stream-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  contain: layout style;
+}
+
+.chat-stream-item[data-sticky] {
+  position: sticky;
+  z-index: 1;
 }

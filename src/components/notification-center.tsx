@@ -152,7 +152,13 @@ export function NotificationCenter() {
         setHistoryOpen(false);
         window.dispatchEvent(
           new CustomEvent(ENTITY_OPEN_EVENT, {
-            detail: { type: link.entityType, id: link.entityId, workspaceId: link.workspaceId },
+            detail: {
+              type: link.entityType,
+              id: link.entityId,
+              workspaceId: link.workspaceId,
+              messageId: link.messageId,
+              chainId: link.chainId,
+            },
           }),
         );
       }
@@ -307,7 +313,7 @@ export function NotificationCenter() {
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger
-              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-transparent text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               aria-label="Notifications"
             >
               <Icon name="bell" size={14} />

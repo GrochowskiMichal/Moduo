@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
 import {
+  AppAvatar,
   Avatar,
   AvatarBadge,
   AvatarFallback,
@@ -8,6 +9,8 @@ import {
   AvatarGroupCount,
   AvatarImage,
   PersonAvatar,
+  PresenceBadge,
+  type PresenceShape,
   TeamMark,
 } from "./avatar";
 import { AtThreeDensities } from "./kit-densities";
@@ -145,6 +148,53 @@ export const Identity: Story = {
   ),
 };
 
+/**
+ * Apps, not people (MOD-149): what an API key wrote shows the gray circle with
+ * a small plug; Moduo's own work (a repeat's catch-up, a waiting-on that came in) the same
+ * circle with the Moduo mark (the follow-up), at every rung and density; a
+ * former member keeps "?". No colour and no AI badge: the name beside it says
+ * who.
+ */
+export const ConnectedApp: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 font-sans text-sm text-foreground">
+      <div className="flex flex-wrap items-center gap-4">
+        <span className="flex items-center gap-1.5">
+          <AppAvatar />
+          Claude Code (app)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <AppAvatar />
+          Maciej · via Claude Code
+        </span>
+        <span className="flex items-center gap-1.5">
+          <AppAvatar kind="moduo" />
+          Moduo caught this up to Tue (recurrence)
+        </span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          <PersonAvatar name="?" />
+          Former member
+        </span>
+      </div>
+      {(["app", "moduo"] as const).map((kind) => (
+        <div key={kind} className="flex items-end gap-3">
+          {(["icon", "sm", "default", "lg"] as const).map((size) => (
+            <AppAvatar key={size} kind={kind} size={size} />
+          ))}
+        </div>
+      ))}
+      <AtThreeDensities>
+        <div className="flex items-center gap-2">
+          <AppAvatar />
+          <AppAvatar kind="moduo" />
+          <PersonAvatar name="?" />
+          <PersonAvatar name="Maciej" id="u-maciej" />
+        </div>
+      </AtThreeDensities>
+    </div>
+  ),
+};
+
 /** An 8 × 8 PNG, inline so the story (and its visual test) needs no network. */
 const PHOTO_FIXTURE =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR42mOIqjiBFTEMLQkA8ZFmgbB74tkAAAAASUVORK5CYII=";
@@ -205,6 +255,44 @@ export const Densities: Story = {
         <TeamMark name="Design" id="t-design" />
         <TeamMark name="Development" id="t-dev" />
         <PersonAvatar name="Maciej" id="u-maciej" size="sm" />
+      </div>
+    </AtThreeDensities>
+  ),
+};
+
+const SHAPES: PresenceShape[] = ["reachable", "away", "dnd", "focusing", "in_call", "offline"];
+
+/** The presence shapes (chat v2 §10, AC11.1): green only for reachable; grey
+ *  outline, bar, target and dot; nothing offline. At three densities. */
+export const Presence: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex items-center gap-4" data-testid="presence-shapes">
+        {SHAPES.map((state) => (
+          <span key={state} className="flex items-center gap-4">
+            <span className="relative flex">
+              <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="icon" />
+              <PresenceBadge state={state} />
+            </span>
+            <span className="relative flex">
+              <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="lg" />
+              <PresenceBadge state={state} size="lg" />
+            </span>
+          </span>
+        ))}
+      </div>
+    </AtThreeDensities>
+  ),
+};
+
+/** The feed rung (chat's stream, CH29): 32 / 28 / 24 px beside a message. */
+export const Feed: Story = {
+  render: () => (
+    <AtThreeDensities>
+      <div className="flex items-center gap-2">
+        <PersonAvatar name="Sofia Ortiz" id="u-sofia" size="feed" />
+        <PersonAvatar name="Mike Chen" id="u-mike" size="feed" />
+        <PersonAvatar name="?" size="feed" />
       </div>
     </AtThreeDensities>
   ),

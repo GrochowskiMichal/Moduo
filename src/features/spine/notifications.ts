@@ -402,6 +402,10 @@ export type NotificationDeepLink = {
    * it is: AT-3). Absent: the one you're in.
    */
   workspaceId?: string;
+  /** A chat notice's message: the conversation opens on it (CV-3, AC1.6). */
+  messageId?: string;
+  /** That message's chain (its root), opened beside the stream. */
+  chainId?: string;
 };
 
 const ROUTE_BY_TYPE: Record<string, string> = {
@@ -467,5 +471,16 @@ export function notificationDeepLink(group: NotificationGroup): NotificationDeep
   if (!group.targetType || !group.targetId) return null;
   const route = ROUTE_BY_TYPE[group.targetType];
   if (!route) return null;
+  if (group.targetType === "chat_channel") {
+    // chat.mention / chat.reply name the message and its chain's root.
+    const { message_id: messageId, parent_id: chainId } = newestItem(group).payload;
+    return {
+      route,
+      entityType: group.targetType,
+      entityId: group.targetId,
+      ...(typeof messageId === "string" && messageId ? { messageId } : {}),
+      ...(typeof chainId === "string" && chainId ? { chainId } : {}),
+    };
+  }
   return { route, entityType: group.targetType, entityId: group.targetId };
 }

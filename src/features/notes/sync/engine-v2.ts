@@ -8,8 +8,9 @@
  *   fold  = notes_op_save_snapshot once the log grows (client-side compaction
  *           — Yjs can't merge in plpgsql).
  * Metadata mutations made offline queue in the meta-outbox and replay FIFO on
- * reconnect. Realtime broadcast plugs into this engine in NO-6; until then
- * freshness comes from refocus/reconnect pulls (the designed fallback path).
+ * reconnect. Live freshness comes from `notesV2.joinLive` (NR-7: the server
+ * tells viewers to pull after each save); refocus/reconnect pulls remain the
+ * fallback. Pushes flush after a 400 ms debounce, at most every 800 ms.
  *
  * Status contract (the quiet dot): "synced" — nothing while healthy;
  * "pending" — local edits queued/flushing; "offline" — a push/pull failed,
@@ -161,8 +162,8 @@ type NoteSession = {
  * IndexedDB connection for the whole workspace visit otherwise. */
 const MAX_IDLE_SESSIONS = 8;
 
-/** After an agent write lands, wait this long (for the broadcast and pull
- * of the same write to settle) before re-saving the merged body. */
+/** After an agent write lands, wait this long (for the live pull of the
+ * same write to settle) before re-saving the merged body. */
 const AGENT_BODY_RESAVE_MS = 1500;
 
 type StatusListener = (status: NotesSyncStatusV2) => void;

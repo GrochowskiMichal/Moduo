@@ -45,7 +45,7 @@ export function UpdateBanner({ state, onCheck, onDownload, onRestart }: Props) {
           ) : null}
           <button
             onClick={onDownload}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <ArrowDownToLine className="h-3 w-3" aria-hidden />
             Download Update
@@ -87,7 +87,7 @@ export function UpdateBanner({ state, onCheck, onDownload, onRestart }: Props) {
           <p className="text-sm font-medium text-foreground">Update downloaded</p>
           <button
             onClick={onRestart}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <RefreshCw className="h-3 w-3" aria-hidden />
             Restart to Update

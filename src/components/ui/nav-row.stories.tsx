@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react";
-import { Hash, Inbox, Layers, ListChecks } from "lucide-react";
+import { Hash, Inbox, Layers, ListChecks, Plus } from "lucide-react";
 import { useState } from "react";
 
 import type { LabelColor } from "../tag-colors";
 import { AtThreeDensities } from "./kit-densities";
-import { type MenuKit, NavRow, NavRowDot, NavSectionHeader } from "./nav-row";
+import { type MenuKit, NavRow, NavRowDot, NavRowField, NavSectionHeader } from "./nav-row";
 
 const meta: Meta<typeof NavRow> = {
   title: "Components/ui/nav-row",
@@ -169,6 +169,48 @@ export const Densities: Story = {
         <NavRow label="Inbox" icon={<Inbox aria-hidden />} count={4} current />
         <NavRow label="Moduo App" icon={<NavRowDot color="blue" />} count={64} menu={rowMenu} />
         <NavRow label="Marketing" icon={<NavRowDot color="amber" />} count={1} menu={rowMenu} />
+      </nav>
+    </AtThreeDensities>
+  ),
+};
+
+/** Unread is weight (Chat's conversations): bold label, foreground colour, no pill; a count only for what is addressed to you. Three densities. */
+export const UnreadDensities: Story = {
+  render: () => (
+    <AtThreeDensities direction="column">
+      <nav aria-label="Conversations" className="flex flex-col gap-px">
+        <NavRow label="General" icon={<Hash aria-hidden />} />
+        <NavRow label="Launch v1" icon={<Hash aria-hidden />} unread />
+        <NavRow label="Acme rebrand" icon={<Hash aria-hidden />} unread count={2} current />
+        <NavRow label="Random" icon={<Hash aria-hidden />} unread />
+      </nav>
+    </AtThreeDensities>
+  ),
+};
+
+/**
+ * Inline name fields (MOD-159): a new project in the "+ New project" row's
+ * place, an area's rename in its header's, each beside the row it stands in
+ * for. Same height, padding and icon slot, the text where the label's is, and
+ * the row rings while edited. Double-click a row to rename it in place.
+ */
+export const NameFields: Story = {
+  render: () => (
+    <AtThreeDensities direction="column">
+      <nav aria-label="Projects" className="flex flex-col gap-px">
+        <NavSectionHeader label="Client work" count={3} onToggle={() => {}} />
+        <NavRowField kind="header" aria-label="Area name" defaultValue="Client work" />
+        <NavRow
+          label="Moduo App"
+          icon={<NavRowDot color="blue" />}
+          count={64}
+          onRename={() => {}}
+        />
+        <NavRowField
+          aria-label="Project name"
+          icon={<Plus className="size-icon-sm" aria-hidden />}
+          placeholder="Project name — Enter to add"
+        />
       </nav>
     </AtThreeDensities>
   ),

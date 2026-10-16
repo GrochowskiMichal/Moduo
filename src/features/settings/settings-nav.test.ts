@@ -16,6 +16,7 @@ describe("SETTINGS_GROUPS (grouped nav — DF-19a)", () => {
       "preferences",
       "timeregion",
       "focus",
+      "chat",
     ]);
     // Storage (AT-3) sits with the workspace's own settings, after access.
     expect(byLabel.Workspace).toEqual([

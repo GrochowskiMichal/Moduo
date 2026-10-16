@@ -43,7 +43,7 @@ Run the work in numbered phases. Each phase = a fresh Claude Code session = one 
 
 Each task: shadcn CLI add → strip default zinc classes → swap to our token classes → add `<name>.stories.tsx` with default + variant + interactive states → add Playwright visual snapshot.
 
-- [ ] **Button** — variants: default, secondary, outline, ghost, destructive, link. Sizes: sm, md (default), lg, icon. Token classes only: `bg-primary text-primary-foreground hover:bg-primary-hover`, etc. Height from `var(--ctrl-h)` (density-driven). Focus ring composes `--shadow-focus`. *New.*
+- [ ] **Button** — variants: default, secondary, outline, ghost, destructive, link. Sizes: sm, md (default), lg, icon. Token classes only: `bg-primary text-primary-foreground hover:bg-primary-hover`, etc. Height from `var(--ctrl-h)` (density-driven). Focus ring: offset-less `ring-2 ring-ring/50` (`--shadow-focus` retired, MOD-160). *New.*
 
 - [ ] **Input, Textarea, Label**. Single primitive task because they always travel together. Input uses `bg-input border-border focus-visible:ring-ring`. Textarea extends Input for multi-line. Label wraps native `<label>` with shadcn's pattern. *New.*
 

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, render, waitFor } from "@testing-library/react";
 
 import {
+  AppAvatar,
   AVATAR_HUES,
   avatarHue,
   initialsOf,
@@ -94,6 +95,66 @@ describe("PersonAvatar and TeamMark", () => {
     expect(mark.textContent).toBe("DS");
     rerender(<TeamMark name="Design" id="t1" letters="dx" />);
     expect(container.textContent).toBe("DX");
+  });
+});
+
+describe("AppAvatar (MOD-149)", () => {
+  it("a connected app is the gray circle with a plug, never the former member's ?", () => {
+    const { container } = render(<AppAvatar />);
+    const root = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(root.getAttribute("data-kind")).toBe("app");
+    expect(root.getAttribute("data-label")).toBe("gray");
+    expect(root.getAttribute("data-size")).toBe("icon");
+    expect(root.getAttribute("aria-hidden")).toBe("true");
+    expect(root.className).toContain("rounded-avatar");
+    expect(container.textContent).toBe("");
+    const glyph = container.querySelector("svg") as SVGElement;
+    expect(glyph.getAttribute("class")).toContain("lucide-plug");
+    expect(glyph.getAttribute("class")).toContain("size-2.5");
+    // Neutral, like the initials: no hue and no accent (brand decision 40a).
+    const fallback = container.querySelector("[data-slot=avatar-fallback]") as HTMLElement;
+    expect(fallback.className).toContain("bg-label-fill");
+    expect(fallback.className).not.toMatch(/primary|accent/);
+  });
+
+  it("scales its plug with the rung", () => {
+    const { container } = render(<AppAvatar size="lg" />);
+    expect(container.querySelector("svg")?.getAttribute("class")).toContain("size-5");
+  });
+
+  it("Moduo's own work is the gray circle with the Moduo mark, not the plug (follow-up)", () => {
+    const { container } = render(<AppAvatar kind="moduo" />);
+    const root = container.querySelector("[data-slot=avatar]") as HTMLElement;
+    expect(root.getAttribute("data-kind")).toBe("moduo");
+    expect(root.getAttribute("data-label")).toBe("gray");
+    expect(root.getAttribute("aria-hidden")).toBe("true");
+    expect(root.className).toContain("rounded-avatar");
+    // The mark, decorative (no title, no img role) and in the foreground colour.
+    expect(container.querySelector(".lucide-plug")).toBeNull();
+    const mark = container.querySelector("svg") as SVGElement;
+    expect(mark.getAttribute("viewBox")).toBe("0 0 1000 1000");
+    expect(mark.getAttribute("aria-hidden")).toBe("true");
+    expect(mark.getAttribute("role")).toBeNull();
+    expect(mark.querySelector("title")).toBeNull();
+    expect(mark.querySelectorAll("path").length).toBeGreaterThan(0);
+    expect(mark.getAttribute("class")).toContain("text-foreground");
+    expect(mark.getAttribute("class")).toContain("size-icon-sm");
+    expect(container.textContent).toBe("");
+    // Neutral as the plug: no hue, no accent (brand decision 40a).
+    const fallback = container.querySelector("[data-slot=avatar-fallback]") as HTMLElement;
+    expect(fallback.className).toContain("bg-label-fill");
+    expect(fallback.className).not.toMatch(/primary|accent/);
+  });
+
+  it("scales the Moduo mark with the rung", () => {
+    const sizes = { sm: "size-5", default: "size-7", lg: "size-9" } as const;
+    for (const [size, glyph] of Object.entries(sizes)) {
+      const { container, unmount } = render(
+        <AppAvatar kind="moduo" size={size as keyof typeof sizes} />,
+      );
+      expect(container.querySelector("svg")?.getAttribute("class")).toContain(glyph);
+      unmount();
+    }
   });
 });
 

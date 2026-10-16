@@ -13,7 +13,8 @@ Read [docs/gotchas/supabase.md](../docs/gotchas/supabase.md) before changing any
 - Every new table ships RLS policies, and the PR says how owner, member and outsider access was checked. RLS does not gate `TRUNCATE`; never `GRANT ALL` to `anon`.
 - The MCP connector and Edge Functions use the service role, which bypasses RLS. Scope every service-role query to the caller's workspace in code.
 - Every new user-owned table must be covered by account erasure (`delete-account`). `auth.admin.deleteUser` only erases what foreign keys cascade.
-- Changes here are Tier 2 risk: `/code-review ultra` + `/claude-security` before merging (see `/s3`).
+- Changes here are Tier 2 risk: run the `validator` subagent before merging (ultra review and security scan paused until beta; see AGENTS.md §Review gates).
+- Migrations reach prod only through a release: [docs/release.md](../docs/release.md).
 
 ## Contracts and Edge Functions
 - A new closed value goes into `functions/_shared/contracts/` (`parse*`, `normalize*`, `is*`) and into a Postgres CHECK in the same change.

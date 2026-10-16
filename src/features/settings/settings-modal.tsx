@@ -6,6 +6,7 @@ import {
   Info,
   KeyRound,
   type LucideIcon,
+  MessageSquare,
   Palette,
   Plug,
   Sliders,
@@ -30,6 +31,7 @@ import { AdvancedSection } from "./sections/advanced-section";
 import { ApiKeysSection } from "./sections/api-keys-section";
 import { AppearanceSection } from "./sections/appearance-section";
 import { BillingSection } from "./sections/billing-section";
+import { ChatSection } from "./sections/chat-section";
 import { FocusSection } from "./sections/focus-section";
 import { IntegrationsSection } from "./sections/integrations-section";
 import { PreferencesSection } from "./sections/preferences-section";
@@ -71,6 +73,7 @@ const SECTIONS: SectionEntry[] = [
   },
   { id: "timeregion", label: "Time & region", icon: Globe, Component: TimeRegionSection },
   { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
+  { id: "chat", label: "Chat", icon: MessageSquare, Component: ChatSection },
   {
     id: "advanced",
     label: "Advanced",
@@ -188,7 +191,7 @@ export function SettingsModal() {
               <div className="flex items-center justify-between px-2 pt-1">
                 <Eyebrow>Settings</Eyebrow>
                 <DialogPrimitive.Close
-                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   aria-label="Close settings"
                 >
                   <X className="size-4" />

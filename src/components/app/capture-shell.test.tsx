@@ -123,6 +123,95 @@ async function openWithShortcut() {
 
 const chip = () => screen.getByRole("button", { name: /^Capture type: / });
 
+describe("a prefilled open (chat's T, CV-7b)", () => {
+  /** A Task body that reports its context and shows the line. */
+  function spyType(seen: Array<CaptureBodyProps["context"]>): CaptureTypeDef {
+    return {
+      ...TASK,
+      Body: (props: CaptureBodyProps) => {
+        seen.push(props.context);
+        return testBody("Task")(props);
+      },
+    };
+  }
+  const openWith = async (request?: { draft?: string; fromRefused?: boolean }) => {
+    await act(async () => {
+      dispatchOpenCapture(request);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+  const close = async () => {
+    press({ metaKey: true, shiftKey: true, key: "K" });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  };
+  const line = () =>
+    (screen.getByRole("textbox", { name: "Task title" }) as HTMLInputElement).value;
+
+  it("holds its own draft for the open (type switches included); a normal open holds none", async () => {
+    const seen: Array<CaptureBodyProps["context"]> = [];
+    const { unlisten } = renderShell([spyType(seen), NOTE]);
+    await openWith({ draft: "From chat" });
+    const held = seen.at(-1)?.held;
+    expect(held).toEqual({ current: null });
+    press({ metaKey: true, key: "2" });
+    expect(chip().getAttribute("aria-label")).toBe("Capture type: Note");
+    const before = seen.length;
+    press({ metaKey: true, key: "3" });
+    expect(chip().getAttribute("aria-label")).toBe("Capture type: Task");
+    expect(seen.length).toBeGreaterThan(before);
+    expect(seen.at(-1)?.held).toBe(held);
+    await close();
+    await openWith();
+    expect(seen.at(-1)?.held).toBeUndefined();
+    await close();
+    await openWith({ draft: "Another message" });
+    expect(seen.at(-1)?.held).not.toBe(held);
+    await close();
+    await openWith({ draft: "Refused one", fromRefused: true });
+    expect(seen.at(-1)?.fromRefused).toBe(true);
+    expect(seen.at(-1)?.held).toEqual({ current: null });
+    unlisten();
+  });
+
+  it("the next open gives back the line kept before it (after one or several prefilled opens)", async () => {
+    const { unlisten } = renderShell([TASK, NOTE]);
+    await openWith();
+    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+      target: { value: "Kept with Esc" },
+    });
+    await close();
+    await openWith({ draft: "From chat" });
+    expect(line()).toBe("From chat");
+    fireEvent.change(screen.getByRole("textbox", { name: "Task title" }), {
+      target: { value: "From chat, edited" },
+    });
+    await close();
+    await openWith({ draft: "A second message" });
+    expect(line()).toBe("A second message");
+    await close();
+    await openWith();
+    expect(line()).toBe("Kept with Esc");
+    unlisten();
+  });
+
+  it("a shell mounted again starts its prefilled opens fresh", async () => {
+    const seen: Array<CaptureBodyProps["context"]> = [];
+    const first = renderShell([spyType(seen)]);
+    await openWith({ draft: "From chat" });
+    const held = seen.at(-1)?.held as { current: unknown };
+    held.current = { segments: [{ text: "typed" }] };
+    first.unlisten();
+    first.unmount();
+    const second = renderShell([spyType(seen)]);
+    await openWith({ draft: "From chat" });
+    expect(seen.at(-1)?.held).toEqual({ current: null });
+    expect(line()).toBe("From chat");
+    second.unlisten();
+  });
+});
+
 describe("opening", () => {
   it("⌘⇧K opens the capture as Task, filed to the Inbox", async () => {
     const { unlisten } = renderShell([TASK, NOTE]);

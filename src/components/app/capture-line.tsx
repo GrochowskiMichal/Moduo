@@ -64,6 +64,7 @@ function CaptureLine({
   onDraftChange,
   writable,
   onDone,
+  context,
 }: LineOptions & CaptureBodyProps) {
   const navigate = useNavigate();
   const { runtime } = useAuth();
@@ -103,6 +104,7 @@ function CaptureLine({
           body: text,
         });
         onDraftChange("");
+        if (created.ref) context?.onCreated?.(created.ref, created.title);
         // Home widgets refetch on this event, so a capture shows there live;
         // the toast's "Open" jump remounts the module page everywhere else.
         requestDashboardDataRefresh();
@@ -132,6 +134,7 @@ function CaptureLine({
       onDraftChange,
       onDone,
       navigate,
+      context,
     ],
   );
 

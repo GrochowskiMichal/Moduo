@@ -324,6 +324,8 @@ export const bucketRowSchema = z.object({
   trash_moved_task_ids: z.union([z.array(z.string()), z.null()]).optional(),
   /** TV-U16: the project's description (plain text, '' for none). Absent before its migration. */
   description: optStr,
+  /** MOD-155: the client when it's a company (never set with client_contact_id). Absent before its migration. */
+  client_company_id: optStr,
 });
 export type BucketRow = z.infer<typeof bucketRowSchema>;
 
@@ -428,6 +430,14 @@ export const timeRegionRowSchema = z.object({
   hour_cycle: z.union([hourCycleSchema, z.null()]).optional(),
   date_order: z.union([dateOrderSchema, z.null()]).optional(),
   share_time_with_owner: z.boolean().optional(),
+  // CV-18: quiet hours, "HH:MM" in the person's zone (the range may cross midnight).
+  quiet_hours: z
+    .object({
+      on: z.boolean(),
+      from: z.union([z.string(), z.null()]).optional(),
+      to: z.union([z.string(), z.null()]).optional(),
+    })
+    .optional(),
 });
 
 export const activityRowSchema = z.object({

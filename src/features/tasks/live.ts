@@ -221,6 +221,17 @@ export function timestampMicros(ts: string | null | undefined): number | null {
   return seconds * 1000 + micros;
 }
 
+/** A server stamp moved back by `ms`, keeping its microseconds. */
+export function stampMinus(stamp: string, ms: number): string {
+  const micros = timestampMicros(stamp);
+  if (micros === null) return stamp;
+  const at = micros - ms * 1000;
+  const whole = Math.floor(at / 1000);
+  const frac = String(((at % 1000) + 1000) % 1000).padStart(3, "0");
+  // toISOString gives milliseconds; add the remaining microseconds.
+  return new Date(whole).toISOString().replace(/Z$/, `${frac}+00:00`);
+}
+
 /** Whether `incoming` is strictly newer than `local` (unknown stamps count as newer). */
 export function isNewer(incoming: string | null | undefined, local: string | null | undefined) {
   const a = timestampMicros(incoming);
