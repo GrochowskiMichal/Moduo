@@ -306,4 +306,20 @@ SELECT test.ok(test.value_as('A', format($q$SELECT string_agg(channel_name, ',')
 SELECT test.ok(coalesce(test.value_as('N', format($q$SELECT string_agg(channel_name, ',') FROM public.chat_conversations_for_item('contact', %L::uuid)$q$,
   test.ref('CI'))), '') = '', 'N (not in P) sees no line for it');
 
+-- ── Linking a deleted message; a conversation missing from the registry ────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_message', %L, 'spawned-from', 'manual')$q$,
+    test.id('W'), test.id('T'), test.mid('q1')));
+  PERFORM test.ok(v LIKE 'P0002 %', 'a deleted message can''t be linked either', v);
+  -- Its registry row gone (links cascade), a send that refers to an item still goes through.
+  DELETE FROM public.entities WHERE workspace_id = test.id('W') AND entity_type = 'chat_channel' AND entity_id = test.ref('Q');
+  v := test.send('A', 'q3', 'Q', 'back to ' || test.uri('task', 'T'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.mentions('Q', 'T') = 1,
+    'a conversation missing from the registry is registered and the line written', v);
+END;
+$$;
+
 -- ── CV-13: the channel link half goes below ────────────────────────────────

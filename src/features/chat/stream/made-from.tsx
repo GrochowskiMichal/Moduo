@@ -75,13 +75,22 @@ export function useMadeFrom(
   const ids = useRef(messageIds);
   ids.current = messageIds;
 
+  // Only the newest read lands: an older one (another conversation, an
+  // earlier window) finishing late must not overwrite it.
+  const seq = useRef(0);
+
   const load = useCallback(() => {
     const wanted = ids.current;
     if (!runtime || wanted.length === 0) return;
-    void runtime
-      .madeFrom(wanted.slice(-MADE_FROM_BATCH))
-      .then((rows) => {
-        const next = groupMadeFrom(rows);
+    const mine = ++seq.current;
+    const batches: Promise<ChatMadeFrom[]>[] = [];
+    for (let i = 0; i < wanted.length; i += MADE_FROM_BATCH) {
+      batches.push(runtime.madeFrom(wanted.slice(i, i + MADE_FROM_BATCH)));
+    }
+    void Promise.all(batches)
+      .then((parts) => {
+        if (mine !== seq.current) return;
+        const next = groupMadeFrom(parts.flat());
         const now = Date.now();
         for (const [mid, items] of local.current) {
           const list = next.get(mid) ?? [];

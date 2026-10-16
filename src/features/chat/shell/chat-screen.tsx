@@ -520,11 +520,20 @@ export function ChatScreen({
   // T / "Make a task": the app's capture opens as Task with the message's words (AC2.7).
   // With a removable "From: Sofia's message in Acme" chip that links the task
   // to the message, and "Became a task" under the message once made (CV-10).
-  const madeFromIds = useMemo(
-    () =>
-      (streamWin?.rows ?? []).filter((m) => !m.sendState && m.kind === "message").map((m) => m.id),
-    [streamWin?.rows],
-  );
+  // The messages on screen: the stream's and the open reply chains' (a wrapped
+  // chain's replies show only in the panel).
+  const madeFromIds = useMemo(() => {
+    const ids = new Set<string>();
+    const take = (m: ChatMessage | null | undefined) => {
+      if (m && !m.sendState && m.kind === "message") ids.add(m.id);
+    };
+    for (const m of streamWin?.rows ?? []) take(m);
+    for (const chain of Object.values(snap.chains)) {
+      take(chain.root);
+      for (const r of chain.replies) take(r);
+    }
+    return [...ids];
+  }, [streamWin?.rows, snap.chains]);
   const madeFrom = useMadeFrom(runtime?.chat ?? null, madeFromIds);
   const addMadeFrom = madeFrom.add;
   const makeTaskFrom = useCallback(
@@ -1038,46 +1047,48 @@ export function ChatScreen({
         title: "Reply chain",
         icon: MessagesSquare,
         render: () => (
-          <ChainItem
-            chat={runtime?.chat ?? null}
-            rootId={entry.id}
-            chain={chain}
-            selfId={selfId}
-            personOf={personOf}
-            onLoad={loadChain}
-            onPersonClick={openPerson}
-            onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
-            onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
-            renderComposer={
-              channel && canWriteHere && root?.channelId === channel.id
-                ? (placeholder) => (
-                    <ChatComposer
-                      key={`chain:${entry.id}`}
-                      runtime={runtime}
-                      workspaceId={workspaceId}
-                      selfId={selfId}
-                      people={people}
-                      placeholder={placeholder}
-                      initial={store?.draft(channel.id, entry.id) ?? ""}
-                      onSend={(body) => {
-                        if (!store || !body.trim()) return false;
-                        store.send({
-                          channelId: channel.id,
-                          body,
-                          replyToId: entry.id,
-                          format: "v2",
-                        });
-                        typingStore?.send(channel.id, entry.id, true);
-                        return true;
-                      }}
-                      onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
-                      onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
-                      onEscapeEmpty={panelStack.back}
-                    />
-                  )
-                : undefined
-            }
-          />
+          <MadeFromScope value={madeFrom}>
+            <ChainItem
+              chat={runtime?.chat ?? null}
+              rootId={entry.id}
+              chain={chain}
+              selfId={selfId}
+              personOf={personOf}
+              onLoad={loadChain}
+              onPersonClick={openPerson}
+              onWrapUp={root && canWrapUp(root) ? () => askWrapUp(entry.id) : undefined}
+              onReopen={root && canWrapUp(root) ? () => reopen(entry.id) : undefined}
+              renderComposer={
+                channel && canWriteHere && root?.channelId === channel.id
+                  ? (placeholder) => (
+                      <ChatComposer
+                        key={`chain:${entry.id}`}
+                        runtime={runtime}
+                        workspaceId={workspaceId}
+                        selfId={selfId}
+                        people={people}
+                        placeholder={placeholder}
+                        initial={store?.draft(channel.id, entry.id) ?? ""}
+                        onSend={(body) => {
+                          if (!store || !body.trim()) return false;
+                          store.send({
+                            channelId: channel.id,
+                            body,
+                            replyToId: entry.id,
+                            format: "v2",
+                          });
+                          typingStore?.send(channel.id, entry.id, true);
+                          return true;
+                        }}
+                        onDraftChange={(stored) => store?.setDraft(channel.id, entry.id, stored)}
+                        onTyping={(active) => typingStore?.send(channel.id, entry.id, !active)}
+                        onEscapeEmpty={panelStack.back}
+                      />
+                    )
+                  : undefined
+              }
+            />
+          </MadeFromScope>
         ),
       };
     }

@@ -21,11 +21,6 @@ export function mentionedInName(
   return row.channelKind === "channel" ? (row.channelName ?? "a channel") : "a direct message";
 }
 
-/** Whether a link is a conversation's "Mentioned in" (drawn as a line, not a card). */
-export function isMentionedInLink(otherType: string, relationKind: string): boolean {
-  return otherType === "chat_channel" && relationKind === "mentions";
-}
-
 export function MentionedInLines({
   entityType,
   entityId,

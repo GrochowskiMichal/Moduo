@@ -596,7 +596,6 @@ export function LinkedSection({
           </Button>
         </p>
       ) : null}
-      {mentioned}
       <div className="flex flex-col gap-1.5">
         {shown.map((row) => (
           <div key={row.link.id} className="group relative">
@@ -628,6 +627,7 @@ export function LinkedSection({
           Show {rows.length - LINKED_VISIBLE} more
         </Button>
       ) : null}
+      {mentioned}
     </div>
   );
 }

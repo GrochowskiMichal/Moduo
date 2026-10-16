@@ -115,6 +115,13 @@ BEGIN
   IF p_msg.id IS NULL OR p_actor IS NULL OR position('moduo://' IN coalesce(p_msg.body, '')) = 0 THEN
     RETURN 0;
   END IF;
+  -- The conversation is the links' source: make sure it's in the registry, so
+  -- a send never fails on a conversation that was never registered.
+  INSERT INTO public.entities (workspace_id, entity_type, entity_id, label, icon)
+  SELECT c.workspace_id, 'chat_channel', c.id, CASE WHEN c.kind = 'channel' THEN c.name ELSE '' END, NULL
+    FROM public.chat_channels c
+   WHERE c.id = p_msg.channel_id AND c.workspace_id = p_msg.workspace_id
+  ON CONFLICT (workspace_id, entity_type, entity_id) DO NOTHING;
   FOR r IN SELECT b.ref_type, b.ref_id FROM public.chat__body_refs(p_msg.body) b LOOP
     -- The registry's names for the two kinds a link may spell differently.
     v_type := CASE r.ref_type WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread' ELSE r.ref_type END;
@@ -494,6 +501,13 @@ BEGIN
   IF p_entity_type IN ('chat_channel', 'chat_message') THEN
     IF NOT public.perm_can_see_entity(p_workspace_id, p_entity_type, p_entity_id) THEN
       RAISE EXCEPTION 'That conversation isn''t available.' USING ERRCODE = '42501';
+    END IF;
+    -- As chat_op_register_message: only a live message, never a system line.
+    IF p_entity_type = 'chat_message' AND NOT EXISTS (
+         SELECT 1 FROM public.chat_messages m
+          WHERE m.id = p_entity_id AND m.workspace_id = p_workspace_id
+            AND m.deleted_at IS NULL AND m.kind = 'message') THEN
+      RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
     END IF;
     INSERT INTO public.entities (workspace_id, entity_type, entity_id, label, icon)
     SELECT p_workspace_id, p_entity_type, p_entity_id,
