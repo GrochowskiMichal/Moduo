@@ -8,7 +8,7 @@
 
 import { legacyTaskStatus, type TaskStatusCategory } from "@contracts/vocabularies";
 import type { CaptureSource } from "../../../lib/capture-source";
-import type { EntityRef } from "../../../lib/entity-links";
+import { type EntityRef, isChatEnd } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { isNetworkError } from "../../../lib/sync/network";
 import type { WorkspaceStore } from "../../../lib/sync/store";
@@ -241,7 +241,7 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
     for (const link of item.links) {
       // "Mentioned in" lines to a conversation or a message are Chat's own:
       // the server refuses them from here, so the reference stays text.
-      if (link.ref.type === "chat_channel" || link.ref.type === "chat_message") continue;
+      if (isChatEnd(link.ref.type)) continue;
       await extra(() =>
         runtime.spine.createLink({
           workspaceId,

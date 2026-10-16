@@ -433,6 +433,27 @@ SELECT test.ok(NOT EXISTS (
      AND (l.source_type IN ('chat_channel', 'chat_message') OR l.target_type IN ('chat_channel', 'chat_message'))
      AND NOT (l.source_type = 'chat_channel' AND l.origin = 'ref')),
   'no live mention row with a chat end is outside Chat''s shape');
+SELECT test.ok(NOT EXISTS (
+  SELECT 1 FROM public.entity_links l
+   WHERE l.deleted_at IS NULL AND l.origin = 'ref' AND l.workspace_id <> test.id('W')
+     AND (l.source_type IN ('chat_channel', 'chat_message') OR l.target_type IN ('chat_channel', 'chat_message'))
+     AND NOT (l.source_type = 'chat_channel' AND l.relation_kind = 'mentions')),
+  'origin ref with a chat end marks Chat''s own rows alone');
+
+-- Type names are compared as written by any caller (case and spaces aside).
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, ' Chat_Channel ', %L, 'mentions', 'manual')$q$,
+    test.id('W'), test.id('T2'), test.ref('Q')));
+  PERFORM test.ok(v NOT LIKE 'ok %', 'a chat type spelled another way is refused too', v);
+  -- Other kinds with a chat end stay open to the app (Chat's own server paths add more).
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_channel', %L, 'references', 'manual')$q$,
+    test.id('W'), test.id('T2'), test.ref('Q')));
+  PERFORM test.ok(v LIKE 'ok %', 'a plain reference between a task and a conversation still works', v);
+END;
+$$;
 
 -- Registry labels: a message has none; a conversation carries its channel's
 -- name, none for a direct or group message or a purged channel.

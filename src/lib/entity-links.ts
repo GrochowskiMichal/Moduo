@@ -119,6 +119,28 @@ export function coerceRelationKind(value: unknown): RelationKind {
   return isRelationKind(value) ? value : DEFAULT_RELATION_KIND;
 }
 
+/** A conversation or a message: links to them follow Chat's rules. */
+export function isChatEnd(type: string): boolean {
+  return type === "chat_channel" || type === "chat_message";
+}
+
+/**
+ * A link only Chat's send and edit write ("Mentioned in"): a mention, or an
+ * inline reference, with a conversation or a message at either end. No other
+ * path makes, moves, retypes or removes one (the server refuses).
+ */
+export function isChatOwnedLink(link: {
+  sourceType: string;
+  targetType: string;
+  relationKind: string;
+  origin?: string | null;
+}): boolean {
+  return (
+    (isChatEnd(link.sourceType) || isChatEnd(link.targetType)) &&
+    (link.relationKind === "mentions" || link.origin === "ref")
+  );
+}
+
 /** Are two entity refs the same entity? (A self-link target.) */
 export function isSameEntity(a: EntityRef, b: EntityRef): boolean {
   return a.type === b.type && a.id === b.id;

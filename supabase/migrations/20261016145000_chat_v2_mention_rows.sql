@@ -18,7 +18,9 @@
 --   3. chat_conversations_for_item counts only rows the chat path writes
 --      (source a conversation, relation `mentions`, origin `ref`).
 --   4. Once: a live mention row with a chat end that isn't in the chat path's
---      shape is closed (soft delete).
+--      shape becomes a plain reference (closed only when the pair already has
+--      one), and other live rows with a chat end lose origin `ref`, so origin
+--      `ref` with a chat end marks the chat path's rows alone.
 --   5. Registry labels: a message has none; a conversation carries its
 --      channel's current name, none for a direct or group message or a purged
 --      channel.
@@ -52,9 +54,9 @@ BEGIN
   END IF;
   -- "Mentioned in" lines come from Chat's send and edit alone; checked before
   -- the registry is touched.
-  IF (p_source_type IN ('chat_channel', 'chat_message') OR p_target_type IN ('chat_channel', 'chat_message'))
+  IF (lower(btrim(p_source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(p_target_type)) IN ('chat_channel', 'chat_message'))
      AND (v_kind = 'mentions' OR v_origin = 'ref') THEN
-    RAISE EXCEPTION 'Mentions of a conversation or a message are written by Chat only.'
+    RAISE EXCEPTION 'Mentions and inline references with a conversation or a message are written by Chat only.'
       USING ERRCODE = '42501';
   END IF;
 
@@ -128,7 +130,7 @@ BEGIN
 
   -- A "Mentioned in" line is history: it stays.
   IF v_link.relation_kind = 'mentions'
-     AND (v_link.source_type IN ('chat_channel', 'chat_message') OR v_link.target_type IN ('chat_channel', 'chat_message')) THEN
+     AND (lower(btrim(v_link.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(v_link.target_type)) IN ('chat_channel', 'chat_message')) THEN
     RAISE EXCEPTION 'A mention in a conversation stays: it''s part of the conversation''s history.'
       USING ERRCODE = '42501';
   END IF;
@@ -180,9 +182,9 @@ BEGIN
     RETURN v_link;
   END IF;
   -- "Mentioned in" lines are Chat's: none is retyped, and none is made here.
-  IF (v_link.source_type IN ('chat_channel', 'chat_message') OR v_link.target_type IN ('chat_channel', 'chat_message'))
+  IF (lower(btrim(v_link.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(v_link.target_type)) IN ('chat_channel', 'chat_message'))
      AND (v_link.relation_kind = 'mentions' OR v_kind = 'mentions') THEN
-    RAISE EXCEPTION 'Mentions of a conversation or a message are written by Chat only.'
+    RAISE EXCEPTION 'Mentions and inline references with a conversation or a message are written by Chat only.'
       USING ERRCODE = '42501';
   END IF;
 
@@ -239,7 +241,7 @@ BEGIN
   END IF;
   -- A "Mentioned in" line is history: it stays.
   IF v_link.relation_kind = 'mentions'
-     AND (v_link.source_type IN ('chat_channel', 'chat_message') OR v_link.target_type IN ('chat_channel', 'chat_message')) THEN
+     AND (lower(btrim(v_link.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(v_link.target_type)) IN ('chat_channel', 'chat_message')) THEN
     RAISE EXCEPTION 'A mention in a conversation stays: it''s part of the conversation''s history.'
       USING ERRCODE = '42501';
   END IF;
@@ -296,8 +298,8 @@ BEGIN
     RAISE EXCEPTION 'An entity cannot link to itself.';
   END IF;
   -- "Mentioned in" lines come from Chat's send and edit alone.
-  IF p_target_type IN ('chat_channel', 'chat_message') AND (v_kind = 'mentions' OR v_origin = 'ref') THEN
-    RAISE EXCEPTION 'Mentions of a conversation or a message are written by Chat only.'
+  IF lower(btrim(p_target_type)) IN ('chat_channel', 'chat_message') AND (v_kind = 'mentions' OR v_origin = 'ref') THEN
+    RAISE EXCEPTION 'Mentions and inline references with a conversation or a message are written by Chat only.'
       USING ERRCODE = '42501';
   END IF;
 
@@ -375,8 +377,8 @@ BEGIN
     RAISE EXCEPTION 'An entity cannot link to itself.';
   END IF;
   -- "Mentioned in" lines come from Chat's send and edit alone.
-  IF p_target_type IN ('chat_channel', 'chat_message') AND (v_kind = 'mentions' OR v_origin = 'ref') THEN
-    RAISE EXCEPTION 'Mentions of a conversation or a message are written by Chat only.'
+  IF lower(btrim(p_target_type)) IN ('chat_channel', 'chat_message') AND (v_kind = 'mentions' OR v_origin = 'ref') THEN
+    RAISE EXCEPTION 'Mentions and inline references with a conversation or a message are written by Chat only.'
       USING ERRCODE = '42501';
   END IF;
 
@@ -453,12 +455,34 @@ GRANT EXECUTE ON FUNCTION public.chat_conversations_for_item(text, uuid) TO auth
 -- ── 7. Mention rows with a chat end not in the chat path's shape (once) ────
 -- They give no line, can't be removed through any op, and share the chat
 -- path's pair key: closed here (soft delete), so a later send writes its own.
+-- A row the app made on purpose (an @ in a note) stays a link: it becomes a
+-- plain `references` link with origin `manual` when the pair has none yet, and
+-- is closed (soft delete) only when it would duplicate one. Afterwards every
+-- live row with a chat end and origin `ref` is one the chat path wrote.
+UPDATE public.entity_links l
+   SET relation_kind = 'references', origin = 'manual'
+ WHERE l.deleted_at IS NULL
+   AND l.relation_kind = 'mentions'
+   AND (lower(btrim(l.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(l.target_type)) IN ('chat_channel', 'chat_message'))
+   AND NOT (l.source_type = 'chat_channel' AND l.origin = 'ref')
+   AND NOT EXISTS (
+     SELECT 1 FROM public.entity_links r
+      WHERE r.workspace_id = l.workspace_id AND r.pair_key = l.pair_key
+        AND r.relation_kind = 'references' AND r.deleted_at IS NULL);
+
 UPDATE public.entity_links l
    SET deleted_at = now()
  WHERE l.deleted_at IS NULL
    AND l.relation_kind = 'mentions'
-   AND (l.source_type IN ('chat_channel', 'chat_message') OR l.target_type IN ('chat_channel', 'chat_message'))
+   AND (lower(btrim(l.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(l.target_type)) IN ('chat_channel', 'chat_message'))
    AND NOT (l.source_type = 'chat_channel' AND l.origin = 'ref');
+
+UPDATE public.entity_links l
+   SET origin = 'manual'
+ WHERE l.deleted_at IS NULL
+   AND l.origin = 'ref'
+   AND (lower(btrim(l.source_type)) IN ('chat_channel', 'chat_message') OR lower(btrim(l.target_type)) IN ('chat_channel', 'chat_message'))
+   AND NOT (l.source_type = 'chat_channel' AND l.relation_kind = 'mentions');
 
 -- ── 8. Registry labels for conversations and messages (once; idempotent) ───
 UPDATE public.entities e
