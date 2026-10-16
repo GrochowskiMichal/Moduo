@@ -10,8 +10,8 @@ import { GridCanvas } from "./grid-canvas";
 const WHEEL_THRESHOLD = 60;
 /** Ignore further wheel this long after a turn, so trackpad momentum can't skip pages (assumption 11). */
 const WHEEL_LOCKOUT_MS = 350;
-/** Computed `overflow-x` values that let a box scroll sideways under a wheel. */
-const SCROLLS_X = new Set(["auto", "scroll", "overlay"]);
+/** Computed `overflow-x` values that let a box scroll sideways under a wheel (`overlay` computes to `auto`). */
+const SCROLLS_X = new Set(["auto", "scroll"]);
 /** What can take focus inside a page (its widgets' controls). */
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -107,13 +107,13 @@ export function DashboardPager({
       accum.current = 0;
       return;
     }
+    const now = performance.now();
+    if (now < lockedUntil.current) return;
     // A widget that scrolls sideways keeps the swipe, to its end and past it.
     if (scrollsSideways(e.target, viewport)) {
       accum.current = 0;
       return;
     }
-    const now = performance.now();
-    if (now < lockedUntil.current) return;
     accum.current += e.deltaX;
     if (Math.abs(accum.current) >= WHEEL_THRESHOLD) {
       onPage(accum.current > 0 ? 1 : -1);

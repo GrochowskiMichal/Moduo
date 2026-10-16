@@ -172,11 +172,18 @@ describe("DashboardPager swipes (MOD-163)", () => {
     const size = withScroller("auto", 400);
     const onPage = rs.fn();
     renderPager(0, onPage);
-    size(screen.getByTestId("scroller"));
-    // From inside its content, at whatever scroll position: the box's own swipe.
+    const scroller = screen.getByTestId("scroller");
+    size(scroller);
+    // Mid-way, then at its right end pushing further right: the box's own swipe.
+    scroller.scrollLeft = 150;
+    fireEvent.wheel(screen.getByTestId("inside"), { deltaX: 120, deltaY: 0 });
+    Object.defineProperty(scroller, "scrollLeft", { configurable: true, value: 300 });
     for (let i = 0; i < 5; i++) {
       fireEvent.wheel(screen.getByTestId("inside"), { deltaX: 120, deltaY: 0 });
     }
+    // At its left end pushing further left.
+    Object.defineProperty(scroller, "scrollLeft", { configurable: true, value: 0 });
+    fireEvent.wheel(scroller, { deltaX: -120, deltaY: 0 });
     expect(onPage).not.toHaveBeenCalled();
     // The rest of the same widget still pages.
     fireEvent.wheel(screen.getByRole("button", { name: "a" }), { deltaX: 80, deltaY: 0 });
