@@ -156,3 +156,21 @@ export function useChannelManagers(
   if (kind !== "channel") return [];
   return held.channelId === channelId ? held.ids : null;
 }
+
+/**
+ * The workspace's people under chat's own read of them. Chat's read knows no
+ * roles: the workspace's role and read-only flag stay (they decide who can be
+ * made a manager).
+ */
+export function mergePeople<P extends { userId: string; role: string | null; readOnly?: boolean }>(
+  members: readonly P[],
+  chatPeople: readonly P[],
+): Record<string, P> {
+  const out: Record<string, P> = {};
+  for (const p of members) out[p.userId] = p;
+  for (const p of chatPeople) {
+    const ws = out[p.userId];
+    out[p.userId] = { ...ws, ...p, role: p.role ?? ws?.role ?? null, readOnly: ws?.readOnly };
+  }
+  return out;
+}

@@ -10,7 +10,7 @@ import { daysLeft, makePrivateCopy } from "../dialogs/channel-dialogs";
 import { mapChannel, mapDeletedChannel, mapMember, mapMessage } from "../mappers";
 import type { ChatChannel, ChatMember, ChatMessage } from "../model";
 import { composerLine, newestPost } from "./composer-state";
-import { managesChannel, personPosts } from "./use-chat-rights";
+import { managesChannel, mergePeople, personPosts } from "./use-chat-rights";
 
 const ME = "me";
 const member = { canPost: true, manageAny: false };
@@ -232,5 +232,24 @@ describe("who can be made a manager: a role that posts (rule 1)", () => {
   it("reads someone unknown as a member until the rows arrive", () => {
     expect(personPosts(null, undefined)).toBe(true);
     expect(personPosts(null, { role: null, readOnly: true })).toBe(false);
+  });
+});
+
+describe("chat's read of people keeps the workspace's role", () => {
+  it("a null role from chat doesn't erase the workspace's role or read-only flag", () => {
+    const ws = [{ userId: "v", name: "Vi", role: "member", readOnly: true }];
+    const chat = [
+      { userId: "v", name: "Vi R.", role: null },
+      { userId: "x", name: "X", role: null },
+    ];
+    const out = mergePeople<{
+      userId: string;
+      name: string;
+      role: string | null;
+      readOnly?: boolean;
+    }>(ws, chat);
+    expect(out.v).toMatchObject({ name: "Vi R.", role: "member", readOnly: true });
+    expect(personPosts([{ role_key: "viewer", post: false }], out.v)).toBe(false);
+    expect(out.x.role).toBeNull();
   });
 });

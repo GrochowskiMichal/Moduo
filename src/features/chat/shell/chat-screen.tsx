@@ -72,6 +72,7 @@ import { ConversationToolbar } from "./conversation-toolbar";
 import { buildChatSidebar, conversationTitle, dmPeople, sidebarOrder } from "./sidebar-model";
 import {
   managesChannel,
+  mergePeople,
   personPosts,
   rightsFrom,
   useChannelManagers,
@@ -183,16 +184,10 @@ export function ChatScreen({
   const rights = rightsFrom(capsRows, role, readOnly);
 
   // ── people ────────────────────────────────────────────────────────────────
-  const peopleById = useMemo(() => {
-    const out: Record<string, ChatPerson> = {};
-    for (const p of members) out[p.userId] = p;
-    // Chat's own read knows no roles: keep the workspace's (role, read-only) under it.
-    for (const p of Object.values(snap.people)) {
-      const ws = out[p.userId];
-      out[p.userId] = { ...ws, ...p, role: p.role ?? ws?.role ?? null, readOnly: ws?.readOnly };
-    }
-    return out;
-  }, [members, snap.people]);
+  const peopleById = useMemo(
+    () => mergePeople(members, Object.values(snap.people)),
+    [members, snap.people],
+  );
   const personOf = useCallback((id: string) => peopleById[id], [peopleById]);
   // Only someone whose role posts can be made a manager (the server's rule).
   const canBeManager = useCallback(
@@ -1365,12 +1360,16 @@ export function ChatScreen({
             )}
             onAdd={async (ids) => {
               const added = (await store?.addMembers(channel.id, ids)) ?? 0;
-              // The server skips anyone a manager removed (only a manager adds them back).
+              // The server skips anyone already in it or no longer in the workspace,
+              // and (for someone who isn't a manager) anyone a manager removed.
               if (added < ids.length) {
+                const why = canManage
+                  ? "the rest are already in it or have left the workspace."
+                  : "only a manager can add back someone who was removed.";
                 toast(
                   added === 0
-                    ? "Nobody was added: only a manager can add back someone who was removed."
-                    : `Added ${added} of ${ids.length}: only a manager can add back someone who was removed.`,
+                    ? `Nobody was added: ${why}`
+                    : `Added ${added} of ${ids.length}: ${why}`,
                 );
               }
             }}
