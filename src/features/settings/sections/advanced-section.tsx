@@ -2,6 +2,8 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { readChatExport, signedFileBytes } from "@/features/chat/export";
+import { listMyClients, listMyNoticePauses } from "@/lib/notices/clients";
 import { listSavedStatuses, readMyStatus } from "@/lib/statuses/api";
 import {
   closeUploadsDb,
@@ -117,6 +119,40 @@ async function gatherExport(
       status: userId ? await readMyStatus(userId) : null,
       saved: await listSavedStatuses(),
     })),
+    // CV-22: every conversation you can read (the app's own reads, so its read
+    // rules), JSON plus a Markdown file per conversation.
+    (async (): Promise<ModuleReadResult> => {
+      try {
+        if (!userId) throw new Error("Sign in to export chat.");
+        const c = runtime.chat;
+        const chat = await readChatExport(
+          {
+            listChannels: (ws) => c.listChannels(ws),
+            page: (args) => c.page(args),
+            chain: (rootId) => c.chain(rootId),
+            people: (ws) => c.people(ws),
+            // CV-9: each conversation's files, then their bytes through signed links.
+            files: c.files ? (args) => c.files!(args) : undefined,
+            fileBytes: signedFileBytes((paths, ttl) => runtime.attachments.signedUrls(paths, ttl)),
+          },
+          workspaceId,
+          userId,
+        );
+        return { module: "chat", ok: true, data: chat.data, files: chat.files };
+      } catch (err) {
+        return {
+          module: "chat",
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    })(),
+    // CV-22: your own apps and tabs, and the workspaces whose notices you
+    // paused (CV-18), nobody else's.
+    read("devices", async () => ({
+      devices: userId ? await listMyClients(userId) : [],
+      noticePauses: userId ? await listMyNoticePauses(userId) : [],
+    })),
   ]);
 }
 
@@ -188,8 +224,8 @@ export function AdvancedSection() {
       };
       const bundle = buildExportBundle(results, meta);
       const entries: Record<string, Uint8Array> = {};
-      for (const [name, json] of Object.entries(bundle.entries)) {
-        entries[name] = strToU8(json);
+      for (const [name, contents] of Object.entries(bundle.entries)) {
+        entries[name] = typeof contents === "string" ? strToU8(contents) : contents;
       }
       downloadZip(exportZipName(meta), entries);
       const failed = Object.keys(bundle.errors);
@@ -287,9 +323,10 @@ export function AdvancedSection() {
         <div className="flex flex-col gap-1">
           <h3 className="font-display text-base text-foreground">Export workspace data</h3>
           <p className="text-sm text-muted-foreground">
-            Download this workspace&apos;s tasks, notes, contacts, calendar events, and habits as a
-            single <code className="font-mono text-xs">.zip</code> of JSON files. A read-only copy
-            of your own data — nothing is changed or removed.
+            Download this workspace&apos;s tasks, notes, contacts, calendar events, habits and the
+            chat conversations you can read as a single{" "}
+            <code className="font-mono text-xs">.zip</code> of JSON files, with each conversation
+            also as Markdown. A read-only copy of your own data — nothing is changed or removed.
           </p>
         </div>
         <div>

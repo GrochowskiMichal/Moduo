@@ -427,6 +427,40 @@ export function sanitizeLayout(raw: unknown): DashboardLayout {
   return { version: 1, pages };
 }
 
+/**
+ * Fit every widget to a size its type still offers (a type may drop a size:
+ * chat's widget dropped L in CV-22). A saved size the type no longer has
+ * becomes the largest allowed size that fits inside its old span, so the page
+ * stays overlap-free, then each changed page compacts. `allowed` comes from the
+ * catalog (the engine stays dependency-free).
+ */
+export function fitAllowedSizes(
+  layout: DashboardLayout,
+  allowed: (type: WidgetInstance["type"]) => readonly WidgetSize[],
+): DashboardLayout {
+  let changed = false;
+  const pages = layout.pages.map((page) => {
+    let pageChanged = false;
+    const widgets = page.widgets.map((w) => {
+      const sizes = allowed(w.type);
+      if (sizes.length === 0 || sizes.includes(w.size)) return w;
+      const old = spanOf(w.size);
+      const inside = sizes
+        .filter((s) => spanOf(s).w <= old.w && spanOf(s).h <= old.h)
+        .sort((a, b) => spanOf(b).w * spanOf(b).h - spanOf(a).w * spanOf(a).h);
+      const size = inside[0];
+      // No allowed size fits inside the old span: it keeps its size.
+      if (!size) return w;
+      pageChanged = true;
+      return { ...w, size, config: { ...w.config } };
+    });
+    if (!pageChanged) return page;
+    changed = true;
+    return { ...page, widgets: compact(widgets) };
+  });
+  return changed ? { ...layout, pages } : layout;
+}
+
 // ── Validation helper (shared by tests & repair reasoning) ──────────────────
 
 /** A layout of widgets is valid iff every one is in-bounds and none overlap. */

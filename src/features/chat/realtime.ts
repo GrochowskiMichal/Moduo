@@ -137,16 +137,15 @@ export function postgresChangesSource(socket: ChatSocket): ChatLiveSource {
         table: "chat_members",
         filter: `user_id=eq.${me}`,
         on: (p) => {
-          const row = p.eventType === "DELETE" ? p.old : p.new;
+          // A removed row carries only its key, the row's own id (CV-22), so it
+          // says nothing about anyone and is ignored: leaving and removal stamp
+          // `left_at` (an update), and a deleted conversation arrives on
+          // chat_channels.
+          if (p.eventType === "DELETE") return;
+          const row = p.new;
           const channelId = field(row, "channel_id");
           if (!channelId) return;
-          // Realtime doesn't filter deletes: anyone's removed row arrives (its
-          // old record is the key, which names the person). Only yours counts.
           if (field(row, "user_id") !== me) return;
-          if (p.eventType === "DELETE") {
-            sink({ type: "member-left", channelId });
-            return;
-          }
           if (field(row, "workspace_id") !== ws) return;
           if (memberLeft(row)) {
             sink({ type: "member-left", channelId });

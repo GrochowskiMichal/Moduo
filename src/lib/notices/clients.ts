@@ -83,3 +83,52 @@ export async function ackNotices(ids: string[]): Promise<void> {
     // The browser's push may ring once more: never worth an error.
   }
 }
+
+/** One of your apps or tabs as the export lists it (CV-22). */
+export type MyClient = {
+  id: string;
+  surface: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  lastActiveAt: string | null;
+};
+
+/** Your own apps and tabs (the table's rule shows each person only their own). */
+export async function listMyClients(userId: string): Promise<MyClient[]> {
+  const { data, error } = await supabaseClient
+    .from("user_clients")
+    .select("id, surface, user_agent, created_at, last_seen_at, last_active_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((r) => ({
+    id: String(r.id),
+    surface: String(r.surface),
+    userAgent: r.user_agent == null ? null : String(r.user_agent),
+    createdAt: String(r.created_at),
+    lastSeenAt: String(r.last_seen_at),
+    lastActiveAt: r.last_active_at == null ? null : String(r.last_active_at),
+  }));
+}
+
+/** A workspace whose notices you paused (CV-18), as the export lists it (CV-22). */
+export type MyNoticePause = { workspaceId: string; pausedAt: string };
+
+/** Your own paused workspaces (the table's rule shows each person only their own). */
+export async function listMyNoticePauses(userId: string): Promise<MyNoticePause[]> {
+  const { data, error } = await supabaseClient
+    .from("user_notice_pauses")
+    .select("workspace_id, paused_at")
+    .eq("user_id", userId)
+    .order("paused_at", { ascending: true });
+  if (error) {
+    // Before CV-18's migration the table doesn't exist: nothing paused.
+    if (error.code === "42P01" || error.code === "PGRST205") return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((r) => ({
+    workspaceId: String(r.workspace_id),
+    pausedAt: String(r.paused_at),
+  }));
+}
