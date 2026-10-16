@@ -3,8 +3,8 @@
  * set (DESIGN_BRIEF §3c). Pure registry + filter so the grammar is
  * unit-testable; execution lives in the slash-menu plugin.
  *
- * `/toggle` and `/embed-task` are gone. `/mindmap` (renamed from
- * `/embed-mindmap`) is deliberately demoted to the last group. Command names
+ * `/toggle` and `/embed-task` are gone, and `/mindmap` left with NR-4 (old
+ * embeds still load and render a quiet "Mindmap (unavailable)" line). Command names
  * are labels — cheap to rename later; keyword aliases keep discovery
  * forgiving (`child`/`subpage` → /page, `check`/`checkbox` → /todo).
  */
@@ -26,10 +26,9 @@ export type SlashCommandId =
   | "task"
   | "contact"
   | "company"
-  | "event"
-  | "mindmap";
+  | "event";
 
-export type SlashCommandGroup = "Basics" | "Insert" | "Embeds";
+export type SlashCommandGroup = "Basics" | "Insert";
 
 export type SlashCommandDef = {
   id: SlashCommandId;
@@ -129,8 +128,8 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   {
     id: "note",
     title: "Note",
-    description: "Link an existing note",
-    keywords: ["ref", "reference", "link"],
+    description: "Link a note — or type [[",
+    keywords: ["ref", "reference", "link", "[["],
     group: "Insert",
   },
   {
@@ -160,14 +159,6 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
     description: "Reference a calendar event",
     keywords: ["calendar", "meeting"],
     group: "Insert",
-  },
-  // ── Embeds (demoted; kept working, no new investment) ───────────────────────
-  {
-    id: "mindmap",
-    title: "Mindmap",
-    description: "Embed a mindmap",
-    keywords: ["embed", "canvas", "map"],
-    group: "Embeds",
   },
 ] as const;
 
