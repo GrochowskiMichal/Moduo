@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { clearSignedUrlCache, signPaths } from "@/features/attachments/signed-urls";
+import { AttachmentOpError } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
 import { memoryChatCopy } from "../store/device-copy";
 import { ChatStore, FILES_ALL_STOPPED } from "../store/store";
@@ -285,12 +286,17 @@ describe("the composer's files", () => {
 
   // A remover whose calls resolve (or fail) when the test says.
   function remover() {
-    const calls: { id: string; ok: () => void; fail: () => void }[] = [];
+    const calls: { id: string; ok: () => void; fail: (code?: string) => void }[] = [];
     const runtime = {
       attachments: {
         remove: (id: string) =>
           new Promise<void>((ok, no) => {
-            calls.push({ id, ok, fail: () => no(new Error("offline")) });
+            calls.push({
+              id,
+              ok,
+              fail: (code?: string) =>
+                no(code ? new AttachmentOpError(code) : new Error("offline")),
+            });
           }),
       },
     };
@@ -400,6 +406,69 @@ describe("the composer's files", () => {
     expect(store.files("c").map((f) => f.fileName)).toEqual(["new.png"]);
     expect(r.calls.map((c) => c.id)).toEqual(["a-q1"]);
     expect(store.busy("c")).toBe(true);
+  });
+
+  it("× during finalize: a failed take-out brings the chip back; not found means it's gone", async () => {
+    const q = fakeQueue();
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+    );
+    const r = remover();
+    await store.add({
+      channelId: "c",
+      workspaceId: WS,
+      userId: ME,
+      files: [file("a.png"), file("b.png")],
+    });
+    store.remove("c", "q1", r.runtime);
+    store.remove("c", "q2", r.runtime);
+    const before = store.view("c").returned;
+    r.calls[0]!.fail();
+    r.calls[1]!.fail("attachment_not_found");
+    await settle();
+    expect(store.files("c").map((f) => [f.fileName, f.problem])).toEqual([
+      ["a.png", REMOVE_FAILED],
+    ]);
+    expect(store.view("c").returned).toBe(before + 1);
+    expect(store.take("c")).toEqual({ id: "m", files: 1 });
+  });
+
+  it("a stale file whose row the server already purged leaves for good (no loop)", async () => {
+    const q = fakeQueue();
+    let now = 0;
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+      () => now,
+    );
+    const r = remover();
+    store.setRemover(r.runtime);
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("old.png")] });
+    q.finish("q1");
+    now += DRAFT_FILE_STALE_MS + 1;
+    expect(store.dropStale("c")).toBe(true);
+    r.calls[0]!.fail("attachment_not_found");
+    await settle();
+    expect(store.files("c")).toEqual([]);
+    expect(store.busy("c")).toBe(false);
+    expect(store.dropStale("c")).toBe(false);
+  });
+
+  it("a stale stopped file leaves quietly: no line, the send doesn't hold", async () => {
+    const q = fakeQueue();
+    let now = 0;
+    const store = new ComposerFilesStore(
+      () => q as never,
+      () => "m",
+      () => now,
+    );
+    await store.add({ channelId: "c", workspaceId: WS, userId: ME, files: [file("x.png")] });
+    q.fail("q1");
+    now += DRAFT_FILE_STALE_MS + 1;
+    expect(store.dropStale("c")).toBe(false);
+    expect(store.notice("c")).toBeNull();
+    expect(store.files("c")).toEqual([]);
   });
 
   it("only files that didn't stop make a message of files only", () => {

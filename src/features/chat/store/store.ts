@@ -186,10 +186,10 @@ export const DEFAULT_CHAT_TIMING: ChatStoreTiming = {
   joinDebounceMs: 250,
 };
 
-/** The stream's page: it draws 50 and needs one past the edge. */
 /** CV-9: why a message of files only whose files all stopped isn't sent. */
 export const FILES_ALL_STOPPED = "its files didn't upload";
 
+/** The stream's page: it draws 50 and needs one past the edge. */
 export const PAGE = 51;
 /** A jump loads this many on each side of its target (+1 to know there's more). */
 export const JUMP_SPAN = 100;

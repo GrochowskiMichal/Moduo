@@ -222,6 +222,53 @@ describe("grammar, handle chip, IME: the keys", () => {
   });
 });
 
+describe("⏎ while files are being added or taken out (CV-9)", () => {
+  const filesApi = (busy: boolean, returned: number) => ({
+    files: [],
+    notice: null,
+    busy,
+    returned,
+    add: () => {},
+    remove: () => {},
+    dropStale: () => false,
+    take: () => null,
+  });
+  const props = (onSend: ReturnType<typeof rs.fn>, busy: boolean, returned: number) => ({
+    runtime: null,
+    workspaceId: null,
+    selfId: "me",
+    people: [],
+    placeholder: "Message #general",
+    initial: "hello",
+    onSend,
+    files: filesApi(busy, returned),
+  });
+
+  it("holds with a line, and sends once the files are ready", async () => {
+    const onSend = rs.fn();
+    const { rerender } = render(createElement(ChatComposer, props(onSend, true, 0)));
+    await settle();
+    const box = screen.getByRole("textbox", { name: "Message #general" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.getByText("Waiting for the files…")).toBeTruthy();
+    rerender(createElement(ChatComposer, props(onSend, false, 0)));
+    await settle();
+    expect(onSend).toHaveBeenCalledWith("hello");
+  });
+
+  it("a file that came back while held stops the hold: nothing goes", async () => {
+    const onSend = rs.fn();
+    const { rerender } = render(createElement(ChatComposer, props(onSend, true, 0)));
+    await settle();
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Message #general" }), { key: "Enter" });
+    rerender(createElement(ChatComposer, props(onSend, false, 1)));
+    await settle();
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByText("Waiting for the files…")).toBeNull();
+  });
+});
+
 describe("grammar, handle chip, IME: the handle chip (CV-10, AC4.1)", () => {
   it("`MOD-142` counts once it's finished, and only with the workspace's key", () => {
     expect(handleFinishedAt("see MOD-142 ", 12, ["MOD"])).toEqual({

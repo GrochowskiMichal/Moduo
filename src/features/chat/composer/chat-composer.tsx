@@ -293,6 +293,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const [error, setError] = useState<string | null>(null);
   // ⏎ while files are still being read in (or taken out): sent once they are.
   const [holding, setHolding] = useState(false);
+  // A file that came back while held (its take-out failed) stops the hold:
+  // the person sees it before anything goes.
+  const holdReturned = useRef(0);
   const [plusOpen, setPlusOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const menus = useRef(new Set<string>());
@@ -375,6 +378,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     const stored = editor.getEditorState().read($exportStored);
     // CV-9: files still being read in hold the send (their id isn't taken yet).
     if (mode === "message" && files?.busy) {
+      holdReturned.current = files.returned;
       setHolding(true);
       return;
     }
@@ -412,8 +416,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   }, [mode, initial, onCancel, onSend, flushDraft, files?.busy, hasFiles]);
 
   useEffect(() => {
-    if (holding && !files?.busy) send();
-  }, [holding, files?.busy, send]);
+    if (!holding) return;
+    if ((files?.returned ?? 0) !== holdReturned.current) {
+      setHolding(false);
+      return;
+    }
+    if (!files?.busy) send();
+  }, [holding, files?.busy, files?.returned, send]);
 
   // ── inserting: chips, emoji, captures ───────────────────────────────────
   const insertAt = useCallback((saved: RangeSelection | null, run: () => void) => {

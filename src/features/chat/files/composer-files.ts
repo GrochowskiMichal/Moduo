@@ -8,7 +8,7 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { getUploadQueue } from "@/lib/uploads";
-import { describeProblem } from "@/lib/uploads/errors";
+import { AttachmentOpError, describeProblem } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
 import { newMessageId } from "../store/outbox";
 import { capNotice, fileShape, takeFiles } from "./model";
@@ -52,6 +52,8 @@ type Draft = {
   adding: number;
   /** Files being taken back out on the server: until they are, they'd still go. */
   removing: number;
+  /** Bumped when a file comes back (its take-out failed): a held send must not go on its own. */
+  returned: number;
 };
 
 type Remover = Pick<ModuoRuntime, "attachments">;
@@ -164,8 +166,13 @@ export class ComposerFilesStore {
         () => {
           if (back) release(back);
         },
-        () => {
-          if (back) this.putBack(channelId, d, back, at);
+        (e: unknown) => {
+          // Not found: the row is gone already (purged, or let go by the
+          // queue), which is what was asked.
+          const gone = e instanceof AttachmentOpError && e.code === "attachment_not_found";
+          if (!back) return;
+          if (gone) release(back);
+          else this.putBack(channelId, d, back, at);
         },
       )
       .finally(() => {
@@ -181,6 +188,10 @@ export class ComposerFilesStore {
       return;
     }
     e.problem = REMOVE_FAILED;
+    // It still goes: counted from now, so the stale check doesn't take it out
+    // (and fail) over and over.
+    e.addedAt = this.now();
+    d.returned += 1;
     const i = at < 0 ? d.entries.length : Math.min(at, d.entries.length);
     d.entries.splice(i, 0, e);
   }
@@ -238,6 +249,7 @@ export class ComposerFilesStore {
       files: this.files(channelId),
       notice: this.notice(channelId),
       busy: this.busy(channelId),
+      returned: this.drafts.get(channelId)?.returned ?? 0,
     };
     this.views.set(channelId, { token, view });
     return view;
@@ -251,7 +263,14 @@ export class ComposerFilesStore {
   private draft(channelId: string): Draft {
     let d = this.drafts.get(channelId);
     if (!d) {
-      d = { messageId: this.mint(), entries: [], notice: null, adding: 0, removing: 0 };
+      d = {
+        messageId: this.mint(),
+        entries: [],
+        notice: null,
+        adding: 0,
+        removing: 0,
+        returned: 0,
+      };
       this.drafts.set(channelId, d);
     }
     return d;
@@ -370,16 +389,21 @@ export class ComposerFilesStore {
     entry.attachmentId ??= this.known.get(key) ?? null;
     this.known.delete(key);
     d.notice = null;
-    const inQueue = this.queue()
+    const item = this.queue()
       .getSnapshot()
-      .items.some((item) => item.id === key);
+      .items.find((x) => x.id === key);
+    const inQueue = !!item;
+    // A stopped upload never goes: if its take-out fails it needn't come back.
+    const stopped = item?.state === "failed" || item?.state === "rejected";
     if (inQueue) {
       this.queue().dismiss(key);
       // Its finalize may already be on the way (the queue attaches a file
-      // dismissed while finalizing): take the row out too. A failure here is
-      // the row the dismiss already let go; onUploaded catches a late finish.
-      if (entry.attachmentId) this.dropOnServer(channelId, d, entry.attachmentId, null);
-      release(entry);
+      // dismissed while finalizing): take the row out too. Not found = the
+      // dismiss already let it go; any other failure brings the chip back.
+      if (entry.attachmentId && this.remover) {
+        this.dropOnServer(channelId, d, entry.attachmentId, stopped ? null : entry, i);
+        if (stopped) release(entry);
+      } else release(entry);
     } else if (entry.attachmentId) {
       this.dropOnServer(channelId, d, entry.attachmentId, entry, i);
     } else {
@@ -396,10 +420,13 @@ export class ComposerFilesStore {
   dropStale(channelId: string): boolean {
     const d = this.drafts.get(channelId);
     if (!d) return false;
+    const states = new Map(this.files(channelId).map((f) => [f.key, f.state]));
     const stale = d.entries.filter((e) => this.now() - e.addedAt > DRAFT_FILE_STALE_MS);
-    if (stale.length === 0) return false;
+    // A stopped file never goes anyway: it leaves quietly.
+    const going = stale.filter((e) => states.get(e.key) !== "failed");
     for (const e of stale) this.remove(channelId, e.key, null);
-    d.notice = staleNotice(stale.length);
+    if (going.length === 0) return false;
+    d.notice = staleNotice(going.length);
     this.emit();
     return true;
   }
@@ -480,12 +507,16 @@ export type ComposerFilesView = {
   files: ComposerFile[];
   notice: string | null;
   busy: boolean;
+  /** Changes when a file came back after a failed take-out. */
+  returned: number;
 };
 
 export type ComposerFilesApi = {
   files: ComposerFile[];
   notice: string | null;
   busy: boolean;
+  /** Changes when a file came back after a failed take-out: a held send stops. */
+  returned: number;
   add: (files: File[]) => void;
   remove: (key: string) => void;
   /** Before a send: take out files too old to go (true: the send holds). */
@@ -527,6 +558,7 @@ export function useComposerFiles(args: {
     files: snap.files,
     notice: snap.notice,
     busy: snap.busy,
+    returned: snap.returned,
     add,
     remove,
     dropStale,

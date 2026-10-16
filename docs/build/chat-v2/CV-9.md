@@ -34,7 +34,7 @@
 - **Chat files don't show in Settings → Storage's largest files** (they count in the pool; `attachments_largest` lists task files) · agent's choice, deferred — confirmed for building, revisitable (open call for Maciej) · rejected: listing them there without a way to open their conversation.
 - **A draft's file older than 23 h is taken out at send, with a line, and the send holds** · agent · the server drops it after a day: rejected: a words message silently going without it, or a files-only one failing "empty" forever.
 - **A message of files only whose files all stopped says "Not sent · its files didn't upload" with Delete only** · agent · Retry could only fail "empty" · rejected: a Retry that never works.
-- **× on a file the server holds waits for the server; a failed take-out brings the chip back** · agent · else the file still went unseen · rejected: fire and forget.
+- **× on a file the server holds waits for the server; a failed take-out brings the chip back** (and stops a held ⏎: nothing goes until the person sees it); "not found" counts as taken out (purged, or let go by the queue) · agent · else the file still went unseen · rejected: fire and forget.
 - **Details has no Files section** (CV-8b's choice kept): the Files view is one switch away.
 - **Drop target = the whole conversation column**, no drag-over highlight · agent · rejected: a composer-only zone.
 - **No `download=` on signed links** · agent · a download already fetches the bytes and saves them under the file's name; a link is never opened in the browser · rejected: a second signing path for chat.
@@ -51,6 +51,7 @@
 - `can_access('chat_message', …)` is false: chat files need their own policy branch.
 - `attachments_largest` lists task files only, `attachments_op_restore` restores task files only, `storage__unsettled_bytes` and `attachments_op_abandon` already cover chat uploads (checked).
 
+- **Open:** the first round of preview links may reuse a cached link with about a minute left (the re-sign timer counts from mount); pictures load at mount, so only a reload after that minute would miss.
 - **Open:** `message-stream.tsx`'s row height adds 256 px for any message with files (only `fileCount` is known before the files load, not their kind); the loading placeholder is likewise kind-agnostic. A chip-only message is over-estimated until measured.
 
 ## For later blocks
