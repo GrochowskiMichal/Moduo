@@ -191,7 +191,7 @@ static, typed manifest — onboarding module N+1 is additive:
 
 | op | RPC | server-side invariants |
 | --- | --- | --- |
-| `tasks.commit` | `tasks_op_commit(ws, task, for_date)` | not archived; order = queue max + 1 (race-safe); recommitting an already-committed task moves it to the end (= "Do last") |
+| `tasks.commit` (**deprecated** in Tasks v3 until TV-D7; Focus replaces the commit queue, see [moduo-mcp-connector.md](./moduo-mcp-connector.md)) | `tasks_op_commit(ws, task, for_date)` | not archived; order = queue max + 1 (race-safe); recommitting an already-committed task moves it to the end (= "Do last") |
 | `tasks.uncommit` | `tasks_op_uncommit(ws, task)` | idempotent; never intercepted (spec §5c) |
 | `tasks.skip_today` | `tasks_op_skip_today(ws, task)` | only if committed; clears commit **and** increments `reschedule_count` atomically (the ambient mirror counter never races) |
 | `tasks.set_status` | `tasks_op_set_status(ws, task, status, recurrence?, position?)` | the server moves the recurrence pointer (never to an occurrence on the day it was done) and records the completion (`task_completions`); the caller's pointer only for a rule outside the server's subset; optional board position |

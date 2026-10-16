@@ -1,5 +1,7 @@
 # Chat v2 — the re-plan
 
+> **Released 2026-10-16** (CV-0…CV-22; CV-23 open). Release record: `specs/BUILD_LOG.md` "Chat v2 release". The status below is the planning record.
+>
 > **Status (2026-10-14): the spec is written ([`specs/chat-v2.md`](../../specs/chat-v2.md), 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14 and the confirmation pass found no blocker or major. **Ready to execute**: CV-0 first.**
 >
 > - **Group N decided (2026-10-14):** huddles and the Google Meet replacement are designed together in a Calls re-plan (start prompt: [`calls-replan-prompt.md`](./calls-replan-prompt.md)); Chat reserves five seams (spec §18) and builds nothing for calls; the hackathon is on site.

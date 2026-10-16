@@ -55,10 +55,10 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | Module | Backing today | Source of truth | Cross-device / multiplayer | Maturity |
 | --- | --- | --- | --- | --- |
 | Auth, Workspaces, Members, Profiles | **Supabase** | Supabase | Yes | ✅ prod |
-| **Tasks** (buckets, tasks, tags, tag_links, relations, time_blocks, activity) | **Supabase** | Supabase | Yes | ✅ 5/5 prod |
+| **Tasks** (Tasks v3: projects (still the `buckets` table until TV-D7), areas, sections, tasks, tags, tag_links, relations, time_blocks, activity) | **Supabase** | Supabase | Yes | ✅ prod; v3 released 2026-10-14 ([specs/tasks-v3.md](../specs/tasks-v3.md)) |
 | User preferences (appearance, focus) | **Supabase** (`user_preferences`) | Supabase | Yes | ✅ prod |
 | MCP connector keys | **Supabase** (`workspace_api_keys`) | Supabase | Yes | ✅ prod |
-| **Notes** | redb (desktop) + Yjs CRDT; web = localStorage fallback | redb (local) | **No** (single-player) | 🟡 4/5, rebuild planned |
+| **Notes** | **Supabase** (Yjs update log `note_updates` + snapshot `doc_state`; y-indexeddb local cache) | Supabase | Yes (live via server-sent pulls, NR-7) | ✅ prod; refresh in progress ([specs/notes-refresh.md](../specs/notes-refresh.md)) |
 | **Email** | redb + in-memory cache; Rust IMAP/SMTP engine | redb (local) | No | 🟡 desktop-only, 2/5 |
 | **Calendar** | localStorage + OAuth tokens | local | No | 🟡 logic only, no UI |
 | **Time-tracking** | redb | local | No | 🟡 Rust backend, no UI |
@@ -76,8 +76,9 @@ Migrations live in `supabase/migrations/` (~16 files as of 2026-06-16). The load
 
 | Migration | Adds |
 | --- | --- |
-| `…_create_tasks_module.sql` | `buckets`, `tasks`, `tags`, `tag_links` |
-| `…_buckets_add_group.sql` | `buckets.group_label` (rail sections) |
+| `…_create_tasks_module.sql` | `buckets` (projects since Tasks v3; the table keeps its name until TV-D7), `tasks`, `tags`, `tag_links` |
+| `…_buckets_add_group.sql` | `buckets.group_label` (rail sections; became areas in Tasks v3) |
+| `…_areas_projects_sections.sql` (Tasks v3, TV-D10) | `areas`, project fields on `buckets`, `sections` + `tasks.section_id`, `tasks.estimate_minutes` |
 | `…_tasks_add_parent.sql` | `tasks.parent_id` + depth-1 trigger (subtasks) |
 | `…_task_relations.sql` | `task_relations` (blocked-by edges; cycle-forbidding trigger) |
 | `…_module_activity_intent_ops.sql` | `module_activity` + the `tasks_op_*` RPCs |
@@ -151,7 +152,7 @@ A full multi-account Spark replacement on a cloud-first web app would mean build
 
 - **Shared-workspace *async* multiplayer**, NOT real-time collaborative editing. Built on Supabase RLS + `workspace_members`; changes appear on refresh/poll. Enough to build Moduo with a partner. No live cursors / simultaneous block-editing at alpha (that is the expensive trap).
 - Consequence: **every new module is Supabase-first**, and **Notes must move to Supabase** (cloud-sync) — notes are the one kept module still local-CRDT, and shared design notes require it. The Notes rebuild is where this lands.
-- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** a chat + calls module is planned for the Duo/Team plans, specced later ([ROADMAP](./ROADMAP.md)); its real-time path is that spec's call. Coordination on entities stays comments + @mentions + notifications.
+- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md): Supabase rows + Realtime, a device store in IndexedDB); calls are being re-planned from Moduo Meet ([ROADMAP](./ROADMAP.md)). Coordination on entities stays comments + @mentions + notifications.
 
 ---
 

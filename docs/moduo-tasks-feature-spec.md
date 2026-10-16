@@ -1,5 +1,7 @@
 # Moduo Tasks Module — Feature Spec (Context Anchor)
 
+> **Superseded by [specs/tasks-v3.md](../specs/tasks-v3.md) (Tasks v3 released 2026-10-14); kept as history.** Terms like buckets, Plan/Execute and the commit queue are retired (see [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md)).
+
 **Purpose of this file:** the canonical, stable description of the Tasks module. Keep it loaded in every Claude Code session for this feature so context isn't lost between sessions. It describes *what the feature is*. The separate build playbook describes *what to build in each session*.
 
 This is a living spec. When a decision changes, update this file first, then code.

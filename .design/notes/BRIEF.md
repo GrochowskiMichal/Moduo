@@ -1,6 +1,6 @@
 # Moduo — Notes Brief
 
-> **Status:** Planned — full rebuild on the spine primitives. A make-or-break leg.
+> **Status:** Shipped in Wave 3 (full rebuild on the spine primitives). Refresh in progress: [specs/notes-refresh.md](../../specs/notes-refresh.md).
 > **Pairs with:** Tasks (real schedulable checkboxes), Mindmap (note-in-canvas), Contacts/Calendar/Email/Finance (via `/refs` + `@mentions`), and the spine itself. Siblings: [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md) · [ROADMAP.md](../../docs/ROADMAP.md) · [data-layers.md](../../docs/data-layers.md).
 
 ---
