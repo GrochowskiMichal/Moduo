@@ -240,7 +240,7 @@ export const DESCRIPTION_WEB_LINK: TextMatchTransformer = {
   },
   replace: (textNode, match) => {
     if (readsAsModuoAddress(match[2] ?? match[3] ?? "")) return;
-    return LINK.replace(textNode, match);
+    return LINK.replace?.(textNode, match);
   },
 };
 
