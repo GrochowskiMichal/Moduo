@@ -70,7 +70,8 @@ async function readConversation(reads: ChatExportReads, channelId: string): Prom
   for (;;) {
     const page = unwrap(await reads.page({ channelId, before, limit: PAGE }));
     for (const m of page) byId.set(m.id, m);
-    if (page.length < PAGE) break;
+    // Only an empty page ends it: the server may answer fewer than asked.
+    if (page.length === 0) break;
     const next = keyOf(page[0]!);
     if (before && next.at === before.at && next.id === before.id) break;
     before = next;

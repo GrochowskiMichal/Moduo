@@ -81,6 +81,8 @@ function fakeReads(
     chains?: Record<string, ChatMessage[]>;
     refused?: string[];
     files?: ChatExportReads["files"];
+    /** The server answers at most this many, whatever is asked. */
+    cap?: number;
   } = {},
 ) {
   const calls = { page: 0, chain: [] as string[] };
@@ -114,7 +116,7 @@ function fakeReads(
             (m) => m.createdAt < before.at || (m.createdAt === before.at && m.id < before.id),
           )
         : all;
-      return { data: older.slice(-limit), error: null };
+      return { data: older.slice(-Math.min(limit, opts.cap ?? limit)), error: null };
     },
     async chain(rootId: string) {
       calls.chain.push(rootId);
@@ -142,6 +144,15 @@ describe("export and erasure: Chat in the lossless export (AC12.8)", () => {
     expect(general.messages.at(-1)!.id).toBe("g449");
     expect(calls.page).toBeGreaterThan(3);
     expect(out.data.incomplete).toEqual([]);
+  });
+
+  it("keeps paging when the server answers fewer than asked", async () => {
+    const long = Array.from({ length: 450 }, (_, i) =>
+      msg(`g${String(i).padStart(3, "0")}`, "general", at(i)),
+    );
+    const { reads } = fakeReads({ general: long }, { cap: 50 });
+    const out = await readChatExport(reads, "w", ME);
+    expect(out.data.conversations[0]!.messages).toHaveLength(450);
   });
 
   it("reads a chain whose replies the pages didn't carry, and keeps reactions", async () => {

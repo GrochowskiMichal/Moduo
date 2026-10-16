@@ -92,7 +92,10 @@ export function GlobalShortcutsDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md" onCloseAutoFocus={returnFocus}>
+      <DialogContent
+        className="max-h-[85vh] max-w-md overflow-y-auto"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Keyboard shortcuts</DialogTitle>
           <DialogDescription>Move around Moduo without the mouse.</DialogDescription>
