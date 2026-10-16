@@ -87,6 +87,8 @@ function estimate(row: Row | undefined): number {
       if (Object.keys(m.reactions).length > 0) h += 30;
       if (m.replyCount > 0) h += 32;
       if (m.replyToId) h += 20;
+      // CV-9: a picture's box is at most 240 tall (--feed-media-max-h), plus its space.
+      if ((m.fileCount ?? 0) > 0) h += 256;
       if (m.sendState === "failed" || m.sendState === "waiting") h += 30;
       return Math.round(h);
     }
@@ -158,6 +160,8 @@ export type MessageStreamProps = {
   onPersonClick?: (userId: string) => void;
   /** A person's card for the hover preview on an author's name (CV-8b). */
   personPreview?: (userId: string) => ReactNode;
+  /** CV-9: a message's files, drawn under its words. */
+  renderFiles?: (m: ChatMessage) => ReactNode;
   /**
    * ⏎ on a message without replies, Esc, ↓ past the newest: back to typing.
    * A letter that isn't a message key comes along (`typed`): it goes into the
@@ -669,6 +673,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       onDiscard: (m: ChatMessage) => live.current.onDiscard(m),
       onPersonClick: props.onPersonClick,
       personPreview: props.personPreview,
+      renderFiles: props.renderFiles,
     };
 
     const draw = (row: Row): ReactNode => {

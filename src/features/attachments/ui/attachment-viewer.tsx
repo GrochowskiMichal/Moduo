@@ -22,6 +22,8 @@ export type AttachmentViewerProps = {
   onIndexChange: (index: number | null) => void;
   canEdit: boolean;
   onDelete: (rec: AttachmentRecord) => void;
+  /** How long a link to the original lives (chat files: shorter than a task's). */
+  originalTtlSeconds?: number;
 };
 
 export function AttachmentViewer({
@@ -32,6 +34,7 @@ export function AttachmentViewer({
   onIndexChange,
   canEdit,
   onDelete,
+  originalTtlSeconds = ATTACHMENT_LINK_TTL_SECONDS.original,
 }: AttachmentViewerProps) {
   const open = index != null && index >= 0 && index < records.length;
   const rec = open ? records[index] : null;
@@ -59,7 +62,7 @@ export function AttachmentViewer({
     setOriginalUrl(null);
     if (!runtime || !objectPath || !image) return;
     let live = true;
-    void signPaths(runtime, [objectPath], ATTACHMENT_LINK_TTL_SECONDS.original)
+    void signPaths(runtime, [objectPath], originalTtlSeconds)
       .then((m) => {
         if (live) setOriginalUrl(m.get(objectPath) ?? null);
       })
@@ -67,7 +70,7 @@ export function AttachmentViewer({
     return () => {
       live = false;
     };
-  }, [runtime, objectPath, image]);
+  }, [runtime, objectPath, image, originalTtlSeconds]);
 
   const go = (delta: number) => {
     if (index == null || count < 2) return;
@@ -76,7 +79,7 @@ export function AttachmentViewer({
 
   const fetchOriginal = async (): Promise<Blob> => {
     if (!runtime || !rec?.objectPath) throw new Error("No file");
-    const m = await signPaths(runtime, [rec.objectPath], ATTACHMENT_LINK_TTL_SECONDS.original);
+    const m = await signPaths(runtime, [rec.objectPath], originalTtlSeconds);
     const url = m.get(rec.objectPath);
     if (!url) throw new Error("No link");
     const res = await fetch(url);

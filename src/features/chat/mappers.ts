@@ -14,6 +14,7 @@ import type {
   ChatCatchupItem,
   ChatChannel,
   ChatDeletedChannel,
+  ChatFile,
   ChatHistoryEntry,
   ChatMember,
   ChatMessage,
@@ -147,6 +148,7 @@ export function mapMessage(raw: unknown): ChatMessage | null {
     mentionsEveryone: r.mentions_everyone === true,
     reactions: mapReactions(r.reactions),
     replyCount: num(r.reply_count),
+    fileCount: num(r.file_count),
     lastReplyAt: str(r.last_reply_at),
     replyUserIds: strArr(r.reply_user_ids),
     wrappedAt: str(r.wrapped_at),
@@ -267,5 +269,29 @@ export function mapHistory(raw: unknown): ChatHistoryEntry | null {
     actorLabel: str(r.actor_label),
     payload: asRow(r.payload) ?? {},
     createdAt,
+  };
+}
+
+/** A row of `chat_files`, or of `attachments` read by message (CV-9), as a chat file. */
+export function mapChatFile(raw: unknown): ChatFile | null {
+  const r = asRow(raw);
+  const id = str(r?.id);
+  const messageId = str(r?.message_id) ?? str(r?.entity_id);
+  const objectPath = str(r?.object_path);
+  if (!r || !id || !messageId || !objectPath) return null;
+  const dim = (v: unknown) => (num(v) > 0 ? num(v) : null);
+  return {
+    id,
+    messageId,
+    authorId: str(r.author_id) ?? str(r.uploader_id),
+    fileName: str(r.file_name) ?? "file",
+    mime: str(r.mime) ?? "application/octet-stream",
+    sizeBytes: num(r.size_bytes),
+    width: dim(r.width),
+    height: dim(r.height),
+    objectPath,
+    previewPath: str(r.preview_path),
+    previewMime: str(r.preview_mime),
+    sentAt: str(r.sent_at) ?? str(r.created_at) ?? EPOCH,
   };
 }

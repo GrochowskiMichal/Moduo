@@ -25,6 +25,7 @@ import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import {
   mapCatchupItem,
   mapChannel,
+  mapChatFile,
   mapDeletedChannel,
   mapHistory,
   mapMember,
@@ -363,6 +364,39 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
           .limit(100);
         if (error) return bad(chatError(error));
         return ok(mapRows(data, mapMessage));
+      }),
+
+    // CV-9: the Files view (newest message first) and the files of a page of messages.
+    files: ({ channelId, before, limit }) =>
+      attempt(async () => {
+        const { data, error } = await db().rpc("chat_files", {
+          p_channel_id: channelId,
+          p_before: before?.sentAt ?? null,
+          p_limit: limit ?? 50,
+          p_before_id: before?.id ?? null,
+        });
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapChatFile));
+      }),
+
+    messageFiles: (messageIds) =>
+      attempt(async () => {
+        if (messageIds.length === 0) return ok([]);
+        // Read through the attachments policy: only what the reader may read.
+        const { data, error } = await db()
+          .from("attachments")
+          .select(
+            "id, entity_id, uploader_id, file_name, mime, size_bytes, width, height, object_path, preview_path, preview_mime, created_at",
+          )
+          .eq("entity_type", "chat_message")
+          .in("entity_id", [...messageIds])
+          .eq("status", "ready")
+          .is("deleted_at", null)
+          .order("created_at")
+          .order("id")
+          .limit(messageIds.length * 10);
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapChatFile));
       }),
 
     async chainFollowing(rootId) {

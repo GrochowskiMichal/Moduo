@@ -4,7 +4,11 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "@rstest/core";
 
-import { ATTACHMENT_PER_FILE_BYTES, ATTACHMENT_PLATFORM_FILE_CAP_BYTES } from "./attachments.ts";
+import {
+  ATTACHMENT_PER_FILE_BYTES,
+  ATTACHMENT_PLATFORM_FILE_CAP_BYTES,
+  CHAT_FILES_PER_MESSAGE,
+} from "./attachments.ts";
 import { PLAN_TIERS } from "./vocabularies.ts";
 
 const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../migrations");
@@ -23,6 +27,12 @@ describe("attachment limits mirror the AT-1 SQL", () => {
   it("matches attachments__platform_file_cap()", () => {
     const m = /attachments__platform_file_cap\(\)[\s\S]*?SELECT (\d+)::bigint/.exec(sql);
     expect(Number(m?.[1])).toBe(ATTACHMENT_PLATFORM_FILE_CAP_BYTES);
+  });
+
+  it("matches attachments__chat_file_cap() (CV-9)", () => {
+    const files = readFileSync(resolve(MIGRATIONS_DIR, "20261016170000_chat_v2_files.sql"), "utf8");
+    const m = /attachments__chat_file_cap\(\)[\s\S]*?SELECT (\d+) \$\$/.exec(files);
+    expect(Number(m?.[1])).toBe(CHAT_FILES_PER_MESSAGE);
   });
 
   it("matches the per-file CASE in storage__limits_for_owner", () => {

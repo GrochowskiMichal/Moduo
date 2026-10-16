@@ -17,6 +17,8 @@ import {
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { supabaseClient } from "@/lib/runtime.web";
 import { forgetPeopleNow } from "@/lib/statuses/store";
+import { getUploadQueue } from "@/lib/uploads";
+import { uploadQueueGate } from "../files/gate";
 import { postgresChangesSource } from "../realtime";
 import { type ChatPresenceSnapshot, chatPresence, forgetChatPresenceStores } from "./presence";
 import { documentVisibility, PresenceSelfRegistry, windowInput } from "./presence-self";
@@ -26,11 +28,13 @@ import {
   type ChatStore,
   chatStore,
   EMPTY_CHAT_SNAPSHOT,
+  setDefaultChatFiles,
   setDefaultChatLive,
 } from "./store";
 import { type ChatTypingSnapshot, ChatTypingStore } from "./typing";
 
 setDefaultChatLive(() => postgresChangesSource(supabaseClient));
+setDefaultChatFiles(() => uploadQueueGate(getUploadQueue()));
 
 const noSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY_CHAT_SNAPSHOT;
