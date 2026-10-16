@@ -44,11 +44,11 @@ BEGIN
   PERFORM test.ok(v LIKE 'ok %', 'setup: A opens the direct message D with B', v);
   INSERT INTO test.ids SELECT 'D', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND kind = 'dm';
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(%L, 'hello <@%s>', NULL, ARRAY[%L]::uuid[], false, NULL, 'hello @B')$q$,
-    test.ref('P'), test.id('B'), test.id('B')));
+    $q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'hello moduo://person/%s', NULL)$q$,
+    test.ref('P'), test.id('B')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A mentions B in P', v);
   INSERT INTO test.ids SELECT 'M', id FROM public.chat_messages WHERE channel_id = test.ref('P');
-  v := test.as_user('A', format($q$SELECT public.chat_op_send(%L, 'Żółw _ahead_', NULL, '{}'::uuid[], false, NULL, NULL)$q$,
+  v := test.as_user('A', format($q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'Żółw *ahead*', NULL)$q$,
     test.ref('Q')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A writes in Q', v);
   INSERT INTO test.ids SELECT 'N', id FROM public.chat_messages WHERE channel_id = test.ref('Q');
@@ -145,10 +145,10 @@ BEGIN
     'plan off: B still reads P, its message, registry, link and activity rows (CH4a)', v);
   PERFORM test.ok(test.sees('C') = 'P:0 M:0 regP:0 regM:0 linkP:0 linkM:0 actP:0 Q:1 regQ:1 linkQ:1',
     'plan off: C still reads nothing about P');
-  v := test.as_user('B', format($q$SELECT public.chat_op_send(%L, 'still?', NULL, '{}'::uuid[], false, NULL, NULL)$q$,
+  v := test.as_user('B', format($q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'still?', NULL)$q$,
     test.ref('P')));
   PERFORM test.ok(v = '42501 Chat is available on the Duo and Team plans.', 'plan off: writing still needs the plan', v);
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('P')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('P')));
   PERFORM test.ok(v = '42501 Chat is available on the Duo and Team plans.'
                   AND NOT (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('P')),
     'plan off: announcement mode, a write, needs the plan too', v);
@@ -183,15 +183,15 @@ BEGIN
     AND (SELECT body FROM public.chat_messages WHERE id = test.ref('N')) = 'Żółw *ahead*'
     AND (SELECT body_text FROM public.chat_messages WHERE id = test.ref('N')) = 'Żółw ahead'
     AND (SELECT body_text FROM public.chat_messages WHERE id = test.ref('M')) = 'hello',
-    'body_text: a v1 send (through its wrapper, CV-2a) is stored as v2 and its words carry no person id');
+    'body_text: a send is stored as v2 and its words carry no person id');
   PERFORM test.ok(
     (SELECT search_tsv @@ to_tsquery('simple', 'zolw') FROM public.chat_messages WHERE id = test.ref('N'))
     AND (SELECT search_tsv @@ to_tsquery('simple', 'ahead') FROM public.chat_messages WHERE id = test.ref('N')),
     'search_tsv: "zolw" finds "Żółw" (simple + unaccent)');
 
   SELECT updated_at INTO v_before FROM public.chat_messages WHERE id = test.ref('N');
-  v := test.as_user('C', format($q$SELECT public.chat_op_react(%L, '👍')$q$, test.ref('M')));
-  v := test.as_user('A', format($q$SELECT public.chat_op_react(%L, '👍')$q$, test.ref('M')));
+  v := test.as_user('C', format($q$SELECT public.chat_op_react(%L, '👍', true)$q$, test.ref('M')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_react(%L, '👍', true)$q$, test.ref('M')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A reacts to M', v);
   SELECT updated_at INTO v_after FROM public.chat_messages WHERE id = test.ref('M');
   PERFORM test.ok(v_after > (SELECT created_at FROM public.chat_messages WHERE id = test.ref('M'))
@@ -421,7 +421,7 @@ BEGIN
            'public.chat_can_read_channel(uuid)'::regprocedure,
            'public.spine__visible_to(uuid, text, uuid, uuid)'::regprocedure,
            'public.chat_realtime_topic_allowed(text)'::regprocedure,
-           'public.share_op_announce(uuid, boolean)'::regprocedure,
+           'public.chat_op_set_announcement(uuid, boolean)'::regprocedure,
            'public.chat__convert_v1(uuid)'::regprocedure,
            'public.chat__messages_body_text()'::regprocedure,
            'public.account_erase_workspace_data(uuid, boolean)'::regprocedure)

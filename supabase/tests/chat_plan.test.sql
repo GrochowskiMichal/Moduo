@@ -17,8 +17,17 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role)
 VALUES (test.id('W'), test.id('A'), 'member') ON CONFLICT (workspace_id, user_id) DO NOTHING;
 
 CREATE TABLE test.grants (workspace_id uuid NOT NULL, tier text, ends_at timestamptz NOT NULL);
-CREATE FUNCTION test.on(p_ws text) RETURNS boolean LANGUAGE sql AS $$
-  SELECT public.chat_workspace_enabled(test.id(p_ws))
+-- The plan as the connector (the service role) reads it: the answer doesn't
+-- depend on who asks (CV-23's member rule is tested below).
+CREATE FUNCTION test.on(p_ws text) RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE
+  v boolean;
+BEGIN
+  PERFORM set_config('request.jwt.claims', '{"role": "service_role"}', true);
+  v := public.chat_workspace_enabled(test.id(p_ws));
+  PERFORM set_config('request.jwt.claims', '{}', true);
+  RETURN v;
+END;
 $$;
 -- The stub TX-9b's function stands for: the tier of a grant that hasn't ended, or null.
 CREATE FUNCTION test.install_grant_stub() RETURNS void LANGUAGE plpgsql AS $$
@@ -80,6 +89,31 @@ BEGIN
 END;
 $$;
 
+-- ── Who it answers: members of the workspace and the service role (CV-23) ───
+DO $$
+DECLARE
+  v text;
+BEGIN
+  -- W2's owner D is on Duo, so chat is on there.
+  PERFORM test.ok(test.value_as('D', format('SELECT public.chat_workspace_enabled(%L)::text', test.id('W2'))) = 'true',
+    'who: the owner of W2 is told chat is on');
+  PERFORM test.ok(test.value_as('A', format('SELECT public.chat_workspace_enabled(%L)::text', test.id('W2'))) = 'false',
+    'who: A, not a member of W2, is told false');
+  PERFORM test.ok(test.value_as('F', format('SELECT public.chat_workspace_enabled(%L)::text', test.id('W2'))) = 'false',
+    'who: F, an owner elsewhere, is told false');
+  INSERT INTO public.workspace_members (workspace_id, user_id, role)
+  VALUES (test.id('W2'), test.id('A'), 'viewer') ON CONFLICT (workspace_id, user_id) DO NOTHING;
+  PERFORM test.ok(test.value_as('A', format('SELECT public.chat_workspace_enabled(%L)::text', test.id('W2'))) = 'true',
+    'who: once A is a member of W2 (even a viewer), A is told chat is on');
+  DELETE FROM public.workspace_members WHERE workspace_id = test.id('W2') AND user_id = test.id('A');
+  PERFORM test.ok(test.on('W2'), 'who: the service role (the connector) is answered');
+  PERFORM set_config('request.jwt.claims', '{"role": "anon"}', true);
+  PERFORM test.ok(public.chat_workspace_enabled(test.id('W2')) IS FALSE, 'who: an anonymous caller is told false');
+  PERFORM set_config('request.jwt.claims', '{}', true);
+  PERFORM test.ok(public.chat_workspace_enabled(test.id('W2')) IS FALSE, 'who: a session with no caller is told false');
+END;
+$$;
+
 -- ── With a dated grant: a handed-out Team workspace has chat (AC2.1) ─────────
 SELECT test.install_grant_stub();
 DO $$
@@ -98,7 +132,7 @@ BEGIN
     (SELECT count(*) FROM public.chat_channels WHERE workspace_id = test.id('W') AND is_default) = 1,
     'grant: W has General');
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(c.id, 'Kickoff plangrantcheck', NULL, '{}'::uuid[], false, NULL, NULL)
+    $q$SELECT public.chat_op_send(gen_random_uuid(), c.id, 'Kickoff plangrantcheck', NULL)
          FROM public.chat_channels c WHERE c.workspace_id = %L AND c.is_default$q$, test.id('W')));
   PERFORM test.ok(v = 'ok 1', 'grant: A posts in General', v);
 
@@ -126,7 +160,7 @@ BEGIN
   PERFORM test.ok(NOT test.on('W'), 'grant ended: chat is paused in W');
 
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(%L, 'After the end', NULL, '{}'::uuid[], false, NULL, NULL)$q$, v_general));
+    $q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'After the end', NULL)$q$, v_general));
   PERFORM test.ok(v NOT LIKE 'ok %' AND v ILIKE '%plan%', 'grant ended: A can''t post (the plan refuses it)', v);
 
   PERFORM test.ok(test.value_as('A', format('SELECT public.chat_can_read_channel(%L)::text', v_general)) = 'true',
@@ -195,11 +229,11 @@ BEGIN
     test.value_as('A', format($q$SELECT count(*)::text FROM public.chat_messages WHERE channel_id = %L$q$, v_general)) = '1',
     'no grant function: A still reads W''s conversation on a Free owner''s plan');
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(%L, 'Still paused', NULL, '{}'::uuid[], false, NULL, NULL)$q$, v_general));
+    $q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'Still paused', NULL)$q$, v_general));
   PERFORM test.ok(v NOT LIKE 'ok %', 'no grant function: A can''t post', v);
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(%L, 'Back on', NULL, '{}'::uuid[], false, NULL, NULL)$q$, v_general));
+    $q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'Back on', NULL)$q$, v_general));
   PERFORM test.ok(test.on('W') AND v = 'ok 1', 'no grant function: the owner moves to Duo and A posts again', v);
 END;
 $$;

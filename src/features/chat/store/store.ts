@@ -508,7 +508,7 @@ export class ChatStore {
       replyToId: entry.replyToId,
       kind: "message",
       event: null,
-      formatVersion: entry.format === "v1" ? 1 : 2,
+      formatVersion: 2,
       authorId: this.userId,
       authorKind: "user",
       authorLabel: null,

@@ -92,6 +92,9 @@ function readBuildId(): string {
   }
 }
 const appVersion = readPackageVersion();
+// Only a release build carries a real version (CI stamps MODUO_VERSION, the
+// same one the updater compares); anything else reports package.json's.
+const appVersionStamped = Boolean(process.env.MODUO_VERSION?.trim());
 const appBuild = readBuildId();
 
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
@@ -110,6 +113,7 @@ export default defineConfig({
       "import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.MODUO_TARGET": JSON.stringify(target),
       "import.meta.env.MODUO_VERSION": JSON.stringify(appVersion),
+      "import.meta.env.MODUO_VERSION_STAMPED": JSON.stringify(appVersionStamped),
       "import.meta.env.MODUO_BUILD": JSON.stringify(appBuild),
       "import.meta.env.PUBLIC_STRIPE_PUBLISHABLE_KEY": JSON.stringify(stripePublishableKey),
       "import.meta.env.PUBLIC_STRIPE_PRICE_PRO_MONTHLY": JSON.stringify(stripePriceProMonthly),

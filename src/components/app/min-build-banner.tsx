@@ -1,8 +1,8 @@
 import { ArrowDownToLine } from "lucide-react";
 import { useEffect } from "react";
-import { APP_VERSION, IS_DESKTOP } from "../../features/settings/about";
+import { APP_VERSION, APP_VERSION_STAMPED, IS_DESKTOP } from "../../features/settings/about";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
-import { applyMinBuild, useMinBuild } from "../../lib/min-build";
+import { applyMinBuild, minBuildApplies, useMinBuild } from "../../lib/min-build";
 import { useAuth } from "../../providers/auth-provider";
 
 /**
@@ -18,6 +18,8 @@ export function MinBuildBanner() {
 
   useEffect(() => {
     if (!runtime) return;
+    // Only a release-stamped desktop build compares its version (lib/min-build.ts).
+    if (!minBuildApplies({ desktop: IS_DESKTOP, stamped: APP_VERSION_STAMPED })) return;
     let cancelled = false;
     void runtime.preferences
       .getMinBuild()

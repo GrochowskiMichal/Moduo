@@ -337,8 +337,8 @@ export type ChatSyncRow = {
   checkedAt: string;
 };
 
-/** How a body is written: v1's screens still send v1 markup (the server converts it). */
-export type ChatBodyFormat = "v1" | "v2";
+/** How a body is written: the stored form v2 (v1 markup is gone since CV-23). */
+export type ChatBodyFormat = "v2";
 
 export type ChatRuntime = {
   // ── The store's transport (CV-3): every call checks `error`, none throws ──

@@ -36,6 +36,16 @@ export function isBelowMinimum(current: string, minimum: string | null | undefin
   return false;
 }
 
+/**
+ * Does the minimum apply to this build? Only to a desktop build whose version a
+ * release stamped (1.0.<run>, the same one the updater compares). The web app
+ * is always the latest deploy and reports package.json's version, as do dev
+ * and local builds, so their version says nothing about their age.
+ */
+export function minBuildApplies(build: { desktop: boolean; stamped: boolean }): boolean {
+  return build.desktop && build.stamped;
+}
+
 // ── The app-wide state ─────────────────────────────────────────────────────────
 
 export type MinBuildState = {

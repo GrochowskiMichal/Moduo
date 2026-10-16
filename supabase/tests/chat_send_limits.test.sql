@@ -36,8 +36,8 @@ $$;
 CREATE FUNCTION test.send(p_who text, p_conv text, p_client text DEFAULT NULL, p_parent uuid DEFAULT NULL)
 RETURNS text LANGUAGE sql AS $$
   SELECT test.as_user(p_who, format(
-    $q$SELECT public.chat_op_send(%L, 'hello', %L, '{}'::uuid[], false, %L)$q$,
-    test.ref(p_conv), p_parent, CASE WHEN p_client IS NULL THEN NULL ELSE test.id(p_client) END))
+    $q$SELECT public.chat_op_send(%L::uuid, %L::uuid, 'hello'::text, %L::uuid)$q$,
+    CASE WHEN p_client IS NULL THEN gen_random_uuid() ELSE test.id(p_client) END, test.ref(p_conv), p_parent))
 $$;
 -- A message from an app, the way the connector posts it with that app's key.
 CREATE FUNCTION test.post_as_app(p_key text, p_ws text, p_conv text, p_parent uuid DEFAULT NULL)
@@ -45,9 +45,9 @@ RETURNS text LANGUAGE sql AS $$
   SELECT test.as_key(p_key, format($q$SELECT public.chat_op_agent_post(%L, %L, 'from the app', %L)$q$,
     test.id(p_ws), test.ref(p_conv), p_parent))
 $$;
--- The message a person sent with this client id.
+-- The message a person sent with this id.
 CREATE FUNCTION test.sent_with(p_client text) RETURNS uuid LANGUAGE sql AS $$
-  SELECT id FROM public.chat_messages WHERE client_id = test.id(p_client)
+  SELECT id FROM public.chat_messages WHERE id = test.id(p_client)
 $$;
 -- Moves every message of a workspace back in time ("that long ago").
 CREATE FUNCTION test.age(p_ws text, p_by interval) RETURNS void LANGUAGE sql AS $$

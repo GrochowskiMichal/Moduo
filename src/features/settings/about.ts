@@ -6,6 +6,13 @@
 /** App version — baked from package.json at build time; "0.0.0" in tests/dev. */
 export const APP_VERSION: string = (import.meta.env.MODUO_VERSION as string | undefined) ?? "0.0.0";
 
+/**
+ * Whether a release stamped APP_VERSION (the desktop release workflow does);
+ * otherwise it is package.json's and says nothing about the build's age.
+ */
+export const APP_VERSION_STAMPED: boolean =
+  (import.meta.env.MODUO_VERSION_STAMPED as boolean | undefined) === true;
+
 /** Build id — short git SHA at build time (or a CI-injected value); "dev" otherwise. */
 export const APP_BUILD: string = (import.meta.env.MODUO_BUILD as string | undefined) ?? "dev";
 

@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly MODUO_TARGET?: string;
   /** App version (package.json) — set at build time by rsbuild.config.ts */
   readonly MODUO_VERSION?: string;
+  /** True when a release stamped the version (CI's MODUO_VERSION), false for package.json's */
+  readonly MODUO_VERSION_STAMPED?: boolean;
   /** Build id (short git SHA, or "dev") — set at build time by rsbuild.config.ts */
   readonly MODUO_BUILD?: string;
   /** Stripe — set in .env.local */

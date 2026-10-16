@@ -8,6 +8,7 @@ import {
   isBelowMinimum,
   isReadOnlyBuild,
   isWriteRequest,
+  minBuildApplies,
   parseVersion,
   READ_ONLY_MESSAGE,
   READ_RPCS,
@@ -33,9 +34,26 @@ describe("old builds are told, never drop rows (AC12.6)", () => {
     expect(parseVersion("1.2")).toBeNull();
   });
 
-  it("the shipped minimum, 0.0.0, holds nobody back", () => {
-    expect(isBelowMinimum("0.0.0", "0.0.0")).toBe(false);
-    expect(isBelowMinimum("1.0.0", "0.0.0")).toBe(false);
+  it("the shipped minimum is 1.0.21, the first production desktop build without v1 chat calls (CV-23)", () => {
+    // The contract migration sets it; a build below it is the one the v1
+    // signatures were dropped under.
+    const migration = readFileSync(
+      join(process.cwd(), "supabase/migrations/20261017130000_chat_v2_contract.sql"),
+      "utf8",
+    );
+    expect(migration).toContain(`VALUES ('min_build', '"1.0.21"'::jsonb, now())`);
+    expect(isBelowMinimum("1.0.20", "1.0.21")).toBe(true);
+    expect(isBelowMinimum("1.0.21", "1.0.21")).toBe(false);
+    expect(isBelowMinimum("1.0.41", "1.0.21")).toBe(false);
+  });
+
+  it("only a release-stamped desktop build is held to the minimum", () => {
+    expect(minBuildApplies({ desktop: true, stamped: true })).toBe(true);
+    // The web app is always the latest deploy and reports package.json's 1.0.0.
+    expect(minBuildApplies({ desktop: false, stamped: false })).toBe(false);
+    expect(minBuildApplies({ desktop: false, stamped: true })).toBe(false);
+    // A dev or local desktop build reports package.json's version too.
+    expect(minBuildApplies({ desktop: true, stamped: false })).toBe(false);
   });
 
   it("an unknown status row still renders as its category", () => {
@@ -160,7 +178,8 @@ describe("readOnlyFetch", () => {
     await guarded(`${BASE}/rest/v1/tasks`, { method: "POST" });
     expect(calls).toHaveLength(1);
 
-    applyMinBuild("2.0.0", "1.0.0");
+    // A desktop build from before the release (1.0.20) under the raised minimum.
+    applyMinBuild("1.0.21", "1.0.20");
     expect(isReadOnlyBuild()).toBe(true);
     const refused = await guarded(`${BASE}/rest/v1/rpc/tasks_op_create`, { method: "POST" });
     expect(refused.status).toBe(403);
