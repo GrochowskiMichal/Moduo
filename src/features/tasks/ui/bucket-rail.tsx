@@ -41,12 +41,12 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { Input } from "../../../components/ui/input";
 import {
   focusNavRow,
   type MenuKit,
   NavRow,
   NavRowDot,
+  NavRowField,
   type NavRowProps,
   NavSectionHeader,
   restoreNavFocus,
@@ -399,6 +399,9 @@ export function BucketRail({
       <NameInput
         placeholder="Project name — Enter to add"
         keepOpen
+        icon={<Plus className="size-icon-sm" aria-hidden />}
+        // In the "+ New project" row's place (which hides meanwhile), on its margin.
+        className={areaId === null ? "mt-1" : undefined}
         onCommit={(name) => onCreateBucket(name, areaId)}
         onClose={() => setAdding(null)}
         onKeyExit={() => focusRowSoon(null)}
@@ -580,6 +583,7 @@ export function BucketRail({
               <div key={area.id} className="mt-2 flex flex-col gap-px">
                 {renamingArea === area.id ? (
                   <NameInput
+                    kind="header"
                     initial={area.name}
                     placeholder="Area name — Enter"
                     onCommit={(name) => onRenameArea(area.id, name)}
@@ -643,6 +647,7 @@ export function BucketRail({
           {adding?.kind === "area" ? (
             <div className="mt-2">
               <NameInput
+                kind="header"
                 placeholder="Area name — Enter"
                 onCommit={(name) => void onCreateArea(name)}
                 onClose={() => setAdding(null)}
@@ -1142,6 +1147,7 @@ function ProjectRow({
   if (addingArea) {
     return (
       <NameInput
+        icon={<NavRowDot color={bucketDotColor(bucket)} />}
         placeholder="Area name — Enter"
         onCommit={(name) => onNewArea(name)}
         onClose={() => setAddingArea(false)}
@@ -1280,9 +1286,14 @@ function ProjectShare({
 
 // ── inline name input (a new project, a new or renamed area) ─────────────────
 
+// The row it stands in for, exactly (MOD-159): a project row's height, padding
+// and icon slot, or an area header's, with the text where that row's label is.
 function NameInput({
   initial = "",
   placeholder,
+  kind = "row",
+  icon,
+  className,
   keepOpen = false,
   onCommit,
   onClose,
@@ -1290,6 +1301,12 @@ function NameInput({
 }: {
   initial?: string;
   placeholder: string;
+  /** A project row, or an area's header. */
+  kind?: "row" | "header";
+  /** The row's leading icon (a row only). */
+  icon?: ReactNode;
+  /** On the row box: the margin of a row it replaces. */
+  className?: string;
   /** Enter adds and stays open for the next one (new projects). */
   keepOpen?: boolean;
   onCommit: (name: string) => void;
@@ -1319,30 +1336,29 @@ function NameInput({
   };
 
   return (
-    <div className="px-1 py-0.5">
-      <Input
-        ref={ref}
-        size="sm"
-        aria-label={placeholder.split(" —")[0]}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commit(keepOpen);
-            if (!keepOpen) onKeyExit();
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            done.current = true;
-            onClose();
-            onKeyExit();
-          }
-        }}
-        onBlur={() => commit(false)}
-        className="px-1.5"
-      />
-    </div>
+    <NavRowField
+      ref={ref}
+      kind={kind}
+      icon={icon}
+      className={className}
+      aria-label={placeholder.split(" —")[0]}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit(keepOpen);
+          if (!keepOpen) onKeyExit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          done.current = true;
+          onClose();
+          onKeyExit();
+        }
+      }}
+      onBlur={() => commit(false)}
+    />
   );
 }

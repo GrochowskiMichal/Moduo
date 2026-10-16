@@ -14,6 +14,7 @@ import {
   type MenuKit,
   NavRow,
   NavRowDot,
+  NavRowField,
   NavSectionHeader,
   restoreNavFocus,
 } from "./nav-row";
@@ -399,5 +400,51 @@ describe("focusNavRow", () => {
     expect(document.activeElement).toBe(main(/^All,/));
 
     expect(focusNavRow(null, "mkt")).toBe(false);
+  });
+});
+
+// MOD-159 — naming something in a rail never moves a row: the field is the
+// label's own text (its type, no box or padding), inside a box with the row's
+// own geometry, and the row rings while it is edited. jsdom can't measure, so
+// the classes are pinned here; the rows' height, the text's x and its ink
+// (pixel rows) were measured live at all three densities.
+describe("inline name fields (MOD-159)", () => {
+  const LABEL_TYPE = ["font-display", "text-base", "font-medium"];
+  const NO_BOX = ["h-full", "p-0", "bg-transparent", "outline-none"];
+
+  it("renames in the row itself: same row, same icon slot, the label's type, no box", async () => {
+    renderRows({ onRename: rs.fn() });
+    const row = rowOf(main(/^Marketing,/));
+    fireEvent.doubleClick(main(/^Marketing,/));
+    const input = screen.getByDisplayValue("Marketing");
+    expect(input.closest('[data-slot="nav-row"]')).toBe(row);
+    expect(row.className).toMatch(/\bh-\(--row-h\)/);
+    expect(row.querySelector('[data-slot="nav-row-icon"]')).toBeTruthy();
+    for (const c of [...LABEL_TYPE, ...NO_BOX]) expect(input.classList).toContain(c);
+    expect(input.className).not.toMatch(/\bborder\b|\bpx-/);
+    expect(row.className).toContain("has-[[data-slot=nav-row-input]:focus]:ring-2");
+  });
+
+  it("stands in for a row: its height, padding and icon slot", () => {
+    render(
+      <NavRowField aria-label="Project name" icon={<Layers aria-hidden />} className="mt-1" />,
+    );
+    const input = screen.getByRole("textbox", { name: "Project name" });
+    const box = input.closest('[data-slot="nav-row-field"]') as HTMLElement;
+    for (const c of ["h-(--row-h)", "pl-2", "pr-1.5", "gap-2.5", "mt-1"]) {
+      expect(box.classList).toContain(c);
+    }
+    expect(box.querySelector('[data-slot="nav-row-icon"]')).toBeTruthy();
+    for (const c of [...LABEL_TYPE, ...NO_BOX]) expect(input.classList).toContain(c);
+  });
+
+  it("stands in for a section header: its height and the header label's type, no icon", () => {
+    render(<NavRowField kind="header" aria-label="Area name" icon={<Layers aria-hidden />} />);
+    const input = screen.getByRole("textbox", { name: "Area name" });
+    const box = input.closest('[data-slot="nav-row-field"]') as HTMLElement;
+    for (const c of ["h-(--row-h-sm)", "pl-2", "pr-1.5"]) expect(box.classList).toContain(c);
+    expect(box.querySelector('[data-slot="nav-row-icon"]')).toBeNull();
+    for (const c of ["font-display", "text-sm", "font-medium"])
+      expect(input.classList).toContain(c);
   });
 });
