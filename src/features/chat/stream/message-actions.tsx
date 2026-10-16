@@ -2,14 +2,15 @@
 // toolbar floats over the row's top edge: your first three quick reactions ·
 // Reply · Task · ⋯ (Reply before Task). ⋯ holds the verbs whose blocks exist
 // today: Edit (own) · Delete (own) · Pin to conversation · Make a task ·
-// Copy link · Mark unread. Reply to… and Wrap up (a root with replies) came with CV-12;
-// Mark as decision, Move to…, Make a note and Remind me join with their
-// blocks (CV-14, CV-16, CV-15).
+// Remind me… (CV-11, H) · Copy link · Mark unread. Reply to… and Wrap up (a
+// root with replies) came with CV-12; Mark as decision, Move to… and Make a
+// note join with their blocks (CV-14, CV-16, CV-15).
 // Right-click opens the same menu with your whole quick row on top and
 // "Customize…" (CV-7c, CH16a); "any emoji" shows once the picker passes
 // `onAnyEmoji` (CV-7b).
 
 import {
+  AlarmClock,
   Check,
   CheckSquare,
   CornerUpLeft,
@@ -45,6 +46,8 @@ export type MessageVerbs = {
   /** Wrap up this root's chain (absent: no item). */
   onWrapUp?: () => void;
   onTask: () => void;
+  /** "Remind me…" (CV-11): the message comes back in Catch up at a time you pick (absent: no item). */
+  onRemind?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   /** Pinning writes (a reader on a paused plan or a viewer can't): absent = no item. */
@@ -126,6 +129,13 @@ function ActionsMenu({
           Make a task
           <DropdownMenuShortcut>T</DropdownMenuShortcut>
         </DropdownMenuItem>
+        {verbs.onRemind ? (
+          <DropdownMenuItem onSelect={verbs.onRemind}>
+            <AlarmClock aria-hidden />
+            Remind me…
+            <DropdownMenuShortcut>H</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         {verbs.onPin ? (
           <DropdownMenuItem onSelect={verbs.onPin}>

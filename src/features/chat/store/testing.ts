@@ -5,6 +5,7 @@
 
 import { timestampMicros } from "../../tasks/live";
 import type {
+  ChatCatchupItem,
   ChatChannel,
   ChatError,
   ChatKey,
@@ -139,6 +140,12 @@ export class FakeChatServer {
   marks: { channelId: string; messageId: string }[] = [];
   /** Chains I stopped following. */
   muted = new Set<string>();
+  /** My open Catch up items (CV-11), as `chat_catchup_open` answers them. */
+  catchup: ChatCatchupItem[] = [];
+  /** Items Done closed (Undo reopens them). */
+  catchupDone = new Map<string, ChatCatchupItem>();
+  /** Every Later / Remind me asked for. */
+  reminds: { messageId: string | null; channelId: string | null; at: string | null }[] = [];
 
   now(): string {
     this.clock += 1000;
@@ -386,6 +393,43 @@ export class FakeChatServer {
           return res;
         }),
       chainRead: () => this.gate("chainRead", () => ok(null)),
+      messages: (ids) =>
+        this.gate("messages", () =>
+          ok(
+            ids
+              .map((id) => this.rows.get(id))
+              .filter((r): r is ChatMessage => !!r && this.readable.has(r.channelId)),
+          ),
+        ),
+      catchupOpen: () =>
+        this.gate("catchupOpen", () =>
+          ok(this.catchup.filter((i) => this.readable.has(i.channelId))),
+        ),
+      catchupDone: (ids) =>
+        this.gate("catchupDone", () => {
+          const gone = this.catchup.filter((i) => ids.includes(i.id));
+          for (const i of gone) this.catchupDone.set(i.id, i);
+          this.catchup = this.catchup.filter((i) => !ids.includes(i.id));
+          return ok(gone.length);
+        }),
+      catchupReopen: (ids) =>
+        this.gate("catchupReopen", () => {
+          const back = ids
+            .map((id) => this.catchupDone.get(id))
+            .filter((i): i is ChatCatchupItem => !!i);
+          for (const i of back) this.catchupDone.delete(i.id);
+          this.catchup = [...this.catchup, ...back];
+          return ok(back.length);
+        }),
+      remind: ({ messageId, channelId, at }) =>
+        this.gate("remind", () => {
+          this.reminds.push({ messageId: messageId ?? null, channelId: channelId ?? null, at });
+          const hide = (i: ChatCatchupItem) =>
+            at !== null && (messageId ? i.messageId === messageId : i.channelId === channelId);
+          const n = this.catchup.filter(hide).length;
+          this.catchup = this.catchup.filter((i) => !hide(i));
+          return ok(Math.max(1, n));
+        }),
       chains: (channelId) =>
         this.gate("chains", () =>
           ok(

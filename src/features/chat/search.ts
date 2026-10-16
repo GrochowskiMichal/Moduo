@@ -10,8 +10,8 @@ export type ChatSearch = {
   t?: string;
   /** Message to scroll to + flash. */
   m?: string;
-  /** A centre surface other than the conversation: Browse channels (CV-8b). */
-  view?: "browse";
+  /** A centre surface other than the conversation: Browse channels (CV-8b), Catch up (CV-11). */
+  view?: "browse" | "catchup";
 };
 
 const ID = /^[0-9a-fA-F-]{36}$/;
@@ -22,7 +22,8 @@ export function validateChatSearch(search: Record<string, unknown>): ChatSearch 
   const c = pick(search.c);
   const t = c ? pick(search.t) : undefined;
   const m = c ? pick(search.m) : undefined;
-  const view = search.view === "browse" ? ("browse" as const) : undefined;
+  const view =
+    search.view === "browse" || search.view === "catchup" ? search.view : undefined;
   return {
     ...(c ? { c } : {}),
     ...(t ? { t } : {}),

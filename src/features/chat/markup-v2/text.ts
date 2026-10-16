@@ -78,3 +78,40 @@ export function mentionsOf(blocks: readonly Block[]): Mentions {
   }
   return out;
 }
+
+/**
+ * One line of a message's words for an excerpt (Catch up's rows, the bell's
+ * chat lines): Markdown marks gone, lines joined, and each reference named by
+ * `nameOf` for this reader (a person's name, an item's title or "Private
+ * item"); a date chip reads as `dayOf` says, else as written.
+ */
+export function toExcerptText(
+  blocks: readonly Block[],
+  nameOf: (type: string, id: string) => string,
+  dayOf: (day: string) => string = (day) => day,
+): string {
+  const line = (leaves: readonly Inline[]) =>
+    leaves
+      .map((leaf) => {
+        switch (leaf.t) {
+          case "ref":
+            return nameOf(leaf.type, leaf.id);
+          case "date":
+            return dayOf(leaf.day);
+          case "br":
+            return " ";
+          default:
+            return inlineText([leaf]);
+        }
+      })
+      .join("");
+  return blocks
+    .map((block) => {
+      if (block.t === "pre") return block.v;
+      if (block.t === "list") return block.items.map(line).join(" ");
+      return line(block.c);
+    })
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

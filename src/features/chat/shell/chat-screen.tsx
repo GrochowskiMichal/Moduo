@@ -22,6 +22,7 @@ import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layou
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { useTimeRegion } from "@/lib/time-region";
 import {
   type ChainRights,
   chainGroups,
@@ -31,6 +32,10 @@ import {
   mayWrap,
   replyToChoices,
 } from "../chains";
+import { catchupStoreFor } from "../catchup/catchup-store";
+import { useCatchupScreen } from "../catchup/catchup-view";
+import { LaterDialog } from "../catchup/later-dialog";
+import { laterHint } from "../catchup/later-times";
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
@@ -129,6 +134,12 @@ export type ChatScreenProps = {
   chainId?: string | null;
   /** The centre shows Browse channels (`view=browse`). */
   browsing?: boolean;
+  /** Catch up is the page's mode (`view=catchup`, CV-11). */
+  catchup?: boolean;
+  /** Open Catch up (the left panel's row). */
+  onOpenCatchup?: () => void;
+  /** Leave Catch up (Esc). */
+  onLeaveCatchup?: () => void;
   /** Open Browse channels. */
   onBrowse?: () => void;
   /** Open a conversation (null: none named, so Chat lands on General). */
@@ -152,8 +163,11 @@ export function ChatScreen({
   messageId,
   chainId = null,
   browsing = false,
+  catchup = false,
   onOpen,
   onBrowse,
+  onOpenCatchup,
+  onLeaveCatchup,
 }: ChatScreenProps) {
   const selfId = userId ?? "";
   const store = useChatStore(runtime, userId, workspaceId);
@@ -210,11 +224,11 @@ export function ChatScreen({
   // ── landing ───────────────────────────────────────────────────────────────
   // No conversation named: General (or the first one in the panel).
   useEffect(() => {
-    if (!ready || conversationId || browsing) return;
+    if (!ready || conversationId || browsing || catchup) return;
     const general = Object.values(snap.channels).find((c) => c.isDefault && !c.archivedAt);
     const first = general ?? ordered[0]?.channel;
     if (first) onOpen(first.id, { replace: true });
-  }, [ready, conversationId, browsing, snap.channels, ordered, onOpen]);
+  }, [ready, conversationId, browsing, catchup, snap.channels, ordered, onOpen]);
 
   // Open once per conversation (re-opening would drop a window around a linked message).
   const known = !!conversationId && !!snap.channels[conversationId];
@@ -525,6 +539,83 @@ export function ChatScreen({
     dispatchOpenCapture({ type: "task", draft: text });
   }, []);
 
+  // ── Remind me (CV-11): a message's ⋯ / H, and `/remind` for the conversation ──
+  const [remindFor, setRemindFor] = useState<{ messageId: string } | { channelId: string } | null>(
+    null,
+  );
+  const remindRegion = useTimeRegion();
+  const remind = useCallback(
+    (target: { messageId: string } | { channelId: string }, at: string) => {
+      setRemindFor(null);
+      if (!store) return;
+      void catchupStoreFor(store)
+        .remind(target, at)
+        .then((res) => {
+          if (failed(res, "Couldn't set the reminder.")) return;
+          const when = laterHint(
+            new Date(at),
+            new Date(),
+            remindRegion.timeZone,
+            remindRegion.hour12,
+          );
+          toast(`I'll bring it back to Catch up ${when}`);
+        });
+    },
+    [store, remindRegion.timeZone, remindRegion.hour12],
+  );
+
+  // ── Catch up (CV-11): the page's mode ─────────────────────────────────────
+  const catchupReplyRef = useRef<ChatComposerHandle | null>(null);
+  const catchupUi = useCatchupScreen({
+    active: catchup && ready,
+    store,
+    chat: runtime?.chat ?? null,
+    channels: snap.channels,
+    mine: snap.mine,
+    unread: snap.unread,
+    selfId,
+    personOf,
+    onPersonClick: undefined,
+    onOpenConversation: (channelId, messageId) =>
+      onOpen(channelId, messageId ? { messageId } : {}),
+    onLeave: () => onLeaveCatchup?.(),
+    onMakeTask: makeTaskFrom,
+    onFocusReply: () => catchupReplyRef.current?.focus(),
+    // A reply from Catch up joins the message's chain, like Reply in the stream.
+    renderReply: (m) => {
+      const c = snap.channels[m.channelId];
+      const canReply =
+        !!c &&
+        !!snap.mine[m.channelId] &&
+        !c.archivedAt &&
+        !c.managersOnly &&
+        rights.canPost &&
+        !snap.paused;
+      if (!canReply) return null;
+      const rootId = m.parentId ?? m.id;
+      const who = authorName(m, m.authorId ? personOf(m.authorId) : undefined);
+      return (
+        <ChatComposer
+          ref={catchupReplyRef}
+          key={`catchup:${m.id}`}
+          runtime={runtime}
+          workspaceId={workspaceId}
+          selfId={selfId}
+          people={people}
+          placeholder={`Reply to ${who}`}
+          initial={store?.draft(m.channelId, rootId) ?? ""}
+          onSend={(body) => {
+            if (!store || !body.trim()) return false;
+            store.send({ channelId: m.channelId, body, replyToId: rootId, format: "v2" });
+            toast("Replied");
+            return true;
+          }}
+          onDraftChange={(stored) => store?.setDraft(m.channelId, rootId, stored)}
+        />
+      );
+    },
+  });
+
   const copyLink = useCallback((m: ChatMessage) => {
     const params = new URLSearchParams({ c: m.channelId, m: m.id });
     void navigator.clipboard
@@ -600,7 +691,7 @@ export function ChatScreen({
   const left = (
     <ChatSidebar
       model={model}
-      activeId={browsing ? null : conversationId}
+      activeId={browsing || catchup ? null : conversationId}
       personOf={personOf}
       online={online}
       collapsed={collapsed}
@@ -608,12 +699,8 @@ export function ChatScreen({
       onOpen={(id) => onOpen(id)}
       onNewConversation={canStart ? () => setNewOpen(true) : undefined}
       onBrowse={onBrowse}
-      onOpenCatchup={() => {
-        // Catch up's own view is CV-11's: until then, the first conversation waiting for you.
-        const all = [...model.pinned, ...model.channels, ...model.dms];
-        const waiting = all.find((r) => r.count > 0) ?? all.find((r) => r.unread);
-        if (waiting) onOpen(waiting.channel.id);
-      }}
+      catchupCurrent={catchup}
+      onOpenCatchup={() => onOpenCatchup?.()}
     />
   );
 
@@ -647,7 +734,9 @@ export function ChatScreen({
   const canWrapUp = (root: ChatMessage) => !!channel && mayWrap(root, channel, chainRights);
 
   let center: React.ReactNode;
-  if (browsing) {
+  if (catchup) {
+    center = catchupUi.center;
+  } else if (browsing) {
     center = (
       <BrowseChannels
         chat={runtime?.chat ?? null}
@@ -812,6 +901,7 @@ export function ChatScreen({
             });
           }}
           onTask={makeTaskFrom}
+          onRemind={(m) => setRemindFor({ messageId: m.id })}
           onCopyLink={copyLink}
           onMarkUnread={(m) => {
             void store
@@ -955,6 +1045,7 @@ export function ChatScreen({
                     !active,
                   )
                 }
+                onRemind={() => setRemindFor({ channelId: channel.id })}
                 onEditLast={() =>
                   editLast(
                     // The row past the window's edge isn't drawn; ids inside their Undo are gone.
@@ -1068,7 +1159,9 @@ export function ChatScreen({
       ),
     };
   });
-  const right = channel ? (
+  const right = catchup ? (
+    catchupUi.right ?? undefined
+  ) : channel ? (
     <RightPanel
       module="chat"
       views={{
@@ -1203,6 +1296,18 @@ export function ChatScreen({
         }}
         onCaptureNote={() => dispatchOpenCapture({ type: "note" })}
         onBrowse={() => onBrowse?.()}
+      />
+      {catchupUi.dialogs}
+      <LaterDialog
+        open={!!remindFor}
+        title={
+          remindFor && "channelId" in remindFor
+            ? "Remind me about this conversation"
+            : "Remind me about this message"
+        }
+        description="It comes back to the top of Catch up at that time, with one notice."
+        onPick={(at) => remindFor && remind(remindFor, at)}
+        onClose={() => setRemindFor(null)}
       />
     </>
   );

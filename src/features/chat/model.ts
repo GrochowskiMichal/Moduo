@@ -6,13 +6,20 @@
 // UI and names the transport the chat store (`store/store.ts`) reads through.
 
 import type {
+  ChatCatchupReason,
   ChatChannelKind,
   ChatMessageKind,
   ChatNotifyLevel,
   ContentAuthorKind,
 } from "@contracts/vocabularies";
 
-export type { ChatChannelKind, ChatMessageKind, ChatNotifyLevel, ContentAuthorKind };
+export type {
+  ChatCatchupReason,
+  ChatChannelKind,
+  ChatMessageKind,
+  ChatNotifyLevel,
+  ContentAuthorKind,
+};
 
 export type ChatChannel = {
   id: string;
@@ -113,6 +120,28 @@ export type ChatUnread = {
   mentions: number;
   addressed: number;
   catchup: number;
+};
+
+/**
+ * One open Catch up item (`chat_catchup_open`, CV-11): showing now, in a
+ * conversation you can still read. A grouped item (a chain, an Every-message
+ * line) names its newest message; a conversation reminder that found no
+ * message has none.
+ */
+export type ChatCatchupItem = {
+  id: string;
+  channelId: string;
+  messageId: string | null;
+  chainRootId: string | null;
+  reason: ChatCatchupReason;
+  actorId: string | null;
+  createdAt: string;
+  /** Set when it was put off (Later / Remind me). */
+  laterUntil: string | null;
+  /** When it came back from Later (it sorts on top from then). */
+  returnedAt: string | null;
+  /** The list's order: its newest message, or when it came back. */
+  at: string;
 };
 
 /** A workspace person as chat renders them. */
@@ -233,6 +262,20 @@ export type ChatRuntime = {
   reopen(rootId: string): Promise<ChatResult<ChatMessage>>;
   /** "Reply to…": the message joins the chain of an earlier message. */
   attachToChain(args: { messageId: string; replyToId: string }): Promise<ChatResult<ChatMessage>>;
+  /** Several messages by id (what you can read of them). */
+  messages(ids: readonly string[]): Promise<ChatResult<ChatMessage[]>>;
+  /** Catch up's open items in this workspace (CV-11). */
+  catchupOpen(workspaceId: string): Promise<ChatResult<ChatCatchupItem[]>>;
+  /** Done: your items close (and their bell rows). Up to 1,000 ids. */
+  catchupDone(ids: readonly string[]): Promise<ChatResult<number>>;
+  /** Undo Done. */
+  catchupReopen(ids: readonly string[]): Promise<ChatResult<number>>;
+  /** Later / Remind me on a message, or `/remind` on a conversation; `at` null clears. */
+  remind(args: {
+    messageId?: string | null;
+    channelId?: string | null;
+    at: string | null;
+  }): Promise<ChatResult<number>>;
   /** You read the chain on the right: its Catch up items close. */
   chainRead(rootId: string): Promise<ChatResult<null>>;
   /** A conversation's reply chains (roots with replies), newest activity first. */
