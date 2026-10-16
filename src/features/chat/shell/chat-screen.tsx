@@ -574,7 +574,10 @@ export function ChatScreen({
       if (!store) return;
       setWrapFor(null);
       // "Also mark as decision" (CV-14): Undo takes back only a decision this wrap-up made.
-      const newDecision = markDecision && !store.rowById(settledId)?.decisionAt;
+      const prior =
+        store.rowById(settledId) ??
+        store.getSnapshot().chains[rootId]?.replies.find((r) => r.id === settledId);
+      const newDecision = markDecision && !!prior && !prior.decisionAt;
       void store.wrapUp(rootId, settledId, markDecision).then((res) => {
         if (failed(res, "Couldn't wrap it up.")) return;
         toast(newDecision ? "Wrapped up · marked as a decision" : "Wrapped up", {
@@ -1503,6 +1506,7 @@ export function ChatScreen({
         replies={wrapReplies ?? []}
         loaded={!!wrapFor && !!snap.chains[wrapFor]?.loaded}
         linked={!!channel?.link}
+        canDecide={canWriteHere}
         personOf={personOf}
         onConfirm={(settledId, markDecision) => wrapFor && wrapUp(wrapFor, settledId, markDecision)}
       />

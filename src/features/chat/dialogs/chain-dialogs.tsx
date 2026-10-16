@@ -35,6 +35,7 @@ export function WrapUpDialog({
   replies,
   loaded,
   linked,
+  canDecide,
   personOf,
   onConfirm,
 }: Named & {
@@ -46,6 +47,8 @@ export function WrapUpDialog({
   loaded: boolean;
   /** The channel links to an item: "Also mark as decision" starts ticked. */
   linked: boolean;
+  /** You may post here (a decision needs it): otherwise no tick. */
+  canDecide: boolean;
   onConfirm: (settledId: string, markDecision: boolean) => void;
 }) {
   return (
@@ -62,6 +65,7 @@ export function WrapUpDialog({
           <WrapUpForm
             replies={replies}
             linked={linked}
+            canDecide={canDecide}
             personOf={personOf}
             onCancel={() => onOpenChange(false)}
             onConfirm={onConfirm}
@@ -75,17 +79,19 @@ export function WrapUpDialog({
 function WrapUpForm({
   replies,
   linked,
+  canDecide,
   personOf,
   onCancel,
   onConfirm,
 }: Named & {
   replies: readonly ChatMessage[];
   linked: boolean;
+  canDecide: boolean;
   onCancel: () => void;
   onConfirm: (settledId: string, markDecision: boolean) => void;
 }) {
   const [picked, setPicked] = useState(replies[replies.length - 1]?.id ?? "");
-  const [markDecision, setMarkDecision] = useState(linked);
+  const [markDecision, setMarkDecision] = useState(linked && canDecide);
   const base = useId();
   return (
     <form
@@ -122,17 +128,19 @@ function WrapUpForm({
           </label>
         ))}
       </RadioGroup>
-      <label
-        htmlFor={`${base}-decision`}
-        className="flex cursor-pointer items-center gap-2.5 px-2 text-sm text-foreground"
-      >
-        <Checkbox
-          id={`${base}-decision`}
-          checked={markDecision}
-          onCheckedChange={(v) => setMarkDecision(v === true)}
-        />
-        Also mark as decision
-      </label>
+      {canDecide ? (
+        <label
+          htmlFor={`${base}-decision`}
+          className="flex cursor-pointer items-center gap-2.5 px-2 text-sm text-foreground"
+        >
+          <Checkbox
+            id={`${base}-decision`}
+            checked={markDecision}
+            onCheckedChange={(v) => setMarkDecision(v === true)}
+          />
+          Also mark as decision
+        </label>
+      ) : null}
       <DialogFooter>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancel

@@ -12,18 +12,19 @@
 -- person from the caller; an API key reads no decision through the spine.
 --
 -- Cast: O owns workspace W (Duo). A, B and N are members, V a viewer; X is in
--- no workspace; K is A's API key (chat and tasks at Edit). Q is a public channel
+-- no workspace; M is an admin; K is A's API key (chat and tasks at Edit). Q is a public channel
 -- of A and B; P a private one of A and B; D a direct message of A and B.
 -- SB is a shared project; PB is O's private project.
 
-SELECT test.person(n) FROM unnest(ARRAY['O', 'A', 'B', 'N', 'V', 'X']) AS n;
+SELECT test.person(n) FROM unnest(ARRAY['O', 'A', 'B', 'N', 'V', 'M', 'X']) AS n;
 UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
 INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Decisions');
 INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('A'), 'member'),
   (test.id('W'), test.id('B'), 'member'),
   (test.id('W'), test.id('N'), 'member'),
-  (test.id('W'), test.id('V'), 'viewer')
+  (test.id('W'), test.id('V'), 'viewer'),
+  (test.id('W'), test.id('M'), 'admin')
 ON CONFLICT (workspace_id, user_id) DO NOTHING;
 INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system, position) VALUES
   (test.id('SB'), test.id('W'), test.id('O'), 'Shared', false, '0001'),
@@ -102,7 +103,7 @@ BEGIN
 END;
 $$;
 -- Every message gets a name in test.ids, so test.on_item can name what it sees.
-INSERT INTO test.ids SELECT n, test.mid(n) FROM unnest(ARRAY['q1', 'q2', 'q3', 'p1', 'p2', 'd1', 'd2', 'r', 'r1', 'r2']) AS n;
+INSERT INTO test.ids SELECT n, test.mid(n) FROM unnest(ARRAY['q1', 'q2', 'q3', 'p1', 'p2', 'd1', 'd2', 'r', 'r1', 'r2', 's', 's1']) AS n;
 
 -- ── Marking: who may, what may be ───────────────────────────────────────────
 DO $$
@@ -244,6 +245,31 @@ BEGIN
     'wrapping up again on the same reply logs no second decision', v);
   PERFORM test.ok(test.on_item('N', 'project', test.id('SB')) = 'q1,r2',
     'the settled decision shows on the linked project');
+END;
+$$;
+
+-- ── Wrap up's tick needs post rights too ────────────────────────────────────
+-- An admin may wrap up any chain, but in an announcement channel they don't
+-- manage they can't post, so they can't mark the decision: the whole wrap-up is
+-- refused (the app doesn't offer the tick to them).
+DO $$
+DECLARE
+  v text;
+BEGIN
+  v := test.send('A', 's', 'Q', 'Which font?');
+  v := test.send('B', 's1', 'Q', 'Inter', 's');
+  PERFORM test.ok(v LIKE 'ok %', 'setup: a chain in Q', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L::uuid, true)$q$, test.ref('Q')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: Q becomes an announcement channel', v);
+  v := test.as_user('M', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, true)$q$, test.mid('s'), test.mid('s1')));
+  PERFORM test.ok(v LIKE '42501 %' AND NOT test.is_decision('s1')
+                  AND (SELECT wrapped_at FROM public.chat_messages WHERE id = test.mid('s')) IS NULL,
+    'an admin who can''t post there: Wrap up with the tick is refused, nothing changes', v);
+  v := test.mark('M', 's1');
+  PERFORM test.ok(v LIKE '42501 %', 'and can''t mark it by hand', v);
+  v := test.as_user('M', format($q$SELECT id FROM public.chat_op_wrap_up(%L::uuid, %L::uuid, false)$q$, test.mid('s'), test.mid('s1')));
+  PERFORM test.ok(v LIKE 'ok %' AND NOT test.is_decision('s1'), 'without the tick the admin wraps it up', v);
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L::uuid, false)$q$, test.ref('Q')));
 END;
 $$;
 
