@@ -175,6 +175,20 @@ describe("chat tools: what they send", () => {
     expect(calls.map((c) => c.fn)).toEqual(["chat_agent_conversations"]);
   });
 
+  it("refuses a name that matches more than one conversation", async () => {
+    const { db } = fakeDb({
+      chat_agent_conversations: [
+        { id: CH, name: "x" },
+        { id: MSG, name: "x" },
+      ],
+    });
+    const ctx = { key: key({ chat: "view" }), db };
+    await expect(conversation(ctx, "x")).rejects.toThrow(
+      'Two conversations are named "x"; use its id from chat_list_channels.',
+    );
+    expect((await conversation(ctx, CH)).id).toBe(CH);
+  });
+
   it("chat_create_channel sends the name as typed", async () => {
     const { db, calls } = fakeDb({ chat_op_agent_create_channel: { id: CH, name: "Release Train", is_private: false } });
     await tool("chat_create_channel").handler({ name: "Release Train" }, { key: key({ chat: "edit" }), db });

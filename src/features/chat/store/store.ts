@@ -1587,9 +1587,9 @@ export class ChatStore {
     const mentioned = row.mentionedUserIds.includes(this.userId) || row.mentionsEveryone;
     const level: ChatNotifyLevel = member.notifyLevel;
     // Your own key's reply is new to you, never a reply addressed to you (CV-21).
-    const ownKeys = row.authorId === this.userId;
+    const viaMyKey = row.authorId === this.userId;
     const inMyChain =
-      !ownKeys &&
+      !viaMyKey &&
       row.parentId !== null &&
       (this.bringsMeIn(this.rowById(row.parentId)) ||
         (row.replyToId !== null && this.bringsMeIn(this.rowById(row.replyToId))));

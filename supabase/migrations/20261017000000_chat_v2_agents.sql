@@ -1172,7 +1172,9 @@ $$;
 
 -- chat_op_create_channel (CV-13's live body), for p_user.
 -- p_names_of: whose private channels a new name may clash with (the person
--- creating it, or null for public channels only).
+-- creating it, or null for public channels only). An earlier draft had nine
+-- arguments: never two of them.
+DROP FUNCTION IF EXISTS public.chat__create_channel_as(uuid, uuid, text, text, boolean, uuid[], boolean, text, uuid);
 CREATE OR REPLACE FUNCTION public.chat__create_channel_as(
   p_user uuid,
   p_workspace_id uuid,

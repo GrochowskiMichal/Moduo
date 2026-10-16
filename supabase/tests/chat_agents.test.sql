@@ -409,6 +409,7 @@ $$;
 DO $$
 DECLARE
   v text;
+  v_counts text;
 BEGIN
   PERFORM test.age(interval '2 minutes');
   -- The creator edits a key's post in the app: their edit, not the key's.
@@ -424,6 +425,8 @@ BEGIN
     test.ref('k3'), format('second deploy %s %s', test.uri('person', test.id('A')),
                            test.uri('person', test.id('C')))));
   PERFORM test.ok(v LIKE 'ok %' AND test.items('C', 'k3') = 'mention' AND test.items('A', 'k3') = ''
+                  AND EXISTS (SELECT 1 FROM public.notice_deliveries d
+                               WHERE d.user_id = test.id('C') AND d.message_id = test.ref('k3'))
                   AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries d
                                    WHERE d.user_id = test.id('A') AND d.message_id = test.ref('k3')),
     'edit: the creator''s own edit naming themselves and C: C is told, A gets no item and no notice', v);
@@ -439,8 +442,17 @@ BEGIN
   -- them, never a reply item; someone else's reply there is.
   PERFORM test.say('A', 'Q', 'a10', 'A asks the CI');
   PERFORM test.age(interval '15 seconds');
+  v_counts := test.value_as('A', format(
+      $q$SELECT unread || ',' || addressed FROM public.chat_unread_counts(%L) WHERE channel_id = %L$q$,
+      test.id('W'), test.ref('Q')));
   v := test.post('KA', 'Q', 'k6', 'the CI answers', 'a10');
   PERFORM test.ok(v = 'ok' AND test.items('A', 'k6') = '', 'own agent''s reply: no reply item for its creator', v);
+  v := test.value_as('A', format(
+      $q$SELECT unread || ',' || addressed FROM public.chat_unread_counts(%L) WHERE channel_id = %L$q$,
+      test.id('W'), test.ref('Q')));
+  PERFORM test.ok(split_part(v, ',', 1)::int = split_part(v_counts, ',', 1)::int + 1
+                  AND split_part(v, ',', 2) = split_part(v_counts, ',', 2),
+    'own agent''s reply: one more unread for its creator, nothing more addressed', v_counts || ' -> ' || v);
   PERFORM test.say('B', 'Q', 'b10', 'B answers too', 'a10');
   PERFORM test.ok(test.items('A', 'b10') = 'reply', 'someone else''s reply there: a reply item for A', test.items('A', 'b10'));
   PERFORM test.age(interval '15 seconds');

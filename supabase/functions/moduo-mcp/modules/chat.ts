@@ -70,7 +70,11 @@ export async function conversation(ctx: ToolContext, channel: string): Promise<R
   const list = await call<Row[]>(ctx, "chat_agent_conversations", { p_workspace_id: ctx.key.workspaceId });
   const wanted = channel.trim();
   const byId = UUID.test(wanted) ? list.find((c) => c.id === wanted.toLowerCase()) : undefined;
-  const found = byId ?? list.find((c) => c.name === wanted || `#${c.name}` === wanted);
+  const named = byId ? [] : list.filter((c) => c.name === wanted || `#${c.name}` === wanted);
+  // A name that matches more than one conversation is refused: the id picks one.
+  if (named.length > 1)
+    throw new Error(`Two conversations are named "${channel}"; use its id from chat_list_channels.`);
+  const found = byId ?? named[0];
   if (!found) throw new Error(`No conversation "${channel}" this key can read. Use chat_list_channels to see them.`);
   return found;
 }
