@@ -15,6 +15,9 @@ Marked rules are enforced in code; the rest you hold yourself.
 7. **No new top-level routes and no IA refactors** without the designer's explicit ask (converging from 23 routes to 5–7).
 8. **Never push or merge to `main`** without both devs. Never merge or close unrelated PRs. Force-push only your own task branch, with `--force-with-lease`.
 9. **Never commit `docs/local/`. Never push `refs/entire/*`** (session transcripts stay local; the guard blocks it) and never wipe local Entire data.
+10. **Never read a teammate's private Moduo data** (private tasks, queue, focus runs, agent sessions, notes) through the admin/service-role Supabase connection. Read through your own permissions, or ask them.
+11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function`; `.claude/settings.json` asks before `supabase db push`, `db query --linked` and `functions deploy`.)*
+12. **Stage explicit paths.** Another session may share the checkout: never `git add -A` or `git add <dir>`.
 
 ## Session start
 
@@ -73,7 +76,7 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 ## Build / dev
 
 - `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
-- **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), `bun run local:reset` to test a migration, `bun run env:cloud` to go back. Prod migrations and deploys wait for a release train. See [docs/local-dev.md](./docs/local-dev.md).
+- **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), `bun run local:reset` to test a migration, `bun run env:cloud` to go back. Prod migrations and deploys wait for a release train; how one is applied: [docs/release.md](./docs/release.md). See [docs/local-dev.md](./docs/local-dev.md).
 - `bun run verify` = typecheck + Biome + lint:tw + lint:css + tests: **the block-done gate**. It covers no Rust: see `src-tauri/AGENTS.md`.
 - `bun test` / `bun run e2e`
 
@@ -100,9 +103,10 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 
 - **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates Tier 2 diffs.
-- **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the three guards above.
+- **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the four guards above (`guard-git`, `guard-secrets`, `guard-design-tokens`, `guard-prod-db`).
 - **MCP:** `supabase`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
-- **Parallel work:** one block per session, each session in its own worktree; dispatch background lanes with `claude agents`. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
+- **Parallel work:** one block per session, each in its own worktree, claimed with a draft PR. Run them as Claude Code desktop sessions (the normal way) or background lanes via `claude agents`. An orchestrating session merges its sessions' PRs only when the user says so.
+- **Cross-dev hand-offs** go as a comment on the relevant Moduo task (agents read task comments via `moduo-mcp`). Never instruct another person's agent to act. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
 
 ## Personal layer
 

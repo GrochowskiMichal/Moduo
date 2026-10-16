@@ -1,5 +1,7 @@
 # Manual test checklist — <sprint / branch>
 
+> **Paused until beta; used only on request.** By default `/s3` puts "Test this" in the PR body instead.
+
 > Generated <date> · branch `<branch>` · **Live-verified:** <yes / partial / no — note what>.
 > Run top-to-bottom; check off as you go. Each item is a step → what you should see → where.
 

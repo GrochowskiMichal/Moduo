@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · Release runbook in `docs/release.md`; prod migrations go by scratch-folder push (a train) or one-transaction `db query --linked` (one or two files).
 - 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, each worktree on its own dev-server port (agent's choice).
 - 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
@@ -191,6 +192,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
 - 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
 - 2026-10-16 · NR-7: clients send nothing over Realtime; the server stamps who is viewing (`notes_live_here`) and hands each saved update to people who may still view the note (`notes-live:<uid>` topics).

@@ -16,6 +16,13 @@ Moduo is organized as a React/TypeScript frontend with a Tauri/Rust backend. Kee
 - `src/lib`: cross-feature runtime adapters and platform services.
 - `src/styles`: global tokens and stylesheet entry points.
 
+Shared data pieces (added 2026-10-17):
+
+- `src/lib/sync/`: the Tasks v3 shared store (TV-D11a): one per person and workspace, a device copy in IndexedDB `moduo-sync`, delta sync by `updated_at`, Realtime merge.
+- `src/features/chat/store/`: the Chat v2 store (CV-3): device copy in IndexedDB `moduo-chat` (`messages` + one `meta` record per person and workspace), outbox, presence, typing.
+- `src/features/chat/markup-v2/`: Chat v2's stored message form (parse, serialize, canonical blocks, mentions, the Lexical bridge).
+- `src/lib/runtime.web.notes-live.ts`: a note's live channel (NR-7): each person listens on a private `notes-live:<uid>` topic the server writes to; clients send nothing over Realtime.
+
 Prefer `@/` imports for source-root imports. The alias resolves to `src`, so use `@/components/ui/button` rather than the older `@/src/components/ui/button`.
 
 ## Feature Slices
