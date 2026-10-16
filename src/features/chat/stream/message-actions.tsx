@@ -11,7 +11,6 @@
 
 import {
   AlarmClock,
-  ArrowRightLeft,
   Check,
   CheckSquare,
   CornerUpLeft,
@@ -136,13 +135,6 @@ function ActionsMenu({
             Wrap up
           </DropdownMenuItem>
         ) : null}
-        {verbs.onMoveTo ? (
-          <DropdownMenuItem onSelect={verbs.onMoveTo}>
-            <ArrowRightLeft aria-hidden />
-            Move to…
-            <DropdownMenuShortcut>M</DropdownMenuShortcut>
-          </DropdownMenuItem>
-        ) : null}
         <DropdownMenuItem onSelect={verbs.onTask}>
           <CheckSquare aria-hidden />
           Make a task
@@ -168,6 +160,13 @@ function ActionsMenu({
           Copy link
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={verbs.onMarkUnread}>Mark unread</DropdownMenuItem>
+        {/* Frame 5: Move to… closes the second group, after Mark unread. */}
+        {verbs.onMoveTo ? (
+          <DropdownMenuItem onSelect={verbs.onMoveTo}>
+            Move to…
+            <DropdownMenuShortcut>M</DropdownMenuShortcut>
+          </DropdownMenuItem>
+        ) : null}
         {verbs.onEdit || verbs.onDelete ? <DropdownMenuSeparator /> : null}
         {verbs.onEdit ? (
           <DropdownMenuItem onSelect={verbs.onEdit}>
