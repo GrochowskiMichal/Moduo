@@ -363,6 +363,8 @@ BEGIN
   PERFORM test.ok(v LIKE 'ok%' AND (test.chan('R')).deleted_at IS NOT NULL AND (test.chan('R')).deleted_by = test.id('A'),
     'delete: its manager deletes R (private)', v);
   PERFORM test.ok(NOT test.reads('A', 'R') AND NOT test.reads('B', 'R'), 'delete: nobody reads it');
+  PERFORM test.ok((test.mem('R', 'B')).access_at IS NOT NULL AND (test.mem('R', 'B')).left_at IS NULL,
+    'delete: each member''s own row is stamped (it reaches them live), still a membership');
   PERFORM test.ok((SELECT deleted_at FROM public.entities WHERE entity_type = 'chat_channel' AND entity_id = test.ref('R')) IS NOT NULL,
     'delete: its registry row is a tombstone');
   PERFORM test.ok(test.value_as('A', format(q_list, test.id('W'))) = '1', 'Recently deleted: its manager sees R');
