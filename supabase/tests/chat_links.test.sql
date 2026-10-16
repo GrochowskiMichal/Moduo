@@ -713,6 +713,38 @@ BEGIN
 END;
 $$;
 
+-- ── The server reads references with the client's grammar ─────────────────
+-- (src/features/chat/markup-v2/refs-parity.test.ts runs the whole corpus
+-- through both sides; these pin the edges here too.)
+CREATE FUNCTION test.refs_of(p_body text) RETURNS text LANGUAGE sql AS $f$
+  SELECT coalesce(string_agg(r.ref_type || '/' || left(r.ref_id::text, 8), ' '), '')
+    FROM public.chat__body_refs(p_body) r
+$f$;
+DO $$
+DECLARE
+  t text := 'moduo://task/d037b0b7-4125-415d-bef9-72662d6b58e6';
+  o text := 'moduo://note/a137b0b7-4125-415d-bef9-72662d6b58e6';
+BEGIN
+  PERFORM test.ok(test.refs_of('``a ' || t || ' b`` ' || o) = 'note/a137b0b7',
+    'a double-backtick code span holds no reference', test.refs_of('``a ' || t || ' b`` ' || o));
+  PERFORM test.ok(test.refs_of('\`` ' || t || ' `') = '',
+    'an escaped backtick, then a code span: no reference', test.refs_of('\`` ' || t || ' `'));
+  PERFORM test.ok(test.refs_of('[see docs](https://example.com/' || t || ')') = '',
+    'a link''s target is not a reference');
+  PERFORM test.ok(test.refs_of('[title](' || t || ') ' || o || ' ' || t) = 'task/d037b0b7 note/a137b0b7',
+    'a titled reference counts once, in order');
+  PERFORM test.ok(test.refs_of(E'```\n' || t || E'\n```\n' || o) = 'note/a137b0b7',
+    'a fenced block holds no reference');
+  PERFORM test.ok(test.refs_of(E'> ' || t || E'\n- ' || o) = 'task/d037b0b7 note/a137b0b7',
+    'quotes and list items are read');
+  PERFORM test.ok(test.refs_of('moduo\://task/d037b0b7-4125-415d-bef9-72662d6b58e6') = '',
+    'an escaped reference is text');
+  PERFORM test.ok((SELECT m.people = ARRAY['d037b0b7-4125-415d-bef9-72662d6b58e6'::uuid] AND m.everyone
+                     FROM public.chat__mentions('@channel moduo://person/d037b0b7-4125-415d-bef9-72662d6b58e6 `moduo://person/a137b0b7-4125-415d-bef9-72662d6b58e6`') m),
+    'chat__mentions reads people and @channel as before');
+END;
+$$;
+
 -- ── No op takes a person; grants ───────────────────────────────────────────
 SELECT test.ok(NOT EXISTS (
   SELECT 1 FROM pg_proc p
@@ -730,7 +762,12 @@ INSERT INTO test.fn_grants_13 VALUES
   ('public.chat__links_to(uuid, text, uuid)', false),
   ('public.chat__link_type(text)', false),
   ('public.chat__check_link_target(uuid, text, uuid, uuid)', false),
-  ('public.chat__set_link(public.chat_channels, text, uuid, uuid)', false);
+  ('public.chat__set_link(public.chat_channels, text, uuid, uuid)', false),
+  ('public.chat__body_runs(text)', false),
+  ('public.chat__inline_scan(text)', false),
+  ('public.chat__mentions_inline(text)', false),
+  ('public.chat__mentions(text)', false),
+  ('public.chat__body_refs(text)', false);
 SELECT test.ok(NOT has_function_privilege('anon', g.fn, 'execute'), 'anon can''t run ' || g.fn) FROM test.fn_grants_13 g;
 SELECT test.ok(has_function_privilege('authenticated', g.fn, 'execute') = g.app,
   CASE WHEN g.app THEN 'the app runs ' ELSE 'the app can''t run ' END || g.fn) FROM test.fn_grants_13 g;

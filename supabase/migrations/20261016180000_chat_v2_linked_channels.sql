@@ -1,10 +1,12 @@
 -- Chat v2 · CV-13 Linked channels (specs/chat-v2.md §8, §12; CH56, CH57;
 -- §Assumptions #6, #25; .design/chat-v2/research/round-3-database.md §2.21).
 -- The stamp is provisional: re-cut on the day it applies; it must stay after
--- …_chat_v2_references (CV-10, chat_conversations_for_item's mentions half) and
--- CV-2b's conversation ops (chat_op_create_channel's 6-argument body, live on
--- the local stack at CV-15's head, 2026-10-16). It runs again cleanly over
--- itself.
+-- …_chat_v2_mention_rows (CV-10-fix: chat_conversations_for_item's mentions
+-- half, chat__mentions / chat__mentions_inline), …_chat_v2_references (CV-10,
+-- chat__body_refs) and CV-2b's conversation ops (chat_op_create_channel's
+-- 6-argument body). Every redefined function starts from its live body on the
+-- local stack (2026-10-16, with CV-10-fix, CV-11, CV-17 and CV-9 applied). It
+-- runs again cleanly over itself.
 --
 -- What it does:
 --   1. chat_channels.linked_type / linked_id / linked_at: a channel links to
@@ -36,6 +38,8 @@
 --   7. chat_link_files_here(channel): whether capture from the channel files
 --      into its linked project for the caller (live, not archived, editable
 --      by them); otherwise the app files into the Inbox.
+--   8. The server reads item references with the client's grammar
+--      (chat__body_refs on chat__mentions' block walk and inline reader).
 --   Nothing here takes a person from the caller; an API key reads no chat row.
 
 SET LOCAL lock_timeout = '5s';
@@ -426,7 +430,9 @@ AS $function$
        AND public.perm_can_edit_entity(c.workspace_id, 'bucket', b.id))
 $function$;
 
--- ── 6. The item's conversations: mentions half (CV-10) + link half ──────────
+-- ── 6. The item's conversations: mentions half (CV-10-fix, live body) + link half
+-- The mentions half is CV-10-fix's as live: only the rows chat__link_mentions
+-- writes (the conversation as the source, relation `mentions`, origin `ref`).
 DROP FUNCTION IF EXISTS public.chat_conversations_for_item(text, uuid);
 CREATE OR REPLACE FUNCTION public.chat_conversations_for_item(p_type text, p_id uuid)
  RETURNS TABLE(channel_id uuid, workspace_id uuid, channel_kind text, channel_name text, channel_private boolean,
@@ -438,16 +444,16 @@ AS $function$
   WITH item AS (
     SELECT CASE p_type WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread' ELSE p_type END AS t
   ), hits AS (
-    SELECT l.workspace_id,
-           CASE WHEN l.source_type = 'chat_channel' THEN l.source_id ELSE l.target_id END AS cid,
-           'mentions'::text AS rel,
-           min(l.created_at) AS since
+    -- The rows chat__link_mentions writes: the conversation as the source,
+    -- relation `mentions`, origin `ref`.
+    SELECT l.workspace_id, l.source_id AS cid, 'mentions'::text AS rel, min(l.created_at) AS since
       FROM public.entity_links l, item
      WHERE auth.uid() IS NOT NULL
        AND l.deleted_at IS NULL
        AND l.relation_kind = 'mentions'
-       AND ((l.source_type = 'chat_channel' AND l.target_type = item.t AND l.target_id = p_id)
-         OR (l.target_type = 'chat_channel' AND l.source_type = item.t AND l.source_id = p_id))
+       AND l.origin = 'ref'
+       AND l.source_type = 'chat_channel'
+       AND l.target_type = item.t AND l.target_id = p_id
      GROUP BY 1, 2
     UNION ALL
     -- The link half reads the channel's own column (a team has no mirror row).
@@ -472,7 +478,477 @@ AS $function$
    LIMIT 50
 $function$;
 
--- ── 7. Grants (re-stated by name; DROP + CREATE reset them) ─────────────────
+-- ── 7. References, read with the client's grammar ──────────────────────────
+-- chat__body_refs (CV-10) read item references with a regex over the body
+-- after dropping fences and single-backtick spans. It now reads them the way
+-- the client's parseStored + mentionsOf do, with the one block walk and inline
+-- reader chat__mentions already uses (CV-10-fix, live bodies): code spans of
+-- any backtick length, backslash escapes, quotes and list items, and a link's
+-- target is never a reference (`[title](moduo://…)` is one, like the bare URI).
+--   chat__body_runs(body)   the block walk: each paragraph, quote and list
+--                           item's inline text, fenced code left out.
+--   chat__inline_scan(run)  the inline reader: every `type/uuid` reference in
+--                           order, each once, and whether `@channel` appears.
+--   chat__mentions_inline / chat__mentions keep their signatures and results;
+--   chat__body_refs keeps its signature (first appearance order, at most 100).
+
+CREATE OR REPLACE FUNCTION public.chat__body_runs(p_body text)
+ RETURNS text[]
+ LANGUAGE plpgsql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_lines text[];
+  n integer;
+  i integer := 1;
+  v_runs text[] := '{}';
+  v_line text;
+  m text[];
+  v_size integer;
+  v_body text[];
+  v_item text[];
+  v_first text[];
+  v_mark text[];
+  v_next text[];
+  v_indent integer;
+  v_para text[];
+  v_prev text;
+  v_cand text;
+  v_cut boolean;
+BEGIN
+  IF p_body IS NULL THEN
+    RETURN v_runs;
+  END IF;
+  -- The block walk is chat__body_text's; it collects the inline runs.
+  v_lines := string_to_array(regexp_replace(p_body, E'\r\n?', E'\n', 'g'), E'\n');
+  n := cardinality(v_lines);
+  WHILE i <= n LOOP
+    v_line := v_lines[i];
+    m := regexp_match(v_line, '^ {0,3}(`{3,})([^`]*)$');
+    IF m IS NOT NULL THEN
+      v_size := length(m[1]);
+      i := i + 1;
+      WHILE i <= n LOOP
+        m := regexp_match(v_lines[i], '^ {0,3}(`+)[ \t]*$');
+        EXIT WHEN m IS NOT NULL AND length(m[1]) >= v_size;
+        i := i + 1;
+      END LOOP;
+      i := i + 1;
+      IF i <= n AND v_lines[i] = '' THEN i := i + 1; END IF;
+      CONTINUE;
+    END IF;
+    IF v_line ~ '^ {0,3}>' THEN
+      v_body := '{}';
+      WHILE i <= n AND v_lines[i] ~ '^ {0,3}>' LOOP
+        v_body := v_body || substring(v_lines[i] FROM '^ {0,3}> ?(.*)$');
+        i := i + 1;
+      END LOOP;
+      v_runs := v_runs || array_to_string(v_body, E'\n');
+      IF i <= n AND v_lines[i] = '' THEN i := i + 1; END IF;
+      CONTINUE;
+    END IF;
+    v_first := public.chat__list_marker(v_line);
+    IF v_first IS NOT NULL THEN
+      v_mark := v_first;
+      WHILE v_mark IS NOT NULL LOOP
+        v_item := ARRAY[v_mark[5]];
+        v_indent := v_mark[4]::integer;
+        i := i + 1;
+        LOOP
+          EXIT WHEN i > n OR v_lines[i] = '';
+          IF v_lines[i] ~ '^[[:space:]]+$' THEN
+            v_item := v_item || CASE WHEN length(v_lines[i]) > v_indent THEN substr(v_lines[i], v_indent + 1) ELSE '' END;
+          ELSIF left(v_lines[i], v_indent) = repeat(' ', v_indent) THEN
+            v_item := v_item || substr(v_lines[i], v_indent + 1);
+          ELSE
+            EXIT;
+          END IF;
+          i := i + 1;
+        END LOOP;
+        v_runs := v_runs || array_to_string(v_item, E'\n');
+        v_next := CASE WHEN i <= n THEN public.chat__list_marker(v_lines[i]) END;
+        v_mark := CASE WHEN v_next IS NOT NULL AND v_next[1] = v_first[1] AND v_next[2] = v_first[2]
+                       THEN v_next END;
+      END LOOP;
+      IF i <= n AND v_lines[i] = '' THEN i := i + 1; END IF;
+      CONTINUE;
+    END IF;
+    v_para := ARRAY[v_line];
+    i := i + 1;
+    LOOP
+      EXIT WHEN i > n;
+      v_cand := v_lines[i];
+      v_prev := v_lines[i - 1];
+      IF v_cand ~ '^ {0,3}(`{3,})([^`]*)$' OR v_cand ~ '^ {0,3}>' THEN
+        v_cut := true;
+      ELSE
+        v_mark := public.chat__list_marker(v_cand);
+        v_cut := v_mark IS NOT NULL AND (
+          v_prev = ''
+          OR (btrim(v_mark[5], E' \t\n\r\f\v') <> ''
+              AND (v_mark[1] = 'f' OR v_mark[3]::bigint = 1)));
+      END IF;
+      EXIT WHEN v_cut;
+      v_para := v_para || v_cand;
+      i := i + 1;
+    END LOOP;
+    IF i <= n AND cardinality(v_para) > 1 AND v_para[cardinality(v_para)] = '' THEN
+      v_para := v_para[1:cardinality(v_para) - 1];
+    ELSIF i <= n AND cardinality(v_para) = 1 AND v_para[1] = '' THEN
+      CONTINUE;
+    END IF;
+    v_runs := v_runs || array_to_string(v_para, E'\n');
+  END LOOP;
+  RETURN v_runs;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat__inline_scan(p_src text, OUT refs text[], OUT everyone boolean)
+ RETURNS record
+ LANGUAGE plpgsql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+DECLARE
+  c text[];
+  cn integer;
+  i integer;
+  j integer;
+  r integer;
+  m text[];
+  v_run integer;
+  v_close integer;
+  v_budget integer;
+  v_ws boolean;          -- what was read last ends in whitespace (or a line starts)
+  v_lbs integer[];       -- positions of a '[' that may still open a link
+  v_ref_at integer;      -- position after the last reference, link or line break
+  v_lb integer;
+  v_href text;
+  v_depth integer;
+  v_ok boolean;
+  v_code text;
+  v_after text;
+  v_before text;
+  v_ref text;
+  v_last_star integer;
+  v_last_tilde integer;
+  v_uri constant text :=
+    '^moduo://(?:date/([0-9]{4}-[0-9]{2}-[0-9]{2})|([a-z][a-z_-]{0,31})/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))';
+BEGIN
+  refs := '{}';
+  everyone := false;
+  IF p_src IS NULL OR p_src = '' THEN
+    RETURN;
+  END IF;
+  v_budget := 2 * char_length(p_src) + 1000;
+  c := regexp_split_to_array(p_src, '');
+  cn := cardinality(c);
+  i := 1;
+  v_ws := true;
+  v_lbs := '{}';
+  v_ref_at := 0;
+  WHILE i <= cn LOOP
+    -- At a line's start: where its last run that could close emphasis starts,
+    -- per character (an opener with no such run to its right on its line is
+    -- text: `a **@channel`; a line break ends every mark).
+    IF i = 1 OR c[i - 1] = E'\n' THEN
+      v_last_star := 0;
+      v_last_tilde := 0;
+      j := i + 1;
+      WHILE j <= cn AND c[j] <> E'\n' LOOP
+        IF (c[j] = '*' OR c[j] = '~') AND c[j - 1] <> c[j] AND c[j - 1] !~ '[[:space:]]' THEN
+          IF c[j] = '*' THEN
+            v_last_star := j;
+          ELSIF j < cn AND c[j + 1] = '~' AND (j + 2 > cn OR c[j + 2] <> '~') THEN
+            v_last_tilde := j;
+          END IF;
+        END IF;
+        j := j + 1;
+      END LOOP;
+    END IF;
+    -- Plain text up to the next character that can mean something.
+    IF c[i] !~ '[\\`m\[\]*~@[:space:]]' THEN
+      j := i + 1;
+      WHILE j <= cn AND c[j] !~ '[\\`m\[\]*~@[:space:]]' LOOP
+        j := j + 1;
+      END LOOP;
+      v_ws := false;
+      i := j;
+      CONTINUE;
+    END IF;
+    IF c[i] ~ '[[:space:]]' THEN
+      IF c[i] = E'\n' THEN
+        v_ref_at := i + 1;   -- a '[' before a line break opens no link after it
+      END IF;
+      v_ws := true;
+      i := i + 1;
+      CONTINUE;
+    END IF;
+    IF c[i] = '\' THEN
+      -- An escaped character is text (so `moduo\://` is no reference); an
+      -- escaped `@` is the text "@", which may still start `@channel`.
+      IF i < cn AND c[i + 1] = '@' THEN
+        i := i + 1;
+        CONTINUE;
+      END IF;
+      i := i + CASE WHEN i < cn AND c[i + 1] ~ '^[!-/:-@\[-`{-~]$' THEN 2 ELSE 1 END;
+      v_ws := false;
+      CONTINUE;
+    END IF;
+    IF c[i] = '`' THEN
+      v_run := 1;
+      WHILE i + v_run <= cn AND c[i + v_run] = '`' LOOP
+        v_run := v_run + 1;
+      END LOOP;
+      j := i + v_run;
+      v_close := -1;
+      WHILE j <= cn AND c[j] <> E'\n' AND v_budget > 0 LOOP
+        v_budget := v_budget - 1;
+        IF c[j] = '`' THEN
+          r := 1;
+          WHILE j + r <= cn AND c[j + r] = '`' LOOP
+            r := r + 1;
+          END LOOP;
+          IF r = v_run THEN
+            v_close := j;
+            EXIT;
+          END IF;
+          j := j + r;
+        ELSE
+          j := j + 1;
+        END IF;
+      END LOOP;
+      IF v_close < 0 THEN
+        v_ws := false;
+        i := i + v_run;
+        CONTINUE;
+      END IF;
+      v_code := array_to_string(c[i + v_run:v_close - 1], '');
+      IF length(v_code) >= 2 AND left(v_code, 1) = ' ' AND right(v_code, 1) = ' ' AND v_code !~ '^ +$' THEN
+        v_code := substr(v_code, 2, length(v_code) - 2);
+      END IF;
+      v_ws := v_code ~ '[[:space:]]$';
+      i := v_close + v_run;
+      CONTINUE;
+    END IF;
+    IF c[i] = 'm' THEN
+      IF c[i + 1] = 'o' AND array_to_string(c[i:i + 7], '') = 'moduo://' THEN
+        m := regexp_match(array_to_string(c[i:i + 80], ''), v_uri);
+        IF m IS NOT NULL AND (m[1] IS NULL OR public.chat__is_iso_day(m[1])) THEN
+          IF m[2] IS NOT NULL THEN
+            v_ref := m[2] || '/' || m[3]::uuid::text;
+            IF NOT v_ref = ANY (refs) THEN
+              refs := refs || v_ref;
+            END IF;
+          END IF;
+          i := i + length(CASE WHEN m[1] IS NOT NULL THEN 'moduo://date/' || m[1]
+                               ELSE 'moduo://' || m[2] || '/' || m[3] END);
+          v_ref_at := i;
+          v_ws := false;
+          CONTINUE;
+        END IF;
+      END IF;
+      v_ws := false;
+      i := i + 1;
+      CONTINUE;
+    END IF;
+    IF c[i] = '[' THEN
+      v_lbs := v_lbs || i;
+      v_ws := false;
+      i := i + 1;
+      CONTINUE;
+    END IF;
+    IF c[i] = ']' THEN
+      v_lb := CASE WHEN cardinality(v_lbs) > 0 THEN v_lbs[cardinality(v_lbs)] END;
+      v_ok := false;
+      IF v_lb IS NOT NULL AND i < cn AND c[i + 1] = '(' AND v_ref_at <= v_lb AND i > v_lb + 1 THEN
+        -- The destination, as chat__inline_text reads it.
+        j := i + 2;
+        v_href := '';
+        IF j <= cn AND c[j] = '<' THEN
+          j := j + 1;
+          WHILE j <= cn AND c[j] <> '>' AND v_budget > 0 LOOP
+            v_budget := v_budget - 1;
+            EXIT WHEN c[j] = E'\n' OR c[j] = '<';
+            IF c[j] = '\' AND j < cn AND c[j + 1] ~ '^[!-/:-@\[-`{-~]$' THEN
+              v_href := v_href || c[j + 1];
+              j := j + 2;
+            ELSE
+              v_href := v_href || c[j];
+              j := j + 1;
+            END IF;
+          END LOOP;
+          IF j <= cn AND c[j] = '>' THEN
+            j := j + 1;
+            v_ok := j <= cn AND c[j] = ')';
+          END IF;
+        ELSE
+          v_depth := 0;
+          WHILE j <= cn AND v_budget > 0 LOOP
+            v_budget := v_budget - 1;
+            EXIT WHEN c[j] ~ '[[:space:]]' OR ascii(c[j]) < 32;
+            IF c[j] = '\' AND j < cn AND c[j + 1] ~ '^[!-/:-@\[-`{-~]$' THEN
+              v_href := v_href || c[j + 1];
+              j := j + 2;
+              CONTINUE;
+            END IF;
+            IF c[j] = '(' THEN
+              v_depth := v_depth + 1;
+            ELSIF c[j] = ')' THEN
+              EXIT WHEN v_depth = 0;
+              v_depth := v_depth - 1;
+            END IF;
+            v_href := v_href || c[j];
+            j := j + 1;
+          END LOOP;
+          v_ok := v_depth = 0 AND j <= cn AND c[j] = ')';
+        END IF;
+        IF v_ok THEN
+          m := regexp_match(v_href, v_uri || '$');
+          IF m IS NOT NULL AND (m[2] IS NOT NULL OR public.chat__is_iso_day(m[1])) THEN
+            -- `[title](moduo://…)` reads as the bare reference.
+            IF m[2] IS NOT NULL THEN
+              v_ref := m[2] || '/' || m[3]::uuid::text;
+              IF NOT v_ref = ANY (refs) THEN
+                refs := refs || v_ref;
+              END IF;
+            END IF;
+          ELSIF m IS NULL AND v_href ~* '^(https?://[^[:space:]]+|mailto:[^[:space:]]+)$'
+                AND v_href !~ '[\x01-\x1f\x7f]' THEN
+            NULL;   -- a link: its target is never read
+          ELSE
+            v_ok := false;
+          END IF;
+        END IF;
+        IF v_ok THEN
+          v_lbs := '{}';
+          v_ref_at := j + 1;
+          v_ws := false;
+          i := j + 1;
+          CONTINUE;
+        END IF;
+      END IF;
+      IF v_lb IS NOT NULL THEN
+        v_lbs := v_lbs[1:cardinality(v_lbs) - 1];
+      END IF;
+      v_ws := false;
+      i := i + 1;
+      CONTINUE;
+    END IF;
+    IF c[i] = '*' OR c[i] = '~' THEN
+      v_run := 1;
+      WHILE i + v_run <= cn AND c[i + v_run] = c[i] LOOP
+        v_run := v_run + 1;
+      END LOOP;
+      v_before := CASE WHEN i > 1 THEN c[i - 1] END;
+      v_after := CASE WHEN i + v_run <= cn THEN c[i + v_run] END;
+      IF (c[i] = '~' AND v_run <> 2)
+         OR ((v_after IS NULL OR v_after ~ '[[:space:]]') AND (v_before IS NULL OR v_before ~ '[[:space:]]'))
+         -- an opener only, with nothing to close it on its right
+         OR ((v_before IS NULL OR v_before ~ '[[:space:]]')
+             AND CASE c[i] WHEN '*' THEN v_last_star ELSE v_last_tilde END <= i) THEN
+        v_ws := false;   -- text
+      END IF;            -- an emphasis marker: transparent
+      i := i + v_run;
+      CONTINUE;
+    END IF;
+    -- '@'
+    -- A whole word: what follows isn't a word character of the same text
+    -- (a reference right after it ends the text).
+    IF v_ws AND array_to_string(c[i:i + 7], '') = '@channel'
+       AND (i + 8 > cn OR c[i + 8] !~ '[A-Za-z0-9_-]'
+            OR (array_to_string(c[i + 8:i + 15], '') = 'moduo://'
+                AND public.chat__mentions_ref_at(array_to_string(c[i + 8:i + 88], '')))) THEN
+      everyone := true;
+      i := i + 8;
+    ELSE
+      i := i + 1;
+    END IF;
+    v_ws := false;
+  END LOOP;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat__mentions(p_body text, OUT people uuid[], OUT teams uuid[], OUT everyone boolean)
+ RETURNS record
+ LANGUAGE plpgsql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_run text;
+  mt record;
+  v_id uuid;
+BEGIN
+  people := '{}';
+  teams := '{}';
+  everyone := false;
+  IF p_body IS NULL OR p_body !~ '(moduo|@channel)' THEN
+    RETURN;
+  END IF;
+  FOREACH v_run IN ARRAY public.chat__body_runs(p_body) LOOP
+    CONTINUE WHEN v_run !~ '(moduo|@channel)';
+    SELECT * INTO mt FROM public.chat__mentions_inline(v_run);
+    everyone := everyone OR mt.everyone;
+    FOREACH v_id IN ARRAY mt.people LOOP
+      IF NOT v_id = ANY (people) THEN people := people || v_id; END IF;
+    END LOOP;
+    FOREACH v_id IN ARRAY mt.teams LOOP
+      IF NOT v_id = ANY (teams) THEN teams := teams || v_id; END IF;
+    END LOOP;
+  END LOOP;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat__mentions_inline(p_src text, OUT people uuid[], OUT teams uuid[], OUT everyone boolean)
+ RETURNS record
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+  SELECT coalesce(array_agg(split_part(u.r, '/', 2)::uuid ORDER BY u.o)
+                    FILTER (WHERE split_part(u.r, '/', 1) = 'person'), '{}'::uuid[]),
+         coalesce(array_agg(split_part(u.r, '/', 2)::uuid ORDER BY u.o)
+                    FILTER (WHERE split_part(u.r, '/', 1) = 'team'), '{}'::uuid[]),
+         s.everyone
+    FROM public.chat__inline_scan(p_src) s
+    LEFT JOIN LATERAL unnest(s.refs) WITH ORDINALITY AS u(r, o) ON true
+   GROUP BY s.everyone
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat__body_refs(p_body text)
+ RETURNS TABLE(ref_type text, ref_id uuid)
+ LANGUAGE plpgsql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_refs text[] := '{}';
+  v_run text;
+  v_ref text;
+BEGIN
+  IF p_body IS NULL OR position('moduo://' IN p_body) = 0 THEN
+    RETURN;
+  END IF;
+  <<runs>>
+  FOREACH v_run IN ARRAY public.chat__body_runs(p_body) LOOP
+    CONTINUE WHEN position('moduo://' IN v_run) = 0;
+    FOREACH v_ref IN ARRAY (SELECT s.refs FROM public.chat__inline_scan(v_run) s) LOOP
+      IF NOT v_ref = ANY (v_refs) THEN
+        v_refs := v_refs || v_ref;
+        EXIT runs WHEN cardinality(v_refs) >= 100;
+      END IF;
+    END LOOP;
+  END LOOP;
+  RETURN QUERY
+    SELECT split_part(u.r, '/', 1), split_part(u.r, '/', 2)::uuid
+      FROM unnest(v_refs) WITH ORDINALITY AS u(r, o)
+     ORDER BY u.o;
+END
+$function$;
+
+-- ── 8. Grants (re-stated by name; DROP + CREATE reset them) ─────────────────
 DO $$
 DECLARE
   fn text;
@@ -482,7 +958,12 @@ BEGIN
     'chat__links_to(uuid, text, uuid)',
     'chat__link_type(text)',
     'chat__check_link_target(uuid, text, uuid, uuid)',
-    'chat__set_link(public.chat_channels, text, uuid, uuid)'
+    'chat__set_link(public.chat_channels, text, uuid, uuid)',
+    'chat__body_runs(text)',
+    'chat__inline_scan(text)',
+    'chat__mentions_inline(text)',
+    'chat__mentions(text)',
+    'chat__body_refs(text)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
