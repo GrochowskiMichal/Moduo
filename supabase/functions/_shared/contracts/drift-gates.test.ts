@@ -261,7 +261,9 @@ describe("cross-runtime drift guards", () => {
     );
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`status IN (${inList(ATTACHMENT_STATUSES)})`);
-    expect(sql).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
+    // CV-9 re-cut the deleted-reason CHECK (chat_message).
+    const recut = readFileSync(resolve(MIGRATIONS_DIR, "20261016170000_chat_v2_files.sql"), "utf8");
+    expect(recut).toContain(`deleted_reason IN (${inList(ATTACHMENT_DELETED_REASONS)})`);
     expect(sql).toContain(`preview_mime IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`p_preview_mime NOT IN (${inList(ATTACHMENT_PREVIEW_MIMES)})`);
     expect(sql).toContain(`bucket_id = '${ATTACHMENTS_BUCKET}'`);

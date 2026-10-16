@@ -91,6 +91,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "booking_google_connected",
   "calendar_busy_blocks",
   "chat_caps_get",
+  // CV-9: a conversation's Files view.
+  "chat_files",
   // CV-3: the chat store's access check and its people.
   "chat_people",
   "chat_sync_ids",

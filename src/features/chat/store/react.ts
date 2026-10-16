@@ -10,6 +10,8 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { supabaseClient } from "@/lib/runtime.web";
+import { getUploadQueue } from "@/lib/uploads";
+import { uploadQueueGate } from "../files/gate";
 import { postgresChangesSource } from "../realtime";
 import { type ChatPresenceSnapshot, chatPresence } from "./presence";
 import {
@@ -17,11 +19,13 @@ import {
   type ChatStore,
   chatStore,
   EMPTY_CHAT_SNAPSHOT,
+  setDefaultChatFiles,
   setDefaultChatLive,
 } from "./store";
 import { type ChatTypingSnapshot, ChatTypingStore } from "./typing";
 
 setDefaultChatLive(() => postgresChangesSource(supabaseClient));
+setDefaultChatFiles(() => uploadQueueGate(getUploadQueue()));
 
 const noSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY_CHAT_SNAPSHOT;

@@ -964,6 +964,9 @@
   --spacing-icon-sm: var(--icon-sm);
   --spacing-icon:    var(--icon);
   --spacing-icon-lg: var(--icon-lg);
+  /* The feed's media box (chat v2 §17, CV-9) → max-w-feed-media / max-h-feed-media. */
+  --spacing-feed-media:   var(--feed-media-max-w);
+  --spacing-feed-media-h: var(--feed-media-max-h);
 
   --text-3xs:  var(--text-3xs);
   --text-2xs:  var(--text-2xs);

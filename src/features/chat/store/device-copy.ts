@@ -43,6 +43,8 @@ export type ChatOutboxEntry = {
   failed?: string;
   /** Deleted while it was being sent: hidden, and deleted on the server once it lands there. */
   deleted?: boolean;
+  /** CV-9: how many files were uploading under its id when it was sent: it waits for them. */
+  files?: number;
 };
 
 export type ChatHeldConversation = { openedAt: number; edge?: ChatKey | null };

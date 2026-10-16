@@ -66,6 +66,7 @@ import {
   ownerKey,
 } from "./device-copy";
 import { compareKeys, compareRows, isNewerRow, keyOf, laterStamp, stampMinus } from "./keys";
+import type { ChatFileGate } from "../files/gate";
 import { classifyChatError, newMessageId } from "./outbox";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -205,6 +206,8 @@ export type ChatStoreOptions = {
   timing?: Partial<ChatStoreTiming>;
   /** Rows per delta page (tests page with fewer). */
   deltaLimit?: number;
+  /** CV-9: whether a message's files are up (a send with files waits for them). */
+  files?: ChatFileGate;
 };
 
 let nextOp = 1;
@@ -237,6 +240,8 @@ export class ChatStore {
   private readonly live: ChatLiveSource | null;
   private readonly timing: ChatStoreTiming;
   private readonly deltaLimit: number;
+  private readonly files: ChatFileGate | null;
+  private stopFiles: (() => void) | null = null;
 
   private status: ChatStatus = "idle";
   private error: string | null = null;
@@ -323,6 +328,7 @@ export class ChatStore {
     this.live = opts.live ?? null;
     this.timing = { ...DEFAULT_CHAT_TIMING, ...opts.timing };
     this.deltaLimit = opts.deltaLimit ?? DELTA_LIMIT;
+    this.files = opts.files ?? null;
   }
 
   // ── Readers ───────────────────────────────────────────────────────────────
@@ -493,6 +499,7 @@ export class ChatStore {
       clientId: null,
       createdAt: entry.createdAt,
       updatedAt: entry.createdAt,
+      fileCount: entry.files ?? 0,
       sendState,
       ...(entry.failed ? { sendError: entry.failed } : {}),
     };
@@ -558,6 +565,8 @@ export class ChatStore {
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", this.onVisibility);
     }
+    // CV-9: a send waiting on its files goes once they're up.
+    this.stopFiles = this.files?.subscribe(() => void this.drain()) ?? null;
     this.booting = this.boot();
   }
 
@@ -566,6 +575,8 @@ export class ChatStore {
     this.running = false;
     this.stopLive?.();
     this.stopLive = null;
+    this.stopFiles?.();
+    this.stopFiles = null;
     for (const t of [this.joinTimer, this.retryTimer, this.countsTimer]) if (t) clearTimeout(t);
     for (const t of [this.accessTimer, this.gapTimer]) if (t) clearInterval(t);
     this.joinTimer = this.retryTimer = this.countsTimer = null;
@@ -1606,8 +1617,12 @@ export class ChatStore {
     body: string;
     replyToId?: string | null;
     format?: ChatBodyFormat;
+    /** CV-9: the id its files were uploaded under (minted by the composer). */
+    id?: string;
+    /** CV-9: how many files go with it: it waits until they're up. */
+    files?: number;
   }): string {
-    const id = newMessageId();
+    const id = args.id ?? newMessageId();
     this.outbox.push({
       id,
       channelId: args.channelId,
@@ -1615,6 +1630,7 @@ export class ChatStore {
       replyToId: args.replyToId ?? null,
       format: args.format ?? "v2",
       createdAt: new Date().toISOString(),
+      ...(args.files ? { files: args.files } : {}),
     });
     const conv = this.ensureConv(args.channelId);
     if (conv.hi) void this.jumpToLatest(args.channelId);
@@ -1631,6 +1647,11 @@ export class ChatStore {
     const entry = this.outbox.find((e) => e.id === id);
     if (!entry?.failed) return;
     delete entry.failed;
+    if (entry.files && this.files?.state(entry.id) === "failed") {
+      // A file stopped: it goes with the files that made it.
+      this.files.release(entry.id);
+      delete entry.files;
+    }
     this.touch(entry.channelId);
     this.metaDirty = true;
     this.notify();
@@ -1641,6 +1662,7 @@ export class ChatStore {
   /** Throw away an unsent message. */
   discard(id: string): void {
     if (!this.dropEntry(id)) return;
+    this.files?.release(id);
     this.notify();
     void this.persistNow();
   }
@@ -1669,6 +1691,25 @@ export class ChatStore {
     return true;
   }
 
+  /**
+   * CV-9: are a waiting send's files up? One still uploading holds only its
+   * own message (later ones go); one that stopped turns it into "Not sent"
+   * (Retry sends it with the files that made it).
+   */
+  private filesUp(entry: ChatOutboxEntry): boolean {
+    if (!entry.files || !this.files) return true;
+    const state = this.files.state(entry.id);
+    if (state === "failed") {
+      entry.failed = "A file didn't upload";
+      this.touch(entry.channelId);
+      this.metaDirty = true;
+      this.notify();
+      void this.persistNow();
+      return false;
+    }
+    return state === "ready";
+  }
+
   /** Send what waits, in order, each under its own id. */
   drain(): Promise<void> {
     if (this.draining) {
@@ -1688,7 +1729,7 @@ export class ChatStore {
   private async runDrain(): Promise<void> {
     for (;;) {
       if (!this.running || this.disposed) return;
-      const entry = this.outbox.find((e) => !e.failed);
+      const entry = this.outbox.find((e) => !e.failed && this.filesUp(e));
       if (!entry) return;
       if (browserOffline()) {
         this.goOffline();
@@ -2050,6 +2091,13 @@ export function setDefaultChatLive(make: () => ChatLiveSource): void {
   defaultLive = make;
 }
 
+let defaultFiles: (() => ChatFileGate) | null = null;
+
+/** The app's upload queue answers whether a message's files are up (CV-9). */
+export function setDefaultChatFiles(make: () => ChatFileGate): void {
+  defaultFiles = make;
+}
+
 /**
  * The chat store for a workspace, made on first use. Keyed by the runtime
  * (each test's fake gets its own) and the workspace; one made for another
@@ -2071,6 +2119,7 @@ export function chatStore(runtime: ModuoRuntime, userId: string, workspaceId: st
     store = new ChatStore(runtime.chat, userId, workspaceId, {
       ...storeOptions,
       live: storeOptions.live ?? defaultLive?.() ?? undefined,
+      files: storeOptions.files ?? defaultFiles?.() ?? undefined,
     });
     byWorkspace.set(workspaceId, store);
     everyStore.add(store);

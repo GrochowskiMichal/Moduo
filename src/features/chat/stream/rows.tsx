@@ -302,6 +302,8 @@ export type RowHandlers = {
   onPersonClick?: (userId: string) => void;
   /** A person's card, previewed on hover over an author's name (CV-8b). */
   personPreview?: (userId: string) => ReactNode;
+  /** CV-9: a message's files (previews and chips), under its words. */
+  renderFiles?: (m: ChatMessage) => ReactNode;
 };
 
 /** An author's name: opens their card on click, previews it on hover (CV-8b). */
@@ -467,6 +469,7 @@ export function MessageRow({
               className={pending ? "opacity-60" : undefined}
             />
           )}
+          {(message.fileCount ?? 0) > 0 ? handlers.renderFiles?.(message) : null}
           <SendState
             message={message}
             onRetry={() => handlers.onRetry?.(message)}

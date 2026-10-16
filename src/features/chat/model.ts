@@ -96,6 +96,8 @@ export type ChatMessage = {
   createdAt: string;
   /** The server's stamp of the row's last change (the delta cursor and the live merge). */
   updatedAt: string;
+  /** CV-9: how many files it holds (absent on rows written before CV-9's columns). */
+  fileCount?: number;
   /** Client-only (the store): an unconfirmed send of yours. */
   sendState?: ChatSendState;
   /** Client-only: why the server refused it ("Not sent · Retry"). */
@@ -162,6 +164,25 @@ export type ChatHistoryEntry = {
 
 /** A position in a conversation's stream: pages key on (created_at, id). */
 export type ChatKey = { at: string; id: string };
+
+/** One file on a sent message (CV-9): readable by whoever reads its conversation. */
+export type ChatFile = {
+  id: string;
+  messageId: string;
+  /** The message's author (also the uploader); null once their account is deleted. */
+  authorId: string | null;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+  /** Paths in the private `attachments` bucket: signed links only. */
+  objectPath: string;
+  previewPath: string | null;
+  previewMime: string | null;
+  /** When its message was sent (the Files view's order). */
+  sentAt: string;
+};
 
 /** What the server said when it didn't answer with data. Never thrown. */
 export type ChatError = { code: string | null; message: string };
@@ -237,6 +258,14 @@ export type ChatRuntime = {
   chainRead(rootId: string): Promise<ChatResult<null>>;
   /** A conversation's reply chains (roots with replies), newest activity first. */
   chains(channelId: string): Promise<ChatResult<ChatMessage[]>>;
+  /** CV-9: a conversation's files, newest message first; `before` = the last file of the previous page. */
+  files?(args: {
+    channelId: string;
+    before?: { sentAt: string; id: string } | null;
+    limit?: number;
+  }): Promise<ChatResult<ChatFile[]>>;
+  /** CV-9: the files of these sent messages that you may read. */
+  messageFiles?(messageIds: readonly string[]): Promise<ChatResult<ChatFile[]>>;
   /** Whether you follow a chain (no mute row = following). */
   chainFollowing(rootId: string): Promise<boolean>;
   followChain(rootId: string, following: boolean): Promise<ChatResult<null>>;

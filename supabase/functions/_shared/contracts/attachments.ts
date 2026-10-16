@@ -39,3 +39,18 @@ export const ATTACHMENT_PER_FILE_BYTES = {
   team: 500 * MiB,
   founder: 500 * MiB,
 } as const;
+
+/** The most files one chat message holds (CV-9): the eleventh is refused
+ *  before upload. Mirrors `attachments__chat_file_cap()`; attachments.test.ts
+ *  checks it. */
+export const CHAT_FILES_PER_MESSAGE = 10;
+
+/** How long a signed link to a chat file lives, in seconds (CV-9): shorter
+ *  than a task's, so someone who leaves a conversation keeps no working link
+ *  for long. The stream re-signs a minute before expiry (signed-urls.ts). */
+export const CHAT_FILE_LINK_TTL_SECONDS = {
+  /** Inline previews in the stream and the Files view. */
+  preview: 600,
+  /** The original, opened or downloaded. */
+  original: 180,
+} as const;

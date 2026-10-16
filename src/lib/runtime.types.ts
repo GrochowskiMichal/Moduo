@@ -305,8 +305,11 @@ export type LargestAttachment = {
 
 export type AttachmentBeginInput = {
   workspaceId: string;
-  entityType: "task";
+  /** A task's file, or a chat message's (CV-9: the id the app minted, before it's sent). */
+  entityType: "task" | "chat_message";
   entityId: string;
+  /** chat_message only: the conversation it will be sent in (who may post decides). */
+  channelId?: string;
   fileName: string;
   mime: string;
   sizeBytes: number;

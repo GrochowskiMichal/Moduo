@@ -86,6 +86,9 @@ import {
   focusAtEnd,
   SelectionFormatPlugin,
 } from "./plugins";
+import { ComposerFileChips } from "../files/composer-chips";
+import type { ComposerFilesApi } from "../files/composer-files";
+import { FilePastePlugin } from "../files/paste-plugin";
 import { PlusMenu, type PlusPick } from "./plus-menu";
 
 /** Tokens-only theme for the editor's nodes (what a sent row draws, roughly). */
@@ -138,6 +141,8 @@ export type ChatComposerProps = {
   onCancel?: () => void;
   /** A line under the box (the `@channel` note after a send). */
   note?: string | null;
+  /** CV-9: the files going with the next message (paste, drop, + → Upload a file). */
+  files?: ComposerFilesApi | null;
   className?: string;
 };
 
@@ -264,10 +269,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     onEscapeEmpty,
     onCancel,
     note,
+    files,
     className,
   },
   ref,
 ) {
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const hasFiles = (files?.files.length ?? 0) > 0;
   const editorRef = useRef<LexicalEditor | null>(null);
   // What an untouched edit exports (a body written elsewhere may not be in the
   // canonical form): ⏎ on it saves nothing.
@@ -360,7 +368,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     const editor = editorRef.current;
     if (!editor) return;
     const stored = editor.getEditorState().read($exportStored);
-    if (!stored.trim()) {
+    // CV-9: files still being read in hold the send (their id isn't taken yet).
+    if (mode === "message" && files?.busy) return;
+    // A message of files only may have no words.
+    if (!stored.trim() && !(mode === "message" && hasFiles)) {
       if (mode === "edit") onCancel?.();
       return;
     }
@@ -389,7 +400,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     flushDraft();
     live.current.onTyping?.(false);
     setGrown(false);
-  }, [mode, initial, onCancel, onSend, flushDraft]);
+  }, [mode, initial, onCancel, onSend, flushDraft, files?.busy, hasFiles]);
 
   // ── inserting: chips, emoji, captures ───────────────────────────────────
   const insertAt = useCallback((saved: RangeSelection | null, run: () => void) => {
@@ -549,7 +560,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const onPlusPick = (pick: PlusPick) => {
     setPlusOpen(false);
     const saved = savedSelection.current;
-    if (pick.kind === "ref") insertAt(saved, () => $insertRef(pick.type, pick.id));
+    if (pick.kind === "upload") fileInput.current?.click();
+    else if (pick.kind === "ref") insertAt(saved, () => $insertRef(pick.type, pick.id));
     else openCreate(pick.command, "", saved);
   };
 
@@ -615,10 +627,34 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                     selfId={selfId}
                     people={people}
                     canCreate={canCreate}
+                    canUpload={!!files}
                     onPick={onPlusPick}
                   />
                 </PopoverContent>
               </Popover>
+            ) : null}
+            {message && files ? (
+              <>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  multiple
+                  hidden
+                  data-slot="composer-file-input"
+                  onChange={(e) => {
+                    const picked = Array.from(e.currentTarget.files ?? []);
+                    e.currentTarget.value = "";
+                    files.add(picked);
+                  }}
+                />
+                <div className="order-first basis-full empty:hidden">
+                  <ComposerFileChips
+                    files={files.files}
+                    notice={files.notice}
+                    onRemove={files.remove}
+                  />
+                </div>
+              </>
             ) : null}
             <div
               ref={textRef}
@@ -725,6 +761,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         <ListPlugin />
         <MarkdownShortcutPlugin transformers={CHAT_TRANSFORMERS} />
         <CleanPastePlugin origins={origins} />
+        {message && files ? <FilePastePlugin onFiles={files.add} /> : null}
         <ComposerStatePlugin onChange={onState} />
         <SelectionFormatPlugin />
         <CaretAfterChipPlugin pending={caretAfterChip} />

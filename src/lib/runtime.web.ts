@@ -1718,7 +1718,9 @@ export const webRuntime: ModuoRuntime = {
           supabaseClient
             .from("attachments")
             .select(ATTACHMENT_COLUMNS, opts)
-            .eq("workspace_id", workspaceId),
+            .eq("workspace_id", workspaceId)
+            // Task files: a chat file is read with its conversation (CV-9).
+            .eq("entity_type", "task"),
         order: (q) => q.order("created_at").order("id"),
       });
       if (res.error) {
@@ -1761,6 +1763,8 @@ export const webRuntime: ModuoRuntime = {
         p_preview_mime: input.previewMime,
         p_width: input.width,
         p_height: input.height,
+        // CV-9: a chat file names its conversation (a task's call stays as it was).
+        ...(input.channelId ? { p_channel_id: input.channelId } : {}),
       });
       return attachmentOpResult(data, error);
     },

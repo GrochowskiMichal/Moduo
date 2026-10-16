@@ -27,7 +27,10 @@ import {
 } from "./errors";
 import type { PreparedUpload } from "./pipeline";
 
-export type UploadTarget = { workspaceId: string; entityType: "task"; entityId: string };
+export type UploadTarget =
+  | { workspaceId: string; entityType: "task"; entityId: string }
+  /** CV-9: a file for a chat message not sent yet: its minted id, in its conversation. */
+  | { workspaceId: string; entityType: "chat_message"; entityId: string; channelId: string };
 
 export function targetKey(t: UploadTarget): string {
   return `${t.workspaceId}:${t.entityType}:${t.entityId}`;
@@ -207,6 +210,7 @@ export class UploadQueue {
   private userId: string | null = null;
   private api: AttachmentsApi | null = null;
   private loaded: Promise<void> | null = null;
+  private restored = false;
   private timer: unknown = null;
   private persistAsked = false;
   private progressTimer: unknown = null;
@@ -290,8 +294,15 @@ export class UploadQueue {
       })
       .catch(() => {});
     await this.loaded;
+    this.restored = true;
     this.emit();
     this.pump();
+  }
+
+  /** The device's stored uploads are back in the queue (a send waiting on its
+   *  files can trust what the snapshot says only from here; CV-9). */
+  hasRestored(): boolean {
+    return this.restored;
   }
 
   /** Signed out: stop moving bytes. Pending files stay stored for next time. */
@@ -618,6 +629,9 @@ export class UploadQueue {
           workspaceId: item.target.workspaceId,
           entityType: item.target.entityType,
           entityId: item.target.entityId,
+          ...(item.target.entityType === "chat_message"
+            ? { channelId: item.target.channelId }
+            : {}),
           fileName: item.fileName,
           mime: item.mime,
           sizeBytes: item.sizeBytes,
