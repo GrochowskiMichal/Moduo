@@ -481,6 +481,11 @@ export class ChatStore {
       replyCount: 0,
       lastReplyAt: null,
       replyUserIds: [],
+      wrappedAt: null,
+      wrappedBy: null,
+      settledId: null,
+      reopenedAt: null,
+      reopenedBy: null,
       pinnedAt: null,
       pinnedBy: null,
       editedAt: null,
@@ -1830,6 +1835,44 @@ export class ChatStore {
       }),
       () => this.transport.pin({ id, pinned }),
     );
+  }
+
+  /** Wrap up a chain (CV-12): its replies leave the stream (a drawing rule on the root). */
+  wrapUp(rootId: string, settledId: string): Promise<ChatWriteResult> {
+    const at = new Date().toISOString();
+    return this.write(
+      rootId,
+      (row) => ({ ...row, wrappedAt: at, wrappedBy: this.userId, settledId }),
+      () => this.transport.wrapUp({ rootId, settledId }),
+    );
+  }
+
+  /** Reopen a wrapped chain (also the wrap-up toast's Undo). */
+  reopen(rootId: string): Promise<ChatWriteResult> {
+    return this.write(
+      rootId,
+      (row) => ({ ...row, wrappedAt: null, wrappedBy: null, settledId: null }),
+      () => this.transport.reopen(rootId),
+    );
+  }
+
+  /** "Reply to…": the message joins `replyToId`'s chain; both chains' roots read again. */
+  async attachToChain(messageId: string, replyToId: string): Promise<ChatWriteResult> {
+    const oldRoot = this.rowById(messageId)?.parentId ?? null;
+    const res = await this.write(
+      messageId,
+      (row) => ({ ...row, parentId: this.rootOf(replyToId), replyToId }),
+      () => this.transport.attachToChain({ messageId, replyToId }),
+    );
+    if (!res.ok) return res;
+    const roots = [...new Set([oldRoot, this.rowById(messageId)?.parentId ?? null])].filter(
+      (id): id is string => !!id,
+    );
+    const read = await Promise.all(roots.map((id) => this.transport.message(id)));
+    for (const root of read) if (root.data) this.landRow(root.data);
+    this.chainCache.clear();
+    this.notify();
+    return res;
   }
 
   // ── Conversation ops (they throw; the screens say why) ────────────────────

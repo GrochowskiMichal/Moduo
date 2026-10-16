@@ -264,6 +264,75 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return rowResult(data, error, "pin");
       }),
 
+    wrapUp: ({ rootId, settledId, markDecision }) =>
+      attempt(async () => {
+        const { data, error } = await db()
+          .rpc("chat_op_wrap_up", {
+            p_root_id: rootId,
+            p_settled_id: settledId,
+            p_mark_decision: markDecision ?? false,
+          })
+          .select(MESSAGE_COLUMNS);
+        return rowResult(data, error, "wrap up");
+      }),
+
+    reopen: (rootId) =>
+      attempt(async () => {
+        const { data, error } = await db()
+          .rpc("chat_op_reopen", { p_root_id: rootId })
+          .select(MESSAGE_COLUMNS);
+        return rowResult(data, error, "reopen");
+      }),
+
+    attachToChain: ({ messageId, replyToId }) =>
+      attempt(async () => {
+        const { data, error } = await db()
+          .rpc("chat_op_attach_to_chain", { p_message_id: messageId, p_reply_to_id: replyToId })
+          .select(MESSAGE_COLUMNS);
+        return rowResult(data, error, "reply to");
+      }),
+
+    chainRead: (rootId) =>
+      attempt(async () => {
+        const { error } = await db().rpc("chat_op_chain_read", { p_root_id: rootId });
+        return error ? bad(chatError(error)) : ok(null);
+      }),
+
+    chains: (channelId) =>
+      attempt(async () => {
+        const { data, error } = await db()
+          .from("chat_messages")
+          .select(MESSAGE_COLUMNS)
+          .eq("channel_id", channelId)
+          .is("parent_id", null)
+          .gt("reply_count", 0)
+          .is("deleted_at", null)
+          .order("last_reply_at", { ascending: false })
+          .limit(100);
+        if (error) return bad(chatError(error));
+        return ok(mapRows(data, mapMessage));
+      }),
+
+    async chainFollowing(rootId) {
+      // RLS shows only your own rows: a row means you stopped following.
+      const { data, error } = await db()
+        .from("chat_chain_mutes")
+        .select("root_id")
+        .eq("root_id", rootId)
+        .maybeSingle();
+      fail(error);
+      return !data;
+    },
+
+    followChain: (rootId, following) =>
+      attempt(async () => {
+        const { error } = await db().rpc("chat_op_follow_chain", {
+          p_message_id: rootId,
+          p_following: following,
+        });
+        return error ? bad(chatError(error)) : ok(null);
+      }),
+
     markRead: ({ channelId, messageId }) =>
       attempt(async () => {
         const { error } = await db().rpc("chat_op_mark_read", {

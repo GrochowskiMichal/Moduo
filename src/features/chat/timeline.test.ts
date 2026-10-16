@@ -11,9 +11,11 @@ import {
   localDay,
   mergeMessages,
   normalizeChannelName,
+  readThroughHidden,
   type SidebarEntry,
   toggleReaction,
   upsertMessage,
+  wrappedReplyIds,
 } from "./timeline";
 
 const ME = "me";
@@ -40,6 +42,11 @@ function msg(id: string, createdAt: string, extra: Partial<ChatMessage> = {}): C
     replyCount: 0,
     lastReplyAt: null,
     replyUserIds: [],
+    wrappedAt: null,
+    wrappedBy: null,
+    settledId: null,
+    reopenedAt: null,
+    reopenedBy: null,
     pinnedAt: null,
     pinnedBy: null,
     editedAt: null,
@@ -361,6 +368,19 @@ describe("read mark, New pill, page boundaries", () => {
     expect(countNewSince(rows, "a", ME)).toBe(2);
     expect(countNewSince(rows, "c", ME)).toBe(0);
     expect(countNewSince(rows, null, ME)).toBe(0);
+    // Hidden replies of a wrapped-up chain can't be scrolled to.
+    expect(countNewSince(rows, "a", ME, new Set(["c"]))).toBe(1);
+  });
+
+  it("the read mark passes the hidden replies after the last row drawn (CV-12)", () => {
+    const rows = [msg("a", T(0)), msg("b", T(1)), msg("c", T(2)), msg("d", T(3))];
+    expect(readThroughHidden(rows, "b", new Set(["c", "d"]))).toBe("d");
+    expect(readThroughHidden(rows, "b", new Set(["c"]))).toBe("b");
+    expect(readThroughHidden(rows, "b", new Set())).toBe("b");
+    expect(readThroughHidden(rows, "x", new Set(["c"]))).toBe("x");
+    // An event line after the hidden replies doesn't hold the mark back.
+    const withEvent = [...rows, msg("e", T(4), { kind: "event" })];
+    expect(readThroughHidden(withEvent, "b", new Set(["c", "d"]))).toBe("d");
   });
 
   it("emoji-only messages draw large", () => {
@@ -370,5 +390,45 @@ describe("read mark, New pill, page boundaries", () => {
     expect(isEmojiOnlyText("ok 🎉")).toBe(false);
     expect(isEmojiOnlyText("1")).toBe(false);
     expect(isEmojiOnlyText("🎉".repeat(9))).toBe(false);
+  });
+});
+
+describe("wrapped chains in the stream (CV-12)", () => {
+  const root = msg("r", "2026-10-01T10:00:00Z", { replyCount: 2 });
+  const a = msg("a", "2026-10-01T10:01:00Z", { parentId: "r", replyToId: "r" });
+  const talk = msg("t", "2026-10-01T10:02:00Z", { authorId: ME });
+  const b = msg("b", "2026-10-01T10:03:00Z", { parentId: "r", replyToId: "a" });
+  const ids = (items: ReturnType<typeof buildStream>) =>
+    items.flatMap((i) => (i.type === "message" ? [i.key] : []));
+
+  it("nothing folds automatically: an open chain's replies stay with the talk between them", () => {
+    const rows = [root, a, talk, b];
+    const hidden = wrappedReplyIds(rows, () => undefined);
+    expect(ids(buildStream(rows, { hidden }))).toEqual(["r", "a", "t", "b"]);
+  });
+
+  it("hides the replies of a wrapped root, keeps the root, and joins the deletes", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T11:00:00Z", settledId: "b" };
+    const rows = [wrapped, a, talk, b];
+    const hidden = wrappedReplyIds(rows, () => undefined, new Set(["t"]));
+    expect([...hidden].sort()).toEqual(["a", "b", "t"]);
+    expect(ids(buildStream(rows, { hidden }))).toEqual(["r"]);
+  });
+
+  it("reads a root outside the window from the store; an unknown root keeps its replies", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T11:00:00Z" };
+    const rows = [a, talk, b];
+    expect([...wrappedReplyIds(rows, (id) => (id === "r" ? wrapped : undefined))]).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(wrappedReplyIds(rows, () => undefined).size).toBe(0);
+  });
+
+  it("a reply after the wrap-up shows (it reopened the chain), and so do unsent ones", () => {
+    const wrapped = { ...root, wrappedAt: "2026-10-01T10:02:30Z" };
+    const unsent = msg("u", "2026-10-01T10:02:10Z", { parentId: "r", sendState: "sending" });
+    const rows = [wrapped, a, talk, unsent, b];
+    expect([...wrappedReplyIds(rows, () => undefined)]).toEqual(["a"]);
   });
 });
