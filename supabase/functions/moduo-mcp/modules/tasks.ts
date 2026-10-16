@@ -36,7 +36,7 @@ import {
   isTaskStatus,
   normalizeTaskStatusCategory,
 } from "../../_shared/contracts/vocabularies.ts";
-import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
+import { keyCanSeeEntityType, keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
 import {
   dateMarkdown,
   defuseReferences,
@@ -66,7 +66,7 @@ import {
   topLevelOnly,
 } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
-import { entityComments, reachOrNull, visibleIds } from "../share.ts";
+import { assertReach, entityComments, reachOrNull, visibleIds } from "../share.ts";
 import {
   pointerOnStatusChange,
   skipOccurrenceTargets,
@@ -317,7 +317,86 @@ async function visibleAreas(ctx: ToolContext): Promise<Row[]> {
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 }
 
-function shapeProject(b: Row, names: ReadonlyMap<string, string>): Row {
+/** A project's client as the key may see it (MOD-155), keyed `type:id`. */
+type ClientNames = ReadonlyMap<string, Row>;
+const NO_CLIENTS: ClientNames = new Map();
+
+function clientKeyOf(b: Row): string | null {
+  if (typeof b.client_company_id === "string") return `company:${b.client_company_id}`;
+  if (typeof b.client_contact_id === "string") return `contact:${b.client_contact_id}`;
+  return null;
+}
+
+/**
+ * MOD-155: the clients of these projects, a person or a company, named only
+ * for a key with Contacts at View and only when the key's person can open
+ * them (the service role bypasses RLS, so the check is here). Anything else
+ * is left out: a key without Contacts never learns who a client is.
+ */
+async function projectClients(ctx: ToolContext, buckets: readonly Row[]): Promise<ClientNames> {
+  if (!keyCanSeeEntityType(ctx.key.scopes, "contact") || !keyCanSeeEntityType(ctx.key.scopes, "company")) {
+    return NO_CLIENTS;
+  }
+  const ids = (column: string) => [
+    ...new Set(buckets.map((b) => b[column]).filter((v): v is string => typeof v === "string")),
+  ];
+  const kinds = [
+    { type: "contact", table: "contacts", ids: ids("client_contact_id") },
+    { type: "company", table: "companies", ids: ids("client_company_id") },
+  ].filter((k) => k.ids.length > 0);
+  const out = new Map<string, Row>();
+  await Promise.all(
+    kinds.map(async (k) => {
+      const [seen, found] = await Promise.all([
+        visibleIds(ctx, k.type),
+        rows(ctx.db.from(k.table).select("id, name")
+          .eq("workspace_id", ctx.key.workspaceId).in("id", k.ids).is("deleted_at", null)),
+      ]);
+      for (const r of found) {
+        if (!seen.has(r.id)) continue;
+        const name = typeof r.name === "string" && r.name.trim() ? r.name.trim() : null;
+        out.set(`${k.type}:${r.id}`, {
+          type: k.type,
+          id: r.id,
+          name: name ?? (k.type === "company" ? "Untitled company" : "Unnamed contact"),
+        });
+      }
+    }),
+  );
+  return out;
+}
+
+/**
+ * The client a create or update names, checked for the key (MOD-155): the
+ * key needs Contacts at View, the person or company must be one its person
+ * can open (a private one reads as missing), and it's one or the other.
+ * Answers the fields to send, with the ids as found.
+ */
+async function clientFields(ctx: ToolContext, args: Row, clearing: boolean): Promise<Row> {
+  const out: Row = {};
+  const given = (["client_contact_id", "client_company_id"] as const).filter((k) =>
+    clearing ? k in args : typeof args[k] === "string",
+  );
+  if (!given.length) return out;
+  if (typeof args.client_contact_id === "string" && typeof args.client_company_id === "string") {
+    throw new Error("A project's client is a person or a company, not both.");
+  }
+  // Clearing one too: a key that can't see clients doesn't touch them.
+  if (!keyCanSeeEntityType(ctx.key.scopes, "contact")) {
+    throw new Error("This API key has no access to Contacts.");
+  }
+  for (const k of given) {
+    const value = args[k];
+    out[k] = typeof value === "string"
+      ? await assertReach(ctx, k === "client_company_id" ? "company" : "contact", value)
+      : null;
+  }
+  return out;
+}
+
+function shapeProject(b: Row, names: ReadonlyMap<string, string>, clients: ClientNames = NO_CLIENTS): Row {
+  const clientKey = clientKeyOf(b);
+  const client = clientKey ? clients.get(clientKey) : undefined;
   return {
     id: b.id,
     name: b.name,
@@ -328,6 +407,8 @@ function shapeProject(b: Row, names: ReadonlyMap<string, string>): Row {
     ...(b.starts_on ? { starts_on: b.starts_on } : {}),
     ...(b.target_on ? { target_on: b.target_on } : {}),
     ...(b.lead_id ? { lead: { id: b.lead_id, name: names.get(b.lead_id) ?? "Former member" } } : {}),
+    // MOD-155: a person or a company, only when the key may see it.
+    ...(client ? { client } : {}),
     // TV-U16's description (plain text, '' for none); TV-U13b carries it.
     ...(typeof b.description === "string" && b.description.trim()
       ? { description: b.description }
@@ -358,7 +439,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "projects_list",
       description:
-        "The projects the key's person can see, in sidebar order: their Inbox (is_inbox), status (active · on_hold · done), area, colour, start and target dates, lead, and the project's description (plain text) when it has one. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.",
+        "The projects the key's person can see, in sidebar order: their Inbox (is_inbox), status (active · on_hold · done), area, colour, start and target dates, lead, client (a person or a company, {type: contact | company, id, name}; only with Contacts access, and only one the person can open), and the project's description (plain text) when it has one. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.",
       access: "view",
       inputSchema: {
         type: "object",
@@ -375,10 +456,11 @@ export const tasksConnectorModule: ConnectorModule = {
         ]);
         const archived = archivedBucketIds(buckets);
         const names = new Map(members.map((m) => [m.user_id, m.name]));
-        return buckets
+        const shown = buckets
           .filter((b) => visible.has(b.id) && (args?.include_archived === true || !archived.has(b.id)))
-          .sort((a, b) => Number(!!b.is_system) - Number(!!a.is_system))
-          .map((b) => shapeProject(b, names));
+          .sort((a, b) => Number(!!b.is_system) - Number(!!a.is_system));
+        const clients = await projectClients(ctx, shown);
+        return shown.map((b) => shapeProject(b, names, clients));
       },
     },
     {
@@ -1672,7 +1754,7 @@ export const tasksConnectorModule: ConnectorModule = {
     {
       name: "projects_create",
       description:
-        "Create a project, owned by the key's creator and seen by the workspace: name, area, status, start and target dates, colour, lead, description. Inside an import run (import_id) it's recorded for imports_undo. Look for an existing project first (projects_list): a re-run should reuse it.",
+        "Create a project, owned by the key's creator and seen by the workspace: name, area, status, start and target dates, colour, lead, client (a person or a company; needs Contacts access), description. Inside an import run (import_id) it's recorded for imports_undo. Look for an existing project first (projects_list): a re-run should reuse it.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -1684,6 +1766,14 @@ export const tasksConnectorModule: ConnectorModule = {
           target_on: { type: "string", description: "Target date, YYYY-MM-DD." },
           color: { type: "string", description: "Colour name, as the app's picker has them." },
           lead_id: { type: "string", description: "A member who leads it." },
+          client_contact_id: {
+            type: "string",
+            description: "The client, when it's a person: a contact uuid (contacts_search). Not with client_company_id.",
+          },
+          client_company_id: {
+            type: "string",
+            description: "The client, when it's a company: a company uuid (contacts_search). Not with client_contact_id.",
+          },
           description: { type: "string", description: "What the project is, plain text (up to 20,000 characters)." },
           import_id: { type: "string", description: "The run from imports_begin." },
         },
@@ -1694,6 +1784,7 @@ export const tasksConnectorModule: ConnectorModule = {
         for (const k of ["area_id", "status", "starts_on", "target_on", "color", "lead_id", "description"]) {
           if (typeof args[k] === "string") fields[k] = args[k];
         }
+        Object.assign(fields, await clientFields(ctx, args, false));
         const ws = ctx.key.workspaceId;
         // Inside a run, made and recorded in one transaction (a refused run makes nothing).
         const project =
@@ -1704,14 +1795,14 @@ export const tasksConnectorModule: ConnectorModule = {
                 p_project: fields,
               }))
             : await unwrap<Row>(ctx.db.rpc("projects_op_create", { p_workspace_id: ws, p_project: fields }));
-        const members = await workspaceMembers(ctx);
-        return shapeProject(project, new Map(members.map((m) => [m.user_id, m.name])));
+        const [members, clients] = await Promise.all([workspaceMembers(ctx), projectClients(ctx, [project])]);
+        return shapeProject(project, new Map(members.map((m) => [m.user_id, m.name])), clients);
       },
     },
     {
       name: "projects_update",
       description:
-        "Edit a project you can edit: name, status (active · on_hold · done), area, start and target dates, colour, lead, description, archived (needs full access). Pass only what changes; null clears a date, the area, the lead or the description.",
+        "Edit a project you can edit: name, status (active · on_hold · done), area, start and target dates, colour, lead, client (a person or a company; needs Contacts access; setting one clears the other), description, archived (needs full access). Pass only what changes; null clears a date, the area, the lead, the client or the description.",
       access: "edit",
       inputSchema: {
         type: "object",
@@ -1724,6 +1815,14 @@ export const tasksConnectorModule: ConnectorModule = {
           target_on: { type: ["string", "null"], description: "YYYY-MM-DD, or null." },
           color: { type: ["string", "null"], description: "Colour name, or null." },
           lead_id: { type: ["string", "null"], description: "Member uuid, or null." },
+          client_contact_id: {
+            type: ["string", "null"],
+            description: "The client as a person: a contact uuid (it replaces a company client), or null.",
+          },
+          client_company_id: {
+            type: ["string", "null"],
+            description: "The client as a company: a company uuid (it replaces a person client), or null.",
+          },
           description: {
             type: ["string", "null"],
             description: "What the project is, plain text (up to 20,000 characters), or null to clear it.",
@@ -1738,6 +1837,7 @@ export const tasksConnectorModule: ConnectorModule = {
         for (const k of ["name", "status", "area_id", "starts_on", "target_on", "color", "lead_id", "description"]) {
           if (k in args) patch[k] = args[k] ?? null;
         }
+        Object.assign(patch, await clientFields(ctx, args, true));
         if (typeof args.archived === "boolean") patch.archived_at = args.archived ? new Date().toISOString() : null;
         if (!Object.keys(patch).length) throw new Error("Nothing to change.");
         const ws = ctx.key.workspaceId;
@@ -1746,8 +1846,8 @@ export const tasksConnectorModule: ConnectorModule = {
           p_project_id: project.id,
           p_patch: patch,
         }));
-        const members = await workspaceMembers(ctx);
-        return shapeProject(updated, new Map(members.map((m) => [m.user_id, m.name])));
+        const [members, clients] = await Promise.all([workspaceMembers(ctx), projectClients(ctx, [updated])]);
+        return shapeProject(updated, new Map(members.map((m) => [m.user_id, m.name])), clients);
       },
     },
     {

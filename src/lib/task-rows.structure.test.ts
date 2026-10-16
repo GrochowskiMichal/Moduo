@@ -144,6 +144,23 @@ describe("structure rows (TV-D10)", () => {
       updated_at: NOW,
     });
     expect("status" in old).toBe(false);
+    expect("clientCompanyId" in old).toBe(false);
+  });
+
+  it("a project's client can be a company (MOD-155), and a row from before it has no such field", () => {
+    const row = {
+      id: "p1",
+      workspace_id: "ws",
+      name: "Acme",
+      status: "active",
+      created_at: NOW,
+      updated_at: NOW,
+    };
+    const company = bucketRowToModel({ ...row, client_contact_id: null, client_company_id: "co1" });
+    expect([company.clientContactId, company.clientCompanyId]).toEqual([null, "co1"]);
+    const person = bucketRowToModel({ ...row, client_contact_id: "c1", client_company_id: null });
+    expect([person.clientContactId, person.clientCompanyId]).toEqual(["c1", null]);
+    expect("clientCompanyId" in bucketRowToModel({ ...row, client_contact_id: "c1" })).toBe(false);
   });
 
   it("sections, teams and reminders map, unknown kinds read safely", () => {

@@ -228,6 +228,13 @@ export type Bucket = {
   targetOn?: string | null;
   leadId?: string | null;
   clientContactId?: string | null;
+  /**
+   * MOD-155: the client when it's a company. A project's client is a contact
+   * or a company, never both (the server clears the other). Absent on a row
+   * read before that migration, which is how the picker knows to offer
+   * people only.
+   */
+  clientCompanyId?: string | null;
   areaId?: string | null;
   createdAt: string;
   updatedAt: string;
