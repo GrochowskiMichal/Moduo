@@ -82,8 +82,15 @@ function subscribe(l: () => void) {
   };
 }
 
-/** The six keys of your quick row, resolved (yours first, Moduo's six fill in). */
-export function useQuickReactions(userId: string | null): {
+/**
+ * The six keys of your quick row, resolved (yours first, Moduo's six fill in).
+ * `usable` says whether a key works here: a custom `:name:` only where that
+ * workspace has it live (CV-20).
+ */
+export function useQuickReactions(
+  userId: string | null,
+  usable?: (key: string) => boolean,
+): {
   row: string[];
   saved: string[] | null;
 } {
@@ -96,7 +103,7 @@ export function useQuickReactions(userId: string | null): {
     if (userId) load(userId);
   }, [userId]);
   const saved = snap.userId === userId ? snap.saved : null;
-  return { row: resolveQuickRow(saved), saved };
+  return { row: resolveQuickRow(saved, usable), saved };
 }
 
 /** Tests only: forget the cached row. */

@@ -14,6 +14,7 @@ type CapsRow = {
   manage_any?: unknown;
   create_public?: unknown;
   create_private?: unknown;
+  add_emoji?: unknown;
 };
 
 export type ChatRights = {
@@ -24,6 +25,8 @@ export type ChatRights = {
   /** Make a public / a private channel (New conversation, CV-8b). */
   createPublic: boolean;
   createPrivate: boolean;
+  /** Add a custom emoji (CV-20: admins and members by default). */
+  addEmoji: boolean;
 };
 
 /** The caps row a role reads (the server's mapping in `chat_has_cap`). */
@@ -39,7 +42,13 @@ export function rightsFrom(
   readOnly: boolean,
 ): ChatRights {
   if (role === "owner") {
-    return { canPost: true, manageAny: true, createPublic: true, createPrivate: true };
+    return {
+      canPost: true,
+      manageAny: true,
+      createPublic: true,
+      createPrivate: true,
+      addEmoji: true,
+    };
   }
   const key = capsRoleKey(role, readOnly);
   const row = rows?.find((r) => r.role_key === key);
@@ -51,6 +60,7 @@ export function rightsFrom(
       manageAny: key === "admin",
       createPublic: writes,
       createPrivate: writes,
+      addEmoji: writes,
     };
   }
   return {
@@ -58,6 +68,7 @@ export function rightsFrom(
     manageAny: row.manage_any === true,
     createPublic: row.create_public === true,
     createPrivate: row.create_private === true,
+    addEmoji: row.add_emoji === true,
   };
 }
 

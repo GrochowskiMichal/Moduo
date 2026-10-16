@@ -11,6 +11,7 @@ import { canShowAsCard, referenceKind } from "@/features/spine/references/kinds"
 import { DateChip } from "@/features/spine/references/ui/date-chip";
 import { Reference } from "@/features/spine/references/ui/reference";
 import { cn } from "@/lib/utils";
+import { InlineCustomEmoji } from "../emoji/context";
 import {
   type Block,
   BOLD,
@@ -22,7 +23,6 @@ import {
   STRIKE,
   TEAM_TYPE,
 } from "../markup-v2";
-import { tokenText } from "../markup-v2/tokens";
 import type { ChatMessage, ChatPerson } from "../model";
 import { isEmojiOnlyText } from "../timeline";
 
@@ -123,8 +123,12 @@ function renderLine(line: readonly Inline[], ctx: BodyContext, key: string): Rea
       case "channel":
         return withMarks(<Mention label="@channel" />, leaf.m, k);
       case "emoji":
-        // Custom emoji images arrive with CV-20; until then the name reads as text.
-        return withMarks(tokenText(leaf), leaf.m, k);
+        // CV-20: the workspace's image while it's live here, else the text.
+        return withMarks(
+          <InlineCustomEmoji name={leaf.name} className="group-data-jumbo/body:size-10" />,
+          leaf.m,
+          k,
+        );
       case "date":
         return <DateChip key={k} day={leaf.day} className="mx-0.5 align-baseline" />;
       case "ref": {
@@ -244,7 +248,7 @@ export function MessageBody({
       data-slot="message-body"
       data-jumbo={jumbo ? "" : undefined}
       className={cn(
-        "min-w-0 break-words font-sans text-foreground [&>*+*]:mt-1.5",
+        "group/body min-w-0 break-words font-sans text-foreground [&>*+*]:mt-1.5",
         jumbo ? "text-4xl leading-tight" : "text-md leading-normal",
         className,
       )}

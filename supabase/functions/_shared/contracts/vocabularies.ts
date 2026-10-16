@@ -716,6 +716,8 @@ export const CHAT_CAPABILITIES = [
   "mention_everyone",
   "post",
   "start_calls",
+  // CV-20: add a custom emoji (admins and members by default).
+  "add_emoji",
 ] as const;
 export type ChatCapability = (typeof CHAT_CAPABILITIES)[number];
 
@@ -1223,8 +1225,10 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 // only by U+200D. Every code point comes from REACTION_KEY_SET (the same
 // numbers as reactions__key_pattern(); the drift gate compares them), so no
 // letters, spaces, controls, invisible or direction marks, lone surrogates,
-// and never two emoji side by side. The `:name:` form of a live custom emoji
-// arrives with CV-20, which widens both halves. A reaction never notifies.
+// and never two emoji side by side. Or a custom emoji's `:name:` (CV-20,
+// CUSTOM_EMOJI_KEY_PATTERN = reactions__custom_key_pattern()): the key check
+// is the shape only; the ops take one only while it names a live emoji of
+// that workspace. A reaction never notifies.
 // ---------------------------------------------------------------------------
 
 type CodeRange = number | readonly [number, number];
@@ -1309,6 +1313,8 @@ const isSkin = (n: number | undefined) => n !== undefined && inRanges(n, REACTIO
  * tone follows. So ❤ and ❤️ are one key, ✅ stays ✅, and ✅️ becomes ✅.
  */
 export function canonicalReactionKey(key: string): string {
+  // A custom emoji's key is already its one spelling (its digits aren't keycaps).
+  if (CUSTOM_EMOJI_KEY_RE.test(key)) return key;
   const cps = [...key]
     .map((c) => c.codePointAt(0) ?? 0)
     .filter((n) => n !== 65038)
@@ -1339,9 +1345,59 @@ const REACTION_KEY_MAX = 32;
 
 export type ReactionKey = string;
 
+// ---------------------------------------------------------------------------
+// Custom emoji (CV-20; spec §6, CH16b) — mirrors chat_custom_emoji's CHECKs,
+// the chat-emoji bucket and chat_op_custom_emoji_add in
+// 20261016235000_chat_v2_custom_emoji.sql. A name is 2–32 of a–z, 0–9, - and
+// _ with at least one letter (so every name also reads as `:name:` in text,
+// markup-v2's EMOJI_NAME_RE), unique per workspace among live emoji, never a
+// standard emoji's shortcode (the server's chat__emoji_name_reserved).
+// ---------------------------------------------------------------------------
+
+/** The name rule, as the SQL spells it (the drift gate compares them). */
+export const CUSTOM_EMOJI_NAME_PATTERN = "(?=[a-z0-9_-]*[a-z])[a-z0-9_-]{2,32}";
+const CUSTOM_EMOJI_NAME_RE = new RegExp(`^${CUSTOM_EMOJI_NAME_PATTERN}$`);
+/** A custom emoji's reaction key: its name between colons. */
+export const CUSTOM_EMOJI_KEY_PATTERN = `^:${CUSTOM_EMOJI_NAME_PATTERN}:$`;
+const CUSTOM_EMOJI_KEY_RE = new RegExp(CUSTOM_EMOJI_KEY_PATTERN);
+/** At most this many bytes per image (and per still frame). */
+export const CUSTOM_EMOJI_MAX_BYTES = 262_144;
+/** Shown and stored at most this many pixels a side. */
+export const CUSTOM_EMOJI_MAX_PX = 128;
+/** At most this many live custom emoji per workspace. */
+export const CUSTOM_EMOJI_PER_WORKSPACE = 500;
+/** What is stored (a still JPEG becomes a PNG before upload). Never SVG. */
+export const CUSTOM_EMOJI_MIMES = ["image/png", "image/gif", "image/webp"] as const;
+export type CustomEmojiMime = (typeof CUSTOM_EMOJI_MIMES)[number];
+export const customEmojiMimeSchema = z.enum(CUSTOM_EMOJI_MIMES);
+export function isCustomEmojiMime(value: unknown): value is CustomEmojiMime {
+  return typeof value === "string" && (CUSTOM_EMOJI_MIMES as readonly string[]).includes(value);
+}
+export function parseCustomEmojiMime(input: unknown): SafeParseResult<CustomEmojiMime> {
+  return parseOrError(customEmojiMimeSchema, input);
+}
+/** Lax read: a type this build doesn't know isn't drawn (null). */
+export function normalizeCustomEmojiMime(input: unknown): CustomEmojiMime | null {
+  return isCustomEmojiMime(input) ? input : null;
+}
+/** The extension each stored type is saved under (`<workspace>/<slot>.<ext>`). */
+export const CUSTOM_EMOJI_EXT: Record<CustomEmojiMime, string> = {
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+};
+export function isCustomEmojiName(value: unknown): value is string {
+  return typeof value === "string" && CUSTOM_EMOJI_NAME_RE.test(value);
+}
+/** `:name:` → `name`, or null when the key isn't a custom emoji's. */
+export function customEmojiNameOf(key: string): string | null {
+  return CUSTOM_EMOJI_KEY_RE.test(key) ? key.slice(1, -1) : null;
+}
+
 /** The key check for writes; the server runs the same rule (it decides). */
 export function isReactionKey(value: unknown): value is ReactionKey {
   if (typeof value !== "string") return false;
+  if (CUSTOM_EMOJI_KEY_RE.test(value)) return true;
   const length = [...value].length; // code points, as Postgres counts them
   if (length < 1 || length > REACTION_KEY_MAX) return false;
   let classes = "";

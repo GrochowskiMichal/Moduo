@@ -29,6 +29,13 @@ import {
   CONTENT_AUTHOR_KINDS,
   DEFAULT_QUICK_REACTIONS,
   REACTION_KEY_SET,
+  CHAT_CAPABILITIES,
+  CUSTOM_EMOJI_KEY_PATTERN,
+  CUSTOM_EMOJI_MAX_BYTES,
+  CUSTOM_EMOJI_MAX_PX,
+  CUSTOM_EMOJI_MIMES,
+  CUSTOM_EMOJI_NAME_PATTERN,
+  CUSTOM_EMOJI_PER_WORKSPACE,
   DATE_ORDERS,
   EMAIL_KINDS,
   EMAIL_OUTBOX_STATUSES,
@@ -397,6 +404,43 @@ describe("cross-runtime drift guards", () => {
       expect(next, pair).toBeGreaterThan(-1);
       at = next;
     }
+  });
+
+  it("custom emoji: CV-20's names, key, types, sizes, the switch and the reserved names", async () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261016235000_chat_v2_custom_emoji.sql"),
+      "utf8",
+    );
+    // One name rule: the table's CHECK, the op and the reaction key.
+    expect(sql).toContain(`CHECK (name ~ '^${CUSTOM_EMOJI_NAME_PATTERN}$')`);
+    expect(sql).toContain(`IF v_name !~ '^${CUSTOM_EMOJI_NAME_PATTERN}$' THEN`);
+    expect(sql).toContain(`SELECT '${CUSTOM_EMOJI_KEY_PATTERN}'::text`);
+    expect(sql).toContain("OR p_key ~ public.reactions__custom_key_pattern())");
+    // Types, sizes and the per-workspace limit.
+    const mimes = CUSTOM_EMOJI_MIMES.map((m) => `'${m}'`).join(", ");
+    expect(sql).toContain(`CHECK (mime IN (${mimes}))`);
+    expect(sql).toContain(`ARRAY[${mimes}], 'STANDARD')`);
+    expect(sql).toContain(`VALUES ('chat-emoji', 'chat-emoji', false, ${CUSTOM_EMOJI_MAX_BYTES},`);
+    expect(sql).toContain(`CHECK (bytes BETWEEN 1 AND ${CUSTOM_EMOJI_MAX_BYTES})`);
+    expect(sql).toContain(`CHECK (width BETWEEN 1 AND ${CUSTOM_EMOJI_MAX_PX})`);
+    expect(sql).toContain(`AND e.deleted_at IS NULL) >= ${CUSTOM_EMOJI_PER_WORKSPACE} THEN`);
+    // The switch is a capability the server knows.
+    expect(CHAT_CAPABILITIES).toContain("add_emoji");
+    expect(sql).toContain("WHEN 'add_emoji' THEN v_row.add_emoji");
+    // The reserved names: Emojibase's GitHub shortcodes that fit the name rule.
+    const github = (await import("emojibase-data/en/shortcodes/github.json")) as unknown as {
+      default?: Record<string, string | string[]>;
+    } & Record<string, string | string[]>;
+    const codes = (github.default ?? github) as Record<string, string | string[]>;
+    const nameRe = new RegExp(`^${CUSTOM_EMOJI_NAME_PATTERN}$`);
+    const want = [...new Set(Object.values(codes).flat())].filter((n) => nameRe.test(n)).sort();
+    const block = sql.slice(sql.indexOf("-- reserved:begin"), sql.indexOf("-- reserved:end"));
+    const listed = block
+      .slice(block.indexOf("'{") + 2, block.indexOf("}'"))
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    expect(listed).toEqual(want);
   });
 
   it("template kinds and link types match TV-D15's op guards", () => {

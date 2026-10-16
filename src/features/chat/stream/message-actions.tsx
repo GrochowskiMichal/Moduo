@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+import { ReactionKeyGlyph } from "../emoji/context";
 import type { ChatMessage } from "../model";
 
 export type MessageVerbs = {
@@ -106,7 +107,7 @@ function ActionsMenu({
                   }}
                   className={cn(toolButton, "text-base")}
                 >
-                  {key}
+                  <ReactionKeyGlyph reactionKey={key} />
                 </button>
               ))}
             </div>
@@ -232,7 +233,7 @@ export function HoverToolbar({
           onClick={() => verbs.onReact(key)}
           className={cn(toolButton, "text-base")}
         >
-          {key}
+          <ReactionKeyGlyph reactionKey={key} />
         </button>
       ))}
       {verbs.onAnyEmoji ? (

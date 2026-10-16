@@ -121,7 +121,25 @@ INSERT INTO test.key_corpus (hex, ok) VALUES
   ('1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D 200D 1F44D', false),
   ('', false),
   ('74 68 75 6D 62 73 5F 75 70', false),
-  ('3A 70 61 72 74 79 3A', false),
+  ('3A 70 61 72 74 79 3A', true),
+  -- Custom emoji (CV-20): `:name:`, 2–32 of a–z 0–9 - _, at least one letter.
+  ('3A 73 68 69 70 69 74 3A', true),
+  ('3A 76 32 3A', true),
+  ('3A 61 2D 62 5F 63 3A', true),
+  ('3A 53 48 49 50 49 54 3A', false),
+  ('3A 3A', false),
+  ('3A 61 3A', false),
+  ('3A 31 32 3A', false),
+  ('3A 61 20 62 3A', false),
+  ('3A 61 2B 62 3A', false),
+  ('3A 61 62', false),
+  ('61 62 3A', false),
+  ('3A 61 62 3A 3A', false),
+  ('3A 61 62 3A 0A', false),
+  ('3A 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 3A', true),
+  ('3A 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 61 3A', false),
+  ('3A 1F44D 3A', false),
+  ('1F44D 3A 61 62 3A', false),
   ('61', false),
   ('31', false),
   ('31 FE0F 20E3', true),
@@ -197,7 +215,10 @@ INSERT INTO test.canonical_corpus (hex, want) VALUES
   ('1F3F3 200D 1F308', '1F3F3 FE0F 200D 1F308'),
   ('1F3F3 FE0F 200D 1F308', '1F3F3 FE0F 200D 1F308'),
   ('1F3C3 200D 27A1', '1F3C3 200D 27A1 FE0F'),
-  ('1F3C3 200D 27A1 FE0F', '1F3C3 200D 27A1 FE0F')
+  ('1F3C3 200D 27A1 FE0F', '1F3C3 200D 27A1 FE0F'),
+  -- A custom emoji's key is already its one spelling (its digits aren't keycaps).
+  ('3A 76 32 3A', '3A 76 32 3A'),
+  ('3A 31 61 3A', '3A 31 61 3A')
 -- canonical:end
 ;
 
@@ -231,7 +252,7 @@ BEGIN
   PERFORM test.ok(NOT coalesce(public.reactions__key_ok(NULL), true), 'key: nothing is refused');
   PERFORM test.ok(NOT public.reactions__key_ok(repeat('👍', 400)), 'key: a long string is refused');
   PERFORM test.ok(NOT public.reactions__key_ok(E'👍\n'), 'key: a line break is refused');
-  -- Custom emoji (`:name:`) arrive with CV-20, which widens this one check.
+  -- Custom emoji (`:name:`, CV-20) are part of this one check (the corpus above).
   PERFORM test.ok(
     pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'comment_reactions_reaction_check'))
       LIKE '%reactions__key_ok(reaction)%',
@@ -264,7 +285,7 @@ BEGIN
   v := test.react('B', 'q1', 'party');
   PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'chat: a word is refused', v);
   v := test.react('B', 'q1', ':party:');
-  PERFORM test.ok(v = '22023 That reaction isn''t supported.', 'chat: a custom name waits for CV-20', v);
+  PERFORM test.ok(v = '22023 That emoji isn''t in this workspace.', 'chat: a custom name needs a live emoji here (CV-20)', v);
   PERFORM test.ok(test.notices() = v_before, 'chat: reacting writes no notice and no notifying activity');
 
   -- Only readers react, and only readers see who reacted.

@@ -187,6 +187,8 @@ BEGIN
   -- What a status may hold.
   PERFORM test.ok(test.set('C', '{"text": "x", "preset": "lunch"}') LIKE '22023%', 'check: an unknown preset is refused');
   PERFORM test.ok(test.set('C', '{"emoji": "abc"}') LIKE '22023%', 'check: an emoji is an emoji');
+  PERFORM test.ok(test.set('C', '{"emoji": ":shipit:"}') LIKE '22023%',
+    'check: a workspace''s custom emoji is no status emoji (CV-20)');
   PERFORM test.ok(test.set('C', jsonb_build_object('text', repeat('a', 101))) LIKE '22023%', 'check: words stop at 100');
   PERFORM test.ok(test.set('C', jsonb_build_object('text', 'x', 'clear_at', now() - interval '1 minute')) LIKE '22023%',
     'check: "clear after" is ahead');

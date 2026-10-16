@@ -19,8 +19,23 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
  *   when the full picker is wired (CV-7b), "Any emoji".
  * - `ReactionButton` — the ☺ button that opens your quick row in a popover.
  *
- * Domain-free: callers pass the labels ("Thumbs up", "You and Anna").
+ * Domain-free: callers pass the labels ("Thumbs up", "You and Anna") and,
+ * for keys that aren't a standard emoji (a workspace's `:name:`), how to draw
+ * them (`glyph`); without it a key is drawn as its text.
  */
+
+/** How a key is drawn; null or absent = as its text. */
+type GlyphOf = (key: string) => React.ReactNode | null;
+
+function Glyph({ k, glyph }: { k: string; glyph?: GlyphOf }) {
+  return (
+    <span aria-hidden className={cn(emojiGlyph, "inline-flex items-center")}>
+      {glyph?.(k) ?? k}
+    </span>
+  );
+}
+
+const emojiGlyph = "text-base leading-none";
 
 type ReactionItem = {
   /** The emoji (the stored key). */
@@ -34,16 +49,17 @@ type ReactionItem = {
   who: string;
 };
 
-const emojiGlyph = "text-base leading-none";
-
 function Reactions({
   items,
   onToggle,
   disabled,
   trailing,
+  glyph,
   className,
 }: {
   items: readonly ReactionItem[];
+  /** Draws a key that isn't a standard emoji (a custom one's image). */
+  glyph?: GlyphOf;
   onToggle?: (key: string, on: boolean) => void;
   /** Read-only (nobody may react here): the chips still say who reacted. */
   disabled?: boolean;
@@ -71,9 +87,7 @@ function Reactions({
                 r.mine ? "font-medium" : "text-muted-foreground",
               )}
             >
-              <span aria-hidden className={emojiGlyph}>
-                {r.key}
-              </span>
+              <Glyph k={r.key} glyph={glyph} />
               {r.count}
             </button>
           </TooltipTrigger>
@@ -98,6 +112,7 @@ function QuickReactionRow({
   onPick,
   onCustomize,
   onAnyEmoji,
+  glyph,
   className,
 }: {
   /** Your quick row, resolved (up to six). */
@@ -111,6 +126,8 @@ function QuickReactionRow({
   onCustomize?: () => void;
   /** "Any emoji": the full picker (CV-7b). Absent until it exists. */
   onAnyEmoji?: () => void;
+  /** Draws a key that isn't a standard emoji (a custom one's image). */
+  glyph?: GlyphOf;
   className?: string;
 }) {
   return (
@@ -127,9 +144,7 @@ function QuickReactionRow({
               onClick={() => onPick(key, !on)}
               className={quickButton}
             >
-              <span aria-hidden className={emojiGlyph}>
-                {key}
-              </span>
+              <Glyph k={key} glyph={glyph} />
             </button>
           );
         })}
@@ -199,5 +214,5 @@ function ReactionButton({
   );
 }
 
-export type { ReactionItem };
+export type { GlyphOf, ReactionItem };
 export { QuickReactionRow, ReactionButton, Reactions };

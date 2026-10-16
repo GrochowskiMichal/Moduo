@@ -117,6 +117,7 @@ export function NoteCommentsPanel({
                         text={parsed.text}
                         mentionNames={people.names}
                         selfName={selfName}
+                        workspaceId={c.workspaceId}
                       />
                     ) : null}
                   </CommentCard>

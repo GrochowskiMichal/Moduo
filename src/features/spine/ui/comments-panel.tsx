@@ -28,6 +28,9 @@ import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed"
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { CustomEmojiGlyph } from "../../chat/emoji/custom-emoji";
+import { useWorkspaceEmoji, type WorkspaceEmoji } from "../../chat/emoji/store";
+import { splitTextTokens, tokenText } from "../../chat/markup-v2/tokens";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import {
   type CommentPerson,
@@ -84,6 +87,7 @@ export function CommentBody({
   text,
   mentionNames,
   selfName,
+  workspaceId,
   className,
 }: {
   text: string;
@@ -91,9 +95,14 @@ export function CommentBody({
   mentionNames: string[];
   /** My name: a mention of me gets the accent tint, others stay neutral. */
   selfName?: string | null;
+  /** The comment's workspace (its custom emoji); the selected one when not given. */
+  workspaceId?: string | null;
   className?: string;
 }) {
-  const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
+  const workspace = useContext(WorkspaceContext);
+  const taskKey = workspace?.selectedWorkspace?.taskKey ?? null;
+  // CV-20: `:name:` draws the workspace's custom emoji (its text once removed).
+  const emoji = useWorkspaceEmoji(workspaceId ?? workspace?.selectedWorkspaceId ?? null);
   return (
     <p
       className={cn(
@@ -117,7 +126,7 @@ export function CommentBody({
             {seg.text}
           </span>
         ) : (
-          <HandleText key={seg.key} text={seg.text} taskKey={taskKey} />
+          <EmojiText key={seg.key} text={seg.text} taskKey={taskKey} emoji={emoji} />
         ),
       )}
     </p>
@@ -143,6 +152,38 @@ function commentSegments(text: string, mentionNames: string[]): CommentSegmentVi
     }
   });
   return out;
+}
+
+/** Plain words with the workspace's custom emoji drawn, then its task handles linked. */
+function EmojiText({
+  text,
+  taskKey,
+  emoji,
+}: {
+  text: string;
+  taskKey: string | null;
+  emoji: WorkspaceEmoji;
+}) {
+  const parts = splitTextTokens({ t: "text", v: text, m: 0 });
+  if (!parts.some((p) => p.t === "emoji")) return <HandleText text={text} taskKey={taskKey} />;
+  return (
+    <span>
+      {parts.map((p, i) =>
+        p.t === "emoji" ? (
+          <CustomEmojiGlyph
+            // biome-ignore lint/suspicious/noArrayIndexKey: parts of one text, never reordered
+            key={i}
+            name={p.name}
+            emoji={emoji.byName.get(p.name)}
+            urlOf={emoji.urlOf}
+          />
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: parts of one text, never reordered
+          <HandleText key={i} text={p.t === "text" ? p.v : tokenText(p)} taskKey={taskKey} />
+        ),
+      )}
+    </span>
+  );
 }
 
 /** Plain words with the workspace's task handles linked (when the reader can see the task). */

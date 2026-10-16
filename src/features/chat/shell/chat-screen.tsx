@@ -56,6 +56,7 @@ import {
 } from "../dialogs/channel-dialogs";
 import { type MoveStep, MoveToDialog, moveTargets } from "../dialogs/move-dialog";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
+import { CustomEmojiProvider } from "../emoji/context";
 import { useComposerFiles } from "../files/composer-files";
 import { FilesView } from "../files/files-view";
 import { MessageFiles } from "../files/message-files";
@@ -1762,7 +1763,7 @@ export function ChatScreen({
   );
 
   return (
-    <>
+    <CustomEmojiProvider workspaceId={workspaceId} canAdd={rights.addEmoji && !snap.paused}>
       <FeaturePanelsShell
         feature="chat"
         hideRight={!right}
@@ -1937,7 +1938,7 @@ export function ChatScreen({
           toast(`Restored ${restored.name ?? "the channel"}`);
         }}
       />
-    </>
+    </CustomEmojiProvider>
   );
 }
 

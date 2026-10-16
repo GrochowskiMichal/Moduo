@@ -14,6 +14,21 @@ import type {
   ContentAuthorKind,
   RelationKind,
 } from "@contracts/vocabularies";
+import type { CustomEmoji } from "./emoji/model";
+
+export type { CustomEmoji };
+
+/** What `chat_op_custom_emoji_add` takes (the adder is the session, never sent). */
+export type CustomEmojiInput = {
+  /** The upload slot from `beginCustomEmoji` (the server names the paths). */
+  uploadId: string;
+  name: string;
+  mime: string;
+  width: number;
+  height: number;
+  bytes: number;
+  animated: boolean;
+};
 
 export type {
   ChatCatchupReason,
@@ -509,6 +524,20 @@ export type ChatRuntime = {
   myPrefs(): Promise<UserChatPrefs>;
   /** Changes only what the patch names; answers the whole set. */
   setMyPrefs(patch: Partial<UserChatPrefs>): Promise<UserChatPrefs>;
+
+  // ── Custom emoji (CV-20; throw on failure). Reads go through the table's
+  //    rule (members of the workspace); writes only through the ops. ──
+  /** The workspace's live custom emoji. */
+  customEmoji(workspaceId: string): Promise<CustomEmoji[]>;
+  /** A slot to upload one emoji's two images into (server-minted, yours, an hour). */
+  beginCustomEmoji(workspaceId: string): Promise<string>;
+  /** Puts one image in the private `chat-emoji` bucket, under your slot. */
+  uploadEmojiImage(path: string, image: Blob, mime: string): Promise<void>;
+  addCustomEmoji(input: CustomEmojiInput): Promise<CustomEmoji>;
+  /** A soft delete: its adder or an admin. */
+  removeCustomEmoji(id: string): Promise<CustomEmoji>;
+  /** Short-lived links to emoji images the reader may see (path → link). */
+  emojiUrls(paths: readonly string[], ttlSeconds: number): Promise<Map<string, string>>;
 
   // ── References (CV-10; throw on failure) ──
   /** Makes a message linkable (no label), only for someone who can read it. */

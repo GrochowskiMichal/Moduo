@@ -46,8 +46,10 @@ describe("your quick row (CH16a)", () => {
 
   it("keeps yours in order, skips what can't be used, and fills from the six", () => {
     expect(resolveQuickRow(["🎉", "👀"])).toEqual(["🎉", "👀", "👍", "✅", "🙏", "❤️"]);
-    // A custom emoji missing here (CV-20) or anything not a key is skipped.
-    expect(resolveQuickRow([":gone:", "🎉", "🎉", "party"])).toEqual([
+    // A custom emoji missing here (CV-20: the workspace's check) or anything
+    // not a key is skipped.
+    const noCustomHere = (k: string) => isReactionKey(k) && !k.startsWith(":");
+    expect(resolveQuickRow([":gone:", "🎉", "🎉", "party"], noCustomHere)).toEqual([
       "🎉",
       "👍",
       "✅",

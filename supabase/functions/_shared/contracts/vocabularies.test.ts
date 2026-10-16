@@ -633,6 +633,39 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
   });
 });
 
+describe("custom emoji (CV-20)", () => {
+  it("a name is 2–32 of a–z 0–9 - _ with a letter; its key is the name between colons", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const ok of ["shipit", "v2", "party-moduo", "a_b", "x".repeat(32)]) {
+      expect(v.isCustomEmojiName(ok), ok).toBe(true);
+      expect(v.isReactionKey(`:${ok}:`), ok).toBe(true);
+      expect(v.customEmojiNameOf(`:${ok}:`)).toBe(ok);
+    }
+    for (const bad of ["a", "12", "Shipit", "a b", "a+b", "x".repeat(33), "", ":ab:"]) {
+      expect(v.isCustomEmojiName(bad), bad).toBe(false);
+    }
+    expect(v.customEmojiNameOf("👍")).toBeNull();
+    expect(v.customEmojiNameOf(":ab")).toBeNull();
+  });
+
+  it("a custom key is already its one spelling", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const k of [":v2:", ":1a:", ":shipit:"]) expect(v.canonicalReactionKey(k)).toBe(k);
+  });
+
+  it("stores PNG, GIF and WebP only (never SVG), each under its own extension", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CUSTOM_EMOJI_MIMES]).toEqual(["image/png", "image/gif", "image/webp"]);
+    expect(v.isCustomEmojiMime("image/svg+xml")).toBe(false);
+    expect(v.parseCustomEmojiMime("image/jpeg").success).toBe(false);
+    expect(v.normalizeCustomEmojiMime("image/gif")).toBe("image/gif");
+    expect(v.normalizeCustomEmojiMime("text/html")).toBeNull();
+    expect(v.CUSTOM_EMOJI_EXT).toEqual({ "image/png": "png", "image/gif": "gif", "image/webp": "webp" });
+    expect(v.CUSTOM_EMOJI_MAX_BYTES).toBe(256 * 1024);
+    expect(v.CUSTOM_EMOJI_PER_WORKSPACE).toBe(500);
+  });
+});
+
 describe("task status categories (TV-D9, REPLAN 53/53a)", () => {
   it("are the five fixed categories, in order", async () => {
     const v = await import("./vocabularies.ts");
