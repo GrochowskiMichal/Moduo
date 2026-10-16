@@ -14,6 +14,8 @@ import type { ChatRuntime, ChatSearchHit } from "../model";
 import { findPosition, stepFind } from "./model";
 import { useChatSearch } from "./use-chat-search";
 
+const NO_HITS: ChatSearchHit[] = [];
+
 export type FindBarProps = {
   chat: ChatRuntime | null;
   workspaceId: string;
@@ -31,12 +33,13 @@ export function FindBar({ chat, workspaceId, channelId, onJump, onClose, onSeeAl
     [workspaceId, q, channelId],
   );
   const { state } = useChatSearch(chat, args);
-  const hits = state.status === "ready" ? state.hits : [];
+  const hits = state.status === "ready" ? state.hits : NO_HITS;
   const full = state.status === "ready" && state.more;
 
-  // New words: start again from the newest hit.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on new words only
-  useEffect(() => setIndex(-1), [args]);
+  // A new answer (not new words: the last answer stays on screen while they
+  // debounce): start again from its newest hit.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the answer changes
+  useEffect(() => setIndex(-1), [hits]);
   // The first answer lands on the newest hit.
   useEffect(() => {
     if (index === -1 && hits.length > 0) {

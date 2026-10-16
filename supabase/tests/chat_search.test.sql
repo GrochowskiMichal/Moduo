@@ -274,6 +274,7 @@ $$;
 -- fan-out aren't what is measured). C reads Q and General; P is B's and A's.
 -- The newest 20,000 matches of "kotwica" are in P; 300 older ones are in Q.
 SET LOCAL session_replication_role = replica;
+SELECT setseed(0.19);
 INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, author_kind, kind,
                                   format_version, body, body_text, created_at)
 SELECT gen_random_uuid(), test.id('W'),
