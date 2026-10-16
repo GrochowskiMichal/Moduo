@@ -77,6 +77,13 @@ describe("global.css scrollbars (DS-1)", () => {
   it("reserves the gutter on pane scrollers, never on the shell wrappers", async () => {
     const blocks = await globalBlocks();
     expect(block(blocks, ".pane-scroll", []).get("scrollbar-gutter")).toBe("stable");
+    // Except in a side panel, where the strip made a fill's right inset 11 px
+    // wider than its left with classic bars (MOD-121 follow-up). The shell
+    // marks both side panels with data-rail-mode.
+    expect(block(blocks, "[data-rail-mode] .pane-scroll", []).get("scrollbar-gutter")).toBe("auto");
+    expect(
+      (await read("src/components/app/feature-panels-shell.tsx")).match(/data-rail-mode=/g),
+    ).toHaveLength(2);
 
     // Representative center panes; each is the element that actually scrolls.
     for (const rel of [

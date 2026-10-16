@@ -523,6 +523,15 @@ body,
   scrollbar-gutter: stable;
 }
 
+/* Except in a side panel (MOD-121 follow-up). Its rows rarely overflow, and
+   with classic bars the reserved strip put every fill and text line 11 px
+   further from the panel's right edge than its left. There the scroller keeps
+   no gutter, so the panel's own padding is the same on both sides; a bar that
+   does appear takes its room from the content. */
+[data-rail-mode] .pane-scroll {
+  scrollbar-gutter: auto;
+}
+
 /* ═══ A menu that scrolls says so (DS-6 follow-up, TV-U10) ═══
    A menu taller than its room scrolls inside (surface.ts); while more items
    wait below, its foot fades out, so the cut-off last item reads as "there's
