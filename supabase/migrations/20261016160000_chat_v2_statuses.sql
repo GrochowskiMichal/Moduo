@@ -25,8 +25,8 @@
 --   5. chat_now(ws), the one read teammates get about Focus: per current
 --      member of the workspace, their status, do not disturb, Focusing (a
 --      running Focus run in its work phase, seen in the last 3 minutes, in any
---      workspace), "until" (a Pomodoro work phase's end, or the end of the Now
---      task's estimate counted from when its clock started), and the task
+--      workspace), "until" (only a Pomodoro work phase's end: a time from the
+--      run itself, never from a task), and the task
 --      (only when its person turned on "Show what I'm focusing on", the task
 --      is in this workspace and the caller can see it). It never shows the
 --      run itself. A non-member, a signed-out caller and an API key get an
@@ -61,6 +61,9 @@ BEGIN
   EXECUTE replace(v_def, p_old, p_new);
 END;
 $$;
+
+-- An earlier draft's helper (never applied anywhere); gone if present.
+DROP FUNCTION IF EXISTS public.user_statuses__shares_workspace(uuid);
 
 -- ── 1. user_statuses ────────────────────────────────────────────────────────
 
@@ -106,27 +109,20 @@ $$;
 CREATE INDEX IF NOT EXISTS user_statuses_clear_at_idx
   ON public.user_statuses (clear_at) WHERE clear_at IS NOT NULL;
 
--- Whether the caller shares a workspace with p_other (a live workspace both
--- are members of). About the caller only: the read rule's check.
-CREATE OR REPLACE FUNCTION public.user_statuses__shares_workspace(p_other uuid)
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-  SELECT auth.uid() IS NOT NULL AND p_other IS NOT NULL AND EXISTS (
-    SELECT 1
-      FROM public.workspace_members a
-      JOIN public.workspace_members b ON b.workspace_id = a.workspace_id AND b.user_id = p_other
-      JOIN public.workspaces w ON w.id = a.workspace_id AND w.deleted_at IS NULL
-     WHERE a.user_id = auth.uid())
-$function$;
-
 ALTER TABLE public.user_statuses ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS user_statuses_read ON public.user_statuses;
 CREATE POLICY user_statuses_read ON public.user_statuses
   FOR SELECT TO authenticated
-  USING (user_id = (SELECT auth.uid()) OR public.user_statuses__shares_workspace(user_id));
+  -- Yours, or someone in a live workspace you're in (the caller's own
+  -- memberships, read under their own rules; no helper a client can call).
+  USING (
+    user_id = (SELECT auth.uid())
+    OR EXISTS (
+      SELECT 1
+        FROM public.workspace_members a
+        JOIN public.workspace_members b ON b.workspace_id = a.workspace_id
+        JOIN public.workspaces w ON w.id = a.workspace_id AND w.deleted_at IS NULL
+       WHERE a.user_id = (SELECT auth.uid()) AND b.user_id = user_statuses.user_id));
 
 -- People read; the ops write.
 REVOKE ALL ON public.user_statuses FROM PUBLIC, anon, authenticated;
@@ -425,10 +421,6 @@ AS $function$
            CASE
              WHEN r.run_id IS NULL THEN NULL
              WHEN r.mode = 'pomodoro' THEN r.phase_started_at + make_interval(secs => r.phase_seconds)
-             WHEN r.mode = 'per_task' THEN
-               (SELECT r.phase_started_at + make_interval(mins => t.estimate_minutes)
-                  FROM public.tasks t
-                 WHERE t.id = r.now_task_id AND t.estimate_minutes > 0)
            END AS until_at,
            CASE WHEN r.run_id IS NOT NULL AND r.show_task AND r.now_task_id IS NOT NULL THEN
              (SELECT t.id FROM public.tasks t
@@ -549,6 +541,8 @@ BEGIN
     'user_statuses__parts(jsonb, boolean)',
     'user_statuses__json(public.user_statuses, timestamptz)',
     'user_statuses__expire(timestamptz)',
+    -- The presence topic's check, called only from the topic functions.
+    'user_statuses__member(uuid)',
     'notice__gate(uuid, uuid, text, timestamptz)',
     'account_erase_workspace_data(uuid, boolean)'
   ] LOOP
@@ -562,9 +556,7 @@ BEGIN
     'user_op_save_status(jsonb, uuid)',
     'user_op_forget_status(uuid)',
     'chat_now(uuid)',
-    -- The read rule's check and the realtime topic policies (about the caller only).
-    'user_statuses__shares_workspace(uuid)',
-    'user_statuses__member(uuid)',
+    -- The realtime topic policies (about the caller only).
     'chat_realtime_topic_allowed(text)',
     'chat_realtime_topic_writable(text)'
   ] LOOP
@@ -605,6 +597,7 @@ BEGIN
   END IF;
   IF has_function_privilege('authenticated', 'public.notice__gate(uuid, uuid, text, timestamptz)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.user_statuses__expire(timestamptz)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.user_statuses__member(uuid)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.chat_now(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'CV-17: a server-only function is reachable.';
   END IF;

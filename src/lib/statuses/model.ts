@@ -40,7 +40,7 @@ export type PersonNow = {
   status: PersonStatus | null;
   dnd: boolean;
   focusing: boolean;
-  /** Only a Pomodoro work phase's end or the Now task's estimate. */
+  /** Only a Pomodoro work phase's end (from the run, never a task). */
   focusUntil: string | null;
   /** Only with their "Show what I'm focusing on" and a task you can see. */
   focusTaskId: string | null;

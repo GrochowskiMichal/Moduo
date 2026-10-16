@@ -2,7 +2,7 @@
 -- supabase/migrations/…_chat_v2_statuses.sql). "statuses, saved statuses,
 -- chat_now" (AC11.1, AC11.3, AC11.4, AC6.6): one status for every workspace;
 -- presets and saved ones; expiry clears it; chat_now shows "Focusing", "until"
--- only with a Pomodoro phase or an estimate, the task only with the opt-in and
+-- only with a Pomodoro phase (never from a task), the task only with the opt-in and
 -- visibility; a do-not-disturb status holds pings. Erasure and grants too.
 --
 -- Cast: O owns W ("Acme", Duo); A, B and C are members. X owns W2, where A is
@@ -92,8 +92,8 @@ BEGIN
 
   SELECT string_agg(f, ', ') INTO v_bad FROM unnest(ARRAY[
     'public.user_op_set_status(jsonb)', 'public.user_op_clear_status()', 'public.user_op_save_status(jsonb, uuid)',
-    'public.user_op_forget_status(uuid)', 'public.chat_now(uuid)', 'public.user_statuses__shares_workspace(uuid)',
-    'public.user_statuses__member(uuid)', 'public.chat_realtime_topic_allowed(text)', 'public.chat_realtime_topic_writable(text)']) f
+    'public.user_op_forget_status(uuid)', 'public.chat_now(uuid)',
+    'public.chat_realtime_topic_allowed(text)', 'public.chat_realtime_topic_writable(text)']) f
    WHERE NOT has_function_privilege('authenticated', f, 'EXECUTE')
       OR has_function_privilege('anon', f, 'EXECUTE')
       OR EXISTS (SELECT 1 FROM pg_proc p, aclexplode(p.proacl) a
@@ -103,11 +103,15 @@ BEGIN
   SELECT string_agg(f, ', ') INTO v_bad FROM unnest(ARRAY[
     'public.user_statuses__parts(jsonb, boolean)', 'public.user_statuses__json(public.user_statuses, timestamptz)',
     'public.user_statuses__expire(timestamptz)', 'public.notice__gate(uuid, uuid, text, timestamptz)',
+    'public.user_statuses__member(uuid)',
     'public.account_erase_workspace_data(uuid, boolean)']) f
    WHERE has_function_privilege('authenticated', f, 'EXECUTE')
       OR has_function_privilege('anon', f, 'EXECUTE')
       OR NOT has_function_privilege('service_role', f, 'EXECUTE');
   PERFORM test.ok(v_bad IS NULL, 'grants: the helpers, the expiry, the gate and erasure are server-only', v_bad);
+  PERFORM test.ok(to_regprocedure('public.user_statuses__shares_workspace(uuid)') IS NULL
+              AND test.as_user('B', format($q$SELECT public.user_statuses__member(%L)$q$, test.id('W'))) LIKE '42501%',
+    'grants: no status or presence helper answers a client directly (no probing who shares a workspace)');
 
   -- The only new functions a signed-in person can call are the ones above.
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO v_bad
@@ -116,15 +120,14 @@ BEGIN
      AND (p.proname LIKE 'user_statuses%' OR p.proname LIKE 'user_op_%status%' OR p.proname = 'chat_now')
      AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
      AND p.proname NOT IN ('user_op_set_status', 'user_op_clear_status', 'user_op_save_status',
-                           'user_op_forget_status', 'chat_now', 'user_statuses__shares_workspace',
-                           'user_statuses__member');
+                           'user_op_forget_status', 'chat_now');
   PERFORM test.ok(v_bad IS NULL, 'grants: no other statuses function is reachable', v_bad);
 
   SELECT string_agg(p.oid::regprocedure::text, ', ') INTO v_bad
     FROM pg_proc p
    WHERE p.oid IN ('public.user_statuses__member(uuid)'::regprocedure, 'public.user_op_set_status(jsonb)'::regprocedure, 'public.user_op_clear_status()'::regprocedure,
                    'public.user_op_save_status(jsonb, uuid)'::regprocedure, 'public.user_op_forget_status(uuid)'::regprocedure,
-                   'public.chat_now(uuid)'::regprocedure, 'public.user_statuses__shares_workspace(uuid)'::regprocedure)
+                   'public.chat_now(uuid)'::regprocedure)
      AND (NOT p.prosecdef OR NOT EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c = 'search_path=""'));
   PERFORM test.ok(v_bad IS NULL, 'shape: every statuses function a person calls pins an empty search_path', v_bad);
 
@@ -270,13 +273,14 @@ BEGIN
   PERFORM test.ok(test.now_of('B', 'W', 'A') = '', 'focus: a Pomodoro break isn''t Focusing');
   PERFORM test.focus('A', 'W', 'pomodoro', 'work', interval '4 minutes');
   PERFORM test.ok(test.now_of('B', 'W', 'A') = '', 'focus: a run not seen for 3 minutes isn''t Focusing');
-  -- Per task: "until" only with an estimate.
+  -- Per task: no "until", even with an estimate (a task's numbers never show).
   PERFORM test.focus('A', 'W', 'per_task', 'work', interval '0', NULL);
   PERFORM test.ok(test.now_field('B', 'W', 'A', 'focusing') = 'true' AND test.now_field('B', 'W', 'A', 'focus_until') IS NULL,
     'focus: Focusing with no estimate has no "until"');
   PERFORM test.focus('A', 'W', 'per_task', 'work', interval '0', 'TA');
-  PERFORM test.ok((test.now_field('B', 'W', 'A', 'focus_until'))::timestamptz = now() - interval '5 minutes' + interval '45 minutes',
-    'focus: the Now task''s estimate counts down to its "until"');
+  PERFORM test.ok(test.now_field('B', 'W', 'A', 'focusing') = 'true' AND test.now_field('B', 'W', 'A', 'focus_until') IS NULL
+              AND test.now_field('C', 'W', 'A', 'focus_until') IS NULL,
+    'focus: the Now task''s estimate never becomes an "until" (only the run''s own Pomodoro end does)');
   -- The task: never without the opt-in.
   PERFORM test.ok(test.now_field('B', 'W', 'A', 'focus_task_id') IS NULL, 'focus: no task without "Show what I''m focusing on"');
   v := test.as_user('A', $q$SELECT public.user_op_set_chat_prefs('{"show_focus_task": true}')$q$);
@@ -386,7 +390,7 @@ BEGIN
   UPDATE public.workspaces SET deleted_at = NULL WHERE id = test.id('W2');
   -- The live feed reads under the same rule: the read policy names only the caller.
   PERFORM test.ok((SELECT qual FROM pg_policies WHERE schemaname = 'public' AND tablename = 'user_statuses'
-                    AND policyname = 'user_statuses_read') LIKE '%uid()%shares_workspace(user_id)%'
+                    AND policyname = 'user_statuses_read') LIKE '%uid()%workspace_members%'
               AND (SELECT count(*) FROM pg_policies WHERE schemaname = 'public'
                     AND tablename IN ('user_statuses', 'user_saved_statuses') AND cmd <> 'SELECT') = 0,
     'rules: one read rule each, about the caller; no write rules (the ops write)');
