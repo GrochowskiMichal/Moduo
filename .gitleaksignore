@@ -20,3 +20,5 @@ d6447e9e326d7f8a3fc1fd2980b92efe61498c61:supabase/functions/auth-email-hook/hand
 
 # The workspace invite email fixture uses a made-up invite token (base64 of plain words, not a credential).
 746423d9c08bd3f7e6b9940583461c7385aaff68:supabase/functions/_shared/email/templates/fixtures.ts:generic-api-key:69
+# Chat v2 research note: a local-stack test user's id in a cleanup example (a UUID, not a secret)
+fe4ad9821a96de1a91440d46884544a1e6b4e68c:.design/chat-v2/research/current-state.md:generic-api-key:223

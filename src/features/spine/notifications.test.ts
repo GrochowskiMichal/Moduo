@@ -387,6 +387,41 @@ describe("notificationDeepLink", () => {
     });
   });
 
+  it("lands a chat notice on its message and chain (CV-3, AC1.6)", () => {
+    const [g] = groupNotifications([
+      item({
+        id: "a",
+        createdAt: "x",
+        op: "chat.reply",
+        targetType: "chat_channel",
+        targetId: "c1",
+        payload: { message_id: "m2", parent_id: "r1", reply_to_id: "r1" },
+      }),
+    ]);
+    expect(notificationDeepLink(g)).toEqual({
+      route: "/chat",
+      entityType: "chat_channel",
+      entityId: "c1",
+      messageId: "m2",
+      chainId: "r1",
+    });
+    // A notice written before it named its message opens the conversation.
+    const [old] = groupNotifications([
+      item({
+        id: "b",
+        createdAt: "x",
+        op: "chat.mention",
+        targetType: "chat_channel",
+        targetId: "c1",
+      }),
+    ]);
+    expect(notificationDeepLink(old)).toEqual({
+      route: "/chat",
+      entityType: "chat_channel",
+      entityId: "c1",
+    });
+  });
+
   it("returns null for an unroutable / missing target", () => {
     const [g] = groupNotifications([
       item({ id: "a", createdAt: "x", targetType: "payment", targetId: "p1" }),

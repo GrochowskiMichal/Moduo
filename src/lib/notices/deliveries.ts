@@ -17,8 +17,20 @@ export type NoticeDelivery = {
   body: string | null;
   /** An in-app path ("/tasks?id=…"), never an outside URL. */
   url: string | null;
+  /** Chat (CV-6a): the conversation and message it is about. */
+  channelId: string | null;
+  messageId: string | null;
+  /** A burst shares one tag ("chat:<conversation>"): a newer notice replaces the last. */
+  tag: string | null;
+  /** Written while a Focus run holds pings (CV-18): never rung. */
+  heldForFocus: boolean;
   createdAt: string;
 };
+
+/** Chat's kinds: their title and text are built on the server for this person. */
+export function isChatNotice(delivery: Pick<NoticeDelivery, "kind">): boolean {
+  return delivery.kind.startsWith("chat_");
+}
 
 /** A Realtime insert's row as a delivery, or null when it doesn't read. */
 export function noticeDeliveryFromRow(raw: unknown): NoticeDelivery | null {
@@ -36,6 +48,10 @@ export function noticeDeliveryFromRow(raw: unknown): NoticeDelivery | null {
     title: r.title,
     body: typeof r.body === "string" ? r.body : null,
     url,
+    channelId: typeof r.channel_id === "string" ? r.channel_id : null,
+    messageId: typeof r.message_id === "string" ? r.message_id : null,
+    tag: typeof r.tag === "string" ? r.tag : null,
+    heldForFocus: r.held_for_focus === true,
     createdAt: r.created_at,
   };
 }
@@ -47,6 +63,15 @@ export function noticeCopy(delivery: NoticeDelivery): { title: string; body: str
       return { title: "Reminder", body: delivery.body ?? delivery.title };
     // TV-D16: "Claude is ready for review", and the task it's about.
     case "agent":
+      return { title: delivery.title, body: delivery.body ?? "" };
+    // CV-6a: "Sofia Ortiz · #plans · Acme" and the text (only while "Show
+    // message text" is on), both written by the server for this person.
+    case "chat_message":
+    case "chat_mention":
+    case "chat_reply":
+    case "chat_announcement":
+    case "chat_reminder":
+    case "chat_focus_summary":
       return { title: delivery.title, body: delivery.body ?? "" };
   }
 }

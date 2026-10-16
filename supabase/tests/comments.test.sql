@@ -1,4 +1,4 @@
--- TV-U13 · Comments: edit, delete with Undo, six fixed reactions
+-- TV-U13 · Comments: edit, delete with Undo, reactions (any emoji since CV-7c)
 -- (supabase/migrations/20261013100000_comment_reactions_edits.sql).
 -- specs/tasks-v3.md §9, AC11.8; REPLAN 88, default q.
 --
@@ -99,8 +99,8 @@ BEGIN
     'grants: the read policy''s gate answers members (for themselves), never anonymously');
   PERFORM test.ok(
     pg_get_constraintdef((SELECT oid FROM pg_constraint WHERE conname = 'comment_reactions_reaction_check'))
-      LIKE '%thumbs_up%check%eyes%pray%heart%smile%',
-    'vocabulary: the six reactions, in order');
+      LIKE '%reactions__key_ok(reaction)%',
+    'vocabulary: any emoji, through the key shared with chat (CV-7c)');
 END $$;
 
 -- ── Edit ─────────────────────────────────────────────────────────────────────
@@ -189,11 +189,11 @@ BEGIN
   UPDATE public.comments SET updated_at = now() - interval '1 hour' WHERE id = test.id('C1');
   SELECT updated_at INTO v_before FROM public.comments WHERE id = test.id('C1');
 
-  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, 'thumbs_up')$q$, test.id('C1')));
+  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, '👍')$q$, test.id('C1')));
   PERFORM test.ok(r = 'ok 1', 'react: F adds 👍 and gets the comment''s reactions back', r);
-  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, 'thumbs_up')$q$, test.id('C1')));
+  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, '👍')$q$, test.id('C1')));
   PERFORM test.ok(r = 'ok 1', 'react: adding it twice keeps one', r);
-  r := test.as_user('O', format($q$SELECT * FROM public.comments_op_react(%L, 'heart')$q$, test.id('C1')));
+  r := test.as_user('O', format($q$SELECT * FROM public.comments_op_react(%L, '❤️')$q$, test.id('C1')));
   PERFORM test.ok(r = 'ok 2', 'react: O adds ❤️', r);
   PERFORM test.ok((SELECT updated_at > v_before AND body = 'First pass is up, @F @O'
                    FROM public.comments WHERE id = test.id('C1')),
@@ -202,12 +202,12 @@ BEGIN
     'react: no activity row, so nobody is notified (88)');
 
   r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, 'party')$q$, test.id('C1')));
-  PERFORM test.ok(r LIKE '22023%', 'react: only the six', r);
-  r := test.as_key('K', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('C1')));
+  PERFORM test.ok(r LIKE '22023%', 'react: a word isn''t a reaction (keys are emoji, CV-7c)', r);
+  r := test.as_key('K', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('C1')));
   PERFORM test.ok(r NOT LIKE 'ok%', 'react: an app over a key can''t react', r);
-  r := test.as_user('X', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('C1')));
+  r := test.as_user('X', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('C1')));
   PERFORM test.ok(r LIKE 'P0002%', 'react: someone outside the workspace is told it isn''t there', r);
-  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('C2')));
+  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('C2')));
   PERFORM test.ok(r LIKE 'P0002%', 'react: not on a deleted comment', r);
 
   PERFORM test.ok(test.value_as('E', format($q$SELECT count(*)::text FROM public.comment_reactions WHERE comment_id = %L$q$,
@@ -217,7 +217,7 @@ BEGIN
                    test.id('C1'))) = '0',
     'read: someone in another workspace reads none');
 
-  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, 'thumbs_up', false)$q$, test.id('C1')));
+  r := test.as_user('F', format($q$SELECT * FROM public.comments_op_react(%L, '👍', false)$q$, test.id('C1')));
   PERFORM test.ok(r = 'ok 1', 'react: F takes 👍 back; O''s ❤️ stays', r);
 END $$;
 
@@ -227,8 +227,8 @@ DECLARE
   r text;
 BEGIN
   PERFORM test.comment('O', 'CP', 'TP', 'Only for me');
-  PERFORM test.as_user('O', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('CP')));
-  r := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('CP')));
+  PERFORM test.as_user('O', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('CP')));
+  r := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('CP')));
   PERFORM test.ok(r LIKE 'P0002%', 'private: M can''t react to what they can''t see', r);
   r := test.as_user('M', format($q$SELECT public.comments_op_delete(%L)$q$, test.id('CP')));
   PERFORM test.ok(r LIKE 'P0002%', 'private: M can''t delete it either (no hint it exists)', r);
@@ -258,7 +258,7 @@ BEGIN
 
   -- A view-only share comments and reacts, but removes only its own.
   PERFORM test.comment('O', 'CV', 'TV', 'Owner note on the brief');
-  r := test.as_user('N', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('CV')));
+  r := test.as_user('N', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('CV')));
   PERFORM test.ok(r LIKE 'ok%', 'view share: N can react to what N can comment on', r);
   r := test.as_user('N', format($q$SELECT public.comments_op_delete(%L)$q$, test.id('CV')));
   PERFORM test.ok(r LIKE '42501%' AND (SELECT deleted_at IS NULL FROM public.comments WHERE id = test.id('CV')),
@@ -267,7 +267,7 @@ BEGIN
   PERFORM test.ok(r LIKE '42501%', 'view share: N can''t edit someone else''s comment', r);
 
   -- A workspace viewer can't comment, so can't react either.
-  r := test.as_user('V', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('C1')));
+  r := test.as_user('V', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('C1')));
   PERFORM test.ok(r NOT LIKE 'ok%', 'viewer: no reactions without commenting', r);
 
   -- A key can't edit, delete, restore or react, even its creator's own.
@@ -280,7 +280,7 @@ BEGIN
 
   -- A share taken back: what it reached is gone, reactions included.
   PERFORM test.comment('O', 'CS', 'TS', 'For S while shared');
-  r := test.as_user('S', format($q$SELECT * FROM public.comments_op_react(%L, 'heart')$q$, test.id('CS')));
+  r := test.as_user('S', format($q$SELECT * FROM public.comments_op_react(%L, '❤️')$q$, test.id('CS')));
   PERFORM test.ok(r LIKE 'ok%', 'revoked share: S reacts while it''s shared', r);
   PERFORM test.comment('S', 'CS2', 'TS', 'S was here');
   PERFORM test.ok(test.value_as('S', format($q$SELECT count(*)::text FROM public.comment_reactions WHERE comment_id = %L$q$,
@@ -288,7 +288,7 @@ BEGIN
     'revoked share: S reads the reactions while it''s shared');
   DELETE FROM public.resource_grants
   WHERE resource_type = 'bucket' AND resource_id = test.id('PS') AND subject_id = test.id('S');
-  r := test.as_user('S', format($q$SELECT * FROM public.comments_op_react(%L, 'heart', false)$q$, test.id('CS')));
+  r := test.as_user('S', format($q$SELECT * FROM public.comments_op_react(%L, '❤️', false)$q$, test.id('CS')));
   PERFORM test.ok(r LIKE 'P0002%', 'revoked share: S can''t react any more', r);
   r := test.as_user('S', format($q$SELECT public.comments_op_edit(%L, 'still mine?')$q$, test.id('CS2')));
   PERFORM test.ok(r LIKE 'P0002%', 'revoked share: S can''t edit their own comment there any more', r);
@@ -353,8 +353,8 @@ BEGIN
   r2 := test.as_user('M', format($q$SELECT public.comments_op_add(%L, 'task', %L, 'x', '{}'::uuid[], 'x', 'task')$q$,
     test.id('W'), test.id('no-such-task')));
   PERFORM test.ok(r = r2 AND r LIKE 'P0002%', 'add: a hidden task and a missing one answer alike', r || ' / ' || r2);
-  r := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('CP')));
-  r2 := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, 'eyes')$q$, test.id('no-such-comment')));
+  r := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('CP')));
+  r2 := test.as_user('M', format($q$SELECT * FROM public.comments_op_react(%L, '👀')$q$, test.id('no-such-comment')));
   PERFORM test.ok(r = r2 AND r LIKE 'P0002%', 'react: a hidden comment and a missing one answer alike', r || ' / ' || r2);
   r := test.as_user('M', format($q$SELECT public.comments_op_edit(%L, 'x')$q$, test.id('CP')));
   r2 := test.as_user('M', format($q$SELECT public.comments_op_edit(%L, 'x')$q$, test.id('no-such-comment')));

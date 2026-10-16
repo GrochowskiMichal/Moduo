@@ -25,6 +25,8 @@ export type ClaimedDelivery = {
   body: string | null;
   url: string | null;
   task_id: string | null;
+  /** A burst's shared tag (CV-6a: "chat:<conversation>"); absent from a database before it. */
+  tag?: string | null;
   subscriptions: PushSubscriptionKeys[];
 };
 
@@ -42,11 +44,33 @@ export type PushDeps = {
   configured: boolean;
   defer?: (task: Promise<unknown>) => void;
   report?: (event: string, detail: Record<string, unknown>) => void;
+  /**
+   * `notice_deliveries__next_due`: milliseconds until the next notice inside
+   * its hold is due (a chat notice waits 8 s for a client to acknowledge it),
+   * or null when none is due within 10 s. Without it (or `sleep`) one claim.
+   */
+  nextDue?: () => Promise<number | null>;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 /** Long enough for any secret the migration's kick sends, short enough to refuse junk early. */
 const SECRET_SHAPE = /^[A-Za-z0-9_-]{32,256}$/;
 const BATCH = 100;
+/** The longest one run waits for a held notice (round-3 §2.14 d). */
+export const HOLD_WAIT_MAX_MS = 10_000;
+/** Claims per run: now, and after waiting for what was held (a burst drains in one kick). */
+const DRAIN_ROUNDS = 3;
+/** A little past the hold, so the claim's clock sees it due. */
+const HOLD_SLACK_MS = 250;
+
+/**
+ * Chat's kinds (`NOTICE_DELIVERY_KINDS` in @contracts, all `chat_*`), read by
+ * prefix so push-send needs no Zod import map and a new chat kind is never
+ * mistaken for a reminder.
+ */
+function isChatKind(kind: string | null | undefined): boolean {
+  return typeof kind === "string" && kind.startsWith("chat_");
+}
 
 /**
  * What a browser gets (public/push-display.js reads these keys): ids and the
@@ -54,6 +78,19 @@ const BATCH = 100;
  * it only while its person is signed in there; anyone else sees a plain line.
  */
 export function pushMessage(delivery: ClaimedDelivery): Record<string, unknown> {
+  const url = delivery.url && /^\/(?!\/)/.test(delivery.url) ? delivery.url : "/";
+  // Chat (CV-6a): the server wrote "Sofia Ortiz · #plans · Acme" and the
+  // text (only while "Show message text" is on) for this person; a burst
+  // shares its tag, so the browser replaces the last notice.
+  if (isChatKind(delivery.kind)) {
+    return {
+      uid: delivery.user_id,
+      title: delivery.title.slice(0, 120),
+      body: (delivery.body ?? "").slice(0, 160),
+      url,
+      tag: delivery.tag ? delivery.tag.slice(0, 80) : `notice-${delivery.id}`,
+    };
+  }
   // A reminder carries only the task's title; an agent's notice (TV-D16)
   // carries its own line ("Claude is ready for review") and the task's title
   // as its body. A database from before TV-D16 sends no kind: a reminder.
@@ -62,7 +99,7 @@ export function pushMessage(delivery: ClaimedDelivery): Record<string, unknown> 
     uid: delivery.user_id,
     title: agent ? delivery.title.slice(0, 80) : "Reminder",
     body: (agent ? (delivery.body ?? "") : delivery.title).slice(0, 80),
-    url: delivery.url && /^\/(?!\/)/.test(delivery.url) ? delivery.url : "/",
+    url,
     tag: delivery.task_id
       ? `${agent ? "agent" : "reminder"}-${delivery.task_id}`
       : `notice-${delivery.id}`,
@@ -100,6 +137,27 @@ export async function runPush(deps: PushDeps): Promise<{ claimed: number; sent: 
   return { claimed: claimed.length, sent, failed };
 }
 
+/**
+ * One kick drains a burst: claim what is due, then, while a notice is still
+ * inside its hold (≤ 10 s away), wait for it and claim again. The minute job
+ * stays the sweeper for anything left.
+ */
+export async function drainPush(deps: PushDeps): Promise<{ claimed: number; sent: number; failed: number }> {
+  const total = { claimed: 0, sent: 0, failed: 0 };
+  for (let round = 1; ; round += 1) {
+    const summary = await runPush(deps);
+    total.claimed += summary.claimed;
+    total.sent += summary.sent;
+    total.failed += summary.failed;
+    if (round >= DRAIN_ROUNDS || !deps.nextDue || !deps.sleep) break;
+    // A database without the wait (before CV-6a's migration) just stops here.
+    const wait = await deps.nextDue().catch(() => null);
+    if (wait === null || !Number.isFinite(wait) || wait < 0 || wait > HOLD_WAIT_MAX_MS) break;
+    await deps.sleep(wait + HOLD_SLACK_MS);
+  }
+  return total;
+}
+
 export async function handlePushRequest(request: PushRequest, deps: PushDeps): Promise<PushResponse> {
   const report = deps.report ?? (() => {});
   if (request.method !== "POST") return { status: 405, body: { error: "method_not_allowed" } };
@@ -117,7 +175,7 @@ export async function handlePushRequest(request: PushRequest, deps: PushDeps): P
     report("not_configured", {});
     return { status: 503, body: { error: "not_configured" } };
   }
-  const task = runPush(deps)
+  const task = drainPush(deps)
     .then((summary) => {
       if (summary.claimed > 0) report("run", summary);
     })

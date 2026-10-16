@@ -222,3 +222,59 @@ export function onShortcut(id: ShortcutId, handler: () => void): () => void {
 export function useShortcut(id: ShortcutId, handler: () => void): void {
   useEffect(() => onShortcut(id, handler), [id, handler]);
 }
+
+// ── Chat's key map, as the shortcut sheet lists it (chat v2 §16, CV-22) ──────
+// Chat binds these itself, each in its scope (the conversation page, the
+// composer, a selected message, Catch up, the chain panel); this list only
+// says them. Keep it in step with specs/chat-v2.md §16.
+
+export type ChatKeyScope =
+  | "Anywhere in Chat"
+  | "The composer"
+  | "A message"
+  | "Catch up"
+  | "The chain panel";
+
+export type ChatKeyRow = { scope: ChatKeyScope; keys: string[]; desc: string };
+
+export function chatKeyRows(isMac = isMacPlatform()): ChatKeyRow[] {
+  const opt = isMac ? "⌥" : "Alt ";
+  const mod = isMac ? "⌘" : "Ctrl ";
+  const shift = isMac ? "⇧" : "Shift ";
+  return [
+    {
+      scope: "Anywhere in Chat",
+      keys: [`${opt}↑`, `${opt}↓`],
+      desc: "Previous / next conversation",
+    },
+    { scope: "Anywhere in Chat", keys: [`${opt}${shift}↓`], desc: "Next unread conversation" },
+    { scope: "Anywhere in Chat", keys: [`${mod}N`], desc: "New conversation here" },
+    {
+      scope: "Anywhere in Chat",
+      keys: [`${opt}1`, `${opt}2`, `${opt}3`],
+      desc: "Details · Reply chains · Files",
+    },
+    {
+      scope: "Anywhere in Chat",
+      keys: ["Esc"],
+      desc: "Step back: menu, quote, selection, panel, Catch up",
+    },
+    { scope: "The composer", keys: ["⏎", `${mod}⏎`], desc: "Send" },
+    { scope: "The composer", keys: [`${shift}⏎`], desc: "New line" },
+    { scope: "The composer", keys: ["↑"], desc: "Edit your last message (empty box)" },
+    { scope: "A message", keys: ["R", "E", "+"], desc: "Reply · edit · react" },
+    {
+      scope: "A message",
+      keys: ["P", "T", "M", "H"],
+      desc: "Pin · make a task · move · remind me",
+    },
+    { scope: "A message", keys: [`${mod}⌫`], desc: "Delete your message" },
+    { scope: "A message", keys: [`${shift}↑`, `${shift}↓`], desc: "Select several" },
+    {
+      scope: "Catch up",
+      keys: ["R", "Space", "T", "H", "⏎"],
+      desc: "Reply · Done · task · Later · open",
+    },
+    { scope: "The chain panel", keys: ["⏎", "Esc"], desc: "Reply in the chain · back" },
+  ];
+}

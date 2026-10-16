@@ -5,9 +5,11 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { $getRoot, type LexicalEditor } from "lexical";
+import { $createParagraphNode, $createTextNode, $getRoot, type LexicalEditor } from "lexical";
+import { Toaster } from "sonner";
 
-import type { CaptureContext } from "../../../lib/capture-registry";
+import { CAPTURE_OPEN_EVENT } from "../../../lib/capture-open";
+import type { CaptureContext, CaptureRequest } from "../../../lib/capture-registry";
 import { ReferenceStoreProvider } from "../../spine/references/context";
 import type { ResolveContext } from "../../spine/references/resolvers";
 import type { ReferencePreviewApi } from "../../spine/references/rows";
@@ -192,13 +194,14 @@ function renderBody(
   context: Partial<CaptureContext> = {},
   store: ReferenceStore | null = referenceStore({}),
   draft = "",
+  onDraftChange: (line: string) => void = () => {},
 ) {
   const onDone = rs.fn();
   const utils = render(
     <ReferenceStoreProvider store={store}>
       <TaskCaptureBody
         draft={draft}
-        onDraftChange={() => {}}
+        onDraftChange={onDraftChange}
         writable
         onDone={onDone}
         context={{ source: null, openId: 1, ...context }}
@@ -627,6 +630,31 @@ describe("From template (`/template`, More → Template…, TV-D15)", () => {
     expect(sent.projectId).toBeNull();
   });
 
+  it("from a prefilled open, a template create leaves the kept draft alone", async () => {
+    const apply = withTemplates();
+    saveDraft(ME, WS, {
+      segments: [{ text: "Kept with Esc" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    const { onDone } = renderBody(
+      { draft: "From chat", held: { current: null } },
+      referenceStore({}),
+      "From chat",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Template…" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Episode/ }));
+    expect(await screen.findByText("Template: Episode")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Create\s*⏎$/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    cleanup();
+    expect(loadDraft(ME, WS)?.segments).toEqual([{ text: "Kept with Esc" }]);
+  });
+
   it("a refused apply keeps the capture open with its template", async () => {
     const apply = withTemplates();
     apply.mockImplementation(async () => null);
@@ -918,5 +946,336 @@ describe("taskForFiles (the file seam's task, AT3-2)", () => {
     const refused = Promise.resolve({ created: [] as { id: string }[], queued: [] as string[] });
     await expect(taskForFiles(refused, "t1")).resolves.toBeNull();
     await expect(taskForFiles(Promise.reject(new Error("no")), "t1")).resolves.toBeNull();
+  });
+});
+
+describe("a prefilled open (chat's T and /task, CV-7b)", () => {
+  /** Types into the description (one Lexical editor since call #15, MOD-117). */
+  const typeDescription = async (text: string) => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    const box = screen.getByRole("textbox", { name: "Description" });
+    act(() => {
+      (box as HTMLElement & { __lexicalEditor: LexicalEditor }).__lexicalEditor.update(
+        () => {
+          const root = $getRoot();
+          root.clear();
+          root.append($createParagraphNode().append($createTextNode(text)));
+        },
+        { discrete: true },
+      );
+    });
+  };
+  /** The description's words as shown. */
+  const descriptionText = () => screen.getByRole("textbox", { name: "Description" }).textContent;
+  const KEPT_SEGMENTS = [
+    { text: "Kept with Esc " },
+    { token: { kind: "person" as const, userId: SAM, label: "" } },
+  ];
+  const keepDraft = () =>
+    saveDraft(ME, WS, {
+      segments: KEPT_SEGMENTS,
+      keep: [],
+      description: "kept description",
+      subtasks: ["kept subtask"],
+      fields: EMPTY_FIELDS,
+    });
+  const keptIsThere = () => {
+    const kept = loadDraft(ME, WS);
+    expect(kept?.segments).toEqual(KEPT_SEGMENTS);
+    expect(kept?.description).toBe("kept description");
+    expect(kept?.subtasks).toEqual(["kept subtask"]);
+  };
+  /** The shell's context for one prefilled open: `held` lives as long as it. */
+  const prefilledOpen = (words: string, openId = 1): Partial<CaptureContext> => ({
+    draft: words,
+    openId,
+    held: { current: null },
+  });
+  const createButton = (name: RegExp) =>
+    screen.getAllByRole("button").find((b) => name.test(b.textContent ?? "")) as HTMLButtonElement;
+
+  it("starts fresh: an earlier draft's words and fields don't ride in", async () => {
+    keepDraft();
+    renderBody(prefilledOpen("Order frames"), referenceStore({}), "Order frames");
+    await waitFor(() => expect(document.body.textContent).toContain("Order frames"));
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    expect(document.body.textContent).not.toContain("kept subtask");
+    expect(screen.queryByText(/Draft restored/)).toBeNull();
+  });
+
+  it("T then Esc: the kept draft is still there", async () => {
+    keepDraft();
+    const { unmount } = renderBody(prefilledOpen("From chat", 7), referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    unmount();
+    keptIsThere();
+  });
+
+  it("T then ⏎: the task is the message's, and the kept draft is still there", async () => {
+    keepDraft();
+    const { onDone } = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    expect(fake.saved[0]?.title).toBe("From chat");
+    expect(onDone).toHaveBeenCalled();
+    cleanup();
+    keptIsThere();
+  });
+
+  it("T then Create more: the emptied capture never overwrites the kept draft", async () => {
+    keepDraft();
+    renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create more/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    await waitFor(() => expect(document.body.textContent).not.toContain("From chat"));
+    keptIsThere();
+    cleanup();
+    keptIsThere();
+  });
+
+  it("T, a type switch and back with nothing changed: the prefill stays, the kept draft doesn't show", async () => {
+    keepDraft();
+    const open = prefilledOpen("From chat");
+    const first = renderBody(open, referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    first.unmount(); // ⌘2: the body goes, the shell's open (and `held`) stays
+    renderBody(open, referenceStore({}), "From chat"); // ⌘3: back
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    expect(document.body.textContent).not.toContain("kept subtask");
+    expect(screen.queryByText(/Draft restored/)).toBeNull();
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    expect(fake.saved[0]?.title).toBe("From chat");
+    cleanup();
+    keptIsThere();
+  });
+
+  it("T, a change under another type, then back: the new words come along", async () => {
+    const open = prefilledOpen("From chat");
+    const first = renderBody(open, referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    first.unmount();
+    renderBody(open, referenceStore({}), "From chat, edited as a note");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat, edited as a note"));
+  });
+
+  it("T, an edit, Esc, then a normal open: the kept draft comes back as it was, tokens and all", async () => {
+    keepDraft();
+    // A normal open first: the shell's line is the kept draft's words.
+    let line = "";
+    const normal = renderBody({}, referenceStore({}), "", (next) => {
+      line = next;
+    });
+    await waitFor(() => expect(line).toContain("Kept with Esc"));
+    normal.unmount();
+    const first = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    await typeDescription("typed in the prefilled capture");
+    first.unmount();
+    keptIsThere();
+    // The shell gives the line back as it was before the prefill: the stored
+    // draft (its person token included) is the one restored, not its words.
+    renderBody({ openId: 2 }, referenceStore({}), line);
+    await waitFor(() => expect(document.body.textContent).toContain("Kept with Esc"));
+    expect(document.querySelector('[data-capture-token="person"]')).toBeTruthy();
+    expect(document.body.textContent).not.toContain("From chat");
+    expect(descriptionText()).toBe("kept description");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    keptIsThere();
+  });
+
+  /** T, a description and a file, ⏎ refused, then the toast's Restore: the request it opens. */
+  async function refuseThenRestore(): Promise<CaptureRequest | undefined> {
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      throw new Error("You can't add tasks here.");
+    });
+    const opened: CaptureRequest[] = [];
+    const onOpen = (e: Event) => opened.push((e as CustomEvent<CaptureRequest>).detail);
+    window.addEventListener(CAPTURE_OPEN_EVENT, onOpen);
+    render(<Toaster />);
+    const first = renderBody(prefilledOpen("From chat"), referenceStore({}), "From chat");
+    const shot = new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
+    await typeDescription("the refused one's words");
+    await act(async () => {
+      dispatchAs("ClipboardEvent", screen.getByRole("textbox", { name: "Description" }), "paste", {
+        clipboardData: {
+          types: ["Files"],
+          files: [shot],
+          items: [{ kind: "file", getAsFile: () => shot }],
+          getData: () => "",
+        },
+      });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await screen.findByRole("button", { name: "Remove shot.png" });
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    first.unmount();
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).not.toBeNull());
+    // The newest toast is the front one (earlier tests' toasts stay in sonner).
+    fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0] as HTMLElement);
+    window.removeEventListener(CAPTURE_OPEN_EVENT, onOpen);
+    return opened.at(-1);
+  }
+  /** The shell's context for a Restore's open (a fresh `held`). */
+  const restoreOpen = (request: CaptureRequest | undefined, openId: number) => ({
+    ...request,
+    openId,
+    held: { current: null },
+  });
+
+  it("T, ⏎ refused, then Restore: it opens in its own draft (files too), the kept one stays", async () => {
+    keepDraft();
+    const uploads: File[][] = [];
+    registerCaptureAttachments((input) => uploads.push(input.files));
+    const request = await refuseThenRestore();
+    keptIsThere();
+    // Kept until it's made: an open that doesn't happen loses nothing.
+    expect(loadDraft(ME, WS, "refused")?.description).toBe("the refused one's words");
+    expect(request).toMatchObject({ type: "task", draft: "From chat", fromRefused: true });
+    const second = renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    expect(descriptionText()).toBe("the refused one's words");
+    expect(screen.getByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    // Esc: both stay kept, files too.
+    second.unmount();
+    keptIsThere();
+    expect(loadDraft(ME, WS, "refused")).not.toBeNull();
+    // Opened again, switched to another type and back, and made: only the
+    // refused one goes, and its file goes up once, with it.
+    const again = restoreOpen(request, 4);
+    const third = renderBody(again, referenceStore({}), "From chat");
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    third.unmount();
+    renderBody(again, referenceStore({}), "From chat");
+    expect(await screen.findByRole("button", { name: "Remove shot.png" })).toBeTruthy();
+    uploads.length = 0;
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).toBeNull());
+    expect(uploads.map((files) => files.map((f) => f.name))).toEqual([["shot.png"]]);
+    cleanup();
+    keptIsThere();
+    // Nothing of it comes back on a later open (no duplicate).
+    window.localStorage.clear();
+    renderBody({ openId: 5 }, referenceStore({}), "");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
+    registerCaptureAttachments(null);
+  });
+
+  it("a restored capture made with Create more is no longer kept", async () => {
+    keepDraft();
+    registerCaptureAttachments(() => {});
+    const request = await refuseThenRestore();
+    renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create more/));
+    await waitFor(() => expect(fake.saved.length).toBeGreaterThan(0));
+    cleanup();
+    expect(loadDraft(ME, WS, "refused")).toBeNull();
+    keptIsThere();
+    window.localStorage.removeItem(`moduo:capture-draft:task:${ME}:${WS}`);
+    renderBody({ openId: 4 }, referenceStore({}), "");
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(screen.queryByText(/Draft restored/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove shot.png" })).toBeNull();
+    registerCaptureAttachments(null);
+  });
+
+  it("a restored capture refused again on Create more stays kept through Esc", async () => {
+    keepDraft();
+    registerCaptureAttachments(() => {});
+    const request = await refuseThenRestore();
+    // Lexical measures the caret when the capture is filled back.
+    Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+    Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
+    // Refused once the emptied capture has drawn: it comes back into it.
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      throw new Error("Still not here.");
+    });
+    const second = renderBody(restoreOpen(request, 3), referenceStore({}), "From chat");
+    await waitFor(() => expect(createButton(/^Create more/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create more/));
+    // The description editor empties a beat after the click, so wait for the
+    // refusal itself (50 ms above) before reading what came back. Outside
+    // `act`: inside it React would hold the emptied title until the end.
+    await new Promise((r) => setTimeout(r, 150));
+    await waitFor(() => expect(descriptionText()).toBe("the refused one's words"));
+    second.unmount();
+    expect(loadDraft(ME, WS, "refused")?.description).toBe("the refused one's words");
+    keptIsThere();
+    registerCaptureAttachments(null);
+  });
+
+  it("Restore into an open prefilled capture, then Esc: the refused one stays kept", async () => {
+    render(<Toaster />);
+    saveDraft(ME, WS, {
+      segments: [{ text: "Refused while closed" }],
+      keep: [],
+      description: "",
+      subtasks: [],
+      fields: EMPTY_FIELDS,
+    });
+    fake.runtime.tasks.upsertTask.mockImplementationOnce(async () => {
+      throw new Error("You can't add tasks here.");
+    });
+    const first = renderBody({ openId: 1 }, referenceStore({}), "");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    first.unmount();
+    await waitFor(() =>
+      expect(loadDraft(ME, WS, "refused")?.segments).toEqual([{ text: "Refused while closed" }]),
+    );
+    // Chat's T opens the capture; the toast's Restore fills it.
+    const open = prefilledOpen("From chat", 2);
+    const second = renderBody(open, referenceStore({}), "From chat");
+    await waitFor(() => expect(document.body.textContent).toContain("From chat"));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Restore" }))[0] as HTMLElement);
+    await waitFor(() => expect(document.body.textContent).toContain("Refused while closed"));
+    second.unmount();
+    expect(loadDraft(ME, WS, "refused")?.segments).toEqual([{ text: "Refused while closed" }]);
+    // Made in that open (back from a type switch): no longer kept.
+    renderBody(open, referenceStore({}), "Refused while closed");
+    await waitFor(() => expect(createButton(/^Create⏎?$/).disabled).toBe(false));
+    fireEvent.click(createButton(/^Create⏎?$/));
+    await waitFor(() => expect(loadDraft(ME, WS, "refused")).toBeNull());
+  });
+
+  it("a Restore that finds no refused capture here (another workspace) starts empty", async () => {
+    keepDraft();
+    renderBody(
+      { draft: "Words from elsewhere", fromRefused: true, openId: 3, held: { current: null } },
+      referenceStore({}),
+      "Words from elsewhere",
+    );
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(document.body.textContent).not.toContain("Words from elsewhere");
+    expect(document.body.textContent).not.toContain("Kept with Esc");
+    keptIsThere();
+  });
+
+  it("a normal open keeps today's draft: what's typed is kept on the device", async () => {
+    const first = renderBody({}, referenceStore({}), "");
+    await typeDescription("normal words");
+    await waitFor(() => expect(loadDraft(ME, WS)?.description).toBe("normal words"));
+    first.unmount();
+    expect(loadDraft(ME, WS)?.description).toBe("normal words");
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { taskCyclesFromJson } from "../task-rows";
-import { deliveriesToShow, noticeCopy, noticeDeliveryFromRow } from "./deliveries";
+import { deliveriesToShow, isChatNotice, noticeCopy, noticeDeliveryFromRow } from "./deliveries";
 
 const row = (over: Record<string, unknown> = {}) => ({
   id: "d1",
@@ -32,6 +32,35 @@ describe("notice deliveries (TV-D12)", () => {
   it("says a reminder in the app's words", () => {
     const d = noticeDeliveryFromRow(row())!;
     expect(noticeCopy(d)).toEqual({ title: "Reminder", body: "Call Anna" });
+  });
+
+  it("reads a chat notice: the server's words, the conversation, message and tag (CV-6a)", () => {
+    const d = noticeDeliveryFromRow(
+      row({
+        kind: "chat_mention",
+        task_id: null,
+        title: "Sofia Ortiz · #plans · Acme",
+        body: "ping @Tom",
+        url: "/chat?c=c1&m=m1",
+        channel_id: "c1",
+        message_id: "m1",
+        tag: "chat:c1",
+        held_for_focus: false,
+      }),
+    )!;
+    expect(d).toMatchObject({
+      kind: "chat_mention",
+      channelId: "c1",
+      messageId: "m1",
+      tag: "chat:c1",
+    });
+    expect(isChatNotice(d)).toBe(true);
+    expect(isChatNotice(noticeDeliveryFromRow(row())!)).toBe(false);
+    expect(noticeCopy(d)).toEqual({ title: "Sofia Ortiz · #plans · Acme", body: "ping @Tom" });
+    expect(noticeCopy({ ...d, body: null })).toEqual({
+      title: "Sofia Ortiz · #plans · Acme",
+      body: "",
+    });
   });
 
   it("shows only the newest few, each once", () => {

@@ -4,7 +4,7 @@ Full entries for this area, newest first. The one-line index of every area is [d
 
 ## 2026-10-16 · A project's client can be a company (MOD-155)
 
-Migration `20261016135941_project_client_company.sql` (Tier 2: migration, contracts, `moduo-mcp`); verified on the local stack by `supabase/tests/project_client.test.sql`, not on prod. Frame matched: [structure](../../.design/tasks-v3/prototypes/structure.html)'s Project panel already draws the Client row as a company ("Acme Inc." with the building icon), which the set row now shows. No frame draws the picker's list, so its People / Companies grouping is the agent's layout, revisitable.
+Migration `20261016172230_project_client_company.sql` (Tier 2: migration, contracts, `moduo-mcp`); verified on the local stack by `supabase/tests/project_client.test.sql`, not on prod. Frame matched: [structure](../../.design/tasks-v3/prototypes/structure.html)'s Project panel already draws the Client row as a company ("Acme Inc." with the building icon), which the set row now shows. No frame draws the picker's list, so its People / Companies grouping is the agent's layout, revisitable.
 
 - **MOD-155 · A project's client is a person or a company, never both** → `buckets.client_company_id`, `buckets__project_check`, `projects__apply_fields`, `projects_op_update` / `projects_op_create`; `ProjectClientValue` (`ui/project-overview-parts.tsx`), `projectClient` / `clientPatch` / `clientCopyClears` (`project-overview.ts`); `projects_list` / `projects_create` / `projects_update` (`moduo-mcp`, `contracts/mcp-tool-args.ts`, `contracts/rows.ts`)
   - Who: Maciej, 2026-10-16, MOD-155 ("The client row on projects can only be a person now, but it could also be a company."). Everything below the decision line is the agent's, revisitable.

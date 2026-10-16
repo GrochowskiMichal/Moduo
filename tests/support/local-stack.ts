@@ -194,14 +194,45 @@ export async function signInPage(
 /**
  * End a person's open Focus runs (TV-F6's `focus_runs`), so a session another
  * test left running (it reads as "on your other device") doesn't become the
- * Now card of the next one.
+ * Now card of the next one. A paused run is ended too: `focus_runs_paused`
+ * wants `paused_at` null unless the status is paused, so a run a test left
+ * paused made this PATCH fail (400) in every later spec's setup.
  */
 export async function endFocusRuns(userId: string): Promise<void> {
   await rest("service", `focus_runs?user_id=eq.${userId}&status=neq.ended`, {
     method: "PATCH",
-    body: { status: "ended", ended_at: new Date().toISOString() },
+    body: { status: "ended", ended_at: new Date().toISOString(), paused_at: null },
   });
 }
 
 /** A unique tag for this run's rows, so runs never collide. */
 export const runTag = () => Math.random().toString(36).slice(2, 7);
+
+/**
+ * Soft-delete what a spec made in the shared dev workspace, so it doesn't
+ * grow with every run: the projects it created (with their sections and
+ * tasks) and the tasks it filed elsewhere under its `tag` (in a title, or as
+ * the `z<tag>…` position the REST-built ones carry, e.g. in the Inbox). The
+ * app reads at most 500 projects on first load (READ_CAPS.buckets), so a
+ * workspace that keeps every run's projects eventually hides a new one and
+ * the spec that made it fails. Tasks first, then sections, then projects (as
+ * tasks-toolbar.spec.ts does); rows already deleted keep their stamp.
+ */
+export async function removeRun(
+  workspaceId: string,
+  tag: string,
+  projectIds: readonly string[],
+): Promise<void> {
+  const at = new Date().toISOString();
+  const patch = (path: string) =>
+    rest("service", `${path}&deleted_at=is.null`, { method: "PATCH", body: { deleted_at: at } });
+  const ids = projectIds.join(",");
+  const inProjects = ids ? `,bucket_id.in.(${ids})` : "";
+  await patch(
+    `tasks?workspace_id=eq.${workspaceId}&or=(title.like.*${tag}*,position.like.z${tag}*${inProjects})`,
+  );
+  if (ids) {
+    await patch(`sections?project_id=in.(${ids})`);
+    await patch(`buckets?id=in.(${ids})`);
+  }
+}

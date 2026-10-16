@@ -16,7 +16,14 @@ const h = rs.hoisted(() => ({
   tasks: [] as Array<Record<string, unknown>>,
   // One runtime object, as the real provider keeps (a new one each render
   // would restart the palette's search effect forever).
-  runtime: { spine: { searchEntities: async () => [] as unknown[] } },
+  runtime: {
+    spine: { searchEntities: async () => [] as unknown[] },
+    // Chat's half of ⌘K (CV-19) answers with nothing here.
+    chat: {
+      search: async () => ({ data: [], error: null }),
+      findConversations: async () => ({ data: [], error: null }),
+    },
+  },
 }));
 h.runtime.spine.searchEntities = async () => h.search;
 
@@ -26,10 +33,11 @@ rs.mock("../../providers/workspace-provider", () => ({
     selectedWorkspaceId: "w1",
     selectedWorkspace: { id: "w1", taskKey: "MOD" },
     modulePermissions: h.perms,
+    members: [],
   }),
 }));
 rs.mock("../../providers/auth-provider", () => ({
-  useAuth: () => ({ runtime: h.runtime }),
+  useAuth: () => ({ runtime: h.runtime, userId: "me" }),
 }));
 rs.mock("../../lib/sync/store", () => ({
   findWorkspaceStore: () => ({
@@ -68,7 +76,7 @@ function record(id: string, label: string) {
 function openAndType(query: string) {
   render(<GlobalCommandPalette />);
   act(() => dispatchOpenPalette());
-  const input = screen.getByPlaceholderText(/Search tasks, notes, contacts/);
+  const input = screen.getByPlaceholderText(/tasks, notes, contacts/);
   fireEvent.change(input, { target: { value: query } });
 }
 

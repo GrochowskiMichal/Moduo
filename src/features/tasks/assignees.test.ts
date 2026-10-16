@@ -85,6 +85,20 @@ describe("Unassigned option + former member", () => {
   });
 });
 
+describe("statuses in the picker (chat v2 CV-17, AC11.4)", () => {
+  it("reads “Mike · on vacation until Oct 20”; nobody else changes", () => {
+    const withNotes = toAssignees(MEMBERS, "me", (id) =>
+      id === "mike" ? "on vacation until Oct 20" : "",
+    );
+    expect(assigneeOptions(withNotes).map((o) => o.label)).toEqual([
+      "Unassigned",
+      "Maciej (you)",
+      "Mike · on vacation until Oct 20",
+      "Vera (view only)",
+    ]);
+  });
+});
+
 describe("one way to name you (MOD-137)", () => {
   const you = byId("me");
   const mike = byId("mike");
