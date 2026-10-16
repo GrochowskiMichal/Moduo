@@ -216,6 +216,7 @@ export const CHAT_HISTORY_OPS = [
   "chat.message_restore",
   "chat.wrap_up",
   "chat.reopen",
+  "chat.move",
 ] as const;
 
 /** One line of a conversation's history (a `module_activity` row). */
@@ -256,6 +257,11 @@ export type ChatError = { code: string | null; message: string };
 
 /** A store read or write: its data, or the error (supabase-js reports on `error`). */
 export type ChatResult<T> = { data: T; error: null } | { data: null; error: ChatError };
+
+/** What `chat_op_move_messages` answers (CV-16). */
+export type ChatMoveAnswer =
+  | { status: "confirm"; newly: number }
+  | { status: "moved" | "undone"; ids: string[]; from: string; to: string };
 
 /** One hit of `chat_search` (CV-19): a message you can read now, newest first. */
 export type ChatSearchHit = {
@@ -374,6 +380,19 @@ export type ChatRuntime = {
   reopen(rootId: string): Promise<ChatResult<ChatMessage>>;
   /** "Reply to…": the message joins the chain of an earlier message. */
   attachToChain(args: { messageId: string; replyToId: string }): Promise<ChatResult<ChatMessage>>;
+  /**
+   * "Move to…" (CV-16): the messages (a root brings its chain) go to `targetId`.
+   * Into a wider audience your own messages first answer `confirm` with how
+   * many people would newly see them. With `undo`, the moved ids and the
+   * source as the target, by you within 10 s: the Undo (answers `undone`, or
+   * refuses when it's too late; never a fresh move).
+   */
+  moveMessages(args: {
+    ids: string[];
+    targetId: string;
+    confirm: boolean;
+    undo?: boolean;
+  }): Promise<ChatResult<ChatMoveAnswer>>;
   /** Several messages by id (what you can read of them). */
   messages(ids: readonly string[]): Promise<ChatResult<ChatMessage[]>>;
   /** Catch up's open items in this workspace (CV-11). */

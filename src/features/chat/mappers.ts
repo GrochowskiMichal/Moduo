@@ -19,6 +19,7 @@ import type {
   ChatHistoryEntry,
   ChatMember,
   ChatMessage,
+  ChatMoveAnswer,
   ChatPerson,
   ChatReactions,
   ChatSearchHit,
@@ -232,6 +233,23 @@ export function mapSyncRow(raw: unknown): ChatSyncRow | null {
     conversationId: str(r.conversation_id),
     checkedAt,
   };
+}
+
+/** `chat_op_move_messages`'s answer (CV-16), or null when it isn't one. */
+export function parseMoveAnswer(raw: unknown): ChatMoveAnswer | null {
+  const r = asRow(raw);
+  if (!r) return null;
+  if (r.status === "confirm") {
+    return typeof r.newly === "number" && r.newly >= 0
+      ? { status: "confirm", newly: r.newly }
+      : null;
+  }
+  if (r.status !== "moved" && r.status !== "undone") return null;
+  const from = str(r.from);
+  const to = str(r.to);
+  if (!from || !to || !Array.isArray(r.ids)) return null;
+  const ids = r.ids.filter((v): v is string => typeof v === "string");
+  return { status: r.status, ids, from, to };
 }
 
 export function mapRows<T>(rows: unknown, mapper: (r: unknown) => T | null): T[] {
