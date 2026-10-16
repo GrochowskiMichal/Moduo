@@ -66,7 +66,11 @@ export function CustomEmojiGlyph({
       referrerPolicy="no-referrer"
       onMouseEnter={emoji.animated ? () => setHover(true) : undefined}
       onMouseLeave={emoji.animated ? () => setHover(false) : undefined}
-      onError={() => setBrokenSrc(src)}
+      onError={() => {
+        setBrokenSrc(src);
+        // The text that replaces it never sees the mouse leave.
+        setHover(false);
+      }}
       data-custom-emoji={emoji.name}
       data-playing={playing ? "" : undefined}
       className={cn("inline-block object-contain", SIZES[size], className)}

@@ -5,7 +5,7 @@
 // that used it read `:name:` from then on.
 
 import { MoreHorizontal, Plus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,28 @@ import { addedByLine, EMOJI_LIMITS, emojiKey, emojiRoomLeft } from "./model";
 import { applyEmoji, useWorkspaceEmoji } from "./store";
 import { AddEmojiDialog } from "./upload-dialog";
 
+/** Whether chat is on the workspace's plan (null while asking or unknown). */
+function useChatOnPlan(workspaceId: string | null): boolean | null {
+  const [state, setState] = useState<{ ws: string; on: boolean } | null>(null);
+  useEffect(() => {
+    const chat = getRuntime()?.chat;
+    if (!workspaceId || !chat) return;
+    let live = true;
+    chat
+      .isEnabled(workspaceId)
+      .then((on) => {
+        if (live) setState({ ws: workspaceId, on });
+      })
+      .catch(() => {
+        // Unknown: the button stays hidden; the op would say why anyway.
+      });
+    return () => {
+      live = false;
+    };
+  }, [workspaceId]);
+  return state && state.ws === workspaceId ? state.on : null;
+}
+
 const dayFormat = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 
 export function CustomEmojiGroup({ userId }: { userId: string | null }) {
@@ -41,6 +63,9 @@ export function CustomEmojiGroup({ userId }: { userId: string | null }) {
   const rights = rightsFrom(caps, role, readOnly);
   const isAdmin = role === "owner" || role === "admin";
   const [adding, setAdding] = useState(false);
+  const onPlan = useChatOnPlan(selectedWorkspaceId);
+  // Paused chat still lists them (CH4a), but adding and removing wait for the plan.
+  const writable = onPlan === true;
 
   if (!selectedWorkspaceId) return null;
   const nameOf = (id: string) => members.find((m) => m.userId === id)?.displayName?.trim() || null;
@@ -66,7 +91,7 @@ export function CustomEmojiGroup({ userId }: { userId: string | null }) {
         {emoji.list.length > 0 ? (
           <ul aria-label="Custom emoji" className="flex flex-col">
             {emoji.list.map((e) => {
-              const mayRemove = isAdmin || (!!userId && e.createdBy === userId);
+              const mayRemove = writable && (isAdmin || (!!userId && e.createdBy === userId));
               return (
                 <li
                   key={e.id}
@@ -113,7 +138,12 @@ export function CustomEmojiGroup({ userId }: { userId: string | null }) {
         ) : emoji.loaded ? (
           <p className="text-sm text-muted-foreground">No custom emoji yet.</p>
         ) : null}
-        {rights.addEmoji ? (
+        {rights.addEmoji && onPlan === false ? (
+          <p className="text-xs text-muted-foreground">
+            Adding emoji is available on the Duo and Team plans.
+          </p>
+        ) : null}
+        {rights.addEmoji && writable ? (
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" disabled={!room} onClick={() => setAdding(true)}>
               <Plus aria-hidden className="size-icon" />

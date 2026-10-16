@@ -1380,7 +1380,7 @@ export function parseCustomEmojiMime(input: unknown): SafeParseResult<CustomEmoj
 export function normalizeCustomEmojiMime(input: unknown): CustomEmojiMime | null {
   return isCustomEmojiMime(input) ? input : null;
 }
-/** The extension each stored type is saved under (`<sha256>.<ext>`). */
+/** The extension each stored type is saved under (`<workspace>/<slot>.<ext>`). */
 export const CUSTOM_EMOJI_EXT: Record<CustomEmojiMime, string> = {
   "image/png": "png",
   "image/gif": "gif",
