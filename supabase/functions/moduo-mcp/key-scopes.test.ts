@@ -17,6 +17,7 @@ rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
 import { calendarConnectorModule } from "./modules/calendar.ts";
 import { linksConnectorModule } from "./modules/links.ts";
+import { notesConnectorModule } from "./modules/notes.ts";
 import {
   type ConnectorModule,
   connectorModules,
@@ -300,6 +301,70 @@ describe("links an agent can touch", () => {
       links,
     );
     expect(kept.map((l) => l.id)).toEqual(["a"]);
+  });
+});
+
+describe("an agent never writes a chat link", () => {
+  const CHANNEL = "66666666-6666-4666-8666-666666666666";
+  const everything = { tasks: "edit", notes: "edit", links: "edit", chat: "edit" };
+  const mention = {
+    id: LINK,
+    workspace_id: WS,
+    deleted_at: null,
+    source_type: "chat_channel",
+    target_type: "task",
+    relation_kind: "mentions",
+  };
+
+  it("refuses to link an item to a conversation or a message, and calls no op", async () => {
+    const { db, rpcCalls } = fakeDb(
+      {
+        tasks: [{ id: TASK, workspace_id: WS, deleted_at: null }],
+        notes: [{ id: TASK, workspace_id: WS, deleted_at: null }],
+      },
+      { perm_can_see_entity: () => true },
+    );
+    const create = tool(linksConnectorModule, "links_create");
+    for (const [chatEnd, kind] of [
+      ["chat_channel", "mentions"],
+      ["chat_message", "mentions"],
+      ["chat_channel", "references"],
+    ]) {
+      await expect(
+        create.handler(
+          { source_type: "task", source_id: TASK, target_type: chatEnd, target_id: CHANNEL, relation_kind: kind },
+          ctx(everything, db),
+        ),
+      ).rejects.toThrow(`Agents can't work with "${chatEnd}" items.`);
+      await expect(
+        create.handler(
+          { source_type: chatEnd, source_id: CHANNEL, target_type: "task", target_id: TASK, relation_kind: kind },
+          ctx(everything, db),
+        ),
+      ).rejects.toThrow(`Agents can't work with "${chatEnd}" items.`);
+    }
+    const noteLink = tool(notesConnectorModule, "notes_link");
+    await expect(
+      noteLink.handler(
+        { note_id: TASK, target_type: "chat_channel", target_id: CHANNEL, relation_kind: "mentions" },
+        ctx(everything, db),
+      ),
+    ).rejects.toThrow('Agents can\'t work with "chat_channel" items.');
+    expect(rpcCalls.map((c) => c.fn).filter((fn) => fn !== "perm_can_see_entity")).toEqual([]);
+  });
+
+  it("refuses to delete or retype a \"Mentioned in\" row, and calls no op", async () => {
+    const { db, rpcCalls } = fakeDb({ entity_links: [mention] });
+    await expect(tool(linksConnectorModule, "links_delete").handler({ link_id: LINK }, ctx(everything, db))).rejects.toThrow(
+      "This link touches something agents can't work with.",
+    );
+    await expect(
+      tool(linksConnectorModule, "links_set_kind").handler(
+        { link_id: LINK, relation_kind: "references" },
+        ctx(everything, db),
+      ),
+    ).rejects.toThrow("This link touches something agents can't work with.");
+    expect(rpcCalls).toEqual([]);
   });
 });
 

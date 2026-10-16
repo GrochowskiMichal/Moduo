@@ -322,4 +322,105 @@ BEGIN
 END;
 $$;
 
+-- ── "Mentioned in" rows are Chat's (CV-10-fix) ─────────────────────────────
+-- Only send and edit write them; no link op makes, removes or retypes one;
+-- every other link behaves as before; the lines count only Chat's rows.
+DO $$
+DECLARE
+  v text;
+  v_mention uuid;
+  v_contact_mention uuid;
+  v_spawned uuid;
+  v_plain uuid;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_channel', %L, 'mentions', 'manual')$q$,
+    test.id('W'), test.id('T2'), test.ref('P')));
+  PERFORM test.ok(v LIKE '42501 %', 'the app can''t make a "Mentioned in" row (item to conversation)', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'chat_channel', %L, 'task', %L, 'mentions', 'ref')$q$,
+    test.id('W'), test.ref('P'), test.id('T2')));
+  PERFORM test.ok(v LIKE '42501 %', 'the app can''t make one in Chat''s own shape either', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'chat_channel', %L, 'task', %L, 'references', 'ref')$q$,
+    test.id('W'), test.ref('P'), test.id('T2')));
+  PERFORM test.ok(v LIKE '42501 %', 'origin ref with a conversation end is Chat''s too', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, 'chat_message', %L, 'mentions', 'manual')$q$,
+    test.id('W'), test.id('T2'), test.mid('p1')));
+  PERFORM test.ok(v LIKE '42501 %', 'nor with a message end', v);
+  PERFORM test.ok(test.mentions('P', 'T2') = 0, 'no refused call left a row');
+
+  -- Everything else is as before.
+  v := test.as_user('A', format($q$SELECT (public.links_op_create(%L, 'task', %L, 'task', %L, 'references', 'manual')).id$q$,
+    test.id('W'), test.id('T'), test.id('T2')));
+  PERFORM test.ok(v LIKE 'ok %', 'an ordinary link between two tasks still works', v);
+  v_plain := (SELECT id FROM public.entity_links WHERE workspace_id = test.id('W') AND deleted_at IS NULL
+               AND pair_key = public.spine_pair_key('task', test.id('T'), 'task', test.id('T2')) AND relation_kind = 'references');
+  PERFORM test.ok(v_plain IS NOT NULL, 'and its row is there');
+  v := test.as_user('A', format($q$SELECT public.links_op_create(%L, 'task', %L, 'task', %L, 'mentions', 'ref')$q$,
+    test.id('W'), test.id('T'), test.id('T2')));
+  PERFORM test.ok(v LIKE 'ok %', 'mentions with origin ref between two tasks still works', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_set_kind(%L, %L, 'blocks')$q$, test.id('W'), v_plain));
+  PERFORM test.ok(v LIKE 'ok %', 'an ordinary link can still be retyped', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_delete(%L, %L)$q$, test.id('W'), v_plain));
+  PERFORM test.ok(v LIKE 'ok %' AND (SELECT deleted_at IS NOT NULL FROM public.entity_links WHERE id = v_plain),
+    'an ordinary link can still be deleted', v);
+
+  -- Chat's rows stay and keep their kind.
+  v_mention := (SELECT id FROM public.entity_links WHERE workspace_id = test.id('W') AND deleted_at IS NULL
+                 AND pair_key = public.spine_pair_key('chat_channel', test.ref('Q'), 'task', test.id('T'))
+                 AND relation_kind = 'mentions');
+  v := test.as_user('A', format($q$SELECT public.links_op_delete(%L, %L)$q$, test.id('W'), v_mention));
+  PERFORM test.ok(v LIKE '42501 %', 'a "Mentioned in" row can''t be deleted', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_set_kind(%L, %L, 'references')$q$, test.id('W'), v_mention));
+  PERFORM test.ok(v LIKE '42501 %', 'nor retyped', v);
+  PERFORM test.ok(test.mentions('Q', 'T') = 1, 'it is still there');
+  v_contact_mention := (SELECT id FROM public.entity_links WHERE workspace_id = test.id('W') AND deleted_at IS NULL
+                         AND pair_key = public.spine_pair_key('chat_channel', test.ref('P'), 'contact', test.ref('CI'))
+                         AND relation_kind = 'mentions');
+  v := test.as_user('A', format($q$SELECT public.contacts_op_unlink(%L, %L)$q$, test.id('W'), v_contact_mention));
+  PERFORM test.ok(v LIKE '42501 %' AND (SELECT deleted_at IS NULL FROM public.entity_links WHERE id = v_contact_mention),
+    'Contacts can''t remove a contact''s "Mentioned in" row either', v);
+  v_spawned := (SELECT id FROM public.entity_links WHERE workspace_id = test.id('W') AND deleted_at IS NULL
+                 AND pair_key = public.spine_pair_key('task', test.id('T'), 'chat_message', test.mid('p1'))
+                 AND relation_kind = 'spawned-from');
+  v := test.as_user('A', format($q$SELECT public.links_op_set_kind(%L, %L, 'mentions')$q$, test.id('W'), v_spawned));
+  PERFORM test.ok(v LIKE '42501 %', 'a link to a message can''t be turned into a mention', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_set_kind(%L, %L, 'references')$q$, test.id('W'), v_spawned));
+  PERFORM test.ok(v LIKE 'ok %', 'a link to a message can still be retyped otherwise', v);
+  v := test.as_user('A', format($q$SELECT public.links_op_delete(%L, %L)$q$, test.id('W'), v_spawned));
+  PERFORM test.ok(v LIKE 'ok %', 'and deleted ("Became a task" isn''t history)', v);
+
+  -- Rows the chat path didn't write give no line.
+  PERFORM test.as_user('O', format($q$SELECT public.tasks_op_create(%L, %L::jsonb)$q$, test.id('W'),
+    jsonb_build_object('id', test.id('T5'), 'title', 'Forged', 'bucket_id', test.id('SB'))));
+  INSERT INTO public.entity_links (workspace_id, source_type, source_id, target_type, target_id, relation_kind, origin, created_by)
+  VALUES (test.id('W'), 'task', test.id('T5'), 'chat_channel', test.ref('Q'), 'mentions', 'ref', test.id('A')),
+         (test.id('W'), 'chat_channel', test.ref('P'), 'task', test.id('T5'), 'mentions', 'manual', test.id('A'));
+  PERFORM test.ok(test.lines('A', 'T5') = '', 'rows the chat path didn''t write give no "Mentioned in" line',
+    test.lines('A', 'T5'));
+  INSERT INTO test.ids SELECT 'G', id FROM public.chat_channels
+   WHERE workspace_id = test.id('W') AND kind = 'channel' AND name NOT IN ('acme', 'founders') LIMIT 1;
+  v := test.send('A', 'g5', 'G', 'see ' || test.uri('task', 'T5'));
+  PERFORM test.ok(v LIKE 'ok %' AND test.lines('A', 'T5') = (SELECT name FROM public.chat_channels WHERE id = test.ref('G')),
+    'a send gives its line', test.lines('A', 'T5'));
+
+  -- Contacts can't make one either; its ordinary links work as before.
+  v := test.as_user('A', format($q$SELECT public.contacts_op_link(%L, 'contact', %L, 'chat_channel', %L, 'mentions', 'manual')$q$,
+    test.id('W'), test.ref('CI'), test.ref('Q')));
+  PERFORM test.ok(v LIKE '42501 %', 'Contacts can''t make a "Mentioned in" row', v);
+  v := test.as_user('A', format($q$SELECT public.contacts_op_link(%L, 'contact', %L, 'task', %L, 'references', 'manual')$q$,
+    test.id('W'), test.ref('CI'), test.id('T')));
+  PERFORM test.ok(v LIKE 'ok %', 'Contacts still links a contact to a task', v);
+END;
+$$;
+
+-- Registry labels: a message has none; a conversation carries its channel's
+-- name, none for a direct or group message or a purged channel.
+SELECT test.ok(NOT EXISTS (SELECT 1 FROM public.entities WHERE entity_type = 'chat_message' AND label <> ''),
+  'no message in the registry carries a label');
+SELECT test.ok(NOT EXISTS (
+  SELECT 1 FROM public.entities e
+    LEFT JOIN public.chat_channels c ON c.id = e.entity_id AND c.workspace_id = e.workspace_id
+   WHERE e.entity_type = 'chat_channel'
+     AND e.label IS DISTINCT FROM coalesce(CASE WHEN c.kind = 'channel' AND c.purged_at IS NULL THEN c.name END, '')),
+  'every conversation in the registry carries its channel''s name, or none');
+
 -- ── CV-13: the channel link half goes below ────────────────────────────────

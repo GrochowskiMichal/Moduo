@@ -239,6 +239,9 @@ export async function runCapture(plan: CapturePlan, deps: CaptureDeps): Promise<
       else createOrAttachByName(tagCtx, tag.name, entity);
     }
     for (const link of item.links) {
+      // "Mentioned in" lines to a conversation or a message are Chat's own:
+      // the server refuses them from here, so the reference stays text.
+      if (link.ref.type === "chat_channel" || link.ref.type === "chat_message") continue;
       await extra(() =>
         runtime.spine.createLink({
           workspaceId,
