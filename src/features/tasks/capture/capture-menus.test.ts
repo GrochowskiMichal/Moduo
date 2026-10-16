@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import { mentionEntries } from "./capture-menus";
+import { commandEntries, mentionEntries, personLabel } from "./capture-menus";
 
 const PHOTO = "https://example.supabase.co/storage/v1/object/public/avatars/profiles/u-sam/a.png";
 
@@ -59,5 +59,28 @@ describe("the @ menu's people (MOD-96)", () => {
         avatarUrl: null,
       },
     ]);
+  });
+});
+
+describe("the menus name you as the app does (call #27, MOD-137)", () => {
+  it("you with no name read You, never You (you)", () => {
+    expect(personLabel({ userId: "u-me", name: "You", fullName: "", isMe: true })).toBe("You");
+    expect(
+      personLabel({ userId: "u-me", name: "Alex Rivera", fullName: "Alex Rivera", isMe: true }),
+    ).toBe("Alex Rivera (you)");
+    expect(personLabel({ userId: "u-sam", name: "Sam Ortiz", isMe: false })).toBe("Sam Ortiz");
+  });
+
+  it("/remind offers Reminder…, and Reminder <when> once a time is typed, never Remind me", () => {
+    const now = new Date(2030, 0, 7, 8, 0);
+    const labels = (query: string) =>
+      commandEntries(query, [], { now }).candidates.map((c) =>
+        "label" in c ? String(c.label) : "",
+      );
+    const open = labels("remind");
+    expect(open).toContain("Reminder…");
+    const timed = labels("remind tomorrow 9am");
+    expect(timed.some((label) => /^Reminder \S/.test(label))).toBe(true);
+    expect([...open, ...timed].some((label) => label.startsWith("Remind me"))).toBe(false);
   });
 });

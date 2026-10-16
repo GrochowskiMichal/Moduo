@@ -17,7 +17,6 @@ import {
 import {
   Bell,
   CalendarClock,
-  Flag,
   Hourglass,
   Inbox,
   type LucideIcon,
@@ -58,7 +57,7 @@ import { PropertyRow, PropertyValue } from "../../../components/ui/property-row"
 import { localDayOf } from "../../../lib/task-rows";
 import { formatDay } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
-import { type Assignee, assigneeLabel } from "../assignee-options";
+import { type Assignee, assigneeLabel, assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
 import { dueDayOf } from "../bulk";
 import {
@@ -478,7 +477,8 @@ function StatusValue({
 }
 
 /**
- * The assignee picker: Me · members · Unassigned (viewers greyed). Handing
+ * The assignee picker: you ("Name (you)", MOD-137) · members · Unassigned
+ * (viewers greyed). Handing
  * an unfiled task (in your Inbox) to someone else asks for a project in the
  * same picker: "Assign to Mike · in [project]", or "Keep unfiled" (20a, AC5.1).
  */
@@ -569,7 +569,7 @@ function AssigneeValue({
                 {assignees.map((a) => (
                   <CommandItem
                     key={a.userId}
-                    value={`${a.name} ${a.fullName} ${a.userId}`}
+                    value={`${a.name} ${a.fullName} ${a.isMe ? SELF_KEYWORDS.join(" ") : ""} ${a.userId}`}
                     disabled={!a.canTakeTasks}
                     onSelect={() => {
                       if (inInbox && a.userId !== currentUserId && projects.length > 0) {
@@ -581,7 +581,7 @@ function AssigneeValue({
                   >
                     <AssigneeAvatar assignee={a} size="icon" />
                     <span className="min-w-0 flex-1 break-words">
-                      {a.canTakeTasks ? a.name : `${a.name} (view only)`}
+                      {a.canTakeTasks ? assigneeListName(a) : `${assigneeListName(a)} (view only)`}
                     </span>
                   </CommandItem>
                 ))}
@@ -671,7 +671,10 @@ function LevelValue({
     ) : (
       <EnergyIcon level={level as EnergyLevel} className="size-icon-sm" />
     );
-  const emptyIcon = kind === "priority" ? <Flag /> : <Zap />;
+  // Unset priority is the three bars all faint, as capture's pill draws it
+  // (MOD-134), never a flag.
+  const emptyIcon =
+    kind === "priority" ? <PriorityIcon level={null} className="size-icon-sm" /> : <Zap />;
   return (
     <DropdownMenu defaultOpen={defaultOpen && canEdit}>
       <DropdownMenuTrigger asChild disabled={!canEdit}>
@@ -697,7 +700,14 @@ function LevelValue({
             </DropdownMenuRadioItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuRadioItem value="none">None</DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="none">
+            {kind === "priority" ? (
+              <span className="flex size-icon-sm items-center text-muted-foreground">
+                <PriorityIcon level={null} className="size-icon-sm" />
+              </span>
+            ) : null}
+            None
+          </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

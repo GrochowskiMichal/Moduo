@@ -11,6 +11,8 @@ import {
   IN_FLIGHT_PANEL_VIEW,
   NO_DATE_PANEL_VIEW,
   type ProjectAsk,
+  panelTaskOf,
+  panelTitleOf,
 } from "./panel-views";
 
 const QUIET = {
@@ -144,5 +146,35 @@ describe("the panel after the title's ask (MOD-131)", () => {
     const picked = pick(clickTitle(start), IN_FLIGHT_PANEL_VIEW);
     expect(shown(picked)).toBe(IN_FLIGHT_PANEL_VIEW);
     expect(shown(clickTask(picked, "t2"))).toBe(IN_FLIGHT_PANEL_VIEW);
+  });
+});
+
+describe("the task the panel shows, with every List group folded (MOD-123)", () => {
+  const task = { id: "t1" };
+
+  it("is the selected task while the List shows rows, or isn't in the centre", () => {
+    expect(panelTaskOf(task, { inCentre: true, showsNothing: false })).toBe(task);
+    expect(panelTaskOf(task, { inCentre: false, showsNothing: true })).toBe(task);
+  });
+
+  it("is none while the List shows no row, so the panel shows the project", () => {
+    const shownTask = panelTaskOf(task, { inCentre: true, showsNothing: true });
+    expect(shownTask).toBeNull();
+    // Inside a project, nothing in the panel is the project's overview.
+    expect(activePanelView({ ...QUIET, projectInstead: shownTask === null })).toBe("project");
+  });
+});
+
+describe("the title row on a multi-selection (MOD-109)", () => {
+  it('reads "4 tasks" on Details while several are selected', () => {
+    expect(panelTitleOf("details", 4)).toBe("4 tasks");
+    expect(panelTitleOf("details", 2)).toBe("2 tasks");
+  });
+
+  it("is the view's own name otherwise", () => {
+    expect(panelTitleOf("details", 1)).toBeUndefined();
+    expect(panelTitleOf("details", 0)).toBeUndefined();
+    // The title's ask shows Project over a selection: it says Project.
+    expect(panelTitleOf("project", 4)).toBeUndefined();
   });
 });

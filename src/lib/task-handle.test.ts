@@ -7,7 +7,9 @@ import {
   TASK_KEY_PATTERN,
   taskHandle,
   taskKeyProblem,
+  taskLinkId,
 } from "./task-handle";
+import { taskUrl } from "./web-origin";
 
 describe("a task's handle (AC3.1)", () => {
   it("is the key and the number, unpadded", () => {
@@ -20,6 +22,26 @@ describe("a task's handle (AC3.1)", () => {
     expect(taskHandle("MOD", null)).toBeNull();
     expect(taskHandle("MOD", undefined)).toBeNull();
     expect(taskHandle("MOD", Number.NaN)).toBeNull();
+  });
+});
+
+describe("a link to a task (MOD-28)", () => {
+  it("names the task by its handle when it has one", () => {
+    expect(taskLinkId("MOD", { id: "f2968388-7a0f-4cd7-9d01-7b9242ebc1ce", number: 142 })).toBe(
+      "MOD-142",
+    );
+    expect(taskUrl(taskLinkId("MOD", { id: "x", number: 142 }))).toBe(
+      `${window.location.origin}/tasks?id=MOD-142`,
+    );
+  });
+
+  it("falls back to the id without a number (not saved yet) or a key", () => {
+    expect(taskLinkId("MOD", { id: "t1", number: null })).toBe("t1");
+    expect(taskLinkId("MOD", { id: "t1" })).toBe("t1");
+    expect(taskLinkId(null, { id: "t1", number: 142 })).toBe("t1");
+    expect(taskUrl(taskLinkId(null, { id: "a b", number: 3 }))).toBe(
+      `${window.location.origin}/tasks?id=a%20b`,
+    );
   });
 });
 

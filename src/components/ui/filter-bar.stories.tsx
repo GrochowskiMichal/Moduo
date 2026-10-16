@@ -33,7 +33,8 @@ const DIMENSIONS: FilterDimension[] = [
     label: "Assignee",
     icon: UserRound,
     options: [
-      { value: "me", label: "Me" },
+      // You: "Alex Rivera (you)" in the picker, "You" on the chip (MOD-137).
+      { value: "me", label: "Alex Rivera (you)", chipLabel: "You", keywords: ["me"] },
       { value: "ola", label: "Ola", keywords: ["ola@moduo.app"] },
       { value: "mike", label: "Mike" },
       { value: "none", label: "Unassigned" },

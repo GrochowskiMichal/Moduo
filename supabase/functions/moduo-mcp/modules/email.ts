@@ -243,7 +243,7 @@ export const emailConnectorModule: ConnectorModule = {
         properties: {
           ref_id: { type: "string", description: "The email_refs uuid (the thread to link)." },
           target_type: { type: "string", description: "Other entity type (task|contact|company|note|…)." },
-          target_id: { type: "string", description: "Other entity uuid." },
+          target_id: { type: "string", description: "Other entity uuid (or a task's handle, e.g. MOD-142)." },
           relation_kind: { type: "string", description: "Relation kind (default references)." },
         },
         required: ["ref_id", "target_type", "target_id"],
@@ -254,11 +254,11 @@ export const emailConnectorModule: ConnectorModule = {
         // thread_key. Matches the app's linkThread({ threadId: ref.id }).
         const ref = await getRef(ctx, str(args, "ref_id"), "id");
         if (!ref) throw new Error("Email thread not found in this workspace.");
-        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
+        const targetId = await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "email_op_link", {
           p_thread_id: ref.id,
           p_target_type: str(args, "target_type"),
-          p_target_id: str(args, "target_id"),
+          p_target_id: targetId,
           p_relation_kind: str(args, "relation_kind", false) || "references",
           p_origin: "manual",
         });

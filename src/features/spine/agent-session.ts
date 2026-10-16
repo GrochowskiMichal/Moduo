@@ -178,6 +178,22 @@ export function agentRowMark(
   return best ? `${who(best)} · ${STATE_WORDS[best.state]}` : null;
 }
 
+/**
+ * A row mark's parts (MOD-125): who ("Claude", "Anna's Claude") and what
+ * ("working", "needs you"), split at its last " · ", and whether it's loud
+ * (needs you). A mark with no state is all "who".
+ */
+export function agentRowMarkParts(mark: string): {
+  who: string;
+  state: string | null;
+  loud: boolean;
+} {
+  const at = mark.lastIndexOf(" · ");
+  if (at < 0) return { who: mark, state: null, loud: false };
+  const state = mark.slice(at + 3);
+  return { who: mark.slice(0, at), state, loud: state === STATE_WORDS.needs_you };
+}
+
 /** Live sessions per task, newest first. */
 export function agentSessionsByTask(
   sessions: readonly AgentSession[],

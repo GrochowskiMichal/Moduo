@@ -1150,6 +1150,35 @@ export function normalizeStarterTemplate(input: unknown): StarterTemplate | null
 }
 
 // ---------------------------------------------------------------------------
+// Onboarding roles (TV-U17, REPLAN §3) — the answers to "What will you run in
+// Moduo?". Kept only in the synced preferences JSON
+// (user_preferences.tasks_onboarding.role), never in a column, so there is no
+// Postgres CHECK to mirror. A role sets defaults only (src/features/tasks/
+// onboarding.ts ROLE_DEFAULTS); an unknown one reads as no answer.
+// ---------------------------------------------------------------------------
+
+export const TASKS_ROLES = [
+  "student",
+  "developer",
+  "pm",
+  "founder",
+  "client_work",
+  "creator",
+] as const;
+export type TasksRole = (typeof TASKS_ROLES)[number];
+export const tasksRoleSchema = z.enum(TASKS_ROLES);
+export function isTasksRole(value: unknown): value is TasksRole {
+  return typeof value === "string" && (TASKS_ROLES as readonly string[]).includes(value);
+}
+export function parseTasksRole(input: unknown): SafeParseResult<TasksRole> {
+  return parseOrError(tasksRoleSchema, input);
+}
+/** Lax read: a role this build doesn't know reads as no answer (null). */
+export function normalizeTasksRole(input: unknown): TasksRole | null {
+  return isTasksRole(input) ? input : null;
+}
+
+// ---------------------------------------------------------------------------
 // Saved views (TV-U8, REPLAN 29d) — mirrors the CHECK on task_views.scope and
 // task_views_op_create's guard in <stamp>_task_views. A view keeps one base
 // scope: All, My tasks, Upcoming (each reader's own) or one project. Focus
@@ -1173,11 +1202,13 @@ export function normalizeTaskViewScope(input: unknown): TaskViewScope | null {
 /**
  * The Filter dimensions a saved view may keep (mirrors
  * task_views__check_filters). An id dimension holds "none" or the id of a
- * person, team or tag of the same workspace; a word dimension holds short
- * words. The app's Filter offers exactly these (TASK_FILTER_DIMENSIONS in
- * features/tasks/filters.ts, held to them by a test).
+ * person, team or tag of the same workspace, or of a project the saver can
+ * see (Project also takes "inbox", each reader's own; MOD-141); a word
+ * dimension holds short words. The app's Filter offers exactly these
+ * (TASK_FILTER_DIMENSIONS in features/tasks/filters.ts, held to them by a
+ * test).
  */
-export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag"] as const;
+export const TASK_VIEW_ID_DIMENSIONS = ["assignee", "creator", "team", "tag", "project"] as const;
 export const TASK_VIEW_WORD_DIMENSIONS = [
   "status",
   "completed",
@@ -1233,4 +1264,58 @@ export function isAttachmentPreviewMime(value: unknown): value is AttachmentPrev
   return (
     typeof value === "string" && (ATTACHMENT_PREVIEW_MIMES as readonly string[]).includes(value)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Label hues — the shared palette for workspace tags (and the hue a calendar
+// or mail account shows). Each name maps 1:1 to a [data-label="…"] token in
+// src/styles/tokens.css (§13b), so a stored hue stays token-routed and
+// theme-safe. Stored as a name in tags.color (and in account prefs), read
+// laxly: tags.color has no CHECK, and an unknown or missing value shows as
+// the default hue. The app (src/components/tag-colors.ts re-exports these)
+// and the MCP connector colour a new tag with the same rule (MOD-93).
+// ---------------------------------------------------------------------------
+
+export const LABEL_COLORS = ["blue", "green", "amber", "red", "violet", "teal", "pink", "gray"] as const;
+export type LabelColor = (typeof LABEL_COLORS)[number];
+export const labelColorSchema = z.enum(LABEL_COLORS);
+export function isLabelColor(value: unknown): value is LabelColor {
+  return typeof value === "string" && (LABEL_COLORS as readonly string[]).includes(value);
+}
+export function parseLabelColor(input: unknown): SafeParseResult<LabelColor> {
+  return parseOrError(labelColorSchema, input);
+}
+
+/** Used when a tag has no stored color, or an unknown one. */
+export const DEFAULT_LABEL_COLOR: LabelColor = "gray";
+
+/** Coerce any stored value to a known hue (fallback: {@link DEFAULT_LABEL_COLOR}). */
+export function normalizeLabelColor(color: unknown): LabelColor {
+  return isLabelColor(color) ? color : DEFAULT_LABEL_COLOR;
+}
+
+/**
+ * Auto-assign a hue for a new tag: the least-used color among `existing`, with
+ * ties broken by palette order. Deterministic (no randomness) so the same set of
+ * tags always colors the same way, and colors spread evenly as tags accumulate.
+ * `gray` is reserved as a fallback and only chosen once every hue is in use.
+ */
+export function pickTagColor(existing: ReadonlyArray<{ color: string | null }>): LabelColor {
+  const counts = new Map<LabelColor, number>(LABEL_COLORS.map((c) => [c, 0]));
+  for (const tag of existing) {
+    const c = normalizeLabelColor(tag.color);
+    counts.set(c, (counts.get(c) ?? 0) + 1);
+  }
+  // Prefer the colored hues; only fall back to gray when everything else is used
+  // at least as much (it sorts last in LABEL_COLORS, so the tie-break handles it).
+  let best: LabelColor = LABEL_COLORS[0];
+  let bestCount = Number.POSITIVE_INFINITY;
+  for (const color of LABEL_COLORS) {
+    const count = counts.get(color) ?? 0;
+    if (count < bestCount) {
+      best = color;
+      bestCount = count;
+    }
+  }
+  return best;
 }

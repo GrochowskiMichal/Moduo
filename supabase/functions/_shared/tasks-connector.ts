@@ -5,7 +5,8 @@
  */
 
 import { isOpenTask, normalizeTaskStatusCategory } from "./contracts/vocabularies.ts";
-import { assigneeIdOf, taskPeople } from "./task-people.ts";
+import { descriptionToMarkdown, markdownExcerpt } from "./description-markdown.ts";
+import { assigneeIdOf, FORMER_MEMBER, taskPeople } from "./task-people.ts";
 
 type Row = Record<string, any>;
 
@@ -217,8 +218,10 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
   };
   const subtasks = data.subtaskCounts.get(t.id);
   if (subtasks) out.subtask_count = subtasks;
-  const description = (t.description ?? "").trim();
-  if (description) out.description = full ? description : description.slice(0, 280);
+  // Markdown, whichever way it's stored: an older description is the editor's
+  // HTML, read as Markdown here (call #15, MOD-120); the excerpt is cut after.
+  const description = descriptionToMarkdown(t.description).trim();
+  if (description) out.description = full ? description : markdownExcerpt(description, 280);
   if (t.parent_id && data.byId.has(t.parent_id)) out.parent_id = t.parent_id;
   // TV-D9: the status's category (backlog · todo · in_progress · done ·
   // wont_do) and the due date as a date, the same for everyone (due_date is
@@ -256,4 +259,114 @@ export function shapeTask(t: Row, data: ShapeData, now: Date, full = false): Row
     out.updated_at = t.updated_at;
   }
   return out;
+}
+
+/** tasks_list's default page: summary rows are small, full ones aren't (MOD-113). */
+export const LIST_PAGE = { summary: 100, full: 25 } as const;
+
+/** Names a summary row shows instead of ids (MOD-113). */
+export type SummaryNames = {
+  /** Section id → name. */
+  sections: ReadonlyMap<string, string>;
+  /** Status id → the name people see (project_statuses). */
+  statuses: ReadonlyMap<string, string>;
+  /** Project id → name; only when the list spans projects. */
+  projects?: ReadonlyMap<string, string>;
+};
+
+/**
+ * The due day a due instant stands for when no zone is known: the server's
+ * own rule, `tasks__due_on_of(at, NULL)` (20261010171000), which sets every
+ * row's due_on from its due_date. Noon UTC (due_on's mirror) is its UTC date;
+ * anything else is the nearest UTC day, so a local midnight anywhere from
+ * UTC-11 to UTC+12 keeps its own date. A plain UTC slice would put a midnight
+ * east of UTC on the day before.
+ */
+export function dueDayOfInstant(iso: unknown): string | null {
+  if (typeof iso !== "string" || !iso) return null;
+  const at = Date.parse(iso);
+  if (Number.isNaN(at)) return null;
+  const d = new Date(at);
+  const noon = d.getUTCHours() === 12 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
+    && d.getUTCMilliseconds() === 0;
+  return new Date(noon ? at : at + 12 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** A task's due day: its due_on, else the day its due_date stands for. */
+export function dueDayOfRow(t: Row): string | null {
+  return typeof t.due_on === "string" && t.due_on ? t.due_on.slice(0, 10) : dueDayOfInstant(t.due_date);
+}
+
+/** "In progress", "To do", "Won't do" are just their category, written out. */
+function sameWords(a: string, b: string): boolean {
+  const letters = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  return letters(a) === letters(b);
+}
+
+/**
+ * tasks_list's default row (MOD-113): what an agent triaging a big project
+ * needs, with names instead of ids and nothing it would have to skip. 66
+ * full rows ran to 57,000 characters (a description excerpt, both people as
+ * objects, every legacy field); `fields: "full"` still answers shapeTask's.
+ * Flags show only when they're true; no assignee means Unassigned.
+ */
+export function shapeTaskSummary(t: Row, data: ShapeData, now: Date, names: SummaryNames): Row {
+  const handleOf = (row: Row | undefined) =>
+    row && data.taskKey && row.number != null ? `${data.taskKey}-${row.number}` : undefined;
+  // A row from before TV-D9 has no category: its legacy status reads as one.
+  const category = normalizeTaskStatusCategory(t.status_category ?? t.status);
+  const statusName = typeof t.status_id === "string" ? names.statuses.get(t.status_id) : undefined;
+  const assigneeId = assigneeIdOf(t);
+  const dueDay = dueDayOfRow(t);
+  const out: Row = {
+    ...(handleOf(t) ? { handle: handleOf(t) } : {}),
+    id: t.id,
+    title: t.title,
+    status: category,
+    ...(statusName && !sameWords(statusName, category) ? { status_name: statusName } : {}),
+  };
+  if (t.priority) out.priority = t.priority;
+  if (assigneeId) out.assignee = data.names.get(assigneeId) ?? FORMER_MEMBER;
+  const project = names.projects?.get(t.bucket_id);
+  if (project) out.project = project;
+  const section = t.section_id ? names.sections.get(t.section_id) : undefined;
+  if (section) out.section = section;
+  const tags = data.taskTags.get(t.id);
+  if (tags?.length) out.tags = tags;
+  if (dueDay) out.due = t.due_time ? `${dueDay} ${String(t.due_time).slice(0, 5)}` : dueDay;
+  if (data.blockedIds.has(t.id)) out.blocked = true;
+  if (isDrifted(t, now)) out.drifted = true;
+  if (data.queuedByMe?.has(t.id)) out.queued_by_me = true;
+  const subtasks = data.subtaskCounts.get(t.id);
+  if (subtasks) out.subtasks = subtasks;
+  if (t.parent_id && data.byId.has(t.parent_id)) {
+    out.parent = handleOf(data.byId.get(t.parent_id)) ?? t.parent_id;
+  }
+  return out;
+}
+
+/** How many comments tasks_get carries (the latest; comments_list reads more). */
+export const TASK_GET_COMMENTS = 20;
+
+/**
+ * A task's comment as agents read it (MOD-94): who wrote it as the app shows
+ * them (a person by name; an app as "<key name> (app)", spine/comments.ts),
+ * when, whether it was edited, and the body. Reactions stay out.
+ */
+export function shapeComment(c: Row, names: ReadonlyMap<string, string>): Row {
+  const person = typeof c.created_by === "string" ? names.get(c.created_by) : undefined;
+  return {
+    id: c.id,
+    author: c.author_kind === "api_key" ? `${c.author_label || "App"} (app)` : (person ?? FORMER_MEMBER),
+    at: c.created_at,
+    ...(c.edited_at ? { edited: true } : {}),
+    body: typeof c.body === "string" ? c.body : "",
+  };
+}
+
+/** Comments oldest first, so the newest is last (ties by id, so it's stable). */
+export function commentsInOrder<T extends Row>(comments: T[]): T[] {
+  return [...comments].sort(
+    (a, b) => compareText(a.created_at, b.created_at) || compareText(a.id, b.id),
+  );
 }

@@ -500,12 +500,12 @@ export const notesConnectorModule: ConnectorModule = {
       },
       handler: async (args, ctx) => {
         await assertReach(ctx, "note", str(args, "note_id"));
-        await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
+        const targetId = await assertReach(ctx, str(args, "target_type"), str(args, "target_id"));
         const link = await callOp(ctx, "links_op_create", {
           p_source_type: "note",
           p_source_id: str(args, "note_id"),
           p_target_type: str(args, "target_type"),
-          p_target_id: str(args, "target_id"),
+          p_target_id: targetId,
           p_relation_kind: str(args, "relation_kind", false) || "references",
           p_origin: "manual",
         });

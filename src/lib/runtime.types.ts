@@ -700,7 +700,7 @@ export type ModuoRuntime = {
     setTimeZone(timeZone: string): Promise<void>;
     /**
      * Time & region (TV-D14): the person's zone, week start, clock, date
-     * order and "Share my tracked time with the workspace owner". Null when
+     * order and "Share your tracked time with the workspace owner". Null when
      * signed out or before the migration.
      */
     getTimeRegion(): Promise<TimeRegion | null>;

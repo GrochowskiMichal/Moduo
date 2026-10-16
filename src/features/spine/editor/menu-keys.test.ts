@@ -13,7 +13,7 @@ import { registerMenuKeys, stepMenuIndex } from "./menu-keys";
 
 const key = () => new KeyboardEvent("keydown");
 
-function harness(rows: number, open = true) {
+function harness(rows: number, open = true, holdEnterWhenEmpty = false) {
   const editor = createHeadlessEditor({
     namespace: "menu-keys",
     onError: (e) => {
@@ -33,6 +33,7 @@ function harness(rows: number, open = true) {
       state.closed += 1;
       state.open = false;
     },
+    holdEnterWhenEmpty,
   });
   return { editor, state };
 }
@@ -65,6 +66,15 @@ describe("one caret-menu keyboard regime", () => {
     const empty = harness(0);
     expect(empty.editor.dispatchCommand(KEY_ENTER_COMMAND, key())).toBe(false);
     expect(empty.editor.dispatchCommand(KEY_ARROW_DOWN_COMMAND, key())).toBe(false);
+  });
+
+  it("a menu that holds ↵ closes on ↵ with no rows, and still lets ↵ through once closed", () => {
+    const held = harness(0, true, true);
+    expect(held.editor.dispatchCommand(KEY_ENTER_COMMAND, key())).toBe(true);
+    expect(held.state.closed).toBe(1);
+    expect(held.state.picked).toEqual([]);
+    expect(held.editor.dispatchCommand(KEY_ENTER_COMMAND, key())).toBe(false);
+    expect(held.editor.dispatchCommand(KEY_TAB_COMMAND, key())).toBe(false);
   });
 
   it("stepMenuIndex wraps both ways", () => {

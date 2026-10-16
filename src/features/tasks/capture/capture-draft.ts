@@ -50,6 +50,14 @@ export type CaptureDraft = {
   fields: DraftFields;
   /** A pasted list waiting for "Create n tasks?" (the person's own lines). */
   pasted?: string | null;
+  /**
+   * The people `@`-mentioned in the description (call #15): told once the
+   * task exists, also after the draft comes back. Each keeps the words the
+   * menu wrote ("@Sam Ortiz", or an email for someone without a name), so
+   * the restored draft can tell they're still in the text; an older draft's
+   * plain ids have no label (the member list's name is used then).
+   */
+  mentions?: Array<{ id: string; label: string | null }>;
 };
 
 export const EMPTY_FIELDS: DraftFields = { tags: [], waitingOn: [] };
@@ -122,6 +130,9 @@ export function storableDraft(draft: CaptureDraft): CaptureDraft {
       statusName: null,
     },
     ...(draft.pasted ? { pasted: draft.pasted } : {}),
+    ...(draft.mentions?.length
+      ? { mentions: [...new Map(draft.mentions.map((m) => [m.id, m])).values()] }
+      : {}),
   };
 }
 
@@ -156,6 +167,15 @@ export function loadDraft(
         waitingOn: Array.isArray(parsed.fields?.waitingOn) ? parsed.fields.waitingOn : [],
       },
       pasted: typeof parsed.pasted === "string" ? parsed.pasted : null,
+      mentions: Array.isArray(parsed.mentions)
+        ? (parsed.mentions as unknown[]).flatMap((m) => {
+            // An older draft kept ids only.
+            if (typeof m === "string") return [{ id: m, label: null }];
+            const row = m as { id?: unknown; label?: unknown } | null;
+            if (typeof row?.id !== "string") return [];
+            return [{ id: row.id, label: typeof row.label === "string" ? row.label : null }];
+          })
+        : [],
     });
   } catch {
     return null;

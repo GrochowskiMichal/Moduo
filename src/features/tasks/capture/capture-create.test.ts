@@ -7,7 +7,13 @@ import { describe, expect, it, rs } from "@rstest/core";
 
 import type { WorkspaceStore } from "../../../lib/sync/store";
 import type { Bucket, Task } from "../model";
-import { type CapturePlan, type CaptureTaskPlan, runCapture, undoCapture } from "./capture-create";
+import {
+  type CapturePlan,
+  type CaptureTaskPlan,
+  mentionsStillIn,
+  runCapture,
+  undoCapture,
+} from "./capture-create";
 
 const WS = "w1";
 const ME = "u-me";
@@ -146,7 +152,42 @@ const plan = (tasks: CaptureTaskPlan[], over: Partial<CapturePlan> = {}): Captur
   ...over,
 });
 
+describe("mentionsStillIn (the description's @-mentions, call #15)", () => {
+  const anna = { id: "u-anna", label: "Anna" };
+  const ann = { id: "u-ann", label: "Ann" };
+  it("tells only people whose whole @Name is still in the words, each once", () => {
+    expect(mentionsStillIn([anna, ann, anna], "Ask @Anna, then @Anna again")).toEqual(["u-anna"]);
+    expect(mentionsStillIn([anna, ann], "Ask @Ann and @Anna.")).toEqual(["u-anna", "u-ann"]);
+    expect(mentionsStillIn([anna], "Anna was asked")).toEqual([]);
+    expect(mentionsStillIn([{ id: "u-sam", label: "Sam Ortiz" }], "cc @Sam Ortiz")).toEqual([
+      "u-sam",
+    ]);
+  });
+});
+
 describe("runCapture through the shared store", () => {
+  it("the people the description @-mentions are told once the task exists (call #15)", async () => {
+    const { store } = fakeStore();
+    const runtime = {
+      ...fakeRuntime(),
+      tasks: { ...fakeRuntime().tasks, mentionInTask: rs.fn(async () => {}) },
+    };
+    const one = item({ title: "A", description: "Ask @Sam Ortiz", mentions: ["u-sam"] });
+    const quiet = item({ title: "B" });
+    const result = await runCapture(plan([one, quiet]), {
+      runtime: runtime as never,
+      userId: ME,
+      store,
+    });
+    expect(result.error).toBeNull();
+    expect(runtime.tasks.mentionInTask).toHaveBeenCalledTimes(1);
+    expect(runtime.tasks.mentionInTask).toHaveBeenCalledWith({
+      workspaceId: WS,
+      taskId: one.id,
+      userIds: ["u-sam"],
+    });
+  });
+
   it("one capture: through the store's create, into the Inbox it holds, on top", async () => {
     const { store, sent } = fakeStore();
     const runtime = fakeRuntime();

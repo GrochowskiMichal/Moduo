@@ -17,7 +17,8 @@ import {
  * local stack (REPLAN 78 + 98; AC5.5, AC11.1, AC11.10): deleting a project
  * hands its open work to its assignees' Inboxes with one notice each and Undo
  * brings it all back; Recently deleted and Archived projects open from the
- * hairline's ⋯; archiving asks about open work; Pin and Customize sidebar.
+ * sidebar's footer (MOD-140); archiving asks about open work; Pin and
+ * Customize sidebar.
  * Run it like trust-pass.spec.ts:
  *   bun run local:up && bun run env:local
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8136
@@ -131,10 +132,12 @@ async function projectMenu(page: Page, name: string, item: string) {
   await page.getByRole("menuitem", { name: item }).click();
 }
 
-async function sidebarMenu(page: Page, item: string | RegExp) {
-  await sidebar(page).locator('[data-slot="sidebar-hairline"]').hover();
-  await page.getByRole("button", { name: "Sidebar options" }).click();
-  await page.getByRole("menuitem", { name: item }).click();
+/** The footer's Archived or Recently deleted (MOD-140): an icon and its name. */
+async function sidebarFooter(page: Page, item: "Archived" | "Recently deleted") {
+  await page
+    .getByRole("navigation", { name: "Archive and trash" })
+    .getByRole("button", { name: item, exact: true })
+    .click();
 }
 
 test("AC5.5 — deleting a project hands open work to its assignees, one notice each; Undo brings it back", async ({
@@ -179,7 +182,9 @@ test("AC5.5 — deleting a project hands open work to its assignees, one notice 
   expect(await bucketOf(done)).toBe(p);
 });
 
-test("AC11.10 — Recently deleted opens from the ⋯ and restores a project", async ({ page }) => {
+test("AC11.10 — Recently deleted opens from the footer and restores a project", async ({
+  page,
+}) => {
   const name = `Trash ${tag}`;
   const p = await project(name);
   const open = await task(p, `Open ${tag}`);
@@ -187,7 +192,7 @@ test("AC11.10 — Recently deleted opens from the ⋯ and restores a project", a
   await openTasks(page);
   await expect(sidebar(page).getByRole("button", { name: /Recently deleted/ })).toHaveCount(0);
 
-  await sidebarMenu(page, /^Recently deleted/);
+  await sidebarFooter(page, "Recently deleted");
   const row = page
     .getByRole("list", { name: "Recently deleted" })
     .getByRole("listitem")
@@ -199,7 +204,7 @@ test("AC11.10 — Recently deleted opens from the ⋯ and restores a project", a
   await expect.poll(() => bucketOf(open)).toBe(p);
 });
 
-test("archiving asks about open work; Archived projects opens from the ⋯; Unarchive", async ({
+test("archiving asks about open work; Archived projects opens from the footer; Unarchive", async ({
   page,
 }) => {
   const name = `Arch ${tag}`;
@@ -213,7 +218,7 @@ test("archiving asks about open work; Archived projects opens from the ⋯; Unar
   await dialog.getByRole("button", { name: "Keep" }).click();
   await expect(sidebar(page).getByRole("button", { name: rowName(name) })).toHaveCount(0);
 
-  await sidebarMenu(page, /^Archived projects/);
+  await sidebarFooter(page, "Archived");
   const row = page
     .getByRole("list", { name: "Archived projects" })
     .getByRole("listitem")

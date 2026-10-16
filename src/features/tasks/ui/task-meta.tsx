@@ -99,18 +99,22 @@ export function TaskCounts({
   task,
   facts,
   className,
+  bare = false,
   ...opts
 }: {
   task: Task;
   facts: CountsFacts;
   className?: string;
+  /** The marks alone, each an item of the caller's group (a List row's
+   *  details give way mark by mark, MOD-138). */
+  bare?: boolean;
 } & CountsOptions) {
   if (!hasTaskCounts(task, facts, opts)) return null;
   const { tags, progress, blockedLabel, comments = 0, attachments = 0, waiting, pending } = facts;
   // The names as words ("ui, notes"): "#" is only how you type a tag (MOD-97).
   const tagList = tags.map((t) => t.name).join(", ");
-  return (
-    <MetaCounts className={className}>
+  const marks = (
+    <>
       {tags.length > 0 && opts.tagNames ? (
         // Dot chips (MOD-97): each says "Tag: <name>" on hover and "+n" names
         // the rest, so no tooltip wraps them (it would double the hover text).
@@ -176,8 +180,9 @@ export function TaskCounts({
           </span>
         </Tip>
       ) : null}
-    </MetaCounts>
+    </>
   );
+  return bare ? marks : <MetaCounts className={className}>{marks}</MetaCounts>;
 }
 
 /**

@@ -123,6 +123,8 @@ export function DetailsPanel({
     [members, isOnline, personOf],
   );
   const creator = channel.createdBy ? personOf(channel.createdBy) : undefined;
+  // "Created by you", never by your own name (MOD-137).
+  const creatorName = channel.createdBy === selfId ? "you" : creator?.name;
   const isDm = channel.kind === "dm";
 
   return (
@@ -151,7 +153,8 @@ export function DetailsPanel({
               {channel.topic || <span className="text-muted-foreground">No topic yet.</span>}
             </p>
             <p className="text-xs text-muted-foreground">
-              Created {creator ? `by ${creator.name} ` : ""}on {formatFullDate(channel.createdAt)}
+              Created {creatorName ? `by ${creatorName} ` : ""}on{" "}
+              {formatFullDate(channel.createdAt)}
             </p>
             {channel.archivedAt ? (
               <p className="text-xs text-muted-foreground">Archived — read only.</p>

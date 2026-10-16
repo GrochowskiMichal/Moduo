@@ -1,13 +1,13 @@
 // Tasks' welcome (TV-U17, tasks-v3 §16, REPLAN 34): the role question once per
-// person, then the basics with "Learn more" / "Explore on my own", then up to
+// person, then the basics with "Learn more" / "Explore on your own" (MOD-137), then up to
 // three steps, each a short clip recorded from the real app with one or two
 // sentences: (1) above the line is yours, below it is shared; (2) line things
 // up in Focus; (3) `@` `#` `/`. Back / Next, progress dots, a Close that's
 // always there, Esc closes. Quiet: no celebration, no forced steps. The state
 // and what opens it are use-tasks-welcome.ts.
 
+import { TASKS_ROLES, type TasksRole } from "@contracts/vocabularies";
 import { useEffect, useState } from "react";
-
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -22,7 +22,7 @@ import { Kbd } from "../../../components/ui/kbd";
 import { useReturnFocus } from "../../../hooks/use-return-focus";
 import { formatShortcut, SHORTCUTS } from "../../../lib/shortcuts";
 import { cn } from "../../../lib/utils";
-import { ROLE_DEFAULTS, TASKS_ROLES, type TasksRole } from "../onboarding";
+import { ROLE_DEFAULTS } from "../onboarding";
 import { FOCUS_WHAT_IT_IS, FocusKeyHints } from "./focus-empty-state";
 import type { TasksWelcome, WelcomeStep } from "./use-tasks-welcome";
 
@@ -184,7 +184,7 @@ function BasicsStep({
       ) : null}
       <DialogFooter>
         <Button variant="ghost" onClick={onExplore}>
-          Explore on my own
+          Explore on your own
         </Button>
         <Button onClick={onLearnMore}>Learn more</Button>
       </DialogFooter>

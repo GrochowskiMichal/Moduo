@@ -52,6 +52,7 @@ import {
   type ShapedReport,
   shapeTimeReport,
 } from "../time-report";
+import { nowOn, useToday } from "../use-today";
 
 /** What a report covers: a project's tasks, or every project of a client. */
 export type TimeReportScope =
@@ -75,9 +76,12 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
   const [result, setResult] = useState<TimeReportResult | null>(null);
   const [failed, setFailed] = useState(false);
 
+  // The periods are your saved time zone's (MOD-110), the zone the report
+  // dates entries in, and turn over at its midnight while the sheet is open.
+  const today = useToday(region.timeZone);
   const range = useMemo(
-    () => reportRange(period, new Date(), region.weekStartsOn, custom),
-    [period, custom, region.weekStartsOn],
+    () => reportRange(period, nowOn(today), region.weekStartsOn, custom, region.timeZone),
+    [period, custom, region.weekStartsOn, region.timeZone, today],
   );
   // Picked dates the report can't take say why, instead of failing.
   const rangeProblem = period === "custom" && custom ? customRangeProblem(custom) : null;

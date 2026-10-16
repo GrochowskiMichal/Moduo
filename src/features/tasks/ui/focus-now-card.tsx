@@ -26,9 +26,9 @@ import type { TaskRefResolver } from "../../focus/run";
 import { toggleFocusPause, useFocusTimer } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
+import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { Reference } from "../../spine/references/ui/reference";
-import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { pillReading } from "../focus-screen";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
@@ -266,7 +266,14 @@ export function NowCard({
             className="pl-0"
           />
         ) : null}
-        {task.description ? <FoldedDescription html={task.description} /> : null}
+        {task.description ? (
+          <FoldedDescription
+            key={task.id}
+            description={task.description}
+            runtime={runtime}
+            workspaceId={workspaceId}
+          />
+        ) : null}
         {runtime ? (
           <NowReferences runtime={runtime} workspaceId={workspaceId} taskId={task.id} />
         ) : null}
@@ -320,17 +327,38 @@ export function NowCard({
   );
 }
 
-/** About six lines, then "Show more" (call 56's fold, read-only here). */
-function FoldedDescription({ html }: { html: string }) {
+/**
+ * About six lines, then "Show more" (call 56's fold, read-only here). The
+ * description shows through its one editor, read-only (call #15): its Markdown
+ * formatted, references live per reader.
+ */
+export function FoldedDescription({
+  description,
+  runtime,
+  workspaceId,
+}: {
+  description: string;
+  runtime: ModuoRuntime | null;
+  workspaceId: string;
+}) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [folds, setFolds] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the text is the cue
+  // Measured again whenever the text's height changes: the editor fills
+  // itself after it mounts. A new description mounts a new editor (its key),
+  // so the observer moves to the new content.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed description replaces the observed element
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || expanded) return;
-    setFolds(box.scrollHeight > box.clientHeight + 1);
-  }, [html, expanded]);
+    const measure = () => setFolds(box.scrollHeight > box.clientHeight + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    const content = box.firstElementChild;
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [expanded, description]);
   return (
     <div>
       <div
@@ -341,7 +369,19 @@ function FoldedDescription({ html }: { html: string }) {
           !expanded && folds && "mask-b-from-60%",
         )}
       >
-        <EntityRichText html={html} />
+        {/* The editor reads its value when it mounts: a changed description
+            gets a new one. */}
+        <EntityTextEditor
+          key={description}
+          value={description}
+          editable={false}
+          format="markdown"
+          runtime={runtime}
+          workspaceId={workspaceId}
+          source={null}
+          ariaLabel="Description"
+          className="min-h-0 text-sm text-muted-foreground"
+        />
       </div>
       {folds || expanded ? (
         <button

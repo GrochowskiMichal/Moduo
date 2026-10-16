@@ -564,6 +564,10 @@ export function MentionMenuPlugin({
           if (candidate) commitRef.current(candidate);
         },
         close: () => setMenu(null),
+        // ⏎ never goes past a menu that shows: with nothing to pick yet
+        // ("Searching…", "No matches") it closes the menu and does nothing
+        // else, so a host's ⏎ (capture's create, call #14) can't fire under it.
+        holdEnterWhenEmpty: true,
       }),
     [editor],
   );

@@ -4,12 +4,15 @@ import {
   effectiveMime,
   fitWithin,
   type ImageEnv,
+  isAnimatedImage,
   isHeic,
   isImageCandidate,
   jpegHasExif,
+  originalIsItsOwnPreview,
   planOriginal,
   prepareUpload,
   renameForMime,
+  SELF_PREVIEW_MAX_BYTES,
 } from "./pipeline";
 
 // A JPEG header: SOI, an APP0 (JFIF) segment, optionally an APP1 Exif segment,
@@ -25,6 +28,66 @@ function jpegBytes({ exif }: { exif: boolean }): Uint8Array {
   }
   parts.push(0xff, 0xda, 0x00, 0x02, 0x11, 0x22);
   return new Uint8Array(parts);
+}
+
+/** A PNG's chunks: IHDR, an `acTL` when animated (an APNG), then IDAT and IEND. */
+function pngBytes({ animated }: { animated: boolean }): Uint8Array {
+  const chunk = (type: string, len: number) => [
+    0,
+    0,
+    0,
+    len,
+    ...Array.from(type, (c) => c.charCodeAt(0)),
+    ...new Array(len).fill(0),
+    0,
+    0,
+    0,
+    0,
+  ];
+  return new Uint8Array([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...chunk("IHDR", 13),
+    ...(animated ? chunk("acTL", 8) : []),
+    ...chunk("IDAT", 4),
+    ...chunk("IEND", 0),
+  ]);
+}
+
+/** A WebP's RIFF chunks: animated by an ANIM chunk or VP8X's flag, or still. */
+function webpBytes(kind: "anim" | "flag" | "still" | "still-x"): Uint8Array {
+  const chunk = (type: string, data: number[]) => [
+    ...Array.from(type, (c) => c.charCodeAt(0)),
+    data.length,
+    0,
+    0,
+    0,
+    ...data,
+    ...(data.length % 2 ? [0] : []),
+  ];
+  const body =
+    kind === "anim"
+      ? [...chunk("VP8X", new Array(10).fill(0)), ...chunk("ANIM", new Array(6).fill(0))]
+      : kind === "flag"
+        ? chunk("VP8X", [0x02, ...new Array(9).fill(0)])
+        : kind === "still-x"
+          ? [...chunk("VP8X", [0x10, ...new Array(9).fill(0)]), ...chunk("VP8L", [0, 0, 0])]
+          : chunk("VP8 ", [0, 0, 0, 0]);
+  return new Uint8Array([
+    ...Array.from("RIFF", (c) => c.charCodeAt(0)),
+    body.length + 4,
+    0,
+    0,
+    0,
+    ...Array.from("WEBP", (c) => c.charCodeAt(0)),
+    ...body,
+  ]);
 }
 
 type FakeImage = { width: number; height: number; alpha?: boolean };
@@ -225,9 +288,113 @@ describe("prepareUpload", () => {
   });
 
   it("drops the preview, not the file, when the preview can't be encoded", async () => {
-    const f = file("png", "x.png", "image/png");
+    // Over 100 KB, so it isn't its own preview (MOD-132) and one is tried.
+    const f = file(new Uint8Array(200_000), "x.png", "image/png");
     const env = fakeEnv({ "x.png": { width: 100, height: 100 } }, { refuse: ["image/jpeg"] });
     const out = await prepareUpload(f, { env });
     expect(out).toMatchObject({ original: f, preview: null, previewMime: null });
+  });
+});
+
+describe("a small image is its own preview (MOD-132)", () => {
+  it("is a JPEG, PNG or WebP within the preview's 1280 px and 100 KB", () => {
+    const at = (over: Partial<Parameters<typeof originalIsItsOwnPreview>[0]> = {}) =>
+      originalIsItsOwnPreview({
+        mime: "image/png",
+        width: 1280,
+        height: 720,
+        sizeBytes: SELF_PREVIEW_MAX_BYTES,
+        ...over,
+      });
+    expect(at()).toBe(true);
+    expect(at({ mime: "image/jpeg" })).toBe(true);
+    expect(at({ mime: "image/webp" })).toBe(true);
+    expect(at({ width: 1281 })).toBe(false);
+    expect(at({ height: 1281, width: 400 })).toBe(false);
+    expect(at({ sizeBytes: SELF_PREVIEW_MAX_BYTES + 1 })).toBe(false);
+    // An animated GIF keeps its still preview; HEIC can't show in most browsers.
+    expect(at({ mime: "image/gif" })).toBe(false);
+    expect(at({ mime: "image/heic" })).toBe(false);
+    expect(at({ mime: "application/pdf" })).toBe(false);
+    // Unknown pixels (never decoded) or an empty file: not an image we know.
+    expect(at({ width: null })).toBe(false);
+    expect(at({ sizeBytes: 0 })).toBe(false);
+  });
+
+  it("makes no preview for one: the file is stored once", async () => {
+    const f = file(jpegBytes({ exif: false }), "plain.jpg", "image/jpeg");
+    const env = fakeEnv({ "plain.jpg": { width: 800, height: 600 } }, { webp: true });
+    const out = await prepareUpload(f, { env });
+    expect(out).toMatchObject({
+      original: f,
+      mime: "image/jpeg",
+      preview: null,
+      previewMime: null,
+      width: 800,
+      height: 600,
+    });
+    expect(env.renders).toEqual([]);
+  });
+
+  it("still makes one for small pixels in a big file, or a small file with big pixels", async () => {
+    const heavy = file(new Uint8Array(400_000), "heavy.png", "image/png");
+    const env1 = fakeEnv({ "heavy.png": { width: 1200, height: 800 } });
+    expect((await prepareUpload(heavy, { env: env1 })).preview).not.toBeNull();
+
+    const wide = file(new Uint8Array(90_000), "wide.png", "image/png");
+    const env2 = fakeEnv({ "wide.png": { width: 3000, height: 2000 } });
+    const out = await prepareUpload(wide, { env: env2 });
+    expect(out.preview).not.toBeNull();
+    expect(env2.renders).toEqual([{ width: 1280, height: 853, mime: "image/jpeg", quality: 0.8 }]);
+  });
+
+  it("tells an animated PNG or WebP from a still one", () => {
+    expect(isAnimatedImage(pngBytes({ animated: true }), "image/png")).toBe(true);
+    expect(isAnimatedImage(pngBytes({ animated: false }), "image/png")).toBe(false);
+    expect(isAnimatedImage(webpBytes("anim"), "image/webp")).toBe(true);
+    expect(isAnimatedImage(webpBytes("flag"), "image/webp")).toBe(true);
+    expect(isAnimatedImage(webpBytes("still"), "image/webp")).toBe(false);
+    expect(isAnimatedImage(webpBytes("still-x"), "image/webp")).toBe(false);
+    // Junk, a truncated header, or another type: not animated.
+    expect(isAnimatedImage(new Uint8Array([1, 2, 3]), "image/png")).toBe(false);
+    expect(isAnimatedImage(pngBytes({ animated: true }).slice(0, 20), "image/png")).toBe(false);
+    expect(isAnimatedImage(pngBytes({ animated: true }), "image/jpeg")).toBe(false);
+  });
+
+  it("keeps a small animated PNG or WebP's still preview", async () => {
+    const apng = file(pngBytes({ animated: true }), "spinner.png", "image/png");
+    const env1 = fakeEnv({ "spinner.png": { width: 64, height: 64, alpha: true } });
+    expect((await prepareUpload(apng, { env: env1 })).preview).not.toBeNull();
+
+    const anim = file(webpBytes("anim"), "wave.webp", "image/webp");
+    const env2 = fakeEnv({ "wave.webp": { width: 200, height: 200 } });
+    expect((await prepareUpload(anim, { env: env2 })).preview).not.toBeNull();
+
+    const still = file(pngBytes({ animated: false }), "icon.png", "image/png");
+    const env3 = fakeEnv({ "icon.png": { width: 64, height: 64, alpha: true } });
+    expect((await prepareUpload(still, { env: env3 })).preview).toBeNull();
+  });
+
+  it("keeps a small GIF's still preview", async () => {
+    const f = file("gif", "wave.gif", "image/gif");
+    const env = fakeEnv({ "wave.gif": { width: 200, height: 200 } });
+    const out = await prepareUpload(f, { env });
+    expect(out.original).toBe(f);
+    expect(out.preview).not.toBeNull();
+  });
+
+  it("decides on the stored original, after EXIF is stripped", async () => {
+    // Re-encoded at 0.1 byte a pixel: 80 KB, its own preview.
+    const light = file(jpegBytes({ exif: true }), "a.jpg", "image/jpeg");
+    const env1 = fakeEnv({ "a.jpg": { width: 1000, height: 800 } });
+    const out1 = await prepareUpload(light, { env: env1 });
+    expect(out1.original).not.toBe(light);
+    expect(out1.original.size).toBe(80_000);
+    expect(out1.preview).toBeNull();
+    // At a byte a pixel, 800 KB: it gets a preview.
+    const dense = file(jpegBytes({ exif: true }), "b.jpg", "image/jpeg");
+    const env2 = fakeEnv({ "b.jpg": { width: 1000, height: 800 } }, { bytesPerPixel: 1 });
+    const out2 = await prepareUpload(dense, { env: env2 });
+    expect(out2.preview).not.toBeNull();
   });
 });

@@ -26,6 +26,8 @@ export type MenuKeyHandlers = {
   setIndex: (index: number) => void;
   pick: (index: number) => void;
   close: () => void;
+  /** ↵ on a drawn menu with no rows closes it instead of reaching the host. */
+  holdEnterWhenEmpty?: boolean;
 };
 
 /** The highlight after one arrow press, wrapping at both ends. */
@@ -52,7 +54,17 @@ export function registerMenuKeys(editor: LexicalEditor, menu: MenuKeyHandlers): 
   return mergeRegister(
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow(1), COMMAND_PRIORITY_HIGH),
     editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow(-1), COMMAND_PRIORITY_HIGH),
-    editor.registerCommand(KEY_ENTER_COMMAND, pick, COMMAND_PRIORITY_HIGH),
+    editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        if (pick(event)) return true;
+        if (!menu.holdEnterWhenEmpty || !menu.isOpen()) return false;
+        event?.preventDefault();
+        menu.close();
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    ),
     editor.registerCommand(KEY_TAB_COMMAND, pick, COMMAND_PRIORITY_HIGH),
     editor.registerCommand(
       KEY_ESCAPE_COMMAND,

@@ -1,7 +1,8 @@
 // Tasks' right-panel views (lib/panel-registry.ts): Details and Project
 // (TV-U13) about this; In flight (TV-F8) and the Timeline's No date (TV-TL2)
 // alongside, in that order, so the keymap's ⌥3 In flight · ⌥4 No date holds.
-// And which of them shows (MOD-131), pure, for the page.
+// And which of them shows (MOD-131), the task it shows (MOD-123) and its
+// title (MOD-109), pure, for the page.
 
 import { CalendarOff, FolderKanban, Info, PlaneTakeoff } from "lucide-react";
 
@@ -59,4 +60,27 @@ export function activePanelView(state: {
   if (state.remembered === NO_DATE_PANEL_VIEW && state.noDateShown) return NO_DATE_PANEL_VIEW;
   if (state.projectInstead) return "project";
   return state.remembered;
+}
+
+/**
+ * The task the panel shows: the selected one, or none while the List in the
+ * centre shows no row (every group that holds tasks folded). The panel then
+ * reads as with nothing selected, the project's overview inside a project,
+ * never a task you can't see (MOD-123). The selection itself stays, so the
+ * page and the List don't fight over it (MOD-122).
+ */
+export function panelTaskOf<T>(
+  selected: T | null,
+  list: { inCentre: boolean; showsNothing: boolean },
+): T | null {
+  return list.inCentre && list.showsNothing ? null : selected;
+}
+
+/**
+ * What the title row says when it isn't the open view's name: "4 tasks" on a
+ * multi-selection's Details, with its ▾ still switching views (MOD-109).
+ */
+export function panelTitleOf(activeView: string, selectedCount: number): string | undefined {
+  // Two or more, so always the plural (bulk.ts's `tasksWord`, without its imports here).
+  return activeView === "details" && selectedCount >= 2 ? `${selectedCount} tasks` : undefined;
 }

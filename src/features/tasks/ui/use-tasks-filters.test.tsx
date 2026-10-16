@@ -11,8 +11,8 @@ import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { Assignee } from "../assignees";
 import { makeTask } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Tag, Task } from "../model";
-import { useTasksFilters } from "./use-tasks-filters";
+import type { Bucket, Tag, Task } from "../model";
+import { type ProjectFilterChoices, useTasksFilters } from "./use-tasks-filters";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -48,7 +48,14 @@ const TAGS: Tag[] = [
   },
 ];
 const ASSIGNEES: Assignee[] = [
-  { userId: "u1", name: "Me", fullName: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   {
     userId: "u2",
     name: "Mike",
@@ -72,12 +79,18 @@ const api = {
   subtasksByParent: new Map<string, Task[]>(),
 } as unknown as TasksModuleApi;
 
-function Harness({ initial = [] as FilterCondition[], keep = null as string | null }) {
+function Harness({
+  initial = [] as FilterCondition[],
+  keep = null as string | null,
+  scopeTasks = TASKS,
+  projects = null as ProjectFilterChoices | null,
+  inboxId = null as string | null,
+}) {
   const [conditions, setConditions] = useState<FilterCondition[]>(initial);
   const f = useTasksFilters({
     workspaceId: "w1",
     scope: "b1",
-    scopeTasks: TASKS,
+    scopeTasks,
     conditions,
     onConditionsChange: setConditions,
     api,
@@ -85,6 +98,8 @@ function Harness({ initial = [] as FilterCondition[], keep = null as string | nu
     assignees: ASSIGNEES,
     enabled: true,
     keepTaskId: keep,
+    projects,
+    inboxId,
   });
   return (
     <TooltipProvider>
@@ -191,6 +206,94 @@ describe("Filter", () => {
     });
     expect(screen.getByRole("combobox", { name: "Filter by" })).toBeTruthy();
   });
+
+  it("lists you as your name plus (you), and the chip reads You (MOD-137)", () => {
+    render(<Harness />);
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "f" });
+    });
+    fireEvent.click(screen.getByRole("option", { name: /^Assignee/ }));
+    const you = screen.getByRole("option", { name: /Alex Rivera \(you\)$/ });
+    fireEvent.click(you);
+    expect(screen.getByRole("group", { name: "Assignee is You" })).toBeTruthy();
+  });
+
+  it("finds you by typing me", () => {
+    render(<Harness />);
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "f" });
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by" }), {
+      target: { value: "me" },
+    });
+    const names = screen
+      .getAllByRole("option")
+      .map((o) => o.getAttribute("aria-label") ?? o.textContent);
+    expect(names).toContain("Assignee › Alex Rivera (you)");
+  });
+});
+
+describe("Project (MOD-141)", () => {
+  const project = (id: string, name: string): Bucket => ({
+    id,
+    workspaceId: "w1",
+    ownerId: "u1",
+    name,
+    isSystem: false,
+    group: null,
+    position: id,
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  });
+  const LAUNCH = project("p1", "Launch v1");
+  const SITE = project("p2", "Website");
+  const SPREAD = [
+    task("a", "Toolbar polish", { bucketId: "p1" }),
+    task("b", "Filter chips", { bucketId: "p2" }),
+    task("c", "Search box", { bucketId: "inbox-1" }),
+  ];
+  const offered = { projects: [SITE, LAUNCH], inbox: true };
+
+  it("names the project, and your Inbox as Inbox", () => {
+    render(
+      <Harness
+        scopeTasks={SPREAD}
+        projects={offered}
+        inboxId="inbox-1"
+        initial={[{ dimension: "project", operator: "any_of", values: ["inbox", "p1"] }]}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "Project is any of Inbox, Launch v1" })).toBeTruthy();
+    expect(rows()).toEqual(["Toolbar polish", "Search box"]);
+  });
+
+  it("is offered in the menu, the projects in the order given", () => {
+    render(<Harness scopeTasks={SPREAD} projects={offered} inboxId="inbox-1" />);
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "f" });
+    });
+    fireEvent.click(screen.getByRole("option", { name: /^Project/ }));
+    const names = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(names.slice(0, 3)).toEqual(["Inbox", "Website", "Launch v1"]);
+  });
+
+  it("isn't offered inside one project, unless a condition already uses it", () => {
+    render(<Harness scopeTasks={SPREAD} />);
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "f" });
+    });
+    expect(screen.queryByRole("option", { name: /^Project/ })).toBeNull();
+    cleanup();
+    // A stored one still shows its chip, so it never filters out of sight.
+    render(
+      <Harness
+        scopeTasks={SPREAD}
+        initial={[{ dimension: "project", operator: "is", values: ["gone"] }]}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "Project is Former project" })).toBeTruthy();
+  });
 });
 
 describe("Search", () => {
@@ -221,7 +324,7 @@ describe("Search", () => {
 
     fireEvent.change(box, { target: { value: "@me" } });
     fireEvent.keyDown(box, { key: "Enter" });
-    expect(screen.getByRole("group", { name: "Assignee is Me" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Assignee is You" })).toBeTruthy();
     expect(rows()).toEqual([]);
   });
 

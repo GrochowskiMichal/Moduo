@@ -22,6 +22,7 @@ import {
 
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import type { MentionActionCandidate, MentionCandidate } from "../../spine/mention";
+import { SELF_NAME } from "../assignee-options";
 import type { Bucket, PriorityLevel, Section, Tag, Team } from "../model";
 import { parseCapture } from "../parse/capture-parser";
 import { type CaptureToken, localDay } from "../parse/capture-tokens";
@@ -59,9 +60,12 @@ const includesWord = (name: string, query: string) => {
   return lower.startsWith(q) || lower.split(/\s+/).some((w) => w.startsWith(q));
 };
 
-/** How a person reads in the menu: "Alex Rivera (you)" for you. */
+/** How a person reads in the menu: "Alex Rivera (you)" for you, "You" while
+ *  you have no name, never "You (you)" (MOD-137, `assigneeListName`). */
 export function personLabel(person: CapturePerson): string {
-  return person.isMe ? `${person.name || "You"} (you)` : person.name;
+  if (!person.isMe) return person.name;
+  const own = person.fullName ?? person.name;
+  return own && own !== SELF_NAME ? `${own} (you)` : SELF_NAME;
 }
 
 function action(
@@ -309,17 +313,17 @@ export function commandEntries(
           ? action(
               effects,
               `remind:${at}`,
-              `Remind me ${formatDayTime(at, now)}`,
+              `Reminder ${formatDayTime(at, now)}`,
               {
                 kind: "token",
-                token: { kind: "remind", at, label: `Remind ${formatDayTime(at, now)}` },
+                token: { kind: "remind", at, label: `Reminder ${formatDayTime(at, now)}` },
               },
               { icon: Bell },
             )
           : action(
               effects,
               "open:remind",
-              "Remind me…",
+              "Reminder…",
               { kind: "open", field: "remind" },
               { icon: Bell },
             ),

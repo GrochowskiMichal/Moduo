@@ -31,6 +31,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { formatDay, formatDayTime } from "../../../lib/time-format";
 import { isoDay } from "../../spine/grammar";
+import { assigneeInSentence, assigneeListName } from "../assignee-options";
 import type { PriorityLevel, RecurrenceRule, Tag, Team } from "../model";
 import { RECURRENCE_PRESETS, recurrenceFromPreset, recurrenceLabel } from "../parse/recurrence";
 import { CATEGORY_LABELS } from "../statuses";
@@ -207,7 +208,7 @@ export function CapturePills({
                 }
               >
                 <PersonAvatar name={avatarName(p)} id={p.userId} src={p.avatarUrl} />
-                <span className="truncate">{p.isMe ? `${p.name} (you)` : p.name}</span>
+                <span className="truncate">{assigneeListName(p)}</span>
                 {assigneeId === p.userId ? <Check className="ms-auto" aria-hidden /> : null}
               </DropdownMenuItem>
             ))}
@@ -390,7 +391,7 @@ function MoreChips({
     chips.push({
       key: "remind",
       icon: Bell,
-      label: `Remind ${formatDayTime(values.remindAt)}`,
+      label: `Reminder ${formatDayTime(values.remindAt)}`,
       clear: () => onChange({ field: "remind", value: null }),
     });
   if (values.estimateMinutes)
@@ -407,13 +408,16 @@ function MoreChips({
       label: capitalise(recurrenceLabel(values.recurrence)),
       clear: () => onChange({ field: "repeat", value: null }),
     });
-  for (const id of values.waitingOn)
+  for (const id of values.waitingOn) {
+    // Said as a sentence: "Waiting on you" for you, never your full name (MOD-137).
+    const person = people.find((p) => p.userId === id);
     chips.push({
       key: `waiting:${id}`,
       icon: Hourglass,
-      label: `Waiting on ${personOf(people, id).name}`,
+      label: `Waiting on ${person ? assigneeInSentence(person) : "someone"}`,
       clear: () => onChange({ field: "waiting", userId: id, on: false }),
     });
+  }
   return (
     <>
       {chips.map((c) => (
@@ -469,7 +473,7 @@ function MorePill({
             icon={<Bell aria-hidden />}
             value={values.remindAt ? new Date(values.remindAt) : null}
             onChange={(d) => onChange({ field: "remind", value: d ? d.toISOString() : null })}
-            placeholder="Remind me at…"
+            placeholder="Reminder at…"
             aria-label="Reminder"
           />
         </div>
