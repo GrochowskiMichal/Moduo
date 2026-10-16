@@ -185,7 +185,7 @@ test("the key map: anywhere in Chat and the chain panel", async ({ page }) => {
   await expect(box).toBeFocused();
 
   // ⌥⇧↓ jumps to the next unread conversation, from the composer too.
-  await expect(page.getByRole("link", { name: new RegExp(MEMBER.name) }).first()).toBeVisible({
+  await expect(page.getByRole("button", { name: new RegExp(`${MEMBER.name} , unread`) })).toBeVisible({
     timeout: 20_000,
   });
   await box.press("Alt+Shift+ArrowDown");

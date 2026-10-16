@@ -23,4 +23,20 @@ describe("GlobalShortcutsDialog", () => {
     const row = screen.getByText("Jump to a module").previousElementSibling;
     expect(row?.textContent).toBe("⌘1–⌘7");
   });
+
+  it("lists Chat's keys by where they work (chat v2 §16, AC4.3)", () => {
+    render(<GlobalShortcutsDialog />);
+    act(() => dispatchOpenShortcuts());
+
+    const chat = screen.getByRole("region", { name: "Chat" });
+    for (const scope of ["Anywhere in Chat", "The composer", "A message", "Catch up", "The chain panel"]) {
+      expect(chat.textContent).toContain(scope);
+    }
+    const nextUnread = screen.getByText("Next unread conversation").previousElementSibling;
+    expect(nextUnread?.textContent).toBe("⌥⇧↓");
+    const edit = screen.getByText("Edit your last message (empty box)").previousElementSibling;
+    expect(edit?.textContent).toBe("↑");
+    const catchup = screen.getByText("Reply · Done · task · Later · open").previousElementSibling;
+    expect(catchup?.textContent).toBe("RSpaceTH⏎");
+  });
 });
