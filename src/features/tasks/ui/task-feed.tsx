@@ -399,7 +399,7 @@ function MergedLine({
 /**
  * One quiet trail line: avatar, "**Name** did this", when (the kit's FeedItem).
  * A change made over an API key (`app` "app") shows the plug, Moduo's own
- * (`app` "moduo": a catch-up, a reminder) the Moduo mark, never the "?" a
+ * (`app` "moduo": a catch-up, a waiting-on that came in) the Moduo mark, never the "?" a
  * former member gets (MOD-149 and its follow-up).
  */
 function FeedEvent({

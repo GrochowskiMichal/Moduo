@@ -241,6 +241,7 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(add.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // A real button: Tab reaches it, as it reached the old lines.
     expect(endButton().tagName).toBe("BUTTON");
+    expect(endButton().tabIndex).toBe(0);
   });
 
   it("Show lists them in place, in their groups, and the line then reads Hide", () => {
@@ -369,6 +370,7 @@ describe('the List in "7 days" (MOD-148 follow-up)', () => {
     // A real button inside the grid: Tab reaches it.
     expect(screen.getByRole("grid").contains(endButton())).toBe(true);
     expect(endButton().tagName).toBe("BUTTON");
+    expect(endButton().tabIndex).toBe(0);
     // Backlog keeps its folded line.
     expect(screen.getAllByRole("button", { name: /^Backlog, / })).toHaveLength(1);
   });
@@ -502,9 +504,14 @@ describe("the Board while Completed is Hidden (MOD-148)", () => {
     expect(boardEnd().textContent).toBe("6 completed · Show");
   });
 
-  it("ends with a new grouping or Completed choice", () => {
+  it("ends with a new scope, grouping or Completed choice", () => {
     const { rerender } = renderBoard();
-    for (const away of [{ completed: "week" as const }, { boardGroupBy: "status" as const }]) {
+    const aways: BoardProps[] = [
+      { completed: "week" },
+      { boardGroupBy: "status" },
+      { selection: "all" },
+    ];
+    for (const away of aways) {
       fireEvent.click(boardEnd());
       expect(card("Task d2")).toBeTruthy();
       rerender(away);
@@ -524,6 +531,14 @@ describe("the Board while Completed is Hidden (MOD-148)", () => {
     renderBoard({ boardGroupBy: "status", lanes: "assignee" });
     expect(completedButtons()).toHaveLength(1);
     expect(boardEnd().textContent).toBe("6 completed · Show");
+  });
+});
+
+describe('the Board in "All" (unchanged)', () => {
+  it("lists every card with no line at all", () => {
+    renderBoard({ completed: "all" });
+    expect(completedButtons()).toHaveLength(0);
+    expect(column("Triage").contains(card("Task d2"))).toBe(true);
   });
 });
 

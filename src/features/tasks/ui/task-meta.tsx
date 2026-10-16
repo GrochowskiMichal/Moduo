@@ -248,14 +248,12 @@ export function CompletedLine({
   shown,
   onToggle,
   mode,
-  className,
 }: {
   count: number;
   shown: boolean;
   onToggle: () => void;
   /** Display → Completed, for the words. */
   mode: CompletedMode;
-  className?: string;
 }) {
   if (count <= 0) return null;
   const label = completedLabel(count, mode);
@@ -263,10 +261,7 @@ export function CompletedLine({
   return (
     <div
       data-slot="completed-end-line"
-      className={cn(
-        "flex min-h-(--row-h-sm) items-center gap-2 px-2.5 font-sans text-xs text-muted-foreground",
-        className,
-      )}
+      className="flex min-h-(--row-h-sm) items-center gap-2 px-2.5 font-sans text-xs text-muted-foreground"
     >
       <ListChecks className="size-icon-xs shrink-0" aria-hidden />
       <button

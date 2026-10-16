@@ -239,7 +239,7 @@ type AppAvatarKind = "app" | "moduo";
  * what an API key wrote through the connector: the same gray circle a former
  * member gets, with a small plug instead of "?", so an app never reads as a
  * missing person. `kind="moduo"` is Moduo's own work (a repeat's catch-up, a
- * reminder; MOD-149 follow-up): the Moduo mark on that gray circle, in the
+ * waiting-on that came in; MOD-149 follow-up): the Moduo mark on that gray circle, in the
  * foreground colour, drawn from the small master like every mark under
  * 24 px. No hue and no AI badge (brand decision 40a): the words beside it
  * say who ("Claude Code (app)", "Maciej · via Claude Code", "Moduo").

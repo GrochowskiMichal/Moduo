@@ -66,7 +66,7 @@ describe("spineActorName", () => {
       "Someone",
     );
     expect(spineActorName({ actorType: "agent", actorId: null, actorLabel: null }, "u1")).toBe(
-      "An agent",
+      "Moduo",
     );
     expect(spineActorName({ actorType: "api_key", actorId: null, actorLabel: null }, "u1")).toBe(
       "An API client",
@@ -79,7 +79,7 @@ describe("appActorKind (MOD-149)", () => {
     expect(appActorKind({ actorType: "api_key" })).toBe("app");
   });
 
-  it("an agent's change is Moduo's own (catch-ups, reminders), the Moduo mark", () => {
+  it("an agent's change is Moduo's own (a catch-up, a waiting-on that came in), the Moduo mark", () => {
     expect(appActorKind({ actorType: "agent" })).toBe("moduo");
   });
 

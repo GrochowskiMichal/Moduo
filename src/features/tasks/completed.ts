@@ -2,7 +2,8 @@
 //
 // Display → Completed: Hidden (default) · 7 days · All. No group or column
 // has a line of its own in any of them: one quiet line ends the whole List
-// or Board and shows what Display hides in place for the session (MOD-148).
+// or Board and shows what Display hides in place until the scope, grouping
+// or Completed changes (MOD-148).
 // Hidden hides every completed task ("12 completed · Show"); "7 days" lists
 // the last week's in their groups and hides the older ones ("5 older
 // completed · Show", the follow-up); All hides none and has no line. A task

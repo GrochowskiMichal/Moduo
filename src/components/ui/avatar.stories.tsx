@@ -148,7 +148,7 @@ export const Identity: Story = {
 
 /**
  * Apps, not people (MOD-149): what an API key wrote shows the gray circle with
- * a small plug; Moduo's own work (a repeat's catch-up, a reminder) the same
+ * a small plug; Moduo's own work (a repeat's catch-up, a waiting-on that came in) the same
  * circle with the Moduo mark (the follow-up), at every rung and density; a
  * former member keeps "?". No colour and no AI badge: the name beside it says
  * who.

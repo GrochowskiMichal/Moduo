@@ -1202,7 +1202,7 @@ describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", 
     expect(key.getAttribute("data-kind")).toBe("app");
     expect(key.querySelector("svg.lucide-plug")).toBeTruthy();
     expect(key.textContent).toBe("");
-    // Moduo's own line (a catch-up, a reminder: actor "agent", no id) shows
+    // Moduo's own line (a catch-up, a waiting-on that came in: actor "agent", no id) shows
     // the Moduo mark on the same gray circle (MOD-149 follow-up).
     const moduo = avatarBy("Moduo");
     expect(moduo.getAttribute("data-kind")).toBe("moduo");

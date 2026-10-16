@@ -29,7 +29,8 @@ export function spineActorName(
   }
   if (entry.actorId && currentUserId && entry.actorId === currentUserId) return "You";
   if (entry.actorLabel) return entry.actorLabel;
-  if (entry.actorType === "agent") return "An agent";
+  // Every "agent" row is Moduo's own work (MOD-149 follow-up): the mark beside it is Moduo's.
+  if (entry.actorType === "agent") return "Moduo";
   if (entry.actorType === "api_key") return "An API client";
   return "Someone";
 }
