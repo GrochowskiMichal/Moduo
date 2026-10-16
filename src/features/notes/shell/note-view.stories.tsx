@@ -130,6 +130,14 @@ const bridge: NotesEditorBridge = {
     restoreDetachedTasks: () => {},
     openTaskDetail: () => {},
   },
+  // The `[[` picker and the ⌘K dialog (NR-4) search these.
+  listNotes: () => [
+    note("n-roadmap", { title: "Roadmap" }),
+    note("n-q4", { title: "Q4 roadmap review" }),
+    note("n-groceries", { title: "Groceries" }),
+  ],
+  createLinkedNote: () => ({ id: crypto.randomUUID(), created: Promise.resolve(true) }),
+  openComments: fn(),
 };
 
 function Harness({ fullWidth, withLinks }: { fullWidth: boolean; withLinks: boolean }) {

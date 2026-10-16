@@ -38,6 +38,7 @@ import { displayTitle } from "../title";
 import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
 import { buildBreadcrumb, type CrumbSection } from "./breadcrumb";
+import { createLinkedNote } from "./create-linked-note";
 import { MoveToDialog } from "./move-to-dialog";
 import { NoteView } from "./note-view";
 import { NotesRightPanel } from "./notes-right-panel";
@@ -107,8 +108,23 @@ export function NotesShell() {
       openNote: (id) => shell.select(id),
       createChildNote: () => (liveNote ? module.createNote(liveNote.id) : null),
       tasks: tasks.taskBridge,
+      listNotes: () => notes,
+      createLinkedNote: (title) =>
+        engine && canEdit
+          ? createLinkedNote({ engine, materializeDraft: module.materializeDraft, title })
+          : null,
+      openComments: () => shell.showPanelVariant("comments"),
     }),
-    [notes, shell.select, liveNote, module, tasks.taskBridge],
+    [
+      notes,
+      shell.select,
+      shell.showPanelVariant,
+      liveNote,
+      module,
+      tasks.taskBridge,
+      engine,
+      canEdit,
+    ],
   );
 
   const canRender = Boolean(

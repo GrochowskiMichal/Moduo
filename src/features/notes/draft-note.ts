@@ -16,6 +16,8 @@ export type Draft = {
   parentId: string | null;
   /** A root started from Pages' "+ New page": filed into Pages on create. */
   toPages?: boolean;
+  /** Created with a title already (`[[Create …]]`, NR-4). Default "". */
+  title?: string;
 };
 
 export type DraftEvent =

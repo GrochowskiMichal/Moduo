@@ -522,11 +522,13 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
    * FIFO meta-outbox, so offline it queues ahead of the doc push.
    */
   const materializeDraft = useCallback(
-    (draft: Draft) => {
-      if (!engine || !canEdit || !workspaceId) return;
-      if (createPromisesRef.current.has(draft.id)) return;
-      if (notesRef.current.some((n) => n.id === draft.id)) return;
+    (draft: Draft): Promise<boolean> => {
+      if (!engine || !canEdit || !workspaceId) return Promise.resolve(false);
+      const pending = createPromisesRef.current.get(draft.id);
+      if (pending) return pending.then(() => !failedCreatesRef.current.has(draft.id));
+      if (notesRef.current.some((n) => n.id === draft.id)) return Promise.resolve(true);
       const { id, parentId } = draft;
+      const title = draft.title ?? "";
       const toPages = parentId === null && draft.toPages === true;
       const position = endPosition(siblingsOf(notesRef.current, parentId));
       const now = new Date().toISOString();
@@ -535,7 +537,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         workspaceId,
         createdBy: userId,
         parentId,
-        title: "",
+        title,
         icon: null,
         isPinned: false,
         position,
@@ -556,7 +558,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       // Queue what was typed durably now; the push waits for the create.
       void engine.promoteDraft(id);
       const created = engine
-        .runMetaOp("create", { workspaceId, id, parentId, title: "", position })
+        .runMetaOp("create", { workspaceId, id, parentId, title, position })
         .then(
           () => {
             pendingCreatesRef.current.delete(id);
@@ -588,6 +590,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
           createPromisesRef.current.delete(id);
         });
       createPromisesRef.current.set(id, created);
+      return created.then(() => !failedCreatesRef.current.has(id));
     },
     [engine, canEdit, workspaceId, userId, load],
   );
