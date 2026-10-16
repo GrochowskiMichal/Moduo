@@ -1253,7 +1253,7 @@ $$;
 -- The agent's side: the key's rules first, then the same body as its creator.
 -- A message or chain the key can't read answers like a missing one.
 
-CREATE OR REPLACE FUNCTION public.chat__key_message(p_message_id uuid, p_need text, OUT creator uuid)
+CREATE OR REPLACE FUNCTION public.chat__key_message(p_workspace_id uuid, p_message_id uuid, p_need text, OUT creator uuid)
   RETURNS uuid
   LANGUAGE plpgsql
   STABLE
@@ -1264,6 +1264,9 @@ DECLARE
   v_channel uuid;
 BEGIN
   v_actor := public.chat__key_actor(p_need);
+  IF p_workspace_id IS DISTINCT FROM v_actor.workspace_id THEN
+    RAISE EXCEPTION 'This API key belongs to another workspace.' USING ERRCODE = '42501';
+  END IF;
   SELECT m.channel_id INTO v_channel FROM public.chat_messages m
    WHERE m.id = p_message_id AND m.workspace_id = v_actor.workspace_id AND m.deleted_at IS NULL;
   IF v_channel IS NULL
@@ -1274,36 +1277,36 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.chat_op_agent_react(p_message_id uuid, p_key text, p_on boolean DEFAULT true)
+CREATE OR REPLACE FUNCTION public.chat_op_agent_react(p_workspace_id uuid, p_message_id uuid, p_key text, p_on boolean DEFAULT true)
   RETURNS public.chat_messages
   LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = 'public'
 AS $$
 BEGIN
-  RETURN public.chat__react_as(public.chat__key_message(p_message_id, 'edit'), p_message_id, p_key, p_on);
+  RETURN public.chat__react_as(public.chat__key_message(p_workspace_id, p_message_id, 'edit'), p_message_id, p_key, p_on);
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.chat_op_agent_mark_decision(p_message_id uuid, p_on boolean DEFAULT true)
+CREATE OR REPLACE FUNCTION public.chat_op_agent_mark_decision(p_workspace_id uuid, p_message_id uuid, p_on boolean DEFAULT true)
   RETURNS public.chat_messages
   LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = 'public'
 AS $$
 BEGIN
-  RETURN public.chat__mark_decision_as(public.chat__key_message(p_message_id, 'edit'), p_message_id, p_on);
+  RETURN public.chat__mark_decision_as(public.chat__key_message(p_workspace_id, p_message_id, 'edit'), p_message_id, p_on);
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.chat_op_agent_wrap_up(p_root_id uuid, p_settled_id uuid, p_mark_decision boolean DEFAULT false)
+CREATE OR REPLACE FUNCTION public.chat_op_agent_wrap_up(p_workspace_id uuid, p_root_id uuid, p_settled_id uuid, p_mark_decision boolean DEFAULT false)
   RETURNS public.chat_messages
   LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = 'public'
 AS $$
 BEGIN
-  RETURN public.chat__wrap_up_as(public.chat__key_message(p_root_id, 'edit'), p_root_id, p_settled_id,
+  RETURN public.chat__wrap_up_as(public.chat__key_message(p_workspace_id, p_root_id, 'edit'), p_root_id, p_settled_id,
     p_mark_decision);
 END;
 $$;
@@ -1397,6 +1400,7 @@ AS $$
 DECLARE
   v_actor record;
   v_limit integer := least(greatest(coalesce(p_limit, 30), 1), 100);
+  v_before timestamptz := p_before;
 BEGIN
   v_actor := public.chat__key_actor('view');
   IF NOT EXISTS (SELECT 1 FROM public.chat_channels c
@@ -1409,6 +1413,14 @@ BEGIN
         WHERE rt.id = p_root_id AND rt.channel_id = p_channel_id AND rt.parent_id IS NULL
           AND rt.kind = 'message') THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
+  END IF;
+  -- A page may start from a message alone: its time is read here.
+  IF v_before IS NULL AND p_before_id IS NOT NULL THEN
+    SELECT b.created_at INTO v_before FROM public.chat_messages b
+     WHERE b.id = p_before_id AND b.channel_id = p_channel_id;
+    IF v_before IS NULL THEN
+      RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
+    END IF;
   END IF;
   RETURN QUERY
     SELECT m.id, m.channel_id, m.parent_id, m.reply_to_id, m.author_id,
@@ -1424,9 +1436,9 @@ BEGIN
        AND m.kind = 'message' AND m.deleted_at IS NULL
        AND CASE WHEN p_root_id IS NULL THEN m.parent_id IS NULL
                 ELSE (m.id = p_root_id OR m.parent_id = p_root_id) END
-       AND (p_before IS NULL
-            OR m.created_at < p_before
-            OR (m.created_at = p_before AND p_before_id IS NOT NULL AND m.id < p_before_id))
+       AND (v_before IS NULL
+            OR m.created_at < v_before
+            OR (m.created_at = v_before AND p_before_id IS NOT NULL AND m.id < p_before_id))
      ORDER BY m.created_at DESC, m.id DESC
      LIMIT v_limit;
 END;
@@ -1681,7 +1693,7 @@ BEGIN
     'chat__key_reads_channel(uuid, uuid, boolean)',
     'chat__key_channel_ids(uuid, uuid, boolean)',
     'chat__key_replies_on(uuid, uuid)',
-    'chat__key_message(uuid, text)',
+    'chat__key_message(uuid, uuid, text)',
     'chat__op_guard_as(uuid, uuid)',
     'chat__op_reader_as(uuid, uuid)',
     'chat__op_channel_as(uuid, uuid)',
@@ -1703,9 +1715,9 @@ BEGIN
   -- The connector's (a key, as the service role) alone.
   FOREACH fn IN ARRAY ARRAY[
     'chat_op_agent_post(uuid, uuid, text, uuid)',
-    'chat_op_agent_react(uuid, text, boolean)',
-    'chat_op_agent_mark_decision(uuid, boolean)',
-    'chat_op_agent_wrap_up(uuid, uuid, boolean)',
+    'chat_op_agent_react(uuid, uuid, text, boolean)',
+    'chat_op_agent_mark_decision(uuid, uuid, boolean)',
+    'chat_op_agent_wrap_up(uuid, uuid, uuid, boolean)',
     'chat_op_agent_create_channel(uuid, text, text, boolean)',
     'chat_agent_conversations(uuid)',
     'chat_agent_messages(uuid, uuid, timestamptz, uuid, integer)',

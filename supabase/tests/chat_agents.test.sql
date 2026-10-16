@@ -329,28 +329,28 @@ DO $$
 DECLARE
   v text;
 BEGIN
-  v := test.key_value('KV', format($q$SELECT (public.chat_op_agent_react(%L, '👍', true)).id::text$q$, test.ref('b1')));
+  v := test.key_value('KV', format($q$SELECT (public.chat_op_agent_react(%L, %L, '👍', true)).id::text$q$, test.id('W'), test.ref('b1')));
   PERFORM test.ok(v LIKE 'ERROR This API key can''t post to chat%', 'react: Chat: View can''t react', v);
-  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_react(%L, '👍', true)).reactions::text$q$, test.ref('b1')));
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_react(%L, %L, '👍', true)).reactions::text$q$, test.id('W'), test.ref('b1')));
   PERFORM test.ok(v LIKE '%' || test.id('A')::text || '%', 'react: the reaction is A''s', v);
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a WHERE a.op = 'chat.react'
                            AND a.payload ->> 'message_id' = test.ref('b1')::text AND a.actor_label = 'A · via CI key'),
     'react: the trail reads "A · via CI key"');
-  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_react(%L, '👍', true)).id::text$q$, test.ref('dm1')));
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_react(%L, %L, '👍', true)).id::text$q$, test.id('W'), test.ref('dm1')));
   PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'react: never in a direct message', v);
-  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_react(%L, '👍', true)).id::text$q$, test.ref('r1')));
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_react(%L, %L, '👍', true)).id::text$q$, test.id('W'), test.ref('r1')));
   PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'react: never where the key can''t read', v);
 
-  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_mark_decision(%L, true)).decision_by::text$q$, test.ref('b1')));
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_mark_decision(%L, %L, true)).decision_by::text$q$, test.id('W'), test.ref('b1')));
   PERFORM test.ok(v = test.id('A')::text, 'decision: marked as A', v);
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a WHERE a.op = 'chat.decision'
                            AND a.payload ->> 'message_id' = test.ref('b1')::text AND a.actor_label = 'A · via CI key'),
     'decision: the trail reads "A · via CI key"');
-  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_mark_decision(%L, true)).id::text$q$, test.ref('p1')));
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_mark_decision(%L, %L, true)).id::text$q$, test.id('W'), test.ref('p1')));
   PERFORM test.ok(v LIKE 'ERROR That message no longer exists%', 'decision: never in a private channel with the switch off', v);
 
-  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_wrap_up(%L, %L, false)).wrapped_by::text$q$,
-    test.ref('k1'), test.ref('b1')));
+  v := test.key_value('KA', format($q$SELECT (public.chat_op_agent_wrap_up(%L, %L, %L, false)).wrapped_by::text$q$,
+    test.id('W'), test.ref('k1'), test.ref('b1')));
   PERFORM test.ok(v = test.id('A')::text, 'wrap up: the key wraps up its own chain as A', v);
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.module_activity a WHERE a.op = 'chat.wrap_up'
                            AND a.payload ->> 'message_id' = test.ref('k1')::text AND a.actor_label = 'A · via CI key'),
@@ -399,8 +399,8 @@ DECLARE
   v_bad text;
 BEGIN
   SELECT string_agg(f, ', ') INTO v_bad FROM unnest(ARRAY[
-    'chat_op_agent_post(uuid, uuid, text, uuid)', 'chat_op_agent_react(uuid, text, boolean)',
-    'chat_op_agent_mark_decision(uuid, boolean)', 'chat_op_agent_wrap_up(uuid, uuid, boolean)',
+    'chat_op_agent_post(uuid, uuid, text, uuid)', 'chat_op_agent_react(uuid, uuid, text, boolean)',
+    'chat_op_agent_mark_decision(uuid, uuid, boolean)', 'chat_op_agent_wrap_up(uuid, uuid, uuid, boolean)',
     'chat_op_agent_create_channel(uuid, text, text, boolean)', 'chat_agent_conversations(uuid)',
     'chat_agent_messages(uuid, uuid, timestamptz, uuid, integer)',
     'chat_agent_search(uuid, text, uuid, timestamptz, uuid, integer)', 'chat_agent_addressed(uuid, integer)']) f

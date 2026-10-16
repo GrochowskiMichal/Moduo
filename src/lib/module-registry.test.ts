@@ -168,7 +168,14 @@ describe("chat manifest", () => {
     expect(chat.permissionKey).toBe("chat");
   });
 
-  it("exposes only the key-attributed post — never the auth.uid() in-app ops", () => {
-    expect(chat.ops.map((o) => o.rpc)).toEqual(["chat_op_agent_post"]);
+  it("exposes only the key's agent ops — never the auth.uid() in-app ops", () => {
+    expect(chat.ops.map((o) => o.rpc)).toEqual([
+      "chat_op_agent_post",
+      "chat_op_agent_react",
+      "chat_op_agent_mark_decision",
+      "chat_op_agent_wrap_up",
+      "chat_op_agent_create_channel",
+    ]);
+    expect(chat.ops.every((o) => o.rpc.startsWith("chat_op_agent_"))).toBe(true);
   });
 });

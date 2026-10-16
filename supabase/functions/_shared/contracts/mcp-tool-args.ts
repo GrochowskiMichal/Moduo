@@ -307,14 +307,30 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
   }),
   email_remove: z.object({ ref_id: nonempty }),
 
-  // Chat (specs/chat.md §Agents) — public channels only; channel = name or id.
+  // Chat (specs/chat-v2.md §14, CV-21) — what the key reads; channel = name as
+  // shown or id; ids of messages are checked by the tool.
   chat_list_channels: z.object({}),
-  chat_read: z.object({ channel: nonempty, thread_id: nonempty.optional(), limit }),
-  chat_search: z.object({ query: nonempty, limit }),
+  chat_read: z.object({
+    channel: nonempty,
+    chain_id: nonempty.optional(),
+    before: nonempty.optional(),
+    limit,
+  }),
+  chat_search: z.object({ query: z.string().trim().min(1).max(256), channel: nonempty.optional(), limit }),
+  chat_addressed_to_me: z.object({ limit }),
   chat_post: z.object({
     channel: nonempty,
     text: z.string().trim().min(1).max(8000),
     thread_id: nonempty.optional(),
+  }),
+  chat_reply: z.object({ message_id: nonempty, text: z.string().trim().min(1).max(8000) }),
+  chat_react: z.object({ message_id: nonempty, emoji: z.string().trim().min(1).max(64), on: z.boolean().optional() }),
+  chat_mark_decision: z.object({ message_id: nonempty, on: z.boolean().optional() }),
+  chat_wrap_up: z.object({ chain_id: nonempty, settled_by: nonempty, mark_decision: z.boolean().optional() }),
+  chat_create_channel: z.object({
+    name: z.string().trim().min(1).max(80),
+    topic: z.string().max(250).optional(),
+    private: z.boolean().optional(),
   }),
 
   links_search_entities: z.object({
