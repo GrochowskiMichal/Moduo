@@ -286,8 +286,18 @@ function endOfDayIn(y: number, m: number, d: number, tz: string | null): Date {
   // Shift by the zone's offset twice, so a daylight-saving change that day settles.
   let at = target - offsetIn(target, tz);
   at = target - offsetIn(at, tz);
-  return new Date(at);
+  // Where clocks go back at midnight, 23:59:59.999 happens twice: take the
+  // later one (the day really ends then). Try the offsets either side of the
+  // day and keep the latest instant whose wall clock is the target.
+  let latest: number | null = null;
+  for (const off of [target - at, offsetIn(target - DAY_MS, tz), offsetIn(target + DAY_MS, tz)]) {
+    const c = target - off;
+    if (offsetIn(c, tz) === off && (latest === null || c > latest)) latest = c;
+  }
+  return new Date(latest ?? at);
 }
+
+const DAY_MS = 86_400_000;
 
 /** An instant's wall clock in a zone. */
 function wallIn(ms: number, tz: string) {
@@ -332,6 +342,47 @@ export function clearAfterHint(choice: StatusClearAfter, dnd: boolean): string {
   const w = when[choice];
   if (!dnd) return w;
   return w ? `do not disturb · ${w.replace(/^clears /, "")}` : "do not disturb";
+}
+
+/** What "Active" does to your status: nothing without do not disturb; a
+ *  status with words keeps them and drops only do not disturb; do not disturb
+ *  by hand (no words), or a status whose time is up (or seconds away), clears. The
+ *  people-now copy can be a minute old, so a status can be past its clear time
+ *  here; setting it again with that time would be refused. */
+export type ActiveChoice =
+  | { kind: "none" }
+  | { kind: "clear" }
+  | {
+      kind: "keep";
+      status: {
+        emoji: string | null;
+        text: string | null;
+        dnd: false;
+        clearAt: string | null;
+        preset: StatusPreset | null;
+      };
+    };
+
+/** How close to its clear time a status already counts as cleared for "Active". */
+export const ACTIVE_EXPIRY_SLACK_MS = 5_000;
+
+export function activeChoice(status: PersonStatus | null, now: Date = new Date()): ActiveChoice {
+  if (!status?.dnd) return { kind: "none" };
+  // Within a few seconds of its time counts as up: it'd be past by the time
+  // the server sees it.
+  const expired =
+    status.clearAt !== null && Date.parse(status.clearAt) <= now.getTime() + ACTIVE_EXPIRY_SLACK_MS;
+  if (expired || (!status.emoji && !status.text)) return { kind: "clear" };
+  return {
+    kind: "keep",
+    status: {
+      emoji: status.emoji,
+      text: status.text,
+      dnd: false,
+      clearAt: status.clearAt,
+      preset: status.preset,
+    },
+  };
 }
 
 export const PRESET_ORDER: readonly StatusPreset[] = ["meeting", "sick", "vacation", "commuting"];

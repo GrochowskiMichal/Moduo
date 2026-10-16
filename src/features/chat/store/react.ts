@@ -19,7 +19,7 @@ import { supabaseClient } from "@/lib/runtime.web";
 import { forgetPeopleNow } from "@/lib/statuses/store";
 import { postgresChangesSource } from "../realtime";
 import { type ChatPresenceSnapshot, chatPresence, forgetChatPresenceStores } from "./presence";
-import { PresenceSelfRegistry, windowInput } from "./presence-self";
+import { documentVisibility, PresenceSelfRegistry, windowInput } from "./presence-self";
 import "@/lib/statuses/live";
 import {
   type ChatSnapshot,
@@ -75,11 +75,13 @@ export function useChatPresence(
   const store = useMemo(
     () =>
       enabled && workspaceId && userId
-        ? chatPresence(supabaseClient, workspaceId, userId, tabPresenceSelf(userId))
+        ? chatPresence(supabaseClient, workspaceId, userId, presenceSelves.for(userId))
         : null,
     [enabled, workspaceId, userId],
   );
   useEffect(() => store?.acquire(), [store]);
+  // Another device's "Show me as online": read again while presence is held.
+  useEffect(() => (store ? presenceSelves.watch() : undefined), [store]);
   return useSyncExternalStore(
     store ? store.subscribe : noSubscribe,
     store ? store.getSnapshot : emptyPresence,
@@ -88,55 +90,17 @@ export function useChatPresence(
 }
 
 /** This tab's "me" on presence (CV-17), for the signed-in person only: it
- *  tracks nothing until their own "Show me as online" is read, follows it
- *  (another tab's change too), and is away after 10 minutes without input. */
+ *  tracks nothing until their own "Show me as online" is read (a failed read
+ *  tries again), follows it (another tab's change at once, another device's
+ *  within a minute while in view), and is away after 10 minutes without input. */
 const presenceSelves = new PresenceSelfRegistry(
   {
     get: (userId) => currentChatServerPrefs(userId)?.showOnline ?? null,
     subscribe: subscribeChatServerPrefs,
-    load: (userId) => loadShowOnline(userId, 0),
+    read: readChatServerPrefs,
   },
-  { onInput: windowInput },
+  { onInput: windowInput, visibility: documentVisibility() },
 );
-
-/** Read the switch; a failed read tries again (2 s, 4 s, … at most a minute
- *  apart) while this tab still holds the person and the switch is unknown. */
-function loadShowOnline(userId: string, attempt: number): void {
-  void readChatServerPrefs().catch(() => {
-    setTimeout(
-      () => {
-        if (presenceSelves.userId === userId && currentChatServerPrefs(userId) === null) {
-          loadShowOnline(userId, attempt + 1);
-        }
-      },
-      Math.min(60_000, 2_000 * 2 ** attempt),
-    );
-  });
-}
-
-function tabPresenceSelf(userId: string) {
-  watchShowOnlineElsewhere();
-  return presenceSelves.for(userId);
-}
-
-/** How often the switch is read again, for a change made on another device
- *  or browser (other tabs here hear it at once). */
-const SHOW_ONLINE_REREAD_MS = 60_000;
-let rereading = false;
-
-/** Another device's change: read the switch again each minute and whenever
- *  the tab comes back into view, while this tab holds a person. */
-function watchShowOnlineElsewhere(): void {
-  if (rereading || typeof window === "undefined") return;
-  rereading = true;
-  const reread = () => {
-    if (presenceSelves.userId) void readChatServerPrefs().catch(() => undefined);
-  };
-  window.setInterval(reread, SHOW_ONLINE_REREAD_MS);
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") reread();
-  });
-}
 
 /** Sign-out: no presence "me", switch or status copy outlives the person. */
 export function forgetChatPresence(): void {

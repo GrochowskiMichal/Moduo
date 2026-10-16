@@ -9,7 +9,12 @@ import { describe, expect, it } from "@rstest/core";
 import { presenceStateOf } from "@/lib/statuses/model";
 import type { ChatSocket } from "./realtime";
 import { ChatPresenceStore, presenceSets } from "./store/presence";
-import { AWAY_AFTER_MS, PresenceSelfRegistry, PresenceSelfWatcher } from "./store/presence-self";
+import {
+  AWAY_AFTER_MS,
+  PresenceSelfRegistry,
+  PresenceSelfWatcher,
+  SHOW_ONLINE_REREAD_MS,
+} from "./store/presence-self";
 
 type FakeChannel = {
   status: ((s: string) => void) | null;
@@ -79,6 +84,9 @@ function fakeTime() {
 }
 
 const WS = "ws-1";
+const flush = async () => {
+  for (let i = 0; i < 5; i += 1) await Promise.resolve();
+};
 const ME = "me";
 
 describe('"Show me as online"', () => {
@@ -167,7 +175,10 @@ describe('"Show me as online"', () => {
           listeners.add(fn);
           return () => listeners.delete(fn);
         },
-        load: () => loads.push("load"),
+        read: () => {
+          loads.push("load");
+          return Promise.resolve();
+        },
       },
       fakeTime(),
     );
@@ -205,6 +216,187 @@ describe('"Show me as online"', () => {
     expect(channels[1]!.calls.at(-1)).toEqual({ op: "untrack" });
     expect(listeners.size).toBe(0);
     expect(registry.userId).toBeNull();
+  });
+
+  it("another device turns it off: this tab untracks after the next re-read, with no tab message", async () => {
+    const time = fakeTime();
+    const server = { on: true };
+    let known: boolean | null = null;
+    const listeners = new Set<() => void>();
+    let reads = 0;
+    const registry = new PresenceSelfRegistry(
+      {
+        get: (id) => (id === ME ? known : null),
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        // As the real read does: keep what the server says, tell listeners.
+        read: async () => {
+          reads += 1;
+          known = server.on;
+          for (const fn of listeners) fn();
+        },
+      },
+      time,
+    );
+    const { socket, channels } = fakeSocket();
+    const self = registry.for(ME);
+    const stopWatch = registry.watch();
+    await flush();
+    const presence = new ChatPresenceStore(socket, WS, ME, self);
+    presence.acquire();
+    channels[0]!.status?.("SUBSCRIBED");
+    expect(channels[0]!.calls).toEqual([
+      { op: "track", state: expect.objectContaining({ away: false }) },
+    ]);
+
+    // Turned off on another device: nothing reaches this tab yet.
+    server.on = false;
+    time.advance(SHOW_ONLINE_REREAD_MS - 1);
+    await flush();
+    expect(channels[0]!.calls.at(-1)?.op).toBe("track");
+    // The minute's re-read hears it and stops tracking.
+    time.advance(1);
+    await flush();
+    expect(reads).toBe(2);
+    expect(channels[0]!.calls.at(-1)).toEqual({ op: "untrack" });
+
+    // Stopped watching: no more reads.
+    stopWatch();
+    time.advance(SHOW_ONLINE_REREAD_MS * 3);
+    await flush();
+    expect(reads).toBe(2);
+    registry.forget();
+  });
+
+  it("a failed first read tries again; once known, the retries stop", async () => {
+    const time = fakeTime();
+    let known: boolean | null = null;
+    const listeners = new Set<() => void>();
+    let reads = 0;
+    let failures = 2;
+    const registry = new PresenceSelfRegistry(
+      {
+        get: () => known,
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        read: async () => {
+          reads += 1;
+          if (failures > 0) {
+            failures -= 1;
+            throw new Error("offline");
+          }
+          known = true;
+          for (const fn of listeners) fn();
+        },
+      },
+      time,
+    );
+    const self = registry.for(ME);
+    await flush();
+    expect(reads).toBe(1);
+    expect(self.get().track).toBe(false);
+    time.advance(2_000);
+    await flush();
+    expect(reads).toBe(2);
+    time.advance(3_999);
+    await flush();
+    expect(reads).toBe(2);
+    time.advance(1);
+    await flush();
+    expect(reads).toBe(3);
+    expect(self.get().track).toBe(true);
+    time.advance(120_000);
+    await flush();
+    expect(reads).toBe(3);
+  });
+
+  it("a retry never outlives sign-out", async () => {
+    const time = fakeTime();
+    let reads = 0;
+    const registry = new PresenceSelfRegistry(
+      {
+        get: () => null,
+        subscribe: () => () => {},
+        read: async () => {
+          reads += 1;
+          throw new Error("offline");
+        },
+      },
+      time,
+    );
+    registry.for(ME);
+    await flush();
+    registry.forget();
+    time.advance(120_000);
+    await flush();
+    expect(reads).toBe(1);
+  });
+
+  it("a hidden tab keeps re-reading, and reads at once on return", async () => {
+    const time = fakeTime();
+    let visible = true;
+    const onVisible = new Set<() => void>();
+    const server = { on: true };
+    let known: boolean | null = null;
+    const listeners = new Set<() => void>();
+    let reads = 0;
+    const registry = new PresenceSelfRegistry(
+      {
+        get: () => known,
+        subscribe: (fn) => {
+          listeners.add(fn);
+          return () => listeners.delete(fn);
+        },
+        read: async () => {
+          reads += 1;
+          known = server.on;
+          for (const fn of listeners) fn();
+        },
+      },
+      {
+        ...time,
+        visibility: {
+          isVisible: () => visible,
+          onChange: (fn) => {
+            onVisible.add(fn);
+            return () => onVisible.delete(fn);
+          },
+        },
+      },
+    );
+    const self = registry.for(ME);
+    const stop = registry.watch();
+    await flush();
+    expect(reads).toBe(1);
+    expect(self.get().track).toBe(true);
+
+    // Hidden, then turned off elsewhere: the hidden tab still stops tracking.
+    visible = false;
+    for (const fn of onVisible) fn();
+    server.on = false;
+    time.advance(SHOW_ONLINE_REREAD_MS);
+    await flush();
+    expect(reads).toBe(2);
+    expect(self.get().track).toBe(false);
+
+    // Back in view: read at once, then each minute again.
+    visible = true;
+    for (const fn of onVisible) fn();
+    await flush();
+    expect(reads).toBe(3);
+    time.advance(SHOW_ONLINE_REREAD_MS);
+    await flush();
+    expect(reads).toBe(4);
+    stop();
+    expect(onVisible.size).toBe(0);
+    time.advance(SHOW_ONLINE_REREAD_MS * 3);
+    await flush();
+    expect(reads).toBe(4);
+    registry.forget();
   });
 
   it("a refused join is an error, never everyone offline (AC1.9)", () => {

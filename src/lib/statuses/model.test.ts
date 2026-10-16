@@ -5,6 +5,7 @@ import { describe, expect, it } from "@rstest/core";
 // picker's suffix, and what "clear after" turns into.
 
 import {
+  activeChoice,
   clearAtFor,
   composerHoldLine,
   nowLine,
@@ -151,4 +152,79 @@ describe("clear after", () => {
       "2026-10-25T22:59:59.999Z",
     );
   });
+});
+
+describe('"Active" from the status menu', () => {
+  const base = {
+    emoji: "🌴",
+    text: "On vacation",
+    dnd: true,
+    clearAt: later(48),
+    preset: "vacation" as const,
+    setAt: later(-1),
+  };
+
+  it("without do not disturb it changes nothing", () => {
+    expect(activeChoice(null, NOW)).toEqual({ kind: "none" });
+    expect(activeChoice({ ...base, dnd: false }, NOW)).toEqual({ kind: "none" });
+  });
+
+  it("a status with words keeps them and drops only do not disturb", () => {
+    expect(activeChoice(base, NOW)).toEqual({
+      kind: "keep",
+      status: {
+        emoji: "🌴",
+        text: "On vacation",
+        dnd: false,
+        clearAt: base.clearAt,
+        preset: "vacation",
+      },
+    });
+  });
+
+  it("do not disturb by hand (no words) clears", () => {
+    expect(activeChoice({ ...base, emoji: null, text: null, preset: null }, NOW)).toEqual({
+      kind: "clear",
+    });
+  });
+
+  it("a status already past its clear time clears instead of sending a past time", () => {
+    expect(activeChoice({ ...base, clearAt: later(-0.1) }, NOW)).toEqual({ kind: "clear" });
+    expect(activeChoice({ ...base, clearAt: NOW.toISOString() }, NOW)).toEqual({ kind: "clear" });
+    // Seconds away is as good as past: it'd be refused by the time it lands.
+    const soon = new Date(NOW.getTime() + 4_000).toISOString();
+    expect(activeChoice({ ...base, clearAt: soon }, NOW)).toEqual({ kind: "clear" });
+    const minute = new Date(NOW.getTime() + 60_000).toISOString();
+    expect(activeChoice({ ...base, clearAt: minute }, NOW).kind).toBe("keep");
+  });
+});
+
+describe("the day's end where clocks go back at midnight", () => {
+  const wall = (ms: number, timeZone: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date(ms));
+
+  for (const [timeZone, y, m, d, next] of [
+    ["America/Santiago", 2026, 4, 4, "05/04/2026, 00:00:00"],
+    ["America/Scoresbysund", 2026, 10, 24, "25/10/2026, 00:00:00"],
+  ] as const) {
+    it(`${timeZone}: the later 23:59:59.999 of ${d}/${m}`, () => {
+      const iso = clearAtFor("date", NOW, { date: new Date(y, m - 1, d), timeZone })!;
+      const at = Date.parse(iso);
+      const day = `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+      expect(wall(at, timeZone)).toBe(`${day}, 23:59:59`);
+      // One millisecond later is already the next day …
+      expect(wall(at + 1, timeZone)).toBe(next);
+      // … and an hour earlier the clock read the same: this is the second pass.
+      expect(wall(at - 3_600_000, timeZone)).toBe(`${day}, 23:59:59`);
+    });
+  }
 });

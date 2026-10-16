@@ -104,23 +104,57 @@ export type ShowOnlineSource = {
   /** Their switch, or null while it isn't known (then nothing is tracked). */
   get: (userId: string) => boolean | null;
   subscribe: (fn: () => void) => () => void;
-  /** Ask for it (once per person). */
-  load: (userId: string) => void;
+  /** Read it from the server (for whoever is signed in); a successful read
+   *  tells `subscribe`'s listeners. */
+  read: () => Promise<unknown>;
 };
+
+/** Whether the tab is in view, and its changes. */
+export type TabVisibility = {
+  isVisible: () => boolean;
+  onChange: (fn: () => void) => () => void;
+};
+
+export type PresenceSelfRegistryDeps = PresenceSelfDeps & {
+  visibility?: TabVisibility;
+};
+
+/** How often the switch is read again while the tab is in view, for a change
+ *  made on another device or browser (other tabs here hear it at once). */
+export const SHOW_ONLINE_REREAD_MS = 60_000;
+/** A failed first read tries again after 2 s, 4 s, … at most a minute apart. */
+export const SHOW_ONLINE_RETRY_MAX_MS = 60_000;
 
 /**
  * The tab's one "me", for one person at a time. Asking for another person (an
  * account switch) or `forget()` (sign-out) disposes the previous one, so no
  * earlier person's switch, idle timer or listener stays behind. A new person
- * tracks nothing until their own switch is read.
+ * tracks nothing until their own switch is read; a failed read tries again.
+ * While `watch()` is held, the switch is read again each minute (hidden tabs
+ * too) and at once whenever the tab comes back into view.
  */
 export class PresenceSelfRegistry {
-  private held: { userId: string; self: PresenceSelfWatcher; stop: () => void } | null = null;
+  private held: {
+    userId: string;
+    self: PresenceSelfWatcher;
+    stop: () => void;
+    retry: unknown;
+  } | null = null;
+  private watchers = 0;
+  private stopVisibility: (() => void) | null = null;
+  private rereadTimer: unknown = null;
+  private readonly setTimer: (fn: () => void, ms: number) => unknown;
+  private readonly clearTimer: (handle: unknown) => void;
 
   constructor(
     private readonly source: ShowOnlineSource,
-    private readonly deps: PresenceSelfDeps = {},
-  ) {}
+    private readonly deps: PresenceSelfRegistryDeps = {},
+  ) {
+    this.setTimer = deps.setTimer ?? ((fn, ms) => globalThis.setTimeout(fn, ms));
+    this.clearTimer =
+      deps.clearTimer ??
+      ((h) => globalThis.clearTimeout(h as ReturnType<typeof globalThis.setTimeout>));
+  }
 
   for(userId: string): PresenceSelfWatcher {
     if (this.held?.userId === userId) return this.held.self;
@@ -132,8 +166,8 @@ export class PresenceSelfRegistry {
       // Someone else's prefs (or none yet) never turn tracking on.
       self.setShowOnline(on ?? false);
     });
-    if (known === null) this.source.load(userId);
-    this.held = { userId, self, stop };
+    this.held = { userId, self, stop, retry: null };
+    if (known === null) this.load(userId, 0);
     return self;
   }
 
@@ -142,15 +176,100 @@ export class PresenceSelfRegistry {
     return this.held?.userId ?? null;
   }
 
+  /** Re-read the switch while held (ref-counted); returns the stop. */
+  watch(): () => void {
+    this.watchers += 1;
+    if (this.watchers === 1) this.startWatching();
+    let stopped = false;
+    return () => {
+      if (stopped) return;
+      stopped = true;
+      this.watchers -= 1;
+      if (this.watchers === 0) this.stopWatching();
+    };
+  }
+
   forget(): void {
     const held = this.held;
     this.held = null;
     if (!held) return;
     held.stop();
+    if (held.retry !== null) this.clearTimer(held.retry);
     // Untrack anywhere it was tracked, then stop the timers.
     held.self.setShowOnline(false);
     held.self.dispose();
   }
+
+  /** The first read; a failure tries again while this tab still holds the
+   *  person and their switch is still unknown. */
+  private load(userId: string, attempt: number): void {
+    void this.source.read().catch(() => {
+      const held = this.held;
+      if (held?.userId !== userId) return;
+      held.retry = this.setTimer(
+        () => {
+          held.retry = null;
+          if (this.held === held && this.source.get(userId) === null) {
+            this.load(userId, attempt + 1);
+          }
+        },
+        Math.min(SHOW_ONLINE_RETRY_MAX_MS, 2_000 * 2 ** attempt),
+      );
+    });
+  }
+
+  private visible(): boolean {
+    return this.deps.visibility?.isVisible() ?? true;
+  }
+
+  private reread(): void {
+    if (this.held) void this.source.read().catch(() => undefined);
+  }
+
+  private startWatching(): void {
+    // Back in view: read at once. A hidden tab keeps its minute re-read (the
+    // browser may slow it), so it never goes on tracking after a change
+    // made elsewhere.
+    this.stopVisibility =
+      this.deps.visibility?.onChange(() => {
+        if (!this.visible()) return;
+        this.reread();
+        this.armReread();
+      }) ?? null;
+    this.armReread();
+  }
+
+  private stopWatching(): void {
+    this.stopVisibility?.();
+    this.stopVisibility = null;
+    this.disarmReread();
+  }
+
+  private armReread(): void {
+    this.disarmReread();
+    this.rereadTimer = this.setTimer(() => {
+      this.rereadTimer = null;
+      this.reread();
+      if (this.watchers > 0) this.armReread();
+    }, SHOW_ONLINE_REREAD_MS);
+  }
+
+  private disarmReread(): void {
+    if (this.rereadTimer !== null) this.clearTimer(this.rereadTimer);
+    this.rereadTimer = null;
+  }
+}
+
+/** The document's visibility, for `visibility`. */
+export function documentVisibility(): TabVisibility | undefined {
+  if (typeof document === "undefined") return undefined;
+  return {
+    isVisible: () => document.visibilityState === "visible",
+    onChange: (fn) => {
+      document.addEventListener("visibilitychange", fn);
+      return () => document.removeEventListener("visibilitychange", fn);
+    },
+  };
 }
 
 /** The browser's input events, for `onInput`. */

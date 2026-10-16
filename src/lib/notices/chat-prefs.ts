@@ -7,7 +7,7 @@
 // "Show me as online"; a change in one tab tells the person's other tabs.
 // A sign-out forgets it.
 
-import { supabaseClient } from "../runtime.web";
+import { supabaseClient } from "@/lib/runtime.web";
 
 export type ChatServerPrefs = {
   noticeShowText: boolean;
@@ -42,6 +42,9 @@ let current: { userId: string; prefs: ChatServerPrefs } | null = null;
 const listeners = new Set<() => void>();
 const CHANNEL = "moduo-chat-prefs";
 let tabs: BroadcastChannel | null = null;
+/** Bumped by a sign-out or a save: a read (or save) that started before it
+ *  keeps nothing. */
+let generation = 0;
 
 function notify(): void {
   for (const fn of listeners) fn();
@@ -52,8 +55,8 @@ async function sessionUserId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
-function keep(userId: string | null, prefs: ChatServerPrefs): ChatServerPrefs {
-  if (userId) {
+function keep(userId: string | null, prefs: ChatServerPrefs, since: number): ChatServerPrefs {
+  if (userId && since === generation) {
     current = { userId, prefs };
     notify();
   }
@@ -76,6 +79,7 @@ export function subscribeChatServerPrefs(fn: () => void): () => void {
 
 /** Forget the copy (sign-out, account switch). */
 export function forgetChatServerPrefs(): void {
+  generation += 1;
   current = null;
   notify();
 }
@@ -90,10 +94,11 @@ function listenToOtherTabs(): void {
 }
 
 export async function readChatServerPrefs(): Promise<ChatServerPrefs> {
+  const since = generation;
   const userId = await sessionUserId();
   const { data, error } = await supabaseClient.rpc("user_chat_prefs");
   if (error) throw new Error(error.message);
-  return keep(userId, chatServerPrefsFromRow(data));
+  return keep(userId, chatServerPrefsFromRow(data), since);
 }
 
 export async function setChatServerPrefs(
@@ -104,10 +109,13 @@ export async function setChatServerPrefs(
   if (patch.emailWhenAway !== undefined) body.email_when_away = patch.emailWhenAway;
   if (patch.showOnline !== undefined) body.show_online = patch.showOnline;
   if (patch.showFocusTask !== undefined) body.show_focus_task = patch.showFocusTask;
+  // A read that started before this save must not put the old value back.
+  generation += 1;
+  const since = generation;
   const userId = await sessionUserId();
   const { data, error } = await supabaseClient.rpc("user_op_set_chat_prefs", { p_patch: body });
   if (error) throw new Error(error.message);
-  const prefs = keep(userId, chatServerPrefsFromRow(data));
+  const prefs = keep(userId, chatServerPrefsFromRow(data), since);
   listenToOtherTabs();
   tabs?.postMessage("changed");
   return prefs;

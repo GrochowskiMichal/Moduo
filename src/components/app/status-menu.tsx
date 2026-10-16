@@ -15,7 +15,7 @@ import {
   type StatusPreset,
 } from "@contracts/vocabularies";
 import { Settings, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -28,6 +28,7 @@ import {
   setMyStatus,
 } from "@/lib/statuses/api";
 import {
+  activeChoice,
   clearAfterHint,
   clearAtFor,
   type PersonStatus,
@@ -105,16 +106,22 @@ export function StatusMenu({
   const now = usePeopleNow(userId, workspaceId);
   const mine: PersonStatus | null = userId ? (now.people.get(userId)?.status ?? null) : null;
 
-  // Saved statuses are private: another person on this tab starts empty.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on a new person only
+  // Saved statuses are private: another person on this tab starts empty, and
+  // a read asked for the one before is dropped when it comes back.
+  const person = useRef(userId);
   useEffect(() => {
+    person.current = userId;
     setSaved(null);
     setEditor(null);
     setOpen(false);
   }, [userId]);
 
   const loadSaved = useCallback(() => {
-    void listSavedStatuses().then(setSaved, () => setSaved([]));
+    const askedFor = person.current;
+    const keep = (list: SavedStatus[]) => {
+      if (person.current === askedFor) setSaved(list);
+    };
+    void listSavedStatuses().then(keep, () => keep([]));
   }, []);
   useEffect(() => {
     if (open && saved === null) loadSaved();
@@ -273,20 +280,15 @@ export function StatusMenu({
               className={ROW}
               disabled={busy}
               onClick={() => {
-                if (!dnd || !mine) {
+                // Back to active: a status with words keeps them, only do not
+                // disturb goes; by hand (no words) or past its time, it clears.
+                const choice = activeChoice(mine);
+                if (choice.kind === "none") {
                   setOpen(false);
                   return;
                 }
-                // Back to active: a status with words keeps them, only do not
-                // disturb goes; do not disturb by hand (no words) clears.
-                if (mine.emoji || mine.text) {
-                  void apply({
-                    emoji: mine.emoji,
-                    text: mine.text,
-                    dnd: false,
-                    clearAt: mine.clearAt,
-                    preset: mine.preset,
-                  });
+                if (choice.kind === "keep") {
+                  void apply(choice.status);
                   return;
                 }
                 void run(clearMyStatus, "Couldn't clear your status.").then(() => setOpen(false));
