@@ -241,18 +241,18 @@ All agent steps, each needing Maciej's OK in the session, in this order. The wor
 
 Prod changes ship with a release train (docs/decisions/workflow.md). In this order, each with Maciej's OK:
 
-1. **Worker** from a branch holding every kind the live worker sends (TX-4 + TX-5 + TX-6), then `bun run functions:reconcile`:
+1. ✅ (2026-10-16, with Maciej's OK, one train for TX-6 + TX-7: `email-worker` v5 from `develop` 56c9c27d) **Worker** from a branch holding every kind the live worker sends (TX-4 + TX-5 + TX-6), then `bun run functions:reconcile`:
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
    It must be live before step 2: the migration's triggers start queueing C6/C7.
-2. **Migration** `20261014170000_tx6_booking_reminders.sql`. Check:
+2. ✅ (2026-10-16, history `20261014170000`, pushed with TX-7's from a scratch folder; both triggers present, 3/3 links at 1440) **Migration** `20261014170000_tx6_booking_reminders.sql`. Check:
    ```sql
    select tgname from pg_trigger where tgname in ('calendar_events_booking_follow', 'slot_bookings_email_follow');
    select count(*) filter (where guest_reminder_minutes = 1440), count(*) from public.exposed_slot_links;
    ```
    Expect both triggers, and every existing link at 1440.
-3. **Booking function** (`booking-public`), so new bookings save their email context:
+3. ✅ (2026-10-16, v25 from `develop` 56c9c27d; unknown slug answers 404) **Booking function** (`booking-public`), so new bookings save their email context:
    ```bash
    supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
@@ -265,18 +265,18 @@ Bookings confirmed before step 3 have no email context and get no reminder or C6
 
 All agent steps, each needing Maciej's OK in the session, in this order. Until step 2, prod keeps its old invite trigger, which posts to `send-workspace-invite` and gets a 503 (no email, no harm), so don't undeploy that function before the migration.
 
-1. **Worker** (agent, with OK), **from `maciej` after TX-7 has merged.** It must hold every kind the live worker sends: `waitlist_invite` (TX-4), the five `booking_*` kinds of TX-5 and the two of TX-6 (`booking_guest_host_cancelled`, `booking_guest_reminder`), `ops_alert` (TX-3) and now `workspace_invite`, `workspace_owner`, `workspace_removed`. A test pins that list (`templates/workspace.test.ts` › "the worker's templates"). Check no newer worker is live first (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`):
+1. ✅ (2026-10-16, v5 from `develop` 56c9c27d, together with TX-6) **Worker** (agent, with OK), **from `maciej` after TX-7 has merged.** It must hold every kind the live worker sends: `waitlist_invite` (TX-4), the five `booking_*` kinds of TX-5 and the two of TX-6 (`booking_guest_host_cancelled`, `booking_guest_reminder`), `ops_alert` (TX-3) and now `workspace_invite`, `workspace_owner`, `workspace_removed`. A test pins that list (`templates/workspace.test.ts` › "the worker's templates"). Check no newer worker is live first (`supabase functions list --project-ref wtoonrvuqumihpkbvwvs`):
    ```bash
    supabase functions deploy email-worker --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
-2. **Migration** `20261015153935_tx7_workspace_emails.sql` (agent, with OK, per the release-train rule). It drops `on_workspace_invite_inserted` and `trigger_send_workspace_invite()`, adds the B3 trigger, the 20-a-day cap, the address check on accept, and B4/B5. Check:
+2. ✅ (2026-10-16, history `20261015153935`; checks as expected, helpers closed to clients, a rolled-back invite on prod queued one B3 with a 7-day expiry) **Migration** `20261015153935_tx7_workspace_emails.sql` (agent, with OK, per the release-train rule). It drops `on_workspace_invite_inserted` and `trigger_send_workspace_invite()`, adds the B3 trigger, the 20-a-day cap, the address check on accept, and B4/B5. Check:
    ```sql
    select tgname from pg_trigger where tgrelid = 'public.workspace_invites'::regclass and not tgisinternal order by 1;
    select to_regprocedure('public.trigger_send_workspace_invite()');
    select position('invite_email_mismatch' in prosrc) > 0 from pg_proc where proname = 'workspace_op_accept_invite';
    ```
    Expect `perm_invites_validate` and `workspace_invites_enqueue_email` (no `on_workspace_invite_inserted`), `null`, `true`.
-3. **Retire the old function** (agent, with OK):
+3. ✅ (2026-10-16: deleted, gateway `404 NOT_FOUND`, reconcile clean) **Retire the old function** (agent, with OK):
    ```bash
    supabase functions delete send-workspace-invite --project-ref wtoonrvuqumihpkbvwvs
    curl -s -o /dev/null -w '%{http_code}\n' https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/send-workspace-invite
