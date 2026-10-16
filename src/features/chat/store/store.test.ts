@@ -610,6 +610,15 @@ describe("Move to… (CV-16)", () => {
     await store.sync("interval");
     await settle();
     expect(ids(store.getSnapshot().windows[D]!.rows)).toContain(root.id);
+
+    // Undo: the moved ids back to the source, asked for as an Undo.
+    if (!moved.ok || moved.answer.status !== "moved") throw new Error("not moved");
+    const undone = await store.moveMessages(moved.answer.ids, moved.answer.from, false, true);
+    expect(undone.ok && undone.answer.status).toBe("undone");
+    await store.sync("interval");
+    await settle();
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(root.id);
+    expect(ids(store.getSnapshot().windows[D]!.rows)).not.toContain(root.id);
   });
 
   it("a refusal says why and moves nothing", async () => {
@@ -665,5 +674,26 @@ describe("Move to… (CV-16)", () => {
       insert: false,
     });
     expect(ids(store.getSnapshot().windows[D]!.rows)).not.toContain(b.id);
+  });
+
+  it("an old move line leaves a message that came back after it", async () => {
+    const { server, store, live } = setup();
+    server.addChannel(C, { isDefault: true });
+    const a = server.post(uuid(1), C);
+    // A's old moved_out line, then A moved back here later (changed after it).
+    const out = server.post(uuid(3), C, {
+      kind: "event",
+      event: { type: "moved_out", ids: [a.id] },
+    });
+    const back = server.change(a.id, { channelId: C });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    await settle();
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(a.id);
+    // The line lands again (a re-read, an echo): A stays.
+    live.emit({ type: "message", row: out, insert: false });
+    live.emit({ type: "message", row: back, insert: false });
+    expect(ids(store.getSnapshot().windows[C]!.rows)).toContain(a.id);
   });
 });

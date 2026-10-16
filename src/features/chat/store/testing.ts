@@ -400,7 +400,7 @@ export class FakeChatServer {
           recount(root);
           return res;
         }),
-      moveMessages: ({ ids, targetId, confirm }) =>
+      moveMessages: ({ ids, targetId, confirm, undo }) =>
         this.gate("moveMessages", (): ChatResult<ChatMoveAnswer> => {
           const first = this.rows.get(ids[0] ?? "");
           if (!first || !this.readable.has(first.channelId) || !this.readable.has(targetId)) {
@@ -408,6 +408,11 @@ export class FakeChatServer {
               data: null,
               error: { code: "P0002", message: "That message no longer exists." },
             };
+          }
+          if (undo) {
+            const from = first.channelId;
+            for (const id of ids) this.change(id, { channelId: targetId });
+            return ok<ChatMoveAnswer>({ status: "undone", ids: [...ids], from, to: targetId });
           }
           if (this.moveNewly > 0 && !confirm) {
             return ok<ChatMoveAnswer>({ status: "confirm", newly: this.moveNewly });

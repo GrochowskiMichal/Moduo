@@ -178,6 +178,8 @@ export type MessageStreamProps = {
    * the bottom bar shows Move `M` · Task `T` · Delete `⌫`. Absent: no item.
    */
   onMoveMany?: (ms: ChatMessage[]) => void;
+  /** Managers and admins may move other people's messages too (else your own only). */
+  canMoveOthers?: boolean;
   onTaskMany?: (ms: ChatMessage[]) => void;
   /** Your own picked messages only (absent: Delete isn't offered). */
   onDeleteMany?: (ms: ChatMessage[]) => void;
@@ -611,7 +613,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       const ms = pickedMessages();
       const allOwn = ms.length > 0 && ms.every(own);
       return {
-        move: p.onMoveMany && canWrite ? () => p.onMoveMany?.(ms) : undefined,
+        move:
+          p.onMoveMany && canWrite && (allOwn || p.canMoveOthers)
+            ? () => p.onMoveMany?.(ms)
+            : undefined,
         task: p.onTaskMany && canUseTools ? () => p.onTaskMany?.(ms) : undefined,
         remove: p.onDeleteMany && canWrite && allOwn ? () => p.onDeleteMany?.(ms) : undefined,
       };
@@ -626,15 +631,18 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         clearPicked();
         scrollRef.current?.focus({ preventScroll: true });
       };
+      // Each action reads the picked messages and the verbs when it runs, so
+      // an edit or a new callback since the pick isn't frozen in.
       const actions: BottomBarAction[] = [];
-      if (v.move) actions.push({ id: "move", label: "Move", keyHint: "M", run: () => v.move?.() });
+      if (v.move)
+        actions.push({ id: "move", label: "Move", keyHint: "M", run: () => manyVerbs().move?.() });
       if (v.task)
         actions.push({
           id: "task",
           label: "Task",
           keyHint: "T",
           run: () => {
-            v.task?.();
+            manyVerbs().task?.();
             after();
           },
         });
@@ -644,7 +652,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         keyHint: "⌫",
         disabled: !v.remove,
         run: () => {
-          v.remove?.();
+          manyVerbs().remove?.();
           after();
         },
       });
@@ -654,7 +662,14 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         actions,
         note: `${picked.size} selected · Esc`,
       };
-    }, [pickedKey, canWrite, canUseTools, conversationId]);
+    }, [
+      pickedKey,
+      canWrite,
+      canUseTools,
+      conversationId,
+      !!props.onMoveMany,
+      !!props.canMoveOthers,
+    ]);
     useBottomBarModeOwner(mode);
 
     const verbsFor = (m: ChatMessage): MessageVerbs => {
@@ -668,7 +683,10 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         onReply: () => p.onReply(m),
         onReplyTo: p.replyToFor?.(m),
         onWrapUp: p.wrapUpFor?.(m),
-        onMoveTo: p.onMoveMany && canWrite && !m.sendState ? () => p.onMoveMany?.([m]) : undefined,
+        onMoveTo:
+          p.onMoveMany && canWrite && !m.sendState && (own(m) || p.canMoveOthers)
+            ? () => p.onMoveMany?.([m])
+            : undefined,
         onReplyPrivately:
           p.onReplyPrivately && m.authorId && m.authorKind === "user" && !own(m)
             ? () => p.onReplyPrivately?.(m)

@@ -668,8 +668,9 @@ export function ChatScreen({
         action: {
           label: "Undo",
           onClick: () =>
-            void store.moveMessages(answer.ids, answer.from).then((r) => {
+            void store.moveMessages(answer.ids, answer.from, false, true).then((r) => {
               if (!r.ok) toast(r.offline ? "Offline" : r.message || "Couldn't undo the move.");
+              else if (r.answer.status !== "undone") toast("Couldn't undo the move.");
             }),
         },
       });
@@ -1263,6 +1264,7 @@ export function ChatScreen({
             onRetry={(m) => store?.retry(m.id)}
             onDiscard={(m) => store?.discard(m.id)}
             onMoveMany={channel.archivedAt ? undefined : askMove}
+            canMoveOthers={canManage}
             onTaskMany={makeTaskFromMany}
             onDeleteMany={deleteManyWithUndo}
             onPersonClick={openPerson}

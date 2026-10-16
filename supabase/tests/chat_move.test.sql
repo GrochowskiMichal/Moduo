@@ -52,14 +52,15 @@ END;
 $$;
 -- Moves the named messages as p_who (through RLS, the person from the
 -- session, or a key): the op's answer, or "<sqlstate> <message>".
-CREATE FUNCTION test.mv(p_who text, p_names text[], p_conv text, p_confirm boolean DEFAULT false)
+CREATE FUNCTION test.mv(p_who text, p_names text[], p_conv text, p_confirm boolean DEFAULT false,
+                        p_undo boolean DEFAULT false)
 RETURNS text LANGUAGE plpgsql AS $$
 DECLARE
   v text;
   v_state text;
   v_msg text;
-  v_sql text := format($q$SELECT public.chat_op_move_messages(%L::uuid[], %L::uuid, %L)::text$q$,
-    ARRAY(SELECT test.mid(n) FROM unnest(p_names) n), test.ref(p_conv), p_confirm);
+  v_sql text := format($q$SELECT public.chat_op_move_messages(%L::uuid[], %L::uuid, %L, %L)::text$q$,
+    ARRAY(SELECT test.mid(n) FROM unnest(p_names) n), test.ref(p_conv), p_confirm, p_undo);
 BEGIN
   BEGIN
     IF p_who = 'K' THEN
@@ -171,9 +172,9 @@ DO $$
 DECLARE
   v text;
 BEGIN
-  v := test.mv('C', ARRAY['b1'], 'P');
-  PERFORM test.ok(v LIKE '42501 %' OR v LIKE 'P0002 %', 'only the mover undoes (C can''t move B''s message)', v);
-  v := test.mv('B', ARRAY['b1'], 'P');
+  v := test.mv('C', ARRAY['b1'], 'P', false, true);
+  PERFORM test.ok(v LIKE '42501 %' OR v LIKE 'P0002 %' OR v LIKE '22023 %', 'only the mover undoes (C can''t move B''s message)', v);
+  v := test.mv('B', ARRAY['b1'], 'P', false, true);
   PERFORM test.ok((v::jsonb) ->> 'status' = 'undone', 'B undoes within the window', v);
   PERFORM test.ok((test.msg('b1')).channel_id = test.ref('P') AND (test.msg('b1')).moved_at IS NULL
               AND (test.msg('b1')).moved_by IS NULL AND (test.msg('b1')).moved_from_channel_id IS NULL,
@@ -277,11 +278,17 @@ BEGIN
   PERFORM test.ok((test.msg('s')).reply_count = 1 AND (test.msg('s')).wrapped_at IS NULL
               AND (test.msg('s')).reopened_by = test.id('B'),
     'the chain it left counts one reply and is open again (it settled it)');
-  v := test.mv('B', ARRAY['s1'], 'Q');
+  PERFORM test.ok((test.msg('s2')).reply_to_id IS NULL AND (test.msg('s2')).channel_id = test.ref('Q'),
+    'C''s s2, left behind, loses its quote of the moved s1 (a quote stays in its conversation)');
+  v := test.mv('B', ARRAY['s1'], 'Q', false, true);
   PERFORM test.ok((v::jsonb) ->> 'status' = 'undone', 'B undoes', v);
   PERFORM test.ok((test.msg('s1')).parent_id = test.mid('s') AND (test.msg('s1')).reply_to_id = test.mid('s')
               AND (test.msg('s')).reply_count = 2 AND (test.msg('s1')).channel_id = test.ref('Q'),
     'Undo puts the reply back in its chain');
+  PERFORM test.ok((test.msg('s2')).reply_to_id = test.mid('s1'), 'Undo gives s2 its quote back');
+  PERFORM test.ok((test.msg('s')).wrapped_at IS NOT NULL AND (test.msg('s')).settled_id = test.mid('s1')
+              AND (test.msg('s')).reopened_by IS NULL,
+    'Undo wraps the chain up again as it was (settled by s1)');
 END;
 $$;
 
@@ -296,6 +303,12 @@ BEGIN
   v := test.mv('A', ARRAY['pin'], 'F');
   PERFORM test.ok((v::jsonb) ->> 'status' = 'moved' AND (test.msg('pin')).pinned_at IS NULL
               AND (test.msg('pin')).pinned_by IS NULL, 'a moved message loses its pin', v);
+  v := test.mv('A', ARRAY['pin'], 'Q', false, true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone' AND (test.msg('pin')).pinned_by = test.id('A'),
+    'Undo pins it again', v);
+  v := test.mv('A', ARRAY['pin'], 'F', false, true);
+  PERFORM test.ok(v LIKE '22023 %' AND (test.msg('pin')).channel_id = test.ref('Q'),
+    'an Undo with no move to undo moves nothing (never a fresh move)', v);
 
   PERFORM test.ok(test.post('C', 'Q', 'v1') LIKE 'ok %', 'C posts v1 in Q');
   v := test.mv('V', ARRAY['v1'], 'Q');
@@ -360,7 +373,7 @@ BEGIN
     'the "Mentioned in" line follows it to F and leaves Q (nothing left there refers to T)');
   PERFORM test.ok(test.lines('B', 'T') = 'founders', 'T now reads "Mentioned in founders" only', test.lines('B', 'T'));
   PERFORM test.ok(test.lines('X', 'T') = '', 'X, outside F, sees no line for it');
-  v := test.mv('A', ARRAY['lk'], 'Q');
+  v := test.mv('A', ARRAY['lk'], 'Q', false, true);
   PERFORM test.ok((v::jsonb) ->> 'status' = 'undone' AND test.mentions('Q', 'T') = 1 AND test.mentions('F', 'T') = 0,
     'Undo puts the line back in Q and retires F''s', v);
 
@@ -410,6 +423,7 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'chat__channel_readers(uuid)',
     'chat__move_refile_items(uuid[], uuid)',
+    'chat__move_scrub_notices(uuid[], uuid)',
     'chat__move_relink(uuid[], uuid, uuid)'
   ] LOOP
     PERFORM test.ok(NOT has_function_privilege('anon', 'public.' || fn, 'EXECUTE')
@@ -417,9 +431,9 @@ BEGIN
                     AND has_function_privilege('service_role', 'public.' || fn, 'EXECUTE'),
       'grants: ' || fn || ' is server-only');
   END LOOP;
-  PERFORM test.ok(NOT has_function_privilege('anon', 'public.chat_op_move_messages(uuid[], uuid, boolean)', 'EXECUTE')
-                  AND has_function_privilege('authenticated', 'public.chat_op_move_messages(uuid[], uuid, boolean)', 'EXECUTE')
-                  AND has_function_privilege('service_role', 'public.chat_op_move_messages(uuid[], uuid, boolean)', 'EXECUTE'),
+  PERFORM test.ok(NOT has_function_privilege('anon', 'public.chat_op_move_messages(uuid[], uuid, boolean, boolean)', 'EXECUTE')
+                  AND has_function_privilege('authenticated', 'public.chat_op_move_messages(uuid[], uuid, boolean, boolean)', 'EXECUTE')
+                  AND has_function_privilege('service_role', 'public.chat_op_move_messages(uuid[], uuid, boolean, boolean)', 'EXECUTE'),
     'grants: chat_op_move_messages is for signed-in people, never anon');
 END;
 $$;
@@ -487,7 +501,7 @@ BEGIN
                                       AND source_type = 'chat_channel' AND relation_kind = 'mentions')),
     'a reference to a conversation makes no "Mentioned in" line, moved or not');
 
-  v := test.mv('B', ARRAY['fl'], 'P');
+  v := test.mv('B', ARRAY['fl'], 'P', false, true);
   PERFORM test.ok((v::jsonb) ->> 'status' = 'undone', 'B undoes it', v);
   PERFORM test.ok(test.sees_file('C', 'moved.png') = '0' AND test.sees_bytes('C', 'moved.png') = '0'
               AND test.files_view('B', 'P') LIKE '%moved.png%',
@@ -517,5 +531,62 @@ BEGIN
                       AND l.pair_key = public.spine_pair_key('chat_channel', test.ref('F'), 'task', test.id('T2')))
                   = test.id('B'),
     'the line is written in B''s name (the author), not the mover''s');
+END;
+$$;
+
+-- ── A chain with a deleted reply moves and comes back with Undo ─────────────
+DO $$
+DECLARE
+  v text;
+BEGIN
+  UPDATE public.chat_messages SET created_at = created_at - interval '1 minute'
+   WHERE workspace_id = test.id('W') AND kind = 'event' AND event ->> 'type' = 'moved_out';
+  -- Written straight in (the sending limit has seen this transaction's posts).
+  INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body, parent_id, deleted_at)
+  VALUES (test.mid('dr'), test.id('W'), test.ref('F'), test.id('C'), 'dr', NULL, NULL),
+         (test.mid('dr1'), test.id('W'), test.ref('F'), test.id('C'), 'dr1', test.mid('dr'), NULL),
+         (test.mid('dr2'), test.id('W'), test.ref('F'), test.id('C'), 'dr2', test.mid('dr'), now());
+  v := test.mv('C', ARRAY['dr'], 'D');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved'
+              AND (v::jsonb) -> 'ids' @> to_jsonb(ARRAY[test.mid('dr2')]),
+    'the chain moves to D with its deleted reply', v);
+  v := test.mv('C', ARRAY['dr', 'dr1', 'dr2'], 'F', false, true);
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'undone' AND (test.msg('dr2')).channel_id = test.ref('F'),
+    'Undo with every moved id (the deleted reply too) puts the chain back', v);
+END;
+$$;
+
+-- ── Waiting notices lose the words for people who can't read where it went ─
+DO $$
+DECLARE
+  v text;
+BEGIN
+  PERFORM test.ok(test.post('A', 'Q', 'nt') LIKE 'ok %', 'A posts nt in the public Q');
+  DELETE FROM public.notice_deliveries WHERE message_id = test.mid('nt');
+  INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title, body, message_id, channel_id)
+  VALUES (test.id('X'), test.id('W'), 'chat_message', 'questions', 'message nt', test.mid('nt'), test.ref('Q')),
+         (test.id('C'), test.id('W'), 'chat_message', 'questions', 'message nt', test.mid('nt'), test.ref('Q'));
+  INSERT INTO public.notice_deliveries (user_id, workspace_id, kind, title, body, message_id, channel_id, pushed_at)
+  VALUES (test.id('X'), test.id('W'), 'chat_message', 'questions', 'message nt', test.mid('nt'), test.ref('Q'), now());
+  INSERT INTO public.email_outbox (kind, to_email, to_user_id, dedupe_key, payload)
+  VALUES ('chat_waiting', 'db-test-x@example.com', test.id('X'), 'cv16-x',
+          jsonb_build_object('text', 'message nt', 'path', '/chat?c=' || test.ref('Q') || '&m=' || test.mid('nt'))),
+         ('chat_waiting', 'db-test-c@example.com', test.id('C'), 'cv16-c',
+          jsonb_build_object('text', 'message nt', 'path', '/chat?c=' || test.ref('Q') || '&m=' || test.mid('nt')));
+  v := test.mv('A', ARRAY['nt'], 'F');
+  PERFORM test.ok((v::jsonb) ->> 'status' = 'moved', 'A moves nt into the narrower F at once', v);
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.notice_deliveries
+                               WHERE message_id = test.mid('nt') AND user_id = test.id('X') AND pushed_at IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM public.notice_deliveries
+                               WHERE message_id = test.mid('nt') AND user_id = test.id('X') AND body IS NOT NULL),
+    'X, outside F: the unsent notice goes and the sent one keeps no words');
+  PERFORM test.ok(EXISTS (SELECT 1 FROM public.notice_deliveries
+                           WHERE message_id = test.mid('nt') AND user_id = test.id('C') AND body = 'message nt'),
+    'C, in F, keeps theirs');
+  PERFORM test.ok((SELECT payload ->> 'text' FROM public.email_outbox WHERE to_user_id = test.id('X')
+                     AND payload ->> 'path' LIKE '%' || test.mid('nt')) IS NULL
+              AND (SELECT payload ->> 'text' FROM public.email_outbox WHERE to_user_id = test.id('C')
+                     AND payload ->> 'path' LIKE '%' || test.mid('nt')) = 'message nt',
+    'the waiting email to X drops its text; C''s keeps it');
 END;
 $$;

@@ -296,12 +296,13 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return rowResult(data, error, "reply to");
       }),
 
-    moveMessages: ({ ids, targetId, confirm }) =>
+    moveMessages: ({ ids, targetId, confirm, undo }) =>
       attempt(async () => {
         const { data, error } = await db().rpc("chat_op_move_messages", {
           p_ids: ids,
           p_target_channel_id: targetId,
           p_confirm: confirm,
+          p_undo: undo ?? false,
         });
         if (error) return bad(chatError(error));
         const answer = parseMoveAnswer(data);

@@ -330,13 +330,15 @@ export type ChatRuntime = {
   /**
    * "Move to…" (CV-16): the messages (a root brings its chain) go to `targetId`.
    * Into a wider audience your own messages first answer `confirm` with how
-   * many people would newly see them; called again by you within 10 s with
-   * the moved ids and the source as the target, it's the Undo.
+   * many people would newly see them. With `undo`, the moved ids and the
+   * source as the target, by you within 10 s: the Undo (answers `undone`, or
+   * refuses when it's too late; never a fresh move).
    */
   moveMessages(args: {
     ids: string[];
     targetId: string;
     confirm: boolean;
+    undo?: boolean;
   }): Promise<ChatResult<ChatMoveAnswer>>;
   /** Several messages by id (what you can read of them). */
   messages(ids: readonly string[]): Promise<ChatResult<ChatMessage[]>>;

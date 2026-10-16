@@ -1067,12 +1067,16 @@ export class ChatStore {
       const ids = Array.isArray(moved)
         ? moved.filter((v): v is string => typeof v === "string")
         : [];
-      // Still filed here, or not in memory (then only the device has it): a
-      // row re-filed somewhere this store holds landed before its line.
+      // Only a copy still filed here and older than the line: a row re-filed
+      // elsewhere landed before its line, and one that came back here later
+      // (a move back, a second move) was changed after it. A row only the
+      // device holds is left to the sync's moved_away answer.
+      const lineAt = micros(row.updatedAt);
       this.forgetIds(
         ids.filter((id) => {
-          const filed = this.where.get(id);
-          return filed === undefined || filed === channelId;
+          if (this.where.get(id) !== channelId) return false;
+          const held = this.convs.get(channelId)?.rows.get(id);
+          return !held || micros(held.updatedAt) < lineAt;
         }),
       );
     }
@@ -1966,8 +1970,8 @@ export class ChatStore {
   }
 
   /**
-   * "Move to…" (CV-16). `confirm` answers the audience warning; the same call
-   * back (the moved ids, the source as the target) within 10 s is the Undo.
+   * "Move to…" (CV-16). `confirm` answers the audience warning; `undo` with
+   * the moved ids and the source as the target (within 10 s) is the Undo.
    * The moved rows leave this conversation at once; the delta re-files them
    * where they went (when this copy holds it).
    */
@@ -1975,11 +1979,12 @@ export class ChatStore {
     ids: readonly string[],
     targetId: string,
     confirm = false,
+    undo = false,
   ): Promise<
     { ok: true; answer: ChatMoveAnswer } | { ok: false; offline: boolean; message: string }
   > {
     if (browserOffline()) return { ok: false, offline: true, message: "Offline" };
-    const res = await this.transport.moveMessages({ ids: [...ids], targetId, confirm });
+    const res = await this.transport.moveMessages({ ids: [...ids], targetId, confirm, undo });
     if (res.error) {
       const failed = this.failed(res.error);
       return failed.ok ? { ok: false, offline: false, message: res.error.message } : failed;

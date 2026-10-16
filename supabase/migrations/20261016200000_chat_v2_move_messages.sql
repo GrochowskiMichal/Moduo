@@ -7,21 +7,26 @@
 --   2. Helpers (server only): chat__channel_readers (who can read a
 --      conversation right now, the same rule as chat_can_read_channel) and
 --      chat__move_refile_items (Catch up items follow their messages for the
---      people who can read where they went; the rest close as 'closed').
---   3. chat_op_move_messages(ids, target, confirm): the person comes from the
+--      people who can read where they went; the rest close as 'closed'),
+--      chat__move_scrub_notices (waiting notices and "waiting" emails lose
+--      the words for people who can't read where the messages went) and
+--      chat__move_relink (below).
+--   3. chat_op_move_messages(ids, target, confirm, undo): the person comes from the
 --      session; read on the source, post rights in the target. Your own
 --      messages go anywhere: when people who can read the target couldn't
 --      read the source, the op first answers with how many and moves only
 --      when called again with confirm. Someone else's messages move only by
 --      the source's managers and admins, and only to a conversation whose
 --      readers could all read the source already. A root brings its whole
---      chain; a reply moved alone leaves its chain; pins are dropped;
+--      chain; a reply moved alone leaves its chain; a quote across the two
+--      conversations is dropped (on both sides); pins are dropped;
 --      reactions and files stay on the message. One quiet event line in each
 --      conversation (moved_out in the source with the ids, moved_in in the
 --      target naming the source as a moduo:// reference). Nothing pings.
---      Called again by the same person within 10 s with the moved ids and the
---      source as the target, it is the Undo: the messages go back where they
---      were (chains and quotes restored) and both lines are soft-deleted.
+--      With undo, by the same person within 10 s, the moved ids and the
+--      source as the target: the messages go back where they were (chains,
+--      quotes, pins and a chain they had settled restored) and both lines are
+--      soft-deleted; too late, it moves nothing (never a fresh move).
 --      At most five moves per person in 10 s (PT429, the sending limit's code).
 --   4. Grants, by name.
 --
@@ -105,6 +110,27 @@ AS $function$
      AND NOT EXISTS (SELECT 1 FROM readers r WHERE r.user_id = i.user_id)
 $function$;
 
+-- Notices still waiting about moved messages: the people who can't read where
+-- they went lose the words (an unsent push goes, a sent one keeps no body, a
+-- queued "waiting" email drops its text), as a delete does for everyone.
+CREATE OR REPLACE FUNCTION public.chat__move_scrub_notices(p_ids uuid[], p_to uuid)
+ RETURNS void
+ LANGUAGE sql
+ SET search_path TO ''
+AS $function$
+  DELETE FROM public.notice_deliveries d
+   WHERE d.message_id = ANY (p_ids) AND d.pushed_at IS NULL
+     AND NOT public.chat__can_read_channel_as(p_to, d.user_id);
+  UPDATE public.notice_deliveries d SET body = NULL
+   WHERE d.message_id = ANY (p_ids) AND d.body IS NOT NULL
+     AND NOT public.chat__can_read_channel_as(p_to, d.user_id);
+  UPDATE public.email_outbox o SET payload = o.payload || '{"text": null}'::jsonb
+   WHERE o.kind = 'chat_waiting' AND o.created_at > now() - interval '8 days'
+     AND o.payload ->> 'text' IS NOT NULL
+     AND substring(o.payload ->> 'path' FROM '&m=([0-9a-f-]{36})$')::uuid = ANY (p_ids)
+     AND NOT public.chat__can_read_channel_as(p_to, o.to_user_id);
+$function$;
+
 -- "Mentioned in" follows moved messages: the chat path's own writer
 -- (chat__link_mentions, as send and edit call it, with each message's author)
 -- leaves the lines for where they are now; a source line that no message left
@@ -152,10 +178,14 @@ $function$;
 --   { "status": "confirm", "newly": n }       own messages, n people would newly see them
 --   { "status": "moved", "ids": [...], "out_id", "in_id", "from", "to" }
 --   { "status": "undone", "ids": [...], "from", "to" }
+-- The local stack had a three-argument draft of the op; nothing else did.
+DROP FUNCTION IF EXISTS public.chat_op_move_messages(uuid[], uuid, boolean);
+
 CREATE OR REPLACE FUNCTION public.chat_op_move_messages(
   p_ids uuid[],
   p_target_channel_id uuid,
-  p_confirm boolean DEFAULT false)
+  p_confirm boolean DEFAULT false,
+  p_undo boolean DEFAULT false)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -177,6 +207,8 @@ DECLARE
   v_detached jsonb;
   v_roots uuid[];
   v_settled uuid[];
+  v_reopened jsonb;
+  v_pins jsonb;
   r record;
   v_now timestamptz := clock_timestamp();
 BEGIN
@@ -227,9 +259,11 @@ BEGIN
   PERFORM 1 FROM public.chat_messages m
    WHERE m.id = ANY (v_sel) OR m.parent_id = ANY (v_sel)
    ORDER BY m.id FOR UPDATE;
+  -- (A deleted reply rides along with its picked root: an Undo names it.)
   IF EXISTS (SELECT 1 FROM public.chat_messages m
               WHERE m.id = ANY (v_sel)
-                AND (m.channel_id <> v_source.id OR m.kind <> 'message' OR m.deleted_at IS NOT NULL)) THEN
+                AND (m.channel_id <> v_source.id OR m.kind <> 'message'
+                     OR (m.deleted_at IS NOT NULL AND NOT coalesce(m.parent_id = ANY (v_sel), false)))) THEN
     RAISE EXCEPTION 'That message no longer exists.' USING ERRCODE = 'P0002';
   END IF;
   -- A picked root brings its whole chain.
@@ -241,7 +275,9 @@ BEGIN
     RAISE EXCEPTION 'That''s too many messages to move at once.' USING ERRCODE = '22023';
   END IF;
 
-  -- ── The Undo: the same person, within 10 s, back where they came from ──
+  -- ── The Undo (p_undo): the same person, within 10 s, back where they came
+  -- from. Asked for and not found, it moves nothing (never a fresh move). ──
+  IF coalesce(p_undo, false) THEN
   SELECT * INTO v_in FROM public.chat_messages e
    WHERE e.channel_id = v_source.id AND e.kind = 'event' AND e.event ->> 'type' = 'moved_in'
      AND e.author_id = v_me AND e.deleted_at IS NULL
@@ -250,7 +286,9 @@ BEGIN
      AND ARRAY(SELECT x::uuid FROM jsonb_array_elements_text(e.event -> 'ids') x ORDER BY 1) = v_all
    ORDER BY e.created_at DESC
    LIMIT 1;
-  IF v_in.id IS NOT NULL THEN
+  IF v_in.id IS NULL THEN
+    RAISE EXCEPTION 'It''s too late to undo that move.' USING ERRCODE = '22023';
+  END IF;
     SELECT * INTO v_out FROM public.chat_messages WHERE id = (v_in.event ->> 'out_id')::uuid;
     IF NOT public.chat__can_post(v_target, v_me) AND NOT public.chat__can_manage(v_target, v_me) THEN
       RAISE EXCEPTION 'You can''t post in that conversation.' USING ERRCODE = '42501';
@@ -274,9 +312,24 @@ BEGIN
         PERFORM public.chat__chain_refresh(r.parent_id::uuid);
       END IF;
     END LOOP;
+    -- Pins the move dropped, and chains it reopened (still as it left them).
+    UPDATE public.chat_messages m
+       SET pinned_at = (p ->> 'pinned_at')::timestamptz, pinned_by = (p ->> 'pinned_by')::uuid
+      FROM jsonb_array_elements(coalesce(v_out.event -> 'pins', '[]'::jsonb)) p
+     WHERE m.id = (p ->> 'id')::uuid AND m.channel_id = v_target.id AND m.pinned_at IS NULL;
+    UPDATE public.chat_messages m
+       SET wrapped_at = (w ->> 'wrapped_at')::timestamptz, wrapped_by = (w ->> 'wrapped_by')::uuid,
+           settled_id = (w ->> 'settled_id')::uuid,
+           reopened_at = (w ->> 'reopened_at')::timestamptz, reopened_by = (w ->> 'reopened_by')::uuid
+      FROM jsonb_array_elements(coalesce(v_out.event -> 'reopened', '[]'::jsonb)) w
+     WHERE m.id = (w ->> 'id')::uuid AND m.channel_id = v_target.id
+       AND m.wrapped_at IS NULL AND m.reopened_by = v_me
+       AND EXISTS (SELECT 1 FROM public.chat_messages s
+                    WHERE s.id = (w ->> 'settled_id')::uuid AND s.parent_id = m.id);
     UPDATE public.chat_messages e
        SET deleted_at = v_now, deleted_by = v_me
      WHERE e.id IN (v_in.id, v_out.id) AND e.deleted_at IS NULL;
+    PERFORM public.chat__move_scrub_notices(v_all, v_target.id);
     PERFORM public.chat__move_refile_items(v_all, v_target.id);
     PERFORM public.chat__move_relink(v_all, v_source.id, v_target.id);
     PERFORM public.module_activity_log(v_source.workspace_id, 'chat', 'chat_channel', v_target.id,
@@ -285,6 +338,7 @@ BEGIN
     RETURN jsonb_build_object('status', 'undone', 'ids', to_jsonb(v_all),
                               'from', v_source.id, 'to', v_target.id);
   END IF;
+  -- A plain move back writes its own lines, like any move.
 
   -- ── Who and where ──
   IF NOT public.chat__can_post(v_target, v_me) THEN
@@ -330,16 +384,31 @@ BEGIN
   -- that stays behind is dropped. Both are kept on the source's line for Undo.
   SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.id, 'parent_id', m.parent_id,
                                                'reply_to_id', m.reply_to_id) ORDER BY m.id), '[]'::jsonb),
-         array_agg(DISTINCT m.parent_id) FILTER (WHERE m.parent_id IS NOT NULL AND NOT m.parent_id = ANY (v_all))
+         array_agg(DISTINCT m.parent_id) FILTER (WHERE m.id = ANY (v_all) AND m.parent_id IS NOT NULL
+                                                   AND NOT m.parent_id = ANY (v_all))
     INTO v_detached, v_roots
     FROM public.chat_messages m
-   WHERE m.id = ANY (v_all)
-     AND ((m.parent_id IS NOT NULL AND NOT m.parent_id = ANY (v_all))
-          OR (m.reply_to_id IS NOT NULL AND NOT m.reply_to_id = ANY (v_all)));
-  -- Chains a settling reply leaves are open again.
-  SELECT array_agg(p.id) INTO v_settled
+   WHERE (m.id = ANY (v_all)
+          AND ((m.parent_id IS NOT NULL AND NOT m.parent_id = ANY (v_all))
+               OR (m.reply_to_id IS NOT NULL AND NOT m.reply_to_id = ANY (v_all))))
+      -- Messages left behind that quote a moved one lose the quote too (a
+      -- quote stays inside its conversation); Undo gives it back.
+      OR (m.channel_id = v_source.id AND NOT m.id = ANY (v_all) AND m.reply_to_id = ANY (v_all));
+  UPDATE public.chat_messages m SET reply_to_id = NULL
+   WHERE m.channel_id = v_source.id AND NOT m.id = ANY (v_all) AND m.reply_to_id = ANY (v_all);
+  -- Chains a settling reply leaves are open again (kept for Undo).
+  SELECT array_agg(p.id),
+         coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'wrapped_at', p.wrapped_at,
+                  'wrapped_by', p.wrapped_by, 'settled_id', p.settled_id,
+                  'reopened_at', p.reopened_at, 'reopened_by', p.reopened_by)), '[]'::jsonb)
+    INTO v_settled, v_reopened
     FROM public.chat_messages p
    WHERE p.id = ANY (coalesce(v_roots, '{}'::uuid[])) AND p.settled_id = ANY (v_all);
+  -- Pins are dropped (kept for Undo).
+  SELECT coalesce(jsonb_agg(jsonb_build_object('id', m.id, 'pinned_at', m.pinned_at,
+                                               'pinned_by', m.pinned_by)), '[]'::jsonb)
+    INTO v_pins
+    FROM public.chat_messages m WHERE m.id = ANY (v_all) AND m.pinned_at IS NOT NULL;
 
   UPDATE public.chat_messages m
      SET channel_id = v_target.id,
@@ -362,7 +431,7 @@ BEGIN
     (v_source.workspace_id, v_source.id, v_me, 'user', '', 'event',
      jsonb_build_object('type', 'moved_out', 'ids', to_jsonb(v_all), 'count', cardinality(v_all),
                         'to_id', v_target.id, 'to', 'moduo://chat_channel/' || v_target.id,
-                        'detached', v_detached))
+                        'detached', v_detached, 'pins', v_pins, 'reopened', v_reopened))
   RETURNING * INTO v_out;
   INSERT INTO public.chat_messages
     (workspace_id, channel_id, author_id, author_kind, body, kind, event)
@@ -373,6 +442,7 @@ BEGIN
                         'out_id', v_out.id))
   RETURNING * INTO v_in;
 
+  PERFORM public.chat__move_scrub_notices(v_all, v_target.id);
   PERFORM public.chat__move_refile_items(v_all, v_target.id);
   PERFORM public.chat__move_relink(v_all, v_source.id, v_target.id);
   PERFORM public.module_activity_log(v_source.workspace_id, 'chat', 'chat_channel', v_source.id,
@@ -391,12 +461,13 @@ BEGIN
   FOREACH fn IN ARRAY ARRAY[
     'chat__channel_readers(uuid)',
     'chat__move_refile_items(uuid[], uuid)',
+    'chat__move_scrub_notices(uuid[], uuid)',
     'chat__move_relink(uuid[], uuid, uuid)'
   ] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', fn);
     EXECUTE format('GRANT EXECUTE ON FUNCTION public.%s TO service_role', fn);
   END LOOP;
-  REVOKE ALL ON FUNCTION public.chat_op_move_messages(uuid[], uuid, boolean) FROM PUBLIC, anon, authenticated;
-  GRANT EXECUTE ON FUNCTION public.chat_op_move_messages(uuid[], uuid, boolean) TO authenticated, service_role;
+  REVOKE ALL ON FUNCTION public.chat_op_move_messages(uuid[], uuid, boolean, boolean) FROM PUBLIC, anon, authenticated;
+  GRANT EXECUTE ON FUNCTION public.chat_op_move_messages(uuid[], uuid, boolean, boolean) TO authenticated, service_role;
 END;
 $$;
