@@ -14,7 +14,7 @@ import {
   Link2,
   type LucideIcon,
   Mail,
-  MessagesSquare,
+  Inbox,
   Pin,
   Repeat,
   Timer,
@@ -43,7 +43,7 @@ export const WIDGET_GALLERY_META: Record<WidgetType, { icon: LucideIcon; descrip
   "quick-capture": { icon: Type, description: "Drop a task into the Inbox." },
   habits: { icon: Repeat, description: "Daily checkboxes + streaks." },
   pinned: { icon: Pin, description: "Pin any note, task, contact…" },
-  chat: { icon: MessagesSquare, description: "DMs and mentions waiting for you (Duo / Team)." },
+  chat: { icon: Inbox, description: "What's waiting for you in Chat: mentions, replies, messages." },
   team: { icon: UsersRound, description: "What each person has on: Focus, in progress, due." },
   upcoming: { icon: CalendarClock, description: "Your coming days, from Tasks' Upcoming." },
 };

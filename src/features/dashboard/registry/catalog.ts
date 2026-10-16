@@ -155,13 +155,14 @@ export const WIDGET_CATALOG: Record<WidgetType, WidgetMeta> = {
     defaultSize: "M",
     defaultConfig: {},
   },
-  // Chat (specs/chat.md): per-workspace plan gate lives in the body (the
-  // catalog only knows runtime capabilities), so it's always offered.
+  // Chat's Catch up (chat v2 CV-22, CH35): what's waiting for you. It keeps
+  // v1's "Conversations" type id so saved dashboards keep their widget; a saved
+  // L instance draws as M. Reading works on a paused plan, so always offered.
   chat: {
     type: "chat",
-    label: "Conversations",
+    label: "Catch up",
     moduleLabel: "Chat",
-    sizes: ["S", "M", "L"],
+    sizes: ["S", "M"],
     defaultSize: "M",
     defaultConfig: {},
     openRoute: "/chat",
