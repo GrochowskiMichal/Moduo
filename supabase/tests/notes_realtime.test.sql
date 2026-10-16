@@ -41,9 +41,21 @@ RETURNS text LANGUAGE sql AS $$
   SELECT test.value_as(p_who, format($q$SELECT public.notes_live_here(%L, %L, %L)::text$q$,
                                      test.id('N'), p_session, p_leaving))
 $$;
-CREATE FUNCTION test.save(p_seq int, p_origin text DEFAULT 'user', p_b64 text DEFAULT 'AQ==') RETURNS void LANGUAGE sql AS $$
+-- Saved updates are sent at commit. The test is one transaction that rolls
+-- back, so "commit" here is switching the deferred trigger to immediate,
+-- which runs what is waiting, then back.
+CREATE FUNCTION test.commit_point() RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  SET CONSTRAINTS public.notes_live_send_pending IMMEDIATE;
+  SET CONSTRAINTS public.notes_live_send_pending DEFERRED;
+END;
+$$;
+CREATE FUNCTION test.save(p_seq int, p_origin text DEFAULT 'user', p_b64 text DEFAULT 'AQ==') RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
   INSERT INTO public.note_updates (workspace_id, note_id, client_id, client_seq, update_b64, origin)
-  VALUES (test.id('W'), test.id('N'), 'probe', p_seq, p_b64, p_origin)
+  VALUES (test.id('W'), test.id('N'), 'probe', p_seq, p_b64, p_origin);
+  PERFORM test.commit_point();
+END;
 $$;
 -- A join the way Realtime authorizes it: the topic for the connection, then the policy.
 CREATE FUNCTION test.reads(p_who text, p_topic text) RETURNS int LANGUAGE plpgsql AS $$
@@ -69,6 +81,7 @@ $$;
 
 DO $$
 DECLARE
+  i int;
   v text;
   o text := test.id('O')::text;
   vv text := test.id('V')::text;
@@ -97,18 +110,40 @@ BEGIN
               AND test.told_with('V', 'changed', '{"updates": ["AQ=="]}'),
     'save: a viewer gets the saved update inline');
   PERFORM test.ok(test.told('O', 'changed') = 1, 'save: so does O');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.note_live_pending), 'save: nothing is left waiting after commit');
   PERFORM test.ok(test.told('M', 'changed') = 0 AND test.told('E', 'changed') = 0,
     'save: people without the note open (or without access) get nothing');
 
+  -- The app's save: several updates in one call are ONE message, in order.
+  v := test.as_user('E', format(
+    $q$SELECT public.notes_op_apply_updates(%L, %L, 'tab-e', '[{"clientSeq": 1, "updateB64": "Ag=="}, {"clientSeq": 2, "updateB64": "Aw=="}, {"clientSeq": 3, "updateB64": "BA=="}]'::jsonb)$q$,
+    test.id('W'), test.id('N')));
+  PERFORM test.commit_point();
+  PERFORM test.ok(v LIKE 'ok %' AND test.told('V', 'changed') = 2
+              AND test.told_with('V', 'changed', '{"updates": ["Ag==", "Aw==", "BA=="]}'),
+    'save: one save of three updates is one message, in order', v);
+  -- A message that can't be sent never fails the save.
+  v := test.as_user('E', format(
+    $q$SELECT public.notes_op_apply_updates(%L, %L, 'tab-e', '[{"clientSeq": 4, "updateB64": "BQ=="}]'::jsonb)$q$,
+    test.id('W'), test.id('N')));
+  ALTER FUNCTION public.notes_live__tell(uuid, text, jsonb) RENAME TO notes_live__tell_off;
+  BEGIN
+    PERFORM test.commit_point();
+    PERFORM test.ok(true, 'save: a failing send doesn''t fail the save');
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM test.ok(false, 'save: a failing send doesn''t fail the save', SQLERRM);
+  END;
+  ALTER FUNCTION public.notes_live__tell_off(uuid, text, jsonb) RENAME TO notes_live__tell;
+
   -- An agent's write is announced, never relayed (clients pull the stored row).
   PERFORM test.save(2, 'api_key');
-  PERFORM test.ok(test.told('V', 'changed') = 2
+  PERFORM test.ok(test.told('V', 'changed') = 3
               AND (SELECT count(*) FROM realtime.messages WHERE topic = 'notes-live:' || vv
                    AND event = 'changed' AND payload @> '{"pull": true}' AND NOT payload ? 'updates') = 1,
     'save: an agent write goes out content-free (pull)');
   -- A big update is announced too.
   PERFORM test.save(3, 'user', repeat('A', 70000));
-  PERFORM test.ok(test.told('V', 'changed') = 3
+  PERFORM test.ok(test.told('V', 'changed') = 4
               AND NOT EXISTS (SELECT 1 FROM realtime.messages WHERE topic = 'notes-live:' || vv
                               AND payload::text LIKE '%AAAAAAAAAA%'),
     'save: an oversized update is pulled, not relayed');
@@ -117,8 +152,8 @@ BEGIN
   DELETE FROM public.resource_grants
   WHERE resource_type = 'note' AND resource_id = test.id('N') AND subject_id = test.id('V');
   PERFORM test.save(4);
-  PERFORM test.ok(test.told('V', 'changed') = 3, 'revoke: V hears nothing after the share is gone', test.told('V', 'changed')::text);
-  PERFORM test.ok(test.told('O', 'changed') = 4, 'revoke: O still does');
+  PERFORM test.ok(test.told('V', 'changed') = 4, 'revoke: V hears nothing after the share is gone', test.told('V', 'changed')::text);
+  PERFORM test.ok(test.told('O', 'changed') = 5, 'revoke: O still does', test.told('O', 'changed')::text);
   v := test.here('V');
   PERFORM test.ok(v IS NULL, 'revoke: V''s next heartbeat is refused', v);
   PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.note_live_viewers WHERE user_id = test.id('V')),
@@ -135,8 +170,12 @@ BEGIN
   PERFORM test.ok(NOT (test.id('E') = ANY (public.notes_live__viewers(test.id('N'))))
               AND test.told_without('O', 'E'),
     'leave: closing the last tab leaves, and O is told');
+  -- Made-up session ids can't pile up: a person keeps at most five tabs.
+  FOR i IN 1..12 LOOP PERFORM test.here('E', 'spam' || i); END LOOP;
+  PERFORM test.ok((SELECT count(*) FROM public.note_live_viewers WHERE user_id = test.id('E')) = 5,
+    'leave: at most five tabs per person are kept');
   -- A tab that went quiet ages out.
-  UPDATE public.note_live_viewers SET seen_at = now() - interval '2 minutes' WHERE user_id = test.id('O');
+  UPDATE public.note_live_viewers SET seen_at = now() - interval '2 minutes';
   PERFORM test.ok(public.notes_live__viewers(test.id('N')) = '{}', 'leave: a quiet tab ages out after a minute');
 
   -- ── The topics: your own, read-only ───────────────────────────────────────

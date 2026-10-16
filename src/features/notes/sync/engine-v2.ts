@@ -73,6 +73,18 @@ const FLUSH_MAX_WAIT_MS = 800;
 const RETRY_BASE_MS = 1000;
 const RETRY_MAX_MS = 30_000;
 
+/** When the next debounced flush fires: `delay` after the latest edit, but
+ * never later than FLUSH_MAX_WAIT_MS after the first edit of the burst
+ * (`dueBy`, null when no flush is pending). */
+export function nextFlush(
+  now: number,
+  dueBy: number | null,
+  delay = FLUSH_DEBOUNCE_MS,
+): { wait: number; dueBy: number } {
+  const by = dueBy ?? now + Math.max(delay, FLUSH_MAX_WAIT_MS);
+  return { wait: Math.max(0, Math.min(delay, by - now)), dueBy: by };
+}
+
 export function getNotesClientId(): string {
   if (typeof window === "undefined") return "server";
   try {
@@ -385,8 +397,15 @@ export class NotesSyncEngineV2 {
           // that is what the session's Undo tracks (NR-6). The first pull's
           // rows are history (possibly days old and built upon), so they
           // apply as plain remote and are never offered for Undo.
+          // NR-7: a peer's live update that builds on this agent row may be
+          // waiting in the doc already; applying the row would integrate it
+          // inside the agent's transaction and Undo would take that person's
+          // text too. Then it is plain history: no Undo offered.
+          const waiting = s.doc.store.pendingStructs !== null || s.doc.store.pendingDs !== null;
           const origin =
-            u.origin === "api_key" && s.synced ? new AgentOrigin(u.actorKeyId) : "remote";
+            u.origin === "api_key" && s.synced && !waiting
+              ? new AgentOrigin(u.actorKeyId)
+              : "remote";
           Y.applyUpdate(s.doc, decodeBase64ToUint8(u.updateB64), origin);
           ids.push(u.id);
         } catch (e) {
@@ -443,10 +462,11 @@ export class NotesSyncEngineV2 {
   }
 
   private scheduleFlush(s: NoteSession, delay = FLUSH_DEBOUNCE_MS) {
-    const now = Date.now();
+    const pending = s.flushTimer !== null;
     if (s.flushTimer) clearTimeout(s.flushTimer);
-    else s.flushDueBy = now + Math.max(delay, FLUSH_MAX_WAIT_MS);
-    const wait = Math.max(0, Math.min(delay, (s.flushDueBy ?? now + delay) - now));
+    const next = nextFlush(Date.now(), pending ? s.flushDueBy : null, delay);
+    s.flushDueBy = next.dueBy;
+    const wait = next.wait;
     s.flushTimer = setTimeout(() => {
       s.flushTimer = null;
       s.flushDueBy = null;

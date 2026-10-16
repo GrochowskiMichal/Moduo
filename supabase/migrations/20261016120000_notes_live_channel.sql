@@ -17,12 +17,18 @@
 --   • Saying "I have this note open" is a call (`notes_live_here`) that checks
 --     view access and records the caller from the session, never from an
 --     argument. It answers with who else is there.
---   • When an update is saved (`note_updates` insert: people and agents
---     alike), a trigger hands it to the people who have that note open,
---     re-checking each one's access at that moment. Someone whose share was
+--   • When updates are saved (`note_updates` insert: people and agents
+--     alike), one message per note per transaction goes, at commit, to the
+--     people who have that note open, re-checking each one's access then. Someone whose share was
 --     taken away hears nothing more, from the next save on.
 --   • Agent (MCP) rows go out content-free: clients pull them, so the stored
 --     row stays the only source of "an agent wrote this" (gotchas §NR-6).
+
+-- The first cut of this block (a per-note topic with a send policy) ran on
+-- local and test databases only; take it away wherever it did.
+DROP POLICY IF EXISTS notes_realtime_read ON realtime.messages;
+DROP POLICY IF EXISTS notes_realtime_write ON realtime.messages;
+DROP FUNCTION IF EXISTS public.notes_realtime_topic_allowed(text, text);
 
 -- ── Who has which note open ────────────────────────────────────────────────
 
@@ -47,11 +53,11 @@ LANGUAGE sql IMMUTABLE AS $$ SELECT interval '60 seconds' $$;
 CREATE OR REPLACE FUNCTION public.notes_live__viewers(p_note_id uuid)
 RETURNS uuid[]
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
-  SELECT coalesce(array_agg(DISTINCT v.user_id ORDER BY v.user_id), '{}')
-  FROM public.note_live_viewers v
-  WHERE v.note_id = p_note_id
-    AND v.seen_at > now() - public.notes_live__fresh()
-    AND public.can_access('note', p_note_id, 'view', v.user_id)
+  SELECT coalesce(array_agg(p.user_id ORDER BY p.user_id), '{}')
+  FROM (SELECT DISTINCT v.user_id FROM public.note_live_viewers v
+        WHERE v.note_id = p_note_id AND v.seen_at > now() - public.notes_live__fresh()) p
+  -- One access check per person, however many tabs they have.
+  WHERE public.can_access('note', p_note_id, 'view', p.user_id)
 $$;
 
 -- Tell everyone who has the note open (and may still view it) something.
@@ -111,6 +117,12 @@ BEGIN
   INSERT INTO public.note_live_viewers (note_id, user_id, session_id)
   VALUES (p_note_id, v_user, p_session_id)
   ON CONFLICT (note_id, user_id, session_id) DO UPDATE SET seen_at = now();
+  -- At most a few tabs per person per note: made-up session ids can't pile up.
+  DELETE FROM public.note_live_viewers x
+  WHERE x.note_id = p_note_id AND x.user_id = v_user
+    AND x.session_id NOT IN (SELECT y.session_id FROM public.note_live_viewers y
+                             WHERE y.note_id = p_note_id AND y.user_id = v_user
+                             ORDER BY y.seen_at DESC LIMIT 5);
 
   v_after := public.notes_live__viewers(p_note_id);
   IF v_after IS DISTINCT FROM v_before THEN
@@ -121,23 +133,57 @@ END;
 $$;
 
 -- ── Saved updates reach the people who have the note open ──────────────────
+--
+-- `notes_op_apply_updates` inserts one row per statement, so a statement
+-- trigger would still fire per keystroke-sized update. Instead each inserted
+-- row of a watched note is noted for this transaction, and a deferred
+-- trigger sends ONE message per note at commit (a rolled-back save sends
+-- nothing). Small updates travel inline (applied at once); agent rows and
+-- big batches are announced and pulled. Sending never fails the save.
 
--- Small updates travel inline (applied at once); a big one, or an agent's,
--- is announced and pulled. Never fails the save.
-CREATE OR REPLACE FUNCTION public.notes_live__on_updates() RETURNS trigger
+CREATE TABLE IF NOT EXISTS public.note_live_pending (
+  tx        bigint NOT NULL DEFAULT txid_current(),
+  note_id   uuid   NOT NULL,
+  update_id bigint NOT NULL,
+  PRIMARY KEY (tx, note_id, update_id)
+);
+ALTER TABLE public.note_live_pending ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.note_live_pending FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS notes_live_on_updates ON public.note_updates;
+DROP FUNCTION IF EXISTS public.notes_live__on_updates();
+
+CREATE OR REPLACE FUNCTION public.notes_live__note_update() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  -- Nobody has the note open: nothing to do (imports, duplicates, agents
+  -- writing to closed notes).
+  IF EXISTS (SELECT 1 FROM public.note_live_viewers v
+             WHERE v.note_id = NEW.note_id AND v.seen_at > now() - public.notes_live__fresh()) THEN
+    INSERT INTO public.note_live_pending (note_id, update_id) VALUES (NEW.note_id, NEW.id)
+    ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.notes_live__send_pending() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   r record;
 BEGIN
+  -- The first deferred firing of the transaction sends everything; the rest
+  -- find nothing left.
   FOR r IN
-    SELECT n.note_id,
-           jsonb_agg(n.update_b64 ORDER BY n.id) FILTER (WHERE n.origin IS DISTINCT FROM 'api_key') AS updates,
-           sum(length(n.update_b64)) AS bytes,
-           bool_or(n.origin = 'api_key') AS agent
-    FROM new_rows n
-    WHERE EXISTS (SELECT 1 FROM public.note_live_viewers v
-                  WHERE v.note_id = n.note_id AND v.seen_at > now() - public.notes_live__fresh())
-    GROUP BY n.note_id
+    WITH mine AS (
+      DELETE FROM public.note_live_pending p WHERE p.tx = txid_current() RETURNING p.note_id, p.update_id
+    )
+    SELECT m.note_id,
+           jsonb_agg(u.update_b64 ORDER BY u.id) FILTER (WHERE u.origin IS DISTINCT FROM 'api_key') AS updates,
+           coalesce(sum(length(u.update_b64)), 0) AS bytes,
+           coalesce(bool_or(u.origin = 'api_key'), false) AS agent
+    FROM mine m JOIN public.note_updates u ON u.id = m.update_id
+    GROUP BY m.note_id
   LOOP
     BEGIN
       IF r.agent OR r.bytes > 60000 THEN
@@ -146,23 +192,29 @@ BEGIN
         PERFORM public.notes_live__tell(r.note_id, 'changed', jsonb_build_object('updates', r.updates));
       END IF;
     EXCEPTION WHEN OTHERS THEN
-      RAISE WARNING 'notes_live__on_updates: % (note %)', SQLERRM, r.note_id;
+      RAISE WARNING 'notes_live__send_pending: % (note %)', SQLERRM, r.note_id;
     END;
   END LOOP;
   RETURN NULL;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS notes_live_on_updates ON public.note_updates;
-CREATE TRIGGER notes_live_on_updates
+DROP TRIGGER IF EXISTS notes_live_note_update ON public.note_updates;
+CREATE TRIGGER notes_live_note_update
   AFTER INSERT ON public.note_updates
-  REFERENCING NEW TABLE AS new_rows
-  FOR EACH STATEMENT EXECUTE FUNCTION public.notes_live__on_updates();
+  FOR EACH ROW EXECUTE FUNCTION public.notes_live__note_update();
+
+DROP TRIGGER IF EXISTS notes_live_send_pending ON public.note_live_pending;
+CREATE CONSTRAINT TRIGGER notes_live_send_pending
+  AFTER INSERT ON public.note_live_pending
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION public.notes_live__send_pending();
 
 REVOKE ALL ON FUNCTION public.notes_live__fresh() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.notes_live__viewers(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.notes_live__tell(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.notes_live__on_updates() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.notes_live__note_update() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.notes_live__send_pending() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.notes_live_here(uuid, text, boolean) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.notes_live_here(uuid, text, boolean) TO authenticated;
 
@@ -184,7 +236,7 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.notes_live_here(uuid, text, boolean)', 'EXECUTE') THEN
     RAISE EXCEPTION 'notes_live_here must be callable by signed-in people only.';
   END IF;
-  FOREACH fn IN ARRAY ARRAY['notes_live__viewers(uuid)', 'notes_live__tell(uuid, text, jsonb)', 'notes_live__on_updates()'] LOOP
+  FOREACH fn IN ARRAY ARRAY['notes_live__viewers(uuid)', 'notes_live__tell(uuid, text, jsonb)', 'notes_live__note_update()', 'notes_live__send_pending()'] LOOP
     IF has_function_privilege('authenticated', 'public.' || fn, 'EXECUTE') THEN
       RAISE EXCEPTION 'public.% is internal: no client may call it.', fn;
     END IF;

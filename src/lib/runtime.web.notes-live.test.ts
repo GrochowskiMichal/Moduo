@@ -131,7 +131,7 @@ describe("joinNoteLive", () => {
     ch.emit("viewers", { noteId: NOTE, viewers: ["me", "ada"] });
     ch.emit("viewers", { noteId: OTHER, viewers: ["bob"] });
     expect(got.updates).toEqual([["QQ=="]]);
-    expect(got.pulls).toBe(1);
+    expect(got.pulls).toBe(2); // the catch-up when let in, then the announced one
     expect(got.viewers.at(-1)).toEqual(["me", "ada"]);
     live.close();
   });
@@ -143,10 +143,10 @@ describe("joinNoteLive", () => {
     await flush();
     const ch = opened[0].channel;
     ch.status?.("SUBSCRIBED");
-    expect(got.pulls).toBe(0);
+    expect(got.pulls).toBe(1); // the catch-up when let in
     ch.status?.("CHANNEL_ERROR");
     ch.status?.("SUBSCRIBED");
-    expect(got.pulls).toBe(1);
+    expect(got.pulls).toBe(2);
     live.close();
   });
 
@@ -175,11 +175,51 @@ describe("joinNoteLive", () => {
     live.close();
     ch.emit("changed", { noteId: NOTE, updates: ["QQ=="] });
     ch.emit("viewers", { noteId: NOTE, viewers: ["ada"] });
+    await flush();
     expect(rpcCalls.at(-1)).toEqual({
       fn: "notes_live_here",
       args: { p_note_id: NOTE, p_session_id: "s1", p_leaving: true },
     });
     expect(got.updates).toEqual([]);
     expect(got.viewers).toEqual([["me"]]);
+  });
+
+  it("pulls once it is let in, so saves made before it was there aren't missed", async () => {
+    const { client } = fakeClient([null, ["me"], ["me"]]);
+    const { got, join } = handlers();
+    const live = joinNoteLive(
+      client,
+      { noteId: NOTE, selfUserId: "me", ...join },
+      { earlyRetryMs: 0, heartbeatMs: 0 },
+    );
+    await new Promise((r) => setTimeout(r, 20));
+    live.close();
+    expect(got.pulls).toBe(1);
+  });
+
+  it("says goodbye only after the heartbeat in flight", async () => {
+    let answer: (v: unknown) => void = () => {};
+    const order: string[] = [];
+    const client = {
+      rpc: (_fn: string, args: any) => {
+        order.push(args.p_leaving ? "bye" : "here");
+        if (args.p_leaving) return Promise.resolve({ data: [], error: null });
+        return new Promise((r) => {
+          answer = r;
+        }).then(() => {
+          order.push("here answered");
+          return { data: ["me"], error: null };
+        });
+      },
+      channel: () => new FakeChannel(),
+      removeChannel: async () => "ok",
+    } as any;
+    const live = joinNoteLive(client, { noteId: NOTE, selfUserId: "me", ...handlers().join });
+    live.close();
+    await flush();
+    expect(order).toEqual(["here"]);
+    answer(null);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(order).toEqual(["here", "here answered", "bye"]);
   });
 });

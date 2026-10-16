@@ -233,7 +233,7 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
 | `src/features/notes/tasks/task-line.test.ts` (extended) | AC10 | Inline due, schedule and assignee patches map to the right task ops. |
 | `supabase/functions/moduo-mcp/modules/notes.test.ts` · "crdt write" (Deno) | AC11 | Append and update produce Yjs updates that a client doc materializes into the same markdown. |
 | `src/features/notes/sync/agent-undo.test.ts` · "undo agent only" | AC11 | Undoing an agent-origin update keeps the human edits made after it. |
-| Realtime policy probe (live check, `docs/testing`) | AC12 | A member without access is refused joining `note:<id>`; a viewer can listen but not send. |
+| `supabase/tests/notes_realtime.test.sql` + `scripts/local/notes-realtime-probe.ts` (local Realtime) | AC12 | A member without access is refused and never appears; a viewer hears saves until the share is taken away (while still connected); nobody can send on a live topic or forge a viewer list. |
 | `src/features/notes/comments/anchors.test.ts` · "anchor lifecycle" | AC13 | Mark ids map to threads, a deleted anchor's thread becomes detached, and resolve unmarks. |
 | `src/features/notes/editor/image-node.test.ts` + `export.test.ts` (extended) | AC14 | An image node round-trips through markdown as `moduo://attachment/<id>`, and the zip bundles its file. |
 | `src/components/app/palette/search-providers.test.ts` · "merge + rank" | AC15 | Title hits rank first, then body hits, then entities; an empty query gives recents; offline body search is labelled. |
@@ -304,11 +304,11 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
 
 **Live, agents, comments, files, search**
 
-18. **confident** · **Secure channel.**
-    - Note channels become private (`config: { private: true }`, topic `note:<id>`).
-    - An RLS policy on `realtime.messages` allows read with `can_access('note', <topic id>, 'view')` and send with `'edit'`, copying chat's policy (`20261006150000_chat_module.sql`).
-    - Presence carries the member's display name and avatar from workspace member profiles.
-    - The client goes through `getRuntime()`, with no direct `supabaseClient` import.
+18. **confident** · **Secure channel** (revised while building NR-7: a per-note private topic can't cut off a revoked listener or stop forged presence, because Realtime checks policies only at join and can't see what is sent).
+    - Clients send nothing over Realtime. Each person listens on one private, read-only topic of their own (`notes-live:<uid>`).
+    - Presence is a server heartbeat (`notes_live_here`) that checks view access from the session; names and avatars come from workspace member profiles.
+    - Saved updates go out at commit, one message per note per save, to the people with the note open, re-checked with `can_access(view)` at that moment. Agent writes and big saves go out as "pull".
+    - The client goes through `getRuntime()` (`notesV2.joinLive`), with no direct `supabaseClient` import.
 19. **low-confidence** · **Agent writes.**
     - `note_updates` gains `origin text NOT NULL DEFAULT 'user'` (`'user' | 'agent'`, a closed vocabulary in `vocabularies.ts` with a matching CHECK) plus `actor_key_id uuid NULL`.
     - The connector pulls the doc, applies the edit headlessly, and pushes through `notes_op_apply_updates` with `p_origin='agent'`. It writes `body_md`/`body_text` and a `notes.agent_edit` activity row, and broadcasts on the note channel.
@@ -344,7 +344,7 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
 | NR-4 | **Writing UX** | Quiet block handles + block menu + ⌥⇧↑↓, unified slash/mention keyboard regime, `[[` note links, ⌘K link dialog, mindmap drop, new welcome note that teaches `/task`, `[[`, `/contact`. | AC7, AC8 | NR-3 |
 | NR-5 | **Task lines in the document** | `TaskLineNode` + `TaskMetaNode` + transform, inline due/schedule/assignee chips + popovers, delete the overlay plugin, keep every NO-5 behavior. | AC10 | NR-3 |
 | NR-6 | **Agent writes land live** | Deno headless schema in `moduo-mcp`, `note_updates.origin/actor_key_id` migration + vocabulary (plus the editing user, so NR-3's meta line can say "Edited … by …"), `apply_updates` `p_origin`, connector create/append/update as CRDT writes + broadcast, `notes.agent_edit` activity, client Undo. **Tier 2** (migration, `moduo-mcp`, contracts). | AC11 | NR-3 |
-| NR-7 | **Secure live channel + named presence** | Private `note:<id>` channels, `realtime.messages` policy, runtime-routed client, names/avatars in presence. **Tier 2** (RLS). | AC12 | — |
+| NR-7 | **Secure live channel + named presence** | Server-routed live updates and presence on per-person read-only topics, `realtime.messages` policy, runtime-routed client, names/avatars in presence. **Tier 2** (RLS). | AC12 | — |
 | NR-8 | **Comments anchored to text** | MarkNode threads, `comments.anchor_id/resolved_at` migration, Comments panel rebuilt (document order, resolve, Detached group, note-level thread kept). **Tier 2** (migration on a spine table). | AC13 | NR-4 |
 | NR-9 | **Images & files** | `ImageNode`/`FileNode`, paste/drag/`/image`/`/file`, resize, viewer, export/import carry files, attachments `entity_type` widened. **Tier 2** (migration). | AC14 | NR-3, AT-1 on `develop` |
 | NR-10 | **⌘K searches everything** | Palette provider registry, notes + registry + recents providers, create-from-query, honest offline, sidebar search row → palette. | AC15 | NR-2 |

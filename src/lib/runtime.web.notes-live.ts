@@ -103,19 +103,28 @@ export function joinNoteLive(
 ): NoteLiveChannel {
   let closed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let accepted = false;
+  /** The heartbeat in flight, so the goodbye can't overtake it. */
+  let inFlight: Promise<unknown> = Promise.resolve();
 
   async function beat(attempt: number) {
     if (closed) return;
     if (timer) clearTimeout(timer);
     timer = null;
-    const res = await client.rpc("notes_live_here", {
+    const call = client.rpc("notes_live_here", {
       p_note_id: noteId,
       p_session_id: sessionId,
       p_leaving: false,
     });
+    inFlight = Promise.resolve(call).catch(() => {});
+    const res = await call;
     if (closed) return;
     const ids = Array.isArray(res.data) ? stringList(res.data) : null;
     onViewers(ids ?? []);
+    // Saves made before the server knew we were here were sent to nobody:
+    // catch up once we are let in (first time, or after a refusal).
+    if (ids !== null && !accepted) onPull();
+    accepted = ids !== null;
     // Refused (or not saved yet): retry quickly at first, then keep the
     // slow beat, so a share granted later starts working without a reload.
     const early = ids === null && attempt < EARLY_ATTEMPTS - 1;
@@ -148,11 +157,13 @@ export function joinNoteLive(
       if (timer) clearTimeout(timer);
       timer = null;
       release();
-      void client.rpc("notes_live_here", {
-        p_note_id: noteId,
-        p_session_id: sessionId,
-        p_leaving: true,
-      });
+      void inFlight.then(() =>
+        client.rpc("notes_live_here", {
+          p_note_id: noteId,
+          p_session_id: sessionId,
+          p_leaving: true,
+        }),
+      );
     },
   };
 }
