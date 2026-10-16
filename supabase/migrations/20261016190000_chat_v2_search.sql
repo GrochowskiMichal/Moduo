@@ -176,9 +176,12 @@ COMMENT ON FUNCTION public.chat_search(uuid, text, uuid, timestamptz, uuid, inte
 -- ── 3b. chat_find_conversations ──────────────────────────────────────────────
 -- ⌘K's Conversations: the conversations the caller can read right now whose name
 -- has every typed word, Polish without diacritics ("zrodla" finds "Źródła"); a
--- direct message by its people's names. Archived channels are included (they
--- stay readable); deleted ones and ones you left are not. At most 20 rows, the
--- words capped like chat_search's (256 characters, 8 words). People only.
+-- direct message by its people's names, everyone it was opened with besides you
+-- (its dm_key, as the client's dmPeople reads it), so one the other person left
+-- is still found by their name, never by yours. Archived channels are included
+-- (they stay readable); deleted ones and ones you left are not. At most 20 rows;
+-- the input capped at 256 characters like chat_search's, and at 8 words (a name
+-- needs fewer than chat_search's 32). People only.
 
 CREATE OR REPLACE FUNCTION public.chat_find_conversations(
   p_workspace_id uuid,
@@ -214,22 +217,31 @@ BEGIN
   RETURN QUERY
     WITH readable AS (
       SELECT r.id FROM public.chat__readable_channel_ids(p_workspace_id, v_me) AS r(id)
+    ), others AS (
+      -- A readable direct message's people besides you, from its dm_key (who it was
+      -- opened with), not its current members: leaving doesn't rename it.
+      SELECT u.channel_id, u.id
+        FROM (SELECT c.id AS channel_id,
+                     CASE WHEN k.id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                          THEN k.id::uuid END AS id
+                FROM public.chat_channels c
+                JOIN readable r ON r.id = c.id
+                CROSS JOIN LATERAL pg_catalog.unnest(pg_catalog.string_to_array(c.dm_key, ',')) AS k(id)
+               WHERE c.kind = 'dm') u
+       WHERE u.id IS NOT NULL AND u.id <> v_me
     ), named AS (
       SELECT c.id, c.kind, c.name, c.archived_at, c.created_at,
              CASE WHEN c.kind = 'channel' THEN '{}'::uuid[]
-                  ELSE coalesce((SELECT pg_catalog.array_agg(mb.user_id ORDER BY mb.user_id)
-                                   FROM public.chat_members mb
-                                  WHERE mb.channel_id = c.id AND mb.left_at IS NULL
-                                    AND mb.user_id <> v_me), '{}') END AS people,
+                  ELSE coalesce((SELECT pg_catalog.array_agg(o.id ORDER BY o.id)
+                                   FROM others o WHERE o.channel_id = c.id), '{}') END AS people,
              pg_catalog.lower(public.chat__unaccent(
                CASE WHEN c.kind = 'channel' THEN coalesce(c.name, '')
                     -- The other people (your own name would match every one of yours);
                     -- a note-to-self by your name.
-                    ELSE coalesce((SELECT pg_catalog.string_agg(p.display_name, ' ')
-                                     FROM public.chat_members mb
-                                     JOIN public.profiles p ON p.id = mb.user_id
-                                    WHERE mb.channel_id = c.id AND mb.left_at IS NULL
-                                      AND mb.user_id <> v_me),
+                    ELSE coalesce((SELECT pg_catalog.string_agg(p.display_name, ' ' ORDER BY o.id)
+                                     FROM others o
+                                     JOIN public.profiles p ON p.id = o.id
+                                    WHERE o.channel_id = c.id),
                                   (SELECT p.display_name FROM public.profiles p WHERE p.id = v_me),
                                   '') END)) AS hay
         FROM public.chat_channels c
@@ -275,7 +287,8 @@ BEGIN
     FROM PUBLIC, anon, authenticated, service_role;
   GRANT EXECUTE ON FUNCTION public.chat_find_conversations(uuid, text, integer) TO authenticated;
   IF has_function_privilege('anon', 'public.chat_find_conversations(uuid, text, integer)', 'EXECUTE')
-     OR has_function_privilege('service_role', 'public.chat_find_conversations(uuid, text, integer)', 'EXECUTE') THEN
+     OR has_function_privilege('service_role', 'public.chat_find_conversations(uuid, text, integer)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.chat_find_conversations(uuid, text, integer)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Grants on public.chat_find_conversations are not as intended: signed-in people only.';
   END IF;
 END;

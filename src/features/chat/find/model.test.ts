@@ -7,7 +7,7 @@ import {
   dateRangeStart,
   findPosition,
   foldText,
-  forgetSearchesForTests,
+  forgetSearches,
   hasSearchableWords,
   inFilterConversations,
   MARK_END,
@@ -114,7 +114,12 @@ describe("chat search model (CV-19)", () => {
   test("negated words only name nothing to find", () => {
     expect(hasSearchableWords("-standup")).toBe(false);
     expect(hasSearchableWords('-"stand up" -retro')).toBe(false);
-    expect(hasSearchableWords("  -standup  or  ")).toBe(false);
+    expect(hasSearchableWords("  -standup  or  -retro ")).toBe(false);
+    // "or" first or last is the word itself, as websearch reads it.
+    expect(hasSearchableWords("or")).toBe(true);
+    expect(hasSearchableWords("OR")).toBe(true);
+    expect(hasSearchableWords("  -standup  or  ")).toBe(true);
+    expect(hasSearchableWords("or -standup")).toBe(true);
     expect(hasSearchableWords("-")).toBe(false);
     expect(hasSearchableWords("standup -retro")).toBe(true);
     expect(hasSearchableWords('"stand up"')).toBe(true);
@@ -161,12 +166,24 @@ describe("chat search model (CV-19)", () => {
   });
 
   test("the bottom bar's Search reopens with the last words and filters", () => {
-    forgetSearchesForTests();
-    expect(reopenSearch("w1", null)).toEqual({});
-    rememberSearch("w1", { q: "żółw", from: "u1", date: "7d" });
-    expect(reopenSearch("w1", null)).toEqual({ q: "żółw", from: "u1", date: "7d" });
-    expect(reopenSearch("w2", null)).toEqual({});
-    expect(reopenSearch("w1", { q: "now" })).toEqual({ q: "now" });
-    expect(reopenSearch(null, null)).toEqual({});
+    forgetSearches();
+    expect(reopenSearch("u1", "w1", null)).toEqual({});
+    rememberSearch("u1", "w1", { q: "żółw", from: "u1", date: "7d" });
+    expect(reopenSearch("u1", "w1", null)).toEqual({ q: "żółw", from: "u1", date: "7d" });
+    expect(reopenSearch("u1", "w2", null)).toEqual({});
+    expect(reopenSearch("u1", "w1", { q: "now" })).toEqual({ q: "now" });
+    expect(reopenSearch("u1", null, null)).toEqual({});
+    expect(reopenSearch(null, "w1", null)).toEqual({});
+  });
+
+  test("a remembered search is the person's: someone else never reopens it, sign-out forgets it", () => {
+    forgetSearches();
+    rememberSearch("u1", "w1", { q: "salary" });
+    // Another person in the same workspace on this device.
+    expect(reopenSearch("u2", "w1", null)).toEqual({});
+    // Sign out, sign back in as someone else (or the same person): nothing is remembered.
+    forgetSearches();
+    expect(reopenSearch("u2", "w1", null)).toEqual({});
+    expect(reopenSearch("u1", "w1", null)).toEqual({});
   });
 });

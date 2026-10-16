@@ -281,15 +281,15 @@ export function ChatScreen({
   const searchNow = useRef(search);
   searchNow.current = search;
   useEffect(() => {
-    if (workspaceId && search) rememberSearch(workspaceId, search);
-  }, [workspaceId, search]);
+    if (userId && workspaceId && search) rememberSearch(userId, workspaceId, search);
+  }, [userId, workspaceId, search]);
   useEffect(() => {
     if (!onSearch) return;
     return onSearchRequest(() => {
-      onSearch(reopenSearch(workspaceId, searchNow.current));
+      onSearch(reopenSearch(userId, workspaceId, searchNow.current));
       return true;
     });
-  }, [onSearch, workspaceId]);
+  }, [onSearch, userId, workspaceId]);
   // "In": every conversation you can read (the store holds only those), starred,
   // unjoined public and archived ones included.
   const searchConversations = useMemo(

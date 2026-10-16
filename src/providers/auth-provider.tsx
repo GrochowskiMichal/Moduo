@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { forgetSearches } from "../features/chat/find/model";
 import { forgetChatPresence } from "../features/chat/store/react";
 import { attachChatUser, wipeChatCopies } from "../features/chat/store/store";
 import { attachFocusUser } from "../features/focus/engine";
@@ -202,6 +203,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // and the remembered workspace list go (TV-D11a).
         void wipeSyncCopies();
         void wipeChatCopies();
+        // Chat's remembered searches are the person's words too (CV-19).
+        forgetSearches();
         forgetRememberedWorkspaces();
         // This browser's notices stop showing the person's words (TV-D12).
         void forgetBrowserPush(null);
@@ -257,6 +260,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // SIGNED_OUT event follows) (TV-D11a).
     void wipeSyncCopies();
     void wipeChatCopies();
+    forgetSearches();
     forgetChatPresence();
     forgetRememberedWorkspaces();
     forgetCaptureDrafts();

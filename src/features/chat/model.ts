@@ -258,7 +258,8 @@ export type ChatConversationFound = {
   kind: ChatChannelKind;
   /** The channel's name; null for a direct message (name it from `people`). */
   name: string | null;
-  /** A direct message's other people. */
+  /** A direct message's people besides you: everyone it was opened with (its key), so one
+   *  someone left keeps their name; empty for a note-to-self. */
   people: string[];
   archived: boolean;
 };

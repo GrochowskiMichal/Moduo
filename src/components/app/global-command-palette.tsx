@@ -70,6 +70,20 @@ const TYPE_LABEL: Record<string, string> = {
   event: "Event",
 };
 
+const NOTHING_FAILED = { messages: false, conversations: false };
+
+/** ⌘K's name for a found conversation: a channel's own, a direct message's people
+ *  (everyone it was opened with besides you), a note-to-self your name or "You". */
+export function foundConversationName(
+  c: ChatConversationFound,
+  selfId: string | null,
+  nameOf: (id: string) => string | undefined,
+): string {
+  if (c.kind === "channel") return c.name ?? "Channel";
+  if (c.people.length === 0) return (selfId ? nameOf(selfId) : undefined) ?? "You";
+  return c.people.map((id) => nameOf(id) ?? "Former member").join(", ");
+}
+
 export function dispatchOpenPalette() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(PALETTE_OPEN_EVENT));
@@ -77,7 +91,7 @@ export function dispatchOpenPalette() {
 
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
-  const { runtime } = useAuth();
+  const { runtime, userId } = useAuth();
   const { selectedWorkspaceId, modulePermissions, members } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -88,7 +102,8 @@ export function GlobalCommandPalette() {
   // (Polish without diacritics), the top five each, then "See all in Chat".
   const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
   const [chatConversations, setChatConversations] = useState<ChatConversationFound[]>([]);
-  const [chatFailed, setChatFailed] = useState(false);
+  // Which half failed: a failed read says "Search isn't available", never "No results.".
+  const [chatFailed, setChatFailed] = useState(NOTHING_FAILED);
   // While chat's answers are on their way, "No results." waits.
   const [chatSearching, setChatSearching] = useState(false);
   const chatReqRef = useRef(0);
@@ -119,7 +134,7 @@ export function GlobalCommandPalette() {
       setSearching(false);
       setChatHits([]);
       setChatConversations([]);
-      setChatFailed(false);
+      setChatFailed(NOTHING_FAILED);
       setChatSearching(false);
     }
   }, [open]);
@@ -133,7 +148,7 @@ export function GlobalCommandPalette() {
     if (!trimmed || !runtime || !selectedWorkspaceId || !chatOn) {
       setChatHits([]);
       setChatConversations([]);
-      setChatFailed(false);
+      setChatFailed(NOTHING_FAILED);
       setChatSearching(false);
       return;
     }
@@ -150,7 +165,7 @@ export function GlobalCommandPalette() {
       });
       void Promise.all([messages, conversations]).then(([hits, convs]) => {
         if (reqId !== chatReqRef.current) return;
-        setChatFailed(hits.error !== null);
+        setChatFailed({ messages: hits.error !== null, conversations: convs.error !== null });
         setChatHits(hits.error ? [] : hits.data);
         setChatConversations(convs.error ? [] : convs.data.slice(0, 5));
         setChatSearching(false);
@@ -168,14 +183,10 @@ export function GlobalCommandPalette() {
       hit.authorLabel ?? (hit.authorId ? memberNames.get(hit.authorId) : null) ?? "Former member",
     [memberNames],
   );
-  // A direct message reads as its people.
+  // A direct message reads as its people, a note-to-self as you (as the sidebar).
   const conversationName = useCallback(
-    (c: ChatConversationFound) =>
-      c.kind === "channel"
-        ? (c.name ?? "Channel")
-        : c.people.map((id) => memberNames.get(id) ?? "Former member").join(", ") ||
-          "Direct message",
-    [memberNames],
+    (c: ChatConversationFound) => foundConversationName(c, userId, (id) => memberNames.get(id)),
+    [memberNames, userId],
   );
 
   // Debounced registry search — last-write-wins via a request counter so a slow
@@ -382,6 +393,7 @@ export function GlobalCommandPalette() {
     visibleNav.length + visibleNotes.length + visibleContacts.length + visibleSettings.length;
 
   const showChat = chatOn && trimmed.length > 0;
+  const anyChatFailed = chatFailed.messages || chatFailed.conversations;
   const chatFound = chatHits.length + chatConversations.length;
   const showNoResults =
     trimmed.length > 0 &&
@@ -390,7 +402,7 @@ export function GlobalCommandPalette() {
     actionCount === 0 &&
     chatFound === 0 &&
     !chatSearching &&
-    !chatFailed;
+    !anyChatFailed;
 
   const renderAction = ({ id, label, icon: Icon, shortcut, run }: Action) => (
     <CommandItem key={id} value={`action:${id}`} onSelect={run}>
@@ -426,9 +438,9 @@ export function GlobalCommandPalette() {
           <CommandGroup heading="Workspace">{visibleSettings.map(renderAction)}</CommandGroup>
         ) : null}
 
-        {showChat && (chatHits.length > 0 || chatFailed) ? (
+        {showChat && (chatHits.length > 0 || chatFailed.messages) ? (
           <CommandGroup heading="Messages">
-            {chatFailed ? (
+            {chatFailed.messages ? (
               <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
                 Search isn't available
               </div>
@@ -449,6 +461,13 @@ export function GlobalCommandPalette() {
                 </CommandItem>
               ))
             )}
+          </CommandGroup>
+        ) : null}
+        {showChat && chatFailed.conversations && !chatFailed.messages ? (
+          <CommandGroup heading="Conversations">
+            <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
+              Search isn't available
+            </div>
           </CommandGroup>
         ) : null}
         {showChat && chatConversations.length > 0 ? (

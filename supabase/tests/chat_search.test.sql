@@ -239,6 +239,26 @@ BEGIN
     'conversations: a direct message by its other person''s name, only for its people', test.convs('A', 'bozena wrob'));
   PERFORM test.ok(test.convs('B', 'bozena') = '',
     'conversations: your own name doesn''t list your direct messages', test.convs('B', 'bozena'));
+  -- A direct message the other person left keeps their name, never yours.
+  PERFORM test.ok(test.as_user('A', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])$q$,
+    test.id('W'), test.id('C'))) LIKE 'ok %', 'setup: A opens a direct message E with C');
+  INSERT INTO test.ids SELECT 'E', id FROM public.chat_channels
+    WHERE workspace_id = test.id('W') AND kind = 'dm' AND id <> test.ref('D');
+  PERFORM test.ok(test.as_user('C', format($q$SELECT public.chat_op_leave(%L)$q$, test.ref('E'))) LIKE 'ok %',
+    'setup: C leaves E');
+  UPDATE public.profiles SET display_name = 'Cezary Nowak' WHERE id = test.id('C');
+  UPDATE public.profiles SET display_name = 'Adam Kowal' WHERE id = test.id('A');
+  PERFORM test.ok(test.convs('A', 'cezary') = 'E',
+    'conversations: a direct message the other person left is found by their name', test.convs('A', 'cezary'));
+  PERFORM test.ok(test.convs('A', 'adam') = '',
+    'conversations: ... and never by yours', test.convs('A', 'adam'));
+  PERFORM test.ok(test.value_as('A', format(
+      $q$SELECT people::text FROM public.chat_find_conversations(%L, 'cezary')$q$, test.id('W')))
+      = format('{%s}', test.id('C')),
+    'conversations: its people are who it was opened with besides you');
+  UPDATE public.profiles SET display_name = 'C' WHERE id = test.id('C');
+  UPDATE public.profiles SET display_name = 'A' WHERE id = test.id('A');
+
   PERFORM test.ok(test.convs('X', 'plans') = '' AND test.convs('C', '   ') = '',
     'conversations: no workspace or no words, nothing');
   PERFORM test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_find_conversations(%L, 'plans')$q$, test.id('W'))) LIKE '42501 %',

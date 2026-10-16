@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 import type { ChatResult, ChatRuntime, ChatSearchHit, ChatSearchQuery } from "../model";
 import { ChatSearchView } from "./chat-search-view";
+import { FindBar } from "./find-bar";
 import type { SearchParams } from "./model";
 import { useChatSearch } from "./use-chat-search";
 
@@ -51,6 +52,20 @@ describe("useChatSearch (CV-19)", () => {
     expect(result.current.state.status).toBe("nothing");
     await new Promise((r) => setTimeout(r, 200));
     expect(calls).toHaveLength(0);
+  });
+
+  test("before Chat's runtime is here, words are on their way, never 'nothing to find'", async () => {
+    const { chat, calls } = fakeChat();
+    const { result, rerender } = renderHook(
+      ({ c, q }: { c: ChatRuntime | null; q: string }) =>
+        useChatSearch(c, { workspaceId: "w", query: q }),
+      { initialProps: { c: null as ChatRuntime | null, q: "" } },
+    );
+    expect(result.current.state.status).toBe("idle");
+    rerender({ c: null, q: "żółw" });
+    expect(result.current.state.status).toBe("loading");
+    rerender({ c: chat, q: "żółw" });
+    await waitFor(() => expect(calls).toHaveLength(1));
   });
 
   test("Show older belongs to the query that produced the list", async () => {
@@ -150,5 +165,24 @@ describe("Chat's Search box (CV-19)", () => {
       />,
     );
     expect(screen.getByText("Type a word to search for.")).toBeTruthy();
+  });
+});
+
+describe("A conversation's own Search (CV-19)", () => {
+  test("before Chat's runtime is here it says it's searching, never 'type a word'", () => {
+    wrap(
+      <FindBar
+        chat={null}
+        workspaceId="w"
+        channelId="c"
+        onJump={() => {}}
+        onClose={() => {}}
+        onSeeAll={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Search in this conversation"), {
+      target: { value: "żółw" },
+    });
+    expect(screen.getByRole("status").textContent).toBe("Searching…");
   });
 });

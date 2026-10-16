@@ -61,11 +61,25 @@ export function matchPeople<P extends { name: string }>(people: readonly P[], qu
  * "type something to search for" instead of asking.
  */
 export function hasSearchableWords(query: string): boolean {
-  const rest = query
-    .replace(/(^|\s)-"[^"]*"?/g, " ")
-    .replace(/(^|\s)-\S*/g, " ")
-    .replace(/(^|\s)or(?=\s|$)/gi, " ");
-  return /[\p{L}\p{N}]/u.test(rest);
+  // As websearch reads it: "or" joins two terms only between them; first or last
+  // ("or", "-standup or") it is the word itself.
+  const tokens = query
+    .replace(/(^|\s)-"[^"]*"?/g, " -phrase ")
+    .split(/\s+/)
+    .filter(Boolean);
+  let afterTerm = false;
+  for (const [i, token] of tokens.entries()) {
+    if (/^or$/i.test(token) && afterTerm && i < tokens.length - 1) {
+      afterTerm = false;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      afterTerm = true;
+      continue;
+    }
+    if (/[\p{L}\p{N}]/u.test(token)) return true;
+  }
+  return false;
 }
 
 /** Every conversation the "in" filter offers: everything you can read right now —
@@ -230,24 +244,31 @@ export function searchQuery(
 
 // ── Reopening ───────────────────────────────────────────────────────────────
 
-/** The last words and filters of Chat's Search, per workspace, for this tab. */
+/** The last words and filters of Chat's Search, per person and workspace, for
+ *  this tab. Cleared on sign-out (`forgetSearches`), so the next person to sign
+ *  in on this device never reopens someone else's words. */
 const lastSearch = new Map<string, SearchParams>();
 
+const searchSlot = (userId: string, workspaceId: string) => `${userId}\u0000${workspaceId}`;
+
 /** Note what Chat's Search shows (called whenever its link changes). */
-export function rememberSearch(workspaceId: string, p: SearchParams): void {
-  lastSearch.set(workspaceId, { ...p });
+export function rememberSearch(userId: string, workspaceId: string, p: SearchParams): void {
+  lastSearch.set(searchSlot(userId, workspaceId), { ...p });
 }
 
 /** What the bottom bar's Search reopens: what is on screen, else the last search. */
 export function reopenSearch(
+  userId: string | null,
   workspaceId: string | null,
   onScreen: SearchParams | null,
 ): SearchParams {
   if (onScreen) return onScreen;
-  return (workspaceId ? lastSearch.get(workspaceId) : undefined) ?? {};
+  if (!userId || !workspaceId) return {};
+  return lastSearch.get(searchSlot(userId, workspaceId)) ?? {};
 }
 
-export function forgetSearchesForTests(): void {
+/** Forget every remembered search (sign-out). */
+export function forgetSearches(): void {
   lastSearch.clear();
 }
 

@@ -48,8 +48,14 @@ export function useChatSearch(
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for `args`; `attempt` re-runs it
   useEffect(() => {
     const id = ++req.current;
-    if (!chat || !args || !key) {
+    if (!args || !key) {
       setInner({ status: typed && args ? "nothing" : "idle" });
+      return;
+    }
+    // Words to find, but Chat's runtime isn't here yet: it's on its way, never
+    // "nothing to find".
+    if (!chat) {
+      setInner({ status: "loading" });
       return;
     }
     setInner((prev) => (prev.status === "ready" ? prev : { status: "loading" }));

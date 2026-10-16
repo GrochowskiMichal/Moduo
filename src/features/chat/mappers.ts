@@ -272,7 +272,7 @@ export function mapHistory(raw: unknown): ChatHistoryEntry | null {
   };
 }
 
-/** A `chat_search` row (CV-19). */
+/** A `chat_find_conversations` row (CV-19). */
 export function mapConversationFound(raw: unknown): ChatConversationFound | null {
   const r = asRow(raw);
   const channelId = str(r?.channel_id);
@@ -288,6 +288,7 @@ export function mapConversationFound(raw: unknown): ChatConversationFound | null
   };
 }
 
+/** A `chat_search` row (CV-19). */
 export function mapSearchHit(raw: unknown): ChatSearchHit | null {
   const r = asRow(raw);
   const messageId = str(r?.message_id);
