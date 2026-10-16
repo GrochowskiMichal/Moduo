@@ -564,11 +564,11 @@ describe("Group by", () => {
       task("me", { assigneeId: "u1" }),
     ];
     const assignees = [
-      { userId: "u1", name: "Me" },
+      { userId: "u1", name: "You" },
       { userId: "u2", name: "Mike" },
     ];
     expect(groupsOf(tasks, "assignee", { assignees })).toEqual([
-      ["Me", ["me"]],
+      ["You", ["me"]],
       ["Mike", ["mike"]],
       ["Former member", ["x"]],
       ["Unassigned", ["u"]],

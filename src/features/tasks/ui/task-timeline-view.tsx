@@ -339,8 +339,12 @@ export function TaskTimelineView({
       }),
     [completed, stayingIds],
   );
+  // A group header is a value: your own reads "You", as on the List (MOD-137).
   const personName = useCallback(
-    (id: string) => personById(id)?.fullName || "Someone",
+    (id: string) => {
+      const person = personById(id);
+      return person?.isMe ? person.name : person?.fullName || "Someone";
+    },
     [personById],
   );
   const showUndated = show.has("undated");

@@ -49,10 +49,12 @@ function initials(label: string): string {
 /** The "+" of a column (default n): it stays visible; disabled says why. */
 function AddButton({
   label,
+  self,
   state,
   onAdd,
 }: {
   label: string;
+  self?: boolean;
   state: GroupAddState;
   onAdd: (add: GroupAdd) => void;
 }) {
@@ -60,7 +62,8 @@ function AddButton({
   return (
     <IconButton
       icon={Plus}
-      label={`Add a task to ${label}`}
+      // "Add a task to you", never "to You" (MOD-137).
+      label={`Add a task to ${self ? "you" : label}`}
       tooltip={state.kind === "disabled" ? state.reason : undefined}
       aria-description={state.kind === "disabled" ? state.reason : undefined}
       aria-disabled={state.kind === "disabled" || undefined}
@@ -88,6 +91,7 @@ export function BoardColumnHeader({
   onFold,
   section,
   onEditStatuses,
+  self,
 }: {
   label: string;
   count: number;
@@ -100,6 +104,8 @@ export function BoardColumnHeader({
   section?: { onRename: (name: string) => void; onDelete: () => void } | null;
   /** One project's status: its ⋯ opens the project's statuses. */
   onEditStatuses?: (() => void) | null;
+  /** The reader's own column ("You"): its buttons say "you" (MOD-137). */
+  self?: boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
   if (renaming && section) {
@@ -124,7 +130,11 @@ export function BoardColumnHeader({
       actions={
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label={`${label} options`} tooltip={null} />
+            <IconButton
+              icon={MoreHorizontal}
+              label={self ? "Your column options" : `${label} options`}
+              tooltip={null}
+            />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onSelect={onFold}>Fold</DropdownMenuItem>
@@ -142,7 +152,7 @@ export function BoardColumnHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       }
-      persistentActions={<AddButton label={label} state={add} onAdd={onAdd} />}
+      persistentActions={<AddButton label={label} self={self} state={add} onAdd={onAdd} />}
     />
   );
 }

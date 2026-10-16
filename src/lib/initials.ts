@@ -21,7 +21,7 @@ function nameWords(name: string): string[] {
  * A person's two initials (call 43): first and last word ("Maciej Grzywacz" →
  * "MG"), or the first two letters of a single word ("Maciej" → "MA", "Mike" →
  * "MI"), so two people who share a first letter still differ. Never one letter
- * and never "Me": pass the person's own name, not a pronoun.
+ * and never "You" or "Me": pass the person's own name, not a pronoun.
  */
 export function initialsOf(name: string | null | undefined): string {
   const words = nameWords(name ?? "");

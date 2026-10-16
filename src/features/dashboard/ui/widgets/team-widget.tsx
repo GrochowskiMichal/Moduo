@@ -114,7 +114,13 @@ export function TeamWidget({ widget, size }: WidgetComponentProps) {
                   className="mt-0.5"
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="min-w-0 truncate text-sm text-foreground">{name}</span>
+                  {/* You read "Maciej Grzywacz (you)", or "You" with no name (MOD-137). */}
+                  <span className="min-w-0 truncate text-sm text-foreground">
+                    {row.isMe && !row.name ? "You" : name}
+                    {row.isMe && row.name ? (
+                      <span className="text-muted-foreground"> (you)</span>
+                    ) : null}
+                  </span>
                   {/* Chat's "now" line (CH70): empty until Chat registers it. */}
                   {NowLine && workspaceId ? (
                     <NowLine workspaceId={workspaceId} userId={row.userId} size={size} />

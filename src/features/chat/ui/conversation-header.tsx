@@ -207,7 +207,7 @@ export function ConversationHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
-                <DropdownMenuLabel>Notify me about</DropdownMenuLabel>
+                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                 <DropdownMenuRadioGroup
                   value={level}
                   onValueChange={(v) => onNotify(v as ChatNotifyLevel)}

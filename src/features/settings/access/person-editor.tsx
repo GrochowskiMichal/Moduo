@@ -192,7 +192,7 @@ export function PersonEditor({
         title={
           <>
             <span className="truncate">{name}</span>
-            {isSelf ? <span className="text-sm text-muted-foreground">You</span> : null}
+            {isSelf ? <span className="text-sm text-muted-foreground">(you)</span> : null}
             {isWorkspaceOwner ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-2xs text-muted-foreground">
                 <Crown className="size-3" aria-hidden />

@@ -48,7 +48,14 @@ const TAGS: Tag[] = [
   },
 ];
 const ASSIGNEES: Assignee[] = [
-  { userId: "u1", name: "Me", fullName: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
   {
     userId: "u2",
     name: "Mike",
@@ -199,6 +206,31 @@ describe("Filter", () => {
     });
     expect(screen.getByRole("combobox", { name: "Filter by" })).toBeTruthy();
   });
+
+  it("lists you as your name plus (you), and the chip reads You (MOD-137)", () => {
+    render(<Harness />);
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "f" });
+    });
+    fireEvent.click(screen.getByRole("option", { name: /^Assignee/ }));
+    const you = screen.getByRole("option", { name: /Alex Rivera \(you\)$/ });
+    fireEvent.click(you);
+    expect(screen.getByRole("group", { name: "Assignee is You" })).toBeTruthy();
+  });
+
+  it("finds you by typing me", () => {
+    render(<Harness />);
+    act(() => {
+      fireEvent.keyDown(document.body, { key: "f" });
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by" }), {
+      target: { value: "me" },
+    });
+    const names = screen
+      .getAllByRole("option")
+      .map((o) => o.getAttribute("aria-label") ?? o.textContent);
+    expect(names).toContain("Assignee › Alex Rivera (you)");
+  });
 });
 
 describe("Project (MOD-141)", () => {
@@ -292,7 +324,7 @@ describe("Search", () => {
 
     fireEvent.change(box, { target: { value: "@me" } });
     fireEvent.keyDown(box, { key: "Enter" });
-    expect(screen.getByRole("group", { name: "Assignee is Me" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Assignee is You" })).toBeTruthy();
     expect(rows()).toEqual([]);
   });
 

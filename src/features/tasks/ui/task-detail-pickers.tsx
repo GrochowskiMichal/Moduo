@@ -429,7 +429,8 @@ function AddSession({
             value={whose}
             onValueChange={(v) => setWhose(v === "assignee" ? "assignee" : "me")}
             items={[
-              { value: "me", label: "Mine" },
+              // "Yours", never "Mine" (MOD-137).
+              { value: "me", label: "Yours" },
               { value: "assignee", label: `${otherAssignee.fullName || otherAssignee.name}’s` },
             ]}
           />
@@ -540,7 +541,8 @@ export function ReminderValue({
             ) : null
           }
         >
-          {firstLabel ?? "Remind me"}
+          {/* Never "Remind me" (MOD-137); the empty value reads like "Add time". */}
+          {firstLabel ?? "Add reminder"}
         </PropertyValue>
       </PopoverTrigger>
       <PopoverContent align="start" className={cn("p-1", picking ? "w-72 p-0" : "w-64")}>
@@ -653,7 +655,7 @@ function RemindAt({ onPick, onCancel }: { onPick: (when: Date) => void; onCancel
           Back
         </Button>
         <Button size="sm" disabled={!shown} onClick={() => shown && onPick(shown)}>
-          Remind me then
+          Set reminder
         </Button>
       </div>
     </div>

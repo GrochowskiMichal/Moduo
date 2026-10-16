@@ -43,6 +43,17 @@ export const AGENT_FALLBACK_LABEL = "Claude";
 /** At most this many chips; the rest fold into "+N more". */
 export const META_CHIP_CAP = 3;
 
+/** Who "Edited … by …" names: "you" for your own edit (MOD-137), else the
+ *  member's name, or null when the app can't name them. */
+export function noteEditorName(
+  editorId: string,
+  selfId: string | null,
+  members: ReadonlyArray<{ userId: string; displayName?: string | null }>,
+): string | null {
+  if (editorId === selfId) return "you";
+  return members.find((m) => m.userId === editorId)?.displayName?.trim() || null;
+}
+
 /** Chip order: who it's about, then the work, then the time, then the mail. */
 const TYPE_ORDER = ["company", "contact", "task", "project", "event", "email_thread", "email"];
 
