@@ -125,12 +125,16 @@ test("custom emoji in the picker, reactions and comments", async ({ page }) => {
     p_workspace_id: room.ws,
     p_task: { id: taskId, title: `Ship ${tag}` },
   });
-  const comment = await rpc<{ id: string } | Array<{ id: string }>>(room.member, "comments_op_add", {
-    p_workspace_id: room.ws,
-    p_entity_type: "task",
-    p_entity_id: taskId,
-    p_body: `Done :${name}:`,
-  });
+  const comment = await rpc<{ id: string } | Array<{ id: string }>>(
+    room.member,
+    "comments_op_add",
+    {
+      p_workspace_id: room.ws,
+      p_entity_type: "task",
+      p_entity_id: taskId,
+      p_body: `Done :${name}:`,
+    },
+  );
   const commentId = Array.isArray(comment) ? comment[0]?.id : comment.id;
   await rpc(room.member, "comments_op_react", {
     p_comment_id: commentId,

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "@rstest/core";
 
 import { resolveQuickRow } from "../../spine/reactions";
 import { rightsFrom } from "../shell/use-chat-rights";
+import { customEmojiExportFiles } from "./export-files";
 import {
   addedByLine,
   type CustomEmoji,
@@ -24,7 +25,6 @@ import {
   emojiViewForTest,
   setEmojiStoreDepsForTest,
 } from "./store";
-import { customEmojiExportFiles } from "./export-files";
 import { emojiPaths, fitWithin, isAnimatedImage, sniffImageType, typeAgrees } from "./upload";
 
 const WS = "11111111-1111-4111-8111-111111111111";
@@ -259,7 +259,12 @@ describe("custom emoji in the account export", () => {
   it("carries the live emoji you added, as emoji/<name>.<ext>; others' and removed ones stay out", async () => {
     const mine = emoji({ id: "m", name: "shipit", storage_path: `${WS}/m.gif`, mime: "image/gif" });
     const unread = emoji({ id: "u", name: "lost", storage_path: `${WS}/u.png` });
-    const theirs = emoji({ id: "t", name: "theirs", created_by: "u2", storage_path: `${WS}/t.png` });
+    const theirs = emoji({
+      id: "t",
+      name: "theirs",
+      created_by: "u2",
+      storage_path: `${WS}/t.png`,
+    });
     const removed = emoji({
       id: "r",
       name: "gone",
