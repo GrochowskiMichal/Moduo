@@ -31,6 +31,11 @@ type MadeFromValue = {
 
 const MadeFromContext = createContext<MadeFromValue | null>(null);
 
+/** How many messages one read asks about (the GET stays well under URL limits). */
+const MADE_FROM_BATCH = 100;
+/** How long a just-made item shows before the server must confirm its link. */
+const LOCAL_GRACE_MS = 6_000;
+
 const NOUN: Record<string, string> = { task: "a task", note: "a note", event: "an event" };
 
 /** "Became a task", "Became a note", or "Became" for a mix. */
@@ -61,7 +66,11 @@ export function useMadeFrom(
   messageIds: readonly string[],
 ): MadeFromValue {
   const [byMessage, setByMessage] = useState<Map<string, Made[]>>(() => new Map());
-  const local = useRef(new Map<string, Made[]>());
+  // Made here and shown at once, until a read after the link write confirms it.
+  // One the server never shows (the From chip was removed, a template made it,
+  // the link failed) goes once LOCAL_GRACE_MS has passed.
+  const local = useRef(new Map<string, Array<Made & { at: number }>>());
+  const timers = useRef<number[]>([]);
   const key = messageIds.join(",");
   const ids = useRef(messageIds);
   ids.current = messageIds;
@@ -70,16 +79,20 @@ export function useMadeFrom(
     const wanted = ids.current;
     if (!runtime || wanted.length === 0) return;
     void runtime
-      .madeFrom(wanted.slice(-200))
+      .madeFrom(wanted.slice(-MADE_FROM_BATCH))
       .then((rows) => {
         const next = groupMadeFrom(rows);
-        // Keep what was just made here until the server shows it.
+        const now = Date.now();
         for (const [mid, items] of local.current) {
           const list = next.get(mid) ?? [];
-          for (const it of items) {
-            if (!list.some((m) => m.type === it.type && m.id === it.id)) list.push(it);
-          }
-          next.set(mid, list);
+          const keep = items.filter((it) => {
+            const seen = list.some((m) => m.type === it.type && m.id === it.id);
+            if (!seen && now - it.at < LOCAL_GRACE_MS) list.push({ type: it.type, id: it.id });
+            return !seen && now - it.at < LOCAL_GRACE_MS;
+          });
+          if (keep.length) local.current.set(mid, keep);
+          else local.current.delete(mid);
+          if (list.length) next.set(mid, list);
         }
         setByMessage(next);
       })
@@ -97,10 +110,19 @@ export function useMadeFrom(
     return () => window.removeEventListener("focus", load);
   }, [load]);
 
+  useEffect(
+    () => () => {
+      for (const t of timers.current) window.clearTimeout(t);
+    },
+    [],
+  );
+
   const add = useCallback(
     (messageId: string, item: Made) => {
       const mine = local.current.get(messageId) ?? [];
-      if (!mine.some((m) => m.type === item.type && m.id === item.id)) mine.push(item);
+      if (!mine.some((m) => m.type === item.type && m.id === item.id)) {
+        mine.push({ ...item, at: Date.now() });
+      }
       local.current.set(messageId, mine);
       setByMessage((prev) => {
         const next = new Map(prev);
@@ -109,8 +131,12 @@ export function useMadeFrom(
         next.set(messageId, list);
         return next;
       });
-      // The link is written just after the item: read again shortly.
-      setTimeout(load, 1500);
+      // The link is written just after the item: read again shortly, and once
+      // more after the grace period so an unlinked one goes away.
+      timers.current.push(
+        window.setTimeout(load, 1_500),
+        window.setTimeout(load, LOCAL_GRACE_MS + 500),
+      );
     },
     [load],
   );

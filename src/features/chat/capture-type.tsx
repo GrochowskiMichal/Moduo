@@ -102,7 +102,7 @@ function MessageCaptureBody({
   const [active, setActive] = useState(0);
   const [dest, setDest] = useState<MessageDestination | null>(null);
   const [fromOn, setFromOn] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const pickerRef = useRef<HTMLInputElement>(null);
   const lineRef = useRef<HTMLTextAreaElement>(null);
   const selfId = userId ?? "";
@@ -147,7 +147,7 @@ function MessageCaptureBody({
 
   const send = async () => {
     const chat = runtime?.chat;
-    if (busy || !chat || !selectedWorkspaceId) return;
+    if (busyRef.current || !chat || !selectedWorkspaceId) return;
     if (!writable) {
       toast.error("You have view-only access to chat.");
       return;
@@ -156,11 +156,13 @@ function MessageCaptureBody({
       pickerRef.current?.focus();
       return;
     }
-    const from = fromOn && source ? (source.ref ?? (await source.resolve?.()) ?? null) : null;
-    const body = messageBody(draft, from);
-    if (!body.trim()) return;
-    setBusy(true);
+    if (!draft.trim() && !(fromOn && source)) return;
+    // One send at a time, from the first ⏎ (resolving the From item takes a moment).
+    busyRef.current = true;
     try {
+      const from = fromOn && source ? (source.ref ?? (await source.resolve?.()) ?? null) : null;
+      const body = messageBody(draft, from);
+      if (!body.trim()) return;
       const channel =
         dest.kind === "conversation"
           ? dest.channel
@@ -201,7 +203,7 @@ function MessageCaptureBody({
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : "Couldn't send that.");
     } finally {
-      setBusy(false);
+      busyRef.current = false;
     }
   };
 

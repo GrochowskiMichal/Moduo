@@ -437,7 +437,11 @@ export function ChatScreen({
                 resolve: () => chat.registerMessage(m.id).catch(() => null),
               }
             : null,
-        onCreated: (ref) => addMadeFrom(m.id, { type: ref.type, id: ref.id }),
+        // Only a task carries the From link; the line drops one the server
+        // never shows (the chip removed, a template, a failed link).
+        onCreated: (ref) => {
+          if (ref.type === "task") addMadeFrom(m.id, { type: ref.type, id: ref.id });
+        },
       });
     },
     [runtime, snap.channels, selfId, personOf, addMadeFrom],

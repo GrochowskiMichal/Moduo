@@ -285,4 +285,25 @@ SELECT test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_message_refs
 SELECT test.ok(test.as_key('K', format($q$SELECT * FROM public.chat_conversations_for_item('task', %L::uuid)$q$,
   test.id('T2'))) = 'ok 0', 'an API key gets no "Mentioned in" line');
 
+-- ── AC3.6: a contact mentioned in the private conversation ─────────────────
+DO $$
+DECLARE
+  v text;
+  v_contact uuid;
+BEGIN
+  v := test.as_user('A', format($q$SELECT public.contacts_op_create(%L, 'Ina Investor', NULL, NULL, NULL, NULL, NULL, NULL)$q$,
+    test.id('W')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A adds the investor''s contact', v);
+  SELECT entity_id INTO v_contact FROM public.entities
+   WHERE workspace_id = test.id('W') AND entity_type = 'contact' AND label = 'Ina Investor';
+  INSERT INTO test.ids VALUES ('CI', v_contact);
+  v := test.send('A', 'p2', 'P', 'Met ' || 'moduo://contact/' || v_contact || ' today');
+  PERFORM test.ok(v LIKE 'ok %', 'A mentions the contact in P', v);
+END;
+$$;
+SELECT test.ok(test.value_as('A', format($q$SELECT string_agg(channel_name, ',') FROM public.chat_conversations_for_item('contact', %L::uuid)$q$,
+  test.ref('CI'))) = 'founders', 'the contact''s Linked shows "Mentioned in founders" to a reader of P who can open it');
+SELECT test.ok(coalesce(test.value_as('N', format($q$SELECT string_agg(channel_name, ',') FROM public.chat_conversations_for_item('contact', %L::uuid)$q$,
+  test.ref('CI'))), '') = '', 'N (not in P) sees no line for it');
+
 -- ── CV-13: the channel link half goes below ────────────────────────────────
