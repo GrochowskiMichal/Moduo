@@ -153,8 +153,9 @@ export function quietChannelsLine(
   unread: Readonly<Record<string, ChatUnread>>,
   mine: Readonly<Record<string, ChatMember>>,
 ): string {
-  const n = Object.values(unread).filter((u) => u.unread > 0 && u.catchup === 0 && mine[u.channelId])
-    .length;
+  const n = Object.values(unread).filter(
+    (u) => u.unread > 0 && u.catchup === 0 && mine[u.channelId],
+  ).length;
   if (n === 0) return "Nothing is waiting for you.";
   const count = WORDS[n] ?? String(n);
   return n === 1

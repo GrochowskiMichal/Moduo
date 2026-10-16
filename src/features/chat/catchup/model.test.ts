@@ -3,7 +3,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import type { ChatCatchupItem, ChatPerson, ChatUnread } from "../model";
-import { channel, member, ME, uuid, YOU } from "../store/testing";
+import { channel, ME, member, uuid, YOU } from "../store/testing";
 import { buildCatchup, catchupWhy, flatRows, nextSelection, quietChannelsLine } from "./model";
 
 const ACME = uuid(10);
@@ -17,7 +17,13 @@ const people: Record<string, ChatPerson> = {
 };
 const personOf = (id: string) => people[id];
 
-function item(n: number, channelId: string, reason: ChatCatchupItem["reason"], minute: number, extra: Partial<ChatCatchupItem> = {}): ChatCatchupItem {
+function item(
+  n: number,
+  channelId: string,
+  reason: ChatCatchupItem["reason"],
+  minute: number,
+  extra: Partial<ChatCatchupItem> = {},
+): ChatCatchupItem {
   const at = new Date(Date.UTC(2026, 9, 16, 9, minute)).toISOString();
   return {
     id: uuid(100 + n),

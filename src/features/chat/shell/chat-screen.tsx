@@ -23,6 +23,10 @@ import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { useTimeRegion } from "@/lib/time-region";
+import { catchupStoreFor } from "../catchup/catchup-store";
+import { useCatchupScreen } from "../catchup/catchup-view";
+import { LaterDialog } from "../catchup/later-dialog";
+import { laterHint } from "../catchup/later-times";
 import {
   type ChainRights,
   chainGroups,
@@ -32,10 +36,6 @@ import {
   mayWrap,
   replyToChoices,
 } from "../chains";
-import { catchupStoreFor } from "../catchup/catchup-store";
-import { useCatchupScreen } from "../catchup/catchup-view";
-import { LaterDialog } from "../catchup/later-dialog";
-import { laterHint } from "../catchup/later-times";
 import { ChatComposer, type ChatComposerHandle } from "../composer/chat-composer";
 import { CHANNEL_REFUSED_COPY } from "../composer/grammar";
 import { ReplyToDialog, WrapUpDialog } from "../dialogs/chain-dialogs";
@@ -576,8 +576,7 @@ export function ChatScreen({
     selfId,
     personOf,
     onPersonClick: undefined,
-    onOpenConversation: (channelId, messageId) =>
-      onOpen(channelId, messageId ? { messageId } : {}),
+    onOpenConversation: (channelId, messageId) => onOpen(channelId, messageId ? { messageId } : {}),
     onLeave: () => onLeaveCatchup?.(),
     onMakeTask: makeTaskFrom,
     onFocusReply: () => catchupReplyRef.current?.focus(),
@@ -1160,7 +1159,7 @@ export function ChatScreen({
     };
   });
   const right = catchup ? (
-    catchupUi.right ?? undefined
+    (catchupUi.right ?? undefined)
   ) : channel ? (
     <RightPanel
       module="chat"

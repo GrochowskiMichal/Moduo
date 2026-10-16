@@ -12,7 +12,12 @@ import { CatchupStore, catchupStoreFor } from "./catchup-store";
 const C = uuid(10);
 const D = uuid(11);
 
-function item(n: number, channelId: string, messageId: string | null, extra: Partial<ChatCatchupItem> = {}): ChatCatchupItem {
+function item(
+  n: number,
+  channelId: string,
+  messageId: string | null,
+  extra: Partial<ChatCatchupItem> = {},
+): ChatCatchupItem {
   const at = stampOf(1_760_000_000_000_000 + n * 1_000_000);
   return {
     id: uuid(100 + n),

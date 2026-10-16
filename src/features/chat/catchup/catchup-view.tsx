@@ -88,6 +88,20 @@ function overlayOpen(): boolean {
   );
 }
 
+function failed(res: { ok: boolean; message?: string; offline?: boolean }, fallback: string) {
+  if (res.ok) return false;
+  toast(res.offline ? "Offline" : res.message || fallback);
+  return true;
+}
+
+/** Enter and Space on another control (a button, a link) are that control's. */
+function ownControl(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || typeof el.closest !== "function") return false;
+  const control = el.closest("button, a, [role='button'], [role='menuitem']");
+  return !!control && !control.hasAttribute("data-catchup-item");
+}
+
 export type CatchupScreenInput = {
   /** Catch up is the page's mode now. */
   active: boolean;
@@ -193,12 +207,6 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
     if (!state.right) dispatchLayoutPanelsSet({ feature: "chat", left: state.left, right: true });
   }, []);
 
-  const failed = (res: { ok: boolean; message?: string; offline?: boolean }, fallback: string) => {
-    if (res.ok) return false;
-    toast(res.offline ? "Offline" : res.message || fallback);
-    return true;
-  };
-
   const done = useCallback(
     (row: CatchupRow) => {
       if (!catchup) return;
@@ -207,8 +215,7 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
       void catchup.done(ids).then((res) => {
         if (failed(res, "Couldn't clear it.")) return;
         undoToast("Done", {
-          onUndo: () =>
-            void catchup.reopen(ids).then((r) => failed(r, "Couldn't bring it back.")),
+          onUndo: () => void catchup.reopen(ids).then((r) => failed(r, "Couldn't bring it back.")),
         });
       });
     },
@@ -300,21 +307,36 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
         if (next) select(next.item.id);
       };
       const key = event.key;
-      const handled = (() => {
-        if (key === "ArrowDown") return move(1), true;
-        if (key === "ArrowUp") return move(-1), true;
-        if (key === "Escape") return onLeave(), true;
-        if (!selected) return false;
-        if (key === " ") return run("done"), true;
-        if (key === "Enter") return run("open"), true;
+      const action = (():
+        | "down"
+        | "up"
+        | "leave"
+        | "done"
+        | "open"
+        | "reply"
+        | "task"
+        | "later"
+        | null => {
+        if (key === "ArrowDown") return "down";
+        if (key === "ArrowUp") return "up";
+        if (key === "Escape") return "leave";
+        if (!selected || event.shiftKey) return null;
+        if (key === " " || key === "Enter") {
+          if (ownControl(event.target)) return null;
+          return key === " " ? "done" : "open";
+        }
         const k = key.toLowerCase();
-        if (event.shiftKey) return false;
-        if (k === "r") return run("reply"), true;
-        if (k === "t") return run("task"), true;
-        if (k === "h") return run("later"), true;
-        return false;
+        if (k === "r") return "reply";
+        if (k === "t") return "task";
+        if (k === "h") return "later";
+        return null;
       })();
-      if (handled) event.preventDefault();
+      if (!action) return;
+      event.preventDefault();
+      if (action === "down") move(1);
+      else if (action === "up") move(-1);
+      else if (action === "leave") onLeave();
+      else run(action);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -548,7 +570,10 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
         />
       </header>
       {noticesOff ? (
-        <p data-slot="catchup-notices-off" className="shrink-0 px-5 pb-2 text-xs text-muted-foreground">
+        <p
+          data-slot="catchup-notices-off"
+          className="shrink-0 px-5 pb-2 text-xs text-muted-foreground"
+        >
           {NOTICES_OFF_LINE}
         </p>
       ) : null}

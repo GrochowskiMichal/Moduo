@@ -28,9 +28,7 @@ describe("Later's times (#33)", () => {
     // 1 Nov 2026: New York goes back to EST (UTC-5).
     const now = new Date("2026-10-31T20:00:00Z");
     const c = laterChoices(now, "America/New_York");
-    expect(c.find((x) => x.id === "tomorrow")?.at.toISOString()).toBe(
-      "2026-11-01T14:00:00.000Z",
-    );
+    expect(c.find((x) => x.id === "tomorrow")?.at.toISOString()).toBe("2026-11-01T14:00:00.000Z");
   });
 
   it("a picked time is read in the zone, and round-trips", () => {

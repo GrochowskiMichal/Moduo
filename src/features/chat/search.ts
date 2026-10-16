@@ -22,8 +22,7 @@ export function validateChatSearch(search: Record<string, unknown>): ChatSearch 
   const c = pick(search.c);
   const t = c ? pick(search.t) : undefined;
   const m = c ? pick(search.m) : undefined;
-  const view =
-    search.view === "browse" || search.view === "catchup" ? search.view : undefined;
+  const view = search.view === "browse" || search.view === "catchup" ? search.view : undefined;
   return {
     ...(c ? { c } : {}),
     ...(t ? { t } : {}),

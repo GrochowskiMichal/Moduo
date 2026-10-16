@@ -272,7 +272,9 @@ export function spineActivityLine(
                 ? "mentioned everyone"
                 : "mentioned you";
       const excerpt =
-        p.format_version === 2 ? chatExcerptText(p.excerpt, opts.referenceName) : excerptText(p.excerpt);
+        p.format_version === 2
+          ? chatExcerptText(p.excerpt, opts.referenceName)
+          : excerptText(p.excerpt);
       return excerpt ? `${verb} ${where}: “${excerpt}”` : `${verb} ${where}`;
     }
     case "chat.channel_create": {
