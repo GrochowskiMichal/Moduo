@@ -18,6 +18,7 @@ import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/righ
 import { onSearchRequest } from "@/components/app/search-events";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { dragHasFiles, filesFromDataTransfer } from "@/features/attachments/files";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layout/panel-events";
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import { dispatchOpenCapture } from "@/lib/capture-open";
@@ -54,6 +55,10 @@ import {
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
+import { useComposerFiles } from "../files/composer-files";
+import { FilesView } from "../files/files-view";
+import { MessageFiles } from "../files/message-files";
+import { hasSendableFiles } from "../files/model";
 import { ChatSearchView } from "../find/chat-search-view";
 import { FindBar } from "../find/find-bar";
 import type { SearchParams } from "../find/model";
@@ -509,6 +514,21 @@ export function ChatScreen({
 
   const streamRef = useRef<MessageStreamHandle | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
+  // CV-9: the files going with the next message, and a message's files in the stream.
+  const composerFiles = useComposerFiles({
+    runtime,
+    workspaceId,
+    userId: selfId,
+    channelId: conversationId ?? "",
+  });
+  const renderFiles = useCallback(
+    (m: ChatMessage) => <MessageFiles message={m} runtime={runtime} />,
+    [runtime],
+  );
+  const filesStamp = (streamWin?.rows ?? [])
+    .filter((r) => (r.fileCount ?? 0) > 0 && !r.deletedAt && !r.sendState)
+    .map((r) => r.id)
+    .join(",");
   const returnToComposer = useCallback((typed?: string) => {
     if (typed) composerRef.current?.insertText(typed);
     else composerRef.current?.focus();
@@ -1029,8 +1049,24 @@ export function ChatScreen({
       channel.kind === "dm"
         ? others.length + 1
         : (details.members?.length ?? (channel.isDefault ? members.length || null : null));
+    // CV-9: files dropped anywhere on the conversation go to the composer.
+    const takesDrop = !line && !managersPending && !!composerFiles;
     center = (
-      <div className="flex h-full min-h-0 flex-col" data-conversation={channel.id}>
+      <div
+        className="flex h-full min-h-0 flex-col"
+        data-conversation={channel.id}
+        onDragOver={(e) => {
+          if (!takesDrop || !dragHasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDrop={(e) => {
+          if (!takesDrop || !dragHasFiles(e.dataTransfer)) return;
+          e.preventDefault();
+          composerFiles?.add(filesFromDataTransfer(e.dataTransfer));
+          composerRef.current?.focus();
+        }}
+      >
         <ConversationToolbar
           row={{ channel, people: others, title }}
           member={member}
@@ -1212,6 +1248,7 @@ export function ChatScreen({
               />
             )}
             onReturnToComposer={returnToComposer}
+            renderFiles={renderFiles}
           />
         </MadeFromScope>
         <div data-chat-composer className="shrink-0 px-3 pb-3">
@@ -1289,14 +1326,23 @@ export function ChatScreen({
                 initial={store?.draft(channel.id) ?? ""}
                 autoFocus
                 note={channelNote?.note ?? null}
+                files={composerFiles}
                 onSend={(body) => {
-                  if (!store || !body.trim()) return false;
+                  if (!store) return false;
+                  // CV-9: upload first, send after: the files went up under this id.
+                  // Files that waited past the server's day are taken out first, with a line.
+                  if (composerFiles?.dropStale()) return false;
+                  const going = hasSendableFiles(composerFiles?.files);
+                  if (!body.trim() && !going) return false;
+                  const withFiles = composerFiles?.take() ?? null;
+                  if (!body.trim() && !withFiles) return false;
                   const replyRoot = replyingTo ? (replyingTo.parentId ?? replyingTo.id) : null;
                   const id = store.send({
                     channelId: channel.id,
                     body,
                     replyToId: replyingTo?.id ?? null,
                     format: "v2",
+                    ...(withFiles ? { id: withFiles.id, files: withFiles.files } : {}),
                   });
                   setReplyingTo(null);
                   typingStore?.send(channel.id, replyRoot, true);
@@ -1542,6 +1588,15 @@ export function ChatScreen({
             personOf={personOf}
             rowById={rowById}
             onOpen={(root) => openChain(root.id)}
+          />
+        ),
+        files: () => (
+          <FilesView
+            runtime={runtime}
+            channelId={channel.id}
+            selfId={selfId}
+            personOf={personOf}
+            refreshKey={filesStamp}
           />
         ),
       }}

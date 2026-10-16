@@ -28,6 +28,8 @@ export const CHAT_MESSAGE_COLUMN_LIST = [
   "settled_id",
   "reopened_at",
   "reopened_by",
+  // CV-9: how many files it holds (0 when none; the stream reads them only then).
+  "file_count",
   "pinned_at",
   "pinned_by",
   "edited_at",

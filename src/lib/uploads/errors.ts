@@ -58,6 +58,8 @@ export type UploadProblem =
   | { kind: "busy" }
   /** Another window of the app is uploading this file right now. */
   | { kind: "elsewhere" }
+  /** A chat message already holds its 10 files (CV-9; refused before upload). */
+  | { kind: "too_many_files"; max: number }
   /** Anything else the server refused. */
   | { kind: "failed" };
 
@@ -96,6 +98,8 @@ export function classifyUploadError(
         };
       case "too_many_pending":
         return { kind: "busy" };
+      case "too_many_files":
+        return { kind: "too_many_files", max: num(d.max_files) || 10 };
       case "no_edit_access":
         return { kind: "no_access" };
       case "entity_not_found":
@@ -181,7 +185,7 @@ export type ProblemCopy = { text: string; actions: ProblemAction[] };
  */
 export function describeProblem(
   problem: UploadProblem,
-  ctx: { fileName: string; isOwner: boolean },
+  ctx: { fileName: string; isOwner: boolean; on?: "task" | "chat_message" },
 ): ProblemCopy {
   switch (problem.kind) {
     case "too_large":
@@ -221,11 +225,25 @@ export function describeProblem(
       };
     case "no_access":
       return {
-        text: "Not attached — you can view this task but not add files",
+        text:
+          ctx.on === "chat_message"
+            ? "Not attached — you can read this conversation but not post in it"
+            : "Not attached — you can view this task but not add files",
         actions: ["dismiss"],
       };
     case "task_gone":
-      return { text: "Not attached — the task was deleted", actions: ["dismiss"] };
+      return {
+        text:
+          ctx.on === "chat_message"
+            ? "Not attached — the conversation is gone, or the message was already sent"
+            : "Not attached — the task was deleted",
+        actions: ["dismiss"],
+      };
+    case "too_many_files":
+      return {
+        text: `Not attached — a message holds up to ${problem.max} files`,
+        actions: ["dismiss"],
+      };
     case "task_syncing":
       return {
         text: "Not attached yet — the task is still syncing. It attaches by itself",

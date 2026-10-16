@@ -1469,8 +1469,10 @@ export type TaskViewFilterDimension =
 // bytes not confirmed yet; `ready` = finalize checked the stored size;
 // `failed` = finalize refused it (size mismatch, over the limit) and the daily
 // purge removes it. A deleted reason says what put the file in the trash:
-// the person (`user`), its task (`task`), or a bucket deleted with its tasks
-// (`bucket`, reserved for TV-U6). Previews are only ever these three formats.
+// the person (`user`), its task (`task`), a bucket deleted with its tasks
+// (`bucket`, reserved for TV-U6), or its chat message (`chat_message`, CV-9:
+// deleted with the message, or taken out of an unsent one; CHECK re-cut in
+// 20261016170000_chat_v2_files). Previews are only ever these three formats.
 // ---------------------------------------------------------------------------
 
 export const ATTACHMENT_STATUSES = ["pending", "ready", "failed"] as const;
@@ -1484,7 +1486,7 @@ export function normalizeAttachmentStatus(input: unknown): AttachmentStatus {
   return isAttachmentStatus(input) ? input : "pending";
 }
 
-export const ATTACHMENT_DELETED_REASONS = ["user", "task", "bucket"] as const;
+export const ATTACHMENT_DELETED_REASONS = ["user", "task", "bucket", "chat_message"] as const;
 export type AttachmentDeletedReason = (typeof ATTACHMENT_DELETED_REASONS)[number];
 export const attachmentDeletedReasonSchema = z.enum(ATTACHMENT_DELETED_REASONS);
 export function isAttachmentDeletedReason(value: unknown): value is AttachmentDeletedReason {
