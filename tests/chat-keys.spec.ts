@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { type ChatRoom, makeChatRoom, removeChatRoom } from "./support/chat-room";
-import { rest, runTag, signInPage } from "./support/local-stack";
+import { type ChatRoom, makeChatRoom, removeChatRoom, sendAs } from "./support/chat-room";
+import { rest, rpc, runTag, signInPage } from "./support/local-stack";
 
 /**
  * Chat v2 CV-7b · the composer and the key map (AC4.3, AC4.6, AC4.7, AC2.7,
@@ -34,6 +34,7 @@ async function openGeneral(page: Page): Promise<void> {
   await expect(page.getByTestId("message-stream")).toBeVisible({ timeout: 20_000 });
 }
 
+const panel = (page: Page) => page.locator('[data-panel-module="chat"]');
 const composer = (page: Page) => page.locator('[data-chat-composer] [contenteditable="true"]');
 const row = (page: Page, text: string) =>
   page.getByRole("article").filter({ hasText: text }).first();
@@ -163,4 +164,61 @@ test("a message over 8,000 characters is refused with the count", async ({ page 
   await expect(box).not.toHaveText("");
   await box.press("ControlOrMeta+a");
   await box.press("Backspace");
+});
+
+// CV-22: the rows of §16 CV-7a and CV-7b didn't cover: anywhere in Chat
+// (⌥↑↓, ⌥⇧↓, ⌥1 ⌥2 from the composer too) and the chain panel (⏎ in its box,
+// Esc back). Catch up's keys are proven in chat-catchup.spec.ts.
+test("the key map: anywhere in Chat and the chain panel", async ({ page }) => {
+  const opened = await rpc<{ id: string } | Array<{ id: string }>>(room.member, "chat_op_open_dm", {
+    p_workspace_id: room.ws,
+    p_user_ids: [room.owner.user.id],
+  });
+  const dm = (Array.isArray(opened) ? opened[0] : opened)?.id ?? "";
+  expect(dm).toBeTruthy();
+  const root = await sendAs(room.member, room.general, `chain root ${tag}`);
+  await sendAs(room.member, room.general, `first reply ${tag}`, root);
+  await openGeneral(page);
+  // The member writes in the direct message after the page is open: it's unread.
+  await sendAs(room.member, dm, `ping ${tag}`);
+  const box = composer(page);
+  await expect(box).toBeFocused();
+
+  // ⌥⇧↓ jumps to the next unread conversation, from the composer too.
+  await expect(page.getByRole("link", { name: new RegExp(MEMBER.name) }).first()).toBeVisible({
+    timeout: 20_000,
+  });
+  await box.press("Alt+Shift+ArrowDown");
+  await expect(page).toHaveURL(new RegExp(`c=${dm}`));
+  // ⌥↑ and ⌥↓ step through conversations; with two, either way is the other.
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect(page).toHaveURL(new RegExp(`c=${room.general}`));
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page).toHaveURL(new RegExp(`c=${dm}`));
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page).toHaveURL(new RegExp(`c=${room.general}`));
+
+  // ⌥2 and ⌥1 switch the panel's views about this conversation.
+  await page.keyboard.press("Alt+Digit2");
+  await expect(panel(page).getByRole("button", { name: "Panel view: Reply chains" })).toBeVisible();
+  await page.keyboard.press("Alt+Digit1");
+  await expect(panel(page).getByRole("button", { name: "Panel view: Details" })).toBeVisible();
+
+  // The chain panel: ⏎ in its box replies in the chain; Esc goes back.
+  const rootRow = row(page, `chain root ${tag}`);
+  await rootRow.locator('[data-slot="chain-replies"]').click();
+  const chain = page.locator('[data-slot="chain-item"]');
+  await expect(chain).toContainText(`first reply ${tag}`);
+  const chainBox = chain.locator('[contenteditable="true"]');
+  await chainBox.click();
+  await page.keyboard.type(`from the chain ${tag}`);
+  await page.keyboard.press("Enter");
+  await expect.poll(() => stored(`from the chain ${tag}`)).toBe(`from the chain ${tag}`);
+  const replies = await rest<Array<{ parent_id: string | null }>>(
+    "service",
+    `chat_messages?channel_id=eq.${room.general}&body=eq.${encodeURIComponent(`from the chain ${tag}`)}&select=parent_id`,
+  );
+  expect(replies[0]?.parent_id).toBe(root);
+  await chainBox.press("Escape");
+  await expect(chain).toHaveCount(0);
 });
