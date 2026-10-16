@@ -38,6 +38,7 @@ import type {
 } from "../../../components/ui/filter-model";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import type { Assignee } from "../assignees";
 import {
   addFilterValue,
@@ -176,12 +177,15 @@ function withUnknown(
     : [...options, ...[...new Set(extra)].map((value) => ({ value, label }))];
 }
 
+/** People as filter values: "Maciej Grzywacz (you)" in the picker, "You" on
+ *  the chip, and typing "me" still finds you (MOD-137). */
 function personOptions(assignees: readonly Assignee[]): FilterOption[] {
   return assignees.map((a) => ({
     value: a.userId,
-    label: a.name,
+    label: assigneeListName(a),
+    chipLabel: a.isMe ? a.name : undefined,
     leading: <AssigneeAvatar assignee={a} size="icon" />,
-    keywords: a.isMe ? ["me", "mine"] : undefined,
+    keywords: a.isMe ? [...SELF_KEYWORDS] : undefined,
   }));
 }
 

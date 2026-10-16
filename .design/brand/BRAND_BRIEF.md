@@ -212,6 +212,7 @@ The mark's own rule is that overlapping parts cancel. So:
 ### Voice (59, 60)
 **Plain, calm, direct.** Short declarative sentences, second person, concrete nouns. The manifesto is the reference.
 - **"We"** is the two of you; **"you"** is the reader. The UI never says "I".
+- **One way to name the reader in the app** (Maciej, 2026-10-15, dogfood call #27, MOD-137): a value on its own reads **"You"** ("Assignee is You", a column, a cell); a people list (pickers, menus, members) reads **"Maciej Grzywacz (you)"**, or "You" with no name yet; a sentence says **"you"** ("Assigned to you", "Waiting on you", "Edited by you"); activity and comments name you **"You"**. Never "me" or "Me"; "my" becomes "your" ("Show your usual pace"), and a label that would need "me" drops the pronoun ("Add reminder", "Follow up if no reply"). Two exceptions: **"My tasks"**, the view's name, and what people type (`@me` in search and pickers keeps working). → [docs/decisions/tasks.md](../../docs/decisions/tasks.md) call #27
 - Personal notes (welcome, waitlist invite, founder access, build updates) are signed **"Maciej & Mike"** while it's the two of you.
 - **Humour** is dry and rare, and never appears in errors, billing or deletion. No exclamation marks. No emoji (63).
 - **Competitors:** name the category ("five apps", "a duct-taped stack"), not the company. Named competitors only on honest comparison and import pages (62).

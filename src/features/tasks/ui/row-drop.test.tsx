@@ -6,7 +6,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rst
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const PEOPLE = {
-  u1: { userId: "u1", name: "Me", avatarUrl: null, isMe: true, canTakeTasks: true },
+  u1: {
+    userId: "u1",
+    name: "You",
+    fullName: "Alex Rivera",
+    avatarUrl: null,
+    isMe: true,
+    canTakeTasks: true,
+  },
 } as const;
 
 rs.mock("../assignees", () => ({

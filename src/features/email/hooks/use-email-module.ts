@@ -429,7 +429,7 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
     [runtime, workspaceId, isDesktop, refreshTissue],
   );
 
-  /** Arm a "remind me if no reply by X" follow-up on a thread (AC7). */
+  /** Arm a "follow up if no reply by X" reminder on a thread (AC7). */
   const setFollowUp = useCallback(
     async (thread: EmailThread, at: Date) => {
       if (!runtime || !workspaceId) return;

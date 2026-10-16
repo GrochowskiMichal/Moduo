@@ -30,6 +30,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import type { EntityRecord } from "../../../lib/entity-links";
 import { getRuntime } from "../../../lib/runtime";
 import { Reference } from "../../spine/references/ui/reference";
+import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { AssigneeAvatar } from "./assignee-avatar";
 
@@ -139,7 +140,8 @@ export function ProjectLeadValue({
   const { assignees, byId } = useAssignees();
   const [open, setOpen] = useState(defaultOpen ?? false);
   const lead = byId(leadId);
-  const label = lead ? lead.fullName || lead.name : leadId ? "Former member" : "Nobody";
+  // The value reads "You", the list "Name (you)" (MOD-137).
+  const label = lead ? lead.name : leadId ? "Former member" : "Nobody";
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild disabled={!canEdit}>
@@ -172,14 +174,14 @@ export function ProjectLeadValue({
               {assignees.map((a) => (
                 <CommandItem
                   key={a.userId}
-                  value={`${a.fullName || a.name} ${a.userId}`}
+                  value={`${a.fullName || a.name} ${a.isMe ? SELF_KEYWORDS.join(" ") : ""} ${a.userId}`}
                   onSelect={() => {
                     setOpen(false);
                     if (a.userId !== leadId) onChange(a.userId);
                   }}
                 >
                   <AssigneeAvatar assignee={a} size="icon" />
-                  {a.fullName || a.name}
+                  {assigneeListName(a)}
                 </CommandItem>
               ))}
             </CommandGroup>

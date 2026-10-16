@@ -88,7 +88,7 @@ function ctx(over: Partial<BoardContext> = {}): BoardContext {
       { id: "t1", name: "Design" },
     ],
     assignees: [
-      { userId: "me", name: "Me", canTakeTasks: true },
+      { userId: "me", name: "You", canTakeTasks: true },
       { userId: "sam", name: "Sam", canTakeTasks: true },
       { userId: "vic", name: "Vic", canTakeTasks: false },
     ],
@@ -293,7 +293,7 @@ describe("other groupings (call 22, default o)", () => {
       [task("a", { assigneeId: "sam" }), task("b", { assigneeId: "gone" }), task("c")],
       ctx({ groupBy: "assignee" }),
     );
-    expect(labels(cols)).toEqual(["Me", "Sam", "Vic", "Former member", "Unassigned"]);
+    expect(labels(cols)).toEqual(["You", "Sam", "Vic", "Former member", "Unassigned"]);
     expect(cols.every((c) => !c.persistent)).toBe(true);
     expect(cols.find((c) => c.label === "Vic")?.target).toBeNull();
     expect(cols.find((c) => c.label === "Former member")?.target).toBeNull();

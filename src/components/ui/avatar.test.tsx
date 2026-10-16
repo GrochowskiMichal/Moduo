@@ -1,6 +1,6 @@
 // DS-6 (tasks-v3 AC1.15, calls 43 + 95): people are two initials on a stable
 // colour in a circle, teams two letters in a rounded square. Never one letter,
-// never "Me". tests/visual/avatars.spec.ts checks the rendered shapes.
+// never "You" or "Me". tests/visual/avatars.spec.ts checks the rendered shapes.
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, render, waitFor } from "@testing-library/react";
 
