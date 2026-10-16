@@ -10,6 +10,8 @@
 -- surface call it); the anchored write wraps it, so the guard, visibility,
 -- registry ensure, mentions and notifications are the same code path.
 
+SET LOCAL lock_timeout = '5s';
+
 ALTER TABLE public.comments
   ADD COLUMN IF NOT EXISTS anchor_id uuid NULL,
   ADD COLUMN IF NOT EXISTS resolved_at timestamptz NULL;
@@ -95,13 +97,18 @@ DECLARE
   v_count integer;
 BEGIN
   PERFORM public.spine_op__guard(p_workspace_id);
+  -- A person resolves (the highlight lives in their editor); an app's key can't.
+  IF public.module_api_key_id() IS NOT NULL THEN
+    RAISE EXCEPTION 'An app can''t resolve a comment thread.' USING ERRCODE = '42501';
+  END IF;
   IF NOT public.comments__item_seen(p_workspace_id, 'note', p_entity_id) THEN
     RAISE EXCEPTION 'That item isn''t there any more.' USING ERRCODE = 'P0002';
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended('comments.anchor:' || p_anchor_id::text, 0));
 
   UPDATE public.comments c
-  SET resolved_at = CASE WHEN p_resolved THEN coalesce(c.resolved_at, now()) ELSE NULL END
+  SET resolved_at = CASE WHEN coalesce(p_resolved, true) THEN coalesce(c.resolved_at, now()) ELSE NULL END,
+      updated_at = now()
   WHERE c.workspace_id = p_workspace_id
     AND c.entity_type = 'note'
     AND c.entity_id = p_entity_id
@@ -113,7 +120,7 @@ BEGIN
 
   PERFORM public.module_activity_log(
     p_workspace_id, 'comments', 'note', p_entity_id,
-    CASE WHEN p_resolved THEN 'comments.resolve' ELSE 'comments.reopen' END,
+    CASE WHEN coalesce(p_resolved, true) THEN 'comments.resolve' ELSE 'comments.reopen' END,
     jsonb_build_object('anchor_id', p_anchor_id));
   RETURN v_count;
 END;

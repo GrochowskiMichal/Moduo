@@ -79,7 +79,6 @@ export function NoteCommentsPanel({
     const open = new Set([...groups.open, ...groups.detached].map((g) => g.anchorId));
     anchorStore.setOpenThreads(noteId, open);
   }, [noteId, thread.loading, groups]);
-  useEffect(() => () => anchorStore.setOpenThreads(noteId, null), [noteId]);
 
   // A thread anchored but never posted to: take its mark back out when the
   // panel goes away (switching views, notes, or closing).
@@ -149,6 +148,10 @@ export function NoteCommentsPanel({
     );
   };
 
+  // Resolving takes the highlight out of the doc, so it needs an editor that
+  // can write it (a viewer reads and replies; an editor resolves).
+  const canResolve = canComment && anchorStore.actions(noteId)?.editable === true;
+
   const anchoredText = (anchorId: string) => anchorStore.actions(noteId)?.textOf(anchorId) ?? "";
 
   const renderThread = (g: CommentThreadGroup, kind: "open" | "detached" | "resolved") => {
@@ -176,7 +179,7 @@ export function NoteCommentsPanel({
                   : "Resolved"}
             </span>
           </button>
-          {kind !== "resolved" && canComment ? (
+          {kind !== "resolved" && canResolve ? (
             <IconButton
               icon={Check}
               label="Resolve"

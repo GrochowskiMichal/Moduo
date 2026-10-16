@@ -18,7 +18,9 @@ import * as Y from "yjs";
 import type { SpineComment } from "@/lib/runtime.types";
 import { createNotesHeadlessEditor, deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { buildDocStateFromMarkdown } from "../editor/materialize";
+import { ADD_COMMENT_COMMAND, registerAddComment } from "../editor/plugins/comment-marks-plugin";
 import { decodeBase64ToUint8 } from "../utils/base64";
+import { anchorStore } from "./anchor-store";
 import { $anchorIdsInOrder, $anchorSelection, $unanchor, groupThreads } from "./anchors";
 
 function bind(doc: Y.Doc): LexicalEditor {
@@ -169,5 +171,51 @@ describe("anchor lifecycle", () => {
     const g = groupThreads([comment("c", "gone", "2026-10-16T10:00:00Z")], null);
     expect(g.open.map((t) => t.anchorId)).toEqual(["gone"]);
     expect(g.detached).toEqual([]);
+  });
+
+  it("the Comment command anchors the selection, opens the composer, and drops an unposted draft", () => {
+    const editor = bind(docFrom("Alpha beta gamma", 5));
+    let opened = 0;
+    registerAddComment(editor, "note-cmd", true, () => {
+      opened += 1;
+    });
+    const select = (word: string) =>
+      editor.update(
+        () => {
+          const text = $getRoot()
+            .getAllTextNodes()
+            .find((t) => t.getTextContent().includes(word))!;
+          const at = text.getTextContent().indexOf(word);
+          const sel = $createRangeSelection();
+          sel.anchor.set(text.getKey(), at, "text");
+          sel.focus.set(text.getKey(), at + word.length, "text");
+          $setSelection(sel);
+        },
+        { discrete: true },
+      );
+
+    select("beta");
+    expect(editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined)).toBe(true);
+    editor.update(() => {}, { discrete: true }); // commit the command's update
+    const first = anchorStore.get("note-cmd").pending;
+    expect(first).toBeTruthy();
+    expect(ids(editor)).toEqual([first]);
+    expect(anchorStore.get("note-cmd").focused).toBe(first);
+    expect(opened).toBe(1);
+
+    // A second Comment before posting replaces the draft's mark.
+    select("gamma");
+    expect(editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined)).toBe(true);
+    editor.update(() => {}, { discrete: true }); // commit the command's update
+    const second = anchorStore.get("note-cmd").pending;
+    expect(second).not.toBe(first);
+    expect(ids(editor)).toEqual([second]);
+  });
+
+  it("a read-only editor never anchors", () => {
+    const editor = bind(docFrom("Alpha", 6));
+    registerAddComment(editor, "note-ro", false, () => {});
+    expect(editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined)).toBe(false);
+    expect(ids(editor)).toEqual([]);
   });
 });

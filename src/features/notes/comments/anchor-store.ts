@@ -16,8 +16,8 @@
 import { useSyncExternalStore } from "react";
 
 export type AnchorEditorActions = {
-  /** Anchor a new thread to the current selection; its id, or null. */
-  anchorSelection: () => string | null;
+  /** The editor can change the doc (take a resolved thread's mark out). */
+  editable: boolean;
   unanchor: (anchorId: string) => void;
   scrollTo: (anchorId: string) => void;
   /** Text under a thread's highlight (for the composer's quote). */
@@ -27,7 +27,7 @@ export type AnchorEditorActions = {
 type NoteAnchors = {
   /** null: no editor has reported this note's doc yet. */
   docOrder: string[] | null;
-  /** null: the panel hasn't loaded, so every mark is shown. */
+  /** null: not known yet, so no mark is highlighted. */
   openThreads: ReadonlySet<string> | null;
   focused: string | null;
   /** A thread anchored here whose first comment isn't posted yet. */

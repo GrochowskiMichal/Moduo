@@ -543,7 +543,6 @@ export function NoteEditor({
                   sourceLabel={titleForLabel || "Untitled"}
                 />
                 <BlockHandlePlugin doc={session.doc} />
-                <CommentMarksPlugin noteId={noteId} editable={editable} />
               </>
             ) : null}
             <MentionMenuPlugin
@@ -573,6 +572,14 @@ export function NoteEditor({
               format while typing. ⌘B/⌘I ride Lexical's built-in rich-text
               bindings; the floating toolbar makes them discoverable. */}
             <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
+            {bare ? (
+              <CommentMarksPlugin
+                noteId={noteId}
+                editable={editable}
+                runtime={runtime}
+                workspaceId={workspaceId ?? null}
+              />
+            ) : null}
             <FormatToolbarPlugin
               editable={editable}
               link={writing}

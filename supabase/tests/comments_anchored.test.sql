@@ -3,8 +3,13 @@
 -- Cast: O owns workspace W and the private note N, shared with V (view). M is
 -- a member who can't see N. A is a thread (anchor) on N; B another.
 
-SELECT test.person(n) FROM unnest(ARRAY['O', 'V', 'M']) AS n;
-INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Moduo Labs');
+SELECT test.person(n) FROM unnest(ARRAY['O', 'V', 'M', 'X']) AS n;
+INSERT INTO public.workspaces (id, owner_id, name) VALUES
+  (test.id('W'), test.id('O'), 'Moduo Labs'),
+  (test.id('W2'), test.id('X'), 'Elsewhere');
+INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by)
+VALUES (test.id('K'), test.id('W'), 'Claude Desktop', 'mdo_test', md5('db-test-key'),
+        '{"notes": "edit", "links": "edit"}'::jsonb, test.id('O'));
 INSERT INTO public.workspace_members (workspace_id, user_id, role)
 SELECT test.id('W'), test.id(n), 'member' FROM unnest(ARRAY['V', 'M']) AS n
 ON CONFLICT (workspace_id, user_id) DO NOTHING;
@@ -46,6 +51,20 @@ BEGIN
   v := test.value_as('M', format($q$SELECT public.comments_op_resolve(%L, %L, %L)::text$q$,
     test.id('W'), test.id('N'), test.id('A')));
   PERFORM test.ok(v LIKE 'ERROR%', 'a member without access cannot resolve', v);
+
+  -- An outsider naming their own workspace with this note gets nothing.
+  v := test.value_as('X', format(
+    $q$SELECT (public.comments_op_add_anchored(%L, %L, %L, 'x')).id::text$q$,
+    test.id('W2'), test.id('N'), test.id('XA')));
+  PERFORM test.ok(v LIKE 'ERROR%', 'another workspace cannot anchor on this note', v);
+  v := test.value_as('X', format($q$SELECT public.comments_op_resolve(%L, %L, %L)::text$q$,
+    test.id('W2'), test.id('N'), test.id('A')));
+  PERFORM test.ok(v LIKE 'ERROR%', 'another workspace cannot resolve this note''s thread', v);
+
+  -- An app's key can't resolve (a person does, in their editor).
+  v := test.as_key('K', format($q$SELECT public.comments_op_resolve(%L, %L, %L)$q$,
+    test.id('W'), test.id('N'), test.id('A')));
+  PERFORM test.ok(v NOT LIKE 'ok%', 'an API key cannot resolve a thread', v);
 
   -- A thread id can't be reused on another note.
   v := test.anchored('O', 'N2', 'A', 'hijack');
