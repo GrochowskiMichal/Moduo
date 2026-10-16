@@ -41,6 +41,7 @@ import {
 import {
   BURST_WINDOW_MS,
   burstCopy,
+  type ChatNoticeTarget,
   chatNoticeSwitch,
   chatNoticeTarget,
   decideChatNotice,
@@ -76,7 +77,7 @@ function openTask(delivery: NoticeDelivery): void {
   );
 }
 
-type Rung = { workspaceId: string | null; target: { c: string; m?: string }; at: number };
+type Rung = { workspaceId: string | null; target: ChatNoticeTarget; at: number };
 /** A tag's last ring, and the rows acknowledged quietly on it since (a burst). */
 type TagRing = { at: number; quiet: number };
 
@@ -150,10 +151,12 @@ export function NoticeDeliveries({
   );
 
   // Open the message a notice is about: its workspace first (a running Focus keeps running).
-  const land = useCallback((workspaceId: string | null, target: { c: string; m?: string }) => {
+  const land = useCallback((workspaceId: string | null, target: ChatNoticeTarget) => {
     const { selectedWorkspaceId: open, selectWorkspace: select, navigate: go } = live.current;
     if (workspaceId && workspaceId !== open) select(workspaceId);
     void go({ to: "/chat", search: target });
+    // Catch up (the Focus summary): no conversation's burst to start over.
+    if (!("c" in target)) return;
     // You read it there: its burst starts over.
     for (const tag of rungByTag.current.keys()) {
       if (tag === `chat:${target.c}` || tag.startsWith(`chat:${target.c}:`)) {

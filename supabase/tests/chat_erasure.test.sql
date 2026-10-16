@@ -1,6 +1,7 @@
 -- Chat v2 account erasure (AC12.8, its tables). CV-1 adds chat_catchup and
 -- chat_chain_mutes to account_erase_workspace_data (preview counts and deletes);
--- later blocks add their own per-person tables here (user_clients, statuses).
+-- later blocks add their own per-person tables here (user_clients, statuses,
+-- CV-18's user_notice_pauses and user_status_changes).
 --
 -- Cast: O owns workspace W; E and F are members; E also owns W2. Rows are written
 -- as the ops will write them (directly, as the server).
@@ -56,6 +57,13 @@ INSERT INTO public.chat_chain_mutes (user_id, root_id, workspace_id) VALUES
   (test.id('E'), test.id('m:1'), test.id('W')),
   (test.id('E'), test.id('m:3'), test.id('W2')),
   (test.id('F'), test.id('m:2'), test.id('W'));
+-- CV-18: a notice pause (per workspace) and the status-change rate counter.
+INSERT INTO public.user_notice_pauses (user_id, workspace_id) VALUES
+  (test.id('G'), test.id('W')),
+  (test.id('F'), test.id('W'));
+INSERT INTO public.user_status_changes (user_id, window_start, n) VALUES
+  (test.id('G'), now(), 1),
+  (test.id('F'), now(), 2);
 
 DO $$
 DECLARE
@@ -97,5 +105,14 @@ BEGIN
     (SELECT count(*) FROM public.chat_catchup WHERE user_id = test.id('F')) = 0
     AND (SELECT count(*) FROM public.chat_chain_mutes WHERE user_id = test.id('F')) = 0,
     'cascade: deleting the account removes its Catch up items and chain mutes');
+  PERFORM test.ok(
+    NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('F'))
+    AND NOT EXISTS (SELECT 1 FROM public.user_status_changes WHERE user_id = test.id('F'))
+    AND EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE user_id = test.id('G'))
+    AND EXISTS (SELECT 1 FROM public.user_status_changes WHERE user_id = test.id('G')),
+    'cascade: deleting the account removes its notice pauses and status-change counter (CV-18); nobody else''s');
+  DELETE FROM public.workspaces WHERE id = test.id('W');
+  PERFORM test.ok(NOT EXISTS (SELECT 1 FROM public.user_notice_pauses WHERE workspace_id = test.id('W')),
+    'cascade: a deleted workspace takes its notice pauses with it');
 END;
 $$;

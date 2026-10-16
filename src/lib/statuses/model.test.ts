@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+import { formatTime } from "../time-format";
 
 // Statuses as people read them (CV-17, AC11.1, AC11.3, AC11.4): the shape for
 // each state, the words, "until", the line above the composer and the person
@@ -93,6 +94,24 @@ describe("statuses (AC11.4)", () => {
       NOW.getTime(),
     );
     expect(composerHoldLine("Mo", meeting.get("mo"), NOW)).toBeNull();
+  });
+
+  it("during their quiet hours: “Sofia's quiet hours · back 9:00” (CV-18)", () => {
+    const back = new Date(NOW.getTime() + 3 * 3_600_000);
+    const people = peopleNowFromRows(
+      [{ user_id: "sofia", status: null, quiet_now: true, back_at: back.toISOString() }],
+      NOW.getTime(),
+    );
+    expect(composerHoldLine("Sofia", people.get("sofia"), NOW)).toBe(
+      `Sofia's quiet hours · back ${formatTime(back)}`,
+    );
+    // Do not disturb says more, so it wins; once back, no line.
+    const both = peopleNowFromRows(
+      [{ user_id: "jana", status: vacation, quiet_now: true, back_at: back.toISOString() }],
+      NOW.getTime(),
+    );
+    expect(composerHoldLine("Jana", both.get("jana"), NOW)).toContain("on vacation");
+    expect(composerHoldLine("Sofia", people.get("sofia"), new Date(back.getTime() + 1))).toBeNull();
   });
 
   it("the shared person picker reads “on vacation until Oct 20”", () => {

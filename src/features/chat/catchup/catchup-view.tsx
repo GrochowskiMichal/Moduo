@@ -25,6 +25,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { IconButton } from "@/components/ui/icon-button";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "@/features/layout/panel-events";
 import { NOTICES_OFF_LINE, useBrowserNoticesOff } from "@/lib/notices/chat-ask";
+import { heldLine, useHeldForFocus } from "@/lib/notices/held";
 import { formatPastDay, formatTime } from "@/lib/time-format";
 import { useTimeRegion } from "@/lib/time-region";
 import { undoToast } from "@/lib/undo-toast";
@@ -157,6 +158,8 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [later, setLater] = useState<CatchupRow | null>(null);
   const noticesOff = useBrowserNoticesOff();
+  // CV-18: what a running Focus holds ("3 held until Focus ends").
+  const held = heldLine(useHeldForFocus());
   const region = useTimeRegion();
 
   const authorOf = useCallback(
@@ -586,6 +589,11 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
           className="shrink-0 px-5 pb-2 text-xs text-muted-foreground"
         >
           {NOTICES_OFF_LINE}
+        </p>
+      ) : null}
+      {held ? (
+        <p data-slot="catchup-held" className="shrink-0 px-5 pb-2 text-xs text-muted-foreground">
+          {held}
         </p>
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>

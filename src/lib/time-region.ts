@@ -36,7 +36,14 @@ export type TimeRegion = {
   dateOrder: DateOrder | null;
   /** "Share my tracked time with the workspace owner" (REPLAN 75). */
   shareTimeWithOwner: boolean;
+  /** Quiet hours (CV-18): every module's device notices wait; "HH:MM" in `timeZone`. */
+  quietHours: QuietHours;
 };
+
+/** Quiet hours: on/off and a range ("19:00" → "09:00" crosses midnight). */
+export type QuietHours = { on: boolean; from: string | null; to: string | null };
+
+export const DEFAULT_QUIET_RANGE = { from: "19:00", to: "09:00" } as const;
 
 /** A change to send: only the keys present change; null = the device's. */
 export type TimeRegionPatch = {
@@ -45,6 +52,7 @@ export type TimeRegionPatch = {
   hourCycle?: HourCycle | null;
   dateOrder?: DateOrder | null;
   shareTimeWithOwner?: boolean;
+  quietHours?: { on: boolean; from: string; to: string };
 };
 
 /** What every reader uses: the saved values with the device's filled in. */
@@ -65,6 +73,7 @@ export const EMPTY_TIME_REGION: TimeRegion = {
   hourCycle: null,
   dateOrder: null,
   shareTimeWithOwner: false,
+  quietHours: { on: false, from: null, to: null },
 };
 
 // ── Rows ──────────────────────────────────────────────────────────────────────
@@ -79,7 +88,17 @@ export function timeRegionRowToModel(raw: unknown): TimeRegion {
     hourCycle: r.hour_cycle ?? null,
     dateOrder: r.date_order ?? null,
     shareTimeWithOwner: r.share_time_with_owner === true,
+    quietHours: {
+      on: r.quiet_hours?.on === true,
+      from: asClock(r.quiet_hours?.from),
+      to: asClock(r.quiet_hours?.to),
+    },
   };
+}
+
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/;
+function asClock(v: unknown): string | null {
+  return typeof v === "string" && CLOCK.test(v) ? v : null;
 }
 
 /** The op's patch: only the keys the change carries. */
@@ -90,7 +109,53 @@ export function timeRegionPatchToRow(patch: TimeRegionPatch): Record<string, unk
   if (patch.hourCycle !== undefined) out.hour_cycle = patch.hourCycle;
   if (patch.dateOrder !== undefined) out.date_order = patch.dateOrder;
   if (patch.shareTimeWithOwner !== undefined) out.share_time_with_owner = patch.shareTimeWithOwner;
+  if (patch.quietHours !== undefined) out.quiet_hours = { ...patch.quietHours };
   return out;
+}
+
+// ── Quiet hours ───────────────────────────────────────────────────────────────
+
+/** Minutes past midnight of a "HH:MM" clock. */
+function clockMinutes(clock: string): number {
+  const [h, m] = clock.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/** The wall-clock minutes past midnight of `at` in `zone` (UTC when unreadable). */
+function zoneMinutes(at: Date, zone: string | null): number {
+  const read = (tz: string) => {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(at);
+    const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+    const m = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+    return (h % 24) * 60 + m;
+  };
+  try {
+    return read(zone || "UTC");
+  } catch {
+    return read("UTC");
+  }
+}
+
+/**
+ * Is it quiet hours at `at` for this person (their saved zone, else UTC, as
+ * the server's `time_region__quiet_now` reads it)? A range whose start is
+ * after its end crosses midnight (19:00 → 9:00). Pure.
+ */
+export function isQuietNow(
+  region: Pick<TimeRegion, "quietHours" | "timeZone">,
+  at: Date = new Date(),
+): boolean {
+  const { on, from, to } = region.quietHours;
+  if (!on || !from || !to || from === to) return false;
+  const now = zoneMinutes(at, region.timeZone);
+  const start = clockMinutes(from);
+  const end = clockMinutes(to);
+  return start < end ? now >= start && now < end : now >= start || now < end;
 }
 
 // ── The device's defaults ─────────────────────────────────────────────────────
@@ -234,7 +299,13 @@ function sanitize(raw: unknown): TimeRegion {
     hourCycle: o.hourCycle === "h12" || o.hourCycle === "h23" ? o.hourCycle : null,
     dateOrder: o.dateOrder === "month_day" || o.dateOrder === "day_month" ? o.dateOrder : null,
     shareTimeWithOwner: o.shareTimeWithOwner === true,
+    quietHours: sanitizeQuiet(o.quietHours),
   };
+}
+
+function sanitizeQuiet(raw: unknown): QuietHours {
+  const q = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return { on: q.on === true, from: asClock(q.from), to: asClock(q.to) };
 }
 
 /** Put a copy in place for `userId` (null = signed out: back to the device's). */
