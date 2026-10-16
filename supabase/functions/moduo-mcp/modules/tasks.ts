@@ -1825,11 +1825,11 @@ export const tasksConnectorModule: ConnectorModule = {
           lead_id: { type: ["string", "null"], description: "Member uuid, or null." },
           client_contact_id: {
             type: ["string", "null"],
-            description: "The client as a person: a contact uuid (it replaces a company client), or null.",
+            description: "The client as a person: a contact uuid (it replaces a company client), or null to clear a person client.",
           },
           client_company_id: {
             type: ["string", "null"],
-            description: "The client as a company: a company uuid (it replaces a person client), or null.",
+            description: "The client as a company: a company uuid (it replaces a person client), or null to clear a company client.",
           },
           description: {
             type: ["string", "null"],
