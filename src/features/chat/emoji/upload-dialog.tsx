@@ -82,7 +82,10 @@ export function AddEmojiDialog({
     try {
       const p = await prepareEmojiFile(file);
       setPrepared(p);
-      if (!name) setName(tidyEmojiName(file.name.replace(/\.[^.]+$/, "")).slice(0, 32));
+      // From the file's name only while the field is still empty (a name typed
+      // while the image was being read wins).
+      const fromFile = tidyEmojiName(file.name.replace(/\.[^.]+$/, "")).slice(0, 32);
+      setName((current) => current || fromFile);
     } catch (e) {
       setPrepared(null);
       setError(e instanceof EmojiFileError ? e.message : "Couldn't read that image.");

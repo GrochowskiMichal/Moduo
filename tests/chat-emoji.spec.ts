@@ -115,13 +115,14 @@ test("custom emoji in the picker, reactions and comments", async ({ page }) => {
     timeout: 20_000,
   });
 
-  // On a task comment.
+  // On a task comment (the member's own task: a task is private to its maker
+  // until shared).
   const taskId = randomUUID();
-  await rpc(room.owner, "tasks_op_create", {
+  await rpc(room.member, "tasks_op_create", {
     p_workspace_id: room.ws,
     p_task: { id: taskId, title: `Ship ${tag}` },
   });
-  const comment = await rpc<{ id: string } | Array<{ id: string }>>(room.owner, "comments_op_add", {
+  const comment = await rpc<{ id: string } | Array<{ id: string }>>(room.member, "comments_op_add", {
     p_workspace_id: room.ws,
     p_entity_type: "task",
     p_entity_id: taskId,

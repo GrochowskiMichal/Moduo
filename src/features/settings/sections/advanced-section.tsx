@@ -2,6 +2,7 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { customEmojiExportFiles } from "@/features/chat/emoji/export-files";
 import { readChatExport, signedFileBytes } from "@/features/chat/export";
 import { listMyClients, listMyNoticePauses } from "@/lib/notices/clients";
 import { listSavedStatuses, readMyStatus } from "@/lib/statuses/api";
@@ -134,6 +135,16 @@ async function gatherExport(
             // CV-9: each conversation's files, then their bytes through signed links.
             files: c.files ? (args) => c.files!(args) : undefined,
             fileBytes: signedFileBytes((paths, ttl) => runtime.attachments.signedUrls(paths, ttl)),
+            // CV-20: the custom emoji you added, as images.
+            extraFiles: (ws) =>
+              customEmojiExportFiles(
+                {
+                  list: (id) => c.customEmoji(id),
+                  bytes: signedFileBytes((paths, ttl) => c.emojiUrls(paths, ttl)),
+                },
+                ws,
+                userId,
+              ),
           },
           workspaceId,
           userId,

@@ -24,6 +24,7 @@ import {
   emojiViewForTest,
   setEmojiStoreDepsForTest,
 } from "./store";
+import { customEmojiExportFiles } from "./export-files";
 import { emojiPaths, fitWithin, isAnimatedImage, sniffImageType, typeAgrees } from "./upload";
 
 const WS = "11111111-1111-4111-8111-111111111111";
@@ -251,5 +252,50 @@ describe("the shared store", () => {
     });
     await emojiLoadForTest(WS);
     expect(emojiViewForTest(WS).list).toEqual([]);
+  });
+});
+
+describe("custom emoji in the account export", () => {
+  it("carries the live emoji you added, as emoji/<name>.<ext>; others' and removed ones stay out", async () => {
+    const mine = emoji({ id: "m", name: "shipit", storage_path: `${WS}/m.gif`, mime: "image/gif" });
+    const unread = emoji({ id: "u", name: "lost", storage_path: `${WS}/u.png` });
+    const theirs = emoji({ id: "t", name: "theirs", created_by: "u2", storage_path: `${WS}/t.png` });
+    const removed = emoji({
+      id: "r",
+      name: "gone",
+      storage_path: `${WS}/r.png`,
+      deleted_at: "2026-10-10T00:00:00Z",
+    });
+    const asked: string[][] = [];
+    const files = await customEmojiExportFiles(
+      {
+        list: async () => [mine, unread, theirs, removed],
+        bytes: async (paths) => {
+          asked.push(paths);
+          return new Map([[`${WS}/m.gif`, new Uint8Array([7])]]);
+        },
+      },
+      WS,
+      "u1",
+    );
+    expect([...asked[0]].sort()).toEqual([`${WS}/m.gif`, `${WS}/u.png`]);
+    expect(files).toEqual([{ path: "emoji/shipit.gif", bytes: new Uint8Array([7]) }]);
+  });
+
+  it("asks for nothing when you added none", async () => {
+    let asked = false;
+    const files = await customEmojiExportFiles(
+      {
+        list: async () => [emoji({ created_by: "u2" })],
+        bytes: async () => {
+          asked = true;
+          return new Map();
+        },
+      },
+      WS,
+      "u1",
+    );
+    expect(files).toEqual([]);
+    expect(asked).toBe(false);
   });
 });

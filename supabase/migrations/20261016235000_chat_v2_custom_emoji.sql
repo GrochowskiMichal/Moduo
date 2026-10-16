@@ -41,6 +41,8 @@
 -- Every redefined function is cut from its live body (pg_temp.recut): if an
 -- earlier migration changed the lines it expects, the migration stops.
 
+SET LOCAL lock_timeout = '5s';
+
 CREATE OR REPLACE FUNCTION pg_temp.recut(p_fn regprocedure, p_old text, p_new text)
 RETURNS void
 LANGUAGE plpgsql
