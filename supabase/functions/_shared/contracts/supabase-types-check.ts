@@ -13,7 +13,7 @@
  * live pg_enum probe fixture) live in `vocabularies.test.ts`.
  */
 
-import type { Database } from "../../../../src/types/supabase.ts";
+import type { Database } from "../../../../apps/app/src/types/supabase.ts";
 
 import type { PlanTier } from "./vocabularies.ts";
 

@@ -1,0 +1,12 @@
+// Turborepo remote cache. Deployed by .github/workflows/turbo-cache.yml (wrangler is pinned there).
+// Secrets READ_TOKEN and WRITE_TOKEN are set by that workflow from the repo's TURBO_READ_TOKEN and
+// TURBO_WRITE_TOKEN; never put them here.
+{
+  "name": "moduo-turbo-cache",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "moduo-turbo-cache" }],
+  "observability": { "enabled": true }
+}

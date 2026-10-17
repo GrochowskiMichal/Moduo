@@ -10,8 +10,7 @@ The process that produced Tasks v3 (2026-10-09 → 2026-10-10: `.design/tasks-v3
 Plan the rebuild of the <MODULE> module, the way Tasks v3 was planned. Follow docs/agents/module-replan.md exactly (it's on the branch t/maciej/tasks-v3-build).
 
 SETUP
-- Start your branch from the Tasks v3 integration branch, which holds the north star: git switch -c t/maciej/<module>-replan t/maciej/tasks-v3-build.
-- Work in LOCAL BUILD MODE: read the 🟠 box at the top of the "Tasks v3" section in specs/BUILD_ORDER.md. Local Supabase is prod; no pushes to maciej/develop and no PRs until Maciej says "release"; backing up your branch to origin is fine.
+- Start your branch from `maciej`, which holds the north star (Tasks v3 released 2026-10-14, Chat v2 2026-10-16): git switch -c t/maciej/<module>-replan maciej.
 - Title the session "[<Module>] rebuild plan".
 
 READ FIRST

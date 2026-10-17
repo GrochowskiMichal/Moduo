@@ -1,0 +1,93 @@
+name: turbo-cache
+
+# Deploys the Turborepo remote cache (infra/turbo-cache: a Worker + the R2 bucket it stores in).
+# Runs when the Worker changes on develop or mike, or by hand. The bucket and its 30-day expiry
+# rule are created on first run; every run re-uploads the two access tokens as Worker secrets.
+on:
+  push:
+    branches: [develop, mike]
+    paths:
+      - infra/turbo-cache/**
+      - .github/workflows/turbo-cache.yml
+  workflow_dispatch:
+
+concurrency:
+  group: turbo-cache-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The write token lives only in this environment, which only develop, main, mike, maciej
+    # and v* tags may use.
+    environment: turbo-cache-write
+    # The Cloudflare token is given only to the wrangler steps, never to install or tests.
+    env:
+      WRANGLER: npx --yes wrangler@4.147.0
+      BUCKET: moduo-turbo-cache
+    defaults:
+      run:
+        working-directory: infra/turbo-cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Test the Worker
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+
+      - name: Bucket and expiry rule
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ! $WRANGLER r2 bucket info "$BUCKET" >/dev/null 2>&1; then
+            $WRANGLER r2 bucket create "$BUCKET"
+          fi
+          if ! $WRANGLER r2 bucket lifecycle list "$BUCKET" | grep -q expire-30d; then
+            $WRANGLER r2 bucket lifecycle add "$BUCKET" expire-30d --expire-days 30 --force
+          fi
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          READ_TOKEN: ${{ secrets.TURBO_READ_TOKEN }}
+          WRITE_TOKEN: ${{ secrets.TURBO_WRITE_TOKEN }}
+        run: |
+          [ -n "$READ_TOKEN" ] && [ -n "$WRITE_TOKEN" ] || { echo "::error::TURBO_READ_TOKEN or TURBO_WRITE_TOKEN is missing"; exit 1; }
+          secrets="$RUNNER_TEMP/turbo-cache-secrets.json"
+          trap 'rm -f "$secrets"' EXIT
+          jq -n --arg r "$READ_TOKEN" --arg w "$WRITE_TOKEN" '{READ_TOKEN: $r, WRITE_TOKEN: $w}' > "$secrets"
+          $WRANGLER deploy
+          $WRANGLER secret bulk "$secrets"
+
+      - name: Smoke test
+        env:
+          READ_TOKEN: ${{ secrets.TURBO_READ_TOKEN }}
+          TURBO_API: ${{ vars.TURBO_API }}
+        run: |
+          if [ -z "$TURBO_API" ]; then
+            echo "::warning::Repo variable TURBO_API is not set; set it to the workers.dev URL printed above."
+            exit 0
+          fi
+          curl -sSf -H "Authorization: Bearer $READ_TOKEN" "$TURBO_API/v8/artifacts/status"
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H "Authorization: Bearer $READ_TOKEN" \
+            -H 'content-length: 1' --data x "$TURBO_API/v8/artifacts/smoke?teamId=smoke")
+          echo "read token PUT → $code"
+          [ "$code" = 403 ]

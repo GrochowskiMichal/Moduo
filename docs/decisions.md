@@ -8,6 +8,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · PLAT-8: cutover: DNS on Cloudflare (checked with `scripts/dns-diff.ts`), every host a Worker custom domain in `wrangler.jsonc`, www as a 308 redirect rule, prod via owner-only `deploy-prod.yml` (rebuilds a staging-tested develop commit with the prod version, moves `prod-app`), updater on updates.moduo.app then workers.dev then GitHub.
+- 2026-10-17 · PLAT-7: desktop Mac builds on Mike's Mac (`moduo-mac`) when online and idle, else GitHub; inline pick-runner (not the archived fallback action), gate enforced by a root-owned hook on the Mac, re-runs always on GitHub, watchdog cancels a stuck Mac job.
+- 2026-10-17 · PLAT-5: landing is its own static-assets Worker; a router hands `/book*` and `/static/*` to the app Worker over a service binding (works on workers.dev and previews; at cutover only custom domains, no zone routes); clean URLs, SPA fallback as Vercel's catch-all.
+- 2026-10-17 · PLAT-4: web app on Workers static assets with the edge Worker serving the shell (`not_found_handling: "none"`, SPA mode served the shell for missing chunks), per-environment config via `public-config.ts`, previews as staging Worker versions, 3-build chunk retention in R2, no preview redirect allowlist (one Supabase project, code sign-in).
+- 2026-10-17 · PLAT-3: CI skips work through the Turborepo remote cache (own Worker + R2, signed), not `--affected` (misses alias inputs); PRs read-only by token, docs-only PRs skip lint/tests.
+- 2026-10-17 · PLAT-2 layout: `e2e/` is `@moduo/e2e`, deps split per package on the hoisted linker, verify through Turborepo root + package tasks, `envMode: loose` until PLAT-3, Vercel/CI build scripts bypass turbo, Tailwind scan pinned to `apps/app`, desktop workflow detects either layout.
+- 2026-10-17 · Platform v2: GitHub Pro (personal, private) + Cloudflare hosting and R2 updates; Mike's Mac is the first-choice desktop runner with hosted fallback; Bun workspaces + Turborepo; AWS, all-Azure, Vercel Pro and Nx rejected.
+- 2026-10-17 · Release runbook in `docs/release.md`; prod migrations go by scratch-folder push (a train) or one-transaction `db query --linked` (one or two files).
 - 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, each worktree on its own dev-server port (agent's choice).
 - 2026-10-14 · A release pushes only its own migrations from a scratch folder (placeholders for prod's versions), so prod's history keeps the file versions; shared functions deploy from every deploying branch.
@@ -104,6 +112,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-17 · PLAT-6: desktop updates come from the update-server Worker on R2 (versioned, never overwritten; rollout and kill switch in KV, fail closed), and the GitHub `latest.json` freezes at each channel's bridge release.
+- 2026-10-17 · Web and desktop take one version from `VERSION` (1.1.0, above the installed 1.0.22/1.0.41); prod desktop needs a bump; `min_build` holds back desktop only.
 - 2026-10-07 · Both desktop release channels run one shared workflow, and only the `.dmg` is notarized.
 - 2026-10-07 · Rust crates and Rsbuild move to the newest stable, not their pre-releases.
 - 2026-10-07 · Desktop Rust is pinned to nightly-2026-10-06, with the parallel front end on.
@@ -121,7 +131,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
-- 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
+- 2026-10-07 · Biome doesn't lint `apps/landing/**/*.html`, and `bun run lint:js` gates CI.
 - 2026-10-07 · The rest of the JS libraries move to their newest stable release, with four majors left on the line already in use.
 - 2026-10-07 · Drag and drop stays on `@dnd-kit/core` 6.3.1, `@dnd-kit/sortable` 10.0.0, and `@dnd-kit/utilities` 3.2.2.
 - 2026-10-07 · The Lexical pack is 0.52.0, and Yjs is 13.6.33.
@@ -191,6 +201,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
 - 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
 - 2026-10-16 · NR-7: clients send nothing over Realtime; the server stamps who is viewing (`notes_live_here`) and hands each saved update to people who may still view the note (`notes-live:<uid>` topics).

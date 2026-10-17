@@ -598,9 +598,8 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
   it("accept exactly what the server accepts (the corpus in chat_reactions.test.sql)", async () => {
     const v = await import("./vocabularies.ts");
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
     const sql = readFileSync(
-      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      new URL("../../../tests/chat_reactions.test.sql", import.meta.url),
       "utf8",
     );
     const block = sql.slice(sql.indexOf("-- corpus:begin"), sql.indexOf("-- corpus:end"));
@@ -618,9 +617,8 @@ describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", 
   it("have one spelling, the same as the server's (the canonical corpus)", async () => {
     const v = await import("./vocabularies.ts");
     const { readFileSync } = await import("node:fs");
-    const { resolve } = await import("node:path");
     const sql = readFileSync(
-      resolve(process.cwd(), "supabase/tests/chat_reactions.test.sql"),
+      new URL("../../../tests/chat_reactions.test.sql", import.meta.url),
       "utf8",
     );
     const block = sql.slice(sql.indexOf("-- canonical:begin"), sql.indexOf("-- canonical:end"));

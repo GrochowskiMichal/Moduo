@@ -43,7 +43,7 @@
 
 ## Known gaps / not-yet-testable
 - The keyed live check (real API key → `notes_append` → live in a browser) has not been run; every item above under "Agent append, live", "Undo" and "Attribution" is verified by tests only.
-- The `realtime` channel for notes is still public until NR-7. The cue is content-free and clients pull, so a forged cue can only trigger a pull; the stored row is the only source of attribution.
+- The `realtime` channel for notes is still public until NR-7. The cue is content-free and clients pull, so a forged cue can only trigger a pull; the stored row is the only source of attribution. _(Superseded by NR-7, 2026-10-16: the channel is per-person and read-only, the connector cue is gone, and the `note_updates` commit trigger sends the content-free pull.)_
 - `notes_update` stays a wholesale replace: text someone is typing inside replaced blocks at that moment is lost by design.
 - Desktop (Tauri) was not run; the code path is shared with web.
 

@@ -48,7 +48,7 @@ import {
   redact,
   repoFunctionsFromPaths,
   untrustworthyList,
-} from "../src/lib/functions-reconcile-core";
+} from "../apps/app/src/lib/functions-reconcile-core";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const API = "https://api.supabase.com/v1";

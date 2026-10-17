@@ -5,3 +5,8 @@ useDefault = true
 [[allowlists]]
 description = "NR-6: the generated, minified Lexical + Yjs bundle the notes connector loads. Library identifiers (e.g. `_.focus.key`) match generic-api-key: false positives, confirmed by the owner 2026-10-15. Rebuilt with `bun run build:notes-doc`, so a per-commit fingerprint would go stale on every rebuild."
 paths = ['''supabase/functions/_shared/notes-doc/notes-doc\.bundle\.js''']
+
+[[allowlists]]
+description = "PLAT-4: Supabase publishable keys (sb_publishable_…) are public by design: every browser gets them in the app bundle and the edge config, and RLS is what protects data. Secret keys (sb_secret_…) stay flagged."
+regexTarget = "match"
+regexes = ['''sb_publishable_[A-Za-z0-9_-]+''']

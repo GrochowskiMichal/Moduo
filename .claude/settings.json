@@ -139,6 +139,8 @@
     ],
     "ask": [
       "Bash(supabase db push*)",
+      "Bash(supabase db query --linked*)",
+      "Bash(supabase db query*--linked*)",
       "Bash(supabase functions deploy*)",
       "Bash(az deployment group create*)",
       "Bash(az deployment sub create*)",

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "agentGuidance": false,
+  "envMode": "loose",
+  "remoteCache": {
+    "signature": true
+  },
+  "futureFlags": {
+    "longerSignatureKey": true
+  },
+  "globalDependencies": ["tsconfig.base.json", "bunfig.toml", ".bun-version"],
+  "tasks": {
+    "build": {
+      "outputs": ["dist/**"]
+    },
+    "build:staging": {
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "lint:tw": {
+      "outputs": []
+    },
+    "lint:css": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": []
+    },
+    "@moduo/landing#build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/app/public/favicon*",
+        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "@moduo/landing#build:staging": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/app/public/favicon*",
+        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "//#typecheck:root": {
+      "inputs": ["tsconfig.json", "scripts/**", "apps/app/src/components/ui/moduo-mark-path.ts"],
+      "outputs": []
+    },
+    "//#lint:js": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/.turbo/**"],
+      "outputs": []
+    },
+    "//#test:scripts": {
+      "inputs": ["scripts/**", "VERSION", "brand/**", "apps/app/src/**", "apps/app/public/**"],
+      "outputs": []
+    }
+  }
+}

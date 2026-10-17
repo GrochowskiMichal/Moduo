@@ -6,7 +6,7 @@
 # worktrees running e2e at once read each other's rows. This takes a
 # machine-wide lock first (an atomic `mkdir`: macOS has no flock) and waits its
 # turn, printing who holds it. The run starts this worktree's own dev server on
-# its own port (playwright.config.ts, scripts/agent/e2e-env.ts).
+# its own port (e2e/playwright.config.ts, scripts/agent/e2e-env.ts).
 #
 # Usage: scripts/agent/e2e.sh <playwright args…>
 #   scripts/agent/e2e.sh tests/capture.spec.ts            # one spec
@@ -180,7 +180,8 @@ if [ -z "${E2E_BASE_URL:-}" ]; then
 fi
 
 say "lock taken (this worktree: $appurl)"
-"$here/quiet.sh" e2e bunx playwright test "${args[@]}" &
+# Playwright runs from the @moduo/e2e package (e2e/), so spec paths are relative to it.
+(cd "$root/e2e" && exec "$here/quiet.sh" e2e bunx playwright test "${args[@]}") &
 child=$!
 printf '%s\n' "$child" >"$LOCK/tree"
 proc_start "$child" >"$LOCK/tree.start"

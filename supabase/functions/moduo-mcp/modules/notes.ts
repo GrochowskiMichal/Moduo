@@ -15,9 +15,9 @@
  * `bun run build:notes-doc` whenever the notes editor schema changes), and
  * push the edit's own update through `notes_op_apply_updates`. The server
  * sees the key and records the row as the key's (`origin = 'api_key'`) and
- * logs `notes.agent_edit`. A cue on the note's live channel makes open
- * editors pull it at once (the cue carries no content, so nobody can pass an
- * edit off as an agent's); a closed note gets it on its next pull.
+ * logs `notes.agent_edit`. The `note_updates` commit trigger (NR-7) tells
+ * open viewers to pull it (content-free, so nobody can pass an edit off as an
+ * agent's); a closed note gets it on its next pull.
  * `body_md` / `body_text` come from the same converter the app uses, and are
  * re-derived when another write raced this one. A note that has a body but no
  * doc yet is seeded first through `notes_op_seed_doc`, the once-only guard.

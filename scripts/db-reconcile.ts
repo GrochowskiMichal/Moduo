@@ -41,7 +41,7 @@ import {
   parseFunctionBodies,
   sqlQuote,
   UNCHECKED,
-} from "../src/lib/db-reconcile-core";
+} from "../apps/app/src/lib/db-reconcile-core";
 
 const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../supabase/migrations");
 const files = readdirSync(MIGRATIONS_DIR)

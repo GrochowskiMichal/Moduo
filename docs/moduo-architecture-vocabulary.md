@@ -29,14 +29,12 @@ A primary functional area accessed via the top bar. Each handles a domain: Dashb
 **Tasks and Calendar are SEPARATE modules.** They integrate (scheduled tasks appear on the Calendar) but are independent — each must work fully with the other hidden.
 
 ### Mode
-A modal state *within* a module. Currently only the Tasks module has modes: **Plan** and **Execute**, toggled at the top of the left panel.
-- **Plan mode** — organize tasks, build today's commit queue. Normal views available.
-- **Execute mode** — isolated focus. One task at a time (Now card + timer), rest queued and dimmed, everything else hidden.
+A modal state *within* a module. No module has modes today. Tasks' **Plan** and **Execute** modes (and the daily "commit queue") are **retired** by Tasks v3 (2026-10-14): what Execute did is now the **Focus** view (formerly Queue: the Now card, Up next, the timer).
 
-A Mode is a deeper state than a View. Switching mode changes what the whole module is *for*; switching view changes how the same data is displayed.
+A Mode would be a deeper state than a View: switching mode changes what the whole module is *for*; switching view changes how the same data is displayed.
 
 ### View
-A way of looking at the same data within a module/mode. Switching views changes presentation, not data. In Tasks Plan mode: List, Board (Gantt deferred). In Calendar: timeline.
+A way of looking at the same data within a module/mode. Switching views changes presentation, not data. In Tasks (v3): List, Board, Timeline, Focus. In Calendar: timeline.
 
 ### Panel
 A region of the screen layout. Top bar, bottom bar, and three middle panels (left = navigation, center = content, right = support/context, collapsible). Panels are layout, not content.
@@ -45,13 +43,17 @@ A region of the screen layout. Top bar, bottom bar, and three middle panels (lef
 A self-contained glance surface in the Dashboard module, aggregating data from other modules. Not a view or panel. Dashboard-only.
 
 ### Sub-feature
-A capability inside a module that doesn't warrant its own module (e.g. bucket management within Tasks). Rule of thumb: meaningful without the parent → module; needs the parent's data → sub-feature.
+A capability inside a module that doesn't warrant its own module (e.g. project management within Tasks). Rule of thumb: meaningful without the parent → module; needs the parent's data → sub-feature.
 
-### Bucket
-A user-defined category for tasks, within the Tasks module.
-- **Exclusive:** one task lives in exactly one bucket.
-- **No cooldown.** Bucket creation is instant and frictionless.
-- **Inbox** is a reserved system bucket for unclassifiable items; cannot be deleted.
+### Project, Area, Section (Tasks v3)
+The structure of the Tasks module ([specs/tasks-v3.md](../specs/tasks-v3.md)): Inbox · optional **Areas** → **Projects** → optional **Sections** → Tasks → Subtasks (one level).
+- **Project:** where a task lives (description, status, start/target, colour, client, optional lead). Stored in the `buckets` table until TV-D7.
+- **Area:** an optional sidebar group of projects (no permissions, no page, no tasks).
+- **Section:** an ordered part of one project; a section never spans projects.
+- **Inbox:** personal, the tray for captures; only you see it. File a task into a project or assign it, and it moves.
+
+### Bucket (retired)
+Tasks v1/v2's word for a project. Retired by Tasks v3 (2026-10-14); the table keeps the name until TV-D7.
 
 ### Tag
 A workspace-level, cross-cutting label that can apply to items across modules (tasks, notes, emails). Not a bucket. Flat (no hierarchy) for now.
