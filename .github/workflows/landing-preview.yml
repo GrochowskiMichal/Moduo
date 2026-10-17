@@ -1,0 +1,118 @@
+name: landing-preview
+
+# A preview of the landing for every PR that can change it (specs/platform-v2.md, PLAT-5, AC10):
+# the moduo.app build (index, legal pages, assets; noindex) is uploaded as a new version of the
+# staging landing Worker (apps/landing/wrangler.jsonc) with `wrangler versions upload`, which
+# never changes what staging serves. Its /book and /static/* go to the staging app Worker, so
+# booking can be tried on the preview host. The alias URL is posted as one PR comment.
+#
+# PRs from forks get no secrets and are skipped.
+on:
+  pull_request:
+    branches: [develop, main, mike, maciej]
+    paths:
+      - apps/landing/**
+      - apps/app/public/favicon*
+      - apps/app/public/apple-touch-icon.png
+      - scripts/smoke-hosting.ts
+      - .github/workflows/landing-preview.yml
+
+concurrency:
+  group: landing-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# bash with pipefail, so a failing wrangler before `| tee` fails the step.
+defaults:
+  run:
+    shell: bash
+
+env:
+  WRANGLER: npx --yes wrangler@4.147.0
+
+jobs:
+  preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cloudflare-preview
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      PR: ${{ github.event.pull_request.number }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build the landing
+        run: node apps/landing/build.mjs --noindex
+
+      - name: Upload the preview version
+        id: upload
+        working-directory: apps/landing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Never `wrangler deploy` here: a PR must not change what staging serves.
+          $WRANGLER versions upload --env staging --preview-alias "pr-$PR" \
+            --message "PR #$PR ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/upload.log"
+          alias=$(grep -i 'alias' "$RUNNER_TEMP/upload.log" | grep -oE 'https://[^ ]+\.workers\.dev' | head -1 || true)
+          version=$(grep -i 'preview url' "$RUNNER_TEMP/upload.log" | grep -vi alias | grep -oE 'https://[^ ]+\.workers\.dev' | head -1 || true)
+          [ -n "$alias$version" ] || { echo "::error::no preview URL in the wrangler output"; exit 1; }
+          echo "url=${alias:-$version}" >> "$GITHUB_OUTPUT"
+          echo "version_url=${version:-$alias}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test
+        id: smoke
+        env:
+          URL: ${{ steps.upload.outputs.version_url }}
+        run: |
+          set +e
+          bun scripts/smoke-hosting.ts "$URL" --landing prod > "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"
+          exit $code
+
+      - name: Comment the preview URL
+        if: always() && steps.upload.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.upload.outputs.url }}
+          VERSION_URL: ${{ steps.upload.outputs.version_url }}
+          SMOKE: ${{ steps.smoke.outcome }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          marker='<!-- landing-preview -->'
+          if [ "$SMOKE" = success ]; then smoke="✅ smoke test passed"; else smoke="❌ smoke test $SMOKE"; fi
+          body=$(printf '%s\n**Landing preview** for %s: %s\n\nThis commit only: %s · %s ([run](%s))\n\nThe moduo.app build; /book goes to the staging app.' \
+            "$marker" "${SHA::7}" "$URL" "$VERSION_URL" "$smoke" "$RUN")
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\")))][0].id // empty")
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
