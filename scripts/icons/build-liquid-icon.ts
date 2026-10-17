@@ -5,9 +5,9 @@
  *
  * Source of truth is scripts/icons/source/Moduo.icon (an Icon Composer
  * bundle: icon.json manifest + Assets/ layers). This script runs Apple's
- * `actool` to compile it into src-tauri/icons/Assets.car, which Tauri ships
+ * `actool` to compile it into apps/desktop/src-tauri/icons/Assets.car, which Tauri ships
  * in the app bundle's Contents/Resources. Paired with CFBundleIconName in
- * src-tauri/Info.plist, macOS Tahoe renders the layered glass icon (light /
+ * apps/desktop/src-tauri/Info.plist, macOS Tahoe renders the layered glass icon (light /
  * dark / clear / tinted appearances, system squircle + specular). On macOS
  * 25 and earlier the system falls back to icons/icon.icns.
  *
@@ -26,14 +26,14 @@ import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Icon set name — must match CFBundleIconName in src-tauri/Info.plist. */
+/** Icon set name — must match CFBundleIconName in apps/desktop/src-tauri/Info.plist. */
 const ICON_NAME = "Moduo";
 /** Lowest macOS that reads the layered .icon. Older versions use icon.icns. */
 const MIN_TARGET = "26.0";
 
 const repoRoot = process.cwd();
 const iconSource = join(repoRoot, "scripts/icons/source", `${ICON_NAME}.icon`);
-const carOut = join(repoRoot, "src-tauri/icons/Assets.car");
+const carOut = join(repoRoot, "apps/desktop/src-tauri/icons/Assets.car");
 
 if (!existsSync(iconSource)) {
   console.error(`source icon not found: ${iconSource}`);
@@ -102,5 +102,5 @@ rmSync(workDir, { recursive: true, force: true });
 console.log(`✓ wrote ${carOut}`);
 console.log(
   "  bundled via tauri.conf.json bundle.resources; CFBundleIconName is set " +
-    "in src-tauri/Info.plist. Rebuild the desktop app to apply.",
+    "in apps/desktop/src-tauri/Info.plist. Rebuild the desktop app to apply.",
 );

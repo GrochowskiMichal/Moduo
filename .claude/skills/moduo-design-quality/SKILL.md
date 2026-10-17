@@ -1,19 +1,19 @@
 ---
 name: moduo-design-quality
-description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with the prototype skill or /design).
+description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against apps/app/src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with the prototype skill or /design).
 ---
 
 # moduo-design-quality
 
 The enforcement-plus-taste layer for Moduo's frontend (a product app — Tauri + shadcn/ui + React; **not** landing pages or brand work). It checks changed components against the live design system and, when building, ships token-driven UI with taste. It audits/fixes against an existing system — it does **not** invent visual direction or run the design process (that's `/s1`).
 
-**Always read first:** `src/styles/tokens.css` (the value source), `docs/DESIGN_RULES.md` (relational rules R1–R10), and a neighbouring component (match its patterns). Use the shadcn primitive in `src/components/ui/` where one exists; never roll your own. If a needed value is missing, **add it to `tokens.css`** — never inline it.
+**Always read first:** `apps/app/src/styles/tokens.css` (the value source), `docs/DESIGN_RULES.md` (relational rules R1–R10), and a neighbouring component (match its patterns). Use the shadcn primitive in `apps/app/src/components/ui/` where one exists; never roll your own. If a needed value is missing, **add it to `tokens.css`** — never inline it.
 
 ## Modes
 
 | Mode | Does | Output |
 | --- | --- | --- |
-| **audit** *(default)* | Read-only. Tier-1 lint + Tier-2 judgment over changed `src/**`. No edits. | The report below. |
+| **audit** *(default)* | Read-only. Tier-1 lint + Tier-2 judgment over changed `apps/app/src/**`. No edits. | The report below. |
 | **polish** | audit, then **fix** — token-route hardcodes, swap to shadcn primitives, close interaction-state gaps. | Edits + report of what changed. |
 | **build-with-taste** | New/redesigned component, token-driven from the start (see Build). | Working code + a short self-audit vs R1–R10. |
 | **motion-pass** | Apply the motion rules across a surface. | Edits + a motion-only Before/After table. |

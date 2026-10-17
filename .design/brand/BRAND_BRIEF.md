@@ -171,7 +171,7 @@ The brand palette is the app's neutral system. No brand hue (36).
 - **Pilat Extended leaves Settings → Font** (49). It doesn't ship, so most people silently got Inter. The picker and the other faces stay; anyone who had picked Pilat lands on Geist.
 - **Geist Mono:** codes, shortcuts, IDs only. Never headlines (50).
 - **Tracking** (51): hero −0.035em · section titles −0.02em · small lockup-style or heading text −0.015em · body 0 · eyebrows +0.04em uppercase 11px.
-- **Marketing scale:** as in `landing-agents-readme.md` (hero `clamp(36px, 7.2vw, 88px)`/600, section 36/600, body 18/400, manifesto 22/400). Product frames inside marketing use the app's 14px scale.
+- **Marketing scale:** as in `apps/landing/landing-agents-readme.md` (hero `clamp(36px, 7.2vw, 88px)`/600, section 36/600, body 18/400, manifesto 22/400). Product frames inside marketing use the app's 14px scale.
 - **Numbers:** tabular figures for times, dates, prices and codes.
 - **Email** (52): Geist where the reader has it installed, system sans elsewhere. The logo is an image, so the brand survives either way. *(Amended 2026-10-08, Maciej: emails don't load Geist from Google Fonts, because that sends every reader's IP address to Google; see docs/decisions/product.md, TX-1.)*
 
@@ -258,7 +258,7 @@ The email set's host "Anna Kowalska" becomes **Anna Carter**.
 ## 12. Imagery and illustration (67–70)
 
 - **The product is the only picture** (67): real UI or HTML-drawn product frames. No stock photography, 3D blobs, abstract waves, mesh gradients or AI-generated imagery. (`assets/image.jpg`, an abstract light-wave stock image, is the exact anti-pattern and gets deleted.)
-- **People** (68): only real people with consent, meaning the founders' photos on About and the manifesto (`landing/assets/makers/`).
+- **People** (68): only real people with consent, meaning the founders' photos on About and the manifesto (`apps/landing/assets/makers/`).
 - **Illustration** (69): none in v1. If ever needed: single-weight line drawings built on the mark's diagonal geometry, in foreground and muted grey only.
 - **Diagrams** (70): hairlines and small dots in Paper and grey, like the link lines in `og.png`. No colour coding beyond module icons.
 - **Icons:** Phosphor line icons, single colour, same set as the app.
@@ -268,7 +268,7 @@ The email set's host "Anna Kowalska" becomes **Anna Carter**.
 ## 13. Applications (66, 72–74)
 
 ### OG and share images (72)
-Today's `landing/assets/og.png` becomes the template: Canvas black, lockup top-left, the line in Geist 600, optional product frame on the right, faint grid. One per page (home, manifesto, privacy, terms, press, booking pages). The typed lockup in it is swapped for the artwork once BRAND-1 exports exist.
+Today's `apps/landing/assets/og.png` becomes the template: Canvas black, lockup top-left, the line in Geist 600, optional product frame on the right, faint grid. One per page (home, manifesto, privacy, terms, press, booking pages). The typed lockup in it is swapped for the artwork once BRAND-1 exports exist.
 
 ### Booking badge (73)
 One phrase, **"Scheduled with Moduo"** + the mark. The booking page already says this. The email set's "Booked with Moduo" footer changes to match.
@@ -325,7 +325,7 @@ Built in BRAND-1 (2026-10-08). The details live in [brand/README.md](../../brand
 | `src/components/ui/moduo-mark-path.ts` | The paths `ModuoMark` renders, generated from `mark.svg` (and `mark-small.svg` for `<ModuoMark small />`, marks drawn ≤ 24 px) |
 | `public/` | Favicons and touch icons for **both** the web app and the landing (the landing build copies the web build, so the landing needs no copies of its own) |
 | `public/email/` | Email lockup (192 × 44 canvas) and footer-badge mark (26 × 26) PNGs, light and dark @2x: the exact canvases the email kit's `assets.ts` (TX-1) expects |
-| `landing/assets/brand/` | Press kit files (BRAND-5) |
+| `apps/landing/assets/brand/` | Press kit files (BRAND-5) |
 | `scripts/icons/source/` | App-icon layer (`Moduo.icon/Assets/moduo-mark.svg`) and `macos-icon-1024.svg`; then `bun scripts/icons/build-macos-icon.ts` + `bun run icon:liquid` |
 
 A test in `bun run verify` (`scripts/brand/brand.test.ts`) fails if these consumers drift from the masters. Everything displayed under 24 px (browser-tab favicons, the email footer badge, `<ModuoMark small />`) switches to `mark-small.svg` automatically once that master exists.
@@ -352,7 +352,7 @@ Plan only. Each block is built later with `/s2` (78). Landing work ships as PRs 
 | **BRAND-1** | Asset pipeline: `brand/` tree, copy today's files in as provisional masters, `bun run brand:export`, every export in §14, consumers wired, old files deleted. **Unblocks the email build's logo.** Re-run after BRAND-0. | n/a (re-run after BRAND-0) | agent |
 | **BRAND-2** | App touch-points: initials as default avatar; Pilat out of the font picker (Pilat users → Geist); unused Equity Sans + Nunito fonts no longer loaded at boot (their CSS classes are dead); staging favicon. | BRAND-1 | agent |
 | **BRAND-3** | The reveal: one component, played once per launch while the session loads, reduced-motion fade; video-intro export (MP4/GIF). | BRAND-1 (better after BRAND-0) | agent |
-| **BRAND-4** | Landing alignment (PR into `prod-landing`): lockup artwork in nav/footer/OG; footer line → brand line; American spelling; drop the unused `--ai` pink variable (the accent demo keeps pink as one of eight options); reveal on first visit; `landing-agents-readme.md` updated to this brief. | BRAND-1 | agent |
+| **BRAND-4** | Landing alignment (PR into `prod-landing`): lockup artwork in nav/footer/OG; footer line → brand line; American spelling; drop the unused `--ai` pink variable (the accent demo keeps pink as one of eight options); reveal on first visit; `apps/landing/landing-agents-readme.md` updated to this brief. | BRAND-1 | agent |
 | **BRAND-5** | Press kit page + zip (§13); social avatars and banners exported. | BRAND-1 | agent |
 | **BRAND-6** | Rendered brand page (the visual brandbook for humans) generated from this brief. | BRAND-0 | agent |
 

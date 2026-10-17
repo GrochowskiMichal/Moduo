@@ -167,12 +167,12 @@ unchanged.
 Each module contributes its surface to the one Moduo MCP connector through a
 static, typed manifest — onboarding module N+1 is additive:
 
-- shared types in [`src/lib/module-manifest.ts`](../src/lib/module-manifest.ts)
+- shared types in [`apps/app/src/lib/module-manifest.ts`](../apps/app/src/lib/module-manifest.ts)
   (`ModuleManifest`: module id, op defs with RPC name + arg docs, readable
   resources, activity entity types);
 - one manifest per module, next to the feature
-  ([`src/features/tasks/ops-manifest.ts`](../src/features/tasks/ops-manifest.ts));
-- the registry ([`src/lib/module-registry.ts`](../src/lib/module-registry.ts))
+  ([`apps/app/src/features/tasks/ops-manifest.ts`](../apps/app/src/features/tasks/ops-manifest.ts));
+- the registry ([`apps/app/src/lib/module-registry.ts`](../apps/app/src/lib/module-registry.ts))
   is the single list the connector iterates. The "onboard a module to MCP"
   recipe lives in [moduo-mcp-connector.md](./moduo-mcp-connector.md) (Session 9).
 
@@ -210,5 +210,5 @@ capture/`createTask` and plain field edits now go through `tasks_op_create` /
 since TV-D8. Subtask one-level and dependency-cycle rules stay DB triggers — they
 are *corruption guards* on the raw write path, which intent ops sit above.
 
-Trail rendering: `src/features/tasks/activity.ts` (op → quiet sentence) +
+Trail rendering: `apps/app/src/features/tasks/activity.ts` (op → quiet sentence) +
 the Activity section of the task detail panel.

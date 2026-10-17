@@ -2,7 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "@rstest/core";
 
-import { MODUO_MARK_PATHS, MODUO_MARK_VIEWBOX } from "../../src/components/ui/moduo-mark-path";
+import {
+  MODUO_MARK_PATHS,
+  MODUO_MARK_VIEWBOX,
+} from "../../apps/app/src/components/ui/moduo-mark-path";
 import {
   artworkSvg,
   canvasSvg,
@@ -152,7 +155,7 @@ describe("packIco", () => {
 
 describe("palette", () => {
   const token = (name: string) => {
-    const m = text("src/styles/tokens.css").match(
+    const m = text("apps/app/src/styles/tokens.css").match(
       new RegExp(`${name}:\\s*oklch\\(([\\d.]+) 0 0\\)`),
     );
     if (!m) throw new Error(`token ${name} not found as an achromatic oklch value`);
@@ -187,7 +190,7 @@ describe("exports match the masters", () => {
   });
 
   it("ModuoMark renders the masters, byte for byte", () => {
-    expect(text("src/components/ui/moduo-mark-path.ts")).toBe(markModule(mark, small));
+    expect(text("apps/app/src/components/ui/moduo-mark-path.ts")).toBe(markModule(mark, small));
     expect(MODUO_MARK_VIEWBOX).toBe(mark.viewBox.map(fmt).join(" "));
     expect(MODUO_MARK_PATHS).toEqual(mark.paths);
   });
@@ -202,7 +205,7 @@ describe("exports match the masters", () => {
       });
     expect(text("brand/exports/favicon/prod/favicon.svg")).toBe(tile(CANVAS, PAPER));
     expect(text("brand/exports/favicon/staging/favicon.svg")).toBe(tile(PAPER, CANVAS));
-    expect(text("public/favicon.svg")).toBe(tile(CANVAS, PAPER));
+    expect(text("apps/app/public/favicon.svg")).toBe(tile(CANVAS, PAPER));
   });
 
   it("the avatar follows the master and its share rule", () => {
@@ -241,8 +244,10 @@ describe("exports match the masters", () => {
     expect(text("brand/exports/email/mark-light.svg")).toBe(markSvg(INK));
     expect(text("brand/exports/email/mark-dark.svg")).toBe(markSvg(PAPER));
     for (const tone of ["light", "dark"]) {
-      expect(pngSize(read(`public/email/lockup-${tone}@2x.png`))).toEqual(EMAIL_LOCKUP_CANVAS);
-      expect(pngSize(read(`public/email/mark-${tone}@2x.png`))).toEqual({
+      expect(pngSize(read(`apps/app/public/email/lockup-${tone}@2x.png`))).toEqual(
+        EMAIL_LOCKUP_CANVAS,
+      );
+      expect(pngSize(read(`apps/app/public/email/mark-${tone}@2x.png`))).toEqual({
         width: EMAIL_MARK_SIZE,
         height: EMAIL_MARK_SIZE,
       });
@@ -250,7 +255,7 @@ describe("exports match the masters", () => {
   });
 
   it("ships a three-size favicon.ico", () => {
-    const ico = read("public/favicon.ico");
+    const ico = read("apps/app/public/favicon.ico");
     const view = new DataView(ico.buffer, ico.byteOffset, ico.byteLength);
     expect(view.getUint16(4, true)).toBe(3);
     expect([ico[6], ico[22], ico[38]]).toEqual([16, 32, 48]);

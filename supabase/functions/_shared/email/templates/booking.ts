@@ -37,7 +37,7 @@ import {
   paragraph,
   sentence,
 } from "../blocks.ts";
-import { daysBetween, zoneKey } from "../../../../../src/features/calendar/booking/sentence.ts";
+import { daysBetween, zoneKey } from "../../../../../apps/app/src/features/calendar/booking/sentence.ts";
 import { dayLong, dayShort, time24, usableTimeZone, zoneLabel } from "../format.ts";
 import { icsAttachment, type IcsEvent } from "../ics.ts";
 import type { QueuedEmail } from "../outbox.ts";

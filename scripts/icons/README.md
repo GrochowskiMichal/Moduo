@@ -8,9 +8,9 @@ Two macOS icon pipelines, both driven from vector sources in `source/`.
   + `Assets/` SVG layers). The mark layer is generated from the brand master
   (see below); edit the manifest's `fill` / `groups` to change the glass look.
 - **Build:** `bun run icon:liquid` (→ `scripts/icons/build-liquid-icon.ts`) runs
-  Apple's `actool` to compile it into `src-tauri/icons/Assets.car`.
-- **Wiring:** `bundle.resources` in `src-tauri/tauri.conf.json` ships `Assets.car`
-  into `Contents/Resources/`; `src-tauri/Info.plist` sets `CFBundleIconName=Moduo`.
+  Apple's `actool` to compile it into `apps/desktop/src-tauri/icons/Assets.car`.
+- **Wiring:** `bundle.resources` in `apps/desktop/src-tauri/tauri.conf.json` ships `Assets.car`
+  into `Contents/Resources/`; `apps/desktop/src-tauri/Info.plist` sets `CFBundleIconName=Moduo`.
   macOS 26 then renders the layered glass icon (light / dark / clear / tinted,
   system squircle + specular).
 - **Requires full Xcode** (`actool` is not in the Command Line Tools). The
@@ -21,7 +21,7 @@ Two macOS icon pipelines, both driven from vector sources in `source/`.
 
 - **Source:** `source/macos-icon-1024.svg` (bakes its own squircle — correct for
   pre-26 systems, which do not mask).
-- **Build:** `bun scripts/icons/build-macos-icon.ts` → `src-tauri/icons/icon.icns`
+- **Build:** `bun scripts/icons/build-macos-icon.ts` → `apps/desktop/src-tauri/icons/icon.icns`
   + the cross-platform PNG fallbacks.
 - Tauri sets `CFBundleIconFile` to this automatically; macOS 26 prefers the
   `CFBundleIconName` glass icon when both are present.

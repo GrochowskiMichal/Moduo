@@ -1,8 +1,12 @@
 name: checks
 
 # Lean mode (pre-alpha): the full suite runs once, on PRs into develop/main and on pushes to them.
-# Other branches get only the fast secret scan (secret-scan.yml). No job here is ever skipped,
-# so the required `static-checks` context can't be satisfied by a skipped run.
+# Other branches get only the fast secret scan (secret-scan.yml). The push run on develop is kept on
+# purpose: it tests the merged commit (the PR run tested the PR head), and sync-staging-app.yml
+# waits for it before staging gets that commit.
+#
+# `static-checks` is the one required context. It is an aggregate that always runs and fails unless
+# `lint` and every unit-test shard passed, so a skipped or cancelled job can't satisfy it.
 on:
   pull_request:
     branches: [develop, main]
@@ -17,8 +21,9 @@ permissions:
   contents: read
 
 jobs:
-  static-checks:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -46,7 +51,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
 
       - name: Install frontend deps
         run: bun install --frozen-lockfile
@@ -63,5 +68,40 @@ jobs:
       - name: CSS lint
         run: bun run lint:css
 
-      - name: Unit tests
-        run: bun run test
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    name: unit-tests (${{ matrix.shard }}/3)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Unit tests (shard ${{ matrix.shard }} of 3)
+        # Turborepo runs each package's suite (app, backend, scripts); every one takes the same shard.
+        run: bunx turbo run test test:scripts -- --shard ${{ matrix.shard }}/3
+
+  static-checks:
+    needs: [lint, unit-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every check passed
+        env:
+          LINT: ${{ needs.lint.result }}
+          TESTS: ${{ needs.unit-tests.result }}
+        run: |
+          echo "lint: $LINT · unit-tests: $TESTS"
+          [ "$LINT" = success ] && [ "$TESTS" = success ]

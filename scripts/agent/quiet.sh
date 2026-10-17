@@ -3,8 +3,8 @@
 # the exit code, the failure lines and a short tail. The full log stays on disk.
 # Usage: scripts/agent/quiet.sh <label> <command…>
 #   scripts/agent/quiet.sh verify bun run verify
-#   scripts/agent/quiet.sh unit bun run test src/features/chat
-#   scripts/agent/quiet.sh e2e bunx playwright test tests/chat-stream.spec.ts --reporter=line
+#   scripts/agent/quiet.sh unit bun run --cwd apps/app test src/features/chat
+#   scripts/agent/quiet.sh e2e bunx playwright test --config e2e/playwright.config.ts e2e/tests/chat-stream.spec.ts --reporter=line
 set -o pipefail
 label="${1:?label}"; shift
 dir="${TMPDIR:-/tmp}/moduo-quiet"; mkdir -p "$dir"

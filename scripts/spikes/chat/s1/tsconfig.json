@@ -1,5 +1,5 @@
 {
   "extends": "../../../../tsconfig.json",
-  "include": ["./harness", "./*.ts", "../../../../src/types/env.d.ts"],
+  "include": ["./harness", "./*.ts", "../../../../apps/app/src/types/env.d.ts"],
   "exclude": []
 }

@@ -48,21 +48,21 @@ A **shared function such as `moduo-mcp` deploys from a merge of `maciej` + `mike
 
 ## 4. Web
 
-`develop` is mirrored to `staging-app` on every push (`sync-staging-app.yml`). To ship, run **Promote to production** (`promote-to-prod.yml`, manual):
+`develop` is mirrored to `staging-app` once `checks` passes on the push (`sync-staging-app.yml`). To ship, run **Promote to production** (`promote-to-prod.yml`, manual):
 
 - target `app`: `staging-app` → `prod-app` (app.moduo.app);
 - target `landing`: `staging-landing` → `prod-landing` (moduo.app).
 
-Vercel deploys on the push.
+Vercel deploys on the push. It runs `scripts/vercel-build.mjs` and serves `apps/app/dist/web` (`vercel.json`) until PLAT-4 and PLAT-5 move hosting to Cloudflare. The first promote after the workspace move (PLAT-2, 2026-10-17) carries the new layout to `prod-app` and `prod-landing`.
 
 ## 5. Desktop
 
 The desktop app bundles its own copy of the UI at build time, so a web change reaches desktop users only when a desktop build ships. Run it on every train that changes the app, after the promote.
 
-- **Desktop Release (production)** (`desktop-release-prod.yml`, manual) builds from `prod-app`: the signed Mac universal `.dmg` and the Windows NSIS installer. It publishes them, with `latest.json` for the in-app updater, to the rolling `prod-latest` release in the separate repo **GrochowskiMichal/moduo-releases**.
+- **Desktop Release (production)** (`desktop-release-prod.yml`, manual) builds from `prod-app` (the Tauri app is in `apps/desktop`; the workflow also builds a `prod-app` from before that move): the signed Mac universal `.dmg` and the Windows NSIS installer. It publishes them, with `latest.json` for the in-app updater, to the rolling `prod-latest` release in the separate repo **GrochowskiMichal/moduo-releases**.
 - **Notarization:** `build-mac` waits up to 20 minutes for Apple and staples. `notarize-mac` runs only when Apple was slower; "skipped" is normal when `build-mac`'s log says the staple worked (the 2026-10-16 run). A skipped `notarize-mac` with no staple in `build-mac` is a problem.
 - **Not the source of truth:** the main repo's own `prod-latest` release (last published 2026-10-05) is stale; don't judge what's live from it.
-- **`windows-portable.yml` is not used:** it fails with `startup_failure` since 2026-09-23. Desktop Release (production) covers Windows.
+- **Bump `VERSION` first.** Production ships the `VERSION` file as is (staging adds `-rc.<run>`), and the updater only installs a higher version, so a production run on an unchanged `VERSION` fails in its `version` job before any build starts. Bump it on `develop` and promote, then run the release. After a run has published, use **Re-run failed jobs**, not "Re-run all jobs": a full re-run asks for the same version again and the check refuses it.
 
 ## 6. Verify what's live
 

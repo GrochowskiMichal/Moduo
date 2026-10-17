@@ -21,9 +21,14 @@ name: Desktop Release (shared)
 #   RELEASES_REPO_TOKEN           fine-grained PAT, contents:write on GrochowskiMichal/moduo-releases
 #   TAURI_SIGNING_PRIVATE_KEY     private key from `bunx tauri signer generate`
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  key password (empty string if none)
-#   MODUO_KEYCHAIN_SERVICE, MODUO_TOKEN_ENCRYPTION_SECRET, MODUO_GOOGLE_MEET_CLIENT_ID/SECRET,
-#   MODUO_CALENDAR_GOOGLE_CLIENT_ID/SECRET, PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+#   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 #   PUBLIC_STRIPE_PUBLISHABLE_KEY, PUBLIC_STRIPE_PRICE_{PRO,TEAM}_{MONTHLY,YEARLY}
+# (The Rust shell reads MODUO_* settings such as the Google OAuth clients at run time, not at
+# build time, so passing them to `tauri build` did nothing; they are not passed any more.)
+#
+# Version: the built branch's VERSION file (scripts/release/version.mjs). Production ships it as is,
+# staging as <VERSION>-rc.<run number>. The updater only installs a higher version, so the
+# `version` job fails the release up front when VERSION isn't newer than what the channel published.
 
 on:
   workflow_call:
@@ -62,16 +67,66 @@ on:
 
 env:
   MODUO_BUILD: ${{ github.sha }}
-  MODUO_VERSION: 1.0.${{ github.run_number }}
   RELEASES_REPO: GrochowskiMichal/moduo-releases
 
 jobs:
   # ─────────────────────────────────────────────────────────────────
+  # Version — one value for every job, checked against the channel's published latest.json
+  # ─────────────────────────────────────────────────────────────────
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: VERSION
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          sparse-checkout: scripts
+
+      - name: Compute the version and check it is newer than the published one
+        id: version
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "::error::The built branch has no VERSION file yet. Merge (or promote) the release-version change into it first."
+            exit 1
+          fi
+          cp VERSION .ci/VERSION
+          VERSION="$(node .ci/scripts/release/version.mjs desktop "$CHANNEL" "$RUN_NUMBER")"
+          # Only a 404 means "nothing published yet"; any other failure must not skip the check.
+          STATUS="$(curl -sL -o latest.json -w '%{http_code}' "https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}/latest.json")"
+          case "$STATUS" in
+            200) PUBLISHED="$(jq -r '.version // empty' latest.json)" ;;
+            404) PUBLISHED="" ;;
+            *) echo "::error::Could not read the published latest.json (HTTP $STATUS). Re-run the job."; exit 1 ;;
+          esac
+          node .ci/scripts/release/version.mjs assert-newer "$VERSION" "$PUBLISHED"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: \`$VERSION\` (published: \`${PUBLISHED:-none}\`)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ─────────────────────────────────────────────────────────────────
   # macOS — universal binary (Apple Silicon + Intel), signed, submitted to Apple
   # ─────────────────────────────────────────────────────────────────
   build-mac:
+    needs: version
     runs-on: macos-latest
     timeout-minutes: 60
+    env:
+      MODUO_VERSION: ${{ needs.version.outputs.version }}
     outputs:
       notary_id: ${{ steps.submit.outputs.id }}
       stapled: ${{ steps.wait.outputs.stapled }}
@@ -136,13 +191,21 @@ jobs:
             exit 1
           fi
 
+      # PLAT-2 moved the Tauri app to apps/desktop. A branch cut before the move (prod-app until the
+      # next promote) still has it at the root, so find it instead of assuming either layout.
+      - name: Locate the desktop app
+        run: |
+          if [ -f apps/desktop/src-tauri/tauri.conf.json ]; then DIR=apps/desktop; else DIR=.; fi
+          echo "DESKTOP_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "Desktop app: $DIR"
+
       - name: Read Rust toolchain
         id: toolchain
-        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$DESKTOP_DIR/src-tauri/rust-toolchain.toml")" >> "$GITHUB_OUTPUT"
 
-      # Same channel as src-tauri/rust-toolchain.toml, so the targets land on the toolchain cargo uses.
+      # Same channel as the app's src-tauri/rust-toolchain.toml, so the targets land on the toolchain cargo uses.
       - name: Setup Rust (+ both Apple targets)
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ steps.toolchain.outputs.channel }}
           components: rustfmt, clippy
@@ -150,21 +213,21 @@ jobs:
 
       # Saved even when a later step fails, so a signing/notarization failure doesn't force a cold compile next time.
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: src-tauri
+          workspaces: ${{ env.DESKTOP_DIR }}/src-tauri
           shared-key: desktop-mac
           cache-on-failure: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .ci/.bun-version
 
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
-      # Stamp a per-run version (the updater only offers builds newer than the installed one),
+      # Stamp the release version (the updater only offers builds newer than the installed one),
       # turn on signed updater bundles, and point this channel's updater at the public releases repo.
       - name: Write CI Tauri config
         run: |
@@ -184,17 +247,12 @@ jobs:
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+          cd "$DESKTOP_DIR"
           bunx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/ci-tauri-config.json"
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
-          MODUO_TOKEN_ENCRYPTION_SECRET: ${{ secrets.MODUO_TOKEN_ENCRYPTION_SECRET }}
-          MODUO_GOOGLE_MEET_CLIENT_ID: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_ID }}
-          MODUO_GOOGLE_MEET_CLIENT_SECRET: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_SECRET }}
-          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
-          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_STRIPE_PUBLISHABLE_KEY }}
@@ -212,7 +270,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          BUNDLE=src-tauri/target/universal-apple-darwin/release/bundle
+          BUNDLE="$DESKTOP_DIR/src-tauri/target/universal-apple-darwin/release/bundle"
           APP=$(find "$BUNDLE/macos" -maxdepth 1 -name "*.app" | head -1)
           DMG=$(find "$BUNDLE/dmg" -name "*.dmg" | head -1)
           TGZ=$(find "$BUNDLE/macos" -name "*.app.tar.gz" | head -1)
@@ -325,8 +383,11 @@ jobs:
   # Windows — NSIS installer (unsigned; SmartScreen "Run anyway" for founders)
   # ─────────────────────────────────────────────────────────────────
   build-windows:
+    needs: version
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      MODUO_VERSION: ${{ needs.version.outputs.version }}
     defaults:
       run:
         shell: bash
@@ -344,27 +405,35 @@ jobs:
           path: .ci
           sparse-checkout: scripts
 
+      # PLAT-2 moved the Tauri app to apps/desktop. A branch cut before the move (prod-app until the
+      # next promote) still has it at the root, so find it instead of assuming either layout.
+      - name: Locate the desktop app
+        run: |
+          if [ -f apps/desktop/src-tauri/tauri.conf.json ]; then DIR=apps/desktop; else DIR=.; fi
+          echo "DESKTOP_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "Desktop app: $DIR"
+
       - name: Read Rust toolchain
         id: toolchain
-        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$DESKTOP_DIR/src-tauri/rust-toolchain.toml")" >> "$GITHUB_OUTPUT"
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
           toolchain: ${{ steps.toolchain.outputs.channel }}
           components: rustfmt, clippy
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: src-tauri
+          workspaces: ${{ env.DESKTOP_DIR }}/src-tauri
           shared-key: desktop-windows
           cache-on-failure: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version-file: .ci/.bun-version
 
       - name: Install frontend deps
         run: bun install --frozen-lockfile
@@ -386,16 +455,11 @@ jobs:
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+          cd "$DESKTOP_DIR"
           bunx tauri build --bundles nsis --config "$GITHUB_WORKSPACE/ci-tauri-config.json"
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          MODUO_KEYCHAIN_SERVICE: ${{ secrets.MODUO_KEYCHAIN_SERVICE }}
-          MODUO_TOKEN_ENCRYPTION_SECRET: ${{ secrets.MODUO_TOKEN_ENCRYPTION_SECRET }}
-          MODUO_GOOGLE_MEET_CLIENT_ID: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_ID }}
-          MODUO_GOOGLE_MEET_CLIENT_SECRET: ${{ secrets.MODUO_GOOGLE_MEET_CLIENT_SECRET }}
-          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
-          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
           PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_STRIPE_PUBLISHABLE_KEY }}
@@ -411,7 +475,7 @@ jobs:
       - name: Stage artifacts
         run: |
           mkdir -p release-artifacts
-          NSIS=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe" | head -1)
+          NSIS=$(find "$DESKTOP_DIR/src-tauri/target/release/bundle/nsis" -name "*-setup.exe" | head -1)
           cp "$NSIS" release-artifacts/Moduo_x64-setup.exe
           cp "$NSIS.sig" release-artifacts/Moduo_x64-setup.exe.sig
 
@@ -426,13 +490,15 @@ jobs:
   # Publish — update the rolling release. Needs a notarised Mac build; Windows is optional.
   # ─────────────────────────────────────────────────────────────────
   publish:
-    needs: [build-mac, notarize-mac, build-windows]
+    needs: [version, build-mac, notarize-mac, build-windows]
     if: >-
       always() &&
       needs.build-mac.result == 'success' &&
       (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      MODUO_VERSION: ${{ needs.version.outputs.version }}
 
     steps:
       - name: Download Mac artifacts
@@ -473,7 +539,7 @@ jobs:
           cat latest.json
 
       - name: Upsert rolling ${{ inputs.release_tag }} GitHub Release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           repository: ${{ env.RELEASES_REPO }}
           token: ${{ secrets.RELEASES_REPO_TOKEN }}

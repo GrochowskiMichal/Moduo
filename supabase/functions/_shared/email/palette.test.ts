@@ -7,7 +7,7 @@ import { describe, expect, it } from "@rstest/core";
 import { EMAIL_PALETTE, type EmailColor } from "./palette.ts";
 
 const TOKENS_CSS = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), "../../../../src/styles/tokens.css"),
+  resolve(dirname(fileURLToPath(import.meta.url)), "../../../../apps/app/src/styles/tokens.css"),
   "utf8",
 );
 

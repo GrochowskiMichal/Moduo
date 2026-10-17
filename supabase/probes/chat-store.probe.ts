@@ -11,13 +11,13 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { CHAT_MESSAGE_COLUMN_LIST } from "../../src/features/chat/columns";
-import type { ChatRuntime } from "../../src/features/chat/model";
-import { type ChatSocket, postgresChangesSource } from "../../src/features/chat/realtime";
-import { memoryChatCopy } from "../../src/features/chat/store/device-copy";
-import { ChatStore } from "../../src/features/chat/store/store";
-import { timestampMicros } from "../../src/features/tasks/live";
-import { chatRuntimeOn } from "../../src/lib/runtime.chat.supabase";
+import { CHAT_MESSAGE_COLUMN_LIST } from "../../apps/app/src/features/chat/columns";
+import type { ChatRuntime } from "../../apps/app/src/features/chat/model";
+import { type ChatSocket, postgresChangesSource } from "../../apps/app/src/features/chat/realtime";
+import { memoryChatCopy } from "../../apps/app/src/features/chat/store/device-copy";
+import { ChatStore } from "../../apps/app/src/features/chat/store/store";
+import { timestampMicros } from "../../apps/app/src/features/tasks/live";
+import { chatRuntimeOn } from "../../apps/app/src/lib/runtime.chat.supabase";
 
 const status = JSON.parse(execFileSync("supabase", ["status", "-o", "json"], { encoding: "utf8" }));
 const URL_ = status.API_URL as string;

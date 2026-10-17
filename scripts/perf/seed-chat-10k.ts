@@ -19,8 +19,8 @@ import {
   ensureChatPerson,
   makeChatRoom,
   seedHistory,
-} from "../../tests/support/chat-room";
-import { rest, stackKeys } from "../../tests/support/local-stack";
+} from "../../e2e/tests/support/chat-room";
+import { rest, stackKeys } from "../../e2e/tests/support/local-stack";
 
 export const CHAT_PERF_OWNER = {
   email: "chat-perf@moduo.local",

@@ -1,6 +1,6 @@
 import { describe, expect, it, rs } from "@rstest/core";
 
-import { TASKS_BUSY_ID as APP_TASKS_BUSY_ID } from "../../../src/features/calendar/booking/model.ts";
+import { TASKS_BUSY_ID as APP_TASKS_BUSY_ID } from "../../../apps/app/src/features/calendar/booking/model.ts";
 import { BUSY_SESSIONS_RPC, sessionBusyIntervals, TASKS_BUSY_ID } from "./booking-sessions.ts";
 
 /** A Supabase client stand-in: records the rpc calls, answers with `answer`. */

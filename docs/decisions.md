@@ -8,6 +8,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · PLAT-2 layout: `e2e/` is `@moduo/e2e`, deps split per package on the hoisted linker, verify through Turborepo root + package tasks, `envMode: loose` until PLAT-3, Vercel/CI build scripts bypass turbo, Tailwind scan pinned to `apps/app`, desktop workflow detects either layout.
+- 2026-10-17 · Platform v2: GitHub Pro (personal, private) + Cloudflare hosting and R2 updates; Mike's Mac is the first-choice desktop runner with hosted fallback; Bun workspaces + Turborepo; AWS, all-Azure, Vercel Pro and Nx rejected.
 - 2026-10-17 · Release runbook in `docs/release.md`; prod migrations go by scratch-folder push (a train) or one-transaction `db query --linked` (one or two files).
 - 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, each worktree on its own dev-server port (agent's choice).
@@ -105,6 +107,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-17 · Web and desktop take one version from `VERSION` (1.1.0, above the installed 1.0.22/1.0.41); prod desktop needs a bump; `min_build` holds back desktop only.
 - 2026-10-07 · Both desktop release channels run one shared workflow, and only the `.dmg` is notarized.
 - 2026-10-07 · Rust crates and Rsbuild move to the newest stable, not their pre-releases.
 - 2026-10-07 · Desktop Rust is pinned to nightly-2026-10-06, with the parallel front end on.
@@ -122,7 +125,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
-- 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
+- 2026-10-07 · Biome doesn't lint `apps/landing/**/*.html`, and `bun run lint:js` gates CI.
 - 2026-10-07 · The rest of the JS libraries move to their newest stable release, with four majors left on the line already in use.
 - 2026-10-07 · Drag and drop stays on `@dnd-kit/core` 6.3.1, `@dnd-kit/sortable` 10.0.0, and `@dnd-kit/utilities` 3.2.2.
 - 2026-10-07 · The Lexical pack is 0.52.0, and Yjs is 13.6.33.

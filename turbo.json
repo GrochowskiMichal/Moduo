@@ -1,0 +1,38 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "agentGuidance": false,
+  "envMode": "loose",
+  "globalDependencies": ["tsconfig.base.json", "bunfig.toml"],
+  "tasks": {
+    "build": {
+      "outputs": ["dist/**"]
+    },
+    "build:staging": {
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "lint:tw": {
+      "outputs": []
+    },
+    "lint:css": {
+      "outputs": []
+    },
+    "test": {
+      "outputs": []
+    },
+    "//#typecheck:root": {
+      "inputs": ["tsconfig.json", "scripts/**", "apps/app/src/components/ui/moduo-mark-path.ts"],
+      "outputs": []
+    },
+    "//#lint:js": {
+      "inputs": ["$TURBO_DEFAULT$", "!**/.turbo/**"],
+      "outputs": []
+    },
+    "//#test:scripts": {
+      "inputs": ["scripts/**", "VERSION", "brand/**", "apps/app/src/**", "apps/app/public/**"],
+      "outputs": []
+    }
+  }
+}
