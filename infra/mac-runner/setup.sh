@@ -449,7 +449,11 @@ gate_files_root_owned() {
 }
 listener_runs_as_ci() { service_running && pgrep -u "$CI_USER" -f Runner.Listener; }
 # Only macOS's own refusal counts; a timeout or a locked keychain is not proof.
-key_not_exportable() { as_ci perl -e "alarm 20; exec @ARGV" security export -k "$KEYCHAIN" -t privKeys -f pkcs12 -P x -o /dev/null 2>&1 | grep -q "cannot be retrieved"; }
+key_not_exportable() {
+  local out
+  out="$(as_ci perl -e "alarm 20; exec @ARGV" security export -k "$KEYCHAIN" -t privKeys -f pkcs12 -P x -o /dev/null 2>&1 || true)"
+  [[ "$out" == *"cannot be retrieved"* ]]
+}
 admin_login_keychain="" # set in verify
 
 verify() {
