@@ -37,7 +37,6 @@ export type ChatOutboxEntry = {
   channelId: string;
   body: string;
   replyToId: string | null;
-  format: "v1" | "v2";
   /** When it was written (the row's time until the server stamps it). */
   createdAt: string;
   /** The server refused it: "Not sent · Retry" until retried or discarded. */

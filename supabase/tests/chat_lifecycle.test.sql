@@ -515,7 +515,6 @@ BEGIN
     'chat_op_delete_channel(uuid)',
     'chat_op_restore_channel(uuid)',
     'chat_recently_deleted(uuid)',
-    'share_op_announce(uuid, boolean)',
     'chat_op_remove_member(uuid, uuid)',
     'chat_op_add_members(uuid, uuid[])',
     'chat_op_join(uuid)',

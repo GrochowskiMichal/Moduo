@@ -42,7 +42,6 @@ import { browserOffline } from "../../../lib/sync/network";
 import { timestampMicros } from "../../tasks/live";
 import type { ChatFileGate } from "../files/gate";
 import type {
-  ChatBodyFormat,
   ChatChannel,
   ChatDeletedChannel,
   ChatError,
@@ -508,7 +507,7 @@ export class ChatStore {
       replyToId: entry.replyToId,
       kind: "message",
       event: null,
-      formatVersion: entry.format === "v1" ? 1 : 2,
+      formatVersion: 2,
       authorId: this.userId,
       authorKind: "user",
       authorLabel: null,
@@ -1685,7 +1684,6 @@ export class ChatStore {
     channelId: string;
     body: string;
     replyToId?: string | null;
-    format?: ChatBodyFormat;
     /** CV-9: the id its files were uploaded under (minted by the composer). */
     id?: string;
     /** CV-9: how many files go with it: it waits until they're up. */
@@ -1697,7 +1695,6 @@ export class ChatStore {
       channelId: args.channelId,
       body: args.body,
       replyToId: args.replyToId ?? null,
-      format: args.format ?? "v2",
       createdAt: new Date().toISOString(),
       ...(args.files ? { files: args.files } : {}),
     });
@@ -1825,7 +1822,6 @@ export class ChatStore {
         channelId: entry.channelId,
         body: entry.body,
         replyToId: entry.replyToId,
-        format: entry.format,
       });
       this.inFlight = null;
       if (res.error) {
@@ -1894,12 +1890,12 @@ export class ChatStore {
     return { ok: true };
   }
 
-  edit(id: string, body: string, format: ChatBodyFormat = "v2"): Promise<ChatWriteResult> {
+  edit(id: string, body: string): Promise<ChatWriteResult> {
     const at = new Date().toISOString();
     return this.write(
       id,
       (row) => ({ ...row, body, editedAt: at }),
-      () => this.transport.edit({ id, body, format }),
+      () => this.transport.edit({ id, body }),
     );
   }
 

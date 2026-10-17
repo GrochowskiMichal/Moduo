@@ -259,7 +259,6 @@ describe("device copy, delta, echo, outbox", () => {
           channelId: C,
           body: "never mind",
           replyToId: null,
-          format: "v2",
           createdAt: server.now(),
         },
       ],

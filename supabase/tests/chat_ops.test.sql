@@ -82,7 +82,7 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.chat_op_create_channel(%L, 'news', '', false, ARRAY[%L, %L]::uuid[])$q$,
     test.id('W'), test.id('B'), test.id('D')));
   INSERT INTO test.ids SELECT 'N', id FROM public.chat_channels WHERE workspace_id = test.id('W') AND name = 'news';
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('N')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('N')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: N is an announcement channel A manages', v);
   -- V (a viewer) and E are in Q too.
   INSERT INTO public.chat_members (channel_id, user_id, workspace_id)
@@ -164,9 +164,9 @@ BEGIN
   PERFORM test.ok(test.all_acts() = v_acts + 1 AND test.acts('n1', 'chat.announcement', 'A') = 1,
     'send: a plain send logs no activity row (N''s post rings the bell: CV-5)');
   PERFORM test.ok((test.msg('b1')).format_version = 2 AND (test.msg('b1')).kind = 'message'
-                  AND (test.msg('b1')).author_id = test.id('B') AND (test.msg('b1')).client_id = test.mid('b1')
+                  AND (test.msg('b1')).author_id = test.id('B') AND (test.msg('b1')).client_id IS NULL
                   AND (test.msg('b1')).body_text = 'from a member',
-    'send: the row is v2, a message, B''s, keyed by its own id (client_id = id while the v1 wrappers live)');
+    'send: the row is v2, a message, B''s, keyed by its own id (no client_id)');
 END;
 $$;
 
@@ -715,13 +715,10 @@ BEGIN
     FROM pg_proc p
    WHERE p.oid IN (
            'public.chat_op_send(uuid, uuid, text, uuid)'::regprocedure,
-           'public.chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)'::regprocedure,
            'public.chat_op_edit(uuid, text)'::regprocedure,
-           'public.chat_op_edit(uuid, text, uuid[])'::regprocedure,
            'public.chat_op_delete(uuid)'::regprocedure,
            'public.chat_op_restore(uuid)'::regprocedure,
            'public.chat_op_react(uuid, text, boolean)'::regprocedure,
-           'public.chat_op_react(uuid, text)'::regprocedure,
            'public.chat_op_pin(uuid, boolean)'::regprocedure,
            'public.chat_op_typing(uuid, uuid, boolean)'::regprocedure,
            'public.chat_op_agent_post(uuid, uuid, text, uuid)'::regprocedure,
@@ -1460,9 +1457,7 @@ BEGIN
            'public.chat_op_remove_member(uuid, uuid)'::regprocedure,
            'public.chat_op_set_prefs(uuid, text, boolean)'::regprocedure,
            'public.chat_op_mark_read(uuid, uuid)'::regprocedure,
-           'public.chat_op_mark_read(uuid, timestamptz)'::regprocedure,
            'public.chat_op_mark_unread(uuid, uuid)'::regprocedure,
-           'public.chat_op_mark_unread(uuid, timestamptz)'::regprocedure,
            'public.chat_unread_counts(uuid)'::regprocedure,
            'public.chat_sync_ids(uuid, timestamptz)'::regprocedure,
            'public.chat_people(uuid)'::regprocedure,

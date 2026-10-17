@@ -958,7 +958,7 @@ export function ChatScreen({
           initial={store?.draft(m.channelId, rootId) ?? ""}
           onSend={(body) => {
             if (!store || !body.trim()) return false;
-            store.send({ channelId: m.channelId, body, replyToId: rootId, format: "v2" });
+            store.send({ channelId: m.channelId, body, replyToId: rootId });
             toast("Replied");
             return true;
           }}
@@ -1309,7 +1309,7 @@ export function ChatScreen({
                 onSend={(body) => {
                   setEditingId(null);
                   returnToComposer();
-                  void store?.edit(m.id, body, "v2").then((res) => {
+                  void store?.edit(m.id, body).then((res) => {
                     if (!res.ok) toast(res.offline ? "Offline" : res.message);
                   });
                 }}
@@ -1486,7 +1486,6 @@ export function ChatScreen({
                     channelId: channel.id,
                     body,
                     replyToId: replyingTo?.id ?? null,
-                    format: "v2",
                     ...(withFiles ? { id: withFiles.id, files: withFiles.files } : {}),
                   });
                   setReplyingTo(null);
@@ -1586,7 +1585,6 @@ export function ChatScreen({
                             channelId: channel.id,
                             body,
                             replyToId: entry.id,
-                            format: "v2",
                           });
                           typingStore?.send(channel.id, entry.id, true);
                           return true;

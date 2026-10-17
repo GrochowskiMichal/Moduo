@@ -337,9 +337,6 @@ export type ChatSyncRow = {
   checkedAt: string;
 };
 
-/** How a body is written: v1's screens still send v1 markup (the server converts it). */
-export type ChatBodyFormat = "v1" | "v2";
-
 export type ChatRuntime = {
   // ── The store's transport (CV-3): every call checks `error`, none throws ──
   /** One page of a conversation's stream, oldest first. `before`: strictly older
@@ -381,13 +378,8 @@ export type ChatRuntime = {
     channelId: string;
     body: string;
     replyToId: string | null;
-    format: ChatBodyFormat;
   }): Promise<ChatResult<ChatMessage>>;
-  edit(args: {
-    id: string;
-    body: string;
-    format: ChatBodyFormat;
-  }): Promise<ChatResult<ChatMessage>>;
+  edit(args: { id: string; body: string }): Promise<ChatResult<ChatMessage>>;
   remove(id: string): Promise<ChatResult<ChatMessage>>;
   react(args: { id: string; key: string; on: boolean }): Promise<ChatResult<ChatMessage>>;
   pin(args: { id: string; pinned: boolean }): Promise<ChatResult<ChatMessage>>;

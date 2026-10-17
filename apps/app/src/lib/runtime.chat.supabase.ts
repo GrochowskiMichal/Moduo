@@ -240,40 +240,24 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
         return ok(mapRows(data, mapUnread));
       }),
 
-    send: ({ id, channelId, body, replyToId, format }) =>
+    send: ({ id, channelId, body, replyToId }) =>
       attempt(async () => {
-        // v1's screens send v1 markup through the old signature, which converts it
-        // on the server and keeps the client-minted id as the row's id (CV-2a).
-        const { data, error } =
-          format === "v1"
-            ? await db()
-                .rpc("chat_op_send", {
-                  p_channel_id: channelId,
-                  p_body: body,
-                  p_parent_id: replyToId,
-                  p_client_id: id,
-                })
-                .select(MESSAGE_COLUMNS)
-            : await db()
-                .rpc("chat_op_send", {
-                  p_id: id,
-                  p_channel_id: channelId,
-                  p_body: body,
-                  p_reply_to_id: replyToId,
-                })
-                .select(MESSAGE_COLUMNS);
+        // Idempotent on the id the client minted (the outbox retries with it).
+        const { data, error } = await db()
+          .rpc("chat_op_send", {
+            p_id: id,
+            p_channel_id: channelId,
+            p_body: body,
+            p_reply_to_id: replyToId,
+          })
+          .select(MESSAGE_COLUMNS);
         return rowResult(data, error, "send");
       }),
 
-    edit: ({ id, body, format }) =>
+    edit: ({ id, body }) =>
       attempt(async () => {
         const { data, error } = await db()
-          .rpc(
-            "chat_op_edit",
-            format === "v1"
-              ? { p_message_id: id, p_body: body, p_mentioned_user_ids: [] }
-              : { p_message_id: id, p_body: body },
-          )
+          .rpc("chat_op_edit", { p_message_id: id, p_body: body })
           .select(MESSAGE_COLUMNS);
         return rowResult(data, error, "edit");
       }),
