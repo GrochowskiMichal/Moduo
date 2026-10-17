@@ -130,7 +130,7 @@ Decided on the owner's behalf. Durable ones are in `docs/decisions/workflow.md`,
 - **Deploys** run from GitHub Actions with `wrangler versions upload` (previews) and `wrangler deploy` (staging and prod), not from Workers Builds, so there's one CI system.
   - *Rejected:* Workers Builds. It has no Rust and no Cargo cache, a 20-minute cap and no artifacts, and it would be a second CI.
 - **Prod deploy, until Phase 2's `/ship`:** a manual `deploy-prod` workflow deploys a given staging version to the production environment. The same artifact goes out, with prod config injected at the edge.
-- **Landing:** its own Worker. On `moduo.app`, Workers routes send `/book*` and `/static/*` to the app Worker and everything else to the landing Worker. Booking keeps its URL, and the landing build stops including the app. The legal-page rewrites become plain files with clean-URL handling.
+- **Landing:** its own Worker. On `moduo.app`, Workers routes send `/book*` and `/static/*` to the app Worker and everything else to the landing Worker. Booking keeps its URL, and the landing build stops including the app. The legal-page rewrites become plain files with clean-URL handling. (As built in PLAT-5: a router in the landing Worker sends `/book*` and `/static/*` to the app Worker through a service binding instead of zone routes, so it works on workers.dev and previews before DNS moves; at cutover PLAT-8 only adds the custom domains `moduo.app`, `www.moduo.app` and `staging.moduo.app` to the landing Workers. See `docs/decisions/workflow.md`.)
 - **Headers:** `_headers` files per app. CSP stays report-only in this spec; enforcing it is Phase 3.
 
 **Desktop distribution:**
