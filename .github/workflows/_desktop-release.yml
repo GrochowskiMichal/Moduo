@@ -2,7 +2,14 @@ name: Desktop Release (shared)
 
 # The one desktop build both channels call (desktop-release.yml = staging, desktop-release-prod.yml = production).
 # Builds a signed, notarised Mac universal .dmg + Windows NSIS installer and publishes them, with
-# a latest.json for the in-app updater, to a rolling release in GrochowskiMichal/moduo-releases.
+# a manifest for the in-app updater, to two places:
+#   1. R2 bucket moduo-releases, served by the update server (infra/update-server): every file under
+#      desktop/<channel>/<version>/, never overwritten, then the channel's latest.json last.
+#   2. The rolling GitHub release in GrochowskiMichal/moduo-releases, as before. Builds before the
+#      PLAT-6 bridge only know that address; drop this once those installs have moved on.
+# Builds from the bridge on list the update server first and GitHub second (the updater falls back
+# to the second only when the first can't be reached). The server's address is the repo variable
+# UPDATE_SERVER_URL (default below); PLAT-8 switches it to https://updates.moduo.app.
 #
 # Mac notarization is one Apple submission (the .dmg; Apple notarises the .app inside it too).
 # build-mac waits for Apple for a while; if Apple is slower than that, notarize-mac keeps waiting on
@@ -19,6 +26,7 @@ name: Desktop Release (shared)
 #   (optional, preferred) APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8 — an App Store Connect
 #                                 API key; used for notarization instead of the Apple ID when all three are set
 #   RELEASES_REPO_TOKEN           fine-grained PAT, contents:write on GrochowskiMichal/moduo-releases
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  R2 upload (Workers R2 Storage: Edit)
 #   TAURI_SIGNING_PRIVATE_KEY     private key from `bunx tauri signer generate`
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  key password (empty string if none)
 #   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY,
@@ -28,7 +36,8 @@ name: Desktop Release (shared)
 #
 # Version: the built branch's VERSION file (scripts/release/version.mjs). Production ships it as is,
 # staging as <VERSION>-rc.<run number>. The updater only installs a higher version, so the
-# `version` job fails the release up front when VERSION isn't newer than what the channel published.
+# `version` job fails the release up front when VERSION isn't newer than what the channel published
+# (on GitHub or on the update server), or when the update server already has that version.
 
 on:
   workflow_call:
@@ -68,6 +77,7 @@ on:
 env:
   MODUO_BUILD: ${{ github.sha }}
   RELEASES_REPO: GrochowskiMichal/moduo-releases
+  UPDATE_SERVER_URL: ${{ vars.UPDATE_SERVER_URL || 'https://moduo-update-server.moduo.workers.dev' }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────────
@@ -115,8 +125,22 @@ jobs:
             *) echo "::error::Could not read the published latest.json (HTTP $STATUS). Re-run the job."; exit 1 ;;
           esac
           node .ci/scripts/release/version.mjs assert-newer "$VERSION" "$PUBLISHED"
+          # The update server's copy. Until its first publish it answers 404 (nothing yet).
+          STATUS="$(curl -sL -o r2-latest.json -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json")"
+          case "$STATUS" in
+            200) R2_PUBLISHED="$(jq -r '.version // empty' r2-latest.json)" ;;
+            404) R2_PUBLISHED="" ;;
+            *) echo "::error::Could not read the update server's latest.json (HTTP $STATUS). Re-run the job."; exit 1 ;;
+          esac
+          node .ci/scripts/release/version.mjs assert-newer "$VERSION" "$R2_PUBLISHED"
+          # Versioned paths are never overwritten: a version whose manifest exists is sealed.
+          STATUS="$(curl -s -o /dev/null -I -w '%{http_code}' "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$VERSION/latest.json")"
+          if [ "$STATUS" != 404 ]; then
+            echo "::error::The update server already has $CHANNEL $VERSION (HTTP $STATUS), or can't say. Bump VERSION, or re-run if it was a network error."
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Version: \`$VERSION\` (published: \`${PUBLISHED:-none}\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: \`$VERSION\` (published: GitHub \`${PUBLISHED:-none}\`, update server \`${R2_PUBLISHED:-none}\`)" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────────────────────────
   # macOS — universal binary (Apple Silicon + Intel), signed, submitted to Apple
@@ -228,14 +252,15 @@ jobs:
         run: bun install --frozen-lockfile
 
       # Stamp the release version (the updater only offers builds newer than the installed one),
-      # turn on signed updater bundles, and point this channel's updater at the public releases repo.
+      # turn on signed updater bundles, and point this channel's updater at the update server first
+      # and the GitHub releases repo second (the fallback while the bridge lasts).
       - name: Write CI Tauri config
         run: |
           cat > "$RUNNER_TEMP/ci-tauri-config.json" <<EOF
           {
             "version": "${MODUO_VERSION}",
             "bundle": { "createUpdaterArtifacts": true },
-            "plugins": { "updater": { "endpoints": ["https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
           }
           EOF
 
@@ -444,7 +469,7 @@ jobs:
           {
             "version": "${MODUO_VERSION}",
             "bundle": { "createUpdaterArtifacts": true },
-            "plugins": { "updater": { "endpoints": ["https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
           }
           EOF
 
@@ -514,31 +539,89 @@ jobs:
           name: windows-nsis
           path: release-artifacts
 
-      # Manifest for the Tauri in-app updater. Without a fresh Windows build the Windows entry is left
-      # out (no update offered) rather than pointing at an older installer under a newer version.
+      # Manifests for the Tauri in-app updater: one per host, the same apart from the download URLs.
+      # Without a fresh Windows build the Windows entry is left out (no update offered) rather than
+      # pointing at an older installer under a newer version.
       - name: Generate latest.json
+        id: manifests
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           cd release-artifacts
-          BASE_URL="https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}"
-          MAC_SIG=$(cat Moduo_universal.app.tar.gz.sig)
-          jq -n \
-            --arg version "$MODUO_VERSION" \
-            --arg notes "${{ inputs.channel }} build from commit ${{ github.sha }}" \
-            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg mac_sig "$MAC_SIG" \
-            --arg mac_url "$BASE_URL/Moduo_universal.app.tar.gz" \
-            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {
-               "darwin-aarch64": {signature: $mac_sig, url: $mac_url},
-               "darwin-x86_64":  {signature: $mac_sig, url: $mac_url}}}' > latest.json
-          if [ -f Moduo_x64-setup.exe.sig ]; then
-            jq --arg sig "$(cat Moduo_x64-setup.exe.sig)" --arg url "$BASE_URL/Moduo_x64-setup.exe" \
-              '.platforms["windows-x86_64"] = {signature: $sig, url: $url}' latest.json > latest.tmp && mv latest.tmp latest.json
-          else
+          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          manifest() {
+            local base="$1" out="$2"
+            jq -n \
+              --arg version "$MODUO_VERSION" \
+              --arg notes "$CHANNEL build from commit $GITHUB_SHA" \
+              --arg pub_date "$PUB_DATE" \
+              --arg mac_sig "$(cat Moduo_universal.app.tar.gz.sig)" \
+              --arg mac_url "$base/Moduo_universal.app.tar.gz" \
+              '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {
+                 "darwin-aarch64": {signature: $mac_sig, url: $mac_url},
+                 "darwin-x86_64":  {signature: $mac_sig, url: $mac_url}}}' > "$out"
+            if [ -f Moduo_x64-setup.exe.sig ]; then
+              jq --arg sig "$(cat Moduo_x64-setup.exe.sig)" --arg url "$base/Moduo_x64-setup.exe" \
+                '.platforms["windows-x86_64"] = {signature: $sig, url: $url}' "$out" > manifest.tmp && mv manifest.tmp "$out"
+            fi
+          }
+          manifest "https://github.com/${RELEASES_REPO}/releases/download/$RELEASE_TAG" latest.json
+          mkdir -p ../r2-manifest
+          manifest "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION" ../r2-manifest/latest.json
+          if [ ! -f Moduo_x64-setup.exe.sig ]; then
             echo "::warning::No Windows build this run — the release keeps its previous Windows installer and the updater offers Windows nothing new."
           fi
-          cat latest.json
+          cat latest.json ../r2-manifest/latest.json
 
+      # R2 first: every installer, bundle and .sig under the version's own folder, then that
+      # version's manifest (which seals it: the version job refuses a version whose manifest
+      # exists), then the channel's latest.json, the one key the update server reads to decide.
+      # A re-run of this job after a partial upload writes the same bytes again; nothing that a
+      # client could have seen changes.
+      - name: Publish to R2 (update server)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CHANNEL: ${{ inputs.channel }}
+          WRANGLER: npx --yes wrangler@4.147.0
+          BUCKET: moduo-releases
+        run: |
+          PREFIX="desktop/$CHANNEL/$MODUO_VERSION"
+          STATUS="$(curl -s -o /dev/null -I -w '%{http_code}' "$UPDATE_SERVER_URL/download/$PREFIX/latest.json")"
+          if [ "$STATUS" != 404 ]; then
+            echo "::error::$PREFIX is already sealed on the update server (HTTP $STATUS); versions are never overwritten."
+            exit 1
+          fi
+          put() { $WRANGLER r2 object put "$BUCKET/$1" --remote --file "$2" --content-type "$3" ${4:+--cache-control "$4"}; }
+          cd release-artifacts
+          for f in Moduo_universal.dmg Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
+            [ -f "$f" ] || continue
+            put "$PREFIX/$f" "$f" application/octet-stream
+          done
+          put "$PREFIX/latest.json" ../r2-manifest/latest.json application/json
+          put "desktop/$CHANNEL/latest.json" ../r2-manifest/latest.json application/json no-store
+          echo "Update server: \`$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json\` → \`$MODUO_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the update server offers it
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          # Workers KV and R2 reads are immediate for new keys, but allow a short settle.
+          for _ in 1 2 3 4 5 6; do
+            got="$(curl -sf "$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json" | jq -r '.version // empty' || true)"
+            [ "$got" = "$MODUO_VERSION" ] && break
+            sleep 10
+          done
+          [ "$got" = "$MODUO_VERSION" ] || { echo "::error::The update server answers $got, not $MODUO_VERSION"; exit 1; }
+          curl -sSf -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/Moduo_universal.app.tar.gz" | head -1
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/aarch64/0.0.1")
+          echo "update check from 0.0.1 → $code (204 while the channel is paused or rolled out to 0%)"
+
+      # Kept during the bridge: builds before PLAT-6 only check GitHub. Runs even when the R2
+      # upload failed, so those installs still get the release (the job stays red).
       - name: Upsert rolling ${{ inputs.release_tag }} GitHub Release
+        if: ${{ !cancelled() && steps.manifests.outcome == 'success' }}
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           repository: ${{ env.RELEASES_REPO }}

@@ -1,0 +1,56 @@
+name: Desktop rollout
+
+# Sets a desktop channel's staged-rollout share and kill switch on the update server
+# (infra/update-server), with no rebuild. Takes effect within about a minute (Workers KV).
+# - rollout: share of installs offered the channel's latest version, 0–100 (stable per install).
+# - paused: the kill switch. While on, the server tells every install "no update".
+# The updater never downgrades: pausing stops a bad version spreading but doesn't pull it back.
+# To replace it, ship a newer version.
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [staging, production]
+        required: true
+      rollout:
+        description: "Share of installs offered the update, 0–100"
+        type: number
+        required: true
+        default: 100
+      paused:
+        description: "Kill switch: offer no update to anyone"
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: desktop-rollout
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      WRANGLER: npx --yes wrangler@4.147.0
+      KV_TITLE: moduo-update-config
+    steps:
+      - name: Write the channel's settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CHANNEL: ${{ inputs.channel }}
+          ROLLOUT: ${{ inputs.rollout }}
+          PAUSED: ${{ inputs.paused }}
+        run: |
+          case "$ROLLOUT" in ''|*[!0-9]*) echo "::error::rollout must be a whole number 0–100"; exit 1 ;; esac
+          [ "$ROLLOUT" -le 100 ] || { echo "::error::rollout must be 0–100"; exit 1; }
+          ID="$($WRANGLER kv namespace list | jq -r --arg t "$KV_TITLE" '.[] | select(.title == $t) | .id')"
+          [ -n "$ID" ] || { echo "::error::KV namespace $KV_TITLE not found; run the update-server workflow first."; exit 1; }
+          VALUE="$(jq -cn --argjson r "$ROLLOUT" --argjson p "$PAUSED" '{rollout: $r, paused: $p}')"
+          $WRANGLER kv key put --remote --namespace-id "$ID" "channel:$CHANNEL" "$VALUE"
+          echo "\`channel:$CHANNEL\` = \`$VALUE\`" >> "$GITHUB_STEP_SUMMARY"
