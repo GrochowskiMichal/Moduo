@@ -21,9 +21,9 @@ name: checks
 # passed and lint and every test shard passed, or a docs-only change skipped them.
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [develop, main, t/mike/plat-3-turbo-ci]
   push:
-    branches: [develop, main, mike, maciej]
+    branches: [develop, main, mike, maciej, t/mike/plat-3-turbo-ci]
 
 concurrency:
   group: checks-${{ github.ref }}

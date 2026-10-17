@@ -5,7 +5,7 @@ name: turbo-cache
 # rule are created on first run; every run re-uploads the two access tokens as Worker secrets.
 on:
   push:
-    branches: [develop, mike]
+    branches: [develop, mike, t/mike/plat-3-turbo-ci]
     paths:
       - infra/turbo-cache/**
       - .github/workflows/turbo-cache.yml
