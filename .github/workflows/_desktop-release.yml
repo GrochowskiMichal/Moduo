@@ -235,7 +235,8 @@ jobs:
   # the run; a re-run builds on GitHub's Mac (see build-mac's runs-on).
   # ─────────────────────────────────────────────────────────────────
   mac-watchdog:
-    needs: pick-runner
+    # After version too, so a slow version job doesn't eat the watchdog's window.
+    needs: [version, pick-runner]
     if: needs.pick-runner.outputs.self_hosted == 'true' && github.run_attempt == '1'
     runs-on: ubuntu-latest
     timeout-minutes: 8

@@ -27,6 +27,10 @@
 # it can't replace root's), with self-update off: re-running this script updates it. The hook, its
 # .env and the plist are root's too. Everything root does inside moduo-ci's home runs as moduo-ci
 # (as_ci), so a link a job plants there can't turn a re-run of this script against you.
+# Accepted risk: a job can read the runner's own credentials (moduo-ci's 600 files) and pose as the
+# runner, so the gate stops misdirected jobs (fork PRs, wrong triggers), not a moduo-ci that a
+# trusted build already compromised. What such a build can reach: moduo-ci's keychain (sign and
+# notarize as Mike, key not exportable) and nothing of Mike's.
 set -euo pipefail
 
 REPO="${MODUO_RUNNER_REPO:-GrochowskiMichal/Moduo}"
@@ -45,7 +49,8 @@ PLIST=/Library/LaunchDaemons/$LABEL.plist
 HOOK_DIR=$MODUO_DIR/mac-runner
 LOG_DIR=$MODUO_DIR/logs
 LOG=$LOG_DIR/actions-runner.log
-CI_PATH=$CI_HOME/.cargo/bin:$CI_HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+# System dirs first: the runner finds `bash` (for the hook) on this PATH, and moduo-ci owns its own bin dirs.
+CI_PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$CI_HOME/.cargo/bin:$CI_HOME/.bun/bin
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SRC_DIR/../.." && pwd)"
@@ -305,14 +310,17 @@ latest_runner() {
   [ -n "$RUNNER_LATEST" ] && [ -n "$RUNNER_SHA" ] || die "Couldn't read the latest runner release and its checksum."
 }
 
-stop_service() { if service_running; then launchctl bootout "system/$LABEL" 2>/dev/null && sleep 2 || true; fi; }
+# Loaded at all, not just running: KeepAlive's 30 s wait between restarts counts as loaded.
+stop_service() { if launchctl print "system/$LABEL" >/dev/null 2>&1; then launchctl bootout "system/$LABEL" 2>/dev/null && sleep 2 || true; fi; }
 
 # Root owns the runner's code and config; moduo-ci owns only its state (registration, logs, work),
 # which it creates itself (config.sh and _work/_diag run as moduo-ci), so root never hands a path
 # moduo-ci could swap to moduo-ci. Root only takes entries over (chown to root, -P: no links
 # followed) or removes planted links, which can't give moduo-ci anything.
 STATE_FILES=" .runner .credentials .credentials_rsaparams .runner_migrated .credentials_migrated "
-planted() { [ -L "$1" ] || { [ -f "$1" ] && [ "$(stat -f %l "$1")" != 1 ]; }; }
+# A root-owned file with extra hard links is harmless (chowning it changes nothing); only links that
+# moduo-ci owns could point root at something else.
+planted() { [ -L "$1" ] || { [ -f "$1" ] && [ "$(stat -f %l "$1")" != 1 ] && [ "$(stat -f %u "$1")" != 0 ]; }; }
 lock_runner_dir() {
   chown -h "root:$CI_USER" "$RUNNER_DIR"
   chmod 1775 "$RUNNER_DIR"
@@ -342,6 +350,8 @@ setup_runner() {
   bold "4. GitHub Actions runner ($RUNNER_NAME → $REPO)"
   install -d -o root -g wheel -m 755 "$MODUO_DIR" "$HOOK_DIR" "$LOG_DIR"
   [ ! -L "$RUNNER_DIR" ] || die "$RUNNER_DIR is a symlink."
+  # The first version of this script put the runner in moduo-ci's home.
+  as_ci rm -rf "$CI_HOME/actions-runner" "$CI_HOME/Library/Logs/actions-runner.log"
 
   # Self-update is off (it would need moduo-ci to own the code), so this keeps it current. GitHub
   # stops sending jobs to a runner that's too old: it shows offline and builds go to GitHub's Mac.
@@ -371,10 +381,11 @@ setup_runner() {
     [ -n "$token" ] || die "No registration token."
     stop_service
     rm -f "$RUNNER_DIR/.runner" "$RUNNER_DIR/.credentials" "$RUNNER_DIR/.credentials_rsaparams" \
-      "$RUNNER_DIR/.runner_migrated" "$RUNNER_DIR/.credentials_migrated" "$RUNNER_DIR/.env" "$RUNNER_DIR/.path"
+      "$RUNNER_DIR/.runner_migrated" "$RUNNER_DIR/.credentials_migrated" "$RUNNER_DIR/.env" "$RUNNER_DIR/.path" \
+      "$RUNNER_DIR/svc.sh"
     (cd / && sudo -u "$CI_USER" -H /usr/bin/env PATH="$CI_PATH" /bin/bash -c \
       'cd "$1" && ./config.sh --unattended --replace --disableupdate --url "https://github.com/$2" --token "$3" --name "$4" --labels moduo-mac --work _work' \
-      _ "$RUNNER_DIR" "$REPO" "$token" "$RUNNER_NAME") >/dev/null
+      _ "$RUNNER_DIR" "$REPO" "$token" "$RUNNER_NAME") >/dev/null || { lock_runner_dir; die "config.sh failed to register the runner."; }
     lock_runner_dir
   fi
   ok "registered"
@@ -454,6 +465,7 @@ verify() {
   check "keychain unlocks with its stored password" unlock_keychain
   check "exactly one signing identity, a Developer ID Application" test "$(identity_count)/$(devid_count)" = "1/1"
   check "notarization profile '$NOTARY_PROFILE' is accepted by Apple" notary_ok
+  check "the signing key can't be exported (run --reimport-cert once if this fails)" not as_ci perl -e "alarm 20; exec @ARGV" security export -k "$KEYCHAIN" -t privKeys -f pkcs12 -P x -o /dev/null
   check "password file is 600 and moduo-ci's" test "$(stat -f '%Su %Lp' "$KEYCHAIN_PASSWORD_FILE")" = "$CI_USER 600"
 
   bold "Toolchain"
@@ -471,6 +483,7 @@ verify() {
   check "$CI_USER can't replace the runner's code" not as_ci test -w "$RUNNER_DIR/bin"
   check "runner self-update is off" grep -q '"disableUpdate": *true' "$RUNNER_DIR/.runner"
   check "plist runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$PLIST"
+  check "the runner's PATH finds bash in /bin, not in a moduo-ci dir" test "$(PATH="$(cat "$RUNNER_DIR/.path")" command -v bash)" = /bin/bash
   check "plist starts the root-owned launcher" has_line "$HOOK_DIR/run-runner.sh" cat "$PLIST"
   check ".env runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$RUNNER_DIR/.env"
   check "refuses pull_request" hook_refuses pull_request refs/pull/1/merge "${REPO%%/*}"
