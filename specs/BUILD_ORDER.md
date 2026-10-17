@@ -503,7 +503,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **PLAT-4 — App on Cloudflare: previews, staging, runtime config, old-chunk retention, headers** · deps: PLAT-3 · 2026-10-17 · `t/mike/plat-4-cloudflare-app` · open: Mike copies `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` into envs `cloudflare-preview`, `cloudflare-deploy`, `turbo-cache-write`, then deletes the repo-level secrets (PLAT-6's Cloudflare jobs use `cloudflare-deploy` too)
 - [ ] **PLAT-5 — Landing on Cloudflare (+ /book and /static routed to the app)** · deps: PLAT-4
 - [x] **PLAT-6 — Desktop distribution on R2 + update-server Worker + bridge release** · done 2026-10-17, `t/mike/plat-6-r2-updates` (#452); staging bridge 1.1.0-rc.43; prod bridge is Mike's step (PR #452) · deps: PLAT-3 · parallel with PLAT-4/5; sequence with PLAT-7 (both edit `_desktop-release.yml`)
-- [ ] **PLAT-7 — Mac self-hosted runner with hosted fallback** · deps: PLAT-2 · needs: Mac admin login, runner-status token
+- [x] **PLAT-7 — Mac self-hosted runner with hosted fallback** · done 2026-10-17, `t/mike/plat-7-mac-runner` (#457); runner `moduo-mac` live on Mike's Mac, `RUNNER_STATUS_TOKEN` set · deps: PLAT-2
 - [ ] **PLAT-8 — Cutover: DNS to Cloudflare, prod on Workers, GitHub Pro + private repo, Vercel cancelled** · deps: PLAT-4, PLAT-5, PLAT-6, PLAT-7 · needs: registrar access, GitHub Pro
 
 ## Running sessions & parallelism
