@@ -2,7 +2,7 @@
   "$schema": "https://turborepo.com/schema.json",
   "agentGuidance": false,
   "envMode": "loose",
-  "globalDependencies": ["tsconfig.base.json", "bunfig.toml", ".stylelintrc.json"],
+  "globalDependencies": ["tsconfig.base.json", "bunfig.toml"],
   "tasks": {
     "build": {
       "outputs": ["dist/**"]

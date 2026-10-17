@@ -24,7 +24,7 @@ Component code uses semantic tokens, not raw values. Concretely:
 - **Font size**: `text-base`, `text-lg`, `text-2xl`. Never `text-[15px]`.
 - **Motion duration**: use `--motion-fast`, `--motion-base`, `--motion-slow` via CSS or via Tailwind's arbitrary value `duration-[var(--motion-base)]`. Never `duration-200`.
 
-Tokens are defined in [src/styles/tokens.css](./src/styles/tokens.css). The full token catalogue with rationale is in [.design/foundation/TOKENS.md](./.design/foundation/TOKENS.md).
+Tokens are defined in [apps/app/src/styles/tokens.css](../apps/app/src/styles/tokens.css). The full token catalogue with rationale is in [.design/foundation/TOKENS.md](./.design/foundation/TOKENS.md).
 
 ### 2. Token edits are system edits
 
@@ -38,18 +38,18 @@ Never invent a per-component token. The system stays small or it stops being a s
 
 ### 3. Primitives wrap shadcn
 
-The `src/components/ui/` folder is for shadcn primitives. When you need a Dialog, Dropdown, Popover, Command, Tabs, Tooltip, Sheet, Toast, Switch, Select, RadioGroup, Separator, Card, ScrollArea, Avatar, Badge, or ContextMenu — use the shadcn version.
+The `apps/app/src/components/ui/` folder is for shadcn primitives. When you need a Dialog, Dropdown, Popover, Command, Tabs, Tooltip, Sheet, Toast, Switch, Select, RadioGroup, Separator, Card, ScrollArea, Avatar, Badge, or ContextMenu — use the shadcn version.
 
 If the primitive isn't installed yet, install it via the shadcn CLI (see Recipes below). Don't hand-author Radix wrappers; shadcn already did that work.
 
 ### 4. Storybook is the spec
 
-Every primitive in `src/components/ui/` ships with a `<name>.stories.tsx`. The story covers:
+Every primitive in `apps/app/src/components/ui/` ships with a `<name>.stories.tsx`. The story covers:
 - Default state
 - All meaningful variants (size, intent, disabled, error)
 - Hover, focus, active states (use Storybook controls)
 
-Feature components (anything in `src/components/`, `src/features/`) are encouraged to have stories but not required.
+Feature components (anything in `apps/app/src/components/`, `apps/app/src/features/`) are encouraged to have stories but not required.
 
 ### 5. Visual snapshots in CI
 
@@ -80,7 +80,7 @@ User preferences map to `data-*` attributes on `<html>`. The cascade does the wo
 
 (`data-text-size` was retired 2026-06-13 — density is the size axis.)
 
-Storybook's toolbar has the same six axes (theme, shade, accent, density, radius, font), built from `APPEARANCE_OPTIONS` in `src/lib/appearance.ts`, and re-applies all of them for every story. `Foundations/StateLadder` shows the state layer under whatever the toolbar is set to.
+Storybook's toolbar has the same six axes (theme, shade, accent, density, radius, font), built from `APPEARANCE_OPTIONS` in `apps/app/src/lib/appearance.ts`, and re-applies all of them for every story. `Foundations/StateLadder` shows the state layer under whatever the toolbar is set to.
 
 The Settings page is the UI for setting these. The values persist to Tauri-backed local storage and are applied on app launch before first paint.
 
@@ -95,23 +95,23 @@ function setAccent(value: AccentName) {
 
 ## Component layer
 
-### Primitives (`src/components/ui/`)
+### Primitives (`apps/app/src/components/ui/`)
 shadcn-derived. One primitive per file. Each primitive:
 - Forwards refs (`React.forwardRef`).
 - Supports `className` for one-off composition (but only with token-based utilities).
 - Uses `cn()` for class merging (the shadcn helper).
 - Lives next to its `.stories.tsx`.
 
-### App shell (`src/components/app/`)
+### App shell (`apps/app/src/components/app/`)
 The chrome of the app — top bar, three-pane shell, menus. Uses primitives to compose.
 
-### Bespoke shared (`src/components/`)
+### Bespoke shared (`apps/app/src/components/`)
 Modals, switchers, menus that are app-specific but used across features.
 
-### Feature components (`src/features/<feature>/`)
+### Feature components (`apps/app/src/features/<feature>/`)
 Per-feature UI. May compose primitives + bespoke shared components. The visual personality of a feature comes from its composition, not from new tokens.
 
-### React Native shim (`src/tw/`)
+### React Native shim (`apps/app/src/tw/`)
 `View`, `Text`, `Pressable`, `TextInput`, `ScrollView`, `Image`, `Modal`, `ActivityIndicator`. These exist for code ported from a React Native codebase. Leave them alone; don't migrate them as part of the redesign.
 
 ## Recipes
@@ -125,15 +125,15 @@ bunx shadcn@latest add <component-name>
 bunx shadcn@latest add dropdown-menu popover command
 ```
 
-The component lands in `src/components/ui/`. Open it; replace any default `bg-zinc-*` / `text-zinc-*` classes with our token classes (`bg-popover`, `text-popover-foreground`, etc.). Add a story file alongside.
+The component lands in `apps/app/src/components/ui/`. Open it; replace any default `bg-zinc-*` / `text-zinc-*` classes with our token classes (`bg-popover`, `text-popover-foreground`, etc.). Add a story file alongside.
 
 ### Add a new feature page
 
 1. Confirm with the user that the route should exist (see rule 7).
-2. Create `src/routes/pages/<name>-page.tsx`.
-3. Add the route to `src/router.tsx`.
+2. Create `apps/app/src/routes/pages/<name>-page.tsx`.
+3. Add the route to `apps/app/src/router.tsx`.
 4. Add the page to the top-nav set if appropriate (in `app-chrome-constants.ts`).
-5. Use the three-pane shell from `src/components/app/feature-panels-shell.tsx`.
+5. Use the three-pane shell from `apps/app/src/components/app/feature-panels-shell.tsx`.
 6. Compose using primitives. If you reach for a hex value, stop and check the token reference.
 
 ### Add a new bespoke component
@@ -141,7 +141,7 @@ The component lands in `src/components/ui/`. Open it; replace any default `bg-zi
 1. Create the file in the right folder (per the Component Layer section above).
 2. Use only token-based classes (`bg-card`, `text-foreground`, etc.).
 3. If you need a behaviour shadcn provides (focus trap, dropdown logic, etc.), wrap the shadcn primitive instead.
-4. Add a story if it's reusable enough to be in `src/components/ui/`.
+4. Add a story if it's reusable enough to be in `apps/app/src/components/ui/`.
 
 ### Add a new accent color
 
@@ -154,7 +154,7 @@ The component lands in `src/components/ui/`. Open it; replace any default `bg-zi
 ### Add a new font
 
 1. Install the @fontsource package: `bun add @fontsource/<font>` (or the variable version).
-2. Import the package's CSS in `src/global.css` (or wherever fonts are loaded).
+2. Import the package's CSS in `apps/app/src/global.css` (or wherever fonts are loaded).
 3. Add `--font-{role}-{name}` to the typography section of `tokens.css`.
 4. Add a `[data-font-{role}="{name}"]` rule that resolves `--font-{role}`.
 5. Add the choice to the Settings page font picker.
@@ -162,7 +162,7 @@ The component lands in `src/components/ui/`. Open it; replace any default `bg-zi
 
 ### Change a token system-wide
 
-1. Edit `src/styles/tokens.css` only.
+1. Edit `apps/app/src/styles/tokens.css` only.
 2. Run Storybook (`bun run storybook`); spot-check the stories that use the changed token.
 3. Run Playwright snapshots (`bun run e2e`). Approve the visual diffs.
 4. Update [.design/foundation/TOKENS.md](./.design/foundation/TOKENS.md) if the rationale or default changed.
@@ -286,7 +286,7 @@ Use Tailwind utilities that map to semantic tokens. Common lookups:
 
 - **Gradient buttons / hero gradients** — the app is flat; depth comes from surface steps, not gradients.
 - **Colored borders on cards** — borders are `border-border`; accent via `bg-primary` or text, not border color.
-- **Emoji in UI** — use the icon set (Phosphor via `src/components/ui/icon`).
+- **Emoji in UI** — use the icon set (Phosphor via `apps/app/src/components/ui/icon`).
 - **New shadow values** — shadows are tokenized (`shadow-sm`, `shadow-md`); dark mode barely shows them, so prefer lightness steps + hairlines for separation.
 - **`font-bold` everywhere** — the type scale + `font-display` vs `font-sans` does the hierarchy work; reach for weight last.
 - **Bespoke tooltips/toasts** — use the primitives.
@@ -326,7 +326,7 @@ Established during the Tasks rebuild; **reusable across modules** (Notes adopts 
   triggers) keep the ring for keyboard focus; no focus ring is ever offset.
   A rail's inline name field is `NavRowField` / `NavRowInput` (MOD-159): the
   label's own text in the row's own box.
-- **New primitives in `src/components/ui/`:** `SegmentedControl` (the one toggle —
+- **New primitives in `apps/app/src/components/ui/`:** `SegmentedControl` (the one toggle —
   no bespoke segmented controls), `IconButton` (required tooltip+label),
   `Toolbar`, `Calendar` + `DateField` (no native `<input type=date>`),
   `CompleteToggle`, `EmptyState`. `TagChip` is the **dot chip** (MOD-97,
@@ -364,10 +364,10 @@ drop targets). The current destination of a rail or nav is neutral
 
 The primitives every module builds on (re-plan §5.2; one-line contracts in
 `.design/tasks-v3/research/visual-audit.md` §C). Each lives in
-`src/components/ui/`, is listed in `src/components/ui/kit.ts`, and has a
+`apps/app/src/components/ui/`, is listed in `apps/app/src/components/ui/kit.ts`, and has a
 `Densities` story that renders it at the three density steps through
 `AtThreeDensities` (`kit-densities.tsx`). `kit.test.ts` fails on a missing
-story; `tests/visual/kit.spec.ts` opens each one and reads its tokens.
+story; `e2e/tests/visual/kit.spec.ts` opens each one and reads its tokens.
 
 | Group | Primitive (file) |
 | --- | --- |

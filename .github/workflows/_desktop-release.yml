@@ -191,11 +191,19 @@ jobs:
             exit 1
           fi
 
+      # PLAT-2 moved the Tauri app to apps/desktop. A branch cut before the move (prod-app until the
+      # next promote) still has it at the root, so find it instead of assuming either layout.
+      - name: Locate the desktop app
+        run: |
+          if [ -f apps/desktop/src-tauri/tauri.conf.json ]; then DIR=apps/desktop; else DIR=.; fi
+          echo "DESKTOP_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "Desktop app: $DIR"
+
       - name: Read Rust toolchain
         id: toolchain
-        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$DESKTOP_DIR/src-tauri/rust-toolchain.toml")" >> "$GITHUB_OUTPUT"
 
-      # Same channel as src-tauri/rust-toolchain.toml, so the targets land on the toolchain cargo uses.
+      # Same channel as the app's src-tauri/rust-toolchain.toml, so the targets land on the toolchain cargo uses.
       - name: Setup Rust (+ both Apple targets)
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
         with:
@@ -207,7 +215,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: src-tauri
+          workspaces: ${{ env.DESKTOP_DIR }}/src-tauri
           shared-key: desktop-mac
           cache-on-failure: true
 
@@ -239,6 +247,7 @@ jobs:
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+          cd "$DESKTOP_DIR"
           bunx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/ci-tauri-config.json"
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -261,7 +270,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          BUNDLE=src-tauri/target/universal-apple-darwin/release/bundle
+          BUNDLE="$DESKTOP_DIR/src-tauri/target/universal-apple-darwin/release/bundle"
           APP=$(find "$BUNDLE/macos" -maxdepth 1 -name "*.app" | head -1)
           DMG=$(find "$BUNDLE/dmg" -name "*.dmg" | head -1)
           TGZ=$(find "$BUNDLE/macos" -name "*.app.tar.gz" | head -1)
@@ -396,9 +405,17 @@ jobs:
           path: .ci
           sparse-checkout: scripts
 
+      # PLAT-2 moved the Tauri app to apps/desktop. A branch cut before the move (prod-app until the
+      # next promote) still has it at the root, so find it instead of assuming either layout.
+      - name: Locate the desktop app
+        run: |
+          if [ -f apps/desktop/src-tauri/tauri.conf.json ]; then DIR=apps/desktop; else DIR=.; fi
+          echo "DESKTOP_DIR=$DIR" >> "$GITHUB_ENV"
+          echo "Desktop app: $DIR"
+
       - name: Read Rust toolchain
         id: toolchain
-        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' src-tauri/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$DESKTOP_DIR/src-tauri/rust-toolchain.toml")" >> "$GITHUB_OUTPUT"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master, 2026-10-16
@@ -409,7 +426,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: src-tauri
+          workspaces: ${{ env.DESKTOP_DIR }}/src-tauri
           shared-key: desktop-windows
           cache-on-failure: true
 
@@ -438,6 +455,7 @@ jobs:
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
+          cd "$DESKTOP_DIR"
           bunx tauri build --bundles nsis --config "$GITHUB_WORKSPACE/ci-tauri-config.json"
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -457,7 +475,7 @@ jobs:
       - name: Stage artifacts
         run: |
           mkdir -p release-artifacts
-          NSIS=$(find src-tauri/target/release/bundle/nsis -name "*-setup.exe" | head -1)
+          NSIS=$(find "$DESKTOP_DIR/src-tauri/target/release/bundle/nsis" -name "*-setup.exe" | head -1)
           cp "$NSIS" release-artifacts/Moduo_x64-setup.exe
           cp "$NSIS.sig" release-artifacts/Moduo_x64-setup.exe.sig
 

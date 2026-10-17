@@ -66,7 +66,7 @@ E2E_BASE_URL=http://127.0.0.1:8131 bun run perf   # seeds (or keeps) the fixture
 ```
 
 - **The fixture** (`scripts/perf/seed-tasks-10k.ts`): 20 projects plus the Inbox, about 1,900 open tasks, 200 Backlog, 7,600 done and 300 Won't do; HTML descriptions, subtasks, dates, tags, blockers, a queue and comments. Task descriptions are Markdown since #408; the seed still writes the old HTML, which the app reads as Markdown (`htmlToMarkdown` in `supabase/functions/_shared/description-markdown.ts`). Every 500th task carries "quokka" (the spec searches it). Sign in as `perf@moduo.local` (the password is in the script) to look around.
-- **The spec** (`tests/perf/tasks-10k.spec.ts`) times real input inside the page, from the input's first event to the frame that shows the result (median of three), checks that long lists and Board columns draw only a screenful, drags a card out of a 1,200-card column, and checks that adding or renaming a project never blocks the page for 200 ms. It logs every number; compare runs on the same machine.
+- **The spec** (`e2e/tests/perf/tasks-10k.spec.ts`) times real input inside the page, from the input's first event to the frame that shows the result (median of three), checks that long lists and Board columns draw only a screenful, drags a card out of a 1,200-card column, and checks that adding or renaming a project never blocks the page for 200 ms. It logs every number; compare runs on the same machine.
 
 ## Not local (on purpose)
 
@@ -76,7 +76,7 @@ E2E_BASE_URL=http://127.0.0.1:8131 bun run perf   # seeds (or keeps) the fixture
 
 ## Tests and the local stack
 
-- **DB-backed tests run inside `bun run verify` whenever the local stack answers.** `src/features/chat/privacy-rules.test.ts` probes `127.0.0.1:54322` with `psql` (override with `MODUO_DB_URL`) and runs `supabase/tests/*.sql`; with no stack it skips with a warning.
+- **DB-backed tests run inside `bun run verify` whenever the local stack answers.** `apps/app/src/features/chat/privacy-rules.test.ts` probes `127.0.0.1:54322` with `psql` (override with `MODUO_DB_URL`) and runs `supabase/tests/*.sql`; with no stack it skips with a warning.
 - **A red result there may come from the stack, not your code.** The snapshot has no `realtime` schema, so `chat_privacy.test.sql` fails its `realtime.messages` checks after `local:reset` ([gotcha](./gotchas/supabase.md)). `bun run local:down` restores the default (skipped); `env:cloud` alone does not, since the test reads the DB URL, not `.env.local`.
 - **Local sign-in:** a user created through the admin API can't sign in with a password. Set it in SQL with `extensions.crypt('<pw>', extensions.gen_salt('bf'))`, as `supabase/seed.sql` does.
 - **Replay prod's function grants before trusting a local probe**: the snapshot grants `anon`/`authenticated` EXECUTE on every function ([gotcha](./gotchas/supabase.md)).

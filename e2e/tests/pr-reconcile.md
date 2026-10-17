@@ -1,6 +1,6 @@
 # Tasks v3 — PR reconcile checklist (AC13)
 
-> The six open PRs the Tasks v3 re-plan gave a verdict ([`.design/tasks-v3/research/`](../.design/tasks-v3/research/), [`specs/tasks-v3.md`](../specs/tasks-v3.md) AC13). Each block that carries a PR ticks its row when it lands; `/s3` checks the list at the release. Local build mode: "landed" means on `t/maciej/tasks-v3-build`; the PR on GitHub closes at the release.
+> The six open PRs the Tasks v3 re-plan gave a verdict ([`.design/tasks-v3/research/`](../../.design/tasks-v3/research/), [`specs/tasks-v3.md`](../../specs/tasks-v3.md) AC13). Each block that carries a PR ticks its row when it lands; `/s3` checks the list at the release. Local build mode: "landed" means on `t/maciej/tasks-v3-build`; the PR on GitHub closes at the release.
 
 | PR | Verdict | Block | Landed | Check |
 | --- | --- | --- | --- | --- |

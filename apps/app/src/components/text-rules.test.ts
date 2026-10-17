@@ -173,7 +173,7 @@ describe("lint:css carries the same rules", () => {
         ".e { transform: rotate(45deg); }",
       ].join("\n"),
       codeFilename: path.join(ROOT, "src/probe.css"),
-      configFile: path.join(ROOT, "../../.stylelintrc.json"),
+      configFile: path.join(ROOT, ".stylelintrc.json"),
     });
     const lines = result.results[0].warnings
       .filter((w) => w.rule === "declaration-property-value-disallowed-list")
