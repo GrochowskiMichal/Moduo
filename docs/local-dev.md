@@ -37,7 +37,9 @@ bun run local:down        # stop (data kept)
 3. applies every repo migration **newer than the snapshot**: your unreleased migration runs locally first;
 4. runs `supabase/seed.sql` (buckets, test user).
 
-`bun run local:reset` wipes the local DB and repeats all of it in about 20 seconds. Write a migration, `local:reset`, test, repeat. Prod only sees it on release day.
+`bun run local:reset` wipes the local DB and repeats all of it in about 20 seconds. Prod only sees a migration on release day.
+
+**The stack is shared** by every worktree, Claude session and dev server on this Mac (AGENTS.md rule 13). A reset wipes the rows and migrations other sessions are testing with, and `local:down` breaks their running servers. So both refuse unless `MODUO_SHARED_STACK_OK=1` is set, which you set only after the user confirms nobody else needs the stack; `.claude/settings.json` denies the raw `supabase db reset` and `supabase stop --no-backup`. To test a migration while others work, apply it on top: `psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -1 -f <file>` (write it to be re-runnable, and leave other sessions' test data alone).
 
 **Proper fix (open, needs Maciej + Mike):** commit a `00000000000000_baseline.sql` captured from prod and archive the pre-baseline files, so `supabase db reset` works for everyone and the snapshot step goes away.
 
@@ -77,6 +79,6 @@ E2E_BASE_URL=http://127.0.0.1:8131 bun run perf   # seeds (or keeps) the fixture
 ## Tests and the local stack
 
 - **DB-backed tests run inside `bun run verify` whenever the local stack answers.** `apps/app/src/features/chat/privacy-rules.test.ts` probes `127.0.0.1:54322` with `psql` (override with `MODUO_DB_URL`) and runs `supabase/tests/*.sql`; with no stack it skips with a warning.
-- **A red result there may come from the stack, not your code.** The snapshot has no `realtime` schema, so `chat_privacy.test.sql` fails its `realtime.messages` checks after `local:reset` ([gotcha](./gotchas/supabase.md)). `bun run local:down` restores the default (skipped); `env:cloud` alone does not, since the test reads the DB URL, not `.env.local`.
+- **A red result there may come from the stack, not your code.** The snapshot has no `realtime` schema, so `chat_privacy.test.sql` fails its `realtime.messages` checks after `local:reset` ([gotcha](./gotchas/supabase.md)). `bun run local:down` (with the user's go-ahead, since it stops the shared stack) restores the default (skipped); `env:cloud` alone does not, since the test reads the DB URL, not `.env.local`.
 - **Local sign-in:** a user created through the admin API can't sign in with a password. Set it in SQL with `extensions.crypt('<pw>', extensions.gen_salt('bf'))`, as `supabase/seed.sql` does.
 - **Replay prod's function grants before trusting a local probe**: the snapshot grants `anon`/`authenticated` EXECUTE on every function ([gotcha](./gotchas/supabase.md)).
