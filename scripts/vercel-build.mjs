@@ -41,7 +41,8 @@ if (target === "landing") {
   // The marketing page stays at /. Booking links are /book on this same host,
   // so the app shell has to be in this deployment too (its /static files are
   // what /book loads). app.html is that shell; index.html is the landing page.
-  // PLAT-5 drops the app build from here once /book routes to the app Worker.
+  // On Cloudflare the landing Worker hands /book to the app Worker instead
+  // (PLAT-5); this path goes away when PLAT-8 moves moduo.app off Vercel.
   execSync("bun run build:web", { stdio: "inherit", cwd: root });
   const outDir = path.join(root, "apps", "app", "dist", "web");
   fs.renameSync(path.join(outDir, "index.html"), path.join(outDir, "app.html"));

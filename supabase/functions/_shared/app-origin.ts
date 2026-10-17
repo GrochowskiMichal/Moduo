@@ -5,11 +5,14 @@
  * field): public endpoints have no session, so anyone can forge either and
  * make our sender mail a link to their own domain. A caller's hint may only
  * pick between the origins listed here; anything else gets the canonical one.
- * Add a host here (and to vercel.json for /book) before linking to it.
+ * Add a host here (and make it serve /book) before linking to it.
  */
 
 /**
- * Public hosts that serve /book (vercel.json rewrites it to the app shell).
+ * Public hosts that serve /book: the landing hosts, whose landing Worker hands
+ * /book to the app Worker (apps/landing/edge/worker.ts; Vercel's vercel.json
+ * rewrite until PLAT-8 moves DNS). workers.dev and preview hosts are left out
+ * on purpose, like the app's previews: their bookings mail moduo.app links.
  * No dev server: production would otherwise mail a localhost link to anyone.
  * A local booking gets a moduo.app Cancel link, which works against the same
  * hosted backend.

@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · PLAT-5: landing is its own static-assets Worker; a router hands `/book*` and `/static/*` to the app Worker over a service binding (works on workers.dev and previews; at cutover only custom domains, no zone routes); clean URLs, SPA fallback as Vercel's catch-all.
 - 2026-10-17 · PLAT-4: web app on Workers static assets with the edge Worker serving the shell (`not_found_handling: "none"`, SPA mode served the shell for missing chunks), per-environment config via `public-config.ts`, previews as staging Worker versions, 3-build chunk retention in R2, no preview redirect allowlist (one Supabase project, code sign-in).
 - 2026-10-17 · PLAT-3: CI skips work through the Turborepo remote cache (own Worker + R2, signed), not `--affected` (misses alias inputs); PRs read-only by token, docs-only PRs skip lint/tests.
 - 2026-10-17 · PLAT-2 layout: `e2e/` is `@moduo/e2e`, deps split per package on the hoisted linker, verify through Turborepo root + package tasks, `envMode: loose` until PLAT-3, Vercel/CI build scripts bypass turbo, Tailwind scan pinned to `apps/app`, desktop workflow detects either layout.
