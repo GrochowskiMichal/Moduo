@@ -318,9 +318,11 @@ stop_service() { if launchctl print "system/$LABEL" >/dev/null 2>&1; then launch
 # moduo-ci could swap to moduo-ci. Root only takes entries over (chown to root, -P: no links
 # followed) or removes planted links, which can't give moduo-ci anything.
 STATE_FILES=" .runner .credentials .credentials_rsaparams .runner_migrated .credentials_migrated "
-# A root-owned file with extra hard links is harmless (chowning it changes nothing); only links that
-# moduo-ci owns could point root at something else.
+# Symlinks, and hard links moduo-ci owns, are removed (removing only drops the name). A root-owned
+# file with extra links may be a link a job made to some other root file, so it's left untouched:
+# neither removed (it could be the runner's own code) nor chowned/chmodded (that would reach the other file).
 planted() { [ -L "$1" ] || { [ -f "$1" ] && [ "$(stat -f %l "$1")" != 1 ] && [ "$(stat -f %u "$1")" != 0 ]; }; }
+shared_root_file() { [ -f "$1" ] && [ "$(stat -f %l "$1")" != 1 ] && [ "$(stat -f %u "$1")" = 0 ]; }
 lock_runner_dir() {
   chown -h "root:$CI_USER" "$RUNNER_DIR"
   chmod 1775 "$RUNNER_DIR"
@@ -331,6 +333,8 @@ lock_runner_dir() {
     if planted "$p" || [ "$f" = run-helper.sh ]; then
       # run-helper.sh: run.sh's moduo-ci-owned copy; run-runner.sh runs the template instead.
       rm -f "$p"
+    elif shared_root_file "$p"; then
+      warn "$p has extra hard links; left as is"
     elif [[ "$STATE_FILES" != *" $f "* ]] && [ "$f" != _work ] && [ "$f" != _diag ]; then
       chown -R -P root:wheel "$p"
       chmod -R go-w "$p"
@@ -444,6 +448,8 @@ gate_files_root_owned() {
   [ -z "$(find "$RUNNER_DIR/bin" "$RUNNER_DIR/externals" ! -user root -print -quit)" ]
 }
 listener_runs_as_ci() { service_running && pgrep -u "$CI_USER" -f Runner.Listener; }
+# Only macOS's own refusal counts; a timeout or a locked keychain is not proof.
+key_not_exportable() { as_ci perl -e "alarm 20; exec @ARGV" security export -k "$KEYCHAIN" -t privKeys -f pkcs12 -P x -o /dev/null 2>&1 | grep -q "cannot be retrieved"; }
 admin_login_keychain="" # set in verify
 
 verify() {
@@ -465,7 +471,7 @@ verify() {
   check "keychain unlocks with its stored password" unlock_keychain
   check "exactly one signing identity, a Developer ID Application" test "$(identity_count)/$(devid_count)" = "1/1"
   check "notarization profile '$NOTARY_PROFILE' is accepted by Apple" notary_ok
-  check "the signing key can't be exported (run --reimport-cert once if this fails)" not as_ci perl -e "alarm 20; exec @ARGV" security export -k "$KEYCHAIN" -t privKeys -f pkcs12 -P x -o /dev/null
+  check "the signing key can't be exported (run --reimport-cert once if this fails)" key_not_exportable
   check "password file is 600 and moduo-ci's" test "$(stat -f '%Su %Lp' "$KEYCHAIN_PASSWORD_FILE")" = "$CI_USER 600"
 
   bold "Toolchain"
