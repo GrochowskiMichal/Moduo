@@ -204,7 +204,8 @@ jobs:
         run: |
           # A first deploy moves moduo.app off a cached Vercel answer (TTL 60 s).
           for _ in $(seq 1 40); do
-            curl -sI https://moduo.app/ | grep -qi '^server: cloudflare' && break
+            h="$(curl -sI https://moduo.app/ || true)"
+            grep -qi '^server: cloudflare' <<< "$h" && break
             sleep 10
           done
           set +e
