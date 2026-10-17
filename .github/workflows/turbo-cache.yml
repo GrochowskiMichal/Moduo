@@ -25,9 +25,8 @@ jobs:
     # The write token lives only in this environment, which only develop, main, mike, maciej
     # and v* tags may use.
     environment: turbo-cache-write
+    # The Cloudflare token is given only to the wrangler steps, never to install or tests.
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER: npx --yes wrangler@4.147.0
       BUCKET: moduo-turbo-cache
     defaults:
@@ -53,6 +52,9 @@ jobs:
           bun run test
 
       - name: Bucket and expiry rule
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if ! $WRANGLER r2 bucket info "$BUCKET" >/dev/null 2>&1; then
             $WRANGLER r2 bucket create "$BUCKET"
@@ -63,6 +65,8 @@ jobs:
 
       - name: Deploy
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           READ_TOKEN: ${{ secrets.TURBO_READ_TOKEN }}
           WRITE_TOKEN: ${{ secrets.TURBO_WRITE_TOKEN }}
         run: |
