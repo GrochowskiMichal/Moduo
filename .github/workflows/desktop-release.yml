@@ -26,6 +26,10 @@ permissions:
 jobs:
   release:
     uses: ./.github/workflows/_desktop-release.yml
+    # actions: write is for mac-watchdog alone (it cancels a run stuck waiting on the Mac).
+    permissions:
+      contents: read
+      actions: write
     secrets: inherit
     with:
       channel: staging
