@@ -13,6 +13,8 @@
 # ends caffeinate when the job ends; -t caps it anyway) and drops the shared Cargo target directory
 # when it outgrows its budget.
 set -euo pipefail
+# Only system tools: moduo-ci's own bin dirs (cargo, bun) come first in the job PATH.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
 refuse() {
   echo "::error::moduo-mac refuses this job: $1. Only pushes to develop/mike, v* tags and the owner's manual runs may use it."
@@ -46,8 +48,8 @@ echo "moduo-mac accepted: $event on $ref by $actor"
 # Universal release builds add a few GB per toolchain bump; start over past the budget.
 target="${CARGO_TARGET_DIR:-}"
 if [ -n "$target" ] && [ -d "$target" ]; then
-  size_gb="$(du -sg "$target" 2>/dev/null | cut -f1 || echo 0)"
-  if [ "${size_gb:-0}" -gt "${MODUO_TARGET_BUDGET_GB:-60}" ]; then
+  size_gb="$(du -sg "$target" 2>/dev/null | tail -1 | cut -f1 || true)"
+  if [[ "$size_gb" =~ ^[0-9]+$ ]] && [ "$size_gb" -gt "${MODUO_TARGET_BUDGET_GB:-60}" ]; then
     echo "Cargo target dir is ${size_gb} GB; clearing it (next build is cold)."
     rm -rf "$target"
   fi

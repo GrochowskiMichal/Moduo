@@ -18,15 +18,23 @@
 #     notarization login (a notarytool profile); its password sits in a 600 file only moduo-ci reads
 #   - the GitHub Actions runner, registered to the repo as `moduo-mac` (labels self-hosted, macOS,
 #     ARM64, moduo-mac), as a LaunchDaemon that runs as moduo-ci, starts at boot and needs no login
-#   - a root-owned job-started hook (job-started.sh) that refuses every job except pushes to
-#     develop/mike, v* tags and the owner's manual runs, so pull_request jobs never run here
+#   - a job-started hook (job-started.sh) that refuses every job except pushes to develop/mike,
+#     v* tags and the owner's manual runs, so pull_request jobs never run here
+#
+# Trust boundary: a job runs as moduo-ci and can change anything moduo-ci owns, so nothing that
+# decides what runs next is moduo-ci's. The runner lives in /Library/Moduo/actions-runner, owned by
+# root (its directory is sticky and group-writable only so the runner can add its own state files;
+# it can't replace root's), with self-update off: re-running this script updates it. The hook, its
+# .env and the plist are root's too. Everything root does inside moduo-ci's home runs as moduo-ci
+# (as_ci), so a link a job plants there can't turn a re-run of this script against you.
 set -euo pipefail
 
 REPO="${MODUO_RUNNER_REPO:-GrochowskiMichal/Moduo}"
 CI_USER=moduo-ci
 CI_HOME=/Users/$CI_USER
 RUNNER_NAME=moduo-mac
-RUNNER_DIR=$CI_HOME/actions-runner
+MODUO_DIR=/Library/Moduo
+RUNNER_DIR=$MODUO_DIR/actions-runner
 CACHE_DIR=$CI_HOME/cache
 STATE_DIR=$CI_HOME/.moduo-ci
 KEYCHAIN=$CI_HOME/Library/Keychains/moduo-signing.keychain-db
@@ -34,8 +42,9 @@ KEYCHAIN_PASSWORD_FILE=$STATE_DIR/keychain-password
 NOTARY_PROFILE=moduo-notary
 LABEL=com.moduo.actions-runner
 PLIST=/Library/LaunchDaemons/$LABEL.plist
-HOOK_DIR=/Library/Moduo/mac-runner
-LOG=$CI_HOME/Library/Logs/actions-runner.log
+HOOK_DIR=$MODUO_DIR/mac-runner
+LOG_DIR=$MODUO_DIR/logs
+LOG=$LOG_DIR/actions-runner.log
 CI_PATH=$CI_HOME/.cargo/bin:$CI_HOME/.bun/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -91,10 +100,12 @@ setup_user() {
     dseditgroup -o edit -d "$CI_USER" -t user admin
   fi
   [ -d "$CI_HOME" ] || createhomedir -c -u "$CI_USER" >/dev/null
-  install -d -o "$CI_USER" -g "$CI_USER" -m 700 "$CI_HOME" "$STATE_DIR"
-  install -d -o "$CI_USER" -g "$CI_USER" -m 755 "$CACHE_DIR" "$CACHE_DIR/cargo-target" "$CACHE_DIR/bun" \
-    "$CI_HOME/Library" "$CI_HOME/Library/Keychains" "$CI_HOME/Library/Logs"
-  chown -R "$CI_USER:$CI_USER" "$CI_HOME"
+  [ ! -L "$CI_HOME" ] || die "$CI_HOME is a symlink."
+  # Root touches the home itself (in root-owned /Users) and nothing below it: a job could have
+  # swapped anything below for a symlink.
+  chown "$CI_USER:$CI_USER" "$CI_HOME"
+  chmod 700 "$CI_HOME"
+  as_ci /bin/sh -c "umask 022; mkdir -p '$CACHE_DIR/cargo-target' '$CACHE_DIR/bun' '$CI_HOME/Library/Keychains' && umask 077 && mkdir -p '$STATE_DIR'"
   ok "standard user, group $CI_USER, home $CI_HOME (700), cache $CACHE_DIR"
 
   # macOS makes homes 750 with group staff. moduo-ci isn't in staff, so only the "other" bits matter.
@@ -183,15 +194,21 @@ setup_keychain() {
     [ -f "$p12" ] || die "No file at $p12."
     read -r -s -p "  The .p12's export password: " pw </dev/tty
     echo
-    install -o "$CI_USER" -g "$CI_USER" -m 600 "$p12" "$STATE_DIR/import.p12"
-    as_ci security import "$STATE_DIR/import.p12" -k "$KEYCHAIN" -P "$pw" -T /usr/bin/codesign -T /usr/bin/security >/dev/null ||
-      { rm -P -f "$STATE_DIR/import.p12"; die "Import failed (wrong password?)."; }
-    rm -P -f "$STATE_DIR/import.p12"
+    # A renewed certificate replaces the old one: two identities with one name make codesign fail.
+    local h
+    for h in $(as_ci security find-identity -p codesigning "$KEYCHAIN" | awk '/^ +[0-9]+\)/ {print $2}' | sort -u); do
+      as_ci security delete-identity -Z "$h" "$KEYCHAIN" >/dev/null
+    done
+    # Copied by moduo-ci itself (root never writes into its home). -x: the key can't be exported again.
+    as_ci /bin/sh -c "umask 077; cat > '$STATE_DIR/import.p12'" <"$p12"
+    as_ci security import "$STATE_DIR/import.p12" -k "$KEYCHAIN" -P "$pw" -x -T /usr/bin/codesign >/dev/null ||
+      { as_ci rm -f "$STATE_DIR/import.p12"; die "Import failed (wrong password?)."; }
+    as_ci rm -f "$STATE_DIR/import.p12"
     as_ci security set-key-partition-list -S apple-tool:,apple: -s -k "$(kc_password)" "$KEYCHAIN" >/dev/null
     [ "$(devid_count)" -ge 1 ] || die "The .p12 holds no valid Developer ID Application identity."
     ok "imported $(as_ci security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(.*\)"/\1/p' | head -1)"
-    if ask "Securely delete $p12 now? (The identity stays in your login keychain.)"; then
-      rm -P -f "$p12" && ok "deleted $p12"
+    if ask "Delete $p12 now? (The identity stays in your login keychain.)"; then
+      rm -f "$p12" && ok "deleted $p12"
     fi
   fi
   [ "$(identity_count)" = 1 ] || warn "the keychain holds $(identity_count) signing identities; it should hold exactly one"
@@ -266,51 +283,93 @@ runner_status() {
     --jq ".runners[] | select(.name == \"$RUNNER_NAME\") | \"\(.status) busy=\(.busy) labels=\([.labels[].name] | join(\",\"))\"" 2>/dev/null
 }
 
+latest_runner() {
+  local rel
+  rel="$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest)"
+  RUNNER_LATEST="$(printf '%s' "$rel" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))')"
+  RUNNER_SHA="$(printf '%s' "$rel" | python3 -c 'import json,re,sys; m=re.search(r"<!-- BEGIN SHA osx-arm64 -->([0-9a-f]{64})<!-- END SHA osx-arm64 -->", json.load(sys.stdin)["body"]); print(m.group(1) if m else "")')"
+  [ -n "$RUNNER_LATEST" ] && [ -n "$RUNNER_SHA" ] || die "Couldn't read the latest runner release and its checksum."
+}
+
+stop_service() { if service_running; then launchctl bootout "system/$LABEL" 2>/dev/null && sleep 2 || true; fi; }
+
+# Root owns the runner's code and config; moduo-ci owns only its state (registration, logs, work).
+lock_runner_dir() {
+  chown -R root:wheel "$RUNNER_DIR"
+  chmod -R go-w "$RUNNER_DIR"
+  chown "root:$CI_USER" "$RUNNER_DIR"
+  chmod 1775 "$RUNNER_DIR"
+  local f
+  for f in .runner .credentials .credentials_rsaparams .runner_migrated .credentials_migrated; do
+    if [ -f "$RUNNER_DIR/$f" ]; then
+      chown "$CI_USER:$CI_USER" "$RUNNER_DIR/$f"
+      chmod 600 "$RUNNER_DIR/$f"
+    fi
+  done
+  for f in _work _diag; do
+    install -d -o "$CI_USER" -g "$CI_USER" -m 755 "$RUNNER_DIR/$f"
+    chown -R "$CI_USER:$CI_USER" "$RUNNER_DIR/$f"
+  done
+  # The runner reads these at start; root's copies decide PATH and the hook, not a job's.
+  rm -f "$RUNNER_DIR/.path" "$RUNNER_DIR/.env"
+  printf '%s' "$CI_PATH" >"$RUNNER_DIR/.path"
+  printf 'LANG=en_US.UTF-8\nACTIONS_RUNNER_HOOK_JOB_STARTED=%s\n' "$HOOK_DIR/job-started.sh" >"$RUNNER_DIR/.env"
+  chmod 644 "$RUNNER_DIR/.path" "$RUNNER_DIR/.env"
+}
+
 setup_runner() {
   bold "4. GitHub Actions runner ($RUNNER_NAME → $REPO)"
-  if ! as_ci test -x "$RUNNER_DIR/config.sh"; then
-    local rel ver sha tmp
-    rel="$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest)"
-    ver="$(printf '%s' "$rel" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))')"
-    sha="$(printf '%s' "$rel" | python3 -c 'import json,re,sys; m=re.search(r"<!-- BEGIN SHA osx-arm64 -->([0-9a-f]{64})<!-- END SHA osx-arm64 -->", json.load(sys.stdin)["body"]); print(m.group(1) if m else "")')"
-    [ -n "$sha" ] || die "Couldn't read the runner's published checksum."
-    doing "downloading actions-runner $ver"
-    tmp="$(as_ci mktemp -d)"
-    as_ci curl -fsSL -o "$tmp/runner.tgz" "https://github.com/actions/runner/releases/download/v$ver/actions-runner-osx-arm64-$ver.tar.gz"
-    [ "$(shasum -a 256 "$tmp/runner.tgz" | awk '{print $1}')" = "$sha" ] || die "Runner checksum mismatch."
-    as_ci install -d -m 755 "$RUNNER_DIR"
-    as_ci tar -xzf "$tmp/runner.tgz" -C "$RUNNER_DIR"
-    as_ci rm -rf "$tmp"
-  fi
-  ok "runner installed in $RUNNER_DIR (it updates itself)"
+  install -d -o root -g wheel -m 755 "$MODUO_DIR" "$HOOK_DIR" "$LOG_DIR"
+  [ ! -L "$RUNNER_DIR" ] || die "$RUNNER_DIR is a symlink."
 
-  if ! as_ci test -f "$RUNNER_DIR/.runner" || [ "${REREGISTER:-}" = 1 ]; then
+  # Self-update is off (it would need moduo-ci to own the code), so this keeps it current. GitHub
+  # stops sending jobs to a runner that's too old: it shows offline and builds go to GitHub's Mac.
+  latest_runner
+  local installed=""
+  [ -f "$HOOK_DIR/runner-version" ] && installed="$(cat "$HOOK_DIR/runner-version")"
+  if [ "$installed" != "$RUNNER_LATEST" ] || [ ! -x "$RUNNER_DIR/config.sh" ]; then
+    doing "installing actions-runner $RUNNER_LATEST${installed:+ (was $installed)}"
+    local tmp
+    tmp="$(mktemp -d)"
+    curl -fsSL -o "$tmp/runner.tgz" "https://github.com/actions/runner/releases/download/v$RUNNER_LATEST/actions-runner-osx-arm64-$RUNNER_LATEST.tar.gz"
+    [ "$(shasum -a 256 "$tmp/runner.tgz" | awk '{print $1}')" = "$RUNNER_SHA" ] || die "Runner checksum mismatch."
+    stop_service
+    install -d -o root -g wheel -m 755 "$RUNNER_DIR"
+    rm -rf "${RUNNER_DIR:?}/bin" "${RUNNER_DIR:?}/externals"
+    tar -xzf "$tmp/runner.tgz" -C "$RUNNER_DIR"
+    rm -rf "$tmp"
+    printf '%s' "$RUNNER_LATEST" >"$HOOK_DIR/runner-version"
+  fi
+  lock_runner_dir
+  ok "runner $RUNNER_LATEST in $RUNNER_DIR (root-owned)"
+
+  if [ ! -f "$RUNNER_DIR/.runner" ] || [ "${REREGISTER:-}" = 1 ]; then
     doing "registering $RUNNER_NAME (labels self-hosted, macOS, ARM64, moduo-mac)"
     local token
     token="$(registration_token)"
     [ -n "$token" ] || die "No registration token."
-    service_running && launchctl bootout "system/$LABEL" 2>/dev/null || true
+    stop_service
+    rm -f "$RUNNER_DIR/.runner" "$RUNNER_DIR/.credentials" "$RUNNER_DIR/.credentials_rsaparams" \
+      "$RUNNER_DIR/.runner_migrated" "$RUNNER_DIR/.credentials_migrated" "$RUNNER_DIR/.env" "$RUNNER_DIR/.path"
     (cd / && sudo -u "$CI_USER" -H /usr/bin/env PATH="$CI_PATH" /bin/bash -c \
-      'cd "$1" && ./config.sh --unattended --replace --url "https://github.com/$2" --token "$3" --name "$4" --labels moduo-mac --work _work' \
+      'cd "$1" && ./config.sh --unattended --replace --disableupdate --url "https://github.com/$2" --token "$3" --name "$4" --labels moduo-mac --work _work' \
       _ "$RUNNER_DIR" "$REPO" "$token" "$RUNNER_NAME") >/dev/null
+    lock_runner_dir
   fi
   ok "registered"
-  # The runner hands .path to every job as PATH; config.sh wrote the shell's.
-  as_ci /bin/sh -c "printf '%s' '$CI_PATH' > '$RUNNER_DIR/.path'"
 
-  # Root-owned, so no job can switch the gate off for the next one.
-  install -d -o root -g wheel -m 755 "$HOOK_DIR"
   install -o root -g wheel -m 755 "$SRC_DIR/job-started.sh" "$HOOK_DIR/job-started.sh"
   ok "job-started hook at $HOOK_DIR/job-started.sh (root-owned)"
 
-  as_ci touch "$LOG"
+  # In a root-owned directory, so the file can't be swapped for a link to something of root's.
+  [ -f "$LOG" ] || install -o "$CI_USER" -g "$CI_USER" -m 644 /dev/null "$LOG"
   local new
   new="$(mktemp)"
   write_plist >"$new"
   plutil -lint -s "$new" || die "Generated plist is invalid."
   if ! cmp -s "$new" "$PLIST" || ! service_running; then
     install -o root -g wheel -m 644 "$new" "$PLIST"
-    launchctl bootout "system/$LABEL" 2>/dev/null && sleep 2 || true
+    stop_service
     launchctl enable "system/$LABEL"
     launchctl bootstrap system "$PLIST"
     doing "LaunchDaemon $LABEL (re)started"
@@ -342,7 +401,13 @@ not() { ! "$@"; }
 hook() { env -i MODUO_HOOK_DRY_RUN=1 GITHUB_REPOSITORY_OWNER="${REPO%%/*}" GITHUB_EVENT_NAME="$1" GITHUB_REF="$2" GITHUB_TRIGGERING_ACTOR="$3" /bin/bash "$HOOK_DIR/job-started.sh"; }
 has_line() { local want="$1"; shift; "$@" 2>/dev/null | grep -qF -- "$want"; }
 owned_by_root_not_writable() { [ "$(stat -f '%Su %Lp' "$1")" = "root 755" ] || [ "$(stat -f '%Su %Lp' "$1")" = "root 644" ]; }
-gate_files_root_owned() { owned_by_root_not_writable "$HOOK_DIR/job-started.sh" && owned_by_root_not_writable "$PLIST" && owned_by_root_not_writable "$HOOK_DIR"; }
+gate_files_root_owned() {
+  local f
+  for f in "$HOOK_DIR" "$HOOK_DIR/job-started.sh" "$PLIST" "$RUNNER_DIR/run.sh" "$RUNNER_DIR/run-helper.sh" "$RUNNER_DIR/bin" "$RUNNER_DIR/externals" "$RUNNER_DIR/.env" "$RUNNER_DIR/.path"; do
+    owned_by_root_not_writable "$f" || return 1
+  done
+  [ -z "$(find "$RUNNER_DIR/bin" "$RUNNER_DIR/externals" ! -user root -print -quit)" ]
+}
 listener_runs_as_ci() { service_running && pgrep -u "$CI_USER" -f Runner.Listener; }
 admin_login_keychain="" # set in verify
 
@@ -376,8 +441,13 @@ verify() {
   check "persistent cache dirs are moduo-ci's" test "$(stat -f %Su "$CACHE_DIR/cargo-target")/$(stat -f %Su "$CACHE_DIR/bun")" = "$CI_USER/$CI_USER"
 
   bold "Trigger rules (job-started hook)"
-  check "hook and plist are root-owned, not writable by $CI_USER" gate_files_root_owned
+  check "hook, plist and runner code are root-owned, not writable by $CI_USER" gate_files_root_owned
+  check "runner directory is root's and sticky" test "$(stat -f '%Su %Lp' "$RUNNER_DIR")" = "root 1775"
+  check "$CI_USER can't change the runner's .env" not as_ci test -w "$RUNNER_DIR/.env"
+  check "$CI_USER can't replace the runner's code" not as_ci test -w "$RUNNER_DIR/bin"
+  check "runner self-update is off" grep -q '"disableUpdate": *true' "$RUNNER_DIR/.runner"
   check "plist runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$PLIST"
+  check ".env runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$RUNNER_DIR/.env"
   check "refuses pull_request" not hook pull_request refs/pull/1/merge "${REPO%%/*}"
   check "refuses pull_request_target" not hook pull_request_target refs/heads/develop "${REPO%%/*}"
   check "refuses schedule" not hook schedule refs/heads/develop "${REPO%%/*}"
@@ -399,7 +469,8 @@ verify() {
   local policy
   policy="$(gh_admin api "repos/$REPO/actions/permissions/fork-pr-contributor-approval" --jq .approval_policy 2>/dev/null || true)"
   if [ "$policy" = all_external_contributors ]; then ok "fork PR workflows need approval for all outside contributors"; else
-    warn "fork PR approval policy is '${policy:-unknown}'; README step 4 sets it to all outside contributors"
+    printf '  \033[31m✗\033[0m fork PR approval policy is %s; README step 4 sets it to all outside contributors\n' "'${policy:-unknown}'"
+    FAILS=$((FAILS + 1))
   fi
 
   echo
@@ -421,10 +492,12 @@ main() {
       ;;
     --verify) verify ;;
     --stop)
+      launchctl disable "system/$LABEL"
       launchctl bootout "system/$LABEL" 2>/dev/null || true
-      ok "stopped; GitHub shows $RUNNER_NAME offline within a minute or so, and desktop builds go to macos-latest"
+      ok "stopped, also across reboots; GitHub shows $RUNNER_NAME offline within a minute or so, and desktop builds go to macos-latest"
       ;;
     --start)
+      launchctl enable "system/$LABEL"
       launchctl bootstrap system "$PLIST" 2>/dev/null || launchctl kickstart -k "system/$LABEL"
       ok "started"
       ;;
