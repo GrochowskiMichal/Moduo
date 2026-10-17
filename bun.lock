@@ -127,6 +127,9 @@
         "@playwright/test": "^1.63.0",
       },
     },
+    "infra/turbo-cache": {
+      "name": "@moduo/turbo-cache",
+    },
     "supabase": {
       "name": "@moduo/backend",
       "version": "0.0.0",
@@ -408,6 +411,8 @@
     "@moduo/landing": ["@moduo/landing@workspace:apps/landing"],
 
     "@moduo/storybook": ["@moduo/storybook@workspace:apps/storybook"],
+
+    "@moduo/turbo-cache": ["@moduo/turbo-cache@workspace:infra/turbo-cache"],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.6", "", { "dependencies": { "@tybys/wasm-util": "^0.10.3" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg=="],
 

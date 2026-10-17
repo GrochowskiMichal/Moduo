@@ -1,17 +1,29 @@
 name: checks
 
-# Lean mode (pre-alpha): the full suite runs once, on PRs into develop/main and on pushes to them.
-# Other branches get only the fast secret scan (secret-scan.yml). The push run on develop is kept on
-# purpose: it tests the merged commit (the PR run tested the PR head), and sync-staging-app.yml
-# waits for it before staging gets that commit.
+# Lean mode (pre-alpha): the full suite runs on PRs into develop/main and on pushes to develop, main
+# and the personal branches. Task branches get only the fast secret scan (secret-scan.yml). The push
+# runs are what fill the remote cache: a personal-branch push writes it, so the later sync PR into
+# develop restores almost everything. The develop push run also tests the merged commit, and
+# sync-staging-app.yml waits for it before staging gets that commit.
 #
-# `static-checks` is the one required context. It is an aggregate that always runs and fails unless
-# `lint` and every unit-test shard passed, so a skipped or cancelled job can't satisfy it.
+# Turborepo decides what actually runs: every task is hashed from its declared inputs and restored
+# from the remote cache (infra/turbo-cache) when nothing it reads changed. `--affected` is
+# deliberately not used: it only follows package.json dependencies, and the app reads
+# supabase/functions/_shared and scripts/ through aliases, so a contracts change would skip the
+# app's tests (docs/decisions/workflow.md, 2026-10-17 · PLAT-3).
+#
+# Cache access: pushes use the turbo-cache-write environment (write token; only develop, main, mike,
+# maciej and v* tags may use it). Pull requests get the read-only token, which the Worker refuses
+# for writes, plus TURBO_CACHE=remote:r. The signing key is given to both, because turbo can't
+# verify a signed artifact without it.
+#
+# `static-checks` is the one required context. It always runs and fails unless the secret scan
+# passed and lint and every test shard passed, or a docs-only change skipped them.
 on:
   pull_request:
     branches: [develop, main]
   push:
-    branches: [develop, main]
+    branches: [develop, main, mike, maciej]
 
 concurrency:
   group: checks-${{ github.ref }}
@@ -20,10 +32,21 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
 jobs:
-  lint:
+  scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+    env:
+      EVENT: ${{ github.event_name }}
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      BEFORE: ${{ github.event.before }}
+      SHA: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -31,12 +54,6 @@ jobs:
           fetch-depth: 0
 
       - name: Secret scan (gitleaks, this push or PR only)
-        env:
-          EVENT: ${{ github.event_name }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD: ${{ github.event.pull_request.head.sha }}
-          BEFORE: ${{ github.event.before }}
-          SHA: ${{ github.sha }}
         run: |
           base=https://github.com/gitleaks/gitleaks/releases/download/v8.30.1
           curl -sSfLO "$base/gitleaks_8.30.1_linux_x64.tar.gz"
@@ -48,6 +65,54 @@ jobs:
           range="$from..$to"
           ./gitleaks git --log-opts="$range" --redact --no-banner --exit-code 1
 
+      - name: Docs-only change?
+        id: changes
+        # Markdown anywhere, and non-code files under docs/ and specs/, feed no check. Anything
+        # else, or a range we can't diff, runs the suite.
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            range="$PR_BASE...$PR_HEAD"
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..$SHA"
+          else
+            echo "No base to diff against: running the suite."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          code=false
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              *.md) ;;
+              docs/*|specs/*)
+                case "$f" in
+                  *.js|*.jsx|*.ts|*.tsx|*.mjs|*.cjs|*.mts|*.cts|*.json|*.jsonc) code=true ;;
+                esac ;;
+              *) code=true ;;
+            esac
+            [ "$code" = true ] && { echo "Code change: $f"; break; }
+          done < <(git diff --name-only --no-renames "$range")
+          [ "$code" = false ] && echo "Docs-only change: lint and tests are skipped."
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+  lint:
+    needs: scan
+    if: needs.scan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Pushes only; an empty name means no environment, so a PR never sees the write token.
+    environment: ${{ github.event_name == 'push' && 'turbo-cache-write' || '' }}
+    env: &turbo-env
+      TURBO_API: ${{ vars.TURBO_API }}
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      # No API URL set → no token either, so it can't go to turbo's default (Vercel) endpoint.
+      TURBO_TOKEN: ${{ vars.TURBO_API != '' && (github.event_name == 'push' && secrets.TURBO_WRITE_TOKEN || secrets.TURBO_READ_TOKEN) || '' }}
+      TURBO_REMOTE_CACHE_SIGNATURE_KEY: ${{ secrets.TURBO_REMOTE_CACHE_SIGNATURE_KEY }}
+      TURBO_CACHE: ${{ github.event_name == 'push' && 'local:rw,remote:rw' || 'local:rw,remote:r' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -56,21 +121,19 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Remote cache mode
+        run: echo "Remote cache ${TURBO_API:-not configured} · TURBO_CACHE=$TURBO_CACHE (remote:r = read-only)"
 
-      - name: Biome (JS/TS lint + format)
-        run: bun run lint:js
-
-      - name: Tailwind arbitrary-value gate
-        run: bun run lint:tw
-
-      - name: CSS lint
-        run: bun run lint:css
+      - name: Typecheck, Biome, lint:tw, lint:css
+        run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:css --output-logs=new-only
 
   unit-tests:
+    needs: scan
+    if: needs.scan.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment: ${{ github.event_name == 'push' && 'turbo-cache-write' || '' }}
+    env: *turbo-env
     strategy:
       fail-fast: false
       matrix:
@@ -88,20 +151,31 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
+      - name: Remote cache mode
+        run: echo "Remote cache ${TURBO_API:-not configured} · TURBO_CACHE=$TURBO_CACHE (remote:r = read-only)"
+
       - name: Unit tests (shard ${{ matrix.shard }} of 3)
-        # Turborepo runs each package's suite (app, backend, scripts); every one takes the same shard.
-        run: bunx turbo run test test:scripts -- --shard ${{ matrix.shard }}/3
+        # Every package's suite (app, backend, scripts, turbo-cache) takes the same shard; each
+        # shard is its own cache entry because turbo hashes the pass-through args.
+        run: bunx turbo run test test:scripts --output-logs=new-only -- --shard ${{ matrix.shard }}/3
 
   static-checks:
-    needs: [lint, unit-tests]
+    needs: [scan, lint, unit-tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Every check passed
         env:
+          SCAN: ${{ needs.scan.result }}
+          CODE: ${{ needs.scan.outputs.code }}
           LINT: ${{ needs.lint.result }}
           TESTS: ${{ needs.unit-tests.result }}
         run: |
-          echo "lint: $LINT · unit-tests: $TESTS"
-          [ "$LINT" = success ] && [ "$TESTS" = success ]
+          echo "scan: $SCAN · code change: $CODE · lint: $LINT · unit-tests: $TESTS"
+          [ "$SCAN" = success ] || exit 1
+          if [ "$CODE" = true ]; then
+            [ "$LINT" = success ] && [ "$TESTS" = success ]
+          else
+            [ "$LINT" = skipped ] && [ "$TESTS" = skipped ]
+          fi
