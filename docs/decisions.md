@@ -399,6 +399,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-17 · Long waits (2 s or more) get a grey Thinking orb (`WaitOrb`, package `thinking-orbs`) instead of a spinner, first on the data export (Maciej, PR #468; 14 px size and build agent's) · freezes on Settings' or the OS's reduced motion · rejected: on the agent chip (40a), metal/beams/gooey/bot avatars (decision 53, R6) → decisions/design-system.md
 - 2026-10-16 · `CollectionHeader`'s count is the tertiary level and 4 px sit under it when rows follow (Maciej, MOD-152; the `:has()` mechanism agent's) · the details, time entries, templates and the Project view all get it · rejected: a Project-only override, `not-last:mb-1` → decisions/design-system.md
 - 2026-10-16 · 8 px between panels, 16 at the window's edges (Maciej, MOD-162) · `--panel-gap` is the resize handle's width; the handle still grabs over 16 px through the library's `resizeTargetMinimumSize` · rejected: a pseudo-element hit area (the library hit-tests by geometry) → decisions/design-system.md
 - 2026-10-16 · A text field marks focus on its own edge (`--ring` at 50%), controls keep the 2 px ring, no ring is offset (Maciej, MOD-160; recipe agent's choice) · a field matches `:focus-visible` on every click, so the ring showed on every field · rejected: the ring on a cleared border, a soft halo → decisions/design-system.md
