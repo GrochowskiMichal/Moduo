@@ -21,6 +21,12 @@ How a release is applied: [docs/release.md](../docs/release.md).
 - Third-party actions outside `actions/*` and `oven-sh/*` are pinned to commit SHAs; Bun is pinned by `.bun-version`.
 - After a prod run, confirm the Mac notarize steps actually ran (not skipped) before calling the build shippable.
 
+## Desktop update server (PLAT-6)
+
+- Installed apps ask `infra/update-server` first (`moduo-update-server` on workers.dev until PLAT-8; the repo variable `UPDATE_SERVER_URL`), then GitHub. Releases go to R2 `moduo-releases` under `desktop/<channel>/<version>/` (never overwritten), and the channel pointer is written last. Deploy: `update-server.yml`.
+- **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert. Never unfreeze it casually: the updater falls back to GitHub on any Worker error, and a moving GitHub manifest would bypass the kill switch.
+- Rollout share and kill switch: run `desktop-rollout.yml` (channel, rollout 0–100, paused). It takes effect in about a minute and never downgrades anyone.
+
 ## Turborepo remote cache
 
 The Worker is `infra/turbo-cache` (`moduo-turbo-cache` on workers.dev, R2 bucket `moduo-turbo-cache`, objects expire after 30 days), deployed by `turbo-cache.yml` when it changes on `develop`/`mike` or by hand.

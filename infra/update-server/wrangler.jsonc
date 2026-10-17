@@ -1,0 +1,16 @@
+// Desktop update server: the Tauri updater endpoint and installer downloads, read from R2.
+// Deployed by .github/workflows/update-server.yml (wrangler is pinned there). That workflow creates
+// the bucket and the KV namespace on first run and swaps the KV id below for the real one; the
+// placeholder only matters to `wrangler dev`, which simulates both locally.
+{
+  "name": "moduo-update-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // Keep workers.dev on: installed builds have this Worker's workers.dev address baked in, even
+  // after PLAT-8 adds updates.moduo.app. Turning it off strands them on the frozen GitHub manifest.
+  "workers_dev": true,
+  "preview_urls": false,
+  "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "moduo-releases" }],
+  "kv_namespaces": [{ "binding": "UPDATE_CONFIG", "id": "KV_NAMESPACE_ID" }],
+  "observability": { "enabled": true }
+}

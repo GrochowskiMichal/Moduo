@@ -1,0 +1,9 @@
+{
+  "name": "@moduo/update-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "rstest"
+  }
+}
