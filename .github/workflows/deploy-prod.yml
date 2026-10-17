@@ -1,0 +1,244 @@
+name: deploy-prod
+
+# Deploys a commit that staging already runs to production (specs/platform-v2.md, PLAT-8): the
+# web app to app.moduo.app (Worker moduo-app-production) and then the landing to moduo.app
+# (moduo-landing-production, whose /book and /static go to that app Worker). The bridge until
+# Phase 2's /ship.
+#
+# Manual, owner only. The commit defaults to the build app.staging.moduo.app serves right now; it
+# must be on develop and have passed `checks` on a push. It is rebuilt from that commit with the
+# production version label (VERSION, no -rc): the same source and lockfile staging tested, and
+# the edge Worker injects prod config. After the app deploy, prod-app is moved to the commit, so
+# "Desktop Release (production)" (built from prod-app) ships the same code.
+#
+# Rollback (AC15): Cloudflare dashboard → Workers → moduo-app-production → Deployments → Rollback,
+# or `npx wrangler rollback --env production` in apps/app (same for apps/landing). See
+# docs/release.md. A rollback, or a deploy of an older commit, leaves prod-app where it was (ahead
+# of what's live): what app.moduo.app serves is its /config.json `build`.
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to deploy (empty = the build app.staging.moduo.app serves now)
+        required: false
+        default: ""
+      target:
+        description: What to deploy
+        type: choice
+        options: [both, app, landing]
+        default: both
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+# bash with pipefail.
+defaults:
+  run:
+    shell: bash
+
+env:
+  WRANGLER: npx --yes wrangler@4.147.0
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      # Only the repo owner may publish production: the one who started the run and the one who
+      # (re-)ran it. Fails loudly instead of skipping, so a refused run doesn't look green.
+      - name: Owner only
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          [ "$ACTOR" = "$OWNER" ] && [ "$TRIGGERING_ACTOR" = "$OWNER" ] \
+            || { echo "::error::Only $OWNER may deploy production (actor $ACTOR, triggered by $TRIGGERING_ACTOR)."; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Pick and check the commit
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          sha="$INPUT_SHA"
+          if [ -z "$sha" ]; then
+            sha="$(curl -sSf https://app.staging.moduo.app/config.json | jq -r '.build // empty')"
+            echo "Staging serves build ${sha:-<none>}"
+          fi
+          [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || { echo "::error::Not a commit id: '$sha'"; exit 1; }
+          full="$(git rev-parse --verify --quiet "$sha^{commit}")" || { echo "::error::$sha is not in this repo"; exit 1; }
+          git merge-base --is-ancestor "$full" origin/develop || { echo "::error::$full is not on develop"; exit 1; }
+          passed="$(gh run list --workflow checks.yml --commit "$full" --event push --status success --json databaseId --jq length)"
+          [ "${passed:-0}" -gt 0 ] || { echo "::error::checks has not passed on a push of $full"; exit 1; }
+          echo "sha=$full" >> "$GITHUB_OUTPUT"
+          echo "Deploying \`${full::7}\` ($(git log -1 --format=%s "$full")) · version $(git show "$full:VERSION")" >> "$GITHUB_STEP_SUMMARY"
+
+  app:
+    needs: resolve
+    if: inputs.target != 'landing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only develop, main, mike and prod-app may use this environment, which holds the Cloudflare token.
+    environment: cloudflare-deploy
+    env:
+      SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      - name: Checkout the commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build the web app
+        # No PUBLIC_* values at build time: the edge Worker injects production's config.
+        run: |
+          MODUO_VERSION="$(cat VERSION)"
+          export MODUO_VERSION MODUO_BUILD="${SHA::7}"
+          echo "build $MODUO_BUILD · version $MODUO_VERSION"
+          bun run build:web
+
+      - name: Keep the previous 3 builds' files
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/hosting/retain-static.sh merge production "${SHA::7}" apps/app/dist/web
+
+      - name: Deploy
+        working-directory: apps/app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER deploy --env production --var "BUILD:${SHA::7}" --message "prod ${SHA::7}"
+
+      - name: Record this build's files
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/hosting/retain-static.sh record production "${SHA::7}"
+
+      - name: Smoke test
+        run: |
+          # A first deploy moves app.moduo.app off a cached CNAME (TTL 300 s): wait until the
+          # host serves this build before checking it.
+          for _ in $(seq 1 40); do
+            [ "$(curl -s https://app.moduo.app/config.json | jq -r '.build // empty' 2>/dev/null)" = "${SHA::7}" ] && break
+            sleep 10
+          done
+          old=()
+          [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
+          set +e
+          bun scripts/smoke-hosting.ts https://app.moduo.app "${old[@]}" --expect "build=${SHA::7}" > "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"
+          exit $code
+
+  landing:
+    needs: [resolve, app]
+    # After the app, so the landing's APP binding finds the new app Worker; also alone (target landing).
+    if: >-
+      always() && needs.resolve.result == 'success' && inputs.target != 'app' &&
+      (needs.app.result == 'success' || needs.app.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cloudflare-deploy
+    env:
+      SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      - name: Checkout the commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Build the landing
+        run: node apps/landing/build.mjs
+
+      - name: Deploy
+        working-directory: apps/landing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER deploy --env production --message "prod ${SHA::7}"
+
+      - name: Smoke test
+        run: |
+          # A first deploy moves moduo.app off a cached Vercel answer (TTL 60 s).
+          for _ in $(seq 1 40); do
+            h="$(curl -sI https://moduo.app/ || true)"
+            grep -qi '^server: cloudflare' <<< "$h" && break
+            sleep 10
+          done
+          set +e
+          bun scripts/smoke-hosting.ts https://moduo.app --landing prod > "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"
+          exit $code
+
+  prod-app:
+    # prod-app is what "Desktop Release (production)" builds; keep it on the code app.moduo.app runs.
+    needs: [resolve, app]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Move prod-app to the deployed commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin prod-app >/dev/null; then
+            git checkout -B prod-app origin/prod-app
+            git merge --ff-only "$SHA" || git merge --no-ff "$SHA" -m "Deploy ${SHA::7} to production"
+          else
+            git checkout -B prod-app "$SHA"
+          fi
+          git push origin prod-app
+          echo "prod-app → \`$(git rev-parse --short HEAD)\` (contains \`${SHA::7}\`)" >> "$GITHUB_STEP_SUMMARY"

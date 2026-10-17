@@ -6,9 +6,9 @@ name: app-staging
 # "staging", scripts/hosting/retain-static.sh), so a tab opened before the deploy keeps loading
 # its chunks (AC8). A smoke test runs against the live Worker afterwards.
 #
-# Staging runs at https://moduo-app-staging.moduo.workers.dev until PLAT-8 moves moduo.app's DNS
-# to Cloudflare and gives it app.staging.moduo.app (Vercel serves that host until then, from
-# sync-staging-app.yml). Roll back from the Cloudflare dashboard or `wrangler rollback --env staging`.
+# Staging is https://app.staging.moduo.app (a custom domain in apps/app/wrangler.jsonc); the smoke
+# test runs there. Production gets a commit from here through deploy-prod.yml. Roll back from the
+# Cloudflare dashboard or `wrangler rollback --env staging`.
 on:
   workflow_run:
     workflows: [checks]
@@ -78,15 +78,12 @@ jobs:
         run: bash scripts/hosting/retain-static.sh merge staging "${SHA::7}" apps/app/dist/web
 
       - name: Deploy
-        id: deploy
         working-directory: apps/app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          $WRANGLER deploy --env staging --var "BUILD:${SHA::7}" --message "develop ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
-          url=$(grep -oE 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
-          echo "url=${url:-https://moduo-app-staging.moduo.workers.dev}" >> "$GITHUB_OUTPUT"
+          $WRANGLER deploy --env staging --var "BUILD:${SHA::7}" --message "develop ${SHA::7}"
 
       - name: Record this build's files
         env:
@@ -96,7 +93,7 @@ jobs:
 
       - name: Smoke test
         env:
-          URL: ${{ steps.deploy.outputs.url }}
+          URL: https://app.staging.moduo.app
         run: |
           old=()
           [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")

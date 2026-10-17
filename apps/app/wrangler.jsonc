@@ -1,7 +1,7 @@
 // The web app on Cloudflare Workers static assets (specs/platform-v2.md, PLAT-4).
 // Deployed by .github/workflows/app-preview.yml (a version per PR, on the staging Worker) and
 // app-staging.yml (staging, after checks pass on develop); wrangler is pinned there. Production
-// is deployed from PLAT-8's deploy-prod workflow; until then Vercel serves app.moduo.app.
+// is deployed by deploy-prod.yml (a commit staging already runs, on app.moduo.app).
 //
 // One build serves every environment. The edge Worker (edge/worker.ts) runs for HTML navigations,
 // /config.json and missing files, and writes the environment's vars below into the page as
@@ -28,13 +28,14 @@
   "observability": { "enabled": true },
   "env": {
     // Previews are versions of this Worker (`wrangler versions upload --preview-alias pr-<n>`),
-    // so they share its config and talk to the same Supabase project. Custom domain
-    // app.staging.moduo.app comes with PLAT-8 (DNS still on Vercel); until then it runs at
-    // https://moduo-app-staging.moduo.workers.dev.
+    // so they share its config and talk to the same Supabase project. Served at
+    // app.staging.moduo.app (a custom domain: wrangler creates its DNS record and certificate) and
+    // still at https://moduo-app-staging.moduo.workers.dev, which the preview aliases need.
     "staging": {
       "name": "moduo-app-staging",
       "workers_dev": true,
       "preview_urls": true,
+      "routes": [{ "pattern": "app.staging.moduo.app", "custom_domain": true }],
       "vars": {
         "SUPABASE_URL": "https://wtoonrvuqumihpkbvwvs.supabase.co",
         "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so",
@@ -42,12 +43,13 @@
         "STAGING_PORTAL": "true"
       }
     },
-    // Not deployed by this block. PostHog, Stripe and VAPID keys are added here when they are
-    // set for prod (today's Vercel prod build has none of them).
+    // app.moduo.app, deployed only by deploy-prod.yml. PostHog, Stripe and VAPID keys are added
+    // here when they are set for prod (the Vercel prod build had none of them).
     "production": {
       "name": "moduo-app-production",
       "workers_dev": false,
       "preview_urls": false,
+      "routes": [{ "pattern": "app.moduo.app", "custom_domain": true }],
       "vars": {
         "SUPABASE_URL": "https://wtoonrvuqumihpkbvwvs.supabase.co",
         "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so",

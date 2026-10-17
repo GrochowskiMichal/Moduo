@@ -4,7 +4,7 @@ name: checks
 # and the personal branches. Task branches get only the fast secret scan (secret-scan.yml). The push
 # runs are what fill the remote cache: a personal-branch push writes it, so the later sync PR into
 # develop restores almost everything. The develop push run also tests the merged commit, and
-# sync-staging-app.yml waits for it before staging gets that commit.
+# the staging deploys (app-staging.yml, landing-deploy.yml) wait for it before staging gets that commit.
 #
 # Turborepo decides what actually runs: every task is hashed from its declared inputs and restored
 # from the remote cache (infra/turbo-cache) when nothing it reads changed. `--affected` is
