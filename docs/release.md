@@ -53,7 +53,7 @@ A **shared function such as `moduo-mcp` deploys from a merge of `maciej` + `mike
 - target `app`: `staging-app` → `prod-app` (app.moduo.app);
 - target `landing`: `staging-landing` → `prod-landing` (moduo.app).
 
-Vercel deploys on the push. It runs `scripts/vercel-build.mjs` and serves `apps/app/dist/web` (`vercel.json`) until PLAT-4 and PLAT-5 move hosting to Cloudflare. The first promote after the workspace move (PLAT-2, 2026-10-17) carries the new layout to `prod-app` and `prod-landing`.
+Vercel deploys on the push. It runs `scripts/vercel-build.mjs` and serves `apps/app/dist/web` (`vercel.json`) until PLAT-8 moves the hosts to Cloudflare. Since PLAT-4 the same `develop` commit also deploys to the Cloudflare staging Worker (`app-staging.yml`, https://moduo-app-staging.moduo.workers.dev), and every PR that touches the app gets a preview URL comment (`app-preview.yml`). Roll the staging Worker back with `wrangler rollback --env staging` from `apps/app`. The first promote after the workspace move (PLAT-2, 2026-10-17) carries the new layout to `prod-app` and `prod-landing`.
 
 ## 5. Desktop
 
