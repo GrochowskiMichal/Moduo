@@ -37,12 +37,12 @@ describe("old builds are told, never drop rows (AC12.6)", () => {
   });
 
   it("the shipped minimum is 1.0.21, the first production desktop build without v1 chat calls (CV-23)", () => {
-    // The contract migration sets it; a build below it is the one the v1
+    // CV-23's min_build migration sets it; a build below it is the one the v1
     // signatures were dropped under.
-    const migration = readFileSync(
-      join(REPO, "supabase/migrations/20261017131000_chat_v2_min_build.sql"),
-      "utf8",
-    );
+    const dir = join(REPO, "supabase/migrations");
+    const file = readdirSync(dir).find((f) => f.endsWith("_chat_v2_min_build.sql"));
+    expect(file).toBeDefined();
+    const migration = readFileSync(join(dir, file ?? ""), "utf8");
     expect(migration).toContain(`VALUES ('min_build', '"1.0.21"'::jsonb, now())`);
     // Desktop builds from before Chat v2 (1.0.<run> up to 1.0.20) are held …
     expect(isBelowMinimum("1.0.20", "1.0.21")).toBe(true);

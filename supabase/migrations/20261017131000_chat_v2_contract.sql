@@ -1,12 +1,14 @@
 -- Chat v2 · CV-23 Contract cleanup (specs/chat-v2.md AC12.9, AC12.10; §Assumptions
 -- #4, #35; .design/chat-v2/research/round-3-database.md §2.3 "Retired"). The
--- stamp must stay after …_chat_v2_agents (CV-21). Every redefined function
+-- stamp must stay after …_chat_v2_min_build (CV-23's first file). Every redefined function
 -- starts from its live body on the local stack; grants are restated by name.
 -- It runs again cleanly over itself (DROP … IF EXISTS, guarded VALIDATE).
 --
--- It ships after the first production desktop build that sends only v2
--- signatures (1.0.21, 2026-10-16); …_chat_v2_min_build then tells an older
--- desktop build to update, and it runs read-only.
+-- Both CV-23 migrations wait for the per-platform minimum-build check to be
+-- live on prod (PLAT-8: the web app is never held back; app.moduo.app reports
+-- 1.1.0), and …_chat_v2_min_build applies before this file: a desktop build
+-- from before Chat v2 (up to 1.0.20) is then already read-only and shows
+-- "Update Moduo" when the v1 signatures it would call go.
 --
 -- What it does:
 --   1. Drops the v1 signatures kept for one release: chat_op_send's seven
@@ -23,8 +25,6 @@
 --   4. Drops v1's chat_messages_channel_idx (chat_messages_stream_idx serves
 --      the stream in both directions).
 --   5. Validates chat_channels_name_trimmed (no untrimmed name is left).
--- app_settings.min_build is raised by …_chat_v2_min_build, applied once the
--- builds that read it per platform are live.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -234,7 +234,7 @@ BEGIN
   BEGIN
     v_grant := public.plan_grant_effective_tier(p_workspace_id)::text;
   EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'chat_workspace_enabled: plan_grant_effective_tier failed (%), read as no grant', SQLSTATE;
+    RAISE WARNING 'chat__workspace_enabled: plan_grant_effective_tier failed (%), read as no grant', SQLSTATE;
     RETURN false;
   END;
   RETURN public.plan_tier_rank(v_grant) >= public.plan_tier_rank('duo');
@@ -546,10 +546,13 @@ BEGIN
   IF NOT has_function_privilege('service_role', 'public.chat__workspace_enabled(uuid)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.chat__workspace_enabled(uuid)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.chat__workspace_enabled(uuid)', 'EXECUTE')
+     OR NOT EXISTS (SELECT 1 FROM pg_proc p
+                     WHERE p.oid = 'public.chat__workspace_enabled(uuid)'::regprocedure AND p.prosecdef
+                       AND EXISTS (SELECT 1 FROM unnest(p.proconfig) c WHERE c LIKE 'search_path=%'))
      OR EXISTS (SELECT 1 FROM pg_proc p
                  WHERE p.pronamespace = 'public'::regnamespace AND p.proname <> 'chat_workspace_enabled'
                    AND p.prosrc ~ 'chat_workspace_enabled\(') THEN
-    RAISE EXCEPTION 'CV-23: chat__workspace_enabled is callable by clients, or a server check still asks chat_workspace_enabled';
+    RAISE EXCEPTION 'CV-23: chat__workspace_enabled lost its definer settings or is callable by clients, or a server check still asks chat_workspace_enabled';
   END IF;
   FOREACH v_fn IN ARRAY ARRAY[
     'public.chat_workspace_enabled(uuid)'::regprocedure,

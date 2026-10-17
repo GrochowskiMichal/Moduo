@@ -85,8 +85,8 @@ BEGIN
 
   PERFORM test.ok(test.on('W2') AND NOT test.on('W3') AND NOT test.on('W'),
     'no grant function: W2 (Duo owner) on; W3 and W (Free owners) off');
-  PERFORM test.ok(public.chat_workspace_enabled(test.id('nowhere')) IS FALSE,
-    'no grant function: an unknown workspace is off');
+  PERFORM test.ok(NOT test.on('nowhere'),
+    'no grant function: an unknown workspace is off (asked past the caller check)');
 END;
 $$;
 

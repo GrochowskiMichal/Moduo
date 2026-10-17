@@ -1,7 +1,8 @@
 -- Chat v2 · old builds after the contract cleanup (CV-23:
--- supabase/migrations/…_chat_v2_contract.sql). "Old builds" (AC12.9, server
--- half): the v1 signatures CV-2a kept for one release are gone, so a build
--- below app_settings.min_build is told to update (src/lib/min-build.ts) instead
+-- supabase/migrations/…_chat_v2_min_build.sql, …_chat_v2_contract.sql). "Old
+-- builds" (AC12.9, server half): the v1 signatures CV-2a kept for one release are
+-- gone, so a desktop build below app_settings.min_build is told to update
+-- (apps/app/src/lib/min-build.ts) instead
 -- of reaching them; the v2 ops answer, a send is keyed by the id the client
 -- mints and writes no client_id; v1 rows keep theirs.
 --
@@ -131,7 +132,8 @@ BEGIN
   PERFORM test.ok((SELECT convalidated FROM pg_constraint
                     WHERE conrelid = 'public.chat_channels'::regclass AND conname = 'chat_channels_name_trimmed'),
     'names: chat_channels_name_trimmed is validated');
-  PERFORM test.ok((SELECT value #>> '{}' FROM public.app_settings WHERE key = 'min_build') = '1.0.21',
-    'min_build: the first production desktop build without v1 calls (1.0.21)');
+  PERFORM test.ok((SELECT string_to_array(substring(value #>> '{}' FROM '^v?(\d+\.\d+\.\d+)'), '.')::int[]
+                     FROM public.app_settings WHERE key = 'min_build') >= ARRAY[1, 0, 21],
+    'min_build: at or above the first production desktop build without v1 calls (1.0.21)');
 END;
 $$;

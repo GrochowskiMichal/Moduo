@@ -118,9 +118,9 @@ try {
 
   // ── the op answers are narrowed; a resend under one id makes one message ──
   const first = randomUUID();
-  const sent = await a.send({ id: first, channelId: G, body: "hello", replyToId: null, format: "v2" });
+  const sent = await a.send({ id: first, channelId: G, body: "hello", replyToId: null });
   ok(sent.data?.id === first, "a send keeps the client-minted id", JSON.stringify(sent.error));
-  const again = await a.send({ id: first, channelId: G, body: "hello", replyToId: null, format: "v2" });
+  const again = await a.send({ id: first, channelId: G, body: "hello", replyToId: null });
   ok(again.data?.id === first && again.data.updatedAt === sent.data?.updatedAt, "a resend returns the stored row");
   ok(psql(`select count(*) from public.chat_messages where id = '${first}'`) === "1", "one row for two sends");
   const narrowed = await A.client
@@ -131,10 +131,7 @@ try {
     "an op's answer is narrowed by select (search_tsv stays off the wire)",
     JSON.stringify(narrowed),
   );
-  const v1 = randomUUID();
-  const viaV1 = await a.send({ id: v1, channelId: G, body: "v1 *markup*", replyToId: null, format: "v1" });
-  ok(viaV1.data?.id === v1 && viaV1.data.formatVersion === 2, "a v1 send keeps its id and is stored as v2", JSON.stringify(viaV1));
-  const refused = await b.send({ id: first, channelId: G, body: "not mine", replyToId: null, format: "v2" });
+  const refused = await b.send({ id: first, channelId: G, body: "not mine", replyToId: null });
   ok(refused.error?.code === "22023", "someone else's id is refused with 22023", JSON.stringify(refused.error));
 
   // ── keyset pages over 200 messages on one timestamp ──
@@ -164,7 +161,7 @@ try {
   await wait(2_000);
   const before = calls.length;
   const liveId = randomUUID();
-  await a.send({ id: liveId, channelId: G, body: "live one", replyToId: null, format: "v2" });
+  await a.send({ id: liveId, channelId: G, body: "live one", replyToId: null });
   const arrived = await until(() => Boolean(store?.rowById(liveId)));
   ok(arrived, "a live row lands in B's store");
   const fetched = calls.slice(before).filter((c) => c === "page" || c === "message" || c === "delta" || c === "counts");
@@ -182,7 +179,7 @@ try {
     insert into public.chat_messages (id, workspace_id, channel_id, author_id, body, format_version)
     select gen_random_uuid(), '${W}', '${G}', '${A.id}', 'd ' || g, 2 from generate_series(1, 20) g;
   `);
-  await a.edit({ id: first, body: "hello, edited", format: "v2" });
+  await a.edit({ id: first, body: "hello, edited" });
   await a.react({ id: first, key: "👍", on: true });
   await store.sync("manual");
   const full = psql(`select string_agg(id::text || '@' || (extract(epoch from updated_at) * 1000000)::bigint, ',' order by created_at, id) from public.chat_messages where channel_id = '${G}'`);
