@@ -7,7 +7,8 @@
 #
 # `wait` exits 0 when stapled, 1 when Apple rejected the build, 3 when Apple is still processing.
 #
-# Auth: an App Store Connect API key when APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8
+# Auth: the notarytool keychain profile NOTARY_KEYCHAIN_PROFILE (in NOTARY_KEYCHAIN) when set, as on
+# the moduo-mac runner; else an App Store Connect API key when APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8
 # (the .p8 contents) are set, otherwise APPLE_ID / APPLE_ID_PASSWORD (app-specific password) / APPLE_TEAM_ID.
 # NOTARY_WAIT_TIMEOUT (default 60m) bounds `wait`; a timeout leaves the submission running at Apple,
 # and re-running the job waits on the same id again.
@@ -16,7 +17,10 @@ set -euo pipefail
 trim() { printf '%s' "$1" | tr -d '[:space:]'; }
 
 AUTH=()
-if [[ -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY_P8:-}" ]]; then
+# The moduo-mac runner (infra/mac-runner) keeps its login as a notarytool profile in its own keychain.
+if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
+  AUTH=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE" ${NOTARY_KEYCHAIN:+--keychain "$NOTARY_KEYCHAIN"})
+elif [[ -n "${APPLE_API_KEY_ID:-}"&& -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY_P8:-}" ]]; then
   KEY_PATH="${RUNNER_TEMP:-/tmp}/AuthKey_$(trim "$APPLE_API_KEY_ID").p8"
   printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
   AUTH=(--key "$KEY_PATH" --key-id "$(trim "$APPLE_API_KEY_ID")" --issuer "$(trim "$APPLE_API_ISSUER")")

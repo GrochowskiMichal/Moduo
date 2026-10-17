@@ -23,6 +23,15 @@ name: Desktop Release (shared)
 # the same submission on its own, and "Re-run failed jobs" there never rebuilds or resubmits.
 # Windows is best-effort: a broken Windows build still publishes the Mac release.
 #
+# The Mac build runs on Mike's Mac (self-hosted runner `moduo-mac`, set up by infra/mac-runner)
+# when it is online and idle, and on GitHub's macos-latest otherwise; `pick-runner` decides in
+# seconds and never waits. Only a push to develop/mike, a v* tag or the owner's manual run may use
+# the Mac (never pull_request or the nightly schedule); the Mac's own job-started hook refuses
+# anything else too. On the Mac the job signs and notarizes with that runner's own keychain
+# (MODUO_SIGNING_KEYCHAIN, a notarytool profile) instead of importing APPLE_CERTIFICATE, keeps its
+# Cargo target dir between runs (CARGO_TARGET_DIR) and skips the GitHub Rust cache. The
+# GitHub-hosted path is unchanged. notarize-mac (only when Apple is slow) always runs on GitHub.
+#
 # Required secrets (GitHub → Settings → Secrets → Actions), passed with `secrets: inherit`:
 #   APPLE_CERTIFICATE             base64-encoded p12 Developer ID Application certificate
 #   APPLE_CERTIFICATE_PASSWORD    p12 password
@@ -34,6 +43,8 @@ name: Desktop Release (shared)
 #                                 API key; used for notarization instead of the Apple ID when all three are set
 #   RELEASES_REPO_TOKEN           fine-grained PAT, contents:write on GrochowskiMichal/moduo-releases
 #   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  R2 upload (Workers R2 Storage: Edit)
+#   RUNNER_STATUS_TOKEN           fine-grained PAT, Administration: read on this repo (lists runners for
+#                                 pick-runner); unset → always GitHub-hosted
 #   TAURI_SIGNING_PRIVATE_KEY     private key from `bunx tauri signer generate`
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  key password (empty string if none)
 #   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY,
@@ -161,11 +172,63 @@ jobs:
           echo "Version: \`$VERSION\` (published: GitHub \`${PUBLISHED:-none}\`, update server \`${R2_PUBLISHED:-none}\`)" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────────────────────────
+  # Which Mac builds: Mike's (moduo-mac) when it may and is online and idle, else GitHub's.
+  # Any doubt (no token, API error, timeout) means GitHub's, so a release never waits on the Mac.
+  # ─────────────────────────────────────────────────────────────────
+  pick-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+      self_hosted: ${{ steps.pick.outputs.self_hosted }}
+
+    steps:
+      - name: Pick the Mac runner
+        id: pick
+        env:
+          GH_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          pick() {
+            if [ "$1" = mac ]; then
+              echo 'runner=["self-hosted","macOS","ARM64","moduo-mac"]' >> "$GITHUB_OUTPUT"
+              echo "self_hosted=true" >> "$GITHUB_OUTPUT"
+            else
+              echo 'runner="macos-latest"' >> "$GITHUB_OUTPUT"
+              echo "self_hosted=false" >> "$GITHUB_OUTPUT"
+            fi
+            echo "Mac build runner: **$1** ($2)" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          # Who may use the Mac (AC13). The Mac's job-started hook enforces the same rules.
+          case "$EVENT:$REF" in
+            push:refs/heads/develop | push:refs/heads/mike | push:refs/tags/v*) ;;
+            workflow_dispatch:*) [ "$ACTOR" = "$OWNER" ] || pick macos-latest "manual run by $ACTOR, not the owner" ;;
+            *) pick macos-latest "$EVENT on $REF never uses the Mac" ;;
+          esac
+          [ -n "$GH_TOKEN" ] || pick macos-latest "RUNNER_STATUS_TOKEN is not set"
+          # Online and not running a job, with all four labels (runs-on labels are case-insensitive).
+          # shellcheck disable=SC2016 # $l and $x are jq variables
+          if ! idle="$(timeout 30 gh api "repos/$GITHUB_REPOSITORY/actions/runners?per_page=100" --jq '
+              [.runners[] | select(.status == "online" and .busy == false)
+               | select([.labels[].name | ascii_downcase] as $l
+                        | ["self-hosted", "macos", "arm64", "moduo-mac"] | all(. as $x | $l | index($x)))]
+              | length')"; then
+            echo "::warning::Could not read the runner list; using GitHub-hosted macOS."
+            pick macos-latest "runner status unavailable"
+          fi
+          if [ "$idle" -gt 0 ]; then pick mac "moduo-mac is online and idle"; fi
+          pick macos-latest "moduo-mac is offline or busy"
+
+  # ─────────────────────────────────────────────────────────────────
   # macOS — universal binary (Apple Silicon + Intel), signed, submitted to Apple
   # ─────────────────────────────────────────────────────────────────
   build-mac:
-    needs: version
-    runs-on: macos-latest
+    needs: [version, pick-runner]
+    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runner) }}
     timeout-minutes: 60
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
@@ -188,6 +251,38 @@ jobs:
           path: .ci
           sparse-checkout: scripts
 
+      - name: Runner
+        run: echo "Mac build on \`$RUNNER_NAME\` ($RUNNER_ENVIRONMENT)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # moduo-mac only: its own keychain already holds the Developer ID identity and the notarization
+      # login (infra/mac-runner/setup.sh). Unlock it, make it the job's keychain, and run the same
+      # checks as the import step below, which the Mac skips.
+      - name: Use the runner's signing keychain
+        if: needs.pick-runner.outputs.self_hosted == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          KEYCHAIN="${MODUO_SIGNING_KEYCHAIN:?not a moduo-mac runner: MODUO_SIGNING_KEYCHAIN is unset}"
+          KEYCHAIN_PASSWORD="$(cat "$HOME/.moduo-ci/keychain-password")"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+          security default-keychain -d user -s "$KEYCHAIN"
+          {
+            echo "BUILD_KEYCHAIN=$KEYCHAIN"
+            echo "NOTARY_KEYCHAIN=$KEYCHAIN"
+            echo "NOTARY_KEYCHAIN_PROFILE=${MODUO_NOTARY_PROFILE:-moduo-notary}"
+          } >> "$GITHUB_ENV"
+          if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -qF "$APPLE_SIGNING_IDENTITY"; then
+            security find-identity -v -p codesigning "$KEYCHAIN"
+            echo "::error::The runner's keychain has no identity named APPLE_SIGNING_IDENTITY. Re-run infra/mac-runner/setup.sh --reimport-cert on the Mac."
+            exit 1
+          fi
+          cp /usr/bin/true "$RUNNER_TEMP/sign-probe"
+          if ! perl -e 'alarm 90; exec @ARGV' codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" --keychain "$KEYCHAIN" "$RUNNER_TEMP/sign-probe"; then
+            echo "::error::codesign could not use the runner's keychain without a prompt (or timed out reaching Apple's timestamp server)."
+            exit 1
+          fi
+
       # Seconds, before any compile: a bad Apple login used to surface only after the build.
       - name: Check Apple notarization login
         env:
@@ -201,6 +296,7 @@ jobs:
 
       # Import the Developer ID cert into an ephemeral keychain and prove codesign can see it.
       - name: Import Apple Developer ID certificate
+        if: needs.pick-runner.outputs.self_hosted != 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -254,7 +350,9 @@ jobs:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       # Saved even when a later step fails, so a signing/notarization failure doesn't force a cold compile next time.
+      # moduo-mac keeps its own target dir (CARGO_TARGET_DIR) and needs no copy of it.
       - name: Cache Rust dependencies
+        if: needs.pick-runner.outputs.self_hosted != 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: ${{ env.DESKTOP_DIR }}/src-tauri
@@ -281,6 +379,11 @@ jobs:
             "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
           }
           EOF
+
+      # The persistent target dir still holds earlier versions' bundles; staging picks the first .dmg it finds.
+      - name: Clear old bundles (moduo-mac)
+        if: needs.pick-runner.outputs.self_hosted == 'true'
+        run: rm -rf "${CARGO_TARGET_DIR:?}/universal-apple-darwin/release/bundle"
 
       # No APPLE_ID / APPLE_PASSWORD here on purpose: Tauri would notarize the .app and block on Apple,
       # and the .dmg submission below covers the .app too. No APPLE_CERTIFICATE either: Tauri would import
@@ -313,7 +416,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          BUNDLE="$DESKTOP_DIR/src-tauri/target/universal-apple-darwin/release/bundle"
+          BUNDLE="${CARGO_TARGET_DIR:-$DESKTOP_DIR/src-tauri/target}/universal-apple-darwin/release/bundle"
           APP=$(find "$BUNDLE/macos" -maxdepth 1 -name "*.app" | head -1)
           DMG=$(find "$BUNDLE/dmg" -name "*.dmg" | head -1)
           TGZ=$(find "$BUNDLE/macos" -name "*.app.tar.gz" | head -1)
