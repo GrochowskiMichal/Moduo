@@ -19,11 +19,13 @@ import {
   ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
   CHAT_CATCHUP_DONE_HOW,
+  CHAT_CHANNEL_KINDS,
   CHAT_CATCHUP_REASONS,
   CHAT_EVENT_TYPES,
   CHAT_LINK_TARGETS,
   CHAT_MENTION_REASONS,
   CHAT_MESSAGE_KINDS,
+  CHAT_NOTIFY_LEVELS,
   CLIENT_SURFACES,
   CHAT_PLAN_TIERS,
   CONTENT_AUTHOR_KINDS,
@@ -157,6 +159,21 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`done_how IN (${inList(CHAT_CATCHUP_DONE_HOW)})`);
   });
 
+  it("CHAT_CHANNEL_KINDS and CHAT_NOTIFY_LEVELS match v1's chat_channels and chat_members CHECKs (unchanged by v2)", () => {
+    const read = (file: string) => readFileSync(resolve(MIGRATIONS_DIR, file), "utf8");
+    const sql = read("20261006150000_chat_module.sql");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
+    expect(sql).toContain(`check (kind in (${inList(CHAT_CHANNEL_KINDS)}))`);
+    expect(sql).toContain(`check (notify_level in (${inList(CHAT_NOTIFY_LEVELS)}))`);
+    // No later migration re-cuts either CHECK, under any name.
+    const recut =
+      /chat_channels_kind_check|chat_members_notify_level_check|check\s*\(\s*\(?\s*kind\s+in\s*\(\s*'channel'|check\s*\(\s*\(?\s*notify_level\s+in\b/i;
+    const later = readdirSync(MIGRATIONS_DIR)
+      .filter((f) => f.endsWith(".sql") && f > "20261006150000_chat_module.sql")
+      .filter((f) => recut.test(read(f)));
+    expect(later).toEqual([]);
+  });
+
   it("CHAT_LINK_TARGETS and RELATION_KINDS match the …_chat_v2_linked_channels CHECKs (CV-13)", () => {
     const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_linked_channels.sql"));
     expect(file).toBeDefined();
@@ -212,9 +229,13 @@ describe("cross-runtime drift guards", () => {
     const atLeastDuo = PLAN_TIERS.filter((t) => (rank.get(t) ?? 0) >= (duo ?? Number.NaN));
     expect([...atLeastDuo].sort()).toEqual([...CHAT_PLAN_TIERS].sort());
 
-    const file = readdirSync(MIGRATIONS_DIR).find((f) => f.endsWith("_chat_v2_plan_source.sql"));
+    // The newest plan rule: CV-4's chat_workspace_enabled, moved by CV-23 into
+    // the internal chat__workspace_enabled (the public one adds the caller check).
+    const enabledDef = /create\s+(?:or\s+replace\s+)?function\s+public\.chat__?workspace_enabled\s*\(/i;
+    const file = migrations.filter((f) => enabledDef.test(read(f))).at(-1);
     expect(file).toBeDefined();
-    const sql = read(file ?? "");
+    const enabledSql = read(file ?? "");
+    const sql = enabledSql.slice(enabledSql.search(enabledDef));
     expect(sql).toContain("to_regprocedure('public.plan_grant_effective_tier(uuid)')");
     expect(sql).toContain(">= public.plan_tier_rank('duo')");
 

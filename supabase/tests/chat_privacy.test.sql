@@ -48,14 +48,14 @@ BEGIN
     WHERE workspace_id = test.id('W') AND kind = 'dm';
 
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(%L, 'hello <@%s>', NULL, ARRAY[%L]::uuid[], false, NULL, 'hello @B')$q$,
-    test.ref('P'), test.id('B'), test.id('B')));
+    $q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'hello moduo://person/%s', NULL)$q$,
+    test.ref('P'), test.id('B')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A mentions B in P', v);
   INSERT INTO test.ids SELECT 'M', id FROM public.chat_messages WHERE channel_id = test.ref('P');
 
   v := test.as_user('A', format(
-    $q$SELECT public.chat_op_send(%L, 'psst <@%s>', NULL, ARRAY[%L]::uuid[], false, NULL, 'psst @B')$q$,
-    test.ref('D'), test.id('B'), test.id('B')));
+    $q$SELECT public.chat_op_send(gen_random_uuid(), %L, 'psst moduo://person/%s', NULL)$q$,
+    test.ref('D'), test.id('B')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: A mentions B in D', v);
   -- A direct message rings no bell (CV-5), so A's edit writes the row about D.
   v := test.as_user('A', format(
@@ -177,7 +177,7 @@ BEGIN
 END;
 $$;
 
--- ── 4. share_op_announce: a channel the caller can read, never a DM ─────────
+-- ── 4. chat_op_set_announcement: a channel the caller can read, never a DM ─────────
 DO $$
 DECLARE
   v text;
@@ -185,29 +185,29 @@ BEGIN
   -- Members hold "Manage any channel" for this part.
   UPDATE public.workspace_chat_caps SET manage_any = true WHERE workspace_id = test.id('W') AND role_key = 'member';
 
-  v := test.as_user('C', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('P')));
-  PERFORM test.ok(v = 'P0001 That channel is gone.',
-    'announce: C, who cannot read P, is told the channel is gone even with Manage any channel', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('P')));
+  PERFORM test.ok(v = '42501 You''re not a member of this conversation.',
+    'announce: C, who cannot read P, is refused even with Manage any channel', v);
   PERFORM test.ok((SELECT NOT managers_only FROM public.chat_channels WHERE id = test.ref('P')),
     'announce: P is unchanged');
 
-  v := test.as_user('X', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('Q')));
-  PERFORM test.ok(v = 'P0001 That channel is gone.', 'announce: X, in no workspace, is told the channel is gone', v);
+  v := test.as_user('X', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('Q')));
+  PERFORM test.ok(v = '42501 You don''t have access to this workspace.', 'announce: X, in no workspace, is refused', v);
 
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('D')));
-  PERFORM test.ok(v = 'P0001 Direct messages can''t be announcement-only.',
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('D')));
+  PERFORM test.ok(v = '22023 Direct messages can''t be announcement channels.',
     'announce: a direct message is refused, even for someone in it', v);
 
-  v := test.as_user('C', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('Q')));
+  v := test.as_user('C', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('Q')));
   PERFORM test.ok(v LIKE 'ok %' AND (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('Q')),
     'announce: C, with Manage any channel, switches the public channel Q on', v);
 
   UPDATE public.workspace_chat_caps SET manage_any = false WHERE workspace_id = test.id('W') AND role_key = 'member';
 
-  v := test.as_user('B', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('P')));
-  PERFORM test.ok(v = '42501 Only a channel manager can change this.',
+  v := test.as_user('B', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('P')));
+  PERFORM test.ok(v = '42501 Only this channel''s managers and admins can change who posts.',
     'announce: B, in P but not a manager, is refused', v);
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('P')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('P')));
   PERFORM test.ok(v LIKE 'ok %' AND (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('P')),
     'announce: A, who made P, switches it on', v);
 END;
@@ -327,7 +327,7 @@ BEGIN
     AND NOT has_function_privilege('anon', 'public.chat_realtime_topic_writable(text)', 'EXECUTE')
     AND has_function_privilege('authenticated', 'public.chat_realtime_topic_writable(text)', 'EXECUTE')
     AND NOT has_function_privilege('anon', 'public.chat_caps_get(uuid)', 'EXECUTE')
-    AND NOT has_function_privilege('anon', 'public.share_op_announce(uuid, boolean)', 'EXECUTE')
+    AND NOT has_function_privilege('anon', 'public.chat_op_set_announcement(uuid, boolean)', 'EXECUTE')
     AND NOT has_function_privilege('anon', 'public.perm_can_see_entity(uuid, text, uuid)', 'EXECUTE'),
     'grants: signed-in people only, never anon');
 END;

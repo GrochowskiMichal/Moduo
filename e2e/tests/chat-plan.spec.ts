@@ -189,13 +189,10 @@ const enabled = (as: Session, room: Room) =>
 
 const send = (room: Room, body: string) =>
   rpc(member, "chat_op_send", {
+    p_id: crypto.randomUUID(),
     p_channel_id: room.general,
     p_body: body,
-    p_parent_id: null,
-    p_mentioned_user_ids: [],
-    p_notify_channel: false,
-    p_client_id: null,
-    p_excerpt: null,
+    p_reply_to_id: null,
   });
 
 /** Everything a paused workspace must still answer: the conversation, its messages, search. */

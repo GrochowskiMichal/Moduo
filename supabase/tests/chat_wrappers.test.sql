@@ -1,8 +1,10 @@
--- Chat v2 · the v1 signatures, one release (CV-2a: supabase/migrations/…_chat_v2_core_ops.sql).
--- "Old builds" (AC12.9, server half): v1's send (7 arguments), edit (3) and
--- react (2, a toggle) convert v1 markup and go through the v2 ops, so a desktop
--- build from before min_build keeps sending; v2 calls resolve to the v2 ops;
--- the app's post writes v2 rows. CV-23 drops the wrappers.
+-- Chat v2 · old builds after the contract cleanup (CV-23:
+-- supabase/migrations/…_chat_v2_min_build.sql, …_chat_v2_contract.sql). "Old
+-- builds" (AC12.9, server half): the v1 signatures CV-2a kept for one release are
+-- gone, so a desktop build below app_settings.min_build is told to update
+-- (apps/app/src/lib/min-build.ts) instead
+-- of reaching them; the v2 ops answer, a send is keyed by the id the client
+-- mints and writes no client_id; v1 rows keep theirs.
 --
 -- Cast: O owns workspace W (Duo); A, B and C are members, V a viewer. A makes the
 -- public channel Q with B, C and V. K is A's API key with Chat at Edit.
@@ -23,17 +25,6 @@ $$;
 CREATE FUNCTION test.msg(p_id uuid) RETURNS public.chat_messages LANGUAGE sql VOLATILE AS $$
   SELECT * FROM public.chat_messages WHERE id = p_id
 $$;
--- v1's send, as the v1 client calls it (every argument named).
-CREATE FUNCTION test.send_v1(p_who text, p_body text, p_client text DEFAULT NULL, p_parent uuid DEFAULT NULL,
-                             p_mentioned uuid[] DEFAULT '{}', p_notify boolean DEFAULT false, p_excerpt text DEFAULT NULL)
-RETURNS text LANGUAGE sql AS $$
-  SELECT test.as_user(p_who, format(
-    $q$SELECT public.chat_op_send(p_channel_id => %L, p_body => %L, p_parent_id => %L, p_mentioned_user_ids => %L,
-                                  p_notify_channel => %L, p_client_id => %L, p_excerpt => %L)$q$,
-    test.ref('Q'), p_body, p_parent, p_mentioned, p_notify,
-    CASE WHEN p_client IS NOT NULL THEN test.id('client:' || p_client) END, p_excerpt))
-$$;
-
 DO $$
 DECLARE
   v text;
@@ -49,101 +40,47 @@ BEGIN
 END;
 $$;
 
--- ── v1 send ─────────────────────────────────────────────────────────────────
+-- ── The v2 ops; no client_id ────────────────────────────────────────────────
 DO $$
 DECLARE
   v text;
-  m public.chat_messages;
 BEGIN
-  v := test.send_v1('B', format('hi <@%s> _soon_ <!channel>', test.id('C')), 'one',
-                    p_mentioned => ARRAY[test.id('A')], p_notify => false, p_excerpt => 'something else entirely');
-  m := test.msg(test.id('client:one'));
-  PERFORM test.ok(v = 'ok 1' AND m.format_version = 2
-                  AND m.body = format('hi moduo://person/%s *soon* @channel', test.id('C'))
-                  AND m.body_text = 'hi  soon @channel',
-    'send v1: the v1 markup is converted and stored as v2, keyed by the v1 client id', v);
-  PERFORM test.ok(m.client_id = test.id('client:one'),
-    'send v1: the row carries the v1 client id, so v1 screens match their optimistic row');
-  PERFORM test.ok(m.mentioned_user_ids = ARRAY[test.id('C')] AND m.mentions_everyone,
-    'send v1: who it mentions is read from the text, not from the list or the switch the client passed');
-  PERFORM test.ok((SELECT payload ->> 'excerpt' FROM public.module_activity
-                    WHERE payload ->> 'message_id' = m.id::text AND op = 'chat.mention' AND payload ->> 'reason' = 'person')
-                  = public.chat__excerpt(m.body),
-    'send v1: the bell''s excerpt is built on the server, not taken from the client');
-  v := test.send_v1('B', 'hi again, resent', 'one');
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('client:one'))).body = m.body
+  v := test.as_user('B', format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, 'hi *soon*'::text, NULL::uuid)$q$,
+    test.id('one'), test.ref('Q')));
+  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('one'))).format_version = 2
+                  AND (test.msg(test.id('one'))).client_id IS NULL,
+    'send: the row is keyed by the id the client minted and carries no client_id', v);
+  v := test.as_user('B', format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, 'hi *soon*'::text, NULL::uuid)$q$,
+    test.id('one'), test.ref('Q')));
+  PERFORM test.ok(v = 'ok 1'
                   AND (SELECT count(*) FROM public.chat_messages WHERE channel_id = test.ref('Q') AND author_id = test.id('B')) = 1,
-    'send v1: a resent client id returns the stored row', v);
+    'send: a resent id returns the stored row (idempotent on the id)', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, 'taking it'::text, NULL::uuid)$q$,
+    test.id('one'), test.ref('Q')));
+  PERFORM test.ok(v = '22023 That message id is already used.', 'send: someone else''s message id is refused', v);
 
-  -- A row sent before the release: its own id, the client id in client_id, v1 text.
+  -- A row sent before the release keeps its client id.
   SET LOCAL session_replication_role = replica;
   INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, body, client_id, format_version)
   VALUES (test.id('old'), test.id('W'), test.ref('Q'), test.id('C'), 'from _before_', test.id('client:old'), 1);
   SET LOCAL session_replication_role = origin;
-  v := test.send_v1('C', 'from _before_', 'old');
-  PERFORM test.ok(v = 'ok 1' AND test.msg(test.id('client:old')) IS NULL
-                  AND (test.msg(test.id('old'))).format_version = 1,
-    'send v1: a resend of a message sent before the release finds it by its client id', v);
+  PERFORM test.ok((test.msg(test.id('old'))).client_id = test.id('client:old'), 'v1 rows: their client_id stays');
 
-  -- A thread reply (v1's parent) joins the chain and quotes the root.
-  v := test.as_user('A', format($q$SELECT public.chat_op_send(%L::uuid, %L::uuid, 'the root'::text, NULL::uuid)$q$,
-    test.id('root'), test.ref('Q')));
-  v := test.send_v1('C', 'in the thread', 'reply', p_parent => test.id('root'));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('client:reply'))).parent_id = test.id('root')
-                  AND (test.msg(test.id('client:reply'))).reply_to_id = test.id('root')
-                  AND (test.msg(test.id('root'))).reply_count = 1,
-    'send v1: a thread reply joins the root''s chain', v);
-  v := test.as_user('B', 'SELECT public.chat_op_send(p_channel_id => ' || quote_literal(test.ref('Q'))
-                         || '::uuid, p_body => ''no client id''::text)');
-  PERFORM test.ok(v = 'ok 1' AND EXISTS (SELECT 1 FROM public.chat_messages WHERE body = 'no client id' AND format_version = 2),
-    'send v1: without a client id it still sends', v);
-  v := test.send_v1('V', 'from a viewer', 'viewer');
-  PERFORM test.ok(v = '42501 Your role can''t post in chat.', 'send v1: the v2 rules hold (a viewer is refused)', v);
-  v := test.as_user('C', 'SELECT public.chat_op_send(p_channel_id => ' || quote_literal(test.ref('Q'))
-                         || '::uuid, p_body => ''taking an id''::text, p_client_id => ' || quote_literal(test.id('root')) || '::uuid)');
-  PERFORM test.ok(v = '22023 That message id is already used.' AND (test.msg(test.id('root'))).body = 'the root',
-    'send v1: a client id that is someone else''s message id is refused', v);
-END;
-$$;
+  v := test.as_user('B', format($q$SELECT public.chat_op_edit(%L::uuid, 'v2 _as typed_'::text)$q$, test.id('one')));
+  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('one'))).body = 'v2 _as typed_', 'edit: the v2 op', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_key => '🎉', p_on => true)$q$, test.id('one')));
+  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('one'))).reactions ? '🎉', 'react: the v2 op', v);
 
--- ── v1 edit and react; v2 calls resolve to the v2 ops ───────────────────────
-DO $$
-DECLARE
-  v text;
-  v_id uuid := test.id('client:one');
-BEGIN
-  v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => %L, p_mentioned_user_ids => '{}')$q$,
-    v_id, format('now <@%s> *later*', test.id('A'))));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = format('now moduo://person/%s *later*', test.id('A'))
-                  AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('A')] AND NOT (test.msg(v_id)).mentions_everyone,
-    'edit v1: a v2 message keeps its text, its v1 tokens become references, mentions are read again', v);
-  v := test.as_user('C', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'not mine', p_mentioned_user_ids => '{}')$q$, v_id));
-  PERFORM test.ok(v = '42501 You can only edit your own messages.', 'edit v1: the v2 rules hold (only the author edits)', v);
-  v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'v2 _as typed_')$q$, v_id));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).body = 'v2 _as typed_',
-    'edit: two named arguments mean the v2 op (no conversion, no ambiguity)', v);
-  v := test.as_user('B', format($q$SELECT public.chat_op_edit(%L::uuid, 'positional'::text)$q$, v_id));
-  PERFORM test.ok(v = 'ok 1', 'edit: two positional arguments mean the v2 op', v);
-  -- v1's composer opens an edit with the stored (v2) text: it isn't converted
-  -- twice, and the tokens its pickers add become references.
-  v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => %L, p_mentioned_user_ids => '{}')$q$,
-    v_id, format('ping moduo://person/%s *now* and <@%s>', test.id('C'), test.id('A'))));
-  PERFORM test.ok(v = 'ok 1'
-                  AND (test.msg(v_id)).body = format('ping moduo://person/%s *now* and moduo://person/%s', test.id('C'), test.id('A'))
-                  AND (test.msg(v_id)).mentioned_user_ids = ARRAY[test.id('C'), test.id('A')],
-    'edit v1: a v2 message''s text is kept, a person picked in v1 becomes a mention', v);
-  v := test.as_user('C', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'from _after_', p_mentioned_user_ids => '{}')$q$,
-    test.id('old')));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(test.id('old'))).body = 'from *after*' AND (test.msg(test.id('old'))).format_version = 2,
-    'edit v1: a v1 message''s text is converted whole', v);
-
-  v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_emoji => '👍')$q$, v_id));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).reactions -> '👍' = jsonb_build_array(test.id('C')::text),
-    'react v1: the toggle turns it on', v);
-  v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_emoji => '👍')$q$, v_id));
-  PERFORM test.ok(v = 'ok 1' AND NOT ((test.msg(v_id)).reactions ? '👍'), 'react v1: and off again', v);
-  v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_key => '🎉', p_on => true)$q$, v_id));
-  PERFORM test.ok(v = 'ok 1' AND (test.msg(v_id)).reactions ? '🎉', 'react: named key and on mean the v2 op', v);
+  -- The v1 forms an old build would send are refused as unknown functions.
+  v := test.as_user('B', format($q$SELECT public.chat_op_send(p_channel_id => %L::uuid, p_body => 'old'::text, p_client_id => %L::uuid)$q$,
+    test.ref('Q'), test.id('client:new')));
+  PERFORM test.ok(v LIKE '42883 %', 'v1 send: gone', v);
+  v := test.as_user('B', format($q$SELECT public.chat_op_edit(p_message_id => %L, p_body => 'x', p_mentioned_user_ids => '{}')$q$, test.id('one')));
+  PERFORM test.ok(v LIKE '42883 %', 'v1 edit: gone', v);
+  v := test.as_user('C', format($q$SELECT public.chat_op_react(p_message_id => %L, p_emoji => '👍')$q$, test.id('one')));
+  PERFORM test.ok(v LIKE '42883 %', 'v1 react (the toggle): gone', v);
+  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('Q')));
+  PERFORM test.ok(v LIKE '42883 %', 'share_op_announce: gone (chat_op_set_announcement replaces it)', v);
 END;
 $$;
 
@@ -163,23 +100,40 @@ BEGIN
 END;
 $$;
 
--- ── Signatures and grants ───────────────────────────────────────────────────
+-- ── What CV-23 retired, and what it keeps ───────────────────────────────────
 DO $$
 BEGIN
   PERFORM test.ok(
-    (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'chat_op_send') = 2
-    AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'chat_op_edit') = 2
-    AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'chat_op_react') = 2
-    AND (SELECT pronargdefaults FROM pg_proc WHERE oid = 'public.chat_op_edit(uuid, text, uuid[])'::regprocedure) = 0
-    AND (SELECT pronargdefaults FROM pg_proc WHERE oid = 'public.chat_op_react(uuid, text, boolean)'::regprocedure) = 0,
-    'signatures: v1 and v2 side by side; no default lets a v2 call reach a v1 wrapper');
+    to_regprocedure('public.chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)') IS NULL
+    AND to_regprocedure('public.chat_op_edit(uuid, text, uuid[])') IS NULL
+    AND to_regprocedure('public.chat_op_react(uuid, text)') IS NULL
+    AND to_regprocedure('public.chat_op_mark_read(uuid, timestamptz)') IS NULL
+    AND to_regprocedure('public.chat_op_mark_unread(uuid, timestamptz)') IS NULL
+    AND to_regprocedure('public.share_op_announce(uuid, boolean)') IS NULL
+    AND to_regprocedure('public.chat_normalize_channel_name(text)') IS NULL,
+    'signatures: the v1 forms, share_op_announce and chat_normalize_channel_name are gone');
   PERFORM test.ok(
-    has_function_privilege('authenticated', 'public.chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)', 'EXECUTE')
-    AND has_function_privilege('authenticated', 'public.chat_op_edit(uuid, text, uuid[])', 'EXECUTE')
-    AND has_function_privilege('authenticated', 'public.chat_op_react(uuid, text)', 'EXECUTE')
-    AND NOT has_function_privilege('anon', 'public.chat_op_send(uuid, text, uuid, uuid[], boolean, uuid, text)', 'EXECUTE')
-    AND NOT has_function_privilege('anon', 'public.chat_op_edit(uuid, text, uuid[])', 'EXECUTE')
-    AND NOT has_function_privilege('anon', 'public.chat_op_react(uuid, text)', 'EXECUTE'),
-    'grants: old builds call the wrappers signed in, never as anon');
+    (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'chat_op_send') = 1
+    AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'chat_op_edit') = 1
+    AND (SELECT count(*) FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'chat_op_react') = 1
+    AND to_regprocedure('public.chat_op_agent_post(uuid, uuid, text, uuid)') IS NOT NULL,
+    'signatures: one of each op is left; the connector''s chat_op_agent_post stays');
+  PERFORM test.ok(
+    has_function_privilege('authenticated', 'public.chat_op_send(uuid, uuid, text, uuid)', 'EXECUTE')
+    AND has_function_privilege('service_role', 'public.chat_op_send(uuid, uuid, text, uuid)', 'EXECUTE')
+    AND NOT has_function_privilege('anon', 'public.chat_op_send(uuid, uuid, text, uuid)', 'EXECUTE')
+    AND (SELECT prosecdef AND EXISTS (SELECT 1 FROM unnest(proconfig) c WHERE c LIKE 'search_path=%')
+           FROM pg_proc WHERE oid = 'public.chat_op_send(uuid, uuid, text, uuid)'::regprocedure),
+    'grants: the send is signed-in people''s and the service role''s, never anon''s; definer, search_path pinned');
+  PERFORM test.ok(to_regclass('public.chat_messages_channel_idx') IS NULL
+                  AND to_regclass('public.chat_messages_stream_idx') IS NOT NULL
+                  AND to_regclass('public.chat_messages_client_uq') IS NOT NULL,
+    'indexes: v1''s stream index is gone; the stream index and v1 rows'' client id index stay');
+  PERFORM test.ok((SELECT convalidated FROM pg_constraint
+                    WHERE conrelid = 'public.chat_channels'::regclass AND conname = 'chat_channels_name_trimmed'),
+    'names: chat_channels_name_trimmed is validated');
+  PERFORM test.ok((SELECT string_to_array(substring(value #>> '{}' FROM '^v?(\d+\.\d+\.\d+)'), '.')::int[]
+                     FROM public.app_settings WHERE key = 'min_build') >= ARRAY[1, 0, 21],
+    'min_build: at or above the first production desktop build without v1 calls (1.0.21)');
 END;
 $$;
