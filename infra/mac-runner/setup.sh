@@ -236,7 +236,7 @@ setup_keychain() {
       ok "notarization profile '$NOTARY_PROFILE' works"
     else
       warn "Apple didn't accept the login (or its server is down). Setup goes on; --verify checks it again."
-      warn "A wrong Apple ID or password: re-run setup.sh, or the store-credentials command in the README."
+      warn "If the Apple login was mistyped, re-run setup.sh or the store-credentials command in the README."
       local xcrun_error
       xcrun_error="$(as_ci xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --keychain "$KEYCHAIN" 2>&1 | tail -3 || true)"
       printf '    %s\n' "$xcrun_error"
