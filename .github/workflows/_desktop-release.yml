@@ -544,6 +544,13 @@ jobs:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
 
     steps:
+      - name: Checkout CI scripts
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          sparse-checkout: scripts
+
       - name: Download Mac artifacts
         uses: actions/download-artifact@v8
         with:
@@ -585,7 +592,13 @@ jobs:
             fi
           }
           manifest "https://github.com/${RELEASES_REPO}/releases/download/$RELEASE_TAG" latest.json
-          jq '.bridge = true' latest.json > manifest.tmp && mv manifest.tmp latest.json
+          # Only a release with both platforms may become the bridge: a frozen manifest without
+          # Windows would leave pre-PLAT-6 Windows installs on GitHub for good.
+          if [ -f Moduo_x64-setup.exe.sig ]; then
+            jq '.bridge = true' latest.json > manifest.tmp && mv manifest.tmp latest.json
+          else
+            echo "::warning::No Windows build, so this GitHub release is not the bridge yet; the next run with Windows becomes it."
+          fi
           mkdir -p ../r2-manifest
           manifest "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION" ../r2-manifest/latest.json
           if [ ! -f Moduo_x64-setup.exe.sig ]; then
@@ -609,6 +622,16 @@ jobs:
         run: |
           PREFIX="desktop/$CHANNEL/$MODUO_VERSION"
           put() { $WRANGLER r2 object put "$BUCKET/$1" --remote --file "$2" --content-type "$3" ${4:+--cache-control "$4"}; }
+          # The channel pointer only moves forward: a re-run of an older run must not undo a newer one.
+          point() {
+            local cur
+            cur="$(curl -sf "$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json" | jq -r '.version // empty' || true)"
+            if [ -n "$cur" ] && [ "$cur" != "$MODUO_VERSION" ] && ! node "$GITHUB_WORKSPACE/.ci/scripts/release/version.mjs" assert-newer "$MODUO_VERSION" "$cur" >/dev/null 2>&1; then
+              echo "::warning::The channel already points at $cur, newer than $MODUO_VERSION; leaving it."
+              return 0
+            fi
+            put "desktop/$CHANNEL/latest.json" "$1" application/json no-store
+          }
           curl -sSf "$UPDATE_SERVER_URL/health" >/dev/null || { echo "::error::The update server is not answering /health."; exit 1; }
           STATUS="$(curl -s -o sealed.json -w '%{http_code}' "$UPDATE_SERVER_URL/download/$PREFIX/latest.json")"
           case "$STATUS" in
@@ -619,12 +642,12 @@ jobs:
                 put "$PREFIX/$f" "$f" application/octet-stream
               done
               put "$PREFIX/latest.json" ../r2-manifest/latest.json application/json
-              put "desktop/$CHANNEL/latest.json" ../r2-manifest/latest.json application/json no-store
+              point ../r2-manifest/latest.json
               ;;
             200)
               [ "$(jq -r '.version' sealed.json)" = "$MODUO_VERSION" ] || { echo "::error::$PREFIX/latest.json is not a $MODUO_VERSION manifest."; exit 1; }
               echo "::warning::$PREFIX is already sealed (a re-run); pointing the channel at it without uploading."
-              put "desktop/$CHANNEL/latest.json" sealed.json application/json no-store
+              point sealed.json
               ;;
             *) echo "::error::Could not tell whether $PREFIX is sealed (HTTP $STATUS). Re-run the job."; exit 1 ;;
           esac
@@ -640,7 +663,13 @@ jobs:
             [ "$got" = "$MODUO_VERSION" ] && break
             sleep 10
           done
-          [ "$got" = "$MODUO_VERSION" ] || { echo "::error::The update server answers $got, not $MODUO_VERSION"; exit 1; }
+          if [ "$got" != "$MODUO_VERSION" ]; then
+            if [ -n "$got" ] && node .ci/scripts/release/version.mjs assert-newer "$got" "$MODUO_VERSION" >/dev/null 2>&1; then
+              echo "::warning::The channel already serves the newer $got."
+            else
+              echo "::error::The update server answers ${got:-nothing}, not $MODUO_VERSION"; exit 1
+            fi
+          fi
           curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/Moduo_universal.app.tar.gz"
           code=$(curl -s -o /dev/null -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/aarch64/0.0.1")
           echo "update check from 0.0.1 → $code (204 while the channel is paused or rolled out to 0%)"
