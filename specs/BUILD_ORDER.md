@@ -492,6 +492,20 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **GH-6 — Status suggestions and automatic moves** · deps: GH-2, GH-5
 - [ ] **GH-7 — Connector** · deps: GH-2
 
+## Platform v2 — workspaces, Cloudflare hosting, Mac build runner · [`specs/platform-v2.md`](./platform-v2.md)
+
+> Mike's lane (infra), decided 2026-10-17: GitHub Pro (personal, private repo) + Cloudflare; Mike's Mac is the first-choice desktop runner with GitHub-hosted fallback; Bun workspaces + Turborepo. **PLAT-2 is a freeze point:** merge `mike` and `maciej` into `develop` and pause new blocks before it starts. Human prerequisites (Cloudflare account and token, registrar access, GitHub Pro, Mac admin login) are listed per block in the spec. Tier 2 (validator) for every block except PLAT-1.
+
+- [ ] **PLAT-0 — Phase 0 quick fixes** (web version stopgap, `min_build` guard, `vercel.json` 404/caching/headers, parallel + sharded tests, staging gated on checks, pinned actions, dead secrets removed) · deps: —
+- [ ] **PLAT-1 — Workspaces skeleton + landing package** · deps: PLAT-0
+- [ ] **PLAT-2 — The big move: apps/app, apps/desktop, apps/storybook, @moduo/backend, @moduo/e2e** (freeze point) · deps: PLAT-1
+- [ ] **PLAT-3 — Turborepo CI + remote cache (Worker + R2, PR read-only)** · deps: PLAT-2 · needs: Cloudflare account + token
+- [ ] **PLAT-4 — App on Cloudflare: previews, staging, runtime config, old-chunk retention, headers** · deps: PLAT-3
+- [ ] **PLAT-5 — Landing on Cloudflare (+ /book and /static routed to the app)** · deps: PLAT-4
+- [ ] **PLAT-6 — Desktop distribution on R2 + update-server Worker + bridge release** · deps: PLAT-3 · parallel with PLAT-4/5; sequence with PLAT-7 (both edit `_desktop-release.yml`)
+- [ ] **PLAT-7 — Mac self-hosted runner with hosted fallback** · deps: PLAT-2 · needs: Mac admin login, runner-status token
+- [ ] **PLAT-8 — Cutover: DNS to Cloudflare, prod on Workers, GitHub Pro + private repo, Vercel cancelled** · deps: PLAT-4, PLAT-5, PLAT-6, PLAT-7 · needs: registrar access, GitHub Pro
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
