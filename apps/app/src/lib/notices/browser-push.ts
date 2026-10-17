@@ -9,6 +9,7 @@
 // worker who that is (`postPushUser`), the worker shows the words only to
 // them, and signing out unsubscribes this browser (`forgetBrowserPush`).
 
+import { publicConfig } from "../public-config";
 import type { ModuoRuntime } from "../runtime.types";
 
 export const PUSH_WORKER_URL = "/push-sw.js";
@@ -27,8 +28,7 @@ export type BrowserPushState =
   | "off";
 
 export function vapidPublicKey(): string | null {
-  const key = import.meta.env.PUBLIC_VAPID_PUBLIC_KEY;
-  return typeof key === "string" && key.trim() ? key.trim() : null;
+  return publicConfig().vapidPublicKey || null;
 }
 
 export function pushSupported(): boolean {

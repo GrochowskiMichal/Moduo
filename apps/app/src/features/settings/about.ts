@@ -3,6 +3,8 @@
 // version/build define lookup lives in one place (also read by Diagnostics,
 // DF-19g). No React here.
 
+import { publicConfig } from "../../lib/public-config";
+
 /** App version — baked from package.json at build time; "0.0.0" in tests/dev. */
 export const APP_VERSION: string = (import.meta.env.MODUO_VERSION as string | undefined) ?? "0.0.0";
 
@@ -24,8 +26,8 @@ const PROD_APP_HOST = "app.moduo.app";
  */
 export function resolveDesktopChannel(
   env: { channel?: string; stagingPortal?: string } = {
-    channel: import.meta.env.PUBLIC_DESKTOP_CHANNEL as string | undefined,
-    stagingPortal: import.meta.env.PUBLIC_STAGING_PORTAL as string | undefined,
+    channel: publicConfig().desktopChannel,
+    stagingPortal: publicConfig().stagingPortal,
   },
   hostname: string | undefined = typeof window !== "undefined"
     ? window.location.hostname

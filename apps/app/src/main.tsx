@@ -8,6 +8,7 @@ import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { applyAppearance, readLocalAppearance } from "./lib/appearance";
+import { installChunkReload } from "./lib/chunk-reload";
 import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
 import { useKeepInMenuBar } from "./lib/keep-in-menu-bar";
 import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
@@ -19,6 +20,9 @@ import "./global.css";
 // The cloud-synced values are reconciled later inside useAppearance/usePreferences.
 applyAppearance(readLocalAppearance());
 applyMotion(readLocalPreferences().motion);
+
+// A chunk the host no longer serves (a tab older than the last 3 deploys) reloads once.
+installChunkReload();
 
 window.addEventListener("error", (event) => {
   console.error("Global error event:", event.error ?? event.message);
