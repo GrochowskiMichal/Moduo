@@ -15,8 +15,8 @@
 # record: uploads this build's tarball to R2 builds/<build>/static.tar.gz and puts it first in
 #         lanes/<lane>.json (newest first, 10 kept).
 #
-# Lanes: "staging", "production" (PLAT-8), "pr-<n>" for previews. Bucket moduo-web-builds; its
-# builds/ prefix expires after 60 days (app-staging.yml creates the bucket and the rule). Needs
+# Lanes: "staging", "production" (PLAT-8), "pr-<n>" for previews. Bucket moduo-web-builds; record
+# creates it on first use, with builds/ and lanes/pr- expiring after 60 days. Needs
 # CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, and GNU tar (CI runs it on ubuntu-latest).
 set -euo pipefail
 
@@ -32,6 +32,18 @@ mkdir -p "$TMP"
 
 r2_get() { $WRANGLER r2 object get "$BUCKET/$1" --remote --file "$2" >/dev/null 2>&1; }
 r2_put() { $WRANGLER r2 object put "$BUCKET/$1" --remote --file "$2" --content-type "$3" >/dev/null; }
+
+ensure_bucket() {
+  if ! $WRANGLER r2 bucket info "$BUCKET" >/dev/null 2>&1; then
+    $WRANGLER r2 bucket create "$BUCKET"
+  fi
+  local rules
+  rules=$($WRANGLER r2 bucket lifecycle list "$BUCKET")
+  grep -q expire-builds <<< "$rules" \
+    || $WRANGLER r2 bucket lifecycle add "$BUCKET" expire-builds builds/ --expire-days 60 --force
+  grep -q expire-pr-lanes <<< "$rules" \
+    || $WRANGLER r2 bucket lifecycle add "$BUCKET" expire-pr-lanes lanes/pr- --expire-days 60 --force
+}
 
 # The lane's recorded builds, newest first, one per line ("" when the lane is new).
 lane_builds() {
@@ -69,6 +81,7 @@ case "$cmd" in
     ;;
   record)
     [ -f "$TMP/$build.tar.gz" ] || { echo "run merge first" >&2; exit 1; }
+    ensure_bucket
     r2_put "builds/$build/static.tar.gz" "$TMP/$build.tar.gz" application/gzip
     { echo "$build"; lane_builds | grep -vx "$build" || true; } | head -n 10 | jq -R . | jq -s . > "$TMP/lane-new.json"
     r2_put "lanes/$lane.json" "$TMP/lane-new.json" application/json
