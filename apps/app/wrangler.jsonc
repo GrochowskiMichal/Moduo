@@ -1,0 +1,58 @@
+// The web app on Cloudflare Workers static assets (specs/platform-v2.md, PLAT-4).
+// Deployed by .github/workflows/app-preview.yml (a version per PR, on the staging Worker) and
+// app-staging.yml (staging, after checks pass on develop); wrangler is pinned there. Production
+// is deployed from PLAT-8's deploy-prod workflow; until then Vercel serves app.moduo.app.
+//
+// One build serves every environment. The edge Worker (edge/worker.ts) runs for HTML navigations,
+// /config.json and missing files, and writes the environment's vars below into the page as
+// window.__MODUO_CONFIG__. Every var here is public (it ships to every browser); never put a
+// secret in vars.
+//
+// Routing: a file that exists is served without the Worker. The Worker runs for "/" and
+// "/index.html" (run_worker_first: they are files, but need the config injected) and for any path
+// with no file: app routes get the shell, /config.json the config, a missing /static/* file a 404.
+// not_found_handling stays "none" on purpose: "single-page-application" answers a missing
+// /static/* file with the shell (and its immutable header) before the Worker can run.
+{
+  "name": "moduo-app",
+  "main": "edge/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist/web",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": ["/", "/index.html"]
+  },
+  "observability": { "enabled": true },
+  "env": {
+    // Previews are versions of this Worker (`wrangler versions upload --preview-alias pr-<n>`),
+    // so they share its config and talk to the same Supabase project. Custom domain
+    // app.staging.moduo.app comes with PLAT-8 (DNS still on Vercel); until then it runs at
+    // https://moduo-app-staging.moduo.workers.dev.
+    "staging": {
+      "name": "moduo-app-staging",
+      "workers_dev": true,
+      "preview_urls": true,
+      "vars": {
+        "SUPABASE_URL": "https://wtoonrvuqumihpkbvwvs.supabase.co",
+        "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so",
+        "WEB_ORIGIN": "https://app.staging.moduo.app",
+        "STAGING_PORTAL": "true"
+      }
+    },
+    // Not deployed by this block. PostHog, Stripe and VAPID keys are added here when they are
+    // set for prod (today's Vercel prod build has none of them).
+    "production": {
+      "name": "moduo-app-production",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "SUPABASE_URL": "https://wtoonrvuqumihpkbvwvs.supabase.co",
+        "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so",
+        "WEB_ORIGIN": "https://app.moduo.app"
+      }
+    }
+  }
+}

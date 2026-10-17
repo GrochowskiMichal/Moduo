@@ -32,7 +32,7 @@ export default defineConfig({
   testEnvironment: "jsdom",
   // Edge Function and contract tests run in @moduo/backend (supabase/rstest.config.ts),
   // repo-script tests in scripts/rstest.config.ts.
-  include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+  include: ["src/**/*.test.ts", "src/**/*.test.tsx", "edge/**/*.test.ts"],
   globals: true,
   setupFiles: ["./rstest.setup.ts"],
   // Half the cores: the whole suite passes this way (62 s locally, against

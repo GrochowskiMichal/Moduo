@@ -24,6 +24,7 @@ import {
   stripLeadingTitle,
   stripTaskIdComments,
 } from "../../features/notes/public-render";
+import { publicConfig } from "../../lib/public-config";
 
 // Render a link only when its href survived the allow-list (react-markdown
 // passes an empty href for dropped schemes); otherwise show the label as plain
@@ -40,8 +41,7 @@ const MD_COMPONENTS: Components = {
 };
 
 const SUPABASE_URL: string =
-  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-  "https://wtoonrvuqumihpkbvwvs.supabase.co";
+  publicConfig().supabaseUrl || "https://wtoonrvuqumihpkbvwvs.supabase.co";
 
 type PublicNote = {
   id: string;

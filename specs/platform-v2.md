@@ -39,7 +39,7 @@ What Mike and Maciej notice:
 
 - **Mike's Mac asleep, offline or busy:** the runner check finds no idle `moduo-mac` runner, and the job goes to `macos-latest`. A queued job never waits forever.
 - **Mac goes to sleep mid-build:** the job fails as "runner lost". Re-run sends it to the fallback (the check runs again).
-- **Preview login:** previews point at staging Supabase. Magic links must redirect back to the preview origin, so the staging Supabase auth redirect allowlist gets a wildcard for preview hosts. Prod Supabase never allows preview hosts.
+- **Preview login:** previews point at staging Supabase. Magic links must redirect back to the preview origin, so the staging Supabase auth redirect allowlist gets a wildcard for preview hosts. Prod Supabase never allows preview hosts. (As built in PLAT-4: there is one Supabase project for staging and prod, and sign-in is a typed code with no redirect, so no allowlist entry was added; see `docs/decisions/workflow.md`.)
 - **Emailed links from previews** (booking cancel and app links) use the canonical origins (`supabase/functions/_shared/app-origin.ts` allow lists). Preview hosts are deliberately not added, so a preview can't mail links to itself.
 - **Push service worker:** `/push-sw.js` and `/push-display.js` must stay at the root, never get an immutable cache header (`Cache-Control: no-cache`), and never be replaced by the SPA fallback.
 - **Old chunk deleted** (older than the retention window): the app's chunk-load error handler reloads once per session, guarded so it can't loop.
@@ -119,7 +119,7 @@ Decided on the owner's behalf. Durable ones are in `docs/decisions/workflow.md`,
 
 **Hosting:**
 
-- **Web:** Workers static assets with `not_found_handling = "single-page-application"`. A small Worker runs first, only for HTML navigations and `/config.json`, using `run_worker_first` patterns.
+- **Web:** Workers static assets with `not_found_handling = "single-page-application"`. A small Worker runs first, only for HTML navigations and `/config.json`, using `run_worker_first` patterns. (As built in PLAT-4: `not_found_handling = "none"` and the Worker serves the shell for unmatched paths, because SPA mode answered a missing `/static/*` file with the shell; `run_worker_first` is `/` and `/index.html`.)
   - It injects `window.__MODUO_CONFIG__` with HTMLRewriter, so there's no extra round trip.
   - Static files never pass through the Worker.
   - Config values are Worker environment variables per environment (staging, production).
@@ -161,7 +161,7 @@ Decided on the owner's behalf. Durable ones are in `docs/decisions/workflow.md`,
 | 5 | **PLAT-5 — Landing on Cloudflare** | Landing Worker, routes for `/book*` and `/static/*` to the app Worker, legal pages, staging landing host | AC10 | PLAT-4 |
 | 6 | **PLAT-6 — Desktop distribution on R2 + update server** | R2 bucket, update-server Worker with tests, release workflow publishing to R2, bridge release per channel | AC11 | PLAT-3 |
 | 7 | **PLAT-7 — Mac runner with fallback** | `infra/mac-runner/setup.sh` (user, keychain, runner service, `--verify`), `pick-runner` job in the desktop workflow, trigger restrictions | AC12, AC13 | PLAT-2, prereqs (d), (e) |
-| 8 | **PLAT-8 — Cutover** | `scripts/dns-diff.ts`; DNS to Cloudflare; prod hosts on Workers via the `deploy-prod` workflow; GitHub Pro + rulesets; repo private; Vercel cancelled; `docs/release.md` updated | AC14, AC15 | PLAT-4, PLAT-5, PLAT-6, PLAT-7, prereqs (b), (c) |
+| 8 | **PLAT-8 — Cutover** | `scripts/dns-diff.ts`; DNS to Cloudflare; custom domain `app.staging.moduo.app` on the `moduo-app-staging` Worker (it runs on workers.dev since PLAT-4) and retire `sync-staging-app.yml`; prod hosts on Workers via the `deploy-prod` workflow; GitHub Pro + rulesets; repo private; Vercel cancelled; `docs/release.md` updated | AC14, AC15 | PLAT-4, PLAT-5, PLAT-6, PLAT-7, prereqs (b), (c) |
 
 PLAT-6 and PLAT-7 can run in parallel with PLAT-4 and PLAT-5: their files don't overlap, except `.github/workflows/_desktop-release.yml`, which PLAT-6 and PLAT-7 both edit, so run those two in sequence.
 

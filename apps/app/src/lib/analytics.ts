@@ -42,15 +42,16 @@
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
 import { useSyncExternalStore } from "react";
 import { APP_VERSION, DESKTOP_CHANNEL, IS_DESKTOP } from "../features/settings/about";
+import { publicConfig } from "./public-config";
 
 type Properties = Record<string, string | number | boolean | null | undefined>;
 
 export type AnalyticsConsent = "granted" | "denied";
 
-const PH_KEY = (import.meta.env.PUBLIC_POSTHOG_KEY ?? "").trim();
+const PH_KEY = publicConfig().posthogKey;
 // rsbuild defines an unset PUBLIC_* var as "" rather than undefined, so `??` alone
 // would never fall back. EU cloud, like the landing.
-const PH_HOST = (import.meta.env.PUBLIC_POSTHOG_HOST ?? "").trim() || "https://eu.i.posthog.com";
+const PH_HOST = publicConfig().posthogHost || "https://eu.i.posthog.com";
 
 const CONSENT_KEY_PREFIX = "moduo:consent:";
 
