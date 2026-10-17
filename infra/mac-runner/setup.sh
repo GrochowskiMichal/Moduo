@@ -293,9 +293,10 @@ latest_runner() {
 
 stop_service() { if service_running; then launchctl bootout "system/$LABEL" 2>/dev/null && sleep 2 || true; fi; }
 
-# Root owns the runner's code and config; moduo-ci owns only its state (registration, logs, work).
-# moduo-ci can add entries to the runner dir (sticky, group-writable), so root never follows one:
-# a symlink or a hard link (link count > 1) planted there is removed, not chowned.
+# Root owns the runner's code and config; moduo-ci owns only its state (registration, logs, work),
+# which it creates itself (config.sh and _work/_diag run as moduo-ci), so root never hands a path
+# moduo-ci could swap to moduo-ci. Root only takes entries over (chown to root, -P: no links
+# followed) or removes planted links, which can't give moduo-ci anything.
 STATE_FILES=" .runner .credentials .credentials_rsaparams .runner_migrated .credentials_migrated "
 planted() { [ -L "$1" ] || { [ -f "$1" ] && [ "$(stat -f %l "$1")" != 1 ]; }; }
 lock_runner_dir() {
@@ -307,17 +308,12 @@ lock_runner_dir() {
     f="${p##*/}"
     if planted "$p"; then
       rm -f "$p"
-    elif [[ "$STATE_FILES" == *" $f "* ]]; then
-      chown -h "$CI_USER:$CI_USER" "$p"
-      chmod 600 "$p"
-    elif [ "$f" != _work ] && [ "$f" != _diag ]; then
+    elif [[ "$STATE_FILES" != *" $f "* ]] && [ "$f" != _work ] && [ "$f" != _diag ]; then
       chown -R -P root:wheel "$p"
       chmod -R go-w "$p"
     fi
   done
-  for f in _work _diag; do
-    [ -d "$RUNNER_DIR/$f" ] || install -d -o "$CI_USER" -g "$CI_USER" -m 755 "$RUNNER_DIR/$f"
-  done
+  as_ci mkdir -p "$RUNNER_DIR/_work" "$RUNNER_DIR/_diag"
   # The runner reads these at start; root's copies decide PATH and the hook, not a job's.
   # Written in root's own dir and renamed in: a rename replaces whatever moduo-ci put there.
   printf '%s' "$CI_PATH" >"$HOOK_DIR/runner.path"
