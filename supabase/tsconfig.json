@@ -1,0 +1,51 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@contracts/*": [
+        "./functions/_shared/contracts/*"
+      ],
+      "@email/*": [
+        "./functions/_shared/email/*"
+      ],
+      "@/*": [
+        "../apps/app/src/*"
+      ]
+    }
+  },
+  "include": [
+    "functions/_shared/contracts",
+    "functions/_shared/email",
+    "functions/_shared/account-erasure.ts",
+    "functions/_shared/account-erasure.test.ts",
+    "functions/_shared/analytics-forget.ts",
+    "functions/_shared/analytics-forget.test.ts",
+    "functions/_shared/app-origin.ts",
+    "functions/_shared/app-origin.test.ts",
+    "functions/_shared/client-ip.ts",
+    "functions/_shared/client-ip.test.ts",
+    "functions/_shared/escape.ts",
+    "functions/_shared/escape.test.ts",
+    "functions/_shared/oauth-connect.ts",
+    "functions/_shared/oauth-connect.test.ts",
+    "functions/_shared/posthog-erasure.ts",
+    "functions/_shared/posthog-erasure.test.ts",
+    "functions/_shared/purge-deleted.ts",
+    "functions/_shared/purge-deleted.test.ts",
+    "functions/auth-email-hook/handler.ts",
+    "functions/auth-email-hook/handler.test.ts",
+    "functions/_shared/standard-webhooks.ts",
+    "functions/_shared/standard-webhooks.test.ts",
+    "functions/_shared/service-rpc.ts",
+    "functions/_shared/service-rpc.test.ts",
+    "functions/_shared/description-markdown.ts",
+    "functions/_shared/description-markdown.test.ts",
+    "functions/email-worker/handler.ts",
+    "functions/email-worker/handler.test.ts",
+    "rstest.config.ts",
+    "../apps/app/src/types/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

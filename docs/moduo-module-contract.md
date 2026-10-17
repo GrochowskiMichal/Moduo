@@ -167,12 +167,12 @@ unchanged.
 Each module contributes its surface to the one Moduo MCP connector through a
 static, typed manifest — onboarding module N+1 is additive:
 
-- shared types in [`src/lib/module-manifest.ts`](../src/lib/module-manifest.ts)
+- shared types in [`apps/app/src/lib/module-manifest.ts`](../apps/app/src/lib/module-manifest.ts)
   (`ModuleManifest`: module id, op defs with RPC name + arg docs, readable
   resources, activity entity types);
 - one manifest per module, next to the feature
-  ([`src/features/tasks/ops-manifest.ts`](../src/features/tasks/ops-manifest.ts));
-- the registry ([`src/lib/module-registry.ts`](../src/lib/module-registry.ts))
+  ([`apps/app/src/features/tasks/ops-manifest.ts`](../apps/app/src/features/tasks/ops-manifest.ts));
+- the registry ([`apps/app/src/lib/module-registry.ts`](../apps/app/src/lib/module-registry.ts))
   is the single list the connector iterates. The "onboard a module to MCP"
   recipe lives in [moduo-mcp-connector.md](./moduo-mcp-connector.md) (Session 9).
 
@@ -191,7 +191,7 @@ static, typed manifest — onboarding module N+1 is additive:
 
 | op | RPC | server-side invariants |
 | --- | --- | --- |
-| `tasks.commit` | `tasks_op_commit(ws, task, for_date)` | not archived; order = queue max + 1 (race-safe); recommitting an already-committed task moves it to the end (= "Do last") |
+| `tasks.commit` (**deprecated** in Tasks v3 until TV-D7; Focus replaces the commit queue, see [moduo-mcp-connector.md](./moduo-mcp-connector.md)) | `tasks_op_commit(ws, task, for_date)` | not archived; order = queue max + 1 (race-safe); recommitting an already-committed task moves it to the end (= "Do last") |
 | `tasks.uncommit` | `tasks_op_uncommit(ws, task)` | idempotent; never intercepted (spec §5c) |
 | `tasks.skip_today` | `tasks_op_skip_today(ws, task)` | only if committed; clears commit **and** increments `reschedule_count` atomically (the ambient mirror counter never races) |
 | `tasks.set_status` | `tasks_op_set_status(ws, task, status, recurrence?, position?)` | the server moves the recurrence pointer (never to an occurrence on the day it was done) and records the completion (`task_completions`); the caller's pointer only for a rule outside the server's subset; optional board position |
@@ -210,5 +210,5 @@ capture/`createTask` and plain field edits now go through `tasks_op_create` /
 since TV-D8. Subtask one-level and dependency-cycle rules stay DB triggers — they
 are *corruption guards* on the raw write path, which intent ops sit above.
 
-Trail rendering: `src/features/tasks/activity.ts` (op → quiet sentence) +
+Trail rendering: `apps/app/src/features/tasks/activity.ts` (op → quiet sentence) +
 the Activity section of the task detail panel.

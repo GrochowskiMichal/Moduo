@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "typecheck": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/supabase/functions/_shared/**",
+        "$TURBO_ROOT$/scripts/**"
+      ]
+    },
+    "lint:tw": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/check-arbitrary-tw.ts"]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/supabase/**",
+        "$TURBO_ROOT$/scripts/**",
+        "$TURBO_ROOT$/e2e/tests/fixtures/**",
+        "$TURBO_ROOT$/assets/**",
+        "$TURBO_ROOT$/VERSION"
+      ]
+    }
+  }
+}

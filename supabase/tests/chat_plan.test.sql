@@ -22,10 +22,11 @@ CREATE TABLE test.grants (workspace_id uuid NOT NULL, tier text, ends_at timesta
 CREATE FUNCTION test.on(p_ws text) RETURNS boolean LANGUAGE plpgsql AS $$
 DECLARE
   v boolean;
+  v_was text := coalesce(current_setting('request.jwt.claims', true), '');
 BEGIN
   PERFORM set_config('request.jwt.claims', '{"role": "service_role"}', true);
   v := public.chat_workspace_enabled(test.id(p_ws));
-  PERFORM set_config('request.jwt.claims', '{}', true);
+  PERFORM set_config('request.jwt.claims', v_was, true);
   RETURN v;
 END;
 $$;
@@ -111,6 +112,12 @@ BEGIN
   PERFORM test.ok(public.chat_workspace_enabled(test.id('W2')) IS FALSE, 'who: an anonymous caller is told false');
   PERFORM set_config('request.jwt.claims', '{}', true);
   PERFORM test.ok(public.chat_workspace_enabled(test.id('W2')) IS FALSE, 'who: a session with no caller is told false');
+  PERFORM set_config('request.jwt.claims', json_build_object('sub', test.id('A'), 'role', 'authenticated')::text, true);
+  PERFORM test.ok(test.on('W2') AND current_setting('request.jwt.claims', true)::jsonb ->> 'sub' = test.id('A')::text,
+    'test.on gives the caller back');
+  PERFORM set_config('request.jwt.claims', '{}', true);
+  PERFORM test.ok(test.value_as('D', format('SELECT public.chat__workspace_enabled(%L)::text', test.id('W2'))) LIKE 'ERROR %permission denied%',
+    'who: the plan rule underneath (chat__workspace_enabled) is the server''s only');
 END;
 $$;
 

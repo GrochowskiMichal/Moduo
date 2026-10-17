@@ -1,6 +1,6 @@
 name: Desktop Release (staging)
 
-# Runs when src-tauri changes land on develop, nightly at 02:00 UTC, or on demand.
+# Runs when desktop app changes (apps/desktop) land on develop, nightly at 02:00 UTC, or on demand.
 # Builds the signed Mac universal .dmg + Windows NSIS installer from develop and publishes them
 # to the rolling `staging-latest` release. The build itself lives in _desktop-release.yml.
 
@@ -13,7 +13,7 @@ on:
     branches:
       - develop
     paths:
-      - "src-tauri/**"
+      - "apps/desktop/**"
 
 # A newer staging build supersedes an older one still waiting on Apple.
 concurrency:
@@ -26,6 +26,10 @@ permissions:
 jobs:
   release:
     uses: ./.github/workflows/_desktop-release.yml
+    # actions: write is for mac-watchdog alone (it cancels a run stuck waiting on the Mac).
+    permissions:
+      contents: read
+      actions: write
     secrets: inherit
     with:
       channel: staging

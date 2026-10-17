@@ -16,11 +16,13 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
 - **Lean mode (pre-alpha):** a Tier 2 diff needs the `validator` subagent, nothing more. `/code-review ultra`, the `claude-security` scan and per-PR `/code-review` are paused until the live beta (designer's call, 2026-10-15 and 2026-10-16): don't run, ask for or block on them.
 - Force-push only your own task branch, only with `--force-with-lease`.
 
+Shipping to prod is not part of `/s3`: it follows [docs/release.md](../../../docs/release.md).
+
 ## Steps
 1. **Test this.** Put 3 to 5 steps (step → expected → surface) in the PR body, live-verified where you can. No `docs/testing/` file unless the designer asks.
 2. **Memory (only what's worth it).** A non-obvious decision goes at the top of `docs/decisions/<area>.md` plus one line in `docs/decisions.md`; a trap that cost more than a few minutes goes in `docs/gotchas/<area>.md`. Tick finished blocks in `specs/BUILD_ORDER.md`; moving `[x]` lines to `specs/BUILD_LOG.md` is batch housekeeping, not per session.
-3. **Review gate.** Tier 2 only (see `AGENTS.md` §Review gates: migrations, contracts, RLS, `moduo-mcp`, billing, `src/lib/runtime*`, updater/signing, workflows): run the `validator` subagent on `git diff origin/<personal>...HEAD` and fix BLOCKER/MAJOR. Everything else relies on a green `bun run verify`.
-4. **Commit** with a concise present-tense imperative subject, a short body and the Co-Authored-By trailer. `guard-secrets.sh` scans the staged changes.
+3. **Review gate.** Tier 2 only (see `AGENTS.md` §Review gates: migrations, contracts, RLS, `moduo-mcp`, billing, `apps/app/src/lib/runtime*`, updater/signing, workflows): run the `validator` subagent on `git diff origin/<personal>...HEAD` and fix BLOCKER/MAJOR. Everything else relies on a green `bun run verify`.
+4. **Commit** explicit paths (`git add <file>…`, never `-A` or a whole directory: another session may share the checkout) with a concise present-tense imperative subject, a short body and the Co-Authored-By trailer. `guard-secrets.sh` scans the staged changes.
 5. **Push the task branch** (`t/<owner>/<kebab>`).
 6. **PR + merge into the personal branch.** Mark the `/s2` draft PR ready (`gh pr ready <n>`) or open one into `maciej`/`mike`, never `main`. Before merging, run `gh pr list --base <personal> --state open` and stop only if another PR touches the same migration, DB object or block. Merge a conflict-free PR with `gh pr merge <n> --merge`; if it conflicts, merge the personal branch in, resolve, re-run `bun run verify`, then merge. Only the fast secret scan runs on this PR.
 6b. **Sync personal → `develop`, in batches** (a finished feature, end of day, or when the other person needs it; skip for a lone doc nit). Open `<personal> → develop`; the required `static-checks` job runs once there (`gh pr checks <n> --watch --required`); merge with `gh pr merge <n> --merge` once it passes, then merge `origin/develop` back into the personal branch. If it fails, fix it on the personal branch and never bypass the ruleset.

@@ -21,8 +21,8 @@ import {
   $exportDescription,
   $importDescription,
   DESCRIPTION_MARKDOWN_NODES,
-} from "../../../src/features/spine/editor/description-markdown";
-import { $isReferenceNode } from "../../../src/features/spine/editor/entity-ref-schema";
+} from "../../../apps/app/src/features/spine/editor/description-markdown";
+import { $isReferenceNode } from "../../../apps/app/src/features/spine/editor/entity-ref-schema";
 import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 import { descriptionReferences, readsAsModuoAddress } from "../_shared/description-markdown.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";

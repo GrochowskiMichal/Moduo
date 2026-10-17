@@ -1,6 +1,6 @@
 # Manual test — Moduo landing v2 (`t/mike/landing-v2`)
 
-Surface: **web** — https://moduo.app (served from `landing/index.html` on `prod-landing`). Preview locally first with `bun run preview:landing` → http://127.0.0.1:8765.
+Surface: **web** — https://moduo.app (served from `apps/landing/index.html` on `prod-landing`). Preview locally first with `bun run preview:landing` → http://127.0.0.1:8765.
 
 ## Deploy
 

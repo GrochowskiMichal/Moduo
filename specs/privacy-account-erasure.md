@@ -196,7 +196,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 | 1 | **PRIV-2a · Erase what's left in other workspaces (SQL)** | Migration with `account_erase_workspace_data` + `account_erasure_new_owner` + the `share_member_removed` changes + grants; local probe for AC1–AC6, AC9, AC12; applied to prod with OK; read-only prod preview. No caller yet, so applying it is safe on its own. | AC1–AC6, AC9, AC12 (SQL side) | PRIV-1 ✓ |
 | 2 | **PRIV-2b · Wire it in, wipe the Stripe copy, in-app copy** | Migration with `account_scrub_stripe_mirror`; two new steps in `account-erasure.ts` + tests; Danger zone sentence; `/auth` deleted notice + tests; `delete-account` redeployed with OK; AC17 one-off: designer deletes the two customers in the Stripe dashboard, then the mirror is wiped with OK. | AC7, AC8, AC10, AC11, AC17 | 1 |
 | 3 | **PRIV-2c · Admin command for privacy@** | Migration with `admin_account_lookup` + `admin_transfer_workspace_owner`; `admin-delete-account` + `_shared/account-admin.ts` + tests (passes `posthog: postHogEraserFromEnv(…)` to `deleteAccount`; needs the PRIV-3 PostHog secrets); runbook `docs/privacy-requests.md`; designer creates `ACCOUNT_ADMIN_SECRET`; deployed with OK; one preview run on a real account. | AC12–AC15 | 1, 2 |
-| 4 | **PRIV-2d · Privacy policy wording** | `landing/privacy.html` updated with the appendix wording on the landing branch flow (Mike redeploys Vercel), plus the "Last updated" date. | AC16 | — |
+| 4 | **PRIV-2d · Privacy policy wording** | `apps/landing/privacy.html` updated with the appendix wording on the landing branch flow (Mike redeploys Vercel), plus the "Last updated" date. | AC16 | — |
 
 ## Out of scope
 
@@ -232,7 +232,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 
 ## Appendix: privacy policy wording (approved with this spec)
 
-In `landing/privacy.html`, "09 How long we keep it":
+In `apps/landing/privacy.html`, "09 How long we keep it":
 
 - **Your account and workspaces**, replacing the current text:
   > As long as you have an account. When you delete it, we delete your account, your workspaces and everything only you could see, and we close your billing record at Stripe. Things you shared with people in their workspaces stay with them, and your messages and comments there stay without your name. Copies in backups expire within 30 days.

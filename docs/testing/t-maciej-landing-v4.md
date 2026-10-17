@@ -113,7 +113,7 @@ Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) a
 
 ## Made by a duo, shipping, questions
 - [ ] "Made by a duo": Maciej Grzywacz (Product and Design) and Mike Grochowski (Engineering) are equal in weight, each with a first-person quote.
-  - Both photos are square, from `landing/assets/makers/`.
+  - Both photos are square, from `apps/landing/assets/makers/`.
 - [ ] "Shipping every week" is hidden for now. It's commented out in the HTML, and the footer's Changelog shows "soon".
 - [ ] Questions: the lead invites a hello or a project chat at hello@moduo.app.
 
@@ -148,6 +148,6 @@ Check the page at three sizes: 1512 × 982 (laptop), 2560 × 1440 (4K at 150%) a
 - The changelog entries are mock data with relative dates.
 
 ## Parked: the live app window
-- The round-7 hero with the real, clickable Moduo window is saved in full at `landing/parked/live-hero.html`. It isn't deployed: vercel-build ships only `landing/index.html` and `landing/assets`.
+- The round-7 hero with the real, clickable Moduo window is saved in full at `apps/landing/parked/live-hero.html`. It isn't deployed: vercel-build ships only `apps/landing/index.html` and `apps/landing/assets`.
 - Preview it locally at http://127.0.0.1:8766/parked/live-hero
 - It comes back as the first section of the pane once the app UI is final and invites start rolling out. When it does, rebuild its screens from the finished app. Its window shows 24-hour times and a Chat tab drawn in the app's style.

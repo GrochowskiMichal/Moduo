@@ -5,7 +5,7 @@
 // near the top, like a real stream).
 
 import ReactDOM from "react-dom/client";
-import "../../../../../src/global.css";
+import "../../../../../apps/app/src/global.css";
 import "./harness.css";
 import { App, control, initialState } from "./app";
 import { run } from "./runner";

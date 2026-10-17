@@ -165,10 +165,12 @@ describe("cross-runtime drift guards", () => {
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
     expect(sql).toContain(`check (kind in (${inList(CHAT_CHANNEL_KINDS)}))`);
     expect(sql).toContain(`check (notify_level in (${inList(CHAT_NOTIFY_LEVELS)}))`);
-    // No later migration re-cuts either CHECK.
+    // No later migration re-cuts either CHECK, under any name.
+    const recut =
+      /chat_channels_kind_check|chat_members_notify_level_check|check\s*\(\s*\(?\s*kind\s+in\s*\(\s*'channel'|check\s*\(\s*\(?\s*notify_level\s+in\b/i;
     const later = readdirSync(MIGRATIONS_DIR)
-      .filter((f) => f.endsWith(".sql") && f > "20261006150000")
-      .filter((f) => /chat_channels_kind_check|chat_members_notify_level_check/.test(read(f)));
+      .filter((f) => f.endsWith(".sql") && f > "20261006150000_chat_module.sql")
+      .filter((f) => recut.test(read(f)));
     expect(later).toEqual([]);
   });
 
@@ -227,8 +229,9 @@ describe("cross-runtime drift guards", () => {
     const atLeastDuo = PLAN_TIERS.filter((t) => (rank.get(t) ?? 0) >= (duo ?? Number.NaN));
     expect([...atLeastDuo].sort()).toEqual([...CHAT_PLAN_TIERS].sort());
 
-    // The newest body of chat_workspace_enabled (CV-4's, re-cut by CV-23).
-    const enabledDef = /create\s+(?:or\s+replace\s+)?function\s+public\.chat_workspace_enabled\s*\(/i;
+    // The newest plan rule: CV-4's chat_workspace_enabled, moved by CV-23 into
+    // the internal chat__workspace_enabled (the public one adds the caller check).
+    const enabledDef = /create\s+(?:or\s+replace\s+)?function\s+public\.chat__?workspace_enabled\s*\(/i;
     const file = migrations.filter((f) => enabledDef.test(read(f))).at(-1);
     expect(file).toBeDefined();
     const enabledSql = read(file ?? "");

@@ -1,12 +1,12 @@
 # Manual test — Moduo landing page (`t/mike/landing-agents-readme`)
 
-Surface: **web** — https://moduo.app (served from `landing/index.html` on `prod-landing`).
+Surface: **web** — https://moduo.app (served from `apps/landing/index.html` on `prod-landing`).
 
 ## Deploy
 
 - [ ] `https://moduo.app` → redirects to `https://moduo.app/` (apex is canonical; www redirects to it)
 - [ ] Page title reads "Moduo — One window for the whole working life"
-- [ ] `https://staging.moduo.app` still shows the staging portal (it builds `landing/staging.html`, not this page)
+- [ ] `https://staging.moduo.app` still shows the staging portal (it builds `apps/landing/staging.html`, not this page)
 
 ## Hero
 

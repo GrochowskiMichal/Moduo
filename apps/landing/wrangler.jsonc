@@ -1,0 +1,51 @@
+// The landing (moduo.app) on Cloudflare Workers static assets (specs/platform-v2.md, PLAT-5).
+// Deployed by .github/workflows/landing-preview.yml (a version per PR, on the staging Worker),
+// landing-deploy.yml (staging, after checks pass on develop) and deploy-prod.yml (production).
+// wrangler is pinned there.
+//
+// `bun run build` (index, manifesto, privacy, terms, dpa, aup, assets, favicons) or
+// `bun run build:staging` (the staging portal at /, the marketing page at /landing, noindex)
+// writes ./dist. Clean URLs: html_handling serves privacy.html at /privacy and redirects
+// /privacy.html there. A path with no file gets index.html, as Vercel's catch-all rewrite does.
+//
+// Booking: /book, /book/* and /static/* run the router Worker first (edge/worker.ts), which
+// hands them to the app Worker through the APP service binding, so moduo.app/book/<slug> stays
+// on moduo.app. No zone routes: the custom domains below are the whole host, and a binding is an
+// in-Cloudflare call that also works on workers.dev and previews.
+{
+  "name": "moduo-landing",
+  "main": "edge/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/book", "/book/*", "/static/*"]
+  },
+  "observability": { "enabled": true },
+  "env": {
+    // staging.moduo.app, and https://moduo-landing-staging.moduo.workers.dev for the previews.
+    // PR previews are versions of this Worker (`wrangler versions upload --preview-alias pr-<n>`)
+    // carrying the prod landing build, so they book through the staging app.
+    "staging": {
+      "name": "moduo-landing-staging",
+      "workers_dev": true,
+      "preview_urls": true,
+      "routes": [{ "pattern": "staging.moduo.app", "custom_domain": true }],
+      "services": [{ "binding": "APP", "service": "moduo-app-staging" }]
+    },
+    // moduo.app. Deployed only by deploy-prod.yml, after moduo-app-production (the binding's
+    // target). www.moduo.app is not a domain of this Worker: a zone Redirect Rule sends it to
+    // https://moduo.app with a 308, as Vercel did (docs/release.md).
+    "production": {
+      "name": "moduo-landing-production",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [{ "pattern": "moduo.app", "custom_domain": true }],
+      "services": [{ "binding": "APP", "service": "moduo-app-production" }]
+    }
+  }
+}

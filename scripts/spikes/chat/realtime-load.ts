@@ -445,9 +445,10 @@ async function send(c: Client, channelId: string, label: string): Promise<Sent |
   const body = `s3m-${n}- ${label} ${randomUUID().slice(0, 8)} — a short line of chat, about the length people type`;
   const tReq = now();
   const r = await c.sb.rpc("chat_op_send", {
+    p_id: randomUUID(),
     p_channel_id: channelId,
     p_body: body,
-    p_client_id: randomUUID(),
+    p_reply_to_id: null,
   });
   const tResp = now();
   if (r.error) {
@@ -494,8 +495,8 @@ function pgStat(): {
     select
       coalesce(sum(calls) filter (where query like 'WITH pgrst_source%' and query like '%"p_stop"%'), 0),
       coalesce(sum(total_exec_time) filter (where query like 'WITH pgrst_source%' and query like '%"p_stop"%'), 0),
-      coalesce(sum(calls) filter (where query like 'WITH pgrst_source%' and query like '%"p_body"%' and query like '%"p_client_id"%'), 0),
-      coalesce(sum(total_exec_time) filter (where query like 'WITH pgrst_source%' and query like '%"p_body"%' and query like '%"p_client_id"%'), 0),
+      coalesce(sum(calls) filter (where query like 'WITH pgrst_source%' and query like '%"p_body"%' and query like '%"p_reply_to_id"%'), 0),
+      coalesce(sum(total_exec_time) filter (where query like 'WITH pgrst_source%' and query like '%"p_body"%' and query like '%"p_reply_to_id"%'), 0),
       coalesce(sum(calls) filter (where query like 'SELECT wal->>%'), 0),
       coalesce(sum(total_exec_time) filter (where query like 'SELECT wal->>%'), 0)
     from pg_stat_statements;`)

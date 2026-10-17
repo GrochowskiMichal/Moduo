@@ -86,6 +86,8 @@ task branch  →  personal branch  →  develop  →  main
 Each merge tier has a stricter testing bar. The PR author is responsible for
 running the gate; the reviewer verifies before approving.
 
+> **Lean mode (pre-alpha):** the gates below are the target for beta. Today a block lands on `bun run verify` plus the `validator` on Tier 2 diffs; see [AGENTS.md §Review gates](./AGENTS.md#review-gates-lean-mode-pre-alpha-no-external-users).
+
 ### Task → personal (you alone)
 
 - `bun run typecheck` clean.
@@ -106,7 +108,7 @@ Everything above, plus:
   density / fonts).
 - Storybook stories render without console errors for any new / changed
   primitives.
-- Visual snapshot suite (`bunx playwright test --project=visual`) green, or
+- Visual snapshot suite (`bun run e2e --project=visual`) green, or
   intentionally regenerated and the new PNG committed.
 - Either reviewer can request screenshots / a short Loom; if asked, attach.
 
@@ -184,26 +186,13 @@ These apply to every AI session in this repo regardless of tool:
    or long-running ones.
 5. **`--force-push` only with `--force-with-lease`** and only on task branches
    you own. Never force-push personal branches, `develop`, or `main`.
-6. **Run `bun run verify` before any develop PR.** Flag in the PR if the
-   heavier personal→develop walkthrough (visual snapshots, desktop golden
-   path) was skipped — Entire-sync merges should not stall on that suite.
+6. **Run `bun run verify` before any develop PR.**
 7. **Reference [AGENTS.md](./AGENTS.md) and [DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md)
    before touching UI.** They're the design contract.
 
 ### Session start checklist
 
-The first thing an LLM session should do, before any other action:
-
-1. Confirm whose session this is — Maciej or Mike. (AGENTS.md says "the user
-   is Maciej" by default; Mike's AGENTS.md fork or session prompt overrides.)
-2. `git fetch && git checkout <owner>` to land on the correct personal branch.
-3. `git pull` to refresh.
-4. `git checkout -b t/<owner>/<task>` for new work.
-5. Skim AGENTS.md + this file's "Rules for LLM agents" + DESIGN_SYSTEM.md
-   if the task is UI.
-
-If any of the above can't be done (no personal branch yet, untracked work
-in progress, etc.), pause and ask before improvising.
+Follow [AGENTS.md §Session start](./AGENTS.md#session-start).
 
 ## Pull request checklist
 
@@ -212,12 +201,7 @@ so it pre-fills automatically.)
 
 - [ ] Targets the correct base branch (`maciej` / `mike` for task PRs;
       `develop` for personal sync; `main` only for releases).
-- [ ] Branch name follows `t/<owner>/<kebab>` for task branches.
-- [ ] Testing gate for the target tier completed (see **Testing gates**).
-- [ ] If UI was changed, screenshots or a short Loom of the affected surface.
-- [ ] If a new primitive was added, Storybook story + entry in
-      [tests/visual/primitives.spec.ts](tests/visual/primitives.spec.ts).
-- [ ] CHANGELOG entry drafted if this PR will be in the next release.
+- [ ] A short "Test this" (step → expected → surface) in the PR body.
 
 ## Branch model activation
 

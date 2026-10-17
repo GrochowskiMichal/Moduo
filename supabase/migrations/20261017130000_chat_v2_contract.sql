@@ -5,9 +5,8 @@
 -- It runs again cleanly over itself (DROP … IF EXISTS, guarded VALIDATE).
 --
 -- It ships after the first production desktop build that sends only v2
--- signatures (1.0.21, 2026-10-16), and raises app_settings.min_build to it, so
--- an older desktop build is told to update and runs read-only instead of
--- calling a signature that is gone.
+-- signatures (1.0.21, 2026-10-16); …_chat_v2_min_build then tells an older
+-- desktop build to update, and it runs read-only.
 --
 -- What it does:
 --   1. Drops the v1 signatures kept for one release: chat_op_send's seven
@@ -19,11 +18,13 @@
 --      client mints. The column and its unique index stay for v1 rows.
 --   3. chat_workspace_enabled(ws) answers only for a member of that workspace
 --      (its owner or a workspace_members row) or for the service role; it is
---      false for anyone else.
+--      false for anyone else. The plan rule moves to the internal
+--      chat__workspace_enabled(ws), which the server's checks call.
 --   4. Drops v1's chat_messages_channel_idx (chat_messages_stream_idx serves
 --      the stream in both directions).
 --   5. Validates chat_channels_name_trimmed (no untrimmed name is left).
---   6. Sets app_settings.min_build to 1.0.21.
+-- app_settings.min_build is raised by …_chat_v2_min_build, applied once the
+-- builds that read it per platform are live.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -197,10 +198,12 @@ REVOKE ALL ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) FROM PUBLIC, 
 GRANT EXECUTE ON FUNCTION public.chat_op_send(uuid, uuid, text, uuid) TO authenticated, service_role;
 
 -- ── 3. chat_workspace_enabled: members and the service role only ────────────
--- Rule: it answers for a member of the workspace (its owner or a
--- workspace_members row) or for the service role (the connector); for anyone
--- else it is false.
-CREATE OR REPLACE FUNCTION public.chat_workspace_enabled(p_workspace_id uuid)
+-- Rule: chat_workspace_enabled(ws) answers for a member of the workspace (its
+-- owner or a workspace_members row) or for the service role (the connector);
+-- for anyone else it is false. The plan rule itself lives in the internal
+-- chat__workspace_enabled(ws), which the server's own checks call after they
+-- have checked membership.
+CREATE OR REPLACE FUNCTION public.chat__workspace_enabled(p_workspace_id uuid)
  RETURNS boolean
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
@@ -209,15 +212,7 @@ AS $function$
 DECLARE
   v_owner uuid;
   v_grant text;
-  v_role text;
-  v_me uuid := auth.uid();
 BEGIN
-  v_role := nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role';
-  IF v_role IS DISTINCT FROM 'service_role'
-     AND (v_me IS NULL OR NOT public.chat_is_workspace_member(p_workspace_id, v_me)) THEN
-    RETURN false;
-  END IF;
-
   SELECT w.owner_id INTO v_owner
     FROM public.workspaces w
    WHERE w.id = p_workspace_id
@@ -246,11 +241,279 @@ BEGIN
 END;
 $function$;
 
+REVOKE ALL ON FUNCTION public.chat__workspace_enabled(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.chat__workspace_enabled(uuid) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.chat_workspace_enabled(p_workspace_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_me uuid := auth.uid();
+BEGIN
+  IF (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role') IS DISTINCT FROM 'service_role'
+     AND (v_me IS NULL OR NOT public.chat_is_workspace_member(p_workspace_id, v_me)) THEN
+    RETURN false;
+  END IF;
+  -- The plan rule (owner's plan or a dated grant).
+  RETURN public.chat__workspace_enabled(p_workspace_id);
+END;
+$function$;
+
 COMMENT ON FUNCTION public.chat_workspace_enabled(uuid) IS
   'Chat is on for this workspace: its owner''s plan is Duo or above, or it holds a dated grant (TX-9b). Answers only for a member of the workspace or the service role; false for anyone else.';
 
 REVOKE ALL ON FUNCTION public.chat_workspace_enabled(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.chat_workspace_enabled(uuid) TO authenticated, service_role;
+
+-- The server's own checks (live bodies; each checks membership or the key
+-- first) read the plan through the internal helper. Same signatures, so
+-- their grants are kept.
+CREATE OR REPLACE FUNCTION public.chat_op__guard(p_workspace_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  if auth.uid() is null or not public.chat_is_workspace_member(p_workspace_id, auth.uid()) then
+    raise exception 'You don''t have access to this workspace.' using errcode = '42501';
+  end if;
+  if not public.chat__workspace_enabled(p_workspace_id) then
+    raise exception 'Chat is available on the Duo and Team plans.' using errcode = '42501';
+  end if;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat__op_guard_as(p_workspace_id uuid, p_user uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF p_user IS NULL OR NOT public.chat_is_workspace_member(p_workspace_id, p_user) THEN
+    RAISE EXCEPTION 'You don''t have access to this workspace.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.chat__workspace_enabled(p_workspace_id) THEN
+    RAISE EXCEPTION 'Chat is available on the Duo and Team plans.' USING ERRCODE = '42501';
+  END IF;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat_can_access_workspace(p_workspace_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select auth.uid() is not null
+     and public.chat_is_workspace_member(p_workspace_id, auth.uid())
+     and public.chat__workspace_enabled(p_workspace_id)
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat_emoji__may_upload(p_name text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_ws uuid := public.chat_emoji__path_workspace(p_name);
+  v_slot uuid := public.chat_emoji__path_slot(p_name);
+BEGIN
+  RETURN v_ws IS NOT NULL
+     AND auth.uid() IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.chat_custom_emoji_uploads u
+                  WHERE u.id = v_slot AND u.workspace_id = v_ws AND u.uploader_id = auth.uid()
+                    AND u.used_at IS NULL AND u.created_at > now() - interval '1 hour')
+     AND public.chat_is_workspace_member(v_ws, auth.uid())
+     AND public.chat__workspace_enabled(v_ws)
+     AND public.chat_has_cap(v_ws, auth.uid(), 'add_emoji');
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.attachments_op_begin(p_workspace_id uuid, p_entity_type text, p_entity_id uuid, p_file_name text, p_mime text, p_size_bytes bigint, p_preview_mime text DEFAULT NULL::text, p_width integer DEFAULT NULL::integer, p_height integer DEFAULT NULL::integer, p_channel_id uuid DEFAULT NULL::uuid)
+ RETURNS attachments
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_uid     uuid := auth.uid();
+  v_owner   uuid;
+  v_lim     record;
+  v_used    bigint;
+  v_pending bigint;
+  v_id      uuid := gen_random_uuid();
+  v_name    text;
+  v_mime    text;
+  v_ext     text;
+  v_row     public.attachments;
+  v_channel public.chat_channels;
+BEGIN
+  -- Uploads need a signed-in person: Storage checks the same uploader.
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'not_signed_in' USING ERRCODE = '42501';
+  END IF;
+  IF p_entity_type = 'task' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.tasks t
+                   WHERE t.id = p_entity_id AND t.workspace_id = p_workspace_id
+                     AND t.deleted_at IS NULL) THEN
+      RAISE EXCEPTION 'entity_not_found' USING ERRCODE = 'P0002';
+    END IF;
+    IF NOT public.can_access('task', p_entity_id, 'edit', v_uid) THEN
+      IF public.can_access('task', p_entity_id, 'view', v_uid) THEN
+        RAISE EXCEPTION 'no_edit_access' USING ERRCODE = '42501';
+      END IF;
+      RAISE EXCEPTION 'entity_not_found' USING ERRCODE = 'P0002';
+    END IF;
+  ELSIF p_entity_type = 'chat_message' THEN
+    -- CV-9: the app minted the message id; the conversation says who may post.
+    SELECT * INTO v_channel FROM public.chat_channels c
+     WHERE c.id = p_channel_id AND c.workspace_id = p_workspace_id AND c.deleted_at IS NULL;
+    IF v_channel.id IS NULL OR p_entity_id IS NULL
+       OR NOT public.chat_can_read_channel(p_channel_id) THEN
+      RAISE EXCEPTION 'entity_not_found' USING ERRCODE = 'P0002';
+    END IF;
+    -- A sent message takes no new files.
+    IF EXISTS (SELECT 1 FROM public.chat_messages m WHERE m.id = p_entity_id) THEN
+      RAISE EXCEPTION 'entity_not_found' USING ERRCODE = 'P0002';
+    END IF;
+    -- Reading never needs the plan; uploading does, like posting.
+    IF NOT public.chat__workspace_enabled(p_workspace_id)
+       OR v_channel.archived_at IS NOT NULL
+       OR NOT public.chat__can_post(v_channel, v_uid) THEN
+      RAISE EXCEPTION 'no_edit_access' USING ERRCODE = '42501';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'unsupported_entity' USING ERRCODE = '22023';
+  END IF;
+  IF p_size_bytes IS NULL OR p_size_bytes <= 0 THEN
+    RAISE EXCEPTION 'invalid_size' USING ERRCODE = '22023';
+  END IF;
+  IF p_preview_mime IS NOT NULL AND p_preview_mime NOT IN ('image/webp','image/png','image/jpeg') THEN
+    RAISE EXCEPTION 'invalid_preview_mime' USING ERRCODE = '22023';
+  END IF;
+  IF (p_width IS NOT NULL AND p_width <= 0) OR (p_height IS NOT NULL AND p_height <= 0) THEN
+    RAISE EXCEPTION 'invalid_dimensions' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT w.owner_id INTO v_owner
+  FROM public.workspaces w WHERE w.id = p_workspace_id AND w.deleted_at IS NULL;
+  IF v_owner IS NULL THEN
+    RAISE EXCEPTION 'entity_not_found' USING ERRCODE = 'P0002';
+  END IF;
+  -- One begin at a time per pool: the checks below then see every upload
+  -- begun before this one, so racing uploads can't all slip under the limit.
+  INSERT INTO public.storage_usage (owner_id) VALUES (v_owner) ON CONFLICT (owner_id) DO NOTHING;
+  PERFORM 1 FROM public.storage_usage su WHERE su.owner_id = v_owner FOR UPDATE;
+  -- One person can't pile up unfinished uploads (pending or failed, until the
+  -- purge removes them).
+  IF (SELECT count(*) FROM public.attachments a
+      WHERE a.uploader_id = v_uid AND a.status <> 'ready') >= 50 THEN
+    RAISE EXCEPTION 'too_many_pending' USING ERRCODE = 'P0001';
+  END IF;
+  -- CV-9: up to 10 files per message, the eleventh refused before upload (the
+  -- pool lock above orders racing begins for one message).
+  IF p_entity_type = 'chat_message'
+     AND (SELECT count(*) FROM public.attachments a
+           WHERE a.entity_type = 'chat_message' AND a.entity_id = p_entity_id
+             AND a.status <> 'failed' AND a.deleted_at IS NULL)
+         >= public.attachments__chat_file_cap() THEN
+    RAISE EXCEPTION 'too_many_files' USING ERRCODE = 'P0001',
+      DETAIL = jsonb_build_object('max_files', public.attachments__chat_file_cap())::text;
+  END IF;
+  SELECT * INTO v_lim FROM public.storage__limits_for_owner(v_owner);
+  IF p_size_bytes > v_lim.per_file_bytes THEN
+    RAISE EXCEPTION 'attachment_too_large' USING ERRCODE = 'P0001',
+      DETAIL = jsonb_build_object('size_bytes', p_size_bytes,
+                                  'per_file_bytes', v_lim.per_file_bytes,
+                                  'tier', v_lim.tier)::text;
+  END IF;
+  SELECT greatest(su.bytes_used, 0) INTO v_used
+  FROM public.storage_usage su WHERE su.owner_id = v_owner;
+  v_used := coalesce(v_used, 0);
+  v_pending := public.storage__unsettled_bytes(v_owner);
+  IF v_used + v_pending + p_size_bytes > v_lim.total_bytes THEN
+    RAISE EXCEPTION 'storage_full' USING ERRCODE = 'P0001',
+      DETAIL = jsonb_build_object('size_bytes', p_size_bytes,
+                                  'used_bytes', v_used,
+                                  'pending_bytes', v_pending,
+                                  'total_bytes', v_lim.total_bytes,
+                                  'tier', v_lim.tier)::text;
+  END IF;
+
+  -- The name is only shown, never part of a path.
+  v_name := left(btrim(regexp_replace(coalesce(p_file_name, ''), '[[:cntrl:]]', '', 'g')), 255);
+  IF v_name = '' THEN
+    v_name := 'file';
+  END IF;
+  v_mime := left(btrim(lower(coalesce(p_mime, ''))), 255);
+  IF v_mime = '' THEN
+    v_mime := 'application/octet-stream';
+  END IF;
+  v_ext := lower(substring(v_name FROM '\.([A-Za-z0-9]{1,10})$'));
+  IF v_ext IS NULL THEN
+    v_ext := 'bin';
+  END IF;
+
+  INSERT INTO public.attachments (
+    id, workspace_id, entity_type, entity_id, uploader_id, file_name, mime,
+    size_bytes, object_path, preview_path, preview_mime, width, height, status)
+  VALUES (
+    v_id, p_workspace_id, p_entity_type, p_entity_id, v_uid, v_name, v_mime, p_size_bytes,
+    p_workspace_id::text || '/' || v_id::text || '/original.' || v_ext,
+    CASE WHEN p_preview_mime IS NULL THEN NULL
+         ELSE p_workspace_id::text || '/' || v_id::text || '/preview.'
+              || CASE p_preview_mime WHEN 'image/webp' THEN 'webp' WHEN 'image/png' THEN 'png' ELSE 'jpg' END
+    END,
+    p_preview_mime, p_width, p_height, 'pending')
+  RETURNING * INTO v_row;
+  RETURN v_row;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.chat__key_actor(p_need text, OUT workspace_id uuid, OUT creator uuid, OUT private_ok boolean)
+ RETURNS record
+ LANGUAGE plpgsql
+ STABLE
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_key uuid := public.module_api_key_id();
+  v_scope text;
+BEGIN
+  IF v_key IS NULL THEN
+    RAISE EXCEPTION 'Only an API key can do this.' USING ERRCODE = '42501';
+  END IF;
+  SELECT k.workspace_id, k.created_by, k.include_private_chat
+    INTO workspace_id, creator, private_ok
+    FROM public.workspace_api_keys k
+   WHERE k.id = v_key AND k.revoked_at IS NULL
+     AND (k.expires_at IS NULL OR k.expires_at > now());
+  IF workspace_id IS NULL OR creator IS NULL THEN
+    RAISE EXCEPTION 'This API key can''t read chat.' USING ERRCODE = '42501';
+  END IF;
+  -- KEYS-1's level, capped by what the creator may do in chat now.
+  v_scope := public.chat_key_scope(workspace_id);
+  IF p_need = 'edit' AND v_scope <> 'edit' THEN
+    RAISE EXCEPTION 'This API key can''t post to chat — give it Chat: Edit in Workspace settings → API keys.'
+      USING ERRCODE = '42501';
+  ELSIF v_scope NOT IN ('view', 'edit') THEN
+    RAISE EXCEPTION 'This API key can''t read chat — give it Chat: View in Workspace settings → API keys.'
+      USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.chat__workspace_enabled(workspace_id) THEN
+    RAISE EXCEPTION 'Chat is available on the Duo and Team plans.' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.chat__reads_workspace(workspace_id, creator) THEN
+    RAISE EXCEPTION 'This API key can''t read chat.' USING ERRCODE = '42501';
+  END IF;
+END;
+$function$;
 
 -- ── 4. v1's stream index ────────────────────────────────────────────────────
 DROP INDEX IF EXISTS public.chat_messages_channel_idx;
@@ -266,11 +529,6 @@ BEGIN
 END;
 $$;
 
--- ── 6. The oldest build that may still save ─────────────────────────────────
-INSERT INTO public.app_settings (key, value, updated_at)
-VALUES ('min_build', '"1.0.21"'::jsonb, now())
-ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now();
-
 -- ── Checks ──────────────────────────────────────────────────────────────────
 DO $$
 DECLARE
@@ -284,6 +542,14 @@ BEGIN
      OR to_regprocedure('public.share_op_announce(uuid, boolean)') IS NOT NULL
      OR to_regprocedure('public.chat_normalize_channel_name(text)') IS NOT NULL THEN
     RAISE EXCEPTION 'CV-23: a retired signature is still there';
+  END IF;
+  IF NOT has_function_privilege('service_role', 'public.chat__workspace_enabled(uuid)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.chat__workspace_enabled(uuid)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.chat__workspace_enabled(uuid)', 'EXECUTE')
+     OR EXISTS (SELECT 1 FROM pg_proc p
+                 WHERE p.pronamespace = 'public'::regnamespace AND p.proname <> 'chat_workspace_enabled'
+                   AND p.prosrc ~ 'chat_workspace_enabled\(') THEN
+    RAISE EXCEPTION 'CV-23: chat__workspace_enabled is callable by clients, or a server check still asks chat_workspace_enabled';
   END IF;
   FOREACH v_fn IN ARRAY ARRAY[
     'public.chat_workspace_enabled(uuid)'::regprocedure,
