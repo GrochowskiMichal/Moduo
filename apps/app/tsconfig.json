@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "@contracts/*": ["../../supabase/functions/_shared/contracts/*"],
+      "@email/*": ["../../supabase/functions/_shared/email/*"]
+    }
+  },
+  "include": ["src", "edge", "rsbuild.config.ts", "rstest.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}

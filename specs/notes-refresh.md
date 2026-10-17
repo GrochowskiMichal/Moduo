@@ -1,6 +1,6 @@
 # Spec: Notes refresh (new core, new surface)
 
-> Status: **In build — NR-1 and NR-2 done, NR-3 built** · Owner: mike (engineer-mode `/s1`, 2026-10-13; 20 product-code calls ratified by Mike) · Supersedes: [specs/notes.md](./notes.md) and [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) wherever they disagree (§2 page anatomy, §2a sidebar, §3c `/mindmap`, quote-comments). Everything else in them (task-line semantics, `@` = people, publish, markdown at every door, offline) still holds · Module contract: [docs/moduo-module-contract.md](../docs/moduo-module-contract.md)
+> Status: **In build — NR-1–4 and NR-6–8 built and on prod (2026-10-16); NR-5 and NR-9–12 open, parked 2026-10-16; New Notes still behind the switch** · Owner: mike (engineer-mode `/s1`, 2026-10-13; 20 product-code calls ratified by Mike) · Supersedes: [specs/notes.md](./notes.md) and [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) wherever they disagree (§2 page anatomy, §2a sidebar, §3c `/mindmap`, quote-comments). Everything else in them (task-line semantics, `@` = people, publish, markdown at every door, offline) still holds · Module contract: [docs/moduo-module-contract.md](../docs/moduo-module-contract.md)
 
 ## Scope
 
@@ -183,7 +183,7 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
   - it is attributed in the meta line;
   - Undo removes only the agent's change;
   - the next human keystroke never discards it.
-- **AC12 — A secure live channel:** only people with view access to a note can receive its live edits or appear in its presence, and only editors can send. Presence shows people's names.
+- **AC12 — A secure live channel:** only people with view access to a note receive its live updates or appear in its presence, and only editors can save. Clients send nothing over Realtime: the server sends a content-free "pull" and stamps the viewer list. Presence shows people's names.
 - **AC13 — Anchored comments:**
   - select → Comment starts a thread whose highlight follows edits;
   - resolving clears it;
@@ -309,17 +309,21 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
     - Presence is a server heartbeat (`notes_live_here`) that checks view access from the session; names and avatars come from workspace member profiles.
     - At commit, each save sends one content-free "pull" message per note to the people with the note open, re-checked with `can_access(view)` at that moment; they fetch the update through the normal read. No note content is ever stored in `realtime.messages`.
     - The client goes through `getRuntime()` (`notesV2.joinLive`), with no direct `supabaseClient` import.
-19. **low-confidence** · **Agent writes.**
+    - As built: the heartbeat runs every 20 s, a viewer row expires after 60 s, and a person keeps at most 5 tabs per note. The pull is sent by a deferred (commit-time) constraint trigger, so a rolled-back save sends nothing. The client flushes after a 400 ms debounce with an 800 ms max wait, and a pull passes its `knownDocVersion` so the server skips re-sending an unchanged snapshot.
+    - #412 adds a compare-and-set on `doc_version` to `notes_op_save_snapshot`, so a stale fold is refused instead of overwriting newer state.
+19. **built (NR-6, NR-7)** · **Agent writes.**
     - `note_updates` gains `origin text NOT NULL DEFAULT 'user'` (`'user' | 'agent'`, a closed vocabulary in `vocabularies.ts` with a matching CHECK) plus `actor_key_id uuid NULL`.
     - The connector pulls the doc, applies the edit headlessly, and pushes through `notes_op_apply_updates` with `p_origin='agent'`. It writes `body_md`/`body_text` and a `notes.agent_edit` activity row, and broadcasts on the note channel.
     - Clients apply agent-origin updates with origin `agent:<keyId>`. A per-session `Y.UndoManager` tracking that origin powers Undo.
     - Closes MCP-1's notes half.
+    - As built: the vocabulary is `'user' | 'api_key'` (`CONTENT_AUTHOR_KINDS`), and the server derives it from `module_api_key_id()`; it is never passed in. NR-7 removed the connector's live cue: the `note_updates` commit trigger tells open viewers to pull, agent writes included.
     - → verify by: `agent-undo.test.ts`. If UndoManager cannot track updates applied before it was created, the fallback is a server-kept pre-write state vector: Undo = apply the inverse diff of that one update.
 20. **confident** · **Anchored comments.**
     - `@lexical/mark` MarkNodes carry thread ids inside the doc, as Lexical's playground CommentPlugin does.
     - `comments` gains `anchor_id uuid NULL` (the thread) and `resolved_at timestamptz NULL`. A thread is all comments sharing an `anchor_id`.
     - This is a shared spine table, so Tier 2.
     - Quote-comments (an `anchor_id` of NULL) stay note-level.
+    - As built (NR-8, `20261016180000_comments_anchored`): CHECK `comments_resolved_needs_anchor` (only a thread can be resolved) and `comments_anchor_on_notes`; `comments_op_resolve` refuses an app's key, so only a person in the editor resolves; the editor highlights only threads it knows are open.
 21. **low-confidence** · **Images and files reuse AT-1's `attachments` table and bucket.**
     - Widen `attachments_op_*`'s `entity_type` check to include `'note'`.
     - An `ImageNode` / `FileNode` (decorators) store the attachment id and dimensions.
@@ -457,4 +461,4 @@ The core (NR-1–NR-7, NR-12) never cuts.
 
 ## Open questions
 
-- [ ] (none blocking NR-1/NR-2). For Maciej, at his next sitting, not blocking: ratify the sidebar model (Favorites/Inbox/Pages), anchored comments, and the cross-module ⌘K scope. Mike decided these in engineer mode, and the designer is authoritative on product.
+- [ ] (none blocking NR-1/NR-2). For Maciej, at his next sitting, not blocking: ratify the sidebar model (Favorites/Inbox/Pages), anchored comments (built in NR-8; Maciej still to ratify), and the cross-module ⌘K scope. Mike decided these in engineer mode, and the designer is authoritative on product.

@@ -1,0 +1,13 @@
+{
+  "name": "@moduo/landing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:staging": "node build.mjs --staging",
+    "preview": "bun ../../scripts/preview-landing.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "rstest"
+  }
+}

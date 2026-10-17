@@ -28,9 +28,9 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 
 | File | Role |
 | --- | --- |
-| `src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
-| `src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
-| `src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for auth/workspaces/tasks, and Tauri `invoke` for the legacy redb-backed modules (notes, email, calendar, time-tracking, graph). |
+| `apps/app/src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
+| `apps/app/src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
+| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for auth/workspaces/tasks, and Tauri `invoke` for the legacy redb-backed modules (notes, email, calendar, time-tracking, graph). |
 
 - Desktop mirrors the Supabase session into Rust `AppState` via the `auth_set_cloud_session` command, so Rust-side code can attribute actions to the signed-in user.
 - **Footgun (see memory):** never import a bare `{ runtime }`; always resolve via `getRuntime()`. Grep `./runtime` when auditing lib exports.
@@ -55,10 +55,10 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | Module | Backing today | Source of truth | Cross-device / multiplayer | Maturity |
 | --- | --- | --- | --- | --- |
 | Auth, Workspaces, Members, Profiles | **Supabase** | Supabase | Yes | ✅ prod |
-| **Tasks** (buckets, tasks, tags, tag_links, relations, time_blocks, activity) | **Supabase** | Supabase | Yes | ✅ 5/5 prod |
+| **Tasks** (Tasks v3: projects (still the `buckets` table until TV-D7), areas, sections, tasks, tags, tag_links, relations, time_blocks, activity) | **Supabase** | Supabase | Yes | ✅ prod; v3 released 2026-10-14 ([specs/tasks-v3.md](../specs/tasks-v3.md)) |
 | User preferences (appearance, focus) | **Supabase** (`user_preferences`) | Supabase | Yes | ✅ prod |
 | MCP connector keys | **Supabase** (`workspace_api_keys`) | Supabase | Yes | ✅ prod |
-| **Notes** | redb (desktop) + Yjs CRDT; web = localStorage fallback | redb (local) | **No** (single-player) | 🟡 4/5, rebuild planned |
+| **Notes** | **Supabase** (Yjs update log `note_updates` + snapshot `doc_state`; y-indexeddb local cache) | Supabase | Yes (live via server-sent pulls, NR-7) | ✅ prod; refresh in progress ([specs/notes-refresh.md](../specs/notes-refresh.md)) |
 | **Email** | redb + in-memory cache; Rust IMAP/SMTP engine | redb (local) | No | 🟡 desktop-only, 2/5 |
 | **Calendar** | localStorage + OAuth tokens | local | No | 🟡 logic only, no UI |
 | **Time-tracking** | redb | local | No | 🟡 Rust backend, no UI |
@@ -76,8 +76,9 @@ Migrations live in `supabase/migrations/` (~16 files as of 2026-06-16). The load
 
 | Migration | Adds |
 | --- | --- |
-| `…_create_tasks_module.sql` | `buckets`, `tasks`, `tags`, `tag_links` |
-| `…_buckets_add_group.sql` | `buckets.group_label` (rail sections) |
+| `…_create_tasks_module.sql` | `buckets` (projects since Tasks v3; the table keeps its name until TV-D7), `tasks`, `tags`, `tag_links` |
+| `…_buckets_add_group.sql` | `buckets.group_label` (rail sections; became areas in Tasks v3) |
+| `…_areas_projects_sections.sql` (Tasks v3, TV-D10) | `areas`, project fields on `buckets`, `sections` + `tasks.section_id`, `tasks.estimate_minutes` |
 | `…_tasks_add_parent.sql` | `tasks.parent_id` + depth-1 trigger (subtasks) |
 | `…_task_relations.sql` | `task_relations` (blocked-by edges; cycle-forbidding trigger) |
 | `…_module_activity_intent_ops.sql` | `module_activity` + the `tasks_op_*` RPCs |
@@ -94,7 +95,7 @@ Two patterns here are **reused by the whole product**, not just Tasks:
 
 ## 4. The module contract (every module follows this)
 
-Defined in `moduo-module-contract.md`; the typed shape is in `src/lib/module-manifest.ts` and the registry in `src/lib/module-registry.ts`. A module is **not done** until it implements all four pillars:
+Defined in `moduo-module-contract.md`; the typed shape is in `apps/app/src/lib/module-manifest.ts` and the registry in `apps/app/src/lib/module-registry.ts`. A module is **not done** until it implements all four pillars:
 
 1. **Intent ops** — named, invariant-keeping mutations as server-side RPCs (Tasks: `tasks_op_commit`, `_reschedule`, `_set_status`, …). Permissions-checked + activity-logged in one transaction. No raw table writes from the client for state-changing actions.
 2. **Actor attribution** — every op records who did it (user or API key/agent).
@@ -130,7 +131,7 @@ Moduo's differentiation is **not** any single module; it is the layer that lets 
 
 A full multi-account Spark replacement on a cloud-first web app would mean building/operating a server-side mail relay (IMAP/SMTP sync, OAuth app verification, token vault, security review). **At alpha we do not.** Instead:
 
-- The **full client lives on desktop**, on the existing Rust engine (`src-tauri/src/commands/email.rs` + `email/` submodules) → redb cache. This replaces Spark for the founder *now*.
+- The **full client lives on desktop**, on the existing Rust engine (`apps/desktop/src-tauri/src/commands/email.rs` + `email/` submodules) → redb cache. This replaces Spark for the founder *now*.
 - **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) is synced to Supabase so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop.
 - The full **web** email client is a post-alpha decision, made once it's proven to matter to customers (not just to us).
 
@@ -151,7 +152,7 @@ A full multi-account Spark replacement on a cloud-first web app would mean build
 
 - **Shared-workspace *async* multiplayer**, NOT real-time collaborative editing. Built on Supabase RLS + `workspace_members`; changes appear on refresh/poll. Enough to build Moduo with a partner. No live cursors / simultaneous block-editing at alpha (that is the expensive trap).
 - Consequence: **every new module is Supabase-first**, and **Notes must move to Supabase** (cloud-sync) — notes are the one kept module still local-CRDT, and shared design notes require it. The Notes rebuild is where this lands.
-- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** a chat + calls module is planned for the Duo/Team plans, specced later ([ROADMAP](./ROADMAP.md)); its real-time path is that spec's call. Coordination on entities stays comments + @mentions + notifications.
+- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md): Supabase rows + Realtime, a device store in IndexedDB); calls are being re-planned from Moduo Meet ([ROADMAP](./ROADMAP.md)). Coordination on entities stays comments + @mentions + notifications.
 
 ---
 
@@ -180,6 +181,6 @@ These are tracked in the alpha **Open Questions & Risks** doc; the load-bearing 
 - **`entity_links` shape** — one universal table with a `relation_kind` enum, vs. separate `links`/`attachments` tables. (Rec: one table, typed.)
 - **Polymorphic integrity** — how to keep `(entity_type, entity_id)` referentially sane without per-type FKs (trigger validation vs. partial indexes vs. a central `entities` registry table). **(Resolved 2026-06-24, revised same day after the design-brief pass: a lean central `entities` registry — upserted per intent op; `entity_links`/`comments`/`tag_links` FK into it. Makes search / @mention / roll-up one indexed query and gives clean cascade-on-delete. Authoritative spec: [.design/connective-tissue/DESIGN_BRIEF.md](../.design/connective-tissue/DESIGN_BRIEF.md).)**
 - **Notes CRDT ↔ Postgres** — how Yjs state reconciles with Supabase for cloud-sync (store the Yjs doc as a blob + derived searchable fields, vs. shred to rows).
-- **Drag-payload contract** — the TypeScript shape for "any entity → any drop target" and where it lives (`src/lib/`).
+- **Drag-payload contract** — the TypeScript shape for "any entity → any drop target" and where it lives (`apps/app/src/lib/`).
 
 *Resolve these before the spine is built; they are cheap now and expensive to retrofit.*

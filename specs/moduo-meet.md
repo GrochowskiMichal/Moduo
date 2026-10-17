@@ -1,6 +1,6 @@
 # Spec: Moduo Meet — our own video calls (self-hosted LiveKit on Azure)
 
-> Status: **Ready** (DoR passed 2026-10-06) · Owner: mike · Related: `specs/calendar.md` (booking links), `specs/chat.md` (calls reuse this engine), `docs/moduo-module-contract.md`, `docs/DESIGN_RULES.md`
+> Status: **Re-planned as Calls** (Chat v2 CH76, 2026-10-14; see `specs/BUILD_ORDER.md` §Moduo Meet). Was: **Ready** (DoR passed 2026-10-06) · Owner: mike · Related: `specs/calendar.md` (booking links), `specs/chat.md` (calls reuse this engine), `docs/moduo-module-contract.md`, `docs/DESIGN_RULES.md`
 
 ## Scope
 

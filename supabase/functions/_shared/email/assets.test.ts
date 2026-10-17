@@ -6,7 +6,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import { emailAssets, LOCKUP_DISPLAY_HEIGHT, LOCKUP_DISPLAY_WIDTH, MARK_DISPLAY_SIZE } from "./assets.ts";
 
-const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../public");
+const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../apps/app/public");
 
 /** Width, height and color type from a PNG's IHDR chunk. */
 function pngHeader(path: string): { width: number; height: number; colorType: number } {

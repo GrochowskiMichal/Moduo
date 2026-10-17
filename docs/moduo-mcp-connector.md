@@ -222,6 +222,80 @@ The local end-to-end check is `bun scripts/mcp-import-roundtrip.ts` (with
 `bun run local:functions` serving the connector): a Todoist-shaped import,
 its re-run, Undo, a session and a cascade, in a disposable workspace.
 
+## Tools (Notes, module #5) — NR-6
+
+In [`modules/notes.ts`](../supabase/functions/moduo-mcp/modules/notes.ts), the
+connector-side mirror of `src/features/notes/ops-manifest.ts`. Key scope:
+`scopes->>'notes'`.
+
+| Tool | Access | Does |
+| --- | --- | --- |
+| `notes_list` | view | The note tree: id, title, parent, icon, published flag (trashed excluded). |
+| `notes_get` | view | One note as markdown (`body_md`) plus its meta. |
+| `notes_search` | view | Full-text search over titles and bodies, with a snippet. |
+| `notes_create` | edit | Create a note from markdown, optionally under a parent; a root note lands in the Inbox. |
+| `notes_append` | edit | Append markdown to the end of a note; live, attributed, undoable. |
+| `notes_update` | edit | Replace a note's body wholesale (optionally rename it); live, attributed, undoable. |
+| `notes_move` | edit | Reparent a note and its subtree, or move it to the root; cycle-guarded. |
+| `notes_archive` | edit | Archive a note and its subtree (reversible). |
+| `notes_trash` | edit | Move a note and its subtree to the Trash (30-day purge). |
+| `notes_link` | edit | Link a note to another entity (idempotent; the key also needs Links: Edit). |
+
+Writes are real CRDT changes: the connector rebuilds the note's Yjs doc,
+applies the edit through the app's headless editor (the prebuilt
+`_shared/notes-doc/notes-doc.bundle.js`) and pushes the update through
+`notes_op_apply_updates`. The server stamps the row `origin = 'api_key'` with
+`actor_key_id` from the calling key and logs `notes.agent_edit`; open editors
+pull it (the `note_updates` commit trigger, NR-7) and offer Undo. Run
+`bun run build:notes-doc` whenever the notes editor schema changes.
+
+## Tools (Chat, module #7) — v2 (CV-21)
+
+In [`modules/chat.ts`](../supabase/functions/moduo-mcp/modules/chat.ts), the
+connector-side mirror of `src/features/chat/ops-manifest.ts` (specs/chat-v2.md
+§14). Every tool is one RPC; none reads a chat table itself.
+
+- **Its own key scope:** `scopes->>'chat'`, none by default.
+- **A key acts as its creator** ("Alex · via CI key"), inside the key's rules,
+  which the database applies (`chat__key_actor`, `chat__key_reads_channel`):
+  channels only, public ones, and private ones only with the key's "Include
+  private channels I'm in" switch while its creator is a member. Direct
+  messages never.
+- **The private-chat switch** is `workspace_api_keys.include_private_chat`
+  (off by default), set through `workspace_api_keys_set_private_chat(key, on)`:
+  only the key's creator turns it on, any key manager turns it off.
+
+| Read (View) | Purpose |
+| --- | --- |
+| `chat_list_channels` | the conversations this key can read |
+| `chat_read` | a conversation's messages, oldest first, or one reply chain (`chain_id`); pages back with `before` |
+| `chat_search` | messages in readable conversations, newest first; whole words and their beginnings, Polish without diacritics too |
+| `chat_addressed_to_me` | what's waiting for the key's creator in Catch up (mentions, chain replies, announcements), never direct messages |
+
+| Write (Edit) | Purpose |
+| --- | --- |
+| `chat_post` | post as the key's creator, Markdown, `<@USER_ID>` and `<!channel>`; 30 posts a minute per key |
+| `chat_reply` | reply to a message; the reply joins its chain |
+| `chat_react` | add or take back the creator's reaction (emoji or `:name:`) |
+| `chat_mark_decision` | mark or unmark a message as a decision |
+| `chat_wrap_up` | wrap up a reply chain with the reply that settled it |
+| `chat_create_channel` | create a channel as the creator (private only with the switch on) |
+
+## Tools (other modules) — the code is the source of truth
+
+Short lists; each tool's description and arguments live in its module file
+under [`modules/`](../supabase/functions/moduo-mcp/modules/).
+
+| Module | View | Edit |
+| --- | --- | --- |
+| Calendar (`calendar.ts`) | `calendar_list_events`, `calendar_day` | `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`, `calendar_schedule_task`, `calendar_move_block`, `calendar_complete_block`, `calendar_roll_forward` |
+| Contacts (`contacts.ts`) | `contacts_list`, `contacts_get`, `contacts_search` | `contacts_create`, `contacts_update`, `contacts_set_status`, `contacts_link`, `contacts_unlink`, `contacts_delete`, `contacts_import` |
+| Email (`email.ts`, tissue threads, metadata only) | `email_list`, `email_get`, `email_search` | `email_snooze`, `email_unsnooze`, `email_follow_up`, `email_clear_follow_up`, `email_link`, `email_remove` |
+| Links (`links.ts`) | `links_search_entities`, `links_list`, `comments_list` | `links_suggest` (Edit: suggestions exist to be accepted), `links_create`, `links_set_kind`, `links_delete`, `comments_add` |
+
+`comments_list` (MOD-94) reads an item's comments, newest last; it needs View
+on the item's own module too and shows only what the key's person can open.
+
 ## Onboard a module to MCP (the recipe)
 
 Prereq: the module satisfies the contract (intent ops + activity + manifest —

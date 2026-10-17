@@ -1,7 +1,7 @@
 name: Desktop Release (production)
 
-# Manual run, built from the `prod-app` branch (what app.moduo.app serves) — run it after
-# "Promote to production". Builds the signed Mac universal .dmg + Windows NSIS installer, pointed
+# Manual run, built from the `prod-app` branch (deploy-prod.yml moves it to the commit it
+# deployed to app.moduo.app) — run it after deploy-prod. Builds the signed Mac universal .dmg + Windows NSIS installer, pointed
 # at app.moduo.app, and publishes them to the rolling `prod-latest` release.
 # The build itself lives in _desktop-release.yml.
 
@@ -19,6 +19,10 @@ permissions:
 jobs:
   release:
     uses: ./.github/workflows/_desktop-release.yml
+    # actions: write is for mac-watchdog alone (it cancels a run stuck waiting on the Mac).
+    permissions:
+      contents: read
+      actions: write
     secrets: inherit
     with:
       channel: production

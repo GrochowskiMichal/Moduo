@@ -23,6 +23,11 @@ describe("bookingOrigin", () => {
     expect(bookingOrigin("https://moduo.app:443")).toBe("https://moduo.app");
   });
 
+  it("mails moduo.app links for bookings made on the Cloudflare landing's workers.dev and preview hosts", () => {
+    expect(bookingOrigin("https://moduo-landing-staging.moduo.workers.dev")).toBe("https://moduo.app");
+    expect(bookingOrigin("https://pr-1-moduo-landing-staging.moduo.workers.dev")).toBe("https://moduo.app");
+  });
+
   it("falls back to moduo.app for anything else", () => {
     const forged = [
       "https://evil.example",

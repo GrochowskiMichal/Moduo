@@ -6,15 +6,36 @@ Last reviewed: 4:05 PM 14th May 2026.
 
 Moduo is organized as a React/TypeScript frontend with a Tauri/Rust backend. Keep boundaries vertical where the app has domain behavior, and keep shared primitives horizontal only when they are genuinely reused across features.
 
+## Workspaces
+
+Since PLAT-2 (2026-10-17) the repo is a Bun workspace run by Turborepo (`turbo.json`). Run scripts from the root; `bun run verify` runs every package's checks.
+
+- `apps/app` (`@moduo/app`): the Rsbuild SPA for web and desktop (`src/`, `public/`, `index.html`, `rsbuild.config.ts`, `rstest.*`). Its own `tsconfig.json` keeps the `@/*`, `@contracts/*` and `@email/*` aliases.
+- `apps/desktop` (`@moduo/desktop`): the Tauri shell. `src-tauri/` lives inside it, and the Tauri CLI runs from `apps/desktop`; `beforeBuildCommand` builds the app's desktop bundle (`apps/app/dist`).
+- `apps/landing` (`@moduo/landing`): the static marketing site.
+- `apps/storybook` (`@moduo/storybook`): Storybook for the app's stories (`.storybook/`).
+- `supabase/` (`@moduo/backend`): migrations and Edge Functions, plus their Rstest suite (`supabase/rstest.config.ts`). It stays at the root because the Supabase CLI expects it there.
+- `e2e/` (`@moduo/e2e`): Playwright configs and specs (`e2e/tests`, `e2e/billing`, …).
+- Root tooling: `scripts/` (with its own `scripts/rstest.config.ts`), `tools/`, `tsconfig.base.json` (shared compiler options).
+
+Paths in docs written before 2026-10-17 are pre-move: `src/` is now `apps/app/src/`, `src-tauri/` is `apps/desktop/src-tauri/`, `tests/` is `e2e/tests/`.
+
 ## Frontend Tree
 
-- `src/app`: application composition such as router creation and other app-level wiring.
-- `src/routes`: route/page adapters. These should stay thin and delegate feature behavior to `src/features`.
-- `src/features/<feature>`: vertical slices for domain UI, hooks, storage, model types, and feature-local utilities.
-- `src/components/ui`: reusable design-system primitives with no domain knowledge.
-- `src/components/app`: reusable app shell/chrome components.
-- `src/lib`: cross-feature runtime adapters and platform services.
-- `src/styles`: global tokens and stylesheet entry points.
+- `apps/app/src/app`: application composition such as router creation and other app-level wiring.
+- `apps/app/src/routes`: route/page adapters. These should stay thin and delegate feature behavior to `apps/app/src/features`.
+- `apps/app/src/features/<feature>`: vertical slices for domain UI, hooks, storage, model types, and feature-local utilities.
+- `apps/app/src/components/ui`: reusable design-system primitives with no domain knowledge.
+- `apps/app/src/components/app`: reusable app shell/chrome components.
+- `apps/app/src/lib`: cross-feature runtime adapters and platform services.
+- `apps/app/src/styles`: global tokens and stylesheet entry points.
+
+Shared data pieces (added 2026-10-17):
+
+- `apps/app/src/lib/sync/`: the Tasks v3 shared store (TV-D11a): one per person and workspace, a device copy in IndexedDB `moduo-sync`, delta sync by `updated_at`, Realtime merge.
+- `apps/app/src/features/chat/store/`: the Chat v2 store (CV-3): device copy in IndexedDB `moduo-chat` (`messages` + one `meta` record per person and workspace), outbox, presence, typing.
+- `apps/app/src/features/chat/markup-v2/`: Chat v2's stored message form (parse, serialize, canonical blocks, mentions, the Lexical bridge).
+- `apps/app/src/lib/runtime.web.notes-live.ts`: a note's live channel (NR-7): each person listens on a private `notes-live:<uid>` topic the server writes to; clients send nothing over Realtime.
 
 Prefer `@/` imports for source-root imports. The alias resolves to `src`, so use `@/components/ui/button` rather than the older `@/src/components/ui/button`.
 
@@ -47,13 +68,13 @@ The email frontend uses `email-workspace.tsx` as the orchestration layer and del
 
 ## Router
 
-TanStack Router supports both code-based and file-based routing. This project currently keeps code-based routing but isolates it under `src/app/router`, so the route tree can later move toward generated/file-based routing without coupling that decision to `main.tsx`.
+TanStack Router supports both code-based and file-based routing. This project currently keeps code-based routing but isolates it under `apps/app/src/app/router`, so the route tree can later move toward generated/file-based routing without coupling that decision to `main.tsx`.
 
 Reference: https://tanstack.com/router/latest/docs/routing/file-based-routing
 
 ## Tauri Backend
 
-Keep `src-tauri/src/commands` as the Tauri command boundary. Large command modules should delegate to sibling modules for constants, parsing, storage, connection, sync, and flag handling. Tauri's own project structure keeps the Rust application under `src-tauri` while the frontend remains a normal web app build.
+Keep `apps/desktop/src-tauri/src/commands` as the Tauri command boundary. Large command modules should delegate to sibling modules for constants, parsing, storage, connection, sync, and flag handling. Tauri's own project structure keeps the Rust application under `apps/desktop/src-tauri` while the frontend remains a normal web app build.
 
 Reference: https://v2.tauri.app/start/project-structure/
 

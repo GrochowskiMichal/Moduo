@@ -1,5 +1,7 @@
 # Moduo — Notes DESIGN BRIEF (the build spec)
 
+> **Superseded in part by [specs/notes-refresh.md](../../specs/notes-refresh.md)**; a full rewrite is planned in NR-12. Changed since this brief: the live channel (NR-7, server-sent pulls and server-stamped presence), comments anchored to text (NR-8), `/mindmap` removed (NR-4), and the sidebar's per-user Favorites and stored Inbox (NR-1).
+
 > **Status:** Ready — ratified with the designer 2026-07-03 (three grilling rounds). Execution contract: [specs/notes.md](../../specs/notes.md).
 > **Pairs with:** [BRIEF.md](./BRIEF.md) (product intent — still valid *except* where §1 below revises it) · [docs/moduo-module-contract.md](../../docs/moduo-module-contract.md) · [docs/data-layers.md](../../docs/data-layers.md).
 

@@ -1,5 +1,7 @@
 # Moduo Tasks Module — Build Playbook
 
+> **Superseded by [specs/tasks-v3.md](../specs/tasks-v3.md) (Tasks v3 released 2026-10-14); kept as history.** Terms like buckets, Plan/Execute and the commit queue are retired (see [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md)).
+
 How to build the Tasks module with Claude Code, start to finish. Pairs with `moduo-tasks-feature-spec.md` (the context anchor) and `docs/architecture-vocabulary.md` (terminology).
 
 ---

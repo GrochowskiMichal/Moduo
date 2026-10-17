@@ -13,7 +13,7 @@ export {
   dayShort,
   time24,
   zoneLabel,
-} from "../../../../src/features/calendar/booking/sentence.ts";
+} from "../../../../apps/app/src/features/calendar/booking/sentence.ts";
 
 const LOCALE = "en-GB";
 

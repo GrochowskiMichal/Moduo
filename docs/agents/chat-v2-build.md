@@ -2,6 +2,8 @@
 
 How the Chat v2 build runs, so anyone can pick it up. The spec is [specs/chat-v2.md](../../specs/chat-v2.md) (blocks CV-0…CV-23); the rules for the local stack are the 🟠 box of the "Chat v2" section in [specs/BUILD_ORDER.md](../../specs/BUILD_ORDER.md). This build changes the Tasks v3 way of working on purpose: measured on Tasks v3, 60 of 90 calendar hours were spent waiting for a human and 85% of tokens went to builders re-reading 0.5 M-token contexts on every turn.
 
+> **Closed 2026-10-16: Chat v2 is released** (prod database, functions, `develop`, `prod-app`, production desktop build; see BUILD_LOG "Chat v2 release"). This runbook is the record of how v2 was built. CV-23 is the one open block; new Chat work branches off `maciej` the normal way.
+
 ## Decided (Maciej, 2026-10-14, calls B1–B6)
 
 - **B1 · No stopping:** the build runs through nights, never asks mid-run (product questions become "agent's choice, deferred to by Maciej", recorded in the block's record file), and restarts by itself after a usage limit at its reset time.
