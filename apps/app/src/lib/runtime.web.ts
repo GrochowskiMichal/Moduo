@@ -107,6 +107,7 @@ import {
   optionalPrefsAvailable,
   prefsSelectCols,
 } from "./prefs-columns";
+import { publicConfig } from "./public-config";
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
 import { webFocusRuntime } from "./runtime.focus.web";
@@ -192,11 +193,9 @@ import { uploadObject } from "./uploads/transport";
 // ── Supabase client ────────────────────────────────────────────────────────────
 
 export const SUPABASE_URL: string =
-  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) ||
-  "https://wtoonrvuqumihpkbvwvs.supabase.co";
+  publicConfig().supabaseUrl || "https://wtoonrvuqumihpkbvwvs.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY: string =
-  (import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
-  "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
+  publicConfig().supabasePublishableKey || "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so";
 
 // No session ever comes from the URL (login CSRF): see auth-url.ts. The boot
 // scrub of a leftover token fragment runs from main.tsx, before the router.
@@ -970,10 +969,7 @@ export const webRuntime: ModuoRuntime = {
       // desktop (tauri://) needs PUBLIC_WEB_ORIGIN. encodeURIComponent is
       // load-bearing — invite tokens are base64 (`+` `/` `=`), which are
       // path/query-hostile raw. DF-24.
-      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(
-        /\/+$/,
-        "",
-      );
+      const configured = publicConfig().webOrigin.replace(/\/+$/, "");
       const origin = configured || (typeof window !== "undefined" ? window.location.origin : "");
       return `${origin}/join?invite=${encodeURIComponent(token)}`;
     },
@@ -1433,10 +1429,7 @@ export const webRuntime: ModuoRuntime = {
     // is correct wherever served; desktop (tauri://) needs PUBLIC_WEB_ORIGIN set
     // to the deployed web origin.
     publishedUrl(token) {
-      const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(
-        /\/+$/,
-        "",
-      );
+      const configured = publicConfig().webOrigin.replace(/\/+$/, "");
       const origin = configured || (typeof window !== "undefined" ? window.location.origin : "");
       return `${origin}/p/${encodeURIComponent(token)}`;
     },

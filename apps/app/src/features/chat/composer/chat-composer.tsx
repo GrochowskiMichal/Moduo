@@ -56,6 +56,7 @@ import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { CAPTURE_TYPES } from "@/lib/capture-registry";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+import { publicConfig } from "../../../lib/public-config";
 import { ComposerFileChips } from "../files/composer-chips";
 import type { ComposerFilesApi } from "../files/composer-files";
 import { hasSendableFiles } from "../files/model";
@@ -611,10 +612,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     () =>
       typeof window === "undefined"
         ? []
-        : [
-            window.location.origin,
-            ((import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined) ?? "").replace(/\/+$/, ""),
-          ].filter(Boolean),
+        : [window.location.origin, publicConfig().webOrigin.replace(/\/+$/, "")].filter(Boolean),
     [],
   );
 

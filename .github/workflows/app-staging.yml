@@ -1,0 +1,115 @@
+name: app-staging
+
+# Deploys the web app to the staging Worker (apps/app/wrangler.jsonc, env staging) after `checks`
+# passes on a develop push, for exactly the commit checks tested (specs/platform-v2.md, PLAT-4,
+# AC6). Each deploy also uploads the hashed files of the previous 3 staging builds (lane
+# "staging", scripts/hosting/retain-static.sh), so a tab opened before the deploy keeps loading
+# its chunks (AC8). A smoke test runs against the live Worker afterwards.
+#
+# Staging runs at https://moduo-app-staging.moduo.workers.dev until PLAT-8 moves moduo.app's DNS
+# to Cloudflare and gives it app.staging.moduo.app (Vercel serves that host until then, from
+# sync-staging-app.yml). Roll back from the Cloudflare dashboard or `wrangler rollback --env staging`.
+on:
+  workflow_run:
+    workflows: [checks]
+    types: [completed]
+    branches: [develop]
+
+# Two develop pushes close together: the later deploy waits; each deploys its own tested commit.
+concurrency:
+  group: app-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER: npx --yes wrangler@4.147.0
+  BUCKET: moduo-web-builds
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only develop and main may use this environment, which holds CLOUDFLARE_API_TOKEN (a
+    # repo-level secret of the same name is the fallback until it is moved).
+    environment: cloudflare-deploy
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build the web app
+        # No PUBLIC_* values at build time: the edge Worker injects each host's config.
+        run: |
+          MODUO_VERSION="$(cat VERSION)-rc"
+          export MODUO_VERSION MODUO_BUILD="${SHA::7}"
+          echo "build $MODUO_BUILD · version $MODUO_VERSION"
+          bun run build:web
+
+      - name: Bucket and expiry rules
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if ! $WRANGLER r2 bucket info "$BUCKET" >/dev/null 2>&1; then
+            $WRANGLER r2 bucket create "$BUCKET"
+          fi
+          rules=$($WRANGLER r2 bucket lifecycle list "$BUCKET")
+          grep -q expire-builds <<< "$rules" || $WRANGLER r2 bucket lifecycle add "$BUCKET" expire-builds builds/ --expire-days 60 --force
+          grep -q expire-pr-lanes <<< "$rules" || $WRANGLER r2 bucket lifecycle add "$BUCKET" expire-pr-lanes lanes/pr- --expire-days 60 --force
+
+      - name: Keep the previous 3 builds' files
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/hosting/retain-static.sh merge staging "${SHA::7}" apps/app/dist/web
+
+      - name: Deploy
+        id: deploy
+        working-directory: apps/app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          $WRANGLER deploy --env staging --message "develop ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          url=$(grep -oE 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
+          echo "url=${url:-https://moduo-app-staging.moduo.workers.dev}" >> "$GITHUB_OUTPUT"
+
+      - name: Record this build's files
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/hosting/retain-static.sh record staging "${SHA::7}"
+
+      - name: Smoke test
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          old=()
+          [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
+          set +e
+          bun scripts/smoke-hosting.ts "$URL" "${old[@]}" --expect stagingPortal=true > "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"
+          exit $code

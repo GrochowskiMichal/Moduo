@@ -2,8 +2,10 @@
 // In the desktop webview `window.location.origin` is `tauri://localhost`, which
 // a browser can't open (gotchas/ui.md), so desktop builds need PUBLIC_WEB_ORIGIN.
 
+import { publicConfig } from "./public-config";
+
 export function webOrigin(): string {
-  const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
+  const configured = publicConfig().webOrigin.replace(/\/+$/, "");
   return configured || (typeof window !== "undefined" ? window.location.origin : "");
 }
 

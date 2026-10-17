@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { reloadOnceForChunkError } from "../../lib/chunk-reload";
 
 type RootErrorBoundaryProps = {
   children: ReactNode;
@@ -24,6 +25,7 @@ export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErr
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error("Root application error:", error, errorInfo);
+    reloadOnceForChunkError(error);
   }
 
   private handleReload = (): void => {
