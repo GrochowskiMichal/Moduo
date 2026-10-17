@@ -108,7 +108,7 @@ Everything above, plus:
   density / fonts).
 - Storybook stories render without console errors for any new / changed
   primitives.
-- Visual snapshot suite (`bunx playwright test --project=visual`) green, or
+- Visual snapshot suite (`bun run e2e --project=visual`) green, or
   intentionally regenerated and the new PNG committed.
 - Either reviewer can request screenshots / a short Loom; if asked, attach.
 

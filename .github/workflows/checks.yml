@@ -89,7 +89,8 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Unit tests (shard ${{ matrix.shard }} of 3)
-        run: bun run test --shard ${{ matrix.shard }}/3
+        # Turborepo runs each package's suite (app, backend, scripts); every one takes the same shard.
+        run: bunx turbo run test test:scripts -- --shard ${{ matrix.shard }}/3
 
   static-checks:
     needs: [lint, unit-tests]

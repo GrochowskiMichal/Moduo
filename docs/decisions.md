@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · PLAT-2 layout: `e2e/` is `@moduo/e2e`, deps split per package on the hoisted linker, verify through Turborepo root + package tasks, `envMode: loose` until PLAT-3, Vercel/CI build scripts bypass turbo, Tailwind scan pinned to `apps/app`, desktop workflow detects either layout.
 - 2026-10-17 · Platform v2: GitHub Pro (personal, private) + Cloudflare hosting and R2 updates; Mike's Mac is the first-choice desktop runner with hosted fallback; Bun workspaces + Turborepo; AWS, all-Azure, Vercel Pro and Nx rejected.
 - 2026-10-17 · Release runbook in `docs/release.md`; prod migrations go by scratch-folder push (a train) or one-transaction `db query --linked` (one or two files).
 - 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.

@@ -1,0 +1,19 @@
+{
+  "name": "@moduo/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "rstest"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@rsbuild/plugin-react": "2.1.1",
+    "@rstest/core": "^0.12.3",
+    "@testing-library/jest-dom": "6.10.0",
+    "jsdom": "^28.1.0"
+  }
+}

@@ -56,19 +56,19 @@ import {
   emailContext,
   guestTimeZone,
 } from "./emails.ts";
-import { isEmailAddress, parseGuestEmails } from "../../../src/features/calendar/booking/guests.ts";
+import { isEmailAddress, parseGuestEmails } from "../../../apps/app/src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
   normalizeWeeklyHours,
   type Interval,
-} from "../../../src/features/calendar/booking/slots.ts";
+} from "../../../apps/app/src/features/calendar/booking/slots.ts";
 import {
   pickVideo,
   VIDEO_LABEL,
   type VideoProvider,
   videoOptions,
   videoSetting,
-} from "../../../src/features/calendar/booking/video.ts";
+} from "../../../apps/app/src/features/calendar/booking/video.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();

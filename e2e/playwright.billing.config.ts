@@ -1,0 +1,52 @@
+import { defineConfig } from "@playwright/test";
+
+/**
+ * Playwright config for billing / entitlements e2e tests.
+ *
+ * Run with:
+ *   bun run --cwd e2e e2e:billing
+ *
+ * Required env vars for full coverage (see billing/helpers.ts):
+ *   E2E_BASE_URL            – app dev server  (default: http://localhost:8081)
+ *   E2E_LANDING_URL         – landing dev server (default: http://localhost:3000)
+ *   E2E_SUPABASE_URL        – Supabase project URL
+ *   E2E_SUPABASE_PUBLISHABLE_KEY – Supabase publishable key
+ *   E2E_TEST_EMAIL_DOMAIN   – disposable email domain (default: mailinator.com)
+ */
+export default defineConfig({
+  testDir: "./billing",
+  timeout: 45_000,
+  retries: process.env.CI ? 2 : 0,
+  reporter: process.env.CI ? "github" : "list",
+  use: {
+    baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8081",
+    trace: "on-first-retry",
+    screenshot: "only-on-failure",
+  },
+  projects: [
+    {
+      name: "app-chromium",
+      testIgnore: /landing-download/,
+      use: {
+        browserName: "chromium",
+        baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8081",
+      },
+    },
+    {
+      name: "landing-chromium",
+      testMatch: /landing-download/,
+      use: {
+        browserName: "chromium",
+        baseURL: process.env.E2E_LANDING_URL ?? "http://localhost:3000",
+      },
+    },
+  ],
+  webServer: [
+    {
+      command: "bun run --cwd ../apps/app dev",
+      url: process.env.E2E_BASE_URL ?? "http://localhost:8081",
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+  ],
+});

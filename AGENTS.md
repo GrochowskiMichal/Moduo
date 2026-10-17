@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The single source of truth for coding agents in Moduo. Claude Code loads it automatically (v2.1.277+; there is deliberately no `CLAUDE.md`). Folder-level `AGENTS.md` files in `supabase/`, `src-tauri/`, `src/components/ui/` and `.github/` load when work touches those folders. **Keep this file under 150 lines:** it is a table of contents. Procedures live in skills, area knowledge in `docs/decisions/` and `docs/gotchas/`, and anything that must hold every time lives in hooks, lint and CI.
+The single source of truth for coding agents in Moduo. Claude Code loads it automatically (v2.1.277+; there is deliberately no `CLAUDE.md`). Folder-level `AGENTS.md` files in `supabase/`, `apps/desktop/src-tauri/`, `apps/app/src/components/ui/` and `.github/` load when work touches those folders. **Keep this file under 150 lines:** it is a table of contents. Procedures live in skills, area knowledge in `docs/decisions/` and `docs/gotchas/`, and anything that must hold every time lives in hooks, lint and CI.
 
 ## Must-hold rules
 
@@ -54,7 +54,7 @@ On Max, Fable counts against at most half the weekly limit. On Pro it bills usag
 Pick the tier by what the diff touches; details are in the `/s3` skill. **Re-tighten everything in the "paused" line before the first external alpha/beta.**
 
 - **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review`. The full CI suite runs once, on PRs into `develop` (and on the push after merging).
-- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `src/lib/runtime*`, updater/signing, `.github/workflows`): add the `validator` subagent on the diff before merging.
+- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `apps/app/src/lib/runtime*`, updater/signing, `.github/workflows`): add the `validator` subagent on the diff before merging.
 - **Paused until beta:** `/code-review ultra`, the `/claude-security` diff scan, `/code-review high` on every PR, per-block manual-test checklist files, hand-written next-session prompts, and Tier 3's designer pass. The floor that stays: gitleaks (hook + CI), `guard-git.sh`, `guard-prod-db.sh`, `static-checks` required on `develop`.
 
 ## Product north star (read before designing any module)
@@ -77,12 +77,13 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 
 - `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
 - **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), `bun run local:reset` to test a migration, `bun run env:cloud` to go back. Prod migrations and deploys wait for a release train; how one is applied: [docs/release.md](./docs/release.md). See [docs/local-dev.md](./docs/local-dev.md).
-- `bun run verify` = typecheck + Biome + lint:tw + lint:css + tests: **the block-done gate**. It covers no Rust: see `src-tauri/AGENTS.md`.
-- `bun test` / `bun run e2e`
+- `bun run verify` = typecheck + Biome + lint:tw + lint:css + tests, run through Turborepo across every workspace: **the block-done gate**. It covers no Rust: see `apps/desktop/src-tauri/AGENTS.md`.
+- `bun run test` (all suites) · `bun run --cwd apps/app test <path>` (one app test) · `bun run e2e`
+- **Workspaces** (Bun + Turborepo; run every root script from the root): `apps/app` (`@moduo/app`, the Rsbuild SPA) · `apps/desktop` (`@moduo/desktop`, Tauri: `src-tauri/` inside, the CLI runs from `apps/desktop`) · `apps/landing` · `apps/storybook` · `supabase/` (`@moduo/backend`, function and contract tests) · `e2e/` (`@moduo/e2e`, Playwright). `scripts/` and `tools/` are root tooling.
 
 ## Repo layout (short)
 
-`src/app/` composition and router · `src/routes/pages/` thin page adapters · `src/features/<feature>/` vertical slices (`ui`, `model`, `hooks`, `storage`/`sync`, `utils`) · `src/components/ui/` shadcn primitives (story required) · `src/components/app/` shell · `src/lib/` runtimes and platform services · `src/styles/tokens.css` tokens (**edit the token, never a component, to change a value**) · `src/tw/` React Native shim being phased out (new and edited chrome uses raw HTML; no repo-wide migration without an ask) · `src-tauri/` Rust · `supabase/` migrations + Edge Functions · `docs/` knowledge · `specs/` specs + ledger · `.design/` design briefs · `.claude/` skills, agents, hooks, settings.
+App code lives in `apps/app/src/` (paths before 2026-10-17 say `src/`): `apps/app/src/app/` composition and router · `apps/app/src/routes/pages/` thin page adapters · `apps/app/src/features/<feature>/` vertical slices (`ui`, `model`, `hooks`, `storage`/`sync`, `utils`) · `apps/app/src/components/ui/` shadcn primitives (story required) · `apps/app/src/components/app/` shell · `apps/app/src/lib/` runtimes and platform services · `apps/app/src/styles/tokens.css` tokens (**edit the token, never a component, to change a value**) · `apps/app/src/tw/` React Native shim being phased out (new and edited chrome uses raw HTML; no repo-wide migration without an ask) · `apps/desktop/src-tauri/` Rust · `supabase/` migrations + Edge Functions · `docs/` knowledge · `specs/` specs + ledger · `.design/` design briefs · `.claude/` skills, agents, hooks, settings.
 
 ## Git
 
@@ -97,7 +98,7 @@ Entire captures Claude Code sessions and links them to commits. Because the repo
 
 ## Domain contracts (Zod + enums)
 
-Closed vocabularies (plan tier, task status, roles, link origins, …) live in `supabase/functions/_shared/contracts/` (`vocabularies.ts`, `primitives.ts`, `errors.ts`); app code imports `@contracts/*`, Edge Functions import relatively. To add or change a value: (1) const array + Zod schema + type in `vocabularies.ts`; (2) keep `parse*` (strict, writes), `normalize*` (lax, reads) and `is*` in lockstep; (3) migrate the Postgres CHECK/enum in the same change; (4) when a value dies, remove it everywhere, no zombie unions. Leave **open** strings alone (polymorphic entity types, renamable contact statuses, IMAP folders, Stripe events, opaque prefs). Never invent a parallel union in `src/features/*/model.ts`.
+Closed vocabularies (plan tier, task status, roles, link origins, …) live in `supabase/functions/_shared/contracts/` (`vocabularies.ts`, `primitives.ts`, `errors.ts`); app code imports `@contracts/*`, Edge Functions import relatively. To add or change a value: (1) const array + Zod schema + type in `vocabularies.ts`; (2) keep `parse*` (strict, writes), `normalize*` (lax, reads) and `is*` in lockstep; (3) migrate the Postgres CHECK/enum in the same change; (4) when a value dies, remove it everywhere, no zombie unions. Leave **open** strings alone (polymorphic entity types, renamable contact statuses, IMAP folders, Stripe events, opaque prefs). Never invent a parallel union in `apps/app/src/features/*/model.ts`.
 
 ## Agent tooling (Claude Code)
 

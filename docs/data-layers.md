@@ -28,9 +28,9 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 
 | File | Role |
 | --- | --- |
-| `src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
-| `src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
-| `src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for auth/workspaces/tasks, and Tauri `invoke` for the legacy redb-backed modules (notes, email, calendar, time-tracking, graph). |
+| `apps/app/src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
+| `apps/app/src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
+| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for auth/workspaces/tasks, and Tauri `invoke` for the legacy redb-backed modules (notes, email, calendar, time-tracking, graph). |
 
 - Desktop mirrors the Supabase session into Rust `AppState` via the `auth_set_cloud_session` command, so Rust-side code can attribute actions to the signed-in user.
 - **Footgun (see memory):** never import a bare `{ runtime }`; always resolve via `getRuntime()`. Grep `./runtime` when auditing lib exports.
@@ -95,7 +95,7 @@ Two patterns here are **reused by the whole product**, not just Tasks:
 
 ## 4. The module contract (every module follows this)
 
-Defined in `moduo-module-contract.md`; the typed shape is in `src/lib/module-manifest.ts` and the registry in `src/lib/module-registry.ts`. A module is **not done** until it implements all four pillars:
+Defined in `moduo-module-contract.md`; the typed shape is in `apps/app/src/lib/module-manifest.ts` and the registry in `apps/app/src/lib/module-registry.ts`. A module is **not done** until it implements all four pillars:
 
 1. **Intent ops** — named, invariant-keeping mutations as server-side RPCs (Tasks: `tasks_op_commit`, `_reschedule`, `_set_status`, …). Permissions-checked + activity-logged in one transaction. No raw table writes from the client for state-changing actions.
 2. **Actor attribution** — every op records who did it (user or API key/agent).
@@ -131,7 +131,7 @@ Moduo's differentiation is **not** any single module; it is the layer that lets 
 
 A full multi-account Spark replacement on a cloud-first web app would mean building/operating a server-side mail relay (IMAP/SMTP sync, OAuth app verification, token vault, security review). **At alpha we do not.** Instead:
 
-- The **full client lives on desktop**, on the existing Rust engine (`src-tauri/src/commands/email.rs` + `email/` submodules) → redb cache. This replaces Spark for the founder *now*.
+- The **full client lives on desktop**, on the existing Rust engine (`apps/desktop/src-tauri/src/commands/email.rs` + `email/` submodules) → redb cache. This replaces Spark for the founder *now*.
 - **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) is synced to Supabase so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop.
 - The full **web** email client is a post-alpha decision, made once it's proven to matter to customers (not just to us).
 
@@ -181,6 +181,6 @@ These are tracked in the alpha **Open Questions & Risks** doc; the load-bearing 
 - **`entity_links` shape** — one universal table with a `relation_kind` enum, vs. separate `links`/`attachments` tables. (Rec: one table, typed.)
 - **Polymorphic integrity** — how to keep `(entity_type, entity_id)` referentially sane without per-type FKs (trigger validation vs. partial indexes vs. a central `entities` registry table). **(Resolved 2026-06-24, revised same day after the design-brief pass: a lean central `entities` registry — upserted per intent op; `entity_links`/`comments`/`tag_links` FK into it. Makes search / @mention / roll-up one indexed query and gives clean cascade-on-delete. Authoritative spec: [.design/connective-tissue/DESIGN_BRIEF.md](../.design/connective-tissue/DESIGN_BRIEF.md).)**
 - **Notes CRDT ↔ Postgres** — how Yjs state reconciles with Supabase for cloud-sync (store the Yjs doc as a blob + derived searchable fields, vs. shred to rows).
-- **Drag-payload contract** — the TypeScript shape for "any entity → any drop target" and where it lives (`src/lib/`).
+- **Drag-payload contract** — the TypeScript shape for "any entity → any drop target" and where it lives (`apps/app/src/lib/`).
 
 *Resolve these before the spine is built; they are cheap now and expensive to retrofit.*

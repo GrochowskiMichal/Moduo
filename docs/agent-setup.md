@@ -1,6 +1,6 @@
 # Agent setup — Claude Code
 
-How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is built with **Claude Code only**, on Anthropic models (Claude Max plan). `AGENTS.md` is the single instruction file: Claude Code reads it natively (v2.1.277+), and there is deliberately no `CLAUDE.md`. Folder-level `AGENTS.md` files load when work touches `supabase/`, `src-tauri/`, `src/components/ui/` or `.github/`.
+How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is built with **Claude Code only**, on Anthropic models (Claude Max plan). `AGENTS.md` is the single instruction file: Claude Code reads it natively (v2.1.277+), and there is deliberately no `CLAUDE.md`. Folder-level `AGENTS.md` files load when work touches `supabase/`, `apps/desktop/src-tauri/`, `apps/app/src/components/ui/` or `.github/`.
 
 ## What the repo provides (committed)
 

@@ -4,7 +4,7 @@
  * `bun run brand:export`: regenerate every brand file from brand/masters/.
  *
  * Writes brand/exports/ (the full set) and the consumers that ship it: the
- * web favicons in public/, the email logos in public/email/, the ModuoMark
+ * web favicons in apps/app/public/, the email logos in apps/app/public/email/, the ModuoMark
  * path module, and the macOS icon sources. Deterministic: running it twice
  * changes nothing. Rules: .design/brand/BRAND_BRIEF.md §14.
  *
@@ -194,11 +194,11 @@ for (const file of [
   "icon-192.png",
   "apple-touch-icon.png",
 ]) {
-  write(`public/${file}`, readFileSync(join(root, "brand/exports/favicon/prod", file)));
+  write(`apps/app/public/${file}`, readFileSync(join(root, "brand/exports/favicon/prod", file)));
 }
-for (const [file, data] of emailLogos) write(`public/email/${file}`, data);
+for (const [file, data] of emailLogos) write(`apps/app/public/email/${file}`, data);
 
-// The native icons (src-tauri/icons) are built from these sources by separate
+// The native icons (apps/desktop/src-tauri/icons) are built from these sources by separate
 // tools (iconutil, actool), so say loudly when they need a rebuild.
 const iconSources: [string, string][] = [
   ["scripts/icons/source/macos-icon-1024.svg", macosIcon],
@@ -209,7 +209,7 @@ const iconsChanged = iconSources.some(
 );
 for (const [rel, svg] of iconSources) write(rel, svg);
 
-const markModulePath = "src/components/ui/moduo-mark-path.ts";
+const markModulePath = "apps/app/src/components/ui/moduo-mark-path.ts";
 write(markModulePath, markModule(mark, markSmall));
 
 console.log(`brand:export wrote ${written.length} files from brand/masters/`);

@@ -65,9 +65,8 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 
 ## Architecture
 
-- Routing: TanStack Router (`/src/router.tsx`)
-- Shared app providers/features remain in `/src`
-- Gateway contracts in `/src/core/contracts`
-- Desktop adapter in `/src/core/adapters/desktop`
-- Rust/Tauri command and persistence scaffold in `/src-tauri`
+- Bun workspaces + Turborepo: the app in `apps/app`, the Tauri shell in `apps/desktop`, the landing in `apps/landing`, Storybook in `apps/storybook`, Edge Functions and migrations in `supabase/`, Playwright in `e2e/` (details: `docs/architecture.md`)
+- Routing: TanStack Router (`apps/app/src/router.tsx`)
+- Shared app providers/features remain in `apps/app/src`
+- Rust/Tauri command and persistence scaffold in `apps/desktop/src-tauri`
 - Local-first persistence is powered by Redb (paused post cloud-first pivot; kept for the future offline/"lite" build)
