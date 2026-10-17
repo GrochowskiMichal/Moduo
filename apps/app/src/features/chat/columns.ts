@@ -1,6 +1,6 @@
 // The message columns a client ever reads (CV-1, CV-0 spike 3): every read and
 // the Realtime binding's `select` name exactly these. `search_tsv` and
-// `body_text` (search only) and `client_id` (v1's, equal to `id` until CV-23)
+// `body_text` (search only) and `client_id` (v1 rows only; v2 sends key on `id`)
 // stay off the wire; never `select *` on chat_messages.
 
 export const CHAT_MESSAGE_COLUMN_LIST = [

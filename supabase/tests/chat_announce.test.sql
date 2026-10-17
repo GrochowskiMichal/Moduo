@@ -139,10 +139,10 @@ BEGIN
   v := test.switch('A', false);
   PERFORM test.ok(v LIKE 'ok%' AND test.send('B', 'N', 'b3', 'open again') LIKE 'ok%',
     'switch: off later, members post again', v);
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('N')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('N')));
   PERFORM test.ok(v LIKE 'ok%' AND (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('N')),
-    'v1 switch: share_op_announce still works through the new op', v);
-  v := test.as_user('B', format($q$SELECT public.share_op_announce(%L, false)$q$, test.ref('N')));
-  PERFORM test.ok(v LIKE '42501%', 'v1 switch: and refuses a member', v);
+    'switch: chat_op_set_announcement turns it on', v);
+  v := test.as_user('B', format($q$SELECT public.chat_op_set_announcement(%L, false)$q$, test.ref('N')));
+  PERFORM test.ok(v LIKE '42501%', 'switch: and refuses a member', v);
 END;
 $$;

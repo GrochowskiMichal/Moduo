@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { mapKnownRows } from "@contracts/rows";
 import { describe, expect, it } from "@rstest/core";
 
@@ -14,6 +15,8 @@ import {
   readOnlyFetch,
 } from "./min-build";
 import { taskRowToModel } from "./task-rows";
+
+const REPO = fileURLToPath(new URL("../../../../", import.meta.url));
 
 const BASE = "http://127.0.0.1:54321";
 
@@ -33,9 +36,21 @@ describe("old builds are told, never drop rows (AC12.6)", () => {
     expect(parseVersion("1.2")).toBeNull();
   });
 
-  it("the shipped minimum, 0.0.0, holds nobody back", () => {
-    expect(isBelowMinimum("0.0.0", "0.0.0")).toBe(false);
-    expect(isBelowMinimum("1.0.0", "0.0.0")).toBe(false);
+  it("the shipped minimum is 1.0.21, the first production desktop build without v1 chat calls (CV-23)", () => {
+    // CV-23's min_build migration sets it; a build below it is the one the v1
+    // signatures were dropped under.
+    const dir = join(REPO, "supabase/migrations");
+    const file = readdirSync(dir).find((f) => f.endsWith("_chat_v2_min_build.sql"));
+    expect(file).toBeDefined();
+    const migration = readFileSync(join(dir, file ?? ""), "utf8");
+    expect(migration).toContain(`VALUES ('min_build', '"1.0.21"'::jsonb, now())`);
+    // Desktop builds from before Chat v2 (1.0.<run> up to 1.0.20) are held …
+    expect(isBelowMinimum("1.0.20", "1.0.21")).toBe(true);
+    expect(isBelowMinimum("1.0.21", "1.0.21")).toBe(false);
+    // … every build from the VERSION file on (production and staging -rc) passes.
+    const version = readFileSync(join(REPO, "VERSION"), "utf8").trim();
+    expect(isBelowMinimum(version, "1.0.21")).toBe(false);
+    expect(isBelowMinimum(`${version}-rc.7`, "1.0.21")).toBe(false);
   });
 
   it("an unknown status row still renders as its category", () => {
@@ -160,7 +175,8 @@ describe("readOnlyFetch", () => {
     await guarded(`${BASE}/rest/v1/tasks`, { method: "POST" });
     expect(calls).toHaveLength(1);
 
-    applyMinBuild("2.0.0", "1.0.0", "desktop");
+    // A desktop build from before Chat v2 (1.0.20) under the raised minimum.
+    applyMinBuild("1.0.21", "1.0.20", "desktop");
     expect(isReadOnlyBuild()).toBe(true);
     const refused = await guarded(`${BASE}/rest/v1/rpc/tasks_op_create`, { method: "POST" });
     expect(refused.status).toBe(403);

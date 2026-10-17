@@ -343,20 +343,6 @@ export function toggleReaction(
 
 // ── Channels / sidebar ───────────────────────────────────────────────────────
 
-/** Same normalization as public.chat_normalize_channel_name — keep in lockstep. */
-export function normalizeChannelName(input: string): string {
-  const kept = input
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^\p{L}\p{N}_-]/gu, "")
-    .replace(/^-+/, "");
-  // Trailing dashes go before the cut, as in SQL; a loop keeps it linear.
-  let end = kept.length;
-  while (end > 0 && kept[end - 1] === "-") end--;
-  return kept.slice(0, end).slice(0, 80);
-}
-
 /** Everyone in a DM except me (a DM with only me is "notes to self"). */
 export function dmOtherIds(channel: ChatChannel, selfId: string): string[] {
   return (channel.dmKey ?? "").split(",").filter((id) => id && id !== selfId);

@@ -225,15 +225,10 @@ BEGIN
   v := test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('R'), test.mid('R200')));
   PERFORM test.ok(test.counts('B', 'R') = '0/0/0/0', 'mark read: the newest message reads them all');
 
-  -- v1's wrappers (timestamps), until CV-3.
-  v := test.as_user('B', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::timestamptz)$q$, test.ref('R'), test.at(191)));
-  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'R') = '10/0/0/0',
-    'v1 mark unread: a time reads as the first message at or after it', v || ' ' || test.counts('B', 'R'));
-  v := test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::timestamptz)$q$, test.ref('R'), test.at(195)));
-  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'R') = '5/0/0/0' AND test.mark('B', 'R') = test.mid('R195'),
-    'v1 mark read: a time reads as the newest message at or before it', v);
-  v := test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, NULL::timestamptz)$q$, test.ref('R')));
-  PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'R') = '0/0/0/0', 'v1 mark read: no time means everything so far', v);
+  -- v1's timestamp forms are gone (CV-23).
+  PERFORM test.ok(to_regprocedure('public.chat_op_mark_read(uuid, timestamptz)') IS NULL
+                  AND to_regprocedure('public.chat_op_mark_unread(uuid, timestamptz)') IS NULL,
+    'mark read and unread take a message, never a time');
 
   -- Read marks log nothing; a non-member's mark is no one's.
   PERFORM test.ok((SELECT count(*) FROM public.module_activity WHERE entity_id = test.ref('R')) = 1,
@@ -277,11 +272,11 @@ BEGIN
   PERFORM test.ok(v = 'ok 1' AND test.counts('B', 'D') = '0/0/0/0', 'paused: marking read still works', v);
   PERFORM test.ok(test.as_user('B', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d2'))) = 'ok 1'
                   AND test.counts('B', 'D') = '2/1/2/2'
-                  AND test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::timestamptz)$q$, test.ref('D'), test.at(2))) = 'ok 1'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d2'))) = 'ok 1'
                   AND test.counts('B', 'D') = '1/1/1/1'
-                  AND test.as_user('B', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::timestamptz)$q$, test.ref('D'), test.at(1))) = 'ok 1'
+                  AND test.as_user('B', format($q$SELECT public.chat_op_mark_unread(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d1'))) = 'ok 1'
                   AND test.counts('B', 'D') = '3/1/3/3',
-    'paused: marking unread, and v1''s timestamp signatures, still work');
+    'paused: marking read and unread still work');
   PERFORM test.as_user('B', format($q$SELECT public.chat_op_mark_read(%L::uuid, %L::uuid)$q$, test.ref('D'), test.mid('d3')));
   UPDATE public.profiles SET plan_tier = 'duo' WHERE id = test.id('O');
 
