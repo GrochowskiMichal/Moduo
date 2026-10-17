@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Run from the repo root (bun run build:desktop:signed:*); the Tauri CLI runs from apps/desktop.
+cd "$(git rev-parse --show-toplevel)"
+
 if [[ -f ".env.local" ]]; then
   set -a
   source ".env.local"
@@ -23,8 +26,10 @@ fi
 
 echo "Using Apple signing identity: ${IDENTITY}"
 
+export APPLE_SIGNING_IDENTITY="${IDENTITY}"
+cd apps/desktop
 if [[ "${MODE}" == "release" ]]; then
-  APPLE_SIGNING_IDENTITY="${IDENTITY}" node ./node_modules/@tauri-apps/cli/tauri.js build --bundles app
+  node ../../node_modules/@tauri-apps/cli/tauri.js build --bundles app
 else
-  APPLE_SIGNING_IDENTITY="${IDENTITY}" node ./node_modules/@tauri-apps/cli/tauri.js build --debug --bundles app
+  node ../../node_modules/@tauri-apps/cli/tauri.js build --debug --bundles app
 fi

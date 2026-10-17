@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, rs } from "@rstest/core";
-import { chatModuleManifest } from "../../../src/features/chat/ops-manifest";
+import { chatModuleManifest } from "../../../apps/app/src/features/chat/ops-manifest";
 import { byline, chatConnectorModule, conversation, readable } from "./modules/chat";
 import { type KeyContext, toolsForKey } from "./registry";
 

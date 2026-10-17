@@ -10,8 +10,8 @@ const projectRoot = path.resolve(process.cwd());
 
 const config: StorybookConfig = {
   stories: [
-    "../../src/components/ui/*.stories.@(js|jsx|ts|tsx)",
-    "../../src/components/*.stories.@(js|jsx|ts|tsx)",
+    "../../apps/app/src/components/ui/*.stories.@(js|jsx|ts|tsx)",
+    "../../apps/app/src/components/*.stories.@(js|jsx|ts|tsx)",
   ],
   addons: ["@storybook/addon-docs"],
   framework: {
@@ -26,7 +26,7 @@ const config: StorybookConfig = {
     const aliasMap: Record<string, string> = {
       "moduo2.0": path.resolve(projectRoot, ".design-sync/entry.tsx"),
       "@contracts": path.resolve(projectRoot, "supabase/functions/_shared/contracts"),
-      "@": path.resolve(projectRoot, "src"),
+      "@": path.resolve(projectRoot, "apps/app/src"),
     };
     if (Array.isArray(existingAlias)) {
       cfg.resolve.alias = [
@@ -36,6 +36,8 @@ const config: StorybookConfig = {
     } else {
       cfg.resolve.alias = { ...(existingAlias ?? {}), ...aliasMap };
     }
+    // Tailwind runs through the app's PostCSS config (apps/app), not a root one.
+    cfg.css = { ...cfg.css, postcss: path.resolve(projectRoot, "apps/app") };
     return cfg;
   },
 };

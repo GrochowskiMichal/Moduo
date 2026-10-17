@@ -13,13 +13,14 @@
       "!.claude",
       "!.design-sync",
       "!.design",
-      "!dist",
-      "!src-tauri",
+      "!**/dist",
+      "!**/.turbo",
+      "!apps/desktop/src-tauri",
       "!supabase",
-      "!storybook-static",
+      "!**/storybook-static",
       "!coverage",
       "!**/*.css",
-      "!src/types/supabase.ts",
+      "!apps/app/src/types/supabase.ts",
       "!bun.lock",
       "!scripts/icons/source",
       "!brand/masters",
@@ -114,7 +115,7 @@
       }
     },
     {
-      "includes": ["scripts/**", "rsbuild.config.ts", "playwright.config.ts"],
+      "includes": ["scripts/**", "apps/app/rsbuild.config.ts", "e2e/playwright.config.ts"],
       "linter": {
         "rules": {}
       }

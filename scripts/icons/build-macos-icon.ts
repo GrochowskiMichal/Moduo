@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 /**
- * Build src-tauri/icons/icon.icns + the cross-platform PNG fallbacks from
+ * Build apps/desktop/src-tauri/icons/icon.icns + the cross-platform PNG fallbacks from
  * scripts/icons/source/macos-icon-1024.svg.
  *
  * Renders the source SVG via @resvg/resvg-js (Rust-backed; no native deps,
@@ -19,8 +19,8 @@ import { Resvg } from "@resvg/resvg-js";
 
 const repoRoot = process.cwd();
 const sourceSvg = join(repoRoot, "scripts/icons/source/macos-icon-1024.svg");
-const icnsOut = join(repoRoot, "src-tauri/icons/icon.icns");
-const iconsDir = join(repoRoot, "src-tauri/icons");
+const icnsOut = join(repoRoot, "apps/desktop/src-tauri/icons/icon.icns");
+const iconsDir = join(repoRoot, "apps/desktop/src-tauri/icons");
 
 const svg = readFileSync(sourceSvg);
 

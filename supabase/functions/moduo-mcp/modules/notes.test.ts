@@ -14,9 +14,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
 
-import { applyAgentEdit } from "../../../../src/features/notes/editor/agent-write";
-import { deriveNoteBody, NOTES_DOC_ROOT } from "../../../../src/features/notes/editor/doc-markdown";
-import { buildDocStateFromMarkdown } from "../../../../src/features/notes/editor/materialize";
+import { applyAgentEdit } from "../../../../apps/app/src/features/notes/editor/agent-write";
+import { deriveNoteBody, NOTES_DOC_ROOT } from "../../../../apps/app/src/features/notes/editor/doc-markdown";
+import { buildDocStateFromMarkdown } from "../../../../apps/app/src/features/notes/editor/materialize";
 import { notesDocCodeHash, notesDocSourceHash } from "../../_shared/notes-doc/source-hash.ts";
 
 rs.mock("../share.ts", () => ({

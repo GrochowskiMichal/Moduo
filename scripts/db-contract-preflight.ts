@@ -4,7 +4,7 @@ import {
   type CatalogSnapshot,
   PREFLIGHT_SQL,
   validateCatalogSnapshot,
-} from "../src/lib/db-contract-preflight-core";
+} from "../apps/app/src/lib/db-contract-preflight-core";
 
 const fixtureFlag = "--fixture";
 const fixtureIndex = process.argv.indexOf(fixtureFlag);

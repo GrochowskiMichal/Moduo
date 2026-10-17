@@ -43,15 +43,16 @@ if (target === "landing") {
   // what /book loads). app.html is that shell; index.html is the landing page.
   // PLAT-5 drops the app build from here once /book routes to the app Worker.
   execSync("bun run build:web", { stdio: "inherit", cwd: root });
-  const outDir = path.join(root, "dist", "web");
+  const outDir = path.join(root, "apps", "app", "dist", "web");
   fs.renameSync(path.join(outDir, "index.html"), path.join(outDir, "app.html"));
   // apps/landing builds the static landing on its own (index, subpages, assets;
   // on staging the portal at / and the marketing page at /landing.html).
   const landing = path.join(root, "apps", "landing");
   execSync(`node build.mjs${staging ? " --staging" : ""}`, { stdio: "inherit", cwd: landing });
   fs.cpSync(path.join(landing, "dist"), outDir, { recursive: true });
-  console.log("[vercel-build] Landing build complete → dist/web/index.html + app.html");
+  console.log("[vercel-build] Landing build complete → apps/app/dist/web/index.html + app.html");
 } else {
   console.log("[vercel-build] Building web app…");
   execSync("bun run build:web", { stdio: "inherit", cwd: root });
 }
+// vercel.json outputDirectory: apps/app/dist/web.

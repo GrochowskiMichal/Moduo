@@ -2,7 +2,7 @@
   "framework": null,
   "installCommand": "bun install --frozen-lockfile",
   "buildCommand": "node scripts/vercel-build.mjs",
-  "outputDirectory": "dist/web",
+  "outputDirectory": "apps/app/dist/web",
   "git": {
     "deploymentEnabled": {
       "**": false,

@@ -1,0 +1,15 @@
+{
+  "name": "@moduo/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:billing": "playwright test --config playwright.billing.config.ts",
+    "perf": "playwright test --project=perf",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}
