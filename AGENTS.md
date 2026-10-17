@@ -18,6 +18,7 @@ Marked rules are enforced in code; the rest you hold yourself.
 10. **Never read a teammate's private Moduo data** (private tasks, queue, focus runs, agent sessions, notes) through the admin/service-role Supabase connection. Read through your own permissions, or ask them.
 11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function`; `.claude/settings.json` asks before `supabase db push`, `db query --linked` and `functions deploy`.)*
 12. **Stage explicit paths.** Another session may share the checkout: never `git add -A` or `git add <dir>`.
+13. **The local Supabase stack is shared** by every session and agent on this Mac. Never wipe or stop it (`local:reset`, `local:down`, `supabase db reset`, `supabase stop --no-backup`) unless the user confirms no other session needs it, and never clean up rows or migrations another session left there. Test a migration by applying it on top with `psql … -1 -f <file>`. *(`scripts/local/stack.sh` refuses reset/down without `MODUO_SHARED_STACK_OK=1`; `.claude/settings.json` denies the raw commands.)*
 
 ## Session start
 
@@ -102,7 +103,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 
 ## Agent tooling (Claude Code)
 
-- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
+- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build) · `libraries-dev` (third-party Libraries.dev UI effects: `libraries review`/`apply`; new packages need the designer's OK, token rules still win). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates Tier 2 diffs.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the four guards above (`guard-git`, `guard-secrets`, `guard-design-tokens`, `guard-prod-db`).
 - **MCP:** `supabase` in `.mcp.json` (`claude mcp login supabase` once per machine). GitHub work goes through the `gh` CLI; Cloudflare through `wrangler` in the workflows ([docs/release.md](./docs/release.md)).

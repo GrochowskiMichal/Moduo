@@ -4,8 +4,9 @@
 #
 #   bun run local:up        start the stack; bootstrap the DB the first time
 #   bun run local:reset     wipe the local DB and rebuild it from the snapshot
+#                           (shared by every session: needs MODUO_SHARED_STACK_OK=1)
 #   bun run local:snapshot  refresh the schema snapshot from prod (read-only)
-#   bun run local:down      stop the stack (data kept)
+#   bun run local:down      stop the stack (data kept; needs MODUO_SHARED_STACK_OK=1)
 #   bun run local:status    URLs and keys
 #
 # Why not `supabase db reset`: the repo cannot rebuild the DB from
@@ -66,6 +67,23 @@ SQL
 
 bootstrapped() { "${PSQL[@]}" -tAc "select to_regclass('public._local_bootstrapped') is not null" 2>/dev/null | grep -q t; }
 
+# The stack is shared: every worktree, Claude session and dev server on this
+# Mac uses the same database. Wiping it (reset) or stopping it (down) breaks
+# their test data and running servers, so both ask for an explicit go-ahead.
+shared_stack_guard() {
+  [[ "${MODUO_SHARED_STACK_OK:-}" == "1" ]] && return 0
+  local servers; servers="$({ pgrep -f 'rsbuild dev' 2>/dev/null || true; } | wc -l | tr -d ' ')"
+  cat >&2 <<MSG
+✗ Refusing to $2 the local Supabase stack: it is shared by every session and
+  agent on this Mac (dev servers running now: ${servers}). $3
+  - To test a migration, apply it on top instead, without wiping anything:
+      psql postgresql://postgres:postgres@127.0.0.1:54322/postgres -v ON_ERROR_STOP=1 -1 -f <file>
+  - Only when the user has confirmed no other session needs the stack:
+      MODUO_SHARED_STACK_OK=1 bun run local:$1
+MSG
+  exit 1
+}
+
 case "${1:-up}" in
   up)
     supabase start
@@ -73,13 +91,17 @@ case "${1:-up}" in
     bun scripts/local/env.ts local
     ;;
   reset)
+    shared_stack_guard reset wipe "A reset wipes every row and every migration other sessions applied."
     supabase stop --no-backup
     supabase start
     bootstrap
     bun scripts/local/env.ts local
     ;;
   snapshot) snapshot ;;
-  down) supabase stop ;;
+  down)
+    shared_stack_guard down stop "Stopping it breaks other sessions' running dev servers and tests (data is kept)."
+    supabase stop
+    ;;
   status) supabase status ;;
   functions)
     [[ -f supabase/functions/.env ]] || cp supabase/functions/.env.example supabase/functions/.env
