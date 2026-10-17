@@ -7,8 +7,9 @@ export default defineConfig({
     "scripts/brand/*.test.ts",
     "scripts/release/*.test.ts",
     "scripts/smoke-hosting.test.ts",
+    "scripts/dns-diff.test.ts",
   ],
   globals: true,
-  // CI shards every suite three ways (checks.yml); this one has two files, so a shard can be empty.
+  // CI shards every suite three ways (checks.yml); this one has few files, so a shard can be empty.
   passWithNoTests: true,
 });

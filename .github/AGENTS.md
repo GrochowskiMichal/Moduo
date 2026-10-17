@@ -7,7 +7,7 @@ Read [docs/gotchas/build-ci.md](../docs/gotchas/build-ci.md) before changing any
 - **Shell pitfalls:** `export X="$(cmd)"` hides a failing `cmd` (assign first, then export); on Windows `shell: bash`, quote `"$GITHUB_WORKSPACE"` instead of `${{ github.workspace }}`.
 - **`checks.yml` matches `bun run verify`** (typecheck, Biome, lint:tw, lint:css, tests) plus the gitleaks secret scan. Add any new check to both. Tests run through Turborepo (`turbo run test test:scripts -- --shard N/3`), so every suite takes the same shard. A docs-only diff skips lint and tests (the `scan` job decides); `static-checks` still passes.
 - **The Turborepo remote cache decides what runs, not `--affected`** (which misses the app's alias inputs). A task whose declared inputs didn't change is restored from the cache. If a task reads a file outside its package, declare it in that package's `turbo.json` `inputs` (`$TURBO_ROOT$/…`), or the cache will replay a stale result.
-- **The desktop app is in `apps/desktop`** (since PLAT-2, 2026-10-17). `_desktop-release.yml` finds it per build (`DESKTOP_DIR`), because `prod-app` keeps the old root layout until the next promote; drop the fallback once `prod-app` has the move.
+- **The desktop app is in `apps/desktop`** (since PLAT-2, 2026-10-17). `_desktop-release.yml` finds it per build (`DESKTOP_DIR`), because `prod-app` keeps the old root layout until the first deploy-prod moves it; drop the fallback after that.
 - Workflow changes are Tier 2 risk (see `/s3`). Watch a release run with `/loop` instead of polling by hand.
 
 ## Release reality
@@ -17,13 +17,13 @@ How a release is applied: [docs/release.md](../docs/release.md).
 - `desktop-release-prod.yml` publishes to `GrochowskiMichal/moduo-releases` (rolling `prod-latest` release + `latest.json` for the updater). Look there, not in this repo.
 - This repo's own `prod-latest` release is stale (v0.1.0, 2026-10-05). Ignore it.
 - **One version, from `VERSION`** (`scripts/release/version.mjs`): prod web and prod desktop ship it as is, other web branches as `<VERSION>-rc`, staging desktop as `<VERSION>-rc.<run>`. The updater only installs a higher version, so **bump `VERSION` before every production desktop release**; the workflow's `version` job fails up front otherwise.
-- `sync-staging-app.yml` runs only after `checks` passed on a develop push (`workflow_run`), and merges the commit checks tested.
+- Staging deploys (`app-staging.yml`, `landing-deploy.yml`) run only after `checks` passed on a develop push (`workflow_run`), for the commit checks tested. Production is `deploy-prod.yml`, owner-only, for a develop commit that passed `checks`; it also moves `prod-app`. `sync-staging-app.yml` and `promote-to-prod.yml` are gone (PLAT-8): no Action deploys from `staging-app`, `prod-landing` or `staging-landing` any more (Vercel's git integration did, until Vercel was removed).
 - Third-party actions outside `actions/*` and `oven-sh/*` are pinned to commit SHAs; Bun is pinned by `.bun-version`.
 - After a prod run, confirm the Mac notarize steps actually ran (not skipped) before calling the build shippable.
 
 ## Desktop update server (PLAT-6)
 
-- Installed apps ask `infra/update-server` first (`moduo-update-server` on workers.dev until PLAT-8; the repo variable `UPDATE_SERVER_URL`), then GitHub. Releases go to R2 `moduo-releases` under `desktop/<channel>/<version>/` (never overwritten), and the channel pointer is written last. Deploy: `update-server.yml`.
+- Installed apps ask `infra/update-server` at https://updates.moduo.app first (the repo variable `UPDATE_SERVER_URL`), the same Worker on workers.dev second, then GitHub. Builds from rc.43 up to PLAT-8 know only the workers.dev address, so `workers_dev` stays on. Releases go to R2 `moduo-releases` under `desktop/<channel>/<version>/` (never overwritten), and the channel pointer is written last. Deploy: `update-server.yml`.
 - **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert. Never unfreeze it casually: the updater falls back to GitHub on any Worker error, and a moving GitHub manifest would bypass the kill switch.
 - Rollout share and kill switch: run `desktop-rollout.yml` (channel, rollout 0–100, paused). It takes effect in about a minute and never downgrades anyone.
 

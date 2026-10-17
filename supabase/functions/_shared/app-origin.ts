@@ -10,8 +10,8 @@
 
 /**
  * Public hosts that serve /book: the landing hosts, whose landing Worker hands
- * /book to the app Worker (apps/landing/edge/worker.ts; Vercel's vercel.json
- * rewrite until PLAT-8 moves DNS). workers.dev and preview hosts are left out
+ * /book to the app Worker (apps/landing/edge/worker.ts; www.moduo.app redirects
+ * to moduo.app). workers.dev and preview hosts are left out
  * on purpose, like the app's previews: their bookings mail moduo.app links.
  * No dev server: production would otherwise mail a localhost link to anyone.
  * A local booking gets a moduo.app Cancel link, which works against the same
