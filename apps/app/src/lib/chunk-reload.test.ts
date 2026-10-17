@@ -73,6 +73,18 @@ describe("reloads once (AC8)", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  it("offline, it never reloads (and keeps the one reload for later)", () => {
+    const storage = memoryStorage();
+    const reload = rs.fn();
+    expect(reloadOnceForChunkError(chunkError(), { storage, reload, online: () => false })).toBe(
+      false,
+    );
+    expect(reloadOnceForChunkError(chunkError(), { storage, reload, online: () => true })).toBe(
+      true,
+    );
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
   it("an unhandled chunk rejection reloads once through the window listener", () => {
     const storage = memoryStorage();
     const reload = rs.fn();

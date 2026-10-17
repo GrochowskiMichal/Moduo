@@ -10,14 +10,14 @@
 #
 # merge:  packs <dist>/static as this build's tarball (before anything is added), then unpacks
 #         the last 3 recorded builds of <lane> into <dist> without overwriting a current file,
-#         and writes the newest previous build's file list to $RUNNER_TEMP/previous-static.txt
+#         and writes the newest previous build's file list to $RUNNER_TEMP/web-builds/previous-static.txt
 #         (scripts/smoke-hosting.ts --old checks a sample after the deploy).
 # record: uploads this build's tarball to R2 builds/<build>/static.tar.gz and puts it first in
 #         lanes/<lane>.json (newest first, 10 kept).
 #
 # Lanes: "staging", "production" (PLAT-8), "pr-<n>" for previews. Bucket moduo-web-builds; record
 # creates it on first use, with builds/ and lanes/pr- expiring after 60 days. Needs
-# CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, and GNU tar (CI runs it on ubuntu-latest).
+# CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, jq and rsync.
 set -euo pipefail
 
 BUCKET="${WEB_BUILDS_BUCKET:-moduo-web-builds}"
@@ -30,7 +30,16 @@ cmd="${1:-}"; lane="${2:-}"; build="${3:-}"
 [[ "$build" =~ ^[0-9a-f]{7,40}$ ]] || { echo "bad build id: $build" >&2; exit 2; }
 mkdir -p "$TMP"
 
-r2_get() { $WRANGLER r2 object get "$BUCKET/$1" --remote --file "$2" >/dev/null 2>&1; }
+# Returns 1 only for a missing object; any other failure (auth, network) stops the script, so
+# a transient error can't silently reset a lane's history.
+r2_get() {
+  local out
+  if out=$($WRANGLER r2 object get "$BUCKET/$1" --remote --file "$2" 2>&1); then return 0; fi
+  if grep -qiE "does not exist|not found|NoSuchKey|10007" <<< "$out"; then return 1; fi
+  echo "$out" >&2
+  echo "::error::reading R2 $BUCKET/$1 failed" >&2
+  exit 1
+}
 r2_put() { $WRANGLER r2 object put "$BUCKET/$1" --remote --file "$2" --content-type "$3" >/dev/null; }
 
 ensure_bucket() {
@@ -58,6 +67,8 @@ case "$cmd" in
     [ -d "$dist/static" ] || { echo "no $dist/static" >&2; exit 1; }
     tar -czf "$TMP/$build.tar.gz" -C "$dist" static
     : > "$TMP/previous-static.txt"
+    # Read in the main shell (not a pipe or <(…)), so a failed read stops the script.
+    builds=$(lane_builds)
     n=0
     first=true
     while IFS= read -r prev; do
@@ -73,17 +84,20 @@ case "$cmd" in
         done > "$TMP/previous-static.txt"
         first=false
       fi
-      tar -xzf "$TMP/prev.tar.gz" -C "$dist" --skip-old-files
+      rm -rf "$TMP/prev" && mkdir -p "$TMP/prev"
+      tar -xzf "$TMP/prev.tar.gz" -C "$TMP/prev"
+      rsync -a --ignore-existing "$TMP/prev/static/" "$dist/static/"
       echo "kept the files of build $prev"
       n=$((n + 1))
-    done < <(lane_builds)
+    done <<< "$builds"
     echo "merged $n previous build(s) into $dist/static ($(find "$dist/static" -type f | wc -l | tr -d ' ') files)"
     ;;
   record)
     [ -f "$TMP/$build.tar.gz" ] || { echo "run merge first" >&2; exit 1; }
     ensure_bucket
     r2_put "builds/$build/static.tar.gz" "$TMP/$build.tar.gz" application/gzip
-    { echo "$build"; lane_builds | grep -vx "$build" || true; } | head -n 10 | jq -R . | jq -s . > "$TMP/lane-new.json"
+    builds=$(lane_builds)
+    { echo "$build"; grep -vx "$build" <<< "$builds" || true; } | grep . | head -n 10 | jq -R . | jq -s . > "$TMP/lane-new.json"
     r2_put "lanes/$lane.json" "$TMP/lane-new.json" application/json
     echo "recorded build $build first in lane $lane"
     ;;

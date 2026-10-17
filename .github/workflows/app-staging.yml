@@ -23,6 +23,11 @@ concurrency:
 permissions:
   contents: read
 
+# bash with pipefail, so a failing wrangler before `| tee` fails the step.
+defaults:
+  run:
+    shell: bash
+
 env:
   WRANGLER: npx --yes wrangler@4.147.0
 
@@ -33,7 +38,7 @@ jobs:
       github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only develop and main may use this environment, which holds CLOUDFLARE_API_TOKEN (a
+    # Only develop, main, mike and prod-app may use this environment, which holds CLOUDFLARE_API_TOKEN (a
     # repo-level secret of the same name is the fallback until it is moved).
     environment: cloudflare-deploy
     env:
@@ -43,6 +48,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@v5
@@ -78,7 +84,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          $WRANGLER deploy --env staging --message "develop ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          $WRANGLER deploy --env staging --var "BUILD:${SHA::7}" --message "develop ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
           url=$(grep -oE 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
           echo "url=${url:-https://moduo-app-staging.moduo.workers.dev}" >> "$GITHUB_OUTPUT"
 
@@ -95,7 +101,7 @@ jobs:
           old=()
           [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
           set +e
-          bun scripts/smoke-hosting.ts "$URL" "${old[@]}" --expect stagingPortal=true > "$RUNNER_TEMP/smoke.md"
+          bun scripts/smoke-hosting.ts "$URL" "${old[@]}" --expect stagingPortal=true --expect "build=${SHA::7}" > "$RUNNER_TEMP/smoke.md"
           code=$?
           set -e
           tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"

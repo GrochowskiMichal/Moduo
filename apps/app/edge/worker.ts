@@ -3,7 +3,7 @@
 // "/index.html" (`run_worker_first`) and for every path with no file, which
 // is every app route, /config.json, and a missing file.
 //
-// - /config.json: this environment's public config as JSON.
+// - /config.json: this environment's public config as JSON, plus the live build id.
 // - /static/* (no such file): a plain 404, never the shell, so a missing
 //   chunk fails fast and the app's chunk-reload handler can act.
 // - Anything else: the SPA shell (index.html from the assets binding) with
@@ -25,7 +25,8 @@ import {
 
 type Fetcher = { fetch(request: Request): Promise<Response> };
 
-export type Env = ConfigEnv & { ASSETS: Fetcher };
+/** BUILD is the short commit SHA, set by the deploy (`--var BUILD:<sha>`), so the smoke test can tell which build is live. */
+export type Env = ConfigEnv & { ASSETS: Fetcher; BUILD?: string };
 
 /** Writes `script` as the first child of <head>. HTMLRewriter in production; tests pass a string version. */
 export type InjectHead = (response: Response, script: string) => Response;
@@ -62,7 +63,7 @@ export async function handle(request: Request, env: Env, inject: InjectHead): Pr
   const config = configFromEnv(env);
 
   if (url.pathname === "/config.json") {
-    return new Response(JSON.stringify(config), {
+    return new Response(JSON.stringify({ ...config, build: env.BUILD ?? "" }), {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": NO_CACHE,
@@ -83,7 +84,10 @@ export async function handle(request: Request, env: Env, inject: InjectHead): Pr
   }
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    return new Response("Method not allowed", { status: 405, headers: { Allow: "GET, HEAD" } });
+    return new Response("Method not allowed", {
+      status: 405,
+      headers: { Allow: "GET, HEAD", ...securityHeaders() },
+    });
   }
 
   // Always the full shell, fetched fresh: a 304 against the file's ETag would

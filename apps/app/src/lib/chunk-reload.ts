@@ -23,6 +23,8 @@ export function isChunkLoadError(error: unknown): boolean {
 type Deps = {
   storage: Pick<Storage, "getItem" | "setItem"> | null;
   reload: () => void;
+  /** Offline, a reload would only show the browser's offline page and lose the tab's state. */
+  online?: () => boolean;
 };
 
 function defaultDeps(): Deps {
@@ -32,12 +34,17 @@ function defaultDeps(): Deps {
   } catch {
     // Storage blocked: never reload, since we couldn't stop a loop.
   }
-  return { storage, reload: () => window.location.reload() };
+  return {
+    storage,
+    reload: () => window.location.reload(),
+    online: () => navigator.onLine !== false,
+  };
 }
 
 /** Reloads the page for a chunk-load error, at most once per tab session. True when it reloaded. */
 export function reloadOnceForChunkError(error: unknown, deps: Deps = defaultDeps()): boolean {
   if (!isChunkLoadError(error) || !deps.storage) return false;
+  if (deps.online && !deps.online()) return false;
   try {
     if (deps.storage.getItem(RELOADED_KEY)) return false;
     deps.storage.setItem(RELOADED_KEY, String(Date.now()));

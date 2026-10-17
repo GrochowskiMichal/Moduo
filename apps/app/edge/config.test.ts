@@ -125,7 +125,14 @@ describe("injects per-host config (AC7)", () => {
     const res = await handle(new Request("https://h.example/config.json"), e, stringInject);
     expect(res.headers.get("Content-Type")).toContain("application/json");
     expect(res.headers.get("Cache-Control")).toBe(NO_CACHE);
-    expect(await res.json()).toEqual(configFromEnv(PROD));
+    expect(await res.json()).toEqual({ ...configFromEnv(PROD), build: "" });
+    const withBuild = env({ ...PROD, BUILD: "abc1234" }).env;
+    const live = await handle(
+      new Request("https://h.example/config.json"),
+      withBuild,
+      stringInject,
+    );
+    expect(((await live.json()) as { build: string }).build).toBe("abc1234");
   });
 });
 
