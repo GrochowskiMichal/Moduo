@@ -43,6 +43,9 @@ export const WILDCARD_PROBE = "dns-diff-wildcard-probe";
 // Vercel's edge ranges (A answers for hosts on a Vercel project, and cname.vercel-dns.com).
 const VERCEL_ANYCAST = [/^216\.198\.79\.\d+$/, /^64\.29\.17\.\d+$/, /^76\.76\.21\.\d+$/];
 
+/** Records each provider manages for itself (Domain Connect discovery); never ours to copy. */
+export const providerOwned = (name: string) => /^_domainconnect\./.test(name);
+
 const host = (s: string) => s.trim().toLowerCase().replace(/\.$/, "");
 
 /** `"v=spf1 " "a ~all"` → `v=spf1 a ~all`; a bare value is kept as is. */
@@ -180,6 +183,27 @@ async function dig(server: string, name: string, type: string): Promise<string[]
 
 export type LiveDiff = { name: string; type: string; vercel: string[]; cloudflare: string[] };
 
+/**
+ * Where a name sends web traffic. Vercel answers A for a host on a Vercel project (it flattens its
+ * ALIAS and wildcard records); Cloudflare's DNS-only copy answers the CNAME to the same target. Both
+ * end at Vercel, so a CNAME to a vercel-dns target counts as "vercel-anycast" too. Any other CNAME
+ * (the Hostinger DKIM keys) stays exact.
+ */
+export function addresses(a: string[], cname: string[]): string[] {
+  const viaVercel = cname.map((c) =>
+    /(^|\.)vercel-dns(-\d+)?\.com$/.test(c) ? "vercel-anycast" : c,
+  );
+  return [...new Set([...a, ...viaVercel])].sort();
+}
+
+const caaIssuer = (v: string) => v.replace(/;.*"$/, '"').replace(/\s+"$/, '"');
+
+/** Cloudflare adds its Universal SSL CAs to any CAA set (always on): extra CAs are fine, a missing one of ours is not. */
+export function caaCovered(vercel: string[], cloudflare: string[]): boolean {
+  const cf = new Set(cloudflare.map(caaIssuer));
+  return vercel.every((v) => cf.has(caaIssuer(v)));
+}
+
 export async function liveDiff(
   names: string[],
   vercelNs: string,
@@ -187,12 +211,22 @@ export async function liveDiff(
   digFn = dig,
 ): Promise<LiveDiff[]> {
   const out: LiveDiff[] = [];
+  const both = (q: string, type: string) =>
+    Promise.all([digFn(vercelNs, q, type), digFn(cloudflareNs, q, type)]);
   for (const name of names) {
+    if (providerOwned(name)) continue;
     const q = name.startsWith("*.") ? `${WILDCARD_PROBE}.${name.slice(2)}` : name;
+    const [[va, ca], [vc, cc]] = await Promise.all([both(q, "A"), both(q, "CNAME")]);
+    const [v, c] = [addresses(va, vc), addresses(ca, cc)];
+    if (v.join("\n") !== c.join("\n"))
+      out.push({ name, type: "A/CNAME", vercel: v, cloudflare: c });
     for (const type of LIVE_TYPES) {
+      if (type === "A" || type === "CNAME") continue;
       if (type === "NS" && q === DOMAIN) continue; // the apex NS set is the one thing that differs
-      const [v, c] = await Promise.all([digFn(vercelNs, q, type), digFn(cloudflareNs, q, type)]);
-      if (v.join("\n") !== c.join("\n")) out.push({ name, type, vercel: v, cloudflare: c });
+      const [v, c] = await both(q, type);
+      if (v.join("\n") === c.join("\n")) continue;
+      if (type === "CAA" && caaCovered(v, c)) continue;
+      out.push({ name, type, vercel: v, cloudflare: c });
     }
   }
   return out;
@@ -351,7 +385,7 @@ if (import.meta.main) {
     const v = fromVercel(await vercelRecords(vToken, process.env.VERCEL_TEAM_ID));
     let c = fromCloudflare(await cloudflareRecords(cfToken, zone.id));
     // Apex NS records are each provider's own; never compare them.
-    const own = (r: Rec) => !(r.type === "NS" && r.name === DOMAIN);
+    const own = (r: Rec) => !(r.type === "NS" && r.name === DOMAIN) && !providerOwned(r.name);
     d = diff(v.filter(own), c.filter(own));
     if (args.has("--sync") && d.onlyVercel.length) {
       for (const r of d.onlyVercel) {

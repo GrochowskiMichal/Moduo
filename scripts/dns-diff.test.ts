@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  addresses,
+  caaCovered,
   cloudflareBody,
   diff,
   fromCloudflare,
@@ -130,6 +132,34 @@ describe("dns-diff · normalizing", () => {
 });
 
 describe("dns-diff · live answers", () => {
+  it("treats Vercel's flattened A and Cloudflare's CNAME to Vercel as the same place", () => {
+    expect(addresses(["vercel-anycast"], [])).toEqual(addresses([], ["cname.vercel-dns-017.com"]));
+    expect(addresses([], ["hostingermail-a.dkim.mail.hostinger.com"])).toEqual([
+      "hostingermail-a.dkim.mail.hostinger.com",
+    ]);
+    expect(addresses(["vercel-anycast"], [])).not.toEqual(addresses(["104.21.3.4"], []));
+  });
+
+  it("matches CAA issuers ignoring Cloudflare's parameters", () => {
+    expect(
+      caaCovered(['0 issue "pki.goog"'], ['0 issue "pki.goog; cansignhttpexchanges=yes"']),
+    ).toBe(true);
+    expect(caaCovered(['0 issue "sectigo.com"'], ['0 issue "pki.goog"'])).toBe(false);
+  });
+
+  it("accepts Cloudflare's extra Universal SSL CAs but not a missing one of ours", async () => {
+    const caa = (extra: boolean) => async (server: string, _n: string, type: string) =>
+      type !== "CAA"
+        ? []
+        : server === "v"
+          ? ['0 issue "letsencrypt.org"', '0 issue "pki.goog"']
+          : extra
+            ? ['0 issue "letsencrypt.org"', '0 issue "pki.goog"', '0 issue "ssl.com"']
+            : ['0 issue "letsencrypt.org"'];
+    expect(await liveDiff(["moduo.app"], "v", "c", caa(true))).toEqual([]);
+    expect(await liveDiff(["moduo.app"], "v", "c", caa(false))).toHaveLength(1);
+    expect(await liveDiff(["_domainconnect.moduo.app"], "v", "c", caa(false))).toEqual([]);
+  });
   const DIG = [
     'moduo.app.\t\t600\tIN\tTXT\t"v=spf1 include:_spf.mail.hostinger.com ~all"',
     'moduo.app.\t\t600\tIN\tTXT\t"anthropic-domain-verification-tbpb07=abc"',
