@@ -6,7 +6,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/app/src/**",
-        "$TURBO_ROOT$/apps/app/tsconfig.json"
+        "$TURBO_ROOT$/apps/app/tsconfig.json",
+        "$TURBO_ROOT$/supabase/functions/_shared/**"
       ]
     },
     "build": {

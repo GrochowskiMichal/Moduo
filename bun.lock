@@ -130,6 +130,9 @@
     "supabase": {
       "name": "@moduo/backend",
       "version": "0.0.0",
+      "dependencies": {
+        "zod": "^4.6.5",
+      },
       "devDependencies": {
         "@rsbuild/plugin-react": "2.1.1",
         "@rstest/core": "^0.12.3",

@@ -1,12 +1,23 @@
 {
   "$schema": "https://turborepo.com/schema.json",
-  "extends": ["//"],
+  "extends": [
+    "//"
+  ],
   "tasks": {
     "typecheck": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/app/src/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/app/src/**"
+      ]
     },
     "test": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/app/src/**", "$TURBO_ROOT$/apps/app/public/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/app/src/**",
+        "$TURBO_ROOT$/apps/app/public/**",
+        "$TURBO_ROOT$/apps/app/package.json",
+        "$TURBO_ROOT$/bun.lock"
+      ]
     }
   }
 }

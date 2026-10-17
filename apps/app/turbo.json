@@ -3,7 +3,11 @@
   "extends": ["//"],
   "tasks": {
     "typecheck": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/supabase/functions/_shared/**"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/supabase/functions/_shared/**",
+        "$TURBO_ROOT$/scripts/**"
+      ]
     },
     "lint:tw": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/check-arbitrary-tw.ts"]
