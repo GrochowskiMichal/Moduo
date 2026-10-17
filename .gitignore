@@ -100,3 +100,6 @@ supabase/functions/.env
 # Playwright run output (e2e and visual)
 test-results/
 playwright-report/
+
+# Turborepo local cache
+.turbo/

@@ -497,7 +497,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > Mike's lane (infra), decided 2026-10-17: GitHub Pro (personal, private repo) + Cloudflare; Mike's Mac is the first-choice desktop runner with GitHub-hosted fallback; Bun workspaces + Turborepo. **PLAT-2 is a freeze point:** merge `mike` and `maciej` into `develop` and pause new blocks before it starts. Human prerequisites (Cloudflare account and token, registrar access, GitHub Pro, Mac admin login) are listed per block in the spec. Tier 2 (validator) for every block except PLAT-1.
 
 - [ ] **PLAT-0 — Phase 0 quick fixes** (web version stopgap, `min_build` guard, `vercel.json` 404/caching/headers, parallel + sharded tests, staging gated on checks, pinned actions, dead secrets removed) · deps: —
-- [ ] **PLAT-1 — Workspaces skeleton + landing package** · deps: PLAT-0
+- [x] **PLAT-1 — Workspaces skeleton + landing package** · deps: PLAT-0 · 2026-10-17 · `t/mike/plat-1-workspaces`
 - [ ] **PLAT-2 — The big move: apps/app, apps/desktop, apps/storybook, @moduo/backend, @moduo/e2e** (freeze point) · deps: PLAT-1
 - [ ] **PLAT-3 — Turborepo CI + remote cache (Worker + R2, PR read-only)** · deps: PLAT-2 · needs: Cloudflare account + token
 - [ ] **PLAT-4 — App on Cloudflare: previews, staging, runtime config, old-chunk retention, headers** · deps: PLAT-3

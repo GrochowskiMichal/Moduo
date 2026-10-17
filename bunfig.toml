@@ -1,0 +1,5 @@
+[install]
+# Keep the flat node_modules layout. Bun defaults workspaces to its isolated
+# linker, which moves every package under node_modules/.bun and changes the
+# app bundle. Revisit when the app moves into apps/ (PLAT-2).
+linker = "hoisted"

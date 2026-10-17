@@ -75,7 +75,7 @@ export const ABOUT_RUNTIME_LINE = "Web & desktop (Tauri 2) · React 19";
 
 export type AboutLink = { label: string; href: string; kind: "changelog" | "legal" | "support" };
 
-/** The privacy policy (landing/privacy.html on prod-landing). */
+/** The privacy policy (apps/landing/privacy.html on prod-landing). */
 export const PRIVACY_POLICY_URL = "https://moduo.app/privacy";
 
 /** Release notes: the public releases repo, until moduo.app has a changelog page. */

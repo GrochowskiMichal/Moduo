@@ -5,7 +5,7 @@
 
 This file is the prompt for a Moduo marketing landing. It keeps the *shape* of a product-screenshot landing (hero, then one idea per section) and replaces every visual decision with the live app in `src/styles/tokens.css`. Hex values below are the sRGB landing equivalents of those oklch tokens — paint with the hex, name them with the token. Do not import Linear's palette, Inter feature settings, acid lime, or gradient floor.
 
-Source of truth for the app: `src/styles/tokens.css`, `docs/DESIGN_RULES.md`, `docs/DESIGN_SYSTEM.md`, `docs/PRODUCT_BRIEF.md`. The live one-screen landing (`landing/index.html`) already locks the headline voice — keep it.
+Source of truth for the app: `src/styles/tokens.css`, `docs/DESIGN_RULES.md`, `docs/DESIGN_SYSTEM.md`, `docs/PRODUCT_BRIEF.md`. The live one-screen landing (`apps/landing/index.html`) already locks the headline voice — keep it.
 
 Moduo's marketing surface is a pure-black page (`#000000`) with paper-white type (`#fafafa`) and one near-white primary action (`#eeeeee` fill, `#030303` text). Darkness is the canvas, not a tinted theme. Hierarchy comes from a three-step surface ladder (canvas → card → popover) plus a 1px hairline (`#1b1b1b`), not from shadows or a chromatic flashlight. Type is Geist at 400–600. Buttons are 8px radius; cards are 12px; pills are full-round and reserved for badges. The only pictures on the page are the product itself: the three-pane shell, a task row, a calendar block, a contact rollup, an email turned into a task.
 
@@ -99,7 +99,7 @@ One picker, default Geist. Display and body are the **same family**. Hierarchy i
 
 ### Marketing type (page chrome)
 
-The in-app scale tops at 48px. The landing headline is allowed to go larger, matching `landing/index.html`. Product UI **inside** frames uses the app scale, not this one.
+The in-app scale tops at 48px. The landing headline is allowed to go larger, matching `apps/landing/index.html`. Product UI **inside** frames uses the app scale, not this one.
 
 | Role | Weight | Size | Line height | Tracking | Token |
 |------|--------|------|-------------|----------|-------|
@@ -253,7 +253,7 @@ Do not use badges as marketing chips across the hero.
 ### Logo mark
 **Role:** Brand in the nav and the hero
 
-Use the existing mark from `landing/index.html`: a single filled SVG path, `currentColor`, color `#fafafa`. Nav size 20px with the word "Moduo" at 14px / 500 beside it. Hero size 40px, no wordmark under it (the headline is the wordmark moment). Do not redraw the mark. Do not set it in a colored tile.
+Use the existing mark from `apps/landing/index.html`: a single filled SVG path, `currentColor`, color `#fafafa`. Nav size 20px with the word "Moduo" at 14px / 500 beside it. Hero size 40px, no wordmark under it (the headline is the wordmark moment). Do not redraw the mark. Do not set it in a colored tile.
 
 ### Stack row (replaces a customer logo strip)
 **Role:** Name the pile of apps a person can leave
