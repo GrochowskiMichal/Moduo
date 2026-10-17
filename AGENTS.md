@@ -102,7 +102,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 
 ## Agent tooling (Claude Code)
 
-- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
+- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build) · `libraries-dev` (third-party Libraries.dev UI effects: `libraries review`/`apply`; new packages need the designer's OK, token rules still win). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates Tier 2 diffs.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the four guards above (`guard-git`, `guard-secrets`, `guard-design-tokens`, `guard-prod-db`).
 - **MCP:** `supabase` in `.mcp.json` (`claude mcp login supabase` once per machine). GitHub work goes through the `gh` CLI; Cloudflare through `wrangler` in the workflows ([docs/release.md](./docs/release.md)).
