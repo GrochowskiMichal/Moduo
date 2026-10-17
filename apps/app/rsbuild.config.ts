@@ -62,8 +62,8 @@ const isWeb = target === "web";
 // SHA (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
 // available.
 function readAppVersion(): string {
-  // Release builds inject the channel's version (scripts/release/version.mjs):
-  // the web one from the deploy workflows, the desktop one from the same value the
+  // Release builds inject the channel's version: the web one from the deploy
+  // workflows (VERSION, plus -rc off production), the desktop one from the same value the
   // workflow stamps into tauri.conf.json, so About and the updater agree.
   const injected = process.env.MODUO_VERSION?.trim();
   if (injected) return injected;

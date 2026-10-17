@@ -1,7 +1,7 @@
 /**
- * The one app version, shared by the web deploys (app-staging.yml, deploy-prod.yml)
- * and the desktop release (_desktop-release.yml). The base comes from the
- * committed VERSION file; channels add a pre-release suffix:
+ * The desktop release version (_desktop-release.yml), from the committed VERSION
+ * file. The web deploys read VERSION directly (app-staging.yml, app-preview.yml
+ * add `-rc`; deploy-prod.yml ships it as is), so the channels line up:
  *
  *   production web (deploy-prod.yml)         → 1.1.0
  *   staging and preview web                  → 1.1.0-rc
