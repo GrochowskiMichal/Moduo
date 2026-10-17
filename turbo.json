@@ -2,7 +2,13 @@
   "$schema": "https://turborepo.com/schema.json",
   "agentGuidance": false,
   "envMode": "loose",
-  "globalDependencies": ["tsconfig.base.json", "bunfig.toml"],
+  "remoteCache": {
+    "signature": true
+  },
+  "futureFlags": {
+    "longerSignatureKey": true
+  },
+  "globalDependencies": ["tsconfig.base.json", "bunfig.toml", ".bun-version"],
   "tasks": {
     "build": {
       "outputs": ["dist/**"]

@@ -46,7 +46,7 @@ What Mike and Maciej notice:
 - **Config missing or malformed at the edge:** the app falls back to the build-time values (`import.meta.env.PUBLIC_*`), which are kept for desktop and dev. It never boots with an empty Supabase URL.
 - **Bridge release not installed** (a desktop app that stays closed for weeks): it keeps polling the old GitHub `latest.json`. That file stays published, pointing at the bridge build, until download stats show no old installs, or 60 days.
 - **DNS cutover:** the MX (Hostinger), SPF, DKIM and DMARC records and every verification TXT record must exist in Cloudflare before the nameservers change. A record left out breaks email silently.
-- **Cache poisoning:** PR jobs get a read-only Turborepo cache token and no signing key. Only `develop` and tag workflows write.
+- **Cache poisoning:** PR jobs get a read-only Turborepo cache token, which the cache Worker refuses for writes. Only push runs on `develop`, `main`, `mike`, `maciej` and `v*` tags write, through the `turbo-cache-write` environment. (As built in PLAT-3: PRs do get the signing key, since turbo can't verify a read without it; see `docs/decisions/workflow.md`.)
 - **Windows build fails:** as today, Windows is left out of the manifest rather than pointing at an older installer.
 - **A Rust-only change:** Turborepo doesn't rebuild the web app; the desktop job still runs.
 - **A rename caught mid-freeze:** a personal branch that wasn't merged before the big move gets rebased with `git rebase` and rename detection, or its changes are re-applied by hand. The freeze checklist prevents this.
@@ -57,7 +57,7 @@ What Mike and Maciej notice:
 - **AC2:** `bun run dev:web` and `bun run dev:desktop` work as before from the root. A desktop debug build launches. The release workflow still produces a signed, notarized `.dmg` and an NSIS `.exe`.
 - **AC3:** A PR that changes only `apps/landing/**` runs no app unit tests. A docs-only PR runs only the secret scan and the required-checks aggregate.
 - **AC4:** Re-running checks on an unchanged commit restores typecheck, lint and test results from the remote cache. The checks job finishes in under 90 s.
-- **AC5:** PR workflows can read the remote cache but can't write it. `develop` workflows write.
+- **AC5:** PR workflows can read the remote cache but can't write it. `develop` workflows write (as built in PLAT-3: also `main`, `mike`, `maciej` pushes and `v*` tags).
 - **AC6:** Every PR gets a comment with a working preview URL of the web app, pointed at staging Supabase. Staging (`app.staging.moduo.app`) updates only after `static-checks` passes on `develop`.
 - **AC7:** One built artifact serves staging and prod. Each host gets its own Supabase URL and key, Stripe keys, PostHog key, VAPID key and web origin at request time, with no rebuild.
 - **AC8:** After a deploy, a tab opened on the previous build can still lazy-load routes (hashed files from the last 3 builds stay served). A truly missing chunk triggers at most one quiet reload.
@@ -76,7 +76,7 @@ What Mike and Maciej notice:
 | CI `checks` on the big-move PR · "turbo verify green" | AC1 | The whole verify suite passes through Turborepo after the move |
 | `apps/desktop` debug build launch (manual, recorded in the PR) · "app opens, signs in" | AC2 | The moved desktop app still builds and boots |
 | `desktop-release` staging run after the move · "signed dmg + exe published" | AC2 | Release builds still sign, notarize and publish |
-| Two probe PRs (landing-only, docs-only) · "affected graph" | AC3 | Turborepo skips unrelated work |
+| Two probe PRs (landing-only, docs-only) · "cache skips unrelated work" | AC3 | Turborepo restores unchanged tasks from the cache; a docs-only PR skips lint and tests |
 | Re-run of `checks` on the same SHA · "cache hit, <90 s" | AC4 | The remote cache restores results |
 | `.github/workflows/checks.yml` review + a PR run log showing a read-only token | AC5 | PRs can't write the shared cache |
 | `scripts/smoke-hosting.ts` · "preview + staging" | AC6, AC9 | Fetches the preview and staging URLs: status codes, headers, 404 for missing `/static`, no-cache on the push service worker |
@@ -113,8 +113,8 @@ Decided on the owner's behalf. Durable ones are in `docs/decisions/workflow.md`,
 - **Aliases stay** (`@/*`, `@contracts/*`, `@email/*`), re-pointed in `apps/app/tsconfig.json`, so no import in `src/` changes. Making contracts a real `@moduo/contracts` package is deferred.
   - *Rejected:* rewriting imports during the move, which multiplies the diff.
 - **Supabase function tests** move out of the app's Rstest config into `supabase/rstest.config.ts`, so Turborepo caches them separately.
-- **Turborepo** with tasks `build`, `build:desktop`, `typecheck`, `lint`, `test` and `verify`, and `--affected` in CI. Never use `turbo prune`; its `bun.lock` pruning had bugs as recently as September 2026.
-- **Remote cache:** self-hosted Worker + R2 (an OSS Turborepo-cache-on-Cloudflare implementation, pinned) with HMAC signing. PR jobs get `TURBO_REMOTE_CACHE_READ_ONLY` and no signing key.
+- **Turborepo** with tasks `build`, `build:desktop`, `typecheck`, `lint`, `test` and `verify`, and the remote cache deciding what runs in CI (not `--affected`, which misses the app's alias inputs: see PLAT-3 in `docs/decisions/workflow.md`). Never use `turbo prune`; its `bun.lock` pruning had bugs as recently as September 2026.
+- **Remote cache:** self-hosted Worker + R2 (`infra/turbo-cache`, our own small v8 artifacts implementation) with HMAC signing. PR jobs get a read-only token and `TURBO_CACHE=local:rw,remote:r`. As built in PLAT-3 they also get the signing key, because turbo can't verify a read without it.
   - *Rejected:* Vercel Remote Cache (we're leaving Vercel); Nx (its free self-hosted cache was deprecated in May 2026).
 
 **Hosting:**
@@ -156,8 +156,8 @@ Decided on the owner's behalf. Durable ones are in `docs/decisions/workflow.md`,
 | 0 | **PLAT-0 — Phase 0 quick fixes** (own session) | Web version stopgap, `min_build` guard, `vercel.json` 404/caching/headers, parallel + sharded tests, staging gated on checks, pinned actions, dead secrets removed | — (prerequisite hygiene) | — |
 | 1 | **PLAT-1 — Workspaces skeleton + landing package** | Root `workspaces`, `turbo.json`, `apps/landing` (moved with `git mv`), and the landing build decoupled from the app build (still deployed by Vercel via an updated `vercel-build.mjs`) | AC1 (partial), AC10 (build half) | PLAT-0 |
 | 2 | **PLAT-2 — The big move** (freeze point) | `apps/app`, `apps/desktop`, `apps/storybook`, `@moduo/backend`, `@moduo/e2e`; every path reference updated (configs, workflows, `AGENTS.md` + folder `AGENTS.md` files, `.claude/hooks`, `.claude/skills`, `.claude/agents/validator.md`, `docs/agent-setup.md`, `docs/architecture.md`); a dated "paths before the move" note in `docs/gotchas.md` | AC1, AC2 | PLAT-1 |
-| 3 | **PLAT-3 — Turborepo CI + remote cache** | Cache Worker + R2 with signing; `checks.yml` on `turbo run … --affected` with test shards; PR read-only cache | AC3, AC4, AC5 | PLAT-2, prereq (a) |
-| 4 | **PLAT-4 — App on Cloudflare (previews + staging)** | `apps/app/wrangler.jsonc`, the edge Worker (config injection, `/config.json`), `public-config.ts`, chunk reload, `_headers`, old-chunk retention, preview comments, staging deploy after checks, `scripts/smoke-hosting.ts`, staging Supabase redirect allowlist | AC6, AC7, AC8, AC9 | PLAT-3 |
+| 3 | **PLAT-3 — Turborepo CI + remote cache** | Cache Worker + R2 with signing; `checks.yml` on `turbo run …` through the remote cache with test shards; PR read-only cache | AC3, AC4, AC5 | PLAT-2, prereq (a) |
+| 4 | **PLAT-4 — App on Cloudflare (previews + staging)** | `apps/app/wrangler.jsonc`, the edge Worker (config injection, `/config.json`), `public-config.ts`, chunk reload, `_headers`, old-chunk retention, preview comments, staging deploy after checks, `scripts/smoke-hosting.ts`, staging Supabase redirect allowlist; move `CLOUDFLARE_API_TOKEN` from a repo secret into an environment (PLAT-3 left it repo-level) | AC6, AC7, AC8, AC9 | PLAT-3 |
 | 5 | **PLAT-5 — Landing on Cloudflare** | Landing Worker, routes for `/book*` and `/static/*` to the app Worker, legal pages, staging landing host | AC10 | PLAT-4 |
 | 6 | **PLAT-6 — Desktop distribution on R2 + update server** | R2 bucket, update-server Worker with tests, release workflow publishing to R2, bridge release per channel | AC11 | PLAT-3 |
 | 7 | **PLAT-7 — Mac runner with fallback** | `infra/mac-runner/setup.sh` (user, keychain, runner service, `--verify`), `pick-runner` job in the desktop workflow, trigger restrictions | AC12, AC13 | PLAT-2, prereqs (d), (e) |
