@@ -103,6 +103,7 @@ playwright-report/
 
 # Turborepo local cache
 .turbo/
+.wrangler/
 
 # Storybook static build (bun run build-storybook)
 storybook-static/

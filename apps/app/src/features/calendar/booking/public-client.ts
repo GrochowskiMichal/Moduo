@@ -1,11 +1,10 @@
 // Guest-side calls to the public booking function. No session.
 
+import { publicConfig } from "../../../lib/public-config";
 import type { VideoProvider } from "./video";
 
-const SUPABASE_URL: string =
-  (import.meta.env.PUBLIC_SUPABASE_URL as string | undefined) || "http://127.0.0.1:54321";
-const SUPABASE_KEY: string =
-  (import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY as string | undefined) || "";
+const SUPABASE_URL: string = publicConfig().supabaseUrl || "http://127.0.0.1:54321";
+const SUPABASE_KEY: string = publicConfig().supabasePublishableKey;
 
 export type BookingPreview = {
   slug: string;

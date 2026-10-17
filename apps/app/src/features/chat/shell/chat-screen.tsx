@@ -31,6 +31,7 @@ import {
 } from "@/lib/statuses/model";
 import { usePeopleNow } from "@/lib/statuses/store";
 import { useTimeRegion } from "@/lib/time-region";
+import { publicConfig } from "../../../lib/public-config";
 import { catchupStoreFor } from "../catchup/catchup-store";
 import { useCatchupScreen } from "../catchup/catchup-view";
 import { LaterDialog } from "../catchup/later-dialog";
@@ -142,7 +143,7 @@ function typingLine(names: string[]): string | null {
 }
 
 function webOrigin(): string {
-  const configured = (import.meta.env.PUBLIC_WEB_ORIGIN as string | undefined)?.replace(/\/+$/, "");
+  const configured = publicConfig().webOrigin.replace(/\/+$/, "");
   return configured || window.location.origin;
 }
 

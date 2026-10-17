@@ -500,7 +500,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **PLAT-1 — Workspaces skeleton + landing package** · deps: PLAT-0 · 2026-10-17 · `t/mike/plat-1-workspaces`
 - [x] **PLAT-2 — The big move: apps/app, apps/desktop, apps/storybook, @moduo/backend, @moduo/e2e** (freeze point) · deps: PLAT-1 · 2026-10-17 · `t/mike/plat-2-big-move`
 - [x] **PLAT-3 — Turborepo CI + remote cache (Worker + R2, PR read-only)** · deps: PLAT-2 · 2026-10-17 · `t/mike/plat-3-turbo-ci`
-- [ ] **PLAT-4 — App on Cloudflare: previews, staging, runtime config, old-chunk retention, headers** · deps: PLAT-3 · also: move `CLOUDFLARE_API_TOKEN` into an environment (a same-repo PR can read it today); PLAT-6's three Cloudflare jobs already name `cloudflare-deploy`
+- [x] **PLAT-4 — App on Cloudflare: previews, staging, runtime config, old-chunk retention, headers** · deps: PLAT-3 · 2026-10-17 · `t/mike/plat-4-cloudflare-app` · open: Mike copies `CLOUDFLARE_API_TOKEN`/`ACCOUNT_ID` into envs `cloudflare-preview`, `cloudflare-deploy`, `turbo-cache-write`, then deletes the repo-level secrets (PLAT-6's Cloudflare jobs use `cloudflare-deploy` too)
 - [ ] **PLAT-5 — Landing on Cloudflare (+ /book and /static routed to the app)** · deps: PLAT-4
 - [ ] **PLAT-6 — Desktop distribution on R2 + update-server Worker + bridge release** · deps: PLAT-3 · parallel with PLAT-4/5; sequence with PLAT-7 (both edit `_desktop-release.yml`)
 - [ ] **PLAT-7 — Mac self-hosted runner with hosted fallback** · deps: PLAT-2 · needs: Mac admin login, runner-status token

@@ -1,0 +1,23 @@
+# Response headers for files served straight from Workers static assets (apps/app/wrangler.jsonc).
+# HTML and /config.json go through the edge Worker, which sets the same security headers itself
+# (edge/config.ts); edge/config.test.ts keeps the two equal. CSP is report-only until Phase 3.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-src 'self' https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(self), microphone=(self), display-capture=(self), fullscreen=(self), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()
+  Strict-Transport-Security: max-age=31536000
+
+# Hashed build output never changes.
+/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Revalidated on every load. The push service workers must stay at the root, never immutable.
+/index.html
+  Cache-Control: no-cache
+/push-sw.js
+  Cache-Control: no-cache
+/push-display.js
+  Cache-Control: no-cache
