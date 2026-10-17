@@ -27,7 +27,8 @@ name: Desktop Release (shared)
 # when it is online and idle, and on GitHub's macos-latest otherwise; `pick-runner` decides in
 # seconds and never waits. Only a push to develop/mike, a v* tag or the owner's manual run may use
 # the Mac (never pull_request or the nightly schedule); the Mac's own job-started hook refuses
-# anything else too. On the Mac the job signs and notarizes with that runner's own keychain
+# anything else too. A re-run always builds on GitHub, and mac-watchdog cancels a run whose Mac
+# build hasn't started within 6 minutes. On the Mac the job signs and notarizes with that runner's own keychain
 # (MODUO_SIGNING_KEYCHAIN, a notarytool profile) instead of importing APPLE_CERTIFICATE, keeps its
 # Cargo target dir between runs (CARGO_TARGET_DIR) and skips the GitHub Rust cache. The
 # GitHub-hosted path is unchanged. notarize-mac (only when Apple is slow) always runs on GitHub.
@@ -91,6 +92,10 @@ on:
         required: false
         type: string
         default: ""
+
+# Jobs get read access only; mac-watchdog alone asks for actions: write (callers grant it).
+permissions:
+  contents: read
 
 env:
   MODUO_BUILD: ${{ github.sha }}
@@ -203,6 +208,7 @@ jobs:
             echo "Mac build runner: **$1** ($2)" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           }
+          [ "$GITHUB_RUN_ATTEMPT" = 1 ] || pick macos-latest "re-run $GITHUB_RUN_ATTEMPT builds on GitHub"
           # Who may use the Mac (AC13). The Mac's job-started hook enforces the same rules.
           case "$EVENT:$REF" in
             push:refs/heads/develop | push:refs/heads/mike | push:refs/tags/v*) ;;
@@ -224,11 +230,42 @@ jobs:
           pick macos-latest "moduo-mac is offline or busy"
 
   # ─────────────────────────────────────────────────────────────────
+  # The Mac can fall asleep (or get another run's build) between pick-runner and the job, and a
+  # self-hosted job then queues for up to a day. If build-mac hasn't started within 6 minutes, cancel
+  # the run; a re-run builds on GitHub's Mac (see build-mac's runs-on).
+  # ─────────────────────────────────────────────────────────────────
+  mac-watchdog:
+    needs: pick-runner
+    if: needs.pick-runner.outputs.self_hosted == 'true' && github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      actions: write
+    steps:
+      - name: Wait for moduo-mac to start build-mac
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 1 36); do
+            status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
+              --jq '[.jobs[] | select(.name | test("build-mac$")) | .status] | first // "pending"' || echo pending)"
+            case "$status" in
+              in_progress | completed) echo "build-mac is $status."; exit 0 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::moduo-mac didn't start build-mac within 6 minutes (asleep or busy). Cancelling; use Re-run all jobs (or failed jobs) and it builds on GitHub's Mac."
+          gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
+          exit 1
+
+  # ─────────────────────────────────────────────────────────────────
   # macOS — universal binary (Apple Silicon + Intel), signed, submitted to Apple
   # ─────────────────────────────────────────────────────────────────
   build-mac:
     needs: [version, pick-runner]
-    runs-on: ${{ fromJSON(needs.pick-runner.outputs.runner) }}
+    # Any re-run (all jobs or failed ones) builds on GitHub: "Re-run failed jobs" reuses pick-runner's
+    # old answer, and the Mac that failed or never answered is the likely reason for the re-run.
+    runs-on: ${{ fromJSON(github.run_attempt == '1' && needs.pick-runner.outputs.runner || '"macos-latest"') }}
     timeout-minutes: 60
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
@@ -258,7 +295,7 @@ jobs:
       # login (infra/mac-runner/setup.sh). Unlock it, make it the job's keychain, and run the same
       # checks as the import step below, which the Mac skips.
       - name: Use the runner's signing keychain
-        if: needs.pick-runner.outputs.self_hosted == 'true'
+        if: runner.environment == 'self-hosted'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
@@ -296,7 +333,7 @@ jobs:
 
       # Import the Developer ID cert into an ephemeral keychain and prove codesign can see it.
       - name: Import Apple Developer ID certificate
-        if: needs.pick-runner.outputs.self_hosted != 'true'
+        if: runner.environment != 'self-hosted'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -352,7 +389,7 @@ jobs:
       # Saved even when a later step fails, so a signing/notarization failure doesn't force a cold compile next time.
       # moduo-mac keeps its own target dir (CARGO_TARGET_DIR) and needs no copy of it.
       - name: Cache Rust dependencies
-        if: needs.pick-runner.outputs.self_hosted != 'true'
+        if: runner.environment != 'self-hosted'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: ${{ env.DESKTOP_DIR }}/src-tauri
@@ -382,7 +419,7 @@ jobs:
 
       # The persistent target dir still holds earlier versions' bundles; staging picks the first .dmg it finds.
       - name: Clear old bundles (moduo-mac)
-        if: needs.pick-runner.outputs.self_hosted == 'true'
+        if: runner.environment == 'self-hosted'
         run: rm -rf "${CARGO_TARGET_DIR:?}/universal-apple-darwin/release/bundle"
 
       # No APPLE_ID / APPLE_PASSWORD here on purpose: Tauri would notarize the .app and block on Apple,

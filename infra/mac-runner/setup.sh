@@ -294,27 +294,37 @@ latest_runner() {
 stop_service() { if service_running; then launchctl bootout "system/$LABEL" 2>/dev/null && sleep 2 || true; fi; }
 
 # Root owns the runner's code and config; moduo-ci owns only its state (registration, logs, work).
+# moduo-ci can add entries to the runner dir (sticky, group-writable), so root never follows one:
+# a symlink or a hard link (link count > 1) planted there is removed, not chowned.
+STATE_FILES=" .runner .credentials .credentials_rsaparams .runner_migrated .credentials_migrated "
+planted() { [ -L "$1" ] || { [ -f "$1" ] && [ "$(stat -f %l "$1")" != 1 ]; }; }
 lock_runner_dir() {
-  chown -R root:wheel "$RUNNER_DIR"
-  chmod -R go-w "$RUNNER_DIR"
-  chown "root:$CI_USER" "$RUNNER_DIR"
+  chown -h "root:$CI_USER" "$RUNNER_DIR"
   chmod 1775 "$RUNNER_DIR"
-  local f
-  for f in .runner .credentials .credentials_rsaparams .runner_migrated .credentials_migrated; do
-    if [ -f "$RUNNER_DIR/$f" ]; then
-      chown "$CI_USER:$CI_USER" "$RUNNER_DIR/$f"
-      chmod 600 "$RUNNER_DIR/$f"
+  local p f
+  for p in "$RUNNER_DIR"/* "$RUNNER_DIR"/.[!.]*; do
+    [ -e "$p" ] || [ -L "$p" ] || continue
+    f="${p##*/}"
+    if planted "$p"; then
+      rm -f "$p"
+    elif [[ "$STATE_FILES" == *" $f "* ]]; then
+      chown -h "$CI_USER:$CI_USER" "$p"
+      chmod 600 "$p"
+    elif [ "$f" != _work ] && [ "$f" != _diag ]; then
+      chown -R -P root:wheel "$p"
+      chmod -R go-w "$p"
     fi
   done
   for f in _work _diag; do
-    install -d -o "$CI_USER" -g "$CI_USER" -m 755 "$RUNNER_DIR/$f"
-    chown -R "$CI_USER:$CI_USER" "$RUNNER_DIR/$f"
+    [ -d "$RUNNER_DIR/$f" ] || install -d -o "$CI_USER" -g "$CI_USER" -m 755 "$RUNNER_DIR/$f"
   done
   # The runner reads these at start; root's copies decide PATH and the hook, not a job's.
-  rm -f "$RUNNER_DIR/.path" "$RUNNER_DIR/.env"
-  printf '%s' "$CI_PATH" >"$RUNNER_DIR/.path"
-  printf 'LANG=en_US.UTF-8\nACTIONS_RUNNER_HOOK_JOB_STARTED=%s\n' "$HOOK_DIR/job-started.sh" >"$RUNNER_DIR/.env"
-  chmod 644 "$RUNNER_DIR/.path" "$RUNNER_DIR/.env"
+  # Written in root's own dir and renamed in: a rename replaces whatever moduo-ci put there.
+  printf '%s' "$CI_PATH" >"$HOOK_DIR/runner.path"
+  printf 'LANG=en_US.UTF-8\nACTIONS_RUNNER_HOOK_JOB_STARTED=%s\n' "$HOOK_DIR/job-started.sh" >"$HOOK_DIR/runner.env"
+  chmod 644 "$HOOK_DIR/runner.path" "$HOOK_DIR/runner.env"
+  mv -f "$HOOK_DIR/runner.path" "$RUNNER_DIR/.path"
+  mv -f "$HOOK_DIR/runner.env" "$RUNNER_DIR/.env"
 }
 
 setup_runner() {
