@@ -202,7 +202,7 @@ jobs:
 
       - name: Smoke test
         run: |
-          # A first deploy moves moduo.app off a cached Vercel answer (TTL 60 s).
+          # A first deploy of a new host can be shadowed by a cached older answer for a minute.
           for _ in $(seq 1 40); do
             h="$(curl -sI https://moduo.app/ || true)"
             grep -qi '^server: cloudflare' <<< "$h" && break

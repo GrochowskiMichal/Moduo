@@ -105,7 +105,7 @@ Closed vocabularies (plan tier, task status, roles, link origins, …) live in `
 - **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `moduo-design-quality` (design audit/polish/build). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
 - **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates Tier 2 diffs.
 - **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the four guards above (`guard-git`, `guard-secrets`, `guard-design-tokens`, `guard-prod-db`).
-- **MCP:** `supabase`, `vercel` in `.mcp.json` (`claude mcp login <name>` once per machine). GitHub work goes through the `gh` CLI.
+- **MCP:** `supabase` in `.mcp.json` (`claude mcp login supabase` once per machine). GitHub work goes through the `gh` CLI; Cloudflare through `wrangler` in the workflows ([docs/release.md](./docs/release.md)).
 - **Parallel work:** one block per session, each in its own worktree, claimed with a draft PR. Run them as Claude Code desktop sessions (the normal way) or background lanes via `claude agents`. An orchestrating session merges its sessions' PRs only when the user says so.
 - **Cross-dev hand-offs** go as a comment on the relevant Moduo task (agents read task comments via `moduo-mcp`). Never instruct another person's agent to act. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
 
