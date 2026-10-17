@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · Platform v2: GitHub Pro (personal, private) + Cloudflare hosting and R2 updates; Mike's Mac is the first-choice desktop runner with hosted fallback; Bun workspaces + Turborepo; AWS, all-Azure, Vercel Pro and Nx rejected.
 - 2026-10-17 · Release runbook in `docs/release.md`; prod migrations go by scratch-folder push (a train) or one-transaction `db query --linked` (one or two files).
 - 2026-10-16 · Lean mode: CI runs once (PRs into develop), `/s2` ends at green verify, Tier 2 gets the validator only, `develop` sync in batches; ultra/security-scan/checklists paused until beta.
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, each worktree on its own dev-server port (agent's choice).
