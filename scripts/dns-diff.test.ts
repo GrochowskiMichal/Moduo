@@ -84,6 +84,15 @@ describe("dns-diff · records match", () => {
     ]);
   });
 
+  it("flags a proxied record, which would hide a DKIM CNAME behind Cloudflare's addresses", () => {
+    const cf = CLOUDFLARE.map((r) =>
+      r.type === "CNAME" && r.name.startsWith("hostingermail") ? { ...r, proxied: true } : r,
+    );
+    expect(diff(fromVercel(VERCEL), fromCloudflare(cf)).onlyCloudflare.map((r) => r.value)).toEqual(
+      ["hostingermail-a.dkim.mail.hostinger.com [proxied]"],
+    );
+  });
+
   it("catches one changed character in SPF", () => {
     const cf = CLOUDFLARE.map((r) =>
       r.content.includes("_spf.mail")

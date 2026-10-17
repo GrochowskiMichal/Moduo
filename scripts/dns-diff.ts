@@ -123,13 +123,23 @@ type CloudflareRecord = {
   data?: { flags?: number; tag?: string; value?: string };
 };
 
+/**
+ * A proxied (orange-cloud) record answers with Cloudflare's addresses instead of its content, so a
+ * proxied DKIM CNAME stops resolving to the key. A pending zone answers proxied records as plain
+ * ones, so the live check can't see this before the switch: mark them here instead.
+ */
 export function fromCloudflare(records: CloudflareRecord[]): Rec[] {
   return records.map((r) => {
-    if (r.type === "MX") return rec(r.name, "MX", `${r.priority ?? 0} ${r.content}`);
-    if (r.type === "CAA" && r.data?.tag)
-      return rec(r.name, "CAA", `${r.data.flags ?? 0} ${r.data.tag} "${r.data.value ?? ""}"`);
-    return rec(r.name, r.type, r.content);
+    const out = plainCloudflare(r);
+    return r.proxied ? { ...out, value: `${out.value} [proxied]` } : out;
   });
+}
+
+function plainCloudflare(r: CloudflareRecord): Rec {
+  if (r.type === "MX") return rec(r.name, "MX", `${r.priority ?? 0} ${r.content}`);
+  if (r.type === "CAA" && r.data?.tag)
+    return rec(r.name, "CAA", `${r.data.flags ?? 0} ${r.data.tag} "${r.data.value ?? ""}"`);
+  return rec(r.name, r.type, r.content);
 }
 
 const key = (r: Rec) => `${r.name}\t${r.type}\t${r.value}`;
