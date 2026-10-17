@@ -21,6 +21,7 @@ pub mod config;
 pub mod domain;
 pub mod email_sync;
 pub mod identity_acl;
+pub mod install_id;
 pub mod keychain;
 pub mod migration_legacy;
 pub mod store_redb;
@@ -383,7 +384,6 @@ pub fn run() {
         // Focus phase-end alerts (TV-F1): the JS engine fires them at the computed
         // time; the plugin can't schedule on desktop.
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .menu(build_app_menu)
         // ⌘Q (and the Apple-menu Quit) fire our custom Quit item here, NOT the predefined
@@ -417,6 +417,16 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // The updater is registered here, not on the builder, because it sends this
+            // install's id (for staged rollouts) and the id lives in the app data folder.
+            let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let install_id = install_id::load_or_create(&data_dir.join("moduo"));
+            app.handle().plugin(
+                tauri_plugin_updater::Builder::new()
+                    .header(install_id::HEADER, install_id)
+                    .map_err(|e| e.to_string())?
+                    .build(),
+            )?;
             let config = config::AppConfig::from_env();
             let db_path =
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
