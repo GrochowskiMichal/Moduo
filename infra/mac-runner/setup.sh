@@ -264,7 +264,7 @@ write_plist() {
   <key>GroupName</key><string>$CI_USER</string>
   <!-- Its own security session, so the job can unlock and use moduo-ci's keychain with nobody logged in. -->
   <key>SessionCreate</key><true/>
-  <key>ProgramArguments</key><array><string>$RUNNER_DIR/run.sh</string></array>
+  <key>ProgramArguments</key><array><string>$HOOK_DIR/run-runner.sh</string></array>
   <key>WorkingDirectory</key><string>$RUNNER_DIR</string>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
@@ -320,7 +320,8 @@ lock_runner_dir() {
   for p in "$RUNNER_DIR"/* "$RUNNER_DIR"/.[!.]*; do
     [ -e "$p" ] || [ -L "$p" ] || continue
     f="${p##*/}"
-    if planted "$p"; then
+    if planted "$p" || [ "$f" = run-helper.sh ]; then
+      # run-helper.sh: run.sh's moduo-ci-owned copy; run-runner.sh runs the template instead.
       rm -f "$p"
     elif [[ "$STATE_FILES" != *" $f "* ]] && [ "$f" != _work ] && [ "$f" != _diag ]; then
       chown -R -P root:wheel "$p"
@@ -379,7 +380,8 @@ setup_runner() {
   ok "registered"
 
   install -o root -g wheel -m 755 "$SRC_DIR/job-started.sh" "$HOOK_DIR/job-started.sh"
-  ok "job-started hook at $HOOK_DIR/job-started.sh (root-owned)"
+  install -o root -g wheel -m 755 "$SRC_DIR/run-runner.sh" "$HOOK_DIR/run-runner.sh"
+  ok "job-started hook and launcher in $HOOK_DIR (root-owned)"
 
   # In a root-owned directory, so the file can't be swapped for a link to something of root's.
   [ -f "$LOG" ] || install -o "$CI_USER" -g "$CI_USER" -m 644 /dev/null "$LOG"
@@ -422,10 +424,10 @@ not() { ! "$@"; }
 hook_refuses() { hook "$@"; [ $? = 1 ]; }
 hook() { [ -f "$HOOK_DIR/job-started.sh" ] || return 2; env -i MODUO_HOOK_DRY_RUN=1 GITHUB_REPOSITORY_OWNER="${REPO%%/*}" GITHUB_EVENT_NAME="$1" GITHUB_REF="$2" GITHUB_TRIGGERING_ACTOR="$3" /bin/bash "$HOOK_DIR/job-started.sh"; }
 has_line() { local want="$1"; shift; "$@" 2>/dev/null | grep -qF -- "$want"; }
-owned_by_root_not_writable() { [ "$(stat -f '%Su %Lp' "$1")" = "root 755" ] || [ "$(stat -f '%Su %Lp' "$1")" = "root 644" ]; }
+owned_by_root_not_writable() { [ "$(stat -f %Su "$1")" = root ] && [ $((8#$(stat -f %Lp "$1") & 8#022)) = 0 ]; }
 gate_files_root_owned() {
   local f
-  for f in "$HOOK_DIR" "$HOOK_DIR/job-started.sh" "$PLIST" "$RUNNER_DIR/run.sh" "$RUNNER_DIR/run-helper.sh" "$RUNNER_DIR/bin" "$RUNNER_DIR/externals" "$RUNNER_DIR/.env" "$RUNNER_DIR/.path"; do
+  for f in "$HOOK_DIR" "$HOOK_DIR/job-started.sh" "$HOOK_DIR/run-runner.sh" "$PLIST" "$RUNNER_DIR/run-helper.sh.template" "$RUNNER_DIR/safe_sleep.sh" "$RUNNER_DIR/bin" "$RUNNER_DIR/externals" "$RUNNER_DIR/.env" "$RUNNER_DIR/.path"; do
     owned_by_root_not_writable "$f" || return 1
   done
   [ -z "$(find "$RUNNER_DIR/bin" "$RUNNER_DIR/externals" ! -user root -print -quit)" ]
@@ -464,11 +466,12 @@ verify() {
 
   bold "Trigger rules (job-started hook)"
   check "hook, plist and runner code are root-owned, not writable by $CI_USER" gate_files_root_owned
-  check "runner directory is root's and sticky" test "$(stat -f '%Su %Lp' "$RUNNER_DIR")" = "root 1775"
+  check "runner directory is root's and sticky" test "$(stat -f '%Su %Mp%Lp' "$RUNNER_DIR")" = "root 1775"
   check "$CI_USER can't change the runner's .env" not as_ci test -w "$RUNNER_DIR/.env"
   check "$CI_USER can't replace the runner's code" not as_ci test -w "$RUNNER_DIR/bin"
   check "runner self-update is off" grep -q '"disableUpdate": *true' "$RUNNER_DIR/.runner"
   check "plist runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$PLIST"
+  check "plist starts the root-owned launcher" has_line "$HOOK_DIR/run-runner.sh" cat "$PLIST"
   check ".env runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$RUNNER_DIR/.env"
   check "refuses pull_request" hook_refuses pull_request refs/pull/1/merge "${REPO%%/*}"
   check "refuses pull_request_target" hook_refuses pull_request_target refs/heads/develop "${REPO%%/*}"
