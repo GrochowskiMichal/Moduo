@@ -108,6 +108,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-17 · PLAT-6: desktop updates come from the update-server Worker on R2 (versioned, never overwritten; rollout and kill switch in KV, fail closed), and the GitHub `latest.json` freezes at each channel's bridge release.
 - 2026-10-17 · Web and desktop take one version from `VERSION` (1.1.0, above the installed 1.0.22/1.0.41); prod desktop needs a bump; `min_build` holds back desktop only.
 - 2026-10-07 · Both desktop release channels run one shared workflow, and only the `.dmg` is notarized.
 - 2026-10-07 · Rust crates and Rsbuild move to the newest stable, not their pre-releases.
