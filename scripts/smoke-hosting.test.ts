@@ -69,7 +69,12 @@ describe("smoke-hosting (AC6, AC8, AC9)", () => {
 const LANDING =
   '<html><head><title>Moduo · Home</title><link rel="canonical" href="https://moduo.app/" /></head></html>';
 
-type LandingHost = { bookToLanding?: boolean; legalFallsBack?: boolean; robots?: boolean };
+type LandingHost = {
+  bookToLanding?: boolean;
+  legalFallsBack?: boolean;
+  robots?: boolean;
+  noRedirect?: boolean;
+};
 
 /** The landing Worker in front of the app Worker, as deployed. */
 function landingHost(h: LandingHost = {}) {
@@ -79,7 +84,7 @@ function landingHost(h: LandingHost = {}) {
     const robots: Record<string, string> = h.robots ? { "X-Robots-Tag": "noindex, nofollow" } : {};
     const html = (body: string) =>
       new Response(body, { headers: { ...SEC, ...robots, "Content-Type": "text/html" } });
-    if (path === "/privacy.html")
+    if (path === "/privacy.html" && !h.noRedirect)
       return new Response(null, { status: 307, headers: { Location: "/privacy" } });
     const appPath = path === "/book" || path.startsWith("/book/") || path.startsWith("/static/");
     if (appPath && !h.bookToLanding) return app(url);
@@ -137,5 +142,32 @@ describe("smoke-hosting landing routes (AC10)", () => {
     });
     const failed = checks.filter((c) => !c.ok).map((c) => c.name);
     expect(failed).toEqual(["GET /", "GET /landing"]);
+  });
+
+  it("wants X-Robots-Tag noindex on previews and staging, never on production, and the clean-URL redirect", async () => {
+    const preview = await smokeLanding("https://p.example", "prod", {
+      fetchFn: landingHost({ robots: true }),
+      noindex: true,
+    });
+    expect(preview.filter((c) => !c.ok)).toEqual([]);
+
+    const unmarked = await smokeLanding("https://p.example", "prod", {
+      fetchFn: landingHost(),
+      noindex: true,
+    });
+    expect(unmarked.find((c) => c.name === "GET /")?.detail).toContain("no X-Robots-Tag noindex");
+
+    const prod = await smokeLanding("https://moduo.app", "prod", {
+      fetchFn: landingHost({ robots: true, noRedirect: true }),
+    });
+    expect(prod.filter((c) => !c.ok).map((c) => c.name)).toEqual([
+      "GET /",
+      "GET /manifesto",
+      "GET /privacy",
+      "GET /terms",
+      "GET /dpa",
+      "GET /aup",
+      "GET /privacy.html",
+    ]);
   });
 });
