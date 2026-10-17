@@ -109,7 +109,7 @@ test("an announcement channel and a viewer get a line, never a box (AC1.8, AC10.
     timeout: 20_000,
   });
   await expect(composer(page)).toHaveCount(0);
-  await rpc(room.owner, "share_op_announce", { p_channel_id: room.general, p_on: false });
+  await rpc(room.owner, "chat_op_set_announcement", { p_channel_id: room.general, p_on: false });
 
   await rest(
     "service",
