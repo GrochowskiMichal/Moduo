@@ -18,6 +18,7 @@ Marked rules are enforced in code; the rest you hold yourself.
 10. **Never read a teammate's private Moduo data** (private tasks, queue, focus runs, agent sessions, notes) through the admin/service-role Supabase connection. Read through your own permissions, or ask them.
 11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function`; `.claude/settings.json` asks before `supabase db push`, `db query --linked` and `functions deploy`.)*
 12. **Stage explicit paths.** Another session may share the checkout: never `git add -A` or `git add <dir>`.
+13. **The local Supabase stack is shared** by every session and agent on this Mac. Never wipe or stop it (`local:reset`, `local:down`, `supabase db reset`, `supabase stop --no-backup`) unless the user confirms no other session needs it, and never clean up rows or migrations another session left there. Test a migration by applying it on top with `psql … -1 -f <file>`. *(`scripts/local/stack.sh` refuses reset/down without `MODUO_SHARED_STACK_OK=1`; `.claude/settings.json` denies the raw commands.)*
 
 ## Session start
 

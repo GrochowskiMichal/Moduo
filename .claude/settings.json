@@ -135,7 +135,9 @@
       "Read(./.entire/metadata/**)",
       "Read(./.env)",
       "Read(./.env.local)",
-      "Read(./.env.*.local)"
+      "Read(./.env.*.local)",
+      "Bash(supabase db reset:*)",
+      "Bash(supabase stop --no-backup:*)"
     ],
     "ask": [
       "Bash(supabase db push*)",

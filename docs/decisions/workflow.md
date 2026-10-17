@@ -2,6 +2,16 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-17 · The local Supabase stack is shared, so wiping or stopping it needs the user's go-ahead** → AGENTS.md rule 13, `scripts/local/stack.sh`, `.claude/settings.json` (deny), [local-dev.md](../local-dev.md)
+  - Who: Maciej, 2026-10-17 ("Another agent is working on that locally… If we need any rules for these sessions that would stop before resetting and messing up other agents' work, add them").
+  - Decision: every session, agent and dev server on a Mac shares one local database.
+    - `local:reset` and `local:down` refuse unless `MODUO_SHARED_STACK_OK=1` is set, which an agent sets only after the user confirms nobody else needs the stack.
+    - Claude Code's project settings deny the raw `supabase db reset` and `supabase stop --no-backup`.
+    - Agents test migrations by applying them on top with `psql … -1 -f`, and leave other sessions' rows and migrations alone.
+    - A test that fails only because the shared DB lacks another session's migrations is reported, not "fixed" by a reset.
+  - Why: on 2026-10-16 six lanes used the stack at once, and on 2026-10-17 another agent owns Chat locally. One reset would erase their applied migrations and test data mid-run.
+  - Rejected: a separate stack per worktree (Docker ports and memory on one Mac, and every lane would rebuild the snapshot); a docs-only rule (agents follow the error message of the command they run more reliably than a page they may not open).
+
 - **2026-10-17 · PLAT-8: cutover. moduo.app's DNS is a Cloudflare zone; every host is a Worker custom domain declared in its `wrangler.jsonc`; production ships through the owner-only `deploy-prod.yml`, which rebuilds a staging-tested develop commit with the prod version.** The zone was filled to match Vercel record for record and checked with `scripts/dns-diff.ts` (record lists through both APIs, and the answers of both nameserver sets per name and type) before Mike changed the nameservers at the registrar (Registrar.eu, through a reseller; not Vercel, which only hosted DNS).
   - *Hosts:* app.staging.moduo.app → `moduo-app-staging`, staging.moduo.app → `moduo-landing-staging`, app.moduo.app → `moduo-app-production`, moduo.app → `moduo-landing-production`, updates.moduo.app → `moduo-update-server` (workers.dev kept on: rc.43 up to PLAT-8 builds know only that address). www.moduo.app is a zone Redirect Rule (308 to the apex), as Vercel had it, not a second landing host; the rule needs a proxied placeholder record for www (AAAA `100::`). The `*` wildcard CNAME to Vercel is deleted before Vercel goes (else www and every unnamed subdomain point at an account we no longer control). Mail and DKIM records stay DNS-only.
   - *Why a rebuild, not the staging bytes:* the version label (`MODUO_VERSION`) is compiled into the bundle, and staging builds say `<VERSION>-rc`. deploy-prod rebuilds the exact commit with the same lockfile, which is on develop and passed `checks` on a push (both checked in the `resolve` job; the default is the build staging serves); config differs only at the edge. Moving the version into the edge config would make the bytes identical; not worth it before Phase 2's `/ship`.
