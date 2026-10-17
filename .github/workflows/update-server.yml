@@ -79,6 +79,8 @@ jobs:
 
       - name: Smoke test
         run: |
+          # A first deploy takes a few seconds to answer on workers.dev (it 404s until then).
+          for _ in $(seq 1 12); do curl -sf "$UPDATE_SERVER_URL/health" && break; sleep 5; done
           curl -sSf "$UPDATE_SERVER_URL/health"
           code=$(curl -s -o /dev/null -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/staging/darwin/aarch64/0.0.1")
           echo "update check → $code"
