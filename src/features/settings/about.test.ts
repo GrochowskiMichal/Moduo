@@ -50,6 +50,8 @@ describe("About links (AC12)", () => {
     const changelog = ABOUT_LINKS.find((l) => l.kind === "changelog");
     expect(changelog).toBeDefined();
     expect(changelog?.label).toMatch(/new/i);
+    // moduo.app/changelog doesn't exist; the public releases page does.
+    expect(changelog?.href).toBe("https://github.com/GrochowskiMichal/moduo-releases/releases");
   });
 
   it("includes Privacy, Terms, and Support links", () => {

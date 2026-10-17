@@ -57,19 +57,17 @@ const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
 const isWeb = target === "web";
 
 // App version + build id surfaced in Settings → About (DF-19i) and Diagnostics
-// (DF-19g). Version comes from package.json; the build id is the short git SHA
-// (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
+// (DF-19g). Version comes from the VERSION file; the build id is the short git
+// SHA (CI may override with MODUO_BUILD) and degrades to "dev" when git isn't
 // available.
-function readPackageVersion(): string {
-  // CI release builds inject the same version they stamp into tauri.conf.json,
-  // so About and the updater compare like with like.
+function readAppVersion(): string {
+  // Release builds inject the channel's version (scripts/release/version.mjs):
+  // the web one from vercel-build.mjs, the desktop one from the same value the
+  // workflow stamps into tauri.conf.json, so About and the updater agree.
   const injected = process.env.MODUO_VERSION?.trim();
   if (injected) return injected;
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")) as {
-      version?: string;
-    };
-    return pkg.version ?? "0.0.0";
+    return fs.readFileSync(path.resolve(__dirname, "VERSION"), "utf8").trim() || "0.0.0";
   } catch {
     return "0.0.0";
   }
@@ -91,7 +89,7 @@ function readBuildId(): string {
     return "dev";
   }
 }
-const appVersion = readPackageVersion();
+const appVersion = readAppVersion();
 const appBuild = readBuildId();
 
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");

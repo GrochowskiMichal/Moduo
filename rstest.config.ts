@@ -43,10 +43,12 @@ export default defineConfig({
     "supabase/functions/booking-public/*.test.ts",
     "supabase/functions/push-send/*.test.ts",
     "scripts/brand/*.test.ts",
+    "scripts/release/*.test.ts",
   ],
   globals: true,
   setupFiles: ["./rstest.setup.ts"],
-  // One file at a time, same as the old `vitest --maxWorkers=1`.
-  pool: { maxWorkers: 1 },
+  // Half the cores: the whole suite passes this way (62 s locally, against
+  // 560 s one file at a time). CI also splits it into shards (checks.yml).
+  pool: { maxWorkers: "50%" },
   performance: { buildCache: true },
 });

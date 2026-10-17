@@ -155,12 +155,12 @@ describe("readOnlyFetch", () => {
     }) as typeof fetch;
     const guarded = readOnlyFetch(base);
 
-    applyMinBuild("0.0.0", "1.0.0");
+    applyMinBuild("0.0.0", "1.0.0", "desktop");
     expect(isReadOnlyBuild()).toBe(false);
     await guarded(`${BASE}/rest/v1/tasks`, { method: "POST" });
     expect(calls).toHaveLength(1);
 
-    applyMinBuild("2.0.0", "1.0.0");
+    applyMinBuild("2.0.0", "1.0.0", "desktop");
     expect(isReadOnlyBuild()).toBe(true);
     const refused = await guarded(`${BASE}/rest/v1/rpc/tasks_op_create`, { method: "POST" });
     expect(refused.status).toBe(403);
@@ -172,6 +172,30 @@ describe("readOnlyFetch", () => {
     await guarded(`${BASE}/auth/v1/token`, { method: "POST" });
     expect(calls).toHaveLength(3);
 
-    applyMinBuild("0.0.0", "1.0.0");
+    applyMinBuild("0.0.0", "1.0.0", "desktop");
+  });
+
+  it("never makes the web app read-only, whatever the minimum says", async () => {
+    const calls: string[] = [];
+    const base = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return new Response("[]", { status: 200 });
+    }) as typeof fetch;
+    const guarded = readOnlyFetch(base);
+
+    // A minimum raised for desktop, a web build on an older or rc VERSION, or a dev build.
+    for (const current of ["1.0.0", "1.1.0-rc", "0.0.0"]) {
+      const state = applyMinBuild("9.0.0", current, "web");
+      expect(state.readOnly).toBe(false);
+      expect(state.minimum).toBe("9.0.0");
+      expect(isReadOnlyBuild()).toBe(false);
+    }
+    const write = await guarded(`${BASE}/rest/v1/tasks`, { method: "POST" });
+    expect(write.status).toBe(200);
+    expect(calls).toHaveLength(1);
+
+    // The same minimum still holds an old desktop back.
+    expect(applyMinBuild("9.0.0", "1.0.0", "desktop").readOnly).toBe(true);
+    applyMinBuild("0.0.0", "1.0.0", "desktop");
   });
 });

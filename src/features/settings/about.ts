@@ -78,12 +78,15 @@ export type AboutLink = { label: string; href: string; kind: "changelog" | "lega
 /** The privacy policy (landing/privacy.html on prod-landing). */
 export const PRIVACY_POLICY_URL = "https://moduo.app/privacy";
 
+/** Release notes: the public releases repo, until moduo.app has a changelog page. */
+export const RELEASE_NOTES_URL = "https://github.com/GrochowskiMichal/moduo-releases/releases";
+
 /**
- * External links shown at the bottom of About. All point at the canonical
- * marketing domain (moduo.app) so they stay correct as the pages fill in.
+ * External links shown at the bottom of About. The legal and support pages
+ * live on the canonical marketing domain (moduo.app).
  */
 export const ABOUT_LINKS: AboutLink[] = [
-  { label: "What's new", href: "https://moduo.app/changelog", kind: "changelog" },
+  { label: "What's new", href: RELEASE_NOTES_URL, kind: "changelog" },
   { label: "Privacy", href: PRIVACY_POLICY_URL, kind: "legal" },
   { label: "Terms", href: "https://moduo.app/terms", kind: "legal" },
   { label: "Support", href: "https://moduo.app/support", kind: "support" },

@@ -15,17 +15,30 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readBaseVersion, webBuildId, webVersion } from "./release/version.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const target = process.env.MODUO_BUILD_TARGET ?? "app";
+
+// Settings → About and min_build read these (rsbuild.config.ts). Vercel clones
+// shallow, so the build id is the commit SHA, not a commit count.
+process.env.MODUO_VERSION = webVersion(readBaseVersion(), process.env.VERCEL_GIT_COMMIT_REF);
+// Without a SHA (a CLI deploy), rsbuild falls back to `git rev-parse`.
+if (process.env.VERCEL_GIT_COMMIT_SHA) {
+  process.env.MODUO_BUILD = webBuildId(process.env.VERCEL_GIT_COMMIT_SHA);
+}
+console.log(
+  `[vercel-build] Version ${process.env.MODUO_VERSION} · build ${process.env.MODUO_BUILD ?? "(git)"}`,
+);
 
 if (target === "landing") {
   const ref = process.env.VERCEL_GIT_COMMIT_REF ?? "";
   const file = ref === "staging-landing" ? "staging.html" : "index.html";
   console.log(`[vercel-build] Building landing (${file}, branch=${ref || "unknown"})…`);
   // The marketing page stays at /. Booking links are /book on this same host,
-  // so the app shell has to be in this deployment too (its /assets are what
-  // /book loads). app.html is that shell; index.html is the landing page.
+  // so the app shell has to be in this deployment too (its /static files are
+  // what /book loads). app.html is that shell; index.html is the landing page.
   execSync("bun run build:web", { stdio: "inherit", cwd: root });
   const outDir = path.join(root, "dist", "web");
   fs.renameSync(path.join(outDir, "index.html"), path.join(outDir, "app.html"));

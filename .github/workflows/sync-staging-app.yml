@@ -1,16 +1,31 @@
 name: Sync develop → staging-app
 
-# Every push to develop is automatically mirrored to staging-app so
-# app.staging.moduo.app always reflects the latest development build.
-# Vercel watches staging-app and triggers a deploy on push.
+# Each develop commit that passed `checks` is mirrored to staging-app, so
+# app.staging.moduo.app only ever serves a tested build. Vercel watches
+# staging-app and deploys on push. It merges the commit checks tested
+# (head_sha), not whatever develop's tip is by then.
 
 on:
-  push:
+  workflow_run:
+    workflows: [checks]
+    types: [completed]
     branches: [develop]
+
+# Two runs close together: the later one waits, and still merges only its own tested commit.
+concurrency:
+  group: sync-staging-app
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   sync:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
 
@@ -26,16 +41,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Merge develop into staging-app
+      - name: Merge the tested develop commit into staging-app
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           git fetch origin staging-app || true
           # If staging-app exists on remote, checkout and merge
           if git ls-remote --exit-code origin staging-app; then
             git checkout -b staging-app origin/staging-app
-            git merge origin/develop --ff-only \
-              || git merge origin/develop --no-ff -m "chore: sync develop → staging-app [skip ci]"
+            git merge "$SHA" --ff-only \
+              || git merge "$SHA" --no-ff -m "chore: sync develop → staging-app [skip ci]"
           else
-            # Branch doesn't exist yet — create it from develop
-            git checkout -b staging-app origin/develop
+            # Branch doesn't exist yet — create it from the tested commit
+            git checkout -b staging-app "$SHA"
           fi
           git push origin staging-app
