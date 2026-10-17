@@ -17,6 +17,7 @@ name: Desktop Release (shared)
 # nothing newer than the bridge, so no fallback can route around the kill switch (a 204 stops the
 # check). The address is the repo variable UPDATE_SERVER_URL (default below). Builds from rc.43 to
 # PLAT-8 have only the workers.dev address, so that address must keep working (workers_dev stays on).
+# The fallback covers the update check only: the manifest's download URLs use UPDATE_SERVER_URL.
 # To re-issue a bridge (a broken bridge build), delete latest.json from the channel's GitHub release.
 #
 # Mac notarization is one Apple submission (the .dmg; Apple notarises the .app inside it too).

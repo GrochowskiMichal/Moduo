@@ -87,7 +87,7 @@ export function normalizeValue(type: string, value: string): string {
 export const fqdn = (label: string, domain = DOMAIN) =>
   label === "" || label === "@"
     ? domain
-    : host(label).endsWith(domain)
+    : host(label) === domain || host(label).endsWith(`.${domain}`)
       ? host(label)
       : `${host(label)}.${domain}`;
 

@@ -12,7 +12,9 @@
 #         the last 3 recorded builds of <lane> into <dist> without overwriting a current file,
 #         and writes the newest previous build's file list to $RUNNER_TEMP/web-builds/previous-static.txt
 #         (scripts/smoke-hosting.ts --old checks a sample after the deploy).
-# record: uploads this build's tarball to R2 builds/<build>/static.tar.gz and puts it first in
+# record: uploads this build's tarball to R2 builds/<build>/static.tar.gz (production:
+#         builds/production/<build>/…, because a prod build of the same commit has other hashes
+#         in the chunks that carry the version label) and puts it first in
 #         lanes/<lane>.json (newest first, 10 kept).
 #
 # Lanes: "staging", "production" (PLAT-8), "pr-<n>" for previews. Bucket moduo-web-builds; record
@@ -54,6 +56,9 @@ ensure_bucket() {
     || $WRANGLER r2 bucket lifecycle add "$BUCKET" expire-pr-lanes lanes/pr- --expire-days 60 --force
 }
 
+# R2 key of a build's tarball in this lane.
+tarball() { if [ "$lane" = production ]; then echo "builds/production/$1/static.tar.gz"; else echo "builds/$1/static.tar.gz"; fi; }
+
 # The lane's recorded builds, newest first, one per line ("" when the lane is new).
 lane_builds() {
   if r2_get "lanes/$lane.json" "$TMP/lane.json"; then
@@ -74,7 +79,7 @@ case "$cmd" in
     while IFS= read -r prev; do
       [ -n "$prev" ] && [ "$prev" != "$build" ] || continue
       [ "$n" -lt "$KEEP_PREVIOUS" ] || break
-      if ! r2_get "builds/$prev/static.tar.gz" "$TMP/prev.tar.gz"; then
+      if ! r2_get "$(tarball "$prev")" "$TMP/prev.tar.gz"; then
         echo "::warning::build $prev of lane $lane is no longer in R2 (expired?); skipped"
         continue
       fi
@@ -95,7 +100,7 @@ case "$cmd" in
   record)
     [ -f "$TMP/$build.tar.gz" ] || { echo "run merge first" >&2; exit 1; }
     ensure_bucket
-    r2_put "builds/$build/static.tar.gz" "$TMP/$build.tar.gz" application/gzip
+    r2_put "$(tarball "$build")" "$TMP/$build.tar.gz" application/gzip
     builds=$(lane_builds)
     { echo "$build"; grep -vx "$build" <<< "$builds" || true; } | grep . | head -n 10 | jq -R . | jq -s . > "$TMP/lane-new.json"
     r2_put "lanes/$lane.json" "$TMP/lane-new.json" application/json

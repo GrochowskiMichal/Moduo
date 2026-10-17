@@ -63,7 +63,9 @@ Every PR that touches the app or the landing also gets a preview URL comment on 
 
 **To ship:** run **deploy-prod** (owner only). Leave `sha` empty to ship the build app.staging.moduo.app serves now, or give a develop commit that passed `checks`. It rebuilds that commit with the production version (`VERSION`, no `-rc`), deploys the app and then the landing, smoke-tests both hosts and moves `prod-app` to the commit (the desktop release builds from `prod-app`). `target` deploys only one of the two.
 
-**Roll back (under a minute):** Cloudflare dashboard → Workers & Pages → `moduo-app-production` (or `moduo-landing-production`) → Deployments → the previous version → Rollback. From a terminal: `npx wrangler rollback --env production` in `apps/app` (or `apps/landing`). A rollback keeps the custom domain; run deploy-prod again to move forward.
+**Roll back (under a minute):** Cloudflare dashboard → Workers & Pages → `moduo-app-production` (or `moduo-landing-production`) → Deployments → the previous version → Rollback. From a terminal: `npx wrangler rollback --env production` in `apps/app` (or `apps/landing`). A rollback keeps the custom domain; run deploy-prod again to move forward. A rollback (or a deploy of an older commit) leaves `prod-app` ahead of what's live, so don't run the production desktop release until web is forward again.
+
+**www and the wildcard:** the www Redirect Rule (`http.host eq "www.moduo.app"` → `https://moduo.app${http.request.uri.path}`, 308, query kept) only runs on proxied traffic, so `www` has a proxied placeholder record (AAAA `100::`). There is no `*` record: Vercel's wildcard was deleted at cutover, so an unnamed subdomain doesn't resolve rather than pointing at a provider we left.
 
 **DNS** is edited in the Cloudflare dashboard. Mail records (Hostinger MX, SPF, the `hostingermail-*` DKIM CNAMEs, Resend's `send.*` and `resend._domainkey`, DMARC) must stay DNS-only (grey cloud): a proxied record answers with Cloudflare addresses. `scripts/dns-diff.ts` was the pre-cutover gate (Vercel vs Cloudflare); it needs a Vercel token, so it can't run once the Vercel account is gone.
 
@@ -78,7 +80,7 @@ The desktop app bundles its own copy of the UI at build time, so a web change re
 
 ## 6. Verify what's live
 
-- **Web:** the commit is an ancestor of `origin/prod-app` (`git merge-base --is-ancestor <sha> origin/prod-app`), and a string new in this release appears in the live JS bundle on app.moduo.app.
+- **Web:** `curl -s https://app.moduo.app/config.json | jq -r .build` is the short commit production serves (staging: app.staging.moduo.app). `prod-app` can be ahead of it after a rollback.
 - **Database:** `select version, name from supabase_migrations.schema_migrations order by version desc limit 20;`
 - **Functions:** `supabase functions list` (version and updated time per function); call one new tool through the connector.
 - **Desktop:** `gh release download prod-latest -R GrochowskiMichal/moduo-releases -p latest.json -O -`. Its `version` and "production build from commit …" note name the build.

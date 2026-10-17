@@ -13,7 +13,8 @@ name: deploy-prod
 #
 # Rollback (AC15): Cloudflare dashboard → Workers → moduo-app-production → Deployments → Rollback,
 # or `npx wrangler rollback --env production` in apps/app (same for apps/landing). See
-# docs/release.md.
+# docs/release.md. A rollback, or a deploy of an older commit, leaves prod-app where it was (ahead
+# of what's live): what app.moduo.app serves is its /config.json `build`.
 on:
   workflow_dispatch:
     inputs:
@@ -44,8 +45,6 @@ env:
 
 jobs:
   resolve:
-    # Only the repo owner may publish production, whoever can dispatch workflows.
-    if: github.actor == github.repository_owner
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -54,6 +53,17 @@ jobs:
     outputs:
       sha: ${{ steps.pick.outputs.sha }}
     steps:
+      # Only the repo owner may publish production: the one who started the run and the one who
+      # (re-)ran it. Fails loudly instead of skipping, so a refused run doesn't look green.
+      - name: Owner only
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          [ "$ACTOR" = "$OWNER" ] && [ "$TRIGGERING_ACTOR" = "$OWNER" ] \
+            || { echo "::error::Only $OWNER may deploy production (actor $ACTOR, triggered by $TRIGGERING_ACTOR)."; exit 1; }
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -137,6 +147,12 @@ jobs:
 
       - name: Smoke test
         run: |
+          # A first deploy moves app.moduo.app off a cached CNAME (TTL 300 s): wait until the
+          # host serves this build before checking it.
+          for _ in $(seq 1 40); do
+            [ "$(curl -s https://app.moduo.app/config.json | jq -r '.build // empty' 2>/dev/null)" = "${SHA::7}" ] && break
+            sleep 10
+          done
           old=()
           [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
           set +e
@@ -186,6 +202,11 @@ jobs:
 
       - name: Smoke test
         run: |
+          # A first deploy moves moduo.app off a cached Vercel answer (TTL 60 s).
+          for _ in $(seq 1 40); do
+            curl -sI https://moduo.app/ | grep -qi '^server: cloudflare' && break
+            sleep 10
+          done
           set +e
           bun scripts/smoke-hosting.ts https://moduo.app --landing prod > "$RUNNER_TEMP/smoke.md"
           code=$?
