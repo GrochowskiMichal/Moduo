@@ -401,6 +401,13 @@ jobs:
         with:
           bun-version-file: .ci/.bun-version
 
+      # The Tauri CLI (bunx tauri) runs on Node. GitHub's Macs ship it; moduo-mac doesn't.
+      - name: Setup Node (moduo-mac)
+        if: runner.environment == 'self-hosted'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
