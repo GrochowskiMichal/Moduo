@@ -74,7 +74,8 @@ jobs:
           secrets="$RUNNER_TEMP/turbo-cache-secrets.json"
           trap 'rm -f "$secrets"' EXIT
           jq -n --arg r "$READ_TOKEN" --arg w "$WRITE_TOKEN" '{READ_TOKEN: $r, WRITE_TOKEN: $w}' > "$secrets"
-          $WRANGLER deploy --secrets-file "$secrets"
+          $WRANGLER deploy
+          $WRANGLER secret bulk "$secrets"
 
       - name: Smoke test
         env:
