@@ -540,6 +540,8 @@ jobs:
       (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The Cloudflare token (R2 upload) lives in this environment (develop, main, mike, prod-app).
+    environment: cloudflare-deploy
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
 
