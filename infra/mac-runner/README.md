@@ -5,6 +5,7 @@ Mike's M4 Pro builds the desktop app when it's online and idle; otherwise the bu
 - The runner is a separate standard macOS user, `moduo-ci`. It isn't an admin, isn't in `staff`, and can't read Mike's home or keychain.
 - Its own keychain holds only the Developer ID Application identity and the notarization login.
 - It runs as a LaunchDaemon (`com.moduo.actions-runner`), so it starts at boot with nobody logged in.
+- The runner's code and config live in `/Library/Moduo/actions-runner` and belong to root, with self-update off, so a job (running as moduo-ci) can't change what runs the next job. Re-running `setup.sh` updates the runner. If you forget, GitHub eventually stops sending jobs to the outdated runner and builds go to GitHub's Mac.
 - A root-owned job-started hook (`job-started.sh`) refuses every job except a push to `develop`/`mike`, a `v*` tag, or the owner's manual run. `pull_request` jobs never run here, even if a workflow asks for the label.
 
 ## One-time setup (Mike, in a terminal)
@@ -60,17 +61,18 @@ Each step needs your password, your Apple login or a GitHub UI action, so run th
 | The certificate was renewed | Export the new one (step 1), then `sudo infra/mac-runner/setup.sh --reimport-cert` |
 | The app-specific password changed | `sudo -u moduo-ci -H xcrun notarytool store-credentials moduo-notary --keychain /Users/moduo-ci/Library/Keychains/moduo-signing.keychain-db` |
 | Re-register the runner | `sudo infra/mac-runner/setup.sh --reregister` |
-| See the runner log | `sudo tail -f /Users/moduo-ci/Library/Logs/actions-runner.log` |
+| See the runner log | `tail -f /Library/Moduo/logs/actions-runner.log` |
+| Update the runner | `sudo infra/mac-runner/setup.sh` (it installs the latest release) |
 | The pinned nightly or `.bun-version` changed | Nothing: the workflow installs the toolchain per job. Re-run `setup.sh` to keep `--verify` green. |
 
-**Cache:** the Cargo target dir (`/Users/moduo-ci/cache/cargo-target`) persists between builds; the hook clears it past 60 GB. The Bun cache is `/Users/moduo-ci/cache/bun`. While a job runs, the hook holds a `caffeinate` assertion so the Mac doesn't idle-sleep mid-build. A Mac that sleeps anyway fails the job as "runner lost"; re-run it and `pick-runner` sends it to GitHub.
+**Cache:** the Cargo target dir (`/Users/moduo-ci/cache/cargo-target`) persists between builds; the hook clears it past 60 GB. The Bun cache is `/Users/moduo-ci/cache/bun`. While a job runs, the hook holds a `caffeinate` assertion so the Mac doesn't idle-sleep mid-build. A Mac that sleeps anyway fails the job as "runner lost". Re-run it: every re-run (failed jobs or all) builds on GitHub's Mac. If the Mac sleeps after `pick-runner` chose it, `mac-watchdog` cancels the run after 6 minutes instead of letting the job queue for a day.
 
 **Removing it:**
 
 ```bash
 sudo launchctl bootout system/com.moduo.actions-runner
 sudo rm /Library/LaunchDaemons/com.moduo.actions-runner.plist
-sudo rm -r /Library/Moduo/mac-runner
+sudo rm -r /Library/Moduo
 sudo sysadminctl -deleteUser moduo-ci
 ```
 
