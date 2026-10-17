@@ -55,7 +55,11 @@ for (const icon of FAVICONS) fs.copyFileSync(path.join(appPublic, icon), path.jo
 
 // Response headers for the Worker (ignored by Vercel). Staging and previews are never indexed.
 let headers = fs.readFileSync(path.join(root, "_headers"), "utf8");
-if (noindex) headers = headers.replace(/^\/\*\n/m, "/*\n  X-Robots-Tag: noindex, nofollow\n");
+if (noindex) {
+  const marked = headers.replace(/^\/\*\r?\n/m, "/*\n  X-Robots-Tag: noindex, nofollow\n");
+  if (marked === headers) throw new Error("[landing] _headers has no /* rule for X-Robots-Tag");
+  headers = marked;
+}
 fs.writeFileSync(path.join(outDir, "_headers"), headers);
 
 console.log(

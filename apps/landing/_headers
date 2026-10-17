@@ -7,15 +7,19 @@
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
   Content-Security-Policy: frame-ancestors 'none'
-  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net; media-src 'self' https:; connect-src 'self' https://*.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy-Report-Only: default-src 'self'; script-src 'self' 'unsafe-inline' https://eu-assets.i.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; media-src 'self' https:; connect-src 'self' https://*.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), browsing-topics=()
   Strict-Transport-Security: max-age=31536000
 
-# Not content-hashed, so cached for a day, then revalidated in the background.
-/assets/*
+# The favicons never change, so they are cached for a day. Exact paths only: a missing file gets
+# index.html (not_found_handling), which must not be cached as an image. /assets/* keeps the
+# default (revalidate) for the same reason.
+/favicon.ico
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-/favicon*
+/favicon.svg
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/favicon-32x32.png
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 /apple-touch-icon.png
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800

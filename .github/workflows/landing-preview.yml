@@ -6,7 +6,9 @@ name: landing-preview
 # never changes what staging serves. Its /book and /static/* go to the staging app Worker, so
 # booking can be tried on the preview host. The alias URL is posted as one PR comment.
 #
-# PRs from forks get no secrets and are skipped.
+# `versions upload` refuses a Worker that was never deployed: moduo-landing-staging was created
+# once by an earlier revision of this job (PR #456); a new environment needs one `landing-deploy`
+# run first. PRs from forks get no secrets and are skipped. Nothing here runs `bun install`.
 on:
   pull_request:
     branches: [develop, main, mike, maciej]
@@ -61,28 +63,6 @@ jobs:
         with:
           bun-version-file: .bun-version
 
-      - name: Install
-        run: bun install --frozen-lockfile
-
-      # `versions upload` refuses a Worker that was never deployed. Only then (once, before
-      # landing-deploy.yml has run on develop) the staging build is deployed first; an existing
-      # staging landing is never touched from a PR.
-      - name: Create the staging landing Worker if it does not exist
-        working-directory: apps/landing
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if $WRANGLER deployments list --env staging > "$RUNNER_TEMP/deployments.log" 2>&1; then
-            echo "moduo-landing-staging exists"
-          elif grep -qiE 'not found|does not exist|10007' "$RUNNER_TEMP/deployments.log"; then
-            node build.mjs --staging
-            $WRANGLER deploy --env staging --message "bootstrap from PR #$PR ${SHA::7}"
-          else
-            cat "$RUNNER_TEMP/deployments.log"
-            exit 1
-          fi
-
       - name: Build the landing
         run: node apps/landing/build.mjs --noindex
 
@@ -108,7 +88,7 @@ jobs:
           URL: ${{ steps.upload.outputs.version_url }}
         run: |
           set +e
-          bun scripts/smoke-hosting.ts "$URL" --landing prod > "$RUNNER_TEMP/smoke.md"
+          bun scripts/smoke-hosting.ts "$URL" --landing prod --noindex > "$RUNNER_TEMP/smoke.md"
           code=$?
           set -e
           tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"

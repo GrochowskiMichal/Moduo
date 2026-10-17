@@ -5,7 +5,7 @@ name: landing-deploy
 # - staging: after `checks` passes on a develop push, for exactly the commit checks tested, or by
 #   hand. The staging build: the portal at /, the marketing page at /landing (noindex). It runs
 #   at https://moduo-landing-staging.moduo.workers.dev until PLAT-8 gives it staging.moduo.app.
-# - production: by hand only, and unused until PLAT-8: the Worker has no domain and no
+# - production: by hand only, from main, and unused until PLAT-8: the Worker has no domain and no
 #   workers.dev, and Vercel keeps serving moduo.app. It needs moduo-app-production to exist (its
 #   APP binding's target).
 #
@@ -41,8 +41,10 @@ env:
 
 jobs:
   deploy:
+    # Production only from main, so a dispatch from a personal branch can't publish moduo.app.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' &&
+        (inputs.target == 'staging' || github.ref == 'refs/heads/main')) ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10

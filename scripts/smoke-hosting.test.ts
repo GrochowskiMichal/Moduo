@@ -69,15 +69,18 @@ describe("smoke-hosting (AC6, AC8, AC9)", () => {
 const LANDING =
   '<html><head><title>Moduo · Home</title><link rel="canonical" href="https://moduo.app/" /></head></html>';
 
-type LandingHost = { bookToLanding?: boolean; legalFallsBack?: boolean };
+type LandingHost = { bookToLanding?: boolean; legalFallsBack?: boolean; robots?: boolean };
 
 /** The landing Worker in front of the app Worker, as deployed. */
 function landingHost(h: LandingHost = {}) {
   const app = host();
   return async (url: string) => {
     const path = new URL(url).pathname;
+    const robots: Record<string, string> = h.robots ? { "X-Robots-Tag": "noindex, nofollow" } : {};
     const html = (body: string) =>
-      new Response(body, { headers: { ...SEC, "Content-Type": "text/html" } });
+      new Response(body, { headers: { ...SEC, ...robots, "Content-Type": "text/html" } });
+    if (path === "/privacy.html")
+      return new Response(null, { status: 307, headers: { Location: "/privacy" } });
     const appPath = path === "/book" || path.startsWith("/book/") || path.startsWith("/static/");
     if (appPath && !h.bookToLanding) return app(url);
     if (path === "/assets/og.png" || path === "/favicon.ico")
@@ -102,6 +105,7 @@ describe("smoke-hosting landing routes (AC10)", () => {
       "GET /terms",
       "GET /dpa",
       "GET /aup",
+      "GET /privacy.html",
       "GET /assets/og.png",
       "GET /favicon.ico",
       "GET /book/smoke-test",

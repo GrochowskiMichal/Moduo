@@ -3,7 +3,7 @@
 // AC8, AC9; PLAT-5: AC10).
 //
 //   bun scripts/smoke-hosting.ts <base-url> [--old <file>] [--expect key=value]…
-//   bun scripts/smoke-hosting.ts <landing-url> --landing prod|staging
+//   bun scripts/smoke-hosting.ts <landing-url> --landing prod|staging [--noindex]
 //
 // Fetches the deployed app and checks: the shell and a deep link are HTML with the edge config
 // injected and revalidate; /config.json answers; a hashed file is immutable; a missing /static/*
@@ -149,19 +149,25 @@ function title(html: string): string {
 export async function smokeLanding(
   base: string,
   kind: LandingKind,
-  opts: { fetchFn?: Fetch } = {},
+  opts: { fetchFn?: Fetch; noindex?: boolean } = {},
 ): Promise<Check[]> {
   const f: Fetch = opts.fetchFn ?? ((url, init) => fetch(url, { redirect: "manual", ...init }));
   const root = base.replace(/\/+$/, "");
   const checks: Check[] = [];
+  // Staging and previews are never indexed; production must be.
+  const noindex = kind === "staging" || opts.noindex === true;
 
-  const page = async (path: string) => {
+  const page = async (path: string, landingFile = true) => {
     const res = await f(`${root}${path}`);
     const html = await res.text();
     const p: string[] = [];
     if (res.status !== 200) p.push(`status ${res.status}`);
     if (!(res.headers.get("content-type") ?? "").includes("text/html")) p.push("not HTML");
     p.push(...securityProblems(res));
+    const robots = /noindex/.test(res.headers.get("x-robots-tag") ?? "");
+    // /book comes from the app Worker, with its own headers.
+    if (landingFile && noindex && !robots) p.push("no X-Robots-Tag noindex");
+    if (landingFile && !noindex && robots) p.push("X-Robots-Tag noindex on production");
     return { html, p, cache: res.headers.get("cache-control") };
   };
 
@@ -188,18 +194,31 @@ export async function smokeLanding(
     checks.push(check(`GET ${path}`, p, `200 HTML "${t}"`));
   }
 
-  for (const path of ["/assets/og.png", "/favicon.ico"]) {
+  if (kind === "prod") {
+    const res = await f(`${root}/privacy.html`);
+    await res.arrayBuffer();
+    const p: string[] = [];
+    if (res.status < 300 || res.status > 308) p.push(`status ${res.status}`);
+    if (!/\/privacy$/.test(res.headers.get("location") ?? ""))
+      p.push(`location ${res.headers.get("location")}`);
+    checks.push(check("GET /privacy.html", p, "redirects to the clean URL /privacy"));
+  }
+
+  for (const [path, cached] of [
+    ["/assets/og.png", false],
+    ["/favicon.ico", true],
+  ] as const) {
     const res = await f(`${root}${path}`);
     await res.arrayBuffer();
     const p: string[] = [];
     if (res.status !== 200) p.push(`status ${res.status}`);
     if (!(res.headers.get("content-type") ?? "").startsWith("image/")) p.push("not an image");
-    if (!/max-age=86400/.test(res.headers.get("cache-control") ?? ""))
+    if (cached && !/max-age=86400/.test(res.headers.get("cache-control") ?? ""))
       p.push(`cache-control ${res.headers.get("cache-control")}`);
-    checks.push(check(`GET ${path}`, p, "200 image, cached a day"));
+    checks.push(check(`GET ${path}`, p, cached ? "200 image, cached a day" : "200 image"));
   }
 
-  const book = await page("/book/smoke-test");
+  const book = await page("/book/smoke-test", false);
   if (!/<script>window\.__MODUO_CONFIG__=\{/.test(book.html)) book.p.push("not the app shell");
   if (book.cache !== "no-cache") book.p.push(`cache-control ${book.cache}`);
   checks.push(check("GET /book/smoke-test", book.p, "200 app shell with config, same host"));
@@ -252,6 +271,7 @@ if (import.meta.main) {
   const old: string[] = [];
   const expect: Record<string, string> = {};
   let landing: LandingKind | undefined;
+  let noindex = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--old") {
       old.push(
@@ -267,6 +287,8 @@ if (import.meta.main) {
         process.exit(2);
       }
       landing = kind;
+    } else if (args[i] === "--noindex") {
+      noindex = true;
     } else if (args[i] === "--expect") {
       const [k, ...v] = args[++i].split("=");
       expect[k] = v.join("=");
@@ -274,11 +296,13 @@ if (import.meta.main) {
   }
   if (!base) {
     console.error(
-      "usage: bun scripts/smoke-hosting.ts <base-url> [--old <file>] [--expect key=value]… | <landing-url> --landing prod|staging",
+      "usage: bun scripts/smoke-hosting.ts <base-url> [--old <file>] [--expect key=value]… | <landing-url> --landing prod|staging [--noindex]",
     );
     process.exit(2);
   }
-  const checks = landing ? await smokeLanding(base, landing) : await smoke(base, { old, expect });
+  const checks = landing
+    ? await smokeLanding(base, landing, { noindex })
+    : await smoke(base, { old, expect });
   console.log(table(base, checks));
   process.exit(checks.every((c) => c.ok) ? 0 : 1);
 }
