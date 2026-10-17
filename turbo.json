@@ -8,7 +8,7 @@
   "futureFlags": {
     "longerSignatureKey": true
   },
-  "globalDependencies": ["tsconfig.base.json", "bunfig.toml"],
+  "globalDependencies": ["tsconfig.base.json", "bunfig.toml", ".bun-version"],
   "tasks": {
     "build": {
       "outputs": ["dist/**"]

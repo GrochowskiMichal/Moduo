@@ -14,11 +14,11 @@ name: checks
 #
 # Cache access: pushes use the turbo-cache-write environment (write token; only develop, main, mike,
 # maciej and v* tags may use it). Pull requests get the read-only token, which the Worker refuses
-# for writes, plus TURBO_CACHE=remote:r. The signing key is given to both, because turbo can't
+# for writes, plus TURBO_CACHE=local:rw,remote:r. The signing key is given to both, because turbo can't
 # verify a signed artifact without it.
 #
 # `static-checks` is the one required context. It always runs and fails unless the secret scan
-# passed and lint and every test shard passed, or a docs-only change skipped them.
+# passed and lint and every test shard passed, or a docs-only PR skipped them.
 on:
   pull_request:
     branches: [develop, main, t/mike/plat-3-turbo-ci]
@@ -67,18 +67,17 @@ jobs:
 
       - name: Docs-only change?
         id: changes
-        # Markdown anywhere, and non-code files under docs/ and specs/, feed no check. Anything
-        # else, or a range we can't diff, runs the suite.
+        # Pull requests only: Markdown anywhere, and non-code files under docs/ and specs/, feed no
+        # check, so a docs-only PR skips lint and tests. Push runs always run the suite: their
+        # `before` may be a commit whose own run failed or was cancelled, and the cache makes an
+        # unchanged suite cheap anyway.
         run: |
-          if [ "$EVENT" = "pull_request" ]; then
-            range="$PR_BASE...$PR_HEAD"
-          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            range="$BEFORE..$SHA"
-          else
-            echo "No base to diff against: running the suite."
+          if [ "$EVENT" != "pull_request" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Assigned first, so a failing diff stops the step instead of reading as "no changes".
+          files=$(git diff --name-only --no-renames "$PR_BASE...$PR_HEAD")
           code=false
           while IFS= read -r f; do
             [ -n "$f" ] || continue
@@ -91,7 +90,7 @@ jobs:
               *) code=true ;;
             esac
             [ "$code" = true ] && { echo "Code change: $f"; break; }
-          done < <(git diff --name-only --no-renames "$range")
+          done <<< "$files"
           [ "$code" = false ] && echo "Docs-only change: lint and tests are skipped."
           echo "code=$code" >> "$GITHUB_OUTPUT"
 

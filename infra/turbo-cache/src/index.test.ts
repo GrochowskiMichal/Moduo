@@ -133,6 +133,20 @@ describe("turbo remote cache worker", () => {
       headers: { "content-length": String(200 * 1024 * 1024) },
     });
     expect(big.status).toBe(413);
+
+    // A streamed body with no length can't go to R2 (it needs the size up front).
+    const req = new Request("https://cache.test/v8/artifacts/abc?teamId=t", {
+      method: "PUT",
+      headers: { authorization: `Bearer ${WRITE}` },
+      body: "x",
+    });
+    req.headers.delete("content-length");
+    const unsized = await handle(req, {
+      ARTIFACTS: memoryBucket().bucket,
+      READ_TOKEN: READ,
+      WRITE_TOKEN: WRITE,
+    });
+    expect(unsized.status).toBe(411);
   });
 
   it("answers a batch lookup with hits and nulls", async () => {
