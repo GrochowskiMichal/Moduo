@@ -6,6 +6,7 @@
   "packageManager": "bun@1.4.2",
   "workspaces": [
     "apps/*",
+    "infra/*",
     "e2e",
     "supabase"
   ],

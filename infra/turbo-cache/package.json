@@ -1,0 +1,9 @@
+{
+  "name": "@moduo/turbo-cache",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "rstest"
+  }
+}
