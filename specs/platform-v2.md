@@ -67,6 +67,7 @@ What Mike and Maciej notice:
 - **AC12:** A desktop build runs on Mike's Mac when it's online and idle, and otherwise on GitHub-hosted macOS. The decision takes under 60 s. The job log names the runner used.
 - **AC13:** The self-hosted runner runs as a separate macOS user and can't read Mike's personal home or keychain. Only `push` to `develop`, `v*` tags and manual dispatch by the owner can target it. `pull_request` jobs never run on it.
 - **AC14:** After cutover: the repo is private, rulesets require `static-checks` on `develop`, Vercel serves and deploys nothing, and DNS for `moduo.app` is on Cloudflare. Mail to `@moduo.app` still arrives, and SPF/DKIM/DMARC still pass for mail Moduo sends.
+  - *As built (PLAT-8, 2026-10-17):* DNS on Cloudflare, `static-checks` required on `develop` (ruleset "Protect main and develop"), Vercel's `moduo` project and the moduo.app domain deleted. **Repo private is deferred:** measured Actions use (about 45k Linux minutes a month at this week's pace) is far over Pro's 3,000 included minutes, so going private waits until CI minutes come down. History is public either way, so the no-secrets rule stands.
 - **AC15:** Prod web rolls back to the previous version in under a minute, from the Cloudflare dashboard or one `wrangler rollback`.
 
 ## Tests that prove them

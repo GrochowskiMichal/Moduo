@@ -23,7 +23,7 @@ function readLocalEnvValue(name: string): string {
         .replace(/^'(.*)'$/, "$1");
     }
   }
-  // Fall back to process.env so CI / Vercel builds work without .env.local
+  // Fall back to process.env so CI builds work without .env.local
   return process.env[name] ?? "";
 }
 
@@ -47,8 +47,8 @@ const vapidPublicKey = readLocalEnvValue("PUBLIC_VAPID_PUBLIC_KEY");
 // deployed web app so a shared /p/<token> link resolves.
 const publicWebOrigin = readLocalEnvValue("PUBLIC_WEB_ORIGIN");
 
-// Staging portal — set to "true" in the Vercel moduo-staging env vars.
-// Adds download buttons (Mac .dmg / Windows .exe) to the auth page.
+// Staging portal — build-time fallback; hosted staging gets it from the edge
+// config (STAGING_PORTAL in apps/app/wrangler.jsonc). Adds download buttons (Mac .dmg / Windows .exe) to the auth page.
 const stagingPortal = readLocalEnvValue("PUBLIC_STAGING_PORTAL");
 // Production desktop build — set to "production" to advertise the prod installers.
 const desktopChannel = readLocalEnvValue("PUBLIC_DESKTOP_CHANNEL");
@@ -63,7 +63,7 @@ const isWeb = target === "web";
 // available.
 function readAppVersion(): string {
   // Release builds inject the channel's version (scripts/release/version.mjs):
-  // the web one from vercel-build.mjs, the desktop one from the same value the
+  // the web one from the deploy workflows, the desktop one from the same value the
   // workflow stamps into tauri.conf.json, so About and the updater agree.
   const injected = process.env.MODUO_VERSION?.trim();
   if (injected) return injected;

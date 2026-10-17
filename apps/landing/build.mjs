@@ -7,8 +7,6 @@
  *   node build.mjs --noindex   → the moduo.app build for a PR preview, never indexed
  *
  * dist/ is what the landing Worker serves (wrangler.jsonc), with _headers.
- * scripts/vercel-build.mjs also copies it over the app build, because Vercel
- * serves moduo.app until PLAT-8 moves its DNS to Cloudflare.
  */
 
 import fs from "node:fs";
@@ -21,8 +19,7 @@ const staging = process.argv.includes("--staging");
 const noindex = staging || process.argv.includes("--noindex");
 
 // Marketing subpages ride along on the public landing (staging keeps its portal at /).
-// The Worker serves each at its clean URL (/manifesto → manifesto.html); Vercel needs a
-// host rewrite in vercel.json for each one until PLAT-8.
+// The Worker serves each at its clean URL (/manifesto → manifesto.html).
 const SUBPAGES = ["manifesto.html", "privacy.html", "terms.html", "dpa.html", "aup.html"];
 const FAVICONS = ["favicon.ico", "favicon.svg", "favicon-32x32.png", "apple-touch-icon.png"];
 
@@ -53,7 +50,7 @@ if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recu
 const appPublic = path.join(root, "..", "app", "public");
 for (const icon of FAVICONS) fs.copyFileSync(path.join(appPublic, icon), path.join(outDir, icon));
 
-// Response headers for the Worker (ignored by Vercel). Staging and previews are never indexed.
+// Response headers for the Worker. Staging and previews are never indexed.
 let headers = fs.readFileSync(path.join(root, "_headers"), "utf8");
 if (noindex) {
   const marked = headers.replace(/^\/\*\r?\n/m, "/*\n  X-Robots-Tag: noindex, nofollow\n");
