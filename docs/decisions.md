@@ -124,7 +124,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
-- 2026-10-07 · Biome doesn't lint `landing/**`, and `bun run lint:js` gates CI.
+- 2026-10-07 · Biome doesn't lint `apps/landing/**/*.html`, and `bun run lint:js` gates CI.
 - 2026-10-07 · The rest of the JS libraries move to their newest stable release, with four majors left on the line already in use.
 - 2026-10-07 · Drag and drop stays on `@dnd-kit/core` 6.3.1, `@dnd-kit/sortable` 10.0.0, and `@dnd-kit/utilities` 3.2.2.
 - 2026-10-07 · The Lexical pack is 0.52.0, and Yjs is 13.6.33.

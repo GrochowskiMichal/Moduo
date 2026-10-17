@@ -7,8 +7,8 @@
 - [ ] **Do:** open any PR's `checks` run → **Expect:** a passing "Biome (JS/TS lint + format)" step after Typecheck _(GitHub)_
 
 ## Landing page
-- [ ] **Do:** `bunx biome check landing/` → **Expect:** no lint diagnostics (linting is off for `landing/**` by decision) _(terminal)_
+- [ ] **Do:** `bunx biome check apps/landing/` → **Expect:** no lint diagnostics (linting is off for `apps/landing/**` by decision) _(terminal)_
 
 ## Known gaps / not-yet-testable
-- Landing bugs are no longer linted; landing-v4 has a loose `==` at `landing/index.html:8775` for Maciej to check.
+- Landing bugs are no longer linted; landing-v4 has a loose `==` at `apps/landing/index.html:8775` for Maciej to check.
 - Branches with unformatted code now fail CI on their next push (Biome checks formatting).

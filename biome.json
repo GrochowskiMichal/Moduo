@@ -71,7 +71,8 @@
       "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "off",
-        "noArrayIndexKey": "warn"
+        "noArrayIndexKey": "warn",
+        "noUndeclaredEnvVars": "off"
       },
       "style": {
         "noNonNullAssertion": "off",
@@ -119,7 +120,7 @@
       }
     },
     {
-      "includes": ["landing/**", ".design/**/prototypes/**"],
+      "includes": ["apps/landing/**/*.html", ".design/**/prototypes/**"],
       "linter": {
         "enabled": false
       }

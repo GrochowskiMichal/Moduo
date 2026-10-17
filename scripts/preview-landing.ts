@@ -1,13 +1,13 @@
 /**
  * Local preview of the static landing, served the way Vercel ships it:
- *   /          → landing/index.html   (moduo.app, prod-landing)
- *   /staging   → landing/staging.html (staging.moduo.app, staging-landing)
- *   /manifesto → landing/manifesto.html
- *   /privacy   → landing/privacy.html
- *   /terms     → landing/terms.html
- *   /dpa       → landing/dpa.html
- *   /aup       → landing/aup.html
- *   /parked/x  → landing/parked/x.html (kept for later, never deployed)
+ *   /          → apps/landing/index.html   (moduo.app, prod-landing)
+ *   /staging   → apps/landing/staging.html (staging.moduo.app, staging-landing)
+ *   /manifesto → apps/landing/manifesto.html
+ *   /privacy   → apps/landing/privacy.html
+ *   /terms     → apps/landing/terms.html
+ *   /dpa       → apps/landing/dpa.html
+ *   /aup       → apps/landing/aup.html
+ *   /parked/x  → apps/landing/parked/x.html (kept for later, never deployed)
  *
  * Usage: bun run preview:landing   (PORT=… to change the port)
  * Re-reads the file on every request — edit, then refresh.
@@ -15,7 +15,7 @@
 
 import path from "node:path";
 
-const root = path.resolve(import.meta.dir, "..", "landing");
+const root = path.resolve(import.meta.dir, "..", "apps", "landing");
 const port = Number(process.env.PORT ?? 8765);
 // Marketing subpages, the way vercel.json rewrites them on moduo.app
 const SUBPAGES: Record<string, string> = {
