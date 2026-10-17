@@ -1,7 +1,7 @@
 /**
- * Local preview of the static landing, served the way Vercel ships it:
- *   /          → apps/landing/index.html   (moduo.app, prod-landing)
- *   /staging   → apps/landing/staging.html (staging.moduo.app, staging-landing)
+ * Local preview of the static landing, served the way the landing Worker ships it:
+ *   /          → apps/landing/index.html   (moduo.app)
+ *   /staging   → apps/landing/staging.html (staging.moduo.app)
  *   /manifesto → apps/landing/manifesto.html
  *   /privacy   → apps/landing/privacy.html
  *   /terms     → apps/landing/terms.html
@@ -17,7 +17,7 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dir, "..", "apps", "landing");
 const port = Number(process.env.PORT ?? 8765);
-// Marketing subpages, the way vercel.json rewrites them on moduo.app
+// Marketing subpages at their clean URLs, as on moduo.app
 const SUBPAGES: Record<string, string> = {
   "/manifesto": "manifesto.html",
   "/privacy": "privacy.html",
@@ -31,7 +31,7 @@ const server = Bun.serve({
   port,
   fetch(req) {
     const { pathname } = new URL(req.url);
-    // Static assets next to the page (share image etc.), shipped to /assets by vercel-build.
+    // Static assets next to the page (share image etc.), shipped to /assets by apps/landing/build.mjs.
     if (pathname.startsWith("/assets/") && !pathname.includes("..")) {
       const asset = Bun.file(path.join(root, pathname));
       return asset

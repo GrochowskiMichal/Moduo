@@ -1,10 +1,10 @@
 /**
- * The one app version, shared by the web build (scripts/vercel-build.mjs) and
- * the desktop release (_desktop-release.yml). The base comes from the
- * committed VERSION file; channels add a pre-release suffix:
+ * The desktop release version (_desktop-release.yml), from the committed VERSION
+ * file. The web deploys read VERSION directly (app-staging.yml, app-preview.yml
+ * add `-rc`; deploy-prod.yml ships it as is), so the channels line up:
  *
- *   production web (prod-app, prod-landing)  → 1.1.0
- *   any other web branch                     → 1.1.0-rc
+ *   production web (deploy-prod.yml)         → 1.1.0
+ *   staging and preview web                  → 1.1.0-rc
  *   production desktop                       → 1.1.0
  *   staging desktop                          → 1.1.0-rc.<run number>
  *
@@ -24,9 +24,6 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
-/** Branches whose web build is the production one. */
-export const PROD_WEB_REFS = ["prod-app", "prod-landing"];
-
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /** The base version from VERSION (`1.1.0`); throws on anything else. */
@@ -36,17 +33,6 @@ export function readBaseVersion(file = path.join(root, "VERSION")) {
     throw new Error(`VERSION must be MAJOR.MINOR.PATCH, got "${base}"`);
   }
   return base;
-}
-
-/** The web build's version: the base on a production branch, `-rc` everywhere else. */
-export function webVersion(base, ref) {
-  return PROD_WEB_REFS.includes(ref ?? "") ? base : `${base}-rc`;
-}
-
-/** The web build id: the short commit SHA Vercel builds, or "dev". */
-export function webBuildId(sha) {
-  const short = (sha ?? "").trim().slice(0, 7);
-  return short || "dev";
 }
 
 /** The desktop version for a release channel. */

@@ -1,28 +1,10 @@
 import { describe, expect, it } from "@rstest/core";
 
-import {
-  compareVersions,
-  desktopVersion,
-  readBaseVersion,
-  webBuildId,
-  webVersion,
-} from "./version.mjs";
+import { compareVersions, desktopVersion, readBaseVersion } from "./version.mjs";
 
 describe("release version", () => {
   it("reads a plain MAJOR.MINOR.PATCH from VERSION", () => {
     expect(readBaseVersion()).toMatch(/^\d+\.\d+\.\d+$/);
-  });
-
-  it("marks every web branch but production as a release candidate", () => {
-    expect(webVersion("1.1.0", "prod-app")).toBe("1.1.0");
-    expect(webVersion("1.1.0", "prod-landing")).toBe("1.1.0");
-    expect(webVersion("1.1.0", "staging-app")).toBe("1.1.0-rc");
-    expect(webVersion("1.1.0", undefined)).toBe("1.1.0-rc");
-  });
-
-  it("uses the short commit SHA as the web build id", () => {
-    expect(webBuildId("fe7833ff0123456789")).toBe("fe7833f");
-    expect(webBuildId(undefined)).toBe("dev");
   });
 
   it("numbers staging desktop builds by run and leaves production plain", () => {
