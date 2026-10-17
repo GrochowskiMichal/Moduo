@@ -219,9 +219,23 @@ setup_keychain() {
     echo "  Now the notarization login, stored in this keychain as profile '$NOTARY_PROFILE'."
     echo "  notarytool asks for it: an App Store Connect API key (.p8 path, key ID, issuer ID) or your"
     echo "  Apple ID, team ID and an app-specific password (README step 2). It checks the login with Apple."
-    as_ci xcrun notarytool store-credentials "$NOTARY_PROFILE" --keychain "$KEYCHAIN" </dev/tty
-    notary_ok || die "Apple did not accept the stored notarization login."
-    ok "notarization profile '$NOTARY_PROFILE' works"
+    echo "  (Team ID: V55SU3M95W.) It is saved first and checked with Apple right after."
+    # Saved without notarytool's own check: an Apple server error there throws the typing away.
+    as_ci xcrun notarytool store-credentials "$NOTARY_PROFILE" --keychain "$KEYCHAIN" --no-validate </dev/tty
+    local i
+    for i in 1 2 3; do
+      notary_ok && break
+      [ "$i" = 3 ] || { doing "Apple didn't confirm it yet; retrying in $((i * 20)) s"; sleep $((i * 20)); }
+    done
+    if notary_ok; then
+      ok "notarization profile '$NOTARY_PROFILE' works"
+    else
+      warn "Apple didn't accept the login (or its server is down). Setup goes on; --verify checks it again."
+      warn "A wrong Apple ID or password: re-run setup.sh, or the store-credentials command in the README."
+      local xcrun_error
+      xcrun_error="$(as_ci xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" --keychain "$KEYCHAIN" 2>&1 | tail -3 || true)"
+      printf '    %s\n' "$xcrun_error"
+    fi
   fi
 }
 
@@ -404,7 +418,9 @@ check() {
   fi
 }
 not() { ! "$@"; }
-hook() { env -i MODUO_HOOK_DRY_RUN=1 GITHUB_REPOSITORY_OWNER="${REPO%%/*}" GITHUB_EVENT_NAME="$1" GITHUB_REF="$2" GITHUB_TRIGGERING_ACTOR="$3" /bin/bash "$HOOK_DIR/job-started.sh"; }
+# Exit 1 means refused. Anything else (2: the hook isn't installed) is no answer, so it fails both kinds of check.
+hook_refuses() { hook "$@"; [ $? = 1 ]; }
+hook() { [ -f "$HOOK_DIR/job-started.sh" ] || return 2; env -i MODUO_HOOK_DRY_RUN=1 GITHUB_REPOSITORY_OWNER="${REPO%%/*}" GITHUB_EVENT_NAME="$1" GITHUB_REF="$2" GITHUB_TRIGGERING_ACTOR="$3" /bin/bash "$HOOK_DIR/job-started.sh"; }
 has_line() { local want="$1"; shift; "$@" 2>/dev/null | grep -qF -- "$want"; }
 owned_by_root_not_writable() { [ "$(stat -f '%Su %Lp' "$1")" = "root 755" ] || [ "$(stat -f '%Su %Lp' "$1")" = "root 644" ]; }
 gate_files_root_owned() {
@@ -454,11 +470,11 @@ verify() {
   check "runner self-update is off" grep -q '"disableUpdate": *true' "$RUNNER_DIR/.runner"
   check "plist runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$PLIST"
   check ".env runs the hook" has_line "$HOOK_DIR/job-started.sh" cat "$RUNNER_DIR/.env"
-  check "refuses pull_request" not hook pull_request refs/pull/1/merge "${REPO%%/*}"
-  check "refuses pull_request_target" not hook pull_request_target refs/heads/develop "${REPO%%/*}"
-  check "refuses schedule" not hook schedule refs/heads/develop "${REPO%%/*}"
-  check "refuses push to a feature branch" not hook push refs/heads/t/mike/x "${REPO%%/*}"
-  check "refuses a manual run by someone else" not hook workflow_dispatch refs/heads/develop someone-else
+  check "refuses pull_request" hook_refuses pull_request refs/pull/1/merge "${REPO%%/*}"
+  check "refuses pull_request_target" hook_refuses pull_request_target refs/heads/develop "${REPO%%/*}"
+  check "refuses schedule" hook_refuses schedule refs/heads/develop "${REPO%%/*}"
+  check "refuses push to a feature branch" hook_refuses push refs/heads/t/mike/x "${REPO%%/*}"
+  check "refuses a manual run by someone else" hook_refuses workflow_dispatch refs/heads/develop someone-else
   check "accepts push to develop" hook push refs/heads/develop someone-else
   check "accepts push to mike" hook push refs/heads/mike "${REPO%%/*}"
   check "accepts a v* tag" hook push refs/tags/v1.2.0 "${REPO%%/*}"
