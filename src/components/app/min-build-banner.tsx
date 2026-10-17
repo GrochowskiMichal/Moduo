@@ -22,7 +22,7 @@ export function MinBuildBanner() {
     void runtime.preferences
       .getMinBuild()
       .then((min) => {
-        if (!cancelled) applyMinBuild(min, APP_VERSION);
+        if (!cancelled) applyMinBuild(min, APP_VERSION, IS_DESKTOP ? "desktop" : "web");
       })
       .catch(() => {});
     return () => {

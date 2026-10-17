@@ -14,5 +14,7 @@ How a release is applied: [docs/release.md](../docs/release.md).
 
 - `desktop-release-prod.yml` publishes to `GrochowskiMichal/moduo-releases` (rolling `prod-latest` release + `latest.json` for the updater). Look there, not in this repo.
 - This repo's own `prod-latest` release is stale (v0.1.0, 2026-10-05). Ignore it.
-- `windows-portable.yml` fails with `startup_failure` since 2026-09-23. `desktop-release-prod.yml` builds Windows; use that.
+- **One version, from `VERSION`** (`scripts/release/version.mjs`): prod web and prod desktop ship it as is, other web branches as `<VERSION>-rc`, staging desktop as `<VERSION>-rc.<run>`. The updater only installs a higher version, so **bump `VERSION` before every production desktop release**; the workflow's `version` job fails up front otherwise.
+- `sync-staging-app.yml` runs only after `checks` passed on a develop push (`workflow_run`), and merges the commit checks tested.
+- Third-party actions outside `actions/*` and `oven-sh/*` are pinned to commit SHAs; Bun is pinned by `.bun-version`.
 - After a prod run, confirm the Mac notarize steps actually ran (not skipped) before calling the build shippable.

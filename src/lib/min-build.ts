@@ -50,9 +50,24 @@ export type MinBuildState = {
 let state: MinBuildState = { readOnly: false, minimum: null, current: null };
 const listeners = new Set<() => void>();
 
-/** Record what the server said. Until a check has run, nothing is held back. */
-export function applyMinBuild(minimum: string | null, current: string): MinBuildState {
-  state = { readOnly: isBelowMinimum(current, minimum), minimum, current };
+/** Which shell this build runs in. */
+export type BuildPlatform = "web" | "desktop";
+
+/**
+ * Record what the server said. Until a check has run, nothing is held back.
+ *
+ * Only the desktop app can be too old: it updates when someone installs the
+ * update. The web app is whatever was last deployed (a reload fetches it), and
+ * its version string follows a different branch's VERSION than an installed
+ * desktop's, so a minimum meant for desktop must never lock the web app.
+ */
+export function applyMinBuild(
+  minimum: string | null,
+  current: string,
+  platform: BuildPlatform,
+): MinBuildState {
+  const readOnly = platform === "desktop" && isBelowMinimum(current, minimum);
+  state = { readOnly, minimum, current };
   for (const listener of listeners) listener();
   return state;
 }
