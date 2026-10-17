@@ -135,6 +135,19 @@ describe("kill switch", () => {
     expect((await call("/desktop/production/darwin/aarch64/1.0.0")).status).toBe(200);
   });
 
+  it("answers 204 when KV or R2 can't be read, so the client never falls back", async () => {
+    const env: Env = {
+      RELEASES: memoryBucket(STAGING),
+      UPDATE_CONFIG: {
+        get: async () => {
+          throw new Error("KV down");
+        },
+      },
+    };
+    const res = await handle(new Request(`${BASE}/desktop/staging/darwin/aarch64/1.0.0`), env);
+    expect(res.status).toBe(204);
+  });
+
   it("treats a config that doesn't parse as paused", async () => {
     for (const raw of [
       "{paused: true",

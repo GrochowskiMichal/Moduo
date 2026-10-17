@@ -2,7 +2,8 @@
 //!
 //! A random UUID minted on first launch and kept in the app data folder. The updater sends it as
 //! `Moduo-Install-Id` so the update server (`infra/update-server`) can put this install in a
-//! stable rollout bucket. It names no person or account and is never sent anywhere else.
+//! stable rollout bucket. It names no person or account. The updater sends it with every update
+//! request it makes, so the GitHub fallback endpoint and the download hosts see it too.
 
 use std::{fs, path::Path};
 

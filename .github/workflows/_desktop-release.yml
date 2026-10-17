@@ -5,11 +5,18 @@ name: Desktop Release (shared)
 # a manifest for the in-app updater, to two places:
 #   1. R2 bucket moduo-releases, served by the update server (infra/update-server): every file under
 #      desktop/<channel>/<version>/, never overwritten, then the channel's latest.json last.
-#   2. The rolling GitHub release in GrochowskiMichal/moduo-releases, as before. Builds before the
-#      PLAT-6 bridge only know that address; drop this once those installs have moved on.
-# Builds from the bridge on list the update server first and GitHub second (the updater falls back
-# to the second only when the first can't be reached). The server's address is the repo variable
-# UPDATE_SERVER_URL (default below); PLAT-8 switches it to https://updates.moduo.app.
+#   2. The rolling GitHub release in GrochowskiMichal/moduo-releases, but only up to the bridge.
+#      Builds before PLAT-6 only know that address. The first release from this workflow on a
+#      channel is that channel's bridge: its GitHub latest.json carries "bridge": true, and later
+#      releases leave the GitHub release alone, so old installs land on the bridge and go no
+#      further there. Everything after the bridge reaches installs through the update server
+#      alone, where the rollout share and the kill switch apply (desktop-rollout.yml).
+# Builds from the bridge on list the update server first and GitHub second. The updater tries the
+# second on any error or non-2xx answer from the first; a frozen GitHub manifest offers nothing
+# newer than the bridge, so that fallback can't route around the kill switch. The server's address
+# is the repo variable UPDATE_SERVER_URL (default below); PLAT-8 switches it to
+# https://updates.moduo.app, and the workers.dev address must keep working for builds that have it.
+# To re-issue a bridge (a broken bridge build), delete latest.json from the channel's GitHub release.
 #
 # Mac notarization is one Apple submission (the .dmg; Apple notarises the .app inside it too).
 # build-mac waits for Apple for a while; if Apple is slower than that, notarize-mac keeps waiting on
@@ -88,6 +95,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
+      github_frozen: ${{ steps.version.outputs.github_frozen }}
 
     steps:
       - name: Checkout
@@ -119,13 +127,17 @@ jobs:
           VERSION="$(node .ci/scripts/release/version.mjs desktop "$CHANNEL" "$RUN_NUMBER")"
           # Only a 404 means "nothing published yet"; any other failure must not skip the check.
           STATUS="$(curl -sL -o latest.json -w '%{http_code}' "https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}/latest.json")"
+          FROZEN=false
           case "$STATUS" in
-            200) PUBLISHED="$(jq -r '.version // empty' latest.json)" ;;
+            200) PUBLISHED="$(jq -r '.version // empty' latest.json)"
+                 [ "$(jq -r '.bridge // false' latest.json)" = true ] && FROZEN=true ;;
             404) PUBLISHED="" ;;
             *) echo "::error::Could not read the published latest.json (HTTP $STATUS). Re-run the job."; exit 1 ;;
           esac
           node .ci/scripts/release/version.mjs assert-newer "$VERSION" "$PUBLISHED"
-          # The update server's copy. Until its first publish it answers 404 (nothing yet).
+          # The update server's copy. Until its first publish it answers 404 (nothing yet). A 404 only
+          # means that when the Worker itself is up (Cloudflare answers 404 for a missing Worker too).
+          curl -sSf "$UPDATE_SERVER_URL/health" >/dev/null || { echo "::error::The update server at $UPDATE_SERVER_URL is not answering /health. Deploy it (update-server workflow) or re-run."; exit 1; }
           STATUS="$(curl -sL -o r2-latest.json -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json")"
           case "$STATUS" in
             200) R2_PUBLISHED="$(jq -r '.version // empty' r2-latest.json)" ;;
@@ -140,6 +152,12 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "github_frozen=$FROZEN" >> "$GITHUB_OUTPUT"
+          if [ "$FROZEN" = true ]; then
+            echo "GitHub release \`$RELEASE_TAG\` holds the bridge ($PUBLISHED) and is left alone." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "This release is the channel's bridge: the GitHub release gets it, then freezes." >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "Version: \`$VERSION\` (published: GitHub \`${PUBLISHED:-none}\`, update server \`${R2_PUBLISHED:-none}\`)" >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────────────────────────
@@ -567,6 +585,7 @@ jobs:
             fi
           }
           manifest "https://github.com/${RELEASES_REPO}/releases/download/$RELEASE_TAG" latest.json
+          jq '.bridge = true' latest.json > manifest.tmp && mv manifest.tmp latest.json
           mkdir -p ../r2-manifest
           manifest "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION" ../r2-manifest/latest.json
           if [ ! -f Moduo_x64-setup.exe.sig ]; then
@@ -577,8 +596,9 @@ jobs:
       # R2 first: every installer, bundle and .sig under the version's own folder, then that
       # version's manifest (which seals it: the version job refuses a version whose manifest
       # exists), then the channel's latest.json, the one key the update server reads to decide.
-      # A re-run of this job after a partial upload writes the same bytes again; nothing that a
-      # client could have seen changes.
+      # A re-run of this job after a partial upload writes the same files again. A re-run after
+      # the seal (the pointer write or the check below failed) uploads nothing and only points
+      # the channel at the sealed manifest; the version job kept any other run off this version.
       - name: Publish to R2 (update server)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -588,19 +608,26 @@ jobs:
           BUCKET: moduo-releases
         run: |
           PREFIX="desktop/$CHANNEL/$MODUO_VERSION"
-          STATUS="$(curl -s -o /dev/null -I -w '%{http_code}' "$UPDATE_SERVER_URL/download/$PREFIX/latest.json")"
-          if [ "$STATUS" != 404 ]; then
-            echo "::error::$PREFIX is already sealed on the update server (HTTP $STATUS); versions are never overwritten."
-            exit 1
-          fi
           put() { $WRANGLER r2 object put "$BUCKET/$1" --remote --file "$2" --content-type "$3" ${4:+--cache-control "$4"}; }
-          cd release-artifacts
-          for f in Moduo_universal.dmg Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
-            [ -f "$f" ] || continue
-            put "$PREFIX/$f" "$f" application/octet-stream
-          done
-          put "$PREFIX/latest.json" ../r2-manifest/latest.json application/json
-          put "desktop/$CHANNEL/latest.json" ../r2-manifest/latest.json application/json no-store
+          curl -sSf "$UPDATE_SERVER_URL/health" >/dev/null || { echo "::error::The update server is not answering /health."; exit 1; }
+          STATUS="$(curl -s -o sealed.json -w '%{http_code}' "$UPDATE_SERVER_URL/download/$PREFIX/latest.json")"
+          case "$STATUS" in
+            404)
+              cd release-artifacts
+              for f in Moduo_universal.dmg Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
+                [ -f "$f" ] || continue
+                put "$PREFIX/$f" "$f" application/octet-stream
+              done
+              put "$PREFIX/latest.json" ../r2-manifest/latest.json application/json
+              put "desktop/$CHANNEL/latest.json" ../r2-manifest/latest.json application/json no-store
+              ;;
+            200)
+              [ "$(jq -r '.version' sealed.json)" = "$MODUO_VERSION" ] || { echo "::error::$PREFIX/latest.json is not a $MODUO_VERSION manifest."; exit 1; }
+              echo "::warning::$PREFIX is already sealed (a re-run); pointing the channel at it without uploading."
+              put "desktop/$CHANNEL/latest.json" sealed.json application/json no-store
+              ;;
+            *) echo "::error::Could not tell whether $PREFIX is sealed (HTTP $STATUS). Re-run the job."; exit 1 ;;
+          esac
           echo "Update server: \`$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json\` → \`$MODUO_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check the update server offers it
@@ -614,14 +641,14 @@ jobs:
             sleep 10
           done
           [ "$got" = "$MODUO_VERSION" ] || { echo "::error::The update server answers $got, not $MODUO_VERSION"; exit 1; }
-          curl -sSf -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/Moduo_universal.app.tar.gz" | head -1
+          curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/Moduo_universal.app.tar.gz"
           code=$(curl -s -o /dev/null -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/aarch64/0.0.1")
           echo "update check from 0.0.1 → $code (204 while the channel is paused or rolled out to 0%)"
 
-      # Kept during the bridge: builds before PLAT-6 only check GitHub. Runs even when the R2
-      # upload failed, so those installs still get the release (the job stays red).
-      - name: Upsert rolling ${{ inputs.release_tag }} GitHub Release
-        if: ${{ !cancelled() && steps.manifests.outcome == 'success' }}
+      # The bridge only (see the top of this file): builds before PLAT-6 only check GitHub. Runs
+      # even when the R2 upload failed, so those installs still reach the bridge (the job stays red).
+      - name: Upsert rolling ${{ inputs.release_tag }} GitHub Release (bridge)
+        if: ${{ !cancelled() && steps.manifests.outcome == 'success' && needs.version.outputs.github_frozen != 'true' }}
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           repository: ${{ env.RELEASES_REPO }}

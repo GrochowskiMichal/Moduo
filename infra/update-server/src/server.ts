@@ -144,8 +144,9 @@ export async function rolloutBucket(seed: string, version: string): Promise<numb
 }
 
 /**
- * Who this request is, for bucketing. Apps from PLAT-6 on send an install id; older ones send
- * nothing, so they fall back to the connecting IP (hashed with the version, never stored).
+ * Who this request is, for bucketing. Builds with PLAT-6's Rust change send an install id; a build
+ * without it (production from a prod-app that predates the change) falls back to the connecting
+ * IP, hashed with the version and never stored.
  */
 function rolloutSeed(request: Request): string {
   const id = request.headers.get(INSTALL_ID_HEADER) ?? "";
@@ -265,7 +266,14 @@ export async function handle(request: Request, env: Env): Promise<Response> {
   if (parts.length === 5 && parts[0] === "desktop") {
     const [, channel, target, arch, current] = parts as [string, string, string, string, string];
     if (!isChannel(channel)) return notFound();
-    return checkForUpdate(request, env, channel, target, arch, current);
+    // Fail closed: an error here would be a 5xx, and the updater would then try its next
+    // endpoint. "No update" is the safe answer when KV or R2 can't be read.
+    try {
+      return await checkForUpdate(request, env, channel, target, arch, current);
+    } catch (err) {
+      console.error(JSON.stringify({ event: "check_failed", channel, error: String(err) }));
+      return noUpdate();
+    }
   }
 
   // /download/desktop/<channel>/<version>/<file>

@@ -6,6 +6,8 @@
   "name": "moduo-update-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
+  // Keep workers.dev on: installed builds have this Worker's workers.dev address baked in, even
+  // after PLAT-8 adds updates.moduo.app. Turning it off strands them on the frozen GitHub manifest.
   "workers_dev": true,
   "preview_urls": false,
   "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "moduo-releases" }],
