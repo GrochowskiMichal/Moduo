@@ -27,6 +27,11 @@ How a release is applied: [docs/release.md](../docs/release.md).
 - **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert. Never unfreeze it casually: the updater falls back to GitHub on any Worker error, and a moving GitHub manifest would bypass the kill switch.
 - Rollout share and kill switch: run `desktop-rollout.yml` (channel, rollout 0–100, paused). It takes effect in about a minute and never downgrades anyone.
 
+## Mac build runner (PLAT-7)
+
+- `build-mac` runs on Mike's Mac (`moduo-mac`, set up by `infra/mac-runner/setup.sh`) when `pick-runner` finds it online and idle, otherwise on `macos-latest`. Steps that differ use `runner.environment == 'self-hosted'`; keep the GitHub-hosted path working on its own.
+- Only pushes to `develop`/`mike`, `v*` tags and the owner's manual runs may use it; the Mac's job-started hook refuses anything else. Never point a `pull_request` job at it. Any re-run builds on GitHub.
+
 ## Turborepo remote cache
 
 The Worker is `infra/turbo-cache` (`moduo-turbo-cache` on workers.dev, R2 bucket `moduo-turbo-cache`, objects expire after 30 days), deployed by `turbo-cache.yml` when it changes on `develop`/`mike` or by hand.
