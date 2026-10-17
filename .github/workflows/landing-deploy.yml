@@ -2,30 +2,21 @@ name: landing-deploy
 
 # Deploys the landing Worker (apps/landing/wrangler.jsonc, specs/platform-v2.md, PLAT-5).
 #
-# - staging: after `checks` passes on a develop push, for exactly the commit checks tested, or by
-#   hand. The staging build: the portal at /, the marketing page at /landing (noindex). It runs
-#   at https://moduo-landing-staging.moduo.workers.dev until PLAT-8 gives it staging.moduo.app.
-# - production: by hand only, from main, and unused until PLAT-8: the Worker has no domain and no
-#   workers.dev, and Vercel keeps serving moduo.app. It needs moduo-app-production to exist (its
-#   APP binding's target).
+# Staging only (https://staging.moduo.app): after `checks` passes on a develop push, for exactly
+# the commit checks tested, or by hand. The staging build: the portal at /, the marketing page at
+# /landing (noindex). Production (moduo.app) is deployed by deploy-prod.yml.
 #
 # The build is a copy step (no app build), so a deploy takes well under a minute. Roll back from
-# the Cloudflare dashboard or `wrangler rollback --env <env>`.
+# the Cloudflare dashboard or `wrangler rollback --env staging`.
 on:
   workflow_run:
     workflows: [checks]
     types: [completed]
     branches: [develop]
   workflow_dispatch:
-    inputs:
-      target:
-        description: Which landing to deploy
-        type: choice
-        options: [staging, production]
-        default: staging
 
 concurrency:
-  group: landing-deploy-${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
+  group: landing-deploy-staging
   cancel-in-progress: false
 
 permissions:
@@ -41,17 +32,14 @@ env:
 
 jobs:
   deploy:
-    # Production only from main, so a dispatch from a personal branch can't publish moduo.app.
     if: >-
-      (github.event_name == 'workflow_dispatch' &&
-        (inputs.target == 'staging' || github.ref == 'refs/heads/main')) ||
+      github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Only develop, main, mike and prod-app may use this environment, which holds the Cloudflare token.
     environment: cloudflare-deploy
     env:
-      TARGET: ${{ github.event_name == 'workflow_dispatch' && inputs.target || 'staging' }}
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Checkout
@@ -71,28 +59,19 @@ jobs:
           bun-version-file: .bun-version
 
       - name: Build the landing
-        run: |
-          if [ "$TARGET" = staging ]; then node apps/landing/build.mjs --staging; else node apps/landing/build.mjs; fi
+        run: node apps/landing/build.mjs --staging
 
       - name: Deploy
-        id: deploy
         working-directory: apps/landing
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          $WRANGLER deploy --env "$TARGET" --message "$GITHUB_REF_NAME ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
-          url=$(grep -oE 'https://[^ ]+\.workers\.dev' "$RUNNER_TEMP/deploy.log" | head -1 || true)
-          echo "url=$url" >> "$GITHUB_OUTPUT"
+        run: $WRANGLER deploy --env staging --message "$GITHUB_REF_NAME ${SHA::7}"
 
       - name: Smoke test
-        # Production has no public address until PLAT-8, so only staging is checked.
-        if: env.TARGET == 'staging'
         env:
-          URL: ${{ steps.deploy.outputs.url || 'https://moduo-landing-staging.moduo.workers.dev' }}
+          URL: https://staging.moduo.app
         run: |
-          # A first deploy takes a few seconds to answer on workers.dev.
-          for _ in $(seq 1 12); do curl -sf -o /dev/null "$URL/" && break; sleep 5; done
           set +e
           bun scripts/smoke-hosting.ts "$URL" --landing staging > "$RUNNER_TEMP/smoke.md"
           code=$?

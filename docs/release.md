@@ -48,21 +48,33 @@ A **shared function such as `moduo-mcp` deploys from a merge of `maciej` + `mike
 
 ## 4. Web
 
-`develop` is mirrored to `staging-app` once `checks` passes on the push (`sync-staging-app.yml`). To ship, run **Promote to production** (`promote-to-prod.yml`, manual):
+Web and landing run on Cloudflare Workers (since PLAT-8, 2026-10-17); moduo.app's DNS is a Cloudflare zone.
 
-- target `app`: `staging-app` → `prod-app` (app.moduo.app);
-- target `landing`: `staging-landing` → `prod-landing` (moduo.app).
+| Host | Worker | Deployed by |
+| --- | --- | --- |
+| app.staging.moduo.app | `moduo-app-staging` | `app-staging.yml`, after `checks` passes on a develop push |
+| staging.moduo.app | `moduo-landing-staging` | `landing-deploy.yml`, same trigger |
+| app.moduo.app | `moduo-app-production` | `deploy-prod.yml`, by hand |
+| moduo.app | `moduo-landing-production` | `deploy-prod.yml`, by hand |
+| www.moduo.app | none: a zone Redirect Rule, 308 to https://moduo.app | n/a |
+| updates.moduo.app | `moduo-update-server` | `update-server.yml` |
 
-Vercel deploys on the push. It runs `scripts/vercel-build.mjs` and serves `apps/app/dist/web` (`vercel.json`) until PLAT-8 moves the hosts to Cloudflare. Since PLAT-4 the same `develop` commit also deploys to the Cloudflare staging Worker (`app-staging.yml`, https://moduo-app-staging.moduo.workers.dev), and every PR that touches the app gets a preview URL comment (`app-preview.yml`). Roll the staging Worker back with `wrangler rollback --env staging` from `apps/app`. The first promote after the workspace move (PLAT-2, 2026-10-17) carries the new layout to `prod-app` and `prod-landing`.
+Every PR that touches the app or the landing also gets a preview URL comment on workers.dev (`app-preview.yml`, `landing-preview.yml`). Custom domains are declared in each `wrangler.jsonc` (`routes` with `custom_domain`), so a deploy keeps them.
+
+**To ship:** run **deploy-prod** (owner only). Leave `sha` empty to ship the build app.staging.moduo.app serves now, or give a develop commit that passed `checks`. It rebuilds that commit with the production version (`VERSION`, no `-rc`), deploys the app and then the landing, smoke-tests both hosts and moves `prod-app` to the commit (the desktop release builds from `prod-app`). `target` deploys only one of the two.
+
+**Roll back (under a minute):** Cloudflare dashboard → Workers & Pages → `moduo-app-production` (or `moduo-landing-production`) → Deployments → the previous version → Rollback. From a terminal: `npx wrangler rollback --env production` in `apps/app` (or `apps/landing`). A rollback keeps the custom domain; run deploy-prod again to move forward.
+
+**DNS** is edited in the Cloudflare dashboard. Mail records (Hostinger MX, SPF, the `hostingermail-*` DKIM CNAMEs, Resend's `send.*` and `resend._domainkey`, DMARC) must stay DNS-only (grey cloud): a proxied record answers with Cloudflare addresses. `scripts/dns-diff.ts` was the pre-cutover gate (Vercel vs Cloudflare); it needs a Vercel token, so it can't run once the Vercel account is gone.
 
 ## 5. Desktop
 
-The desktop app bundles its own copy of the UI at build time, so a web change reaches desktop users only when a desktop build ships. Run it on every train that changes the app, after the promote.
+The desktop app bundles its own copy of the UI at build time, so a web change reaches desktop users only when a desktop build ships. Run it on every train that changes the app, after deploy-prod.
 
 - **Desktop Release (production)** (`desktop-release-prod.yml`, manual) builds from `prod-app` (the Tauri app is in `apps/desktop`; the workflow also builds a `prod-app` from before that move): the signed Mac universal `.dmg` and the Windows NSIS installer. It publishes them, with `latest.json` for the in-app updater, to the rolling `prod-latest` release in the separate repo **GrochowskiMichal/moduo-releases**.
 - **Notarization:** `build-mac` waits up to 20 minutes for Apple and staples. `notarize-mac` runs only when Apple was slower; "skipped" is normal when `build-mac`'s log says the staple worked (the 2026-10-16 run). A skipped `notarize-mac` with no staple in `build-mac` is a problem.
 - **Not the source of truth:** the main repo's own `prod-latest` release (last published 2026-10-05) is stale; don't judge what's live from it.
-- **Bump `VERSION` first.** Production ships the `VERSION` file as is (staging adds `-rc.<run>`), and the updater only installs a higher version, so a production run on an unchanged `VERSION` fails in its `version` job before any build starts. Bump it on `develop` and promote, then run the release. After a run has published, use **Re-run failed jobs**, not "Re-run all jobs": a full re-run asks for the same version again and the check refuses it.
+- **Bump `VERSION` first.** Production ships the `VERSION` file as is (staging adds `-rc.<run>`), and the updater only installs a higher version, so a production run on an unchanged `VERSION` fails in its `version` job before any build starts. Bump it on `develop`, run deploy-prod (which moves `prod-app`), then run the release. After a run has published, use **Re-run failed jobs**, not "Re-run all jobs": a full re-run asks for the same version again and the check refuses it.
 
 ## 6. Verify what's live
 

@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-17 · PLAT-8: cutover: DNS on Cloudflare (checked with `scripts/dns-diff.ts`), every host a Worker custom domain in `wrangler.jsonc`, www as a 308 redirect rule, prod via owner-only `deploy-prod.yml` (rebuilds a staging-tested develop commit with the prod version, moves `prod-app`), updater on updates.moduo.app then workers.dev then GitHub.
 - 2026-10-17 · PLAT-7: desktop Mac builds on Mike's Mac (`moduo-mac`) when online and idle, else GitHub; inline pick-runner (not the archived fallback action), gate enforced by a root-owned hook on the Mac, re-runs always on GitHub, watchdog cancels a stuck Mac job.
 - 2026-10-17 · PLAT-5: landing is its own static-assets Worker; a router hands `/book*` and `/static/*` to the app Worker over a service binding (works on workers.dev and previews; at cutover only custom domains, no zone routes); clean URLs, SPA fallback as Vercel's catch-all.
 - 2026-10-17 · PLAT-4: web app on Workers static assets with the edge Worker serving the shell (`not_found_handling: "none"`, SPA mode served the shell for missing chunks), per-environment config via `public-config.ts`, previews as staging Worker versions, 3-build chunk retention in R2, no preview redirect allowlist (one Supabase project, code sign-in).

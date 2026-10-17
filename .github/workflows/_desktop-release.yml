@@ -11,11 +11,12 @@ name: Desktop Release (shared)
 #      releases leave the GitHub release alone, so old installs land on the bridge and go no
 #      further there. Everything after the bridge reaches installs through the update server
 #      alone, where the rollout share and the kill switch apply (desktop-rollout.yml).
-# Builds from the bridge on list the update server first and GitHub second. The updater tries the
-# second on any error or non-2xx answer from the first; a frozen GitHub manifest offers nothing
-# newer than the bridge, so that fallback can't route around the kill switch. The server's address
-# is the repo variable UPDATE_SERVER_URL (default below); PLAT-8 switches it to
-# https://updates.moduo.app, and the workers.dev address must keep working for builds that have it.
+# Builds list the update server at https://updates.moduo.app first, the same Worker at its
+# workers.dev address second, and GitHub third. The updater tries the next one on any error or
+# non-2xx answer; both server addresses read the same KV, and a frozen GitHub manifest offers
+# nothing newer than the bridge, so no fallback can route around the kill switch (a 204 stops the
+# check). The address is the repo variable UPDATE_SERVER_URL (default below). Builds from rc.43 to
+# PLAT-8 have only the workers.dev address, so that address must keep working (workers_dev stays on).
 # To re-issue a bridge (a broken bridge build), delete latest.json from the channel's GitHub release.
 #
 # Mac notarization is one Apple submission (the .dmg; Apple notarises the .app inside it too).
@@ -100,7 +101,8 @@ permissions:
 env:
   MODUO_BUILD: ${{ github.sha }}
   RELEASES_REPO: GrochowskiMichal/moduo-releases
-  UPDATE_SERVER_URL: ${{ vars.UPDATE_SERVER_URL || 'https://moduo-update-server.moduo.workers.dev' }}
+  UPDATE_SERVER_URL: ${{ vars.UPDATE_SERVER_URL || 'https://updates.moduo.app' }}
+  UPDATE_SERVER_FALLBACK_URL: https://moduo-update-server.moduo.workers.dev
 
 jobs:
   # ─────────────────────────────────────────────────────────────────
@@ -414,14 +416,15 @@ jobs:
 
       # Stamp the release version (the updater only offers builds newer than the installed one),
       # turn on signed updater bundles, and point this channel's updater at the update server first
-      # and the GitHub releases repo second (the fallback while the bridge lasts).
+      # (its domain, then workers.dev) and the GitHub releases repo last (the fallback while the
+      # bridge lasts).
       - name: Write CI Tauri config
         run: |
           cat > "$RUNNER_TEMP/ci-tauri-config.json" <<EOF
           {
             "version": "${MODUO_VERSION}",
             "bundle": { "createUpdaterArtifacts": true },
-            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "${UPDATE_SERVER_FALLBACK_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
           }
           EOF
 
@@ -635,7 +638,7 @@ jobs:
           {
             "version": "${MODUO_VERSION}",
             "bundle": { "createUpdaterArtifacts": true },
-            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "${UPDATE_SERVER_FALLBACK_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
           }
           EOF
 
