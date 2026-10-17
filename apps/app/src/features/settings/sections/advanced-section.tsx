@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
+import { WaitOrb } from "../../../components/ui/wait-orb";
 import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
@@ -346,11 +347,7 @@ export function AdvancedSection() {
             onClick={() => void handleExport()}
             disabled={exporting || !workspaceId}
           >
-            {exporting ? (
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            ) : (
-              <Download className="size-3.5" aria-hidden />
-            )}
+            {exporting ? <WaitOrb on="primary" /> : <Download className="size-3.5" aria-hidden />}
             {exporting ? "Preparing…" : "Export data"}
           </Button>
         </div>
