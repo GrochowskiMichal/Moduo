@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-19 · REL-1: how the release-notes leak check decides (agent's choices inside the approved spec)** → [docs/release-notes.md](../release-notes.md), `scripts/release/check-notes.ts`
+  - Database and function names that are one plain word (`tasks`, `contacts`, `comments`) are **not** on the run-time deny-list: they're the product's own vocabulary, and denying them would make most notes unwritable. Every other name has `_` or `-`, which the identifier rules catch anyway; the deny-list adds the reason ("Edge Function name") to the error.
+  - Beyond the spec's rules it also rejects PascalCase identifiers with two or more humps (`TaskList`, with an allow-list of brand spellings: GitHub, YouTube, macOS, iPhone …), `#123`, commit hashes, and the terms Postgres, SQL, edge function and service role (validator review).
+  - Highlights fall back to the first improved and fixed items when a release has no `new` ones, so a patch release's update toast isn't empty. `prepare` refuses a release with only internal notes unless `--reliability` (the spec's "ship anyway" edge case) and refuses a `--version` that isn't higher. `release-notes/` is outside Biome, so the generated JSON never fails lint.
+  - kebab-case would flag ordinary English (sign-in, follow-up), so a short list of common compounds and two-part words with a common first part (`re-`, `non-`, `one-`) pass. Anything else hyphenated fails; the writing rules say to rephrase.
+  - `internal: true` notes skip the word rules (never published) but must still parse; `internal` is required so every note is a conscious choice.
+  - `.changes/`, `release-notes/` and `CHANGELOG.md` never count as docs-only in `checks.yml`, otherwise a note-only PR would skip the check.
+  - `CHANGELOG.md` is generated from `releases.json` (a test keeps them equal); the old hand-written template is gone.
 - **2026-10-17 · The local Supabase stack is shared, so wiping or stopping it needs the user's go-ahead** → AGENTS.md rule 13, `scripts/local/stack.sh`, `.claude/settings.json` (deny), [local-dev.md](../local-dev.md)
   - Who: Maciej, 2026-10-17 ("Another agent is working on that locally… If we need any rules for these sessions that would stop before resetting and messing up other agents' work, add them").
   - Decision: every session, agent and dev server on a Mac shares one local database.

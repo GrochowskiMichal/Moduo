@@ -54,8 +54,29 @@
       "inputs": ["$TURBO_DEFAULT$", "!**/.turbo/**"],
       "outputs": []
     },
+    "//#lint:notes": {
+      "inputs": [
+        ".changes/**",
+        "release-notes/**",
+        "scripts/release/**",
+        "supabase/migrations/**",
+        "supabase/functions/**"
+      ],
+      "outputs": []
+    },
     "//#test:scripts": {
-      "inputs": ["scripts/**", "VERSION", "brand/**", "apps/app/src/**", "apps/app/public/**"],
+      "inputs": [
+        "scripts/**",
+        "VERSION",
+        "brand/**",
+        "apps/app/src/**",
+        "apps/app/public/**",
+        ".changes/**",
+        "release-notes/**",
+        "CHANGELOG.md",
+        "supabase/migrations/**",
+        "supabase/functions/**"
+      ],
       "outputs": []
     }
   }
