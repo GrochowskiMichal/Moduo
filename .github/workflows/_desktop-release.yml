@@ -100,7 +100,6 @@ permissions:
   contents: read
 
 env:
-  MODUO_BUILD: ${{ github.sha }}
   RELEASES_REPO: GrochowskiMichal/moduo-releases
   UPDATE_SERVER_URL: ${{ vars.UPDATE_SERVER_URL || 'https://updates.moduo.app' }}
   UPDATE_SERVER_FALLBACK_URL: https://moduo-update-server.moduo.workers.dev
@@ -115,6 +114,13 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       github_frozen: ${{ steps.version.outputs.github_frozen }}
+      # The commit being built (inputs.ref, e.g. prod-app), not github.sha: that is the commit
+      # the workflow file came from, which differs when a channel builds another branch.
+      # Build jobs check out build_sha, so a branch that moves mid-run (or a later "Re-run failed
+      # jobs") still builds and labels the same tree. `build` is its 7-character form, shown in
+      # About and the update notes, the same as the web builds.
+      build_sha: ${{ steps.sha.outputs.sha }}
+      build: ${{ steps.sha.outputs.short }}
 
     steps:
       - name: Checkout
@@ -123,6 +129,14 @@ jobs:
           ref: ${{ inputs.ref }}
           sparse-checkout: VERSION
           sparse-checkout-cone-mode: false
+
+      - name: Record the commit being built
+        id: sha
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "short=${SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "Building \`${SHA::7}\` ($(git log -1 --format=%s HEAD))" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout CI scripts
         uses: actions/checkout@v7
@@ -273,6 +287,7 @@ jobs:
     timeout-minutes: 60
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
+      MODUO_BUILD: ${{ needs.version.outputs.build }}
     outputs:
       notary_id: ${{ steps.submit.outputs.id }}
       stapled: ${{ steps.wait.outputs.stapled }}
@@ -281,7 +296,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.version.outputs.build_sha }}
 
       # CI scripts come from the workflow's own commit, so a build of an older branch
       # (prod-app before a promote) still gets the current signing/notarization logic.
@@ -583,6 +598,7 @@ jobs:
     timeout-minutes: 60
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
+      MODUO_BUILD: ${{ needs.version.outputs.build }}
     defaults:
       run:
         shell: bash
@@ -591,7 +607,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.version.outputs.build_sha }}
 
       - name: Checkout CI scripts
         uses: actions/checkout@v7
@@ -696,6 +712,7 @@ jobs:
     environment: cloudflare-deploy
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
+      MODUO_BUILD: ${{ needs.version.outputs.build }}
 
     steps:
       - name: Checkout CI scripts
@@ -733,7 +750,7 @@ jobs:
             local base="$1" out="$2"
             jq -n \
               --arg version "$MODUO_VERSION" \
-              --arg notes "$CHANNEL build from commit $GITHUB_SHA" \
+              --arg notes "$CHANNEL build from commit $MODUO_BUILD" \
               --arg pub_date "$PUB_DATE" \
               --arg mac_sig "$(cat Moduo_universal.app.tar.gz.sig)" \
               --arg mac_url "$base/Moduo_universal.app.tar.gz" \
@@ -842,7 +859,7 @@ jobs:
           body: |
             Rolling ${{ inputs.channel }} release.
 
-            **Commit:** ${{ github.sha }}
+            **Commit:** ${{ needs.version.outputs.build }}
             **Version:** ${{ env.MODUO_VERSION }}
             **Run:** ${{ github.run_id }}
 
