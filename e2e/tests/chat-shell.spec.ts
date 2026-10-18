@@ -102,14 +102,14 @@ test("a public channel you're not in offers Join; joining puts it in your panel"
 test("an announcement channel and a viewer get a line, never a box (AC1.8, AC10.9)", async ({
   page,
 }) => {
-  await rpc(room.owner, "share_op_announce", { p_channel_id: room.general, p_on: true });
+  await rpc(room.owner, "chat_op_set_announcement", { p_channel_id: room.general, p_on: true });
   await signInPage(page, room.member, room.ws);
   await page.goto(`/chat?c=${room.general}`);
   await expect(line(page)).toHaveText("Only managers post here · Reply privately", {
     timeout: 20_000,
   });
   await expect(composer(page)).toHaveCount(0);
-  await rpc(room.owner, "share_op_announce", { p_channel_id: room.general, p_on: false });
+  await rpc(room.owner, "chat_op_set_announcement", { p_channel_id: room.general, p_on: false });
 
   await rest(
     "service",

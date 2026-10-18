@@ -104,9 +104,10 @@ try {
     });
   }
   await ca.rpc("chat_op_send", {
+    p_id: randomUUID(),
     p_channel_id: G,
     p_body: "which columns arrive",
-    p_client_id: randomUUID(),
+    p_reply_to_id: null,
   });
   for (let i = 0; i < 50 && Object.keys(got).length < bindings.length; i++)
     await new Promise((r) => setTimeout(r, 100));

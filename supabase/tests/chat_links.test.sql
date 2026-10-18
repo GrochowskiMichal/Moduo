@@ -122,11 +122,6 @@ BEGIN
   PERFORM test.ok(test.mentions('Q', 'T') = 1, 'an edit that drops an item keeps its row (history)');
   v := test.as_user('A', format($q$SELECT public.chat_op_delete(%L::uuid)$q$, test.mid('q1')));
   PERFORM test.ok(v LIKE 'ok %' AND test.mentions('Q', 'T2') = 1, 'deleting the message keeps its rows', v);
-  -- The v1 wrapper goes through the same body.
-  v := test.as_user('B', format($q$SELECT public.chat_op_send(%L::uuid, %L::text)$q$,
-    test.ref('Q'), 'v1 path ' || test.uri('task', 'TP')));
-  PERFORM test.ok(v LIKE 'ok %' AND test.mentions('Q', 'TP') = 0,
-    'through the v1 wrapper an item the sender can''t open still leaves no row', v);
 END;
 $$;
 

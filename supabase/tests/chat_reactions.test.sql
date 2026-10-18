@@ -297,8 +297,6 @@ BEGIN
   PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: one you can''t read answers the same as a missing one', v);
   v := test.react('X', 'q1', '👍');
   PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: an outsider gets the same answer', v);
-  v := test.as_user('X', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text)$q$, test.mid('q1')));
-  PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: the toggle form answers the same', v);
   v := test.as_key('K', format($q$SELECT public.chat_op_react(%L::uuid, '👍'::text, true)$q$, test.mid('q1')));
   PERFORM test.ok(v = 'P0002 That message no longer exists.', 'chat: a key is refused the same way', v);
   PERFORM test.react('B', 'p1', '👀');
@@ -372,7 +370,6 @@ BEGIN
             AND bool_and(p.pronargs <= 3)
        FROM pg_proc p
       WHERE p.oid IN ('public.chat_op_react(uuid, text, boolean)'::regprocedure,
-                      'public.chat_op_react(uuid, text)'::regprocedure,
                       'public.comments_op_react(uuid, text, boolean)'::regprocedure,
                       'public.user_op_set_chat_prefs(jsonb)'::regprocedure)),
     'ops: none takes a person from the caller');

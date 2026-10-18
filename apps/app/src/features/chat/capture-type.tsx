@@ -173,7 +173,6 @@ function MessageCaptureBody({
         channelId: channel.id,
         body,
         replyToId: null,
-        format: "v2",
       });
       if (res.error) throw new Error(res.error.message);
       onDraftChange("");

@@ -79,7 +79,7 @@ BEGIN
   PERFORM test.ok(v LIKE 'ok %', 'setup: General exists', v);
   v := test.make('A', 'N', 'W', 'news', false, ARRAY['B', 'L', 'V']);
   PERFORM test.ok(v = 'ok 1', 'setup: A makes the public channel N with B, L and V', v);
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('N')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('N')));
   PERFORM test.ok(v LIKE 'ok %', 'setup: N is an announcement channel A manages', v);
   -- L has a manager row but isn't in N;
   -- V, a viewer, has a manager row while in it.
@@ -129,10 +129,10 @@ BEGIN
   v := test.as_user('V', format($q$SELECT public.chat_op_pin(%L, true)$q$, test.mid('n1')));
   PERFORM test.ok(v = '42501 Your role can''t pin messages here.', 'pin: nor a read-only manager', v);
 
-  v := test.as_user('L', format($q$SELECT public.share_op_announce(%L, false)$q$, test.ref('N')));
-  PERFORM test.ok(v = '42501 Only a channel manager can change this.', 'announce: a manager who left can''t switch it', v);
-  v := test.as_user('V', format($q$SELECT public.share_op_announce(%L, false)$q$, test.ref('N')));
-  PERFORM test.ok(v = '42501 Only a channel manager can change this.', 'announce: nor a read-only manager', v);
+  v := test.as_user('L', format($q$SELECT public.chat_op_set_announcement(%L, false)$q$, test.ref('N')));
+  PERFORM test.ok(v = '42501 Only this channel''s managers and admins can change who posts.', 'announce: a manager who left can''t switch it', v);
+  v := test.as_user('V', format($q$SELECT public.chat_op_set_announcement(%L, false)$q$, test.ref('N')));
+  PERFORM test.ok(v = '42501 Only this channel''s managers and admins can change who posts.', 'announce: nor a read-only manager', v);
   PERFORM test.ok((SELECT managers_only FROM public.chat_channels WHERE id = test.ref('N')),
     'announce: N is still announcement-only');
 
@@ -142,10 +142,10 @@ BEGIN
   v := test.as_user('A', format($q$SELECT public.chat_op_pin(%L, true)$q$, test.mid('n1')));
   PERFORM test.ok(v = 'ok 1' AND (SELECT pinned_at IS NOT NULL FROM public.chat_messages WHERE id = test.mid('n1')),
     'pin: its manager in it pins', v);
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, false)$q$, test.ref('N')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, false)$q$, test.ref('N')));
   PERFORM test.ok(v LIKE 'ok %' AND NOT (SELECT managers_only FROM public.chat_channels WHERE id = test.ref('N')),
     'announce: its manager in it switches it off', v);
-  v := test.as_user('A', format($q$SELECT public.share_op_announce(%L, true)$q$, test.ref('N')));
+  v := test.as_user('A', format($q$SELECT public.chat_op_set_announcement(%L, true)$q$, test.ref('N')));
   PERFORM test.ok(v LIKE 'ok %', 'announce: and on again', v);
   -- An admin ("Manage any channel"): the owner, not in N.
   v := test.as_user('O', format($q$SELECT public.chat_op_pin(%L, false)$q$, test.mid('n1')));
@@ -338,7 +338,7 @@ BEGIN
   PERFORM test.ok(v_bad IS NULL, 'grants: the helpers, the trigger and the erasure are server-only', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad
     FROM unnest(ARRAY['chat_op_send(uuid, uuid, text, uuid)', 'chat_op_pin(uuid, boolean)',
-                      'share_op_announce(uuid, boolean)', 'chat_op_leave(uuid)', 'chat_op_remove_member(uuid, uuid)',
+                      'chat_op_set_announcement(uuid, boolean)', 'chat_op_leave(uuid)', 'chat_op_remove_member(uuid, uuid)',
                       'chat_op_create_channel(uuid, text, text, boolean, uuid[], boolean, text, uuid)',
                       'chat_op_update_channel(uuid, text, text)', 'chat_op_bootstrap(uuid)']) AS f
    WHERE has_function_privilege('anon', 'public.' || f, 'EXECUTE')
