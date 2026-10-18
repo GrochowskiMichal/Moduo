@@ -83,4 +83,4 @@ The desktop app bundles its own copy of the UI at build time, so a web change re
 - **Web:** `curl -s https://app.moduo.app/config.json | jq -r .build` is the short commit production serves (staging: app.staging.moduo.app). `prod-app` can be ahead of it after a rollback.
 - **Database:** `select version, name from supabase_migrations.schema_migrations order by version desc limit 20;`
 - **Functions:** `supabase functions list` (version and updated time per function); call one new tool through the connector.
-- **Desktop:** `gh release download prod-latest -R GrochowskiMichal/moduo-releases -p latest.json -O -`. Its `version` and "production build from commit …" note name the build.
+- **Desktop:** `curl -s https://updates.moduo.app/desktop/production/latest.json | jq '.version,.notes'` (staging: `/desktop/staging/`). The note names the short commit that was built (from 2026-10-19; 1.1.0's note shows the workflow's commit instead, `37bb493`, while it was built from `0670dbe`). The GitHub `prod-latest` manifest is frozen at the bridge release (1.1.0), so it no longer shows what's live.
