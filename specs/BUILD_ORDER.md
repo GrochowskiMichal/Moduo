@@ -510,7 +510,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 > Mike's lane, decided 2026-10-19 (Phase 2 of the release-pipeline plan). `/ship` asks "ship it yourself now, or hand it to the other founder"; there's no GitHub approval step. Release notes are agent-written with no review, behind the `check-notes` leak check. Windows signing is skipped (Mike, 2026-10-19). REL-4 can run in parallel with REL-2/REL-3; REL-2 and REL-5 both edit `_desktop-release.yml`. Tier 2 (validator) for REL-2, REL-3, REL-5 and REL-6.
 
-- [ ] **REL-1 — Release notes pipeline (.changes, leak check in verify + CI, releases.json, /s3 step)** · deps: —
+- [x] **REL-1 — Release notes pipeline (.changes, leak check in verify + CI, releases.json, /s3 step)** · deps: — · 2026-10-19 · `t/mike/rel-1-release-notes`
 - [ ] **REL-2 — Tag release workflow (release.yml on v*, _deploy-web.yml, desktop on change, notes into the manifest)** · deps: REL-1
 - [ ] **REL-3 — /ship skill + guard-release.sh hook; first release v1.2.0 through /ship** · deps: REL-2
 - [ ] **REL-4 — What's new, update toast highlights, About history, web reload prompt, moduo.app/changelog** · deps: REL-1
