@@ -504,7 +504,18 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **PLAT-5 — Landing on Cloudflare (+ /book and /static routed to the app)** · deps: PLAT-4 · 2026-10-17 · `t/mike/plat-5-landing` (#456) · staging landing https://moduo-landing-staging.moduo.workers.dev; for PLAT-8: custom domains only (no zone routes), deploy `moduo-app-production` before the first landing prod deploy, and consider a production-only environment for `main`
 - [x] **PLAT-6 — Desktop distribution on R2 + update-server Worker + bridge release** · done 2026-10-17, `t/mike/plat-6-r2-updates` (#452); staging bridge 1.1.0-rc.43; prod bridge is Mike's step (PR #452) · deps: PLAT-3 · parallel with PLAT-4/5; sequence with PLAT-7 (both edit `_desktop-release.yml`)
 - [x] **PLAT-7 — Mac self-hosted runner with hosted fallback** · done 2026-10-17, `t/mike/plat-7-mac-runner` (#457); runner `moduo-mac` live on Mike's Mac, `RUNNER_STATUS_TOKEN` set · deps: PLAT-2
-- [~] **PLAT-8 — Cutover: DNS to Cloudflare, prod on Workers, GitHub Pro + private repo, Vercel cancelled** · built 2026-10-17, `t/mike/plat-8-cutover` (#460) + `t/mike/plat-8-cutover-2`; DNS on Cloudflare, all hosts on Workers, deploy-prod live, rollback 5.6 s, Vercel project + domain deleted · open: (1) mail round-trip with SPF/DKIM/DMARC headers (Mike sends a test email); (2) **repo private deferred**: Actions would need ~56k quota-minutes a month (~45k Linux + Windows ×2 + macOS ×10) vs Pro's 3,000 (measured 2026-10-17), so cut CI minutes first; (3) prod desktop bridge release (PR #452 steps); (4) `apps/landing/privacy.html` and `dpa.html` still name Vercel as host/subprocessor: replace with Cloudflare (owner's wording, see PRIV-2d) · deps: PLAT-4, PLAT-5, PLAT-6, PLAT-7
+- [~] **PLAT-8 — Cutover: DNS to Cloudflare, prod on Workers, GitHub Pro + private repo, Vercel cancelled** · built 2026-10-17, `t/mike/plat-8-cutover` (#460) + `t/mike/plat-8-cutover-2`; DNS on Cloudflare, all hosts on Workers, deploy-prod live, rollback 5.6 s, Vercel project + domain deleted · open: (1) mail round-trip with SPF/DKIM/DMARC headers (Mike sends a test email); (2) **repo private deferred**: Actions would need ~56k quota-minutes a month vs Pro's 3,000 (measured 2026-10-17), so cut CI minutes first · done 2026-10-19: prod desktop bridge 1.1.0 (run 39173497067), privacy/DPA name Cloudflare (#471) · deps: PLAT-4, PLAT-5, PLAT-6, PLAT-7
+
+## Release v2 — tag releases, /ship, release notes, What's new, split Mac builds · [`specs/release-v2.md`](./release-v2.md)
+
+> Mike's lane, decided 2026-10-19 (Phase 2 of the release-pipeline plan). `/ship` asks "ship it yourself now, or hand it to the other founder"; there's no GitHub approval step. Release notes are agent-written with no review, behind the `check-notes` leak check. Windows signing is skipped (Mike, 2026-10-19). REL-4 can run in parallel with REL-2/REL-3; REL-2 and REL-5 both edit `_desktop-release.yml`. Tier 2 (validator) for REL-2, REL-3, REL-5 and REL-6.
+
+- [ ] **REL-1 — Release notes pipeline (.changes, leak check in verify + CI, releases.json, /s3 step)** · deps: —
+- [ ] **REL-2 — Tag release workflow (release.yml on v*, _deploy-web.yml, desktop on change, notes into the manifest)** · deps: REL-1
+- [ ] **REL-3 — /ship skill + guard-release.sh hook; first release v1.2.0 through /ship** · deps: REL-2
+- [ ] **REL-4 — What's new, update toast highlights, About history, web reload prompt, moduo.app/changelog** · deps: REL-1
+- [ ] **REL-5 — Split Mac builds (per-arch updater bundles, universal .dmg kept)** · deps: REL-2
+- [ ] **REL-6 — Retire prod-app/staging-app/prod-landing/main, branch cleanup, delete-on-merge** · deps: REL-3
 
 ## Running sessions & parallelism
 
