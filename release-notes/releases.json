@@ -1,0 +1,26 @@
+{
+  "releases": [
+    {
+      "version": "1.1.0",
+      "date": "2026-10-18",
+      "highlights": [
+        "Desktop updates are smaller and download faster, straight from Moduo's own servers.",
+        "The web app keeps working after an update, instead of showing errors until you reload."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "Desktop updates are smaller and download faster, straight from Moduo's own servers."
+        },
+        {
+          "type": "improved",
+          "text": "Web and desktop now show the same version number, so it's easy to tell which release you're on."
+        },
+        {
+          "type": "fixed",
+          "text": "The web app keeps working after an update, instead of showing errors until you reload."
+        }
+      ]
+    }
+  ]
+}

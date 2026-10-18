@@ -1,31 +1,17 @@
 # Changelog
 
-All notable user-visible changes ship here. One section per release tag, dated.
-Sections within a release: **Added**, **Changed**, **Fixed**, **Removed**.
+What changed in each Moduo release, newest first. Also in the app (What's new) and at
+https://moduo.app/changelog.
 
-Follow Keep a Changelog conventions loosely; we don't aspire to perfect format.
+<!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
-The release-PR description should be a good first draft of the entry — keep
-both in sync.
+## 1.1.0 · 2026-10-18
 
-## [Unreleased]
+### Improved
 
-<!-- Bullet items here as PRs merge into develop. -->
-
-<!--
-Template for the next release:
-
-## [alpha-0.1.0] — YYYY-MM-DD
-
-### Added
--
-
-### Changed
--
+- Desktop updates are smaller and download faster, straight from Moduo's own servers.
+- Web and desktop now show the same version number, so it's easy to tell which release you're on.
 
 ### Fixed
--
 
-### Removed
--
--->
+- The web app keeps working after an update, instead of showing errors until you reload.
