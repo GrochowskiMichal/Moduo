@@ -82,6 +82,8 @@ jobs:
           while IFS= read -r f; do
             [ -n "$f" ] || continue
             case "$f" in
+              # Release notes are Markdown but published: the leak check (lint:notes) must run.
+              .changes/*|release-notes/*|CHANGELOG.md) code=true ;;
               *.md) ;;
               docs/*|specs/*)
                 case "$f" in
@@ -123,8 +125,8 @@ jobs:
       - name: Remote cache mode
         run: echo "Remote cache ${TURBO_API:-not configured} · TURBO_CACHE=$TURBO_CACHE (remote:r = read-only)"
 
-      - name: Typecheck, Biome, lint:tw, lint:css
-        run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:css --output-logs=new-only
+      - name: Typecheck, Biome, lint:tw, lint:css, release-notes leak check
+        run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:css lint:notes --output-logs=new-only
 
   unit-tests:
     needs: scan
