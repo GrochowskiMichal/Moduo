@@ -22,6 +22,7 @@
       "!**/*.css",
       "!apps/app/src/types/supabase.ts",
       "!bun.lock",
+      "!release-notes",
       "!scripts/icons/source",
       "!brand/masters",
       "!brand/exports",

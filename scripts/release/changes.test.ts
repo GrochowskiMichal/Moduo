@@ -76,6 +76,11 @@ describe("release notes pipeline", () => {
         n("new", "C."),
       ]).highlights,
     ).toEqual(["A.", "B."]);
+    // A patch release still gets highlights: the first improved, then fixed items.
+    expect(
+      buildRelease("1.1.1", "2026-11-02", [n("fixed", "F."), n("improved", "I."), n("fixed", "G.")])
+        .highlights,
+    ).toEqual(["I.", "F."]);
 
     const file = addRelease(
       { releases: [buildRelease("1.1.0", "2026-10-18", [n("fixed", "Old.")])] },
@@ -139,6 +144,31 @@ describe("release notes pipeline", () => {
     );
     // Consumed notes (internal too) are deleted; the README stays.
     expect(fs.readdirSync(path.join(root, ".changes"))).toEqual(["README.md"]);
+  });
+
+  it("ships only-internal work only when asked, with the reliability line", () => {
+    const files = {
+      VERSION: "1.1.0\n",
+      ".changes/tidy.md": noteFile("improved", "Refactored things.", "internal\n"),
+    };
+    expect(() => prepareRelease({ root: tempRepo(files), date: "2026-11-02" })).toThrow(
+      /no public notes/,
+    );
+    const root = tempRepo(files);
+    expect(prepareRelease({ root, date: "2026-11-02", reliability: true }).release).toEqual({
+      version: "1.1.1",
+      date: "2026-11-02",
+      highlights: ["Reliability improvements."],
+      items: [{ type: "improved", text: "Reliability improvements." }],
+    });
+    expect(() =>
+      prepareRelease({
+        root: tempRepo(files),
+        date: "2026-11-02",
+        reliability: true,
+        version: "1.0.9",
+      }),
+    ).toThrow(/must be higher/);
   });
 
   it("refuses to prepare while a note leaks", () => {

@@ -39,8 +39,8 @@ Write for someone who uses Moduo and has never seen its code.
 - **Say what people can now do, or what now works.** "Snoozed tasks come back at the start of your working day." Not what you changed inside.
 - **Use the names people see in the app**: Tasks, Notes, Chat, Calendar, the dashboard, Focus, What's new, Settings. Plain product words are fine even when they sound technical: agents, Claude Desktop, MCP, GitHub pull requests.
 - **Present tense, second person, no hype.** "You can…", "Search finds…". No "we're excited", no emoji, no exclamation marks in a row.
-- **No internals, ever.** No file names or paths, no code identifiers (`camelCase`, `PascalCase`, `snake_case`, `kebab-case`), no backticks or `name()`, no block or ticket IDs (`TV-U12`, `MOD-114`), no table, SQL function or Edge Function names, and none of these words: RLS, migration, Supabase, Tauri, Rust, Cloudflare, Worker, endpoint, token, secret, CVE, exploit, vulnerability, validator, Turborepo, workflow.
-- **Hyphens and slashes:** common English compounds pass (sign-in, follow-up, real-time, re-open, drag-and-drop). If the check flags a hyphenated word, rephrase it ("two-step" → "in two steps"). Write "Mac and Windows", not "Mac/Windows".
+- **No internals, ever.** No file names or paths, no code identifiers (`camelCase`, `PascalCase`, `snake_case`, `kebab-case`), no backticks or `name()`, no block or ticket IDs (`TV-U12`, `MOD-114`), no pull request numbers or commit hashes, no table, SQL function or Edge Function names, and none of these words: RLS, migration, Supabase, Tauri, Rust, Cloudflare, Worker, endpoint, token, secret, CVE, exploit, vulnerability, validator, Turborepo, workflow, and also Postgres, SQL, edge function, service role.
+- **Hyphens and slashes:** common English compounds pass (sign-in, follow-up, real-time, re-open, drag-and-drop, 3-minute, Wi-Fi). If the check flags a hyphenated word, rephrase it ("two-step" → "in two steps"). Write "Mac and Windows", not "Mac/Windows".
 - **Security fixes** are always `type: security` with exactly this text: `Security and reliability improvements.` Never describe what was wrong: the notes are public before every user has updated.
 
 | Instead of | Write |
@@ -64,6 +64,6 @@ A PR that adds only a note still runs the check in CI: `.changes/`, `release-not
 
 ## What happens at release
 
-`/ship` runs `bun scripts/release/changes.ts prepare`: it computes the version (any public `new` note → minor, otherwise patch), adds the release to `release-notes/releases.json` (newest first, public items grouped New, Improved, Fixed, Security, all security notes collapsed into the one line, at most two highlights), rewrites `CHANGELOG.md` from it and deletes the consumed note files. `releases.json` is the source of truth; never edit `CHANGELOG.md` by hand (a test checks it matches).
+`/ship` runs `bun scripts/release/changes.ts prepare`: it computes the version (any public `new` note → minor, otherwise patch), adds the release to `release-notes/releases.json` (newest first, public items grouped New, Improved, Fixed, Security, all security notes collapsed into the one line, at most two highlights: marked ones, else the first `new` items, else the first improved and fixed items), rewrites `CHANGELOG.md` from it and deletes the consumed note files. With only internal notes pending it refuses, unless `--reliability` ships a patch with the one item "Reliability improvements." `releases.json` is the source of truth; never edit `CHANGELOG.md` by hand (a test checks it matches).
 
 Other commands: `status` (pending notes and the next version), `notes <X.Y.Z>` (the updater Markdown for a release), `coming-next` (the staging updater Markdown for pending notes), `changelog` (rewrite `CHANGELOG.md`).

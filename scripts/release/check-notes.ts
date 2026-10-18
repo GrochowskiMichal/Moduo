@@ -64,7 +64,8 @@ export function parseNote(slug: string, source: string): Note {
     const kv = /^([a-z]+)\s*:\s*(.*?)\s*$/.exec(line);
     if (!kv) throw new Error(`front matter line is not "key: value": ${line}`);
     if (fields.has(kv[1])) throw new Error(`front matter repeats "${kv[1]}"`);
-    fields.set(kv[1], kv[2].replace(/^["']|["']$/g, ""));
+    const value = kv[2].replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "");
+    fields.set(kv[1], value);
   }
   for (const key of fields.keys()) {
     if (!["type", "internal", "highlight"].includes(key)) {
@@ -176,6 +177,11 @@ const BANNED_TERMS: Array<[RegExp, string]> = [
   [/\bvalidators?\b/gi, "validator"],
   [/\bturborepo\b/gi, "Turborepo"],
   [/\bworkflows?\b/gi, "workflow"],
+  // Not in the spec's list, but just as internal.
+  [/\bpostgres(?:ql)?\b/gi, "Postgres"],
+  [/\bsql\b/gi, "SQL"],
+  [/\bedge functions?\b/gi, "Edge Function"],
+  [/\bservice[ -]role\b/gi, "service role"],
 ];
 
 /**
@@ -243,6 +249,7 @@ const HYPHENATED_WORDS = new Set([
   "per-person",
   "per-task",
   "per-project",
+  "wi-fi",
 ]);
 
 /** First parts that make an ordinary English compound (`re-open`, `non-blocking`). */
@@ -312,6 +319,10 @@ export function findLeaks(text: string, deny: DenyList): Leak[] {
   each(FILE_EXTENSION, (m) => push(m[0], "file name", m.index ?? 0));
   each(PATH, (m) => push(m[0].trim().replace(/^\(/, ""), "file path", m.index ?? 0));
   each(BLOCK_ID, (m) => push(m[0], "block or ticket ID", m.index ?? 0));
+  each(/#\d+\b/g, (m) => push(m[0], "pull request or issue number", m.index ?? 0));
+  each(/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,40}\b/g, (m) =>
+    push(m[0], "commit hash", m.index ?? 0),
+  );
   each(CAMEL_CASE, (m) => {
     if (!BRAND_CASE.has(m[0].toLowerCase())) push(m[0], "camelCase identifier", m.index ?? 0);
   });
@@ -328,6 +339,7 @@ export function findLeaks(text: string, deny: DenyList): Leak[] {
     const lower = word.toLowerCase();
     if (!/[a-z]/i.test(word) || BLOCK_ID_WHOLE.test(word)) return;
     if (deny.has(lower)) return; // named below with what it is
+    if (/^\d+-[a-z]+$/.test(lower)) return; // 3-minute, 24-hour
     const parts = lower.split("-");
     if (HYPHENATED_WORDS.has(lower) || (parts.length === 2 && HYPHEN_PREFIXES.has(parts[0]))) {
       return;
@@ -355,7 +367,10 @@ export function shapeProblems(text: string, type: NoteType): string[] {
     problems.push(`is ${text.length} characters (at most ${MAX_NOTE_LENGTH})`);
   }
   if (!/[.!?]$/.test(text)) problems.push("must end a sentence with . ! or ?");
-  const sentences = text.split(/(?<=[.!?])\s+/).filter(Boolean).length;
+  const sentences = text
+    .replace(/\b(?:e\.g|i\.e|etc|vs)\./gi, "")
+    .split(/(?<=[.!?])\s+/)
+    .filter(Boolean).length;
   if (sentences > 2) problems.push(`has ${sentences} sentences (one or two)`);
   return problems;
 }
@@ -392,8 +407,8 @@ export function releasesShapeProblems(data: unknown): string[] {
   file.releases.forEach((r, i) => {
     const at = `releases[${i}]`;
     if (!/^\d+\.\d+\.\d+$/.test(r?.version ?? "")) problems.push(`${at}.version is not X.Y.Z`);
-    if (versions.has(r.version)) problems.push(`${at}: version ${r.version} appears twice`);
-    versions.add(r.version);
+    if (versions.has(r?.version)) problems.push(`${at}: version ${r.version} appears twice`);
+    versions.add(r?.version);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(r?.date ?? "")) problems.push(`${at}.date is not YYYY-MM-DD`);
     if (!Array.isArray(r?.highlights) || r.highlights.length > 2) {
       problems.push(`${at}.highlights must be a list of at most 2 texts`);

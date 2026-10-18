@@ -72,6 +72,15 @@ describe("release notes leak check", () => {
       "moduo-mcp",
     ]);
 
+    expect(words("Timers save every 3-minute block and work over Wi-Fi.")).toEqual([]);
+    expect(words("Rewrote the SQL in Postgres behind an edge function as service role.")).toEqual([
+      "SQL",
+      "Postgres",
+      "edge function",
+      "service role",
+    ]);
+    expect(words("Shipped in #475 at commit 3688d318.")).toEqual(["#475", "3688d318"]);
+
     // The reason is named with the word, so the error says what to fix.
     const [leak] = findLeaks("The booking-public page loads faster.", deny);
     expect(leak).toEqual({ word: "booking-public", reason: "Edge Function name" });
@@ -115,6 +124,7 @@ describe("release notes leak check", () => {
 
   it("keeps notes short: one or two sentences, 200 characters", () => {
     expect(shapeProblems("One. Two.", "new")).toEqual([]);
+    expect(shapeProblems("Works with lists, e.g. tasks. Faster too.", "new")).toEqual([]);
     expect(shapeProblems("One. Two. Three.", "new")).toEqual(["has 3 sentences (one or two)"]);
     expect(shapeProblems("No full stop", "fixed")).toEqual(["must end a sentence with . ! or ?"]);
     expect(shapeProblems(`${"a".repeat(200)}.`, "fixed")).toEqual([
@@ -130,6 +140,11 @@ describe("release notes leak check", () => {
       highlight: true,
       text: "Snooze is here.",
     });
+    // Comments after a value, as in the README template, are ignored.
+    expect(
+      parseNote("x", "---\ntype: fixed  # new | improved\ninternal: false # shown\n---\nHi.\n")
+        .type,
+    ).toBe("fixed");
     expect(() => parseNote("x", "Just text.")).toThrow(/front matter/);
     expect(() => parseNote("x", note("feature", "Hi."))).toThrow(/type must be one of/);
     expect(() => parseNote("x", "---\ntype: new\n---\nHi.\n")).toThrow(/internal: true/);

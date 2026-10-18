@@ -14,7 +14,7 @@
  * CLI:
  *   bun scripts/release/changes.ts status                 pending notes and the next version
  *   bun scripts/release/changes.ts prepare [--date D]     bump VERSION, add the release to
- *        [--version X.Y.Z]                                releases.json, rewrite CHANGELOG.md,
+ *        [--version X.Y.Z] [--reliability]                releases.json, rewrite CHANGELOG.md,
  *                                                          delete the consumed note files
  *   bun scripts/release/changes.ts notes <X.Y.Z>          updater Markdown for a released version
  *   bun scripts/release/changes.ts coming-next            updater Markdown for pending notes
@@ -83,13 +83,25 @@ export function releaseItems(notes: Note[]): ReleaseItem[] {
   return items;
 }
 
-/** At most two highlights: notes marked `highlight: true`, else the first `new` items. */
+/**
+ * At most two highlights: notes marked `highlight: true`, else the first `new`
+ * items, else (a patch release) the first improved and fixed items, so the
+ * update toast always has something to show.
+ */
 export function releaseHighlights(notes: Note[]): string[] {
   const visible = publicNotes(notes).filter((n) => n.type !== "security");
   const marked = visible.filter((n) => n.highlight);
-  const pick = marked.length ? marked : visible.filter((n) => n.type === "new");
+  const fresh = visible.filter((n) => n.type === "new");
+  const pick = marked.length ? marked : fresh.length ? fresh : releaseOrder(visible);
   return pick.slice(0, 2).map((n) => n.text);
 }
+
+function releaseOrder(notes: Note[]): Note[] {
+  return TYPE_ORDER.flatMap((type) => notes.filter((n) => n.type === type));
+}
+
+/** The line a release with only internal notes ships with, when shipped anyway. */
+export const RELIABILITY_LINE = "Reliability improvements.";
 
 export function buildRelease(version: string, date: string, notes: Note[]): Release {
   if (!SEMVER.test(version)) throw new Error(`version must be X.Y.Z (got "${version}")`);
@@ -178,15 +190,36 @@ export type Prepared = { version: string; release: Release; consumed: string[] }
  * (internal ones too). Refuses while any note fails the leak check.
  */
 export function prepareRelease(
-  opts: { root?: string; date: string; version?: string } = { date: today() },
+  opts: { root?: string; date: string; version?: string; reliability?: boolean } = {
+    date: today(),
+  },
 ): Prepared {
   const root = opts.root ?? ROOT;
   const problems = checkRepo(root);
   if (problems.length) throw new Error(`notes fail the leak check:\n${problems.join("\n")}`);
   const { notes } = readNotes(root);
   const current = fs.readFileSync(path.join(root, "VERSION"), "utf8").trim();
-  const version = opts.version ?? nextVersion(current, notes);
-  const release = buildRelease(version, opts.date, notes);
+  // Nothing people can notice: refuse, unless asked to ship a "Reliability improvements." patch.
+  const shown = publicNotes(notes);
+  if (!shown.length && !opts.reliability) {
+    throw new Error("no public notes since the last release (pass --reliability to ship anyway)");
+  }
+  const released = shown.length
+    ? notes
+    : [
+        {
+          slug: "reliability",
+          type: "improved" as const,
+          internal: false,
+          highlight: false,
+          text: RELIABILITY_LINE,
+        },
+      ];
+  const version = opts.version ?? nextVersion(current, released);
+  if (compareSemver(version, current) <= 0) {
+    throw new Error(`version ${version} must be higher than VERSION ${current}`);
+  }
+  const release = buildRelease(version, opts.date, released);
   const releases = addRelease(readReleases(root), release);
   writeReleases(releases, root);
   fs.writeFileSync(path.join(root, "CHANGELOG.md"), renderChangelog(releases));
@@ -194,6 +227,13 @@ export function prepareRelease(
   const consumed = notes.map((n) => `.changes/${n.slug}.md`);
   for (const rel of consumed) fs.rmSync(path.join(root, rel));
   return { version, release, consumed };
+}
+
+function compareSemver(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
+  return 0;
 }
 
 function today(): string {
@@ -224,6 +264,7 @@ function main(args: string[]): void {
       const result = prepareRelease({
         date: flag(rest, "--date") ?? today(),
         version: flag(rest, "--version"),
+        reliability: rest.includes("--reliability"),
       });
       console.log(`Prepared ${result.version}: ${result.consumed.length} note file(s) consumed.`);
       return;
