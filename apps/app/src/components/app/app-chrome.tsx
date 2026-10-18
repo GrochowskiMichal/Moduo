@@ -32,6 +32,7 @@ import { SettingsModal } from "../../features/settings/settings-modal";
 import { ReferencesProvider } from "../../features/spine/references/provider";
 import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
+import { WhatsNewOnLaunch } from "../../features/whats-new/whats-new-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
 import { initialsOf } from "../../lib/initials";
 import {
@@ -593,6 +594,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
             <EmailDueWebSweep />
             <UpdateOnLaunch />
+            {/* "Updated to X · See what's new" once, and the What's new dialog (REL-4). */}
+            <WhatsNewOnLaunch />
             {/* The shared Tasks store for this workspace, held all session, and its
                 quiet sync state: Offline / "2 waiting to sync" (TV-D11a). */}
             <TasksSyncStatus />

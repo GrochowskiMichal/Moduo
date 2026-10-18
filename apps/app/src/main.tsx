@@ -7,10 +7,12 @@ import "@fontsource/nunito/700.css";
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { APP_BUILD, IS_DESKTOP } from "./features/settings/about";
 import { applyAppearance, readLocalAppearance } from "./lib/appearance";
 import { installChunkReload } from "./lib/chunk-reload";
 import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
 import { useKeepInMenuBar } from "./lib/keep-in-menu-bar";
+import { startNewVersionCheck } from "./lib/new-version-check";
 import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
 import { router } from "./router";
 import "./global.css";
@@ -23,6 +25,10 @@ applyMotion(readLocalPreferences().motion);
 
 // A chunk the host no longer serves (a tab older than the last 3 deploys) reloads once.
 installChunkReload();
+
+// Web only (REL-4): a tab left open across a release offers "Moduo was updated ·
+// Reload", and never reloads by itself.
+if (!IS_DESKTOP && APP_BUILD !== "dev") startNewVersionCheck({ bundledBuild: APP_BUILD });
 
 window.addEventListener("error", (event) => {
   console.error("Global error event:", event.error ?? event.message);

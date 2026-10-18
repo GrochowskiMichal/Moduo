@@ -46,12 +46,11 @@ describe("About shows version + build (AC12)", () => {
 });
 
 describe("About links (AC12)", () => {
-  it("includes a What's-new / changelog link", () => {
+  it("includes the full changelog on moduo.app (REL-4, AC9)", () => {
     const changelog = ABOUT_LINKS.find((l) => l.kind === "changelog");
     expect(changelog).toBeDefined();
-    expect(changelog?.label).toMatch(/new/i);
-    // moduo.app/changelog doesn't exist; the public releases page does.
-    expect(changelog?.href).toBe("https://github.com/GrochowskiMichal/moduo-releases/releases");
+    expect(changelog?.label).toBe("Full changelog");
+    expect(changelog?.href).toBe("https://moduo.app/changelog");
   });
 
   it("includes Privacy, Terms, and Support links", () => {
