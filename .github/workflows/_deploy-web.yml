@@ -1,0 +1,168 @@
+name: Deploy web (shared)
+
+# Deploys one commit to production (specs/release-v2.md, REL-2): the web app to app.moduo.app
+# (Worker moduo-app-production), then the landing to moduo.app (moduo-landing-production, whose
+# /book and /static go to that app Worker). Called by release.yml (a vX.Y.Z tag) and
+# deploy-prod.yml (redeploy a tag). The caller checks the commit first (scripts/release/check-tag.sh).
+#
+# The commit is rebuilt with the production version label (VERSION, no -rc): the same source and
+# lockfile staging tested, and the edge Worker injects prod config. The previous 3 builds' static
+# files stay deployed (PLAT-4), so open tabs keep loading their chunks until they reload.
+#
+# Rollback: Cloudflare dashboard → Workers → moduo-app-production → Deployments → Rollback, or
+# `npx wrangler rollback --env production` in apps/app (same for apps/landing). See docs/release.md.
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: "Full commit to deploy (already checked by the caller)"
+        required: true
+        type: string
+      label:
+        description: "What the Cloudflare deployment message names, e.g. the tag"
+        required: true
+        type: string
+      target:
+        description: "both | app | landing"
+        required: false
+        type: string
+        default: both
+
+permissions:
+  contents: read
+
+# bash with pipefail.
+defaults:
+  run:
+    shell: bash
+
+env:
+  WRANGLER: npx --yes wrangler@4.147.0
+
+jobs:
+  app:
+    if: inputs.target != 'landing'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only develop, main, mike, prod-app and v* tags may use this environment (REL-6 drops main and prod-app).
+    environment: cloudflare-deploy
+    env:
+      SHA: ${{ inputs.sha }}
+      LABEL: ${{ inputs.label }}
+    steps:
+      - name: Checkout the commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build the web app
+        # No PUBLIC_* values at build time: the edge Worker injects production's config.
+        run: |
+          MODUO_VERSION="$(cat VERSION)"
+          export MODUO_VERSION MODUO_BUILD="${SHA::7}"
+          echo "build $MODUO_BUILD · version $MODUO_VERSION"
+          bun run build:web
+
+      - name: Keep the previous 3 builds' files
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/hosting/retain-static.sh merge production "${SHA::7}" apps/app/dist/web
+
+      - name: Deploy
+        working-directory: apps/app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER deploy --env production --var "BUILD:${SHA::7}" --message "prod $LABEL ${SHA::7}"
+
+      - name: Record this build's files
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bash scripts/hosting/retain-static.sh record production "${SHA::7}"
+
+      - name: Smoke test
+        run: |
+          # A first deploy moves app.moduo.app off a cached CNAME (TTL 300 s): wait until the
+          # host serves this build before checking it.
+          for _ in $(seq 1 40); do
+            [ "$(curl -s https://app.moduo.app/config.json | jq -r '.build // empty' 2>/dev/null)" = "${SHA::7}" ] && break
+            sleep 10
+          done
+          old=()
+          [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
+          set +e
+          bun scripts/smoke-hosting.ts https://app.moduo.app "${old[@]}" --expect "build=${SHA::7}" > "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"
+          exit $code
+
+  landing:
+    needs: app
+    # After the app, so the landing's APP binding finds the new app Worker; also alone (target landing).
+    if: >-
+      always() && inputs.target != 'app' &&
+      (needs.app.result == 'success' || needs.app.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cloudflare-deploy
+    env:
+      SHA: ${{ inputs.sha }}
+      LABEL: ${{ inputs.label }}
+    steps:
+      - name: Checkout the commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Build the landing
+        run: node apps/landing/build.mjs
+
+      - name: Deploy
+        working-directory: apps/landing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER deploy --env production --message "prod $LABEL ${SHA::7}"
+
+      - name: Smoke test
+        run: |
+          # A first deploy of a new host can be shadowed by a cached older answer for a minute.
+          for _ in $(seq 1 40); do
+            h="$(curl -sI https://moduo.app/ || true)"
+            grep -qi '^server: cloudflare' <<< "$h" && break
+            sleep 10
+          done
+          set +e
+          bun scripts/smoke-hosting.ts https://moduo.app --landing prod > "$RUNNER_TEMP/smoke.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/smoke.md"
+          exit $code

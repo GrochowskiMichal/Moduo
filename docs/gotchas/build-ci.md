@@ -83,3 +83,9 @@ Read before working in `.github/`, `scripts/`, `package.json`, `rsbuild.config.t
 
 - **The app and the landing import `release-notes/releases.json` at build time, so Turborepo must list it as an input.** It lives outside both workspaces, so `$TURBO_DEFAULT$` doesn't see it and a notes-only change would replay a cached build with the old notes. `apps/app/turbo.json` (build, typecheck, test) and the landing build in the root `turbo.json` list `$TURBO_ROOT$/release-notes/**`; keep it there if the file moves. The file must exist: the app's import fails the build without it. → [releases.ts](../../apps/app/src/features/whats-new/releases.ts)
 
+
+## Tag releases (REL-2)
+
+- **A tag push runs the workflow file from the tagged commit, not from `develop`.** `release.yml` and `scripts/release/check-tag.sh` must already be on the tagged commit, and a tag on a branch whose `release.yml` was edited runs that edited file (the refusal probe ran this branch's own copy). The check is only as strong as who may push `v*` tags: today only the two founders have write access; a tag ruleset would make it hold regardless. → [release.yml](../../.github/workflows/release.yml)
+- **The `cloudflare-deploy` environment holds no secrets of its own:** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are repo secrets, so its branch/tag policy decides which refs show up as deployments, not who can reach the token. Don't rely on it as a secret boundary. (2026-10-19)
+- **GitHub keeps one waiting run per concurrency group**, even with `cancel-in-progress: false`: a third run cancels the waiting one. `release-production`, `deploy-web-production` and `desktop-release-production` are shared between the tag release and the manual re-runs, so a manual re-run started while a release job waits cancels that job.
