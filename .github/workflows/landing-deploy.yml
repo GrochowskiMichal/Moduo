@@ -4,7 +4,7 @@ name: landing-deploy
 #
 # Staging only (https://staging.moduo.app): after `checks` passes on a develop push, for exactly
 # the commit checks tested, or by hand. The staging build: the portal at /, the marketing page at
-# /landing (noindex). Production (moduo.app) is deployed by deploy-prod.yml.
+# /landing (noindex). Production (moduo.app) is deployed by release.yml on a vX.Y.Z tag.
 #
 # The build is a copy step (no app build), so a deploy takes well under a minute. Roll back from
 # the Cloudflare dashboard or `wrangler rollback --env staging`.

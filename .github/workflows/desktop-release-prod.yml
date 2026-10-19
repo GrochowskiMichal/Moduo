@@ -1,14 +1,21 @@
 name: Desktop Release (production)
 
-# Manual run, built from the `prod-app` branch (deploy-prod.yml moves it to the commit it
-# deployed to app.moduo.app) — run it after deploy-prod. Builds the signed Mac universal .dmg + Windows NSIS installer, pointed
-# at app.moduo.app, and publishes them to the rolling `prod-latest` release.
-# The build itself lives in _desktop-release.yml.
+# Manual re-run of a release tag's desktop build (specs/release-v2.md, REL-2). A release builds
+# desktop from its vX.Y.Z tag in release.yml when anything desktop bundles changed; run this to
+# build a tag again (a failed release's desktop half) or one release.yml skipped. Same check as the
+# release (scripts/release/check-tag.sh). Builds the signed Mac universal .dmg + Windows NSIS
+# installer, pointed at app.moduo.app, and publishes them through the update server. The build
+# itself lives in _desktop-release.yml. No longer builds prod-app (REL-6 retires that branch).
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build (vX.Y.Z)
+        required: true
 
-# Never cancel a production build mid-notarization; a second run queues behind it.
+# Never cancel a production build mid-notarization; a second run queues behind it. Shared with
+# release.yml's desktop job.
 concurrency:
   group: desktop-release-production
   cancel-in-progress: false
@@ -16,8 +23,44 @@ concurrency:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Owner only
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          [ "$ACTOR" = "$OWNER" ] && [ "$TRIGGERING_ACTOR" = "$OWNER" ] \
+            || { echo "::error::Only $OWNER may release production desktop (actor $ACTOR, triggered by $TRIGGERING_ACTOR)."; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: bash scripts/release/check-tag.sh "$TAG"
+
   release:
+    needs: resolve
     uses: ./.github/workflows/_desktop-release.yml
     # actions: write is for mac-watchdog alone (it cancels a run stuck waiting on the Mac).
     permissions:
@@ -26,7 +69,8 @@ jobs:
     secrets: inherit
     with:
       channel: production
-      ref: prod-app
+      # The commit resolve checked, so a moved tag can't swap in an unchecked one.
+      ref: ${{ needs.resolve.outputs.sha }}
       release_tag: prod-latest
       release_name: "Production — latest build"
       prerelease: false
