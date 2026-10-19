@@ -1,5 +1,5 @@
 {
- "business": "Moduo Pro (day-loop wedge): run-cost model, founders unpaid",
+ "business": "Moduo Pro (Polish sp. z o.o.) (day-loop wedge): run-cost model, founders unpaid",
  "unit": "paid seat",
  "price": 12.0,
  "variable": [
@@ -56,15 +56,19 @@
   {
    "label": "Claude Max 20x, two seats at $200 (founders' own spend; Startup-program credits not counted) [founders 2026-10-19; seat count to confirm]",
    "cost": 400
+  },
+  {
+   "label": "Accounting office in Poland (full books for a sp. z o.o., ~PLN 600-1,500/month) [estimate]",
+   "cost": 250
   }
  ],
  "startup": [
   {
-   "label": "Company incorporation [TBD: country undecided (Poland, USA or Japan)]",
-   "cost": 0
+   "label": "Register a sp. z o.o. via S24 (PLN 250 court fee + 0.5% PCC on PLN 5,000 capital = PLN 274) [public price, 2026]",
+   "cost": 75
   },
   {
-   "label": "Apple Developer re-enrolment as an Organization [TBD; fee covered by the yearly $99]",
+   "label": "Apple Developer re-enrolment as an Organization (fee covered by the yearly $99)",
    "cost": 0
   }
  ],
