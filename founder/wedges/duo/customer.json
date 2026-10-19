@@ -1,0 +1,35 @@
+{
+ "business": "Moduo Duo: an all-in-one workspace with chat for two people working together",
+ "target": "Two-person teams (co-founders, partner pairs, a freelancer plus an assistant) who coordinate across Slack or WhatsApp, Notion and a shared task app",
+ "where": "Online; mostly US, UK and EU",
+ "age": [24, 50],
+ "segments": [
+  {"name": "Early-stage startup co-founders", "share": 0.35, "income": [30000, 120000]},
+  {"name": "Partners in a small service business", "share": 0.40, "income": [50000, 160000]},
+  {"name": "Solo operator with an assistant or VA", "share": 0.25, "income": [60000, 200000]}
+ ],
+ "behaviours": [
+  {"name": "Slack plus Notion pair", "share": 0.25, "how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion."},
+  {"name": "WhatsApp coordinators", "share": 0.20, "how": "Run the business through a WhatsApp chat and a shared Google Sheet."},
+  {"name": "One partner decides tools", "share": 0.15, "how": "One of the two picks the tools; the other goes along if it's easy."},
+  {"name": "Subscription trimmer", "share": 0.15, "how": "Cuts anything that costs per seat and isn't used daily by both."},
+  {"name": "Couple running a business", "share": 0.10, "how": "Mixes household and business admin in the same tools."},
+  {"name": "Early adopter", "share": 0.15, "how": "Likes trying new tools together and moves fast."}
+ ],
+ "objections": [
+  "Slack's free plan already covers our chat",
+  "Getting my partner to switch apps is the hard part",
+  "We'd lose our Notion setup and templates",
+  "What happens when we hire a third person?",
+  "A small startup's chat won't be as reliable as Slack or WhatsApp",
+  "$20 a month is more than we pay now",
+  "We need it on our phones"
+ ],
+ "habits": [
+  "you and your partner have a standing Monday call to sync on who's doing what",
+  "you lost track of who replied to a client last week",
+  "half your coordination happens in voice notes",
+  "you share one Google Calendar for the business"
+ ],
+ "_notes": "Draws on PRODUCT_BRIEF.md section 2 (partner/founder pairs, primary close second) and the 2026-10-02 chat decision. No mobile app is a real gap for this group. Shares and incomes are guesses."
+}

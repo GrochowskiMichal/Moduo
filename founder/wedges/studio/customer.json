@@ -1,0 +1,35 @@
+{
+ "business": "Moduo Team: an all-in-one workspace with chat for small agencies and studios",
+ "target": "Owners and leads of agencies or studios with 3 to 5 people doing client work (design, dev, marketing, content)",
+ "where": "Online; mostly US, UK and EU",
+ "age": [27, 50],
+ "segments": [
+  {"name": "Design or creative studio", "share": 0.35, "income": [60000, 150000]},
+  {"name": "Dev or product agency", "share": 0.35, "income": [70000, 180000]},
+  {"name": "Marketing or content agency", "share": 0.30, "income": [55000, 140000]}
+ ],
+ "behaviours": [
+  {"name": "ClickUp or Asana refugee", "share": 0.20, "how": "Found their last tool overwhelming and wants something simpler."},
+  {"name": "Basecamp flat-pricer", "share": 0.15, "how": "Values flat pricing so clients and contractors cost nothing extra."},
+  {"name": "Trello plus Slack", "share": 0.20, "how": "Runs projects on Trello boards and talks in Slack."},
+  {"name": "Time-tracking first", "share": 0.15, "how": "Chooses tools by how well they track billable hours per client."},
+  {"name": "Owner decides alone", "share": 0.15, "how": "Picks tools quickly, but switches only if the team won't revolt."},
+  {"name": "Reads every review", "share": 0.15, "how": "Needs G2 or Capterra reviews and a stable vendor before moving the team."}
+ ],
+ "objections": [
+  "We need time tracking per client, and this doesn't do it",
+  "Clients and contractors need access without paying for a seat",
+  "Moving the whole team off Slack and Trello is a big ask",
+  "No way to show a client project status without inviting them",
+  "Basecamp is $59 flat for unlimited people; per seat adds up",
+  "A new tool from a two-person startup is a risk for client work",
+  "We need a 'waiting on client' or 'in review' state"
+ ],
+ "habits": [
+  "you run a Monday stand-up mainly to find out who's on what",
+  "two freelancers work with you on and off",
+  "you estimate projects in a spreadsheet and overrun half of them",
+  "clients email you for status updates every week"
+ ],
+ "_notes": "Draws on .design/tasks-dogfood/research-2026-10/segments.md 1c (Hubstaff 53% time-tracking pain, Monday 3-seat minimum, Basecamp $59 flat). Time-per-client, waiting/review states and client status links are known gaps (research section 6), so they appear as objections, not features. Shares and incomes are guesses."
+}

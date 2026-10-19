@@ -1,0 +1,37 @@
+{
+ "business": "Moduo: an all-in-one workspace (tasks, notes, calendar, contacts, email), pitched as a client hub for solo service businesses",
+ "target": "Solo freelancers and consultants (designers, developers, writers, coaches) who juggle several clients across 4+ separate apps",
+ "where": "Online; mostly US, UK and EU",
+ "age": [25, 50],
+ "segments": [
+  {"name": "Freelance designer, developer or writer", "share": 0.45, "income": [35000, 120000]},
+  {"name": "Consultant or coach", "share": 0.35, "income": [50000, 180000]},
+  {"name": "Solo founder of a small service business", "share": 0.20, "income": [40000, 150000]}
+ ],
+ "behaviours": [
+  {"name": "Notion tinkerer", "share": 0.20, "how": "Has built their own client system in Notion and keeps rebuilding it."},
+  {"name": "Tool-stack loyalist", "share": 0.18, "how": "Pays for Spark, Todoist and Calendly and is fine with how they fit together."},
+  {"name": "Subscription trimmer", "share": 0.15, "how": "Audits their subscriptions every few months and cancels anything they don't use weekly."},
+  {"name": "Inbox-as-to-do-list", "share": 0.15, "how": "Runs their work from email stars and flags; forgets follow-ups."},
+  {"name": "Reads every review", "share": 0.12, "how": "Won't try a new tool without Reddit threads and reviews saying it's stable."},
+  {"name": "Paper and calendar", "share": 0.10, "how": "Uses a paper notebook and Google Calendar; has tried apps and dropped them."},
+  {"name": "Early adopter", "share": 0.10, "how": "Tries new productivity apps on launch day, rarely sticks with one."}
+ ],
+ "objections": [
+  "All-in-one apps are mediocre at everything; I'd still need my real email client",
+  "Moving my clients, notes and tasks over is a weekend I don't have",
+  "A new startup could shut down and take my data with it",
+  "I already pay for tools that work well enough",
+  "No Outlook support is a dealbreaker for some of my clients' threads",
+  "I don't want my client email synced to someone else's cloud",
+  "$12 a month on top of what I already pay"
+ ],
+ "habits": [
+  "you have five active clients and two waiting on a proposal",
+  "you lost a follow-up email last month and nearly lost the client",
+  "you invoice at the end of every month from a spreadsheet",
+  "you work from home and a café two days a week",
+  "you check email first thing and it decides your day"
+ ],
+ "_notes": "Segments and objections draw on .design/tasks-dogfood/research-2026-10/segments.md (1a, 1b) and PRODUCT_BRIEF.md risks. Income ranges and behaviour shares are guesses; correct them before dealing."
+}
