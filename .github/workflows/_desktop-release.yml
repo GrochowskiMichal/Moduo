@@ -500,16 +500,16 @@ jobs:
 
       # Stable filenames so download URLs don't change between versions. The macOS updater
       # installs the .app.tar.gz, not the .dmg: Moduo_aarch64 and Moduo_x64 for the manifest's
-      # per-arch keys, and Moduo_universal for the one transition release that still carries the
-      # darwin-universal fallback key (see "Generate latest.json"). Each per-arch .app is also
-      # zipped for its notarization submission ($RUNNER_TEMP/notary, never published).
+      # per-arch keys. The universal build's own .app.tar.gz is only the size baseline below and is
+      # never published (the darwin-universal transition key ended after 1.2.1). Each per-arch .app
+      # is also zipped for its notarization submission ($RUNNER_TEMP/notary, never published).
       - name: Verify signatures and stage artifacts
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           TARGET_DIR="$(cd "${CARGO_TARGET_DIR:-$DESKTOP_DIR/src-tauri/target}" && pwd)"
           mkdir -p "$RUNNER_TEMP/mac" "$RUNNER_TEMP/notary"
-          # stage <rust target> <file stem> <expected lipo archs>
+          # stage <rust target> <file stem> <expected lipo archs>; an empty stem verifies without copying.
           stage() {
             local bundle="$TARGET_DIR/$1/release/bundle" app tgz bin
             app=$(find "$bundle/macos" -maxdepth 1 -name "*.app" | head -1)
@@ -519,29 +519,33 @@ jobs:
             codesign -dv "$app" 2>&1 | grep -q "flags=.*runtime" || { echo "::error::$1: the app is not signed with the hardened runtime; Apple will reject it."; exit 1; }
             bin="$app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")"
             [ "$(lipo -archs "$bin")" = "$3" ] || { echo "::error::$1: the binary is $(lipo -archs "$bin"), expected $3."; exit 1; }
-            cp "$tgz" "$RUNNER_TEMP/mac/$2.app.tar.gz"
-            cp "$tgz.sig" "$RUNNER_TEMP/mac/$2.app.tar.gz.sig"
+            if [ -n "$2" ]; then
+              cp "$tgz" "$RUNNER_TEMP/mac/$2.app.tar.gz"
+              cp "$tgz.sig" "$RUNNER_TEMP/mac/$2.app.tar.gz.sig"
+            fi
             APP_PATH="$app"
+            TGZ_PATH="$tgz"
           }
           stage aarch64-apple-darwin Moduo_aarch64 arm64
           ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/notary/Moduo_aarch64.app.zip"
           stage x86_64-apple-darwin Moduo_x64 x86_64
           ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/notary/Moduo_x64.app.zip"
-          stage universal-apple-darwin Moduo_universal "x86_64 arm64"
+          stage universal-apple-darwin "" "x86_64 arm64"
           DMG=$(find "$TARGET_DIR/universal-apple-darwin/release/bundle/dmg" -name "*.dmg" | head -1)
           if ! codesign --verify "$DMG" 2>/dev/null; then
             codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" --keychain "$BUILD_KEYCHAIN" "$DMG"
           fi
           cp "$DMG" "$RUNNER_TEMP/mac/Moduo_universal.dmg"
-          # AC12: each per-arch bundle is at most 60% of the universal one.
-          UNI=$(stat -f %z "$RUNNER_TEMP/mac/Moduo_universal.app.tar.gz")
+          # AC12: each per-arch bundle is at most 60% of the universal one (built, not published).
+          UNI=$(stat -f %z "$TGZ_PATH")
           {
             echo "| Updater bundle | Bytes | Of universal |"
             echo "| --- | --- | --- |"
-            for f in Moduo_aarch64 Moduo_x64 Moduo_universal; do
+            echo "| universal (baseline, not published) | $UNI | 100% |"
+            for f in Moduo_aarch64 Moduo_x64; do
               size=$(stat -f %z "$RUNNER_TEMP/mac/$f.app.tar.gz")
               echo "| \`$f.app.tar.gz\` | $size | $((size * 100 / UNI))% |"
-              if [ "$f" != Moduo_universal ] && [ $((size * 100)) -gt $((UNI * 60)) ]; then
+              if [ $((size * 100)) -gt $((UNI * 60)) ]; then
                 echo "::warning::$f.app.tar.gz is $((size * 100 / UNI))% of the universal bundle (expected at most 60%)." >&2
               fi
             done
@@ -838,9 +842,6 @@ jobs:
       # Without a fresh Windows build the Windows entry is left out (no update offered) rather than
       # pointing at an older installer under a newer version.
       # Mac (REL-5): darwin-aarch64 and darwin-x86_64 each point at their own per-arch bundle.
-      # TRANSITION ONLY: "darwin-universal" points at the universal bundle. Tauri never asks for that
-      # key; the update server falls back to it when a darwin-<arch> key is missing. Drop it, the
-      # Moduo_universal.app.tar.gz build and its uploads once one release has shipped per-arch keys.
       - name: Generate latest.json
         id: manifests
         env:
@@ -859,12 +860,9 @@ jobs:
               --arg arm_url "$base/Moduo_aarch64.app.tar.gz" \
               --arg x64_sig "$(cat Moduo_x64.app.tar.gz.sig)" \
               --arg x64_url "$base/Moduo_x64.app.tar.gz" \
-              --arg uni_sig "$(cat Moduo_universal.app.tar.gz.sig)" \
-              --arg uni_url "$base/Moduo_universal.app.tar.gz" \
               '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {
-                 "darwin-aarch64":   {signature: $arm_sig, url: $arm_url},
-                 "darwin-x86_64":    {signature: $x64_sig, url: $x64_url},
-                 "darwin-universal": {signature: $uni_sig, url: $uni_url}}}' > "$out"
+                 "darwin-aarch64": {signature: $arm_sig, url: $arm_url},
+                 "darwin-x86_64":  {signature: $x64_sig, url: $x64_url}}}' > "$out"
             if [ -f Moduo_x64-setup.exe.sig ]; then
               jq --arg sig "$(cat Moduo_x64-setup.exe.sig)" --arg url "$base/Moduo_x64-setup.exe" \
                 '.platforms["windows-x86_64"] = {signature: $sig, url: $url}' "$out" > manifest.tmp && mv manifest.tmp "$out"
@@ -917,10 +915,10 @@ jobs:
             404)
               cd release-artifacts
               # The Mac files are required (the manifest points at them); Windows is optional.
-              for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig; do
+              for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig; do
                 [ -f "$f" ] || { echo "::error::$f is missing from the Mac artifacts."; exit 1; }
               done
-              for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
+              for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
                 [ -f "$f" ] || continue
                 put "$PREFIX/$f" "$f" application/octet-stream
               done
@@ -954,7 +952,7 @@ jobs:
               echo "::error::The update server answers ${got:-nothing}, not $MODUO_VERSION"; exit 1
             fi
           fi
-          for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_x64.app.tar.gz Moduo_universal.app.tar.gz; do
+          for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_x64.app.tar.gz; do
             curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/$f"
           done
           for arch in aarch64 x86_64; do
@@ -986,6 +984,5 @@ jobs:
             release-artifacts/Moduo_universal.dmg
             release-artifacts/Moduo_aarch64.app.tar.gz
             release-artifacts/Moduo_x64.app.tar.gz
-            release-artifacts/Moduo_universal.app.tar.gz
             release-artifacts/Moduo_x64-setup.exe
             release-artifacts/latest.json
