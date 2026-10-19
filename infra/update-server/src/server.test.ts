@@ -110,6 +110,59 @@ describe("update check", () => {
     expect((await call("/desktop/staging/darwin/x86_64/1.1.0-rc.3")).status).toBe(200);
   });
 
+  it("serves each Mac arch its own bundle when the release has per-arch keys (REL-5)", async () => {
+    const { call } = setup({
+      files: {
+        "desktop/staging/latest.json": manifest("1.2.0-rc.60", [
+          "darwin-aarch64",
+          "darwin-x86_64",
+          "darwin-universal",
+          "windows-x86_64",
+        ]),
+      },
+    });
+    for (const arch of ["aarch64", "x86_64"]) {
+      const res = await call(`/desktop/staging/darwin/${arch}/1.2.0-rc.3`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        url: `${BASE}/download/desktop/x/1.2.0-rc.60/darwin-${arch}`,
+        signature: `sig-darwin-${arch}`,
+      });
+    }
+  });
+
+  it("falls back to the universal Mac bundle when an arch's key is missing", async () => {
+    const { call } = setup({
+      files: {
+        "desktop/staging/latest.json": manifest("1.2.0-rc.60", [
+          "darwin-aarch64",
+          "darwin-universal",
+        ]),
+      },
+    });
+    expect(await (await call("/desktop/staging/darwin/x86_64/1.2.0-rc.3")).json()).toMatchObject({
+      url: `${BASE}/download/desktop/x/1.2.0-rc.60/darwin-universal`,
+      signature: "sig-darwin-universal",
+    });
+    // Only the Mac falls back: Windows still gets nothing without its own key.
+    expect((await call("/desktop/staging/windows/x86_64/1.2.0-rc.3")).status).toBe(204);
+  });
+
+  it("answers 204 for a missing Mac arch once the universal key is dropped", async () => {
+    const { call } = setup({
+      files: { "desktop/staging/latest.json": manifest("1.2.0-rc.61", ["darwin-aarch64"]) },
+    });
+    expect((await call("/desktop/staging/darwin/x86_64/1.2.0-rc.3")).status).toBe(204);
+    expect((await call("/desktop/staging/darwin/aarch64/1.2.0-rc.3")).status).toBe(200);
+  });
+
+  it("never answers a client asking for the universal key itself", async () => {
+    const { call } = setup({
+      files: { "desktop/staging/latest.json": manifest("1.2.0-rc.60", ["darwin-universal"]) },
+    });
+    expect((await call("/desktop/staging/darwin/universal/1.2.0-rc.3")).status).toBe(404);
+  });
+
   it("decodes the version Tauri percent-encodes and rejects junk", async () => {
     const { call } = setup({ files: STAGING });
     expect((await call("/desktop/staging/darwin/aarch64/1.1.0-rc.3%2Bbuild.7")).status).toBe(200);
