@@ -2,6 +2,13 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+- **2026-10-19 · REL-4: when "Updated to X" shows, and where the notes come from (agent's choices inside the approved spec)** → `apps/app/src/features/whats-new/`, `apps/app/src/lib/new-version-check.ts`
+  - The last version told about is `lastSeenVersion` in the synced preferences blob (no migration; the localStorage mirror is the fallback). It only moves forward, also when another device's copy arrives (`newerVersion` in `applyFromCloud`), so a rollback or a device behind never re-arms the toast. The decision waits for this session's preferences read (`usePreferencesReady`).
+  - Nobody has a version recorded on the first release with What's new, and neither does a new account. Such a person gets the toast only if their preferences carry a stamp (Tasks onboarding) from before the release date; otherwise it's recorded quietly. Auth's `created_at` isn't in the runtime session, and a toast saying "Updated" to someone new reads wrong.
+  - The toast lasts 12 s and only offers the dialog. Versions without notes (staging `-rc`) are recorded quietly.
+  - The desktop update toast reads the next version's highlights from the manifest Markdown (REL-1 writes them as bold lines before the groups), and "See what's new" shows that version's grouped notes from the same Markdown, because this build doesn't bundle them yet.
+  - The web reload prompt counts a missing, empty or unreadable `build` as no check at all (not a reset), and stops polling once it has prompted.
+  - moduo.app/changelog is the Terms page with its `<main>` swapped (`apps/landing/changelog.mjs`), so it keeps the text pages' styles without a copy. About's "What's new" link became "Full changelog" → moduo.app/changelog under the new release list.
 - **2026-10-19 · REL-1: how the release-notes leak check decides (agent's choices inside the approved spec)** → [docs/release-notes.md](../release-notes.md), `scripts/release/check-notes.ts`
   - Database and function names that are one plain word (`tasks`, `contacts`, `comments`) are **not** on the run-time deny-list: they're the product's own vocabulary, and denying them would make most notes unwritable. Every other name has `_` or `-`, which the identifier rules catch anyway; the deny-list adds the reason ("Edge Function name") to the error.
   - Beyond the spec's rules it also rejects PascalCase identifiers with two or more humps (`TaskList`, with an allow-list of brand spellings: GitHub, YouTube, macOS, iPhone …), `#123`, commit hashes, and the terms Postgres, SQL, edge function and service role (validator review).

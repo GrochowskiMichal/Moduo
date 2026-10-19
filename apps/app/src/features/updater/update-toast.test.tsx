@@ -39,7 +39,27 @@ describe("two highlights", () => {
     ]);
   });
 
-  it("without a Highlights heading, the first two bullets", () => {
+  it("reads the pipeline's bold highlight lines", () => {
+    // scripts/release/changes.ts renderReleaseMarkdown's shape.
+    const rendered = [
+      "**Desktop updates now download straight from Moduo's own servers.**",
+      "",
+      "**The web app keeps working after an update.**",
+      "",
+      "### Improved",
+      "",
+      "- Desktop updates now download straight from Moduo's own servers.",
+    ].join("\n");
+    expect(manifestHighlights(rendered)).toEqual([
+      "Desktop updates now download straight from Moduo's own servers.",
+      "The web app keeps working after an update.",
+    ]);
+    expect(releaseFromManifest({ version: "1.1.0", body: rendered, date: null })?.items).toEqual([
+      { type: "improved", text: "Desktop updates now download straight from Moduo's own servers." },
+    ]);
+  });
+
+  it("without highlights, the first two bullets", () => {
     expect(manifestHighlights("- One\n- Two\n- Three")).toEqual(["One", "Two"]);
   });
 

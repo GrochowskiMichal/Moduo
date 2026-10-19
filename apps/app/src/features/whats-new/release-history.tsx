@@ -33,10 +33,7 @@ export function ReleaseHistory({ releases = RELEASES }: { releases?: Release[] }
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">
                   {release.highlights[0] ?? ""}
                 </span>
-                <ChevronRight
-                  className="size-3.5 shrink-0 text-subtle-foreground"
-                  aria-hidden
-                />
+                <ChevronRight className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden />
               </button>
             </li>
           ))}

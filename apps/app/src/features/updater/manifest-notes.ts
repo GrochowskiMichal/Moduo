@@ -4,14 +4,17 @@
 // This build doesn't bundle that version yet, so the toast reads its two
 // highlights, and What's new its grouped items, from the Markdown.
 //
-// Read leniently: headings name the groups (Highlights, New, Improved, Fixed;
-// any level, any case) and `-`/`*` bullets are the lines. With no Highlights
-// heading, the first two bullets are the highlights. Anything else is ignored.
+// The pipeline writes the highlights first, each as its own bold line
+// (`**…**`), then `### New` / `### Improved` / `### Fixed` with `- ` bullets
+// (scripts/release/changes.ts renderReleaseMarkdown). Read leniently: a
+// Highlights heading with bullets works too, headings match by prefix at any
+// level, and with no highlights at all the first two bullets stand in.
 
 import { type NoteType, type Release, SECURITY_LINE } from "../whats-new/releases";
 
 const HEADING = /^#{1,6}\s+(.+?)\s*#*\s*$/;
 const BULLET = /^\s*[-*+]\s+(.+?)\s*$/;
+const BOLD_LINE = /^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/;
 
 type Section = "highlights" | NoteType | null;
 
@@ -42,6 +45,13 @@ function parse(body: string | null | undefined) {
     const heading = HEADING.exec(raw);
     if (heading) {
       section = sectionFor(heading[1] ?? "");
+      continue;
+    }
+    // A bold line before any group heading is a highlight.
+    const bold = section === null || section === "highlights" ? BOLD_LINE.exec(raw) : null;
+    if (bold) {
+      const text = plain(bold[1] ?? "");
+      if (text) highlights.push(text);
       continue;
     }
     const bullet = BULLET.exec(raw);
