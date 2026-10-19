@@ -1,0 +1,13 @@
+{
+  "id": "P019",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I don't move my team's client work onto something I can't find a single G2 or Capterra review for. The price is fine, but if this vendor folds or breaks mid-project, it's my clients who feel it.",
+  "objection": "It's a brand-new tool with no track record and no reviews. Client pages that pull in every email and meeting sound great until the startup disappears and I'm stuck migrating mid-project.",
+  "would_change_my_mind": "A solid set of real reviews on G2 or Capterra from studios our size, plus some proof the company will still be around in two years.",
+  "price_too_cheap": 4,
+  "price_cheap": 9,
+  "price_expensive": 22,
+  "price_too_expensive": 35
+}

@@ -1,0 +1,13 @@
+{
+  "id": "P012",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "The team already lives in Trello and Slack and it mostly works; my real problem is overrunning estimates, and nothing here says it fixes that. Asking everyone to move their boards and their chat at once is a bigger cost than $45 a month.",
+  "objection": "Moving the whole team off Slack and Trello is a big ask, and if even one person keeps using Slack we end up with two places to check instead of one.",
+  "would_change_my_mind": "If it imported our Trello boards and Slack history in one go and showed time or budget per client against the estimate, so it actually helps with the overruns.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 28
+}

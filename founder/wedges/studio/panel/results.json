@@ -1,0 +1,151 @@
+{
+ "business": "Moduo Team: an all-in-one workspace with chat for small agencies and studios",
+ "seed": 7,
+ "dealt": 20,
+ "answered": 20,
+ "skipped": [],
+ "buys": 0,
+ "passes": 20,
+ "buy_rate": 0.0,
+ "by_segment": [
+  [
+   "Marketing or content agency",
+   6,
+   0.0
+  ],
+  [
+   "Dev or product agency",
+   7,
+   0.0
+  ],
+  [
+   "Design or creative studio",
+   7,
+   0.0
+  ]
+ ],
+ "by_behaviour": [
+  [
+   "Basecamp flat-pricer",
+   3,
+   0.0
+  ],
+  [
+   "Reads every review",
+   3,
+   0.0
+  ],
+  [
+   "Owner decides alone",
+   3,
+   0.0
+  ],
+  [
+   "Trello plus Slack",
+   4,
+   0.0
+  ],
+  [
+   "Time-tracking first",
+   3,
+   0.0
+  ],
+  [
+   "ClickUp or Asana refugee",
+   4,
+   0.0
+  ]
+ ],
+ "by_income": [
+  [
+   "$96,000 to $123,000",
+   7,
+   0.0
+  ],
+  [
+   "under $96,000",
+   6,
+   0.0
+  ],
+  [
+   "$123,000 and up",
+   7,
+   0.0
+  ]
+ ],
+ "why_not": [
+  [
+   "need",
+   10,
+   [
+    "My problem is that I blow half my estimates, and nothing in this pitch touches estimating, time or budgets. Without that it's just another task board plus chat, and my team already has those and won't move for a sideways switch.",
+    "My real pain is clients emailing me every week for status, and nothing here says clients can see anything or that there's a 'waiting on client' state. A client page only I can see doesn't stop those emails, and per-seat pricing is exactly what I left behind for Basecamp."
+   ],
+   [
+    "P003",
+    "P005"
+   ]
+  ],
+  [
+   "trust",
+   4,
+   [
+    "I've never heard of Moduo and I can't find a single G2 or Capterra review, so I'm not moving my whole team and our client history onto it. The client page sounds useful, but $45 a month is cheap compared to the cost of picking a vendor that disappears in a year.",
+    "The client page sounds like it could kill my weekly status emails, so I'd probably start the trial, but I just got burned migrating off ClickUp and I'm not moving the team again onto a tool nobody's heard of. If I'm going to switch, Basecamp is the safe bet and it's flat price."
+   ],
+   [
+    "P002",
+    "P011"
+   ]
+  ],
+  [
+   "habit",
+   4,
+   [
+    "The team already lives in Trello and Slack. Moving boards, client threads and chat to a new tool I've never heard of is a week of grumbling just so I can skip a Monday stand-up I don't actually mind running.",
+    "The team already lives in Trello and Slack and it mostly works; my real problem is overrunning estimates, and nothing here says it fixes that. Asking everyone to move their boards and their chat at once is a bigger cost than $45 a month."
+   ],
+   [
+    "P004",
+    "P012"
+   ]
+  ],
+  [
+   "price",
+   2,
+   [
+    "It's me plus two freelancers who come and go, so I'd be paying a seat for people who are around half the month, and the moment I add a client or another contractor the bill climbs. Basecamp-style flat pricing lets me invite whoever without thinking, so I'm not switching to per-seat for something that looks similar.",
+    "Forty-five a month for the core team is nothing, but half the people who touch our work are freelancers and clients, and nothing here tells me they get in without each costing me $15. We already have something that mostly works, so I won't move the team for a maybe."
+   ],
+   [
+    "P001",
+    "P007"
+   ]
+  ]
+ ],
+ "why_yes": [],
+ "flip": [
+  "A flat price for the whole workspace around $50 a month, with freelancers and clients as free guests.",
+  "A solid set of G2 or Capterra reviews from other small agencies, plus free guest access for clients and contractors.",
+  "Estimates vs. actual hours per client project, built in, so I can see a job going over before it does",
+  "A one-click import of our Trello boards plus a Slack bridge, so we could try the client pages without anyone having to move chat on day one.",
+  "Free client and contractor access to a client-facing status view with a 'waiting on client' state, so the weekly status emails actually stop.",
+  "Built-in time tracking per client and per task, with a simple report I can send or bill from.",
+  "Free guest access for clients and contractors, limited to their own client page and tasks.",
+  "Built-in timers that log hours against each client and task, with estimate-versus-actual reporting I can bill from.",
+  "Built-in time tracking per client plus a flat price where occasional freelancers and clients get in free.",
+  "Built-in time tracking per client and per task that rolls up into billable-hours reports I can invoice from.",
+  "If clients could open their page themselves and see status without me writing an update, I'd pay for that, ideally at a flat team price.",
+  "If it imported our Trello boards and Slack history in one go and showed time or budget per client against the estimate, so it actually helps with the overruns.",
+  "A solid set of G2 or Capterra reviews from other small agencies, plus seeing a built-in 'waiting on client' / 'in review' state in the trial.",
+  "If it imported our Trello boards in one click and plugged into Slack, so I could trial it with no migration and nobody had to leave Slack.",
+  "Time tracking against estimates per client, so I could see overruns while a project runs, plus a one-click import from Trello and Slack so the move takes an afternoon, not a month.",
+  "A clear line saying clients and contractors get free guest access to their project or client page, so I only pay for my core team.",
+  "Built-in time estimates vs. actuals per client project that show me when a job is about to overrun, or a flat studio price at or under Basecamp's.",
+  "Built-in time tracking per client and per task, with estimate vs actual and an export I can invoice from.",
+  "A solid set of real reviews on G2 or Capterra from studios our size, plus some proof the company will still be around in two years.",
+  "Free guest or client access to their own client page and tasks, stated plainly up front."
+ ],
+ "purchases_first_month_per_buyer": null,
+ "price_answers": 20
+}

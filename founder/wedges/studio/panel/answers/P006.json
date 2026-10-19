@@ -1,0 +1,13 @@
+{
+  "id": "P006",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "The client page is nice, but what I actually need is time tracked per client so I can bill and see which accounts eat us alive, and this doesn't do it. Trello and Slack already work for my team, so I'm not moving everyone for something that still leaves me needing a separate time tracker.",
+  "objection": "No time tracking per client. Without it I'd still be paying for and juggling a second tool, so it doesn't replace Trello plus Slack, it just adds a third thing.",
+  "would_change_my_mind": "Built-in time tracking per client and per task, with a simple report I can send or bill from.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 28
+}

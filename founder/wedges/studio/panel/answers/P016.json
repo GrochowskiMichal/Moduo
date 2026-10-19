@@ -1,0 +1,13 @@
+{
+  "id": "P016",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "The simpler setup and the client pages sound good, and I might start the free trial. But nothing here says my clients and freelancers can get in without a paid seat, and that's the reason I'd switch, so I'm not paying for it on this pitch.",
+  "objection": "Per-seat pricing with no mention of free guest access. If every contractor and client reviewer costs $15 a month, I'm back to paying for a tool I resent, just with fewer features.",
+  "would_change_my_mind": "A clear line saying clients and contractors get free guest access to their project or client page, so I only pay for my core team.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 20,
+  "price_too_expensive": 30
+}

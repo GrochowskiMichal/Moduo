@@ -1,0 +1,13 @@
+{
+  "id": "P004",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "The team already lives in Trello and Slack. Moving boards, client threads and chat to a new tool I've never heard of is a week of grumbling just so I can skip a Monday stand-up I don't actually mind running.",
+  "objection": "It wants to replace both Trello and Slack at once, and it charges per seat. At five people that's $75 a month when Basecamp does the same pitch for $59 flat, so I'm paying more to take a bigger risk on an unknown.",
+  "would_change_my_mind": "A one-click import of our Trello boards plus a Slack bridge, so we could try the client pages without anyone having to move chat on day one.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 22
+}

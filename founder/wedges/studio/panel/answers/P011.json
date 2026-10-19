@@ -1,0 +1,13 @@
+{
+  "id": "P011",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "The client page sounds like it could kill my weekly status emails, so I'd probably start the trial, but I just got burned migrating off ClickUp and I'm not moving the team again onto a tool nobody's heard of. If I'm going to switch, Basecamp is the safe bet and it's flat price.",
+  "objection": "It's per seat. At five people that's $75 a month against Basecamp's $59 flat for everyone, and I don't know if Moduo will still be around in a year or just turn into another bloated ClickUp.",
+  "would_change_my_mind": "If clients could open their page themselves and see status without me writing an update, I'd pay for that, ideally at a flat team price.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

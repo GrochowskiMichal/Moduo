@@ -1,0 +1,13 @@
+{
+  "id": "P005",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "My real pain is clients emailing me every week for status, and nothing here says clients can see anything or that there's a 'waiting on client' state. A client page only I can see doesn't stop those emails, and per-seat pricing is exactly what I left behind for Basecamp.",
+  "objection": "Per person pricing means every contractor I bring in for a month costs me more, and there's no mention of letting clients or freelancers in for free, so I'd end up rationing seats.",
+  "would_change_my_mind": "Free client and contractor access to a client-facing status view with a 'waiting on client' state, so the weekly status emails actually stop.",
+  "price_too_cheap": 10,
+  "price_cheap": 40,
+  "price_expensive": 90,
+  "price_too_expensive": 150
+}

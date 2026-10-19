@@ -1,0 +1,13 @@
+{
+  "id": "P015",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "My team lives in Slack and Trello and it works well enough. Making everyone switch chat and boards at once for a client page is a fight I don't want, and the pitch says nothing about estimates or hours, which is where I actually lose money.",
+  "objection": "Ripping out Slack and Trello means the whole team has to move together. If one person drags their feet we end up running two tools, and I lose a week of momentum on paid work.",
+  "would_change_my_mind": "Time tracking against estimates per client, so I could see overruns while a project runs, plus a one-click import from Trello and Slack so the move takes an afternoon, not a month.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 28
+}

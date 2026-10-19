@@ -1,0 +1,13 @@
+{
+  "id": "P002",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I've never heard of Moduo and I can't find a single G2 or Capterra review, so I'm not moving my whole team and our client history onto it. The client page sounds useful, but $45 a month is cheap compared to the cost of picking a vendor that disappears in a year.",
+  "objection": "No reviews and no track record. I don't know if this company will exist next year, and the pitch doesn't say whether clients and contractors can get in without each paying for a seat, which is the main thing I need.",
+  "would_change_my_mind": "A solid set of G2 or Capterra reviews from other small agencies, plus free guest access for clients and contractors.",
+  "price_too_cheap": 5,
+  "price_cheap": 10,
+  "price_expensive": 20,
+  "price_too_expensive": 30
+}

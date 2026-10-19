@@ -1,0 +1,13 @@
+{
+  "id": "P007",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "price",
+  "reason": "Forty-five a month for the core team is nothing, but half the people who touch our work are freelancers and clients, and nothing here tells me they get in without each costing me $15. We already have something that mostly works, so I won't move the team for a maybe.",
+  "objection": "Per-seat pricing for people who drop in twice a month. If every contractor and client needs a paid seat, the real bill is double what's on the page and the 'one workspace' story falls apart.",
+  "would_change_my_mind": "Free guest access for clients and contractors, limited to their own client page and tasks.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

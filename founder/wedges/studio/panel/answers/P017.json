@@ -1,0 +1,13 @@
+{
+  "id": "P017",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "It sounds calmer than ClickUp, but my real problem is that I estimate in a spreadsheet and overrun half my projects, and nothing here says it helps with estimates, hours or budgets. Without that it's another task board, and at $15 a head it ends up costing more than Basecamp's flat $59 once we're five people.",
+  "objection": "Per-seat pricing for a tool that doesn't touch my biggest headache; I'd be paying more each time I hire just to move my to-dos somewhere new.",
+  "would_change_my_mind": "Built-in time estimates vs. actuals per client project that show me when a job is about to overrun, or a flat studio price at or under Basecamp's.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}

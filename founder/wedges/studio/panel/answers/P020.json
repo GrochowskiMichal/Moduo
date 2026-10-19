@@ -1,0 +1,13 @@
+{
+  "id": "P020",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "Simpler than ClickUp sounds nice, but half my work involves clients and contractors, and nothing here says they can get in without a paid seat. I'd maybe poke at the trial, but I'm not moving my team for another tool that only works for the people on payroll.",
+  "objection": "Per-seat pricing with no mention of free guest access. If every client and freelancer needs a $15 seat, the real bill isn't $45, it's whatever my contractor count is that month, and I left ClickUp partly to stop that kind of thing.",
+  "would_change_my_mind": "Free guest or client access to their own client page and tasks, stated plainly up front.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 20,
+  "price_too_expensive": 30
+}

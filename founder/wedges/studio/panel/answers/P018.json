@@ -1,0 +1,13 @@
+{
+  "id": "P018",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "Our whole business runs on billable hours per client, and nothing in this pitch says it tracks time at all. A nice client page doesn't help me if I still have to log hours somewhere else and reconcile them.",
+  "objection": "No per-client time tracking, so it can't tell me which projects are overrunning or what to invoice, which is the actual problem I have.",
+  "would_change_my_mind": "Built-in time tracking per client and per task, with estimate vs actual and an export I can invoice from.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 20,
+  "price_too_expensive": 30
+}

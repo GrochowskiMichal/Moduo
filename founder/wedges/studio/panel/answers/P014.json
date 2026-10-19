@@ -1,0 +1,13 @@
+{
+  "id": "P014",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Trello and Slack already work well enough for us, and the client page isn't worth making five people relearn where everything lives. My real problem is knowing who's on what, and I solve that in a 15-minute Monday stand-up.",
+  "objection": "Moving the whole team off Slack and Trello is a big ask. Nobody's going to give up Slack for a built-in chat, so I'd end up paying for a third tool next to the two we keep.",
+  "would_change_my_mind": "If it imported our Trello boards in one click and plugged into Slack, so I could trial it with no migration and nobody had to leave Slack.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

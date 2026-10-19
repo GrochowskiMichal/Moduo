@@ -1,0 +1,13 @@
+{
+  "id": "P003",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "My problem is that I blow half my estimates, and nothing in this pitch touches estimating, time or budgets. Without that it's just another task board plus chat, and my team already has those and won't move for a sideways switch.",
+  "objection": "Per-seat pricing creeps up. At five people it's $75 a month, more than Basecamp's flat $59 for unlimited people, and I'd still be estimating in my spreadsheet.",
+  "would_change_my_mind": "Estimates vs. actual hours per client project, built in, so I can see a job going over before it does",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 22
+}
