@@ -9,7 +9,7 @@
   - Free: 1 workspace, 1 seat, web and desktop.
   - Pro: $12/month, 1 seat.
   - Duo: $20/month for 2 seats; unlocks chat.
-  - Team: $15/seat/month, no seat minimum; unlocks chat.
+  - Team: $15/seat/month, 3-seat minimum; unlocks chat.
   - Trial: 14 days with no card, 30 days if a card is added.
   - Yearly prices: **TBD**.
 - **Where and how:** online. Tauri desktop app plus a web app, synced through Supabase; email is desktop-first. Currently **invite-only**, Stripe is in test mode, and the macOS build is development-signed. Today a friend can't install it (Wave D, `/s1 ALPHA`). Acquisition channel: **TBD** (there's a landing page with a waitlist).
@@ -32,7 +32,7 @@ Each pitch in [wedges/](./wedges/) is the same product, aimed at a different fir
 1. **[client-hub](./wedges/client-hub/)**: solo freelancers and consultants. "Every client in one place." Pro, $12.
 2. **[day-loop](./wedges/day-loop/)**: people who time-block their day and have churned off Motion/Sunsama/Morgen. "A plan that survives the day." Pro, $12.
 3. **[duo](./wedges/duo/)**: co-founder and partner pairs. "One workspace for both of you, chat included." Duo, $20 for two.
-4. **[studio](./wedges/studio/)**: agencies and studios of 3–5. "Pay for the people you have." Team, $15/seat, no minimum.
+4. **[studio](./wedges/studio/)**: agencies and studios of 3–5. "One workspace for the studio." Team, $15/seat, 3-seat minimum.
 
 ## Open questions the pack should answer
 

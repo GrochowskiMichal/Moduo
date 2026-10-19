@@ -7,7 +7,7 @@ Four pitches for the same product, each aimed at a different first customer. Eac
 | [client-hub](./client-hub/) | Solo freelancers and consultants | Every client in one place, no logging | Pro $12 |
 | [day-loop](./day-loop/) | Time-blockers who churned off Motion/Sunsama/Morgen | A plan that survives the day | Pro $12 |
 | [duo](./duo/) | Co-founder and partner pairs | One workspace for both of you, chat included | Duo $20 for two |
-| [studio](./studio/) | Agencies and studios of 3–5 | Pay for the people you have | Team $15/seat |
+| [studio](./studio/) | Agencies and studios of 3–5 | One workspace for the studio | Team $15/seat, min 3 |
 
 ## Before running
 
