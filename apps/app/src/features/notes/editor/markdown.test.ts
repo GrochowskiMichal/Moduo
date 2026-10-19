@@ -305,6 +305,17 @@ describe("single dialect (NR-3, AC9)", () => {
     expect(roundTrip(md)).toBe(md);
   });
 
+  it("a backslash right before a pipe in a cell can't swallow the escape", () => {
+    // The exporter escapes the text's backslash before the cell escapes the
+    // pipe, so `a\|b` goes out as `a\\\|b`: GFM and the importer both read it
+    // as one backslash and one pipe in the same cell.
+    const md = "| Formula | Note |\n| --- | --- |\n| a\\\\\\|b | ok |";
+    expect(roundTrip(md)).toBe(md);
+    const editor = makeEditor();
+    editor.update(() => $convertFromMarkdownString(md, NOTES_TRANSFORMERS), { discrete: true });
+    expect(JSON.stringify(editor.getEditorState().toJSON())).toContain('"text":"a\\\\|b"');
+  });
+
   it("a line break inside a cell is `<br>`; a literal backslash-n stays text", () => {
     const md = "| Path | Note |\n| --- | --- |\n| C:\\new | line one<br>line two |";
     // The exporter escapes the backslash (`C:\\new`); after that the bytes hold.

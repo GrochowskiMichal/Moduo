@@ -68,7 +68,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           # The last tag that shipped desktop is the one the production channel serves.
-          paths=(apps/app apps/desktop packages supabase/functions/_shared assets bun.lock package.json tsconfig.base.json .bun-version)
+          paths=(apps/app apps/desktop packages supabase/functions/_shared assets bun.lock package.json tsconfig.base.json .bun-version .nvmrc)
           live="$(curl -sf --max-time 20 "$UPDATE_SERVER_URL/desktop/production/latest.json" | jq -r '.version // empty' || true)"
           if [ -z "$live" ]; then
             reason="the update server didn't say which version production desktop runs"
@@ -97,7 +97,8 @@ jobs:
       group: deploy-web-production
       cancel-in-progress: false
     uses: ./.github/workflows/_deploy-web.yml
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     with:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ github.ref_name }}
@@ -114,7 +115,10 @@ jobs:
     permissions:
       contents: read
       actions: write
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+      RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
     with:
       channel: production
       # The commit resolve checked, so a moved tag can't swap in an unchecked one.
@@ -154,7 +158,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           # changes.ts is erasable TypeScript; Node 24 runs it without a build.
-          node-version: 24
+          node-version-file: .nvmrc
 
       - name: Publish the GitHub release
         env:

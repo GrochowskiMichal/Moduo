@@ -1,12 +1,10 @@
-import { motion } from "framer-motion";
-import type { CSSProperties } from "react";
+import { type CSSProperties, ViewTransition } from "react";
 
 import { cn } from "@/lib/utils";
 
 import { spanOf } from "../engine/grid-engine";
 import { GRID_COLS, GRID_ROWS, type WidgetInstance, type WidgetSize } from "../engine/types";
 import type { DragRender } from "../hooks/use-grid-drag";
-import { useGridMotion } from "../motion";
 import { WidgetFrame } from "./widget-frame";
 
 // Motion tuning (transform factors, not design tokens — the DS has no scale scale).
@@ -14,8 +12,6 @@ import { WidgetFrame } from "./widget-frame";
 const EDIT_SCALE = 0.985;
 /** The dragged widget lifts slightly above the rest. */
 const ACTIVE_SCALE = 1.03;
-/** Instant transition — the dragged widget must track the finger 1:1, no lag. */
-const INSTANT_FOLLOW = { duration: 0 } as const;
 
 /** Inline grid placement from a widget's cell + size span (the one sanctioned runtime-geometry style). */
 function placementStyle(widget: WidgetInstance): CSSProperties {
@@ -65,11 +61,14 @@ export interface GridCanvasProps {
  * its (x,y)+size span (DB-2).
  *
  * DB-3 layers on the edit/drag surface: while a drag is live we render its
- * `preview` positions instead of the stored ones, the pushed neighbours FLIP-glide
- * to their new cells (framer `layout="position"`, timed by the motion tokens), and
- * the dragged widget is transform-offset to follow the finger 1:1 (its own layout
- * FLIP disabled so it never lags). Every cell stays a `motion.div` so the
- * active↔idle switch never remounts the widget body.
+ * `preview` positions instead of the stored ones, and the pushed neighbours glide
+ * to their new cells: each cell sits in a React `<ViewTransition>`, the drag hook
+ * sets a new preview inside a `dashboard-grid` transition, and global.css times
+ * the glide with the motion tokens. The dragged widget stays in its pre-drag cell,
+ * translated by the pointer's travel so it follows the finger 1:1; it opts out of
+ * the glide while held (it would lag the cursor) and glides into place on the
+ * drop. The cell element never changes type, so the active↔idle switch never
+ * remounts the widget body.
  */
 export function GridCanvas({
   widgets,
@@ -80,13 +79,10 @@ export function GridCanvas({
   onRemove,
   onResize,
 }: GridCanvasProps) {
-  // FLIP timing from the motion tokens — `duration` is 0s under
-  // prefers-reduced-motion (the token zeroes itself), so the neighbour glides
-  // collapse to instant. This is the grid's ONLY reduced-motion guard (AC12);
-  // don't hardcode this transition or reduced-motion silently regresses.
-  const motionSpec = useGridMotion();
   // While dragging, render the live preview layout; otherwise the stored one.
   const rendered = drag?.preview ?? widgets;
+  // The dragged widget's pre-drag placement: its translate is measured from there.
+  const home = drag ? widgets.find((w) => w.id === drag.activeId) : undefined;
 
   // The gap is the panels' 8 (MOD-163). The drag reads it back off the
   // computed style at press, so the cell math follows it.
@@ -95,38 +91,42 @@ export function GridCanvas({
       <GridLines editing={editing} />
       {rendered.map((widget) => {
         const isActive = drag?.activeId === widget.id;
+        // Geometry only (cell, pointer offset, lift), so it rides inline like the placement.
+        const style: CSSProperties = {
+          ...placementStyle(isActive && home ? home : widget),
+          translate: isActive && drag ? `${drag.transform.x}px ${drag.transform.y}px` : undefined,
+          scale: String(isActive ? ACTIVE_SCALE : editing ? EDIT_SCALE : 1),
+        };
         return (
-          <motion.div
+          // `default="none"`: only a layout change glides, never a mount or unmount.
+          <ViewTransition
             key={widget.id}
-            // The active widget follows the finger via a transform offset — no
-            // layout FLIP on it (that would lag the cursor). Idle widgets FLIP.
-            layout={isActive ? false : "position"}
-            style={placementStyle(widget)}
-            animate={
-              isActive && drag
-                ? { x: drag.transform.x, y: drag.transform.y, scale: ACTIVE_SCALE }
-                : { x: 0, y: 0, scale: editing ? EDIT_SCALE : 1 }
-            }
-            transition={
-              isActive ? INSTANT_FOLLOW : { duration: motionSpec.duration, ease: motionSpec.ease }
-            }
-            // No wheel handler: a sideways swipe over a widget turns the page,
-            // and the pager leaves one over a sideways scroller to it (MOD-163,
-            // spec assumption 11).
-            onPointerDown={(e) => onWidgetPointerDown?.(widget.id, e)}
-            className={cn(
-              "min-h-0 min-w-0",
-              editing && (isActive ? "cursor-grabbing" : "cursor-grab"),
-              isActive && "z-[var(--z-sticky)] shadow-lg",
-            )}
+            default="none"
+            // Only the drag hook's transitions glide; a route change never does.
+            update={isActive ? "none" : { "dashboard-grid": "dashboard-glide", default: "none" }}
           >
-            <WidgetFrame
-              widget={widget}
-              editing={editing}
-              onRemove={onRemove}
-              onResize={onResize}
-            />
-          </motion.div>
+            <div
+              style={style}
+              // No wheel handler: a sideways swipe over a widget turns the page,
+              // and the pager leaves one over a sideways scroller to it (MOD-163,
+              // spec assumption 11).
+              onPointerDown={(e) => onWidgetPointerDown?.(widget.id, e)}
+              className={cn(
+                "min-h-0 min-w-0",
+                // The edit-mode ease-down eases; the held widget's lift is instant.
+                !isActive && "transition-[scale] duration-(--motion-base) ease-(--ease-out)",
+                editing && (isActive ? "cursor-grabbing" : "cursor-grab"),
+                isActive && "z-[var(--z-sticky)] shadow-lg",
+              )}
+            >
+              <WidgetFrame
+                widget={widget}
+                editing={editing}
+                onRemove={onRemove}
+                onResize={onResize}
+              />
+            </div>
+          </ViewTransition>
         );
       })}
     </div>

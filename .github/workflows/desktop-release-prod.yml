@@ -66,7 +66,10 @@ jobs:
     permissions:
       contents: read
       actions: write
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+      RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
     with:
       channel: production
       # The commit resolve checked, so a moved tag can't swap in an unchecked one.

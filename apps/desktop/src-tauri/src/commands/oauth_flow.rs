@@ -278,7 +278,7 @@ pub(crate) fn should_refresh(expires_at: i64, now: i64, skew_secs: i64) -> bool 
     now.saturating_add(skew_secs) >= expires_at
 }
 
-/// The SASL `XOAUTH2` initial-response string for IMAP/SMTP. The `imap` crate and
+/// The SASL `XOAUTH2` initial-response string for IMAP/SMTP. async-imap and
 /// lettre both base64-encode this themselves, so we return the RAW SASL string
 /// (`user=<addr>\x01auth=Bearer <token>\x01\x01`).
 pub(crate) fn xoauth2_sasl(user: &str, access_token: &str) -> String {

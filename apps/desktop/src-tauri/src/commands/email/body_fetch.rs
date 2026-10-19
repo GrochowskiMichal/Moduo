@@ -61,7 +61,7 @@ pub(super) fn fetch_body_from_imap(
     let fetches = session
         .uid_fetch(uid.to_string(), "(UID BODY.PEEK[])")
         .map_err(|e| format!("uid_fetch_body_failed:{}", e))?;
-    let Some(first) = fetches.iter().next() else {
+    let Some(first) = fetches.first() else {
         let _ = session.logout();
         return Err("email_not_found".to_string());
     };

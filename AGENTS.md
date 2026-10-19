@@ -84,7 +84,7 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 
 ## Repo layout (short)
 
-App code lives in `apps/app/src/` (paths before 2026-10-17 say `src/`): `apps/app/src/app/` composition and router · `apps/app/src/routes/pages/` thin page adapters · `apps/app/src/features/<feature>/` vertical slices (`ui`, `model`, `hooks`, `storage`/`sync`, `utils`) · `apps/app/src/components/ui/` shadcn primitives (story required) · `apps/app/src/components/app/` shell · `apps/app/src/lib/` runtimes and platform services · `apps/app/src/styles/tokens.css` tokens (**edit the token, never a component, to change a value**) · `apps/app/src/tw/` React Native shim being phased out (new and edited chrome uses raw HTML; no repo-wide migration without an ask) · `apps/desktop/src-tauri/` Rust · `supabase/` migrations + Edge Functions · `docs/` knowledge · `specs/` specs + ledger · `.design/` design briefs · `.claude/` skills, agents, hooks, settings.
+App code lives in `apps/app/src/` (paths before 2026-10-17 say `src/`): `apps/app/src/app/` composition and router · `apps/app/src/routes/pages/` thin page adapters · `apps/app/src/features/<feature>/` vertical slices (`ui`, `model`, `hooks`, `storage`/`sync`, `utils`) · `apps/app/src/components/ui/` shadcn primitives (story required) · `apps/app/src/components/app/` shell · `apps/app/src/lib/` runtimes and platform services · `apps/app/src/styles/tokens.css` tokens (**edit the token, never a component, to change a value**) · `apps/desktop/src-tauri/` Rust · `supabase/` migrations + Edge Functions · `docs/` knowledge · `specs/` specs + ledger · `.design/` design briefs · `.claude/` skills, agents, hooks, settings.
 
 ## Git
 

@@ -111,9 +111,6 @@ Modals, switchers, menus that are app-specific but used across features.
 ### Feature components (`apps/app/src/features/<feature>/`)
 Per-feature UI. May compose primitives + bespoke shared components. The visual personality of a feature comes from its composition, not from new tokens.
 
-### React Native shim (`apps/app/src/tw/`)
-`View`, `Text`, `Pressable`, `TextInput`, `ScrollView`, `Image`, `Modal`, `ActivityIndicator`. These exist for code ported from a React Native codebase. Leave them alone; don't migrate them as part of the redesign.
-
 ## Recipes
 
 ### Add a shadcn primitive

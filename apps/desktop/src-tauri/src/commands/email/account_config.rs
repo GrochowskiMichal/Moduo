@@ -148,7 +148,7 @@ pub(super) fn select_mailbox_for_folder(
     session: &mut ImapSession,
     provider: &str,
     folder: &str,
-) -> Result<(String, imap::types::Mailbox), String> {
+) -> Result<(String, async_imap::types::Mailbox), String> {
     for mailbox in mailbox_candidates(provider, folder) {
         if let Ok(info) = session.select(mailbox.as_str()) {
             return Ok((mailbox, info));

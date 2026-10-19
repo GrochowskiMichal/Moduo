@@ -27,6 +27,14 @@ on:
         required: false
         type: string
         default: both
+    # The Cloudflare token lives in the jobs' environment; only the account id is passed.
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      # Read from the jobs' environment (cloudflare-deploy); declared so the
+      # names are known, never passed by a caller. An environment secret wins over a passed one.
+      CLOUDFLARE_API_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -56,10 +64,20 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
 
+      # Node's version comes from the workflow's own commit: a rollback deploys a tag
+      # cut before `.nvmrc` existed (cone mode always brings the root files).
+      - name: Checkout the CI config
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+          sparse-checkout: .github
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .ci/.nvmrc
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -132,10 +150,20 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
 
+      # Node's version comes from the workflow's own commit: a rollback deploys a tag
+      # cut before `.nvmrc` existed (cone mode always brings the root files).
+      - name: Checkout the CI config
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+          sparse-checkout: .github
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .ci/.nvmrc
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

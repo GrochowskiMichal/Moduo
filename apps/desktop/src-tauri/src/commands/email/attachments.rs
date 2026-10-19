@@ -224,7 +224,7 @@ fn fetch_raw_message(
     let fetches = session
         .uid_fetch(uid.to_string(), "(UID BODY.PEEK[])")
         .map_err(|e| format!("uid_fetch_body_failed:{}", e))?;
-    let result = match fetches.iter().next() {
+    let result = match fetches.first() {
         Some(first) => match first.body() {
             Some(raw) => Ok(raw.to_vec()),
             None => Err("email_body_missing".to_string()),

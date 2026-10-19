@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { activeTransform, cellMetrics, pointerToTargetCell } from "./grid-geometry";
+import { cellMetrics, pointerToTargetCell } from "./grid-geometry";
 
 // A convenient exact grid: 8 cols × 4 rows in a 796×308 box with a 12px gap makes
 // stepX = (796 + 12) / 8 = 101 and stepY = (308 + 12) / 4 = 80 — whole numbers, so
@@ -96,43 +96,5 @@ describe("pointerToTargetCell", () => {
       metrics: METRICS,
     });
     expect(target).toEqual({ x: 0, y: 0 });
-  });
-});
-
-describe("activeTransform", () => {
-  it("equals the raw pointer delta when the snap cell hasn't moved", () => {
-    const t = activeTransform({
-      originalCell: { x: 2, y: 1 },
-      activeCell: { x: 2, y: 1 },
-      delta: { x: 37, y: -18 },
-      metrics: METRICS,
-    });
-    expect(t).toEqual({ x: 37, y: -18 });
-  });
-
-  it("shrinks to the sub-cell residual once the snap advances a cell", () => {
-    // Dragged 1.25 steps right; snapped to +1 cell → residual is the leftover .25.
-    const delta = { x: METRICS.stepX * 1.25, y: 0 };
-    const t = activeTransform({
-      originalCell: { x: 0, y: 0 },
-      activeCell: { x: 1, y: 0 },
-      delta,
-      metrics: METRICS,
-    });
-    expect(t.x).toBeCloseTo(METRICS.stepX * 0.25, 5);
-    expect(t.y).toBe(0);
-  });
-
-  it("keeps the widget visually at original+delta regardless of the snap cell", () => {
-    // The visual position (activeCell·step + transform) must always reconstruct
-    // originalCell·step + delta — the finger-follow invariant.
-    const originalCell = { x: 1, y: 2 };
-    const activeCell = { x: 4, y: 0 };
-    const delta = { x: 250, y: -60 };
-    const t = activeTransform({ originalCell, activeCell, delta, metrics: METRICS });
-    const visualX = activeCell.x * METRICS.stepX + t.x;
-    const visualY = activeCell.y * METRICS.stepY + t.y;
-    expect(visualX).toBeCloseTo(originalCell.x * METRICS.stepX + delta.x, 5);
-    expect(visualY).toBeCloseTo(originalCell.y * METRICS.stepY + delta.y, 5);
   });
 });

@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-19 · The sensitive CI secrets live in environments (desktop-signing, cloudflare-deploy, a narrower cloudflare-preview); low-value ones stay repo-level and are passed by name; no `secrets: inherit`.
 - 2026-10-19 · REL-6: mirror branches retired (prod is tags only); ruleset keeps `mike`/`maciej` safe from delete-on-merge; `guard-git.sh` guards `develop`/`mike`/`maciej`; `turbo-cache-write` keeps `maciej`; `branch-audit.ts` holds merged branches an open PR still uses → decisions/workflow.md
 - 2026-10-19 · REL-3: `guard-release.sh` consumes the `/ship` marker and ignores it after 60 minutes; `--tags` and API dispatches are blocked; the first release diffs from the live web build; the release PR is the release record → decisions/workflow.md
 - 2026-10-19 · REL-4: What's new's last-seen version lives in synced preferences and only moves forward; no recorded version → toast only for people with a pre-release stamp; update toast reads highlights from the manifest Markdown; reload prompt ignores unreadable builds; /changelog reuses the Terms page → decisions/workflow.md
@@ -118,6 +119,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-19 · Release builds use `lto`, `codegen-units = 1` and `strip`: 28 MB → 15 MB.
+- 2026-10-19 · Desktop download links go to the update server's `latest/` redirect (current manifest version, Windows falls back to the last version with an installer), ignoring rollout and kill switch; the GitHub bridges stay frozen.
 - 2026-10-19 · REL-5: Mac updater bundles are per-arch (darwin-aarch64, darwin-x86_64), each .app notarized as a zip; the website .dmg stays universal; the darwin-universal transition key and its fallback were dropped after production 1.2.1.
 - 2026-10-17 · PLAT-6: desktop updates come from the update-server Worker on R2 (versioned, never overwritten; rollout and kill switch in KV, fail closed), and the GitHub `latest.json` freezes at each channel's bridge release.
 - 2026-10-17 · Web and desktop take one version from `VERSION` (1.1.0, above the installed 1.0.22/1.0.41); prod desktop needs a bump; `min_build` holds back desktop only.
@@ -135,6 +138,11 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
+- 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`; jsdom 30.
+- 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.
+- 2026-10-19 · Desktop IMAP is `async-imap` 0.12 (tokio) over `tokio-native-tls`.
+- 2026-10-19 · Dependency hygiene: unused packages and the RN shim removed, hoisted test imports declared.
 - 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.

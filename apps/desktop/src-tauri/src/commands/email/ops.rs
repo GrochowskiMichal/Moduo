@@ -244,7 +244,7 @@ pub(super) fn list_folders_blocking(
             let selectable = !name
                 .attributes()
                 .iter()
-                .any(|attr| matches!(attr, imap::types::NameAttribute::NoSelect));
+                .any(|attr| matches!(attr, async_imap::types::NameAttribute::NoSelect));
             let display_name = name
                 .delimiter()
                 .and_then(|delim| full.rsplit(delim).next())

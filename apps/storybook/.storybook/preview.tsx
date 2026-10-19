@@ -10,9 +10,6 @@ import {
 import { useLayoutEffect, useMemo } from "react";
 
 import "../../app/src/global.css";
-import "@fontsource/nunito/400.css";
-import "@fontsource/nunito/600.css";
-import "@fontsource/nunito/700.css";
 
 import { TooltipProvider } from "../../app/src/components/ui/tooltip";
 import {

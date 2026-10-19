@@ -28,6 +28,23 @@ function memoryBucket(files: Record<string, string>): Bucket {
       const { size, httpEtag } = object(files[key]!);
       return { size, httpEtag };
     },
+    // Like R2: one entry per folder under `prefix`, paged two at a time to exercise the cursor.
+    async list({ prefix, delimiter, cursor }) {
+      const folders = [
+        ...new Set(
+          Object.keys(files)
+            .filter((k) => k.startsWith(prefix) && k.slice(prefix.length).includes(delimiter))
+            .map((k) => prefix + k.slice(prefix.length).split(delimiter)[0]! + delimiter),
+        ),
+      ].sort();
+      const start = cursor ? Number(cursor) : 0;
+      const end = start + 2;
+      return {
+        delimitedPrefixes: folders.slice(start, end),
+        truncated: end < folders.length,
+        cursor: end < folders.length ? String(end) : undefined,
+      };
+    },
   };
 }
 
@@ -318,6 +335,113 @@ describe("downloads", () => {
   it("refuses writes", async () => {
     const { call } = setup({ files });
     expect((await call("/download/desktop/staging/1.1.0-rc.12/x.dmg", {}, "PUT")).status).toBe(405);
+  });
+});
+
+describe("latest downloads", () => {
+  const files = {
+    "desktop/production/latest.json": manifest("1.2.1"),
+    "desktop/production/1.2.1/Moduo_universal.dmg": "dmg-bytes",
+    "desktop/production/1.2.1/Moduo_x64-setup.exe": "exe-bytes",
+  };
+
+  it("redirects to the file in the channel's current version", async () => {
+    const { call } = setup({ files });
+    for (const file of ["Moduo_universal.dmg", "Moduo_x64-setup.exe"]) {
+      const res = await call(`/download/desktop/production/latest/${file}`);
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe(`${BASE}/download/desktop/production/1.2.1/${file}`);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    }
+    const head = await call("/download/desktop/production/latest/Moduo_universal.dmg", {}, "HEAD");
+    expect(head.status).toBe(302);
+    expect(head.headers.get("location")).toBe(
+      `${BASE}/download/desktop/production/1.2.1/Moduo_universal.dmg`,
+    );
+    expect(head.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("falls back to the newest older version that has the file when the current one lacks it", async () => {
+    const { call } = setup({
+      files: {
+        "desktop/staging/latest.json": manifest("1.2.0-rc.60", ["darwin-aarch64"]),
+        "desktop/staging/1.2.0-rc.60/Moduo_universal.dmg": "dmg",
+        "desktop/staging/1.2.0-rc.59/Moduo_universal.dmg": "dmg",
+        "desktop/staging/1.2.0-rc.9/Moduo_x64-setup.exe": "old-exe",
+        "desktop/staging/1.2.0-rc.58/Moduo_x64-setup.exe": "exe",
+        "desktop/staging/1.2.0-rc.57/Moduo_x64-setup.exe": "older-exe",
+        // Uploaded but never pointed at (or pointed back from): newer than latest.json, skipped.
+        "desktop/staging/1.2.0-rc.61/Moduo_x64-setup.exe": "unreleased",
+      },
+    });
+    const res = await call("/download/desktop/staging/latest/Moduo_x64-setup.exe");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(
+      `${BASE}/download/desktop/staging/1.2.0-rc.58/Moduo_x64-setup.exe`,
+    );
+  });
+
+  it("follows the manifest even while the channel is paused or partly rolled out", async () => {
+    for (const value of ['{"paused":true}', '{"rollout":0}', "not json"]) {
+      const { call } = setup({ files, config: { "channel:production": value } });
+      const res = await call("/download/desktop/production/latest/Moduo_universal.dmg");
+      expect(res.headers.get("location")).toBe(
+        `${BASE}/download/desktop/production/1.2.1/Moduo_universal.dmg`,
+      );
+    }
+  });
+
+  it("gives up after the newest few older versions", async () => {
+    const files: Record<string, string> = {
+      "desktop/staging/latest.json": manifest("1.2.0-rc.20"),
+      "desktop/staging/1.2.0-rc.20/Moduo_universal.dmg": "dmg",
+      "desktop/staging/1.2.0-rc.1/Moduo_x64-setup.exe": "too-old",
+    };
+    for (let rc = 2; rc < 20; rc++)
+      files[`desktop/staging/1.2.0-rc.${rc}/Moduo_universal.dmg`] = "dmg";
+    const res = await setup({ files }).call("/download/desktop/staging/latest/Moduo_x64-setup.exe");
+    expect(res.status).toBe(404);
+  });
+
+  it("answers a name other than the installers without reading the bucket", async () => {
+    const touch = (): never => {
+      throw new Error("bucket read");
+    };
+    const env: Env = {
+      RELEASES: { get: touch, head: touch, list: touch },
+      UPDATE_CONFIG: { get: async () => null },
+    };
+    for (const file of ["anything.bin", "latest.json", "Moduo_aarch64.app.tar.gz"]) {
+      const res = await handle(new Request(`${BASE}/download/desktop/staging/latest/${file}`), env);
+      expect(res.status).toBe(404);
+    }
+  });
+
+  it("404s when there is no manifest, no such file, or a bad name", async () => {
+    const { call } = setup({ files });
+    expect(
+      (await setup().call("/download/desktop/production/latest/Moduo_universal.dmg")).status,
+    ).toBe(404);
+    expect((await call("/download/desktop/production/latest/missing.dmg")).status).toBe(404);
+    expect((await call("/download/desktop/production/latest/..%2Flatest.json")).status).toBe(404);
+    expect((await call("/download/desktop/staging/latest/Moduo_universal.dmg")).status).toBe(404);
+    expect((await call("/download/desktop/other/latest/Moduo_universal.dmg")).status).toBe(404);
+    expect((await call("/download/desktop/production/latest/.hidden")).status).toBe(404);
+    for (const version of ["../x", "latest"]) {
+      const odd = setup({
+        files: {
+          "desktop/production/latest.json": manifest(version),
+          [`desktop/production/${version}/Moduo_universal.dmg`]: "dmg",
+        },
+      });
+      expect(
+        (await odd.call("/download/desktop/production/latest/Moduo_universal.dmg")).status,
+      ).toBe(404);
+    }
+    const broken = setup({ files: { "desktop/production/latest.json": "{" } });
+    expect(
+      (await broken.call("/download/desktop/production/latest/Moduo_universal.dmg")).status,
+    ).toBe(404);
   });
 });
 
