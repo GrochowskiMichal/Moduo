@@ -52,7 +52,7 @@ name: Desktop Release (shared)
 #     (optional, preferred) APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8
 #     TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD if the key has one)
 #   cloudflare-deploy environment (develop, mike, v*), read by publish: CLOUDFLARE_API_TOKEN.
-#   Repo level, passed by name by the caller (not `secrets: inherit`):
+#   Repo level (callers use `secrets: inherit`, which the environment secrets also need):
 #     CLOUDFLARE_ACCOUNT_ID, RELEASES_REPO_TOKEN (contents:write on moduo-releases),
 #     RUNNER_STATUS_TOKEN (Administration: read on this repo; unset → always GitHub-hosted)
 # (The Rust shell reads MODUO_* settings such as the Google OAuth clients at run time, not at
@@ -97,15 +97,6 @@ on:
         required: false
         type: string
         default: ""
-    # Low-value secrets that stay at repo level, so the caller passes them by name. The signing
-    # and Cloudflare tokens are not here: they live in the jobs' environments.
-    secrets:
-      CLOUDFLARE_ACCOUNT_ID:
-        required: false
-      RELEASES_REPO_TOKEN:
-        required: false
-      RUNNER_STATUS_TOKEN:
-        required: false
     outputs:
       published:
         description: "true once the update server offers this build (a failed Windows build still turns the run red)"
