@@ -72,6 +72,12 @@ expect 2 '/usr/bin/git push --force origin t/mike/x' 'force through an absolute 
 expect 2 '(git push origin refs/entire/checkpoints/v1)' 'Entire refs inside a subshell'
 expect 2 '(cd x && git push origin develop)' 'push to develop inside a subshell'
 expect 2 'echo $(git push origin develop)' 'push to develop inside a substitution'
+expect 2 'git push origin "$(git branch --show-current)" --force' 'force after a substitution'
+expect 2 'git push origin ${B} --force' 'force after a variable'
+expect 2 'git push origin "$(git branch --show-current)" --mirror' 'mirror after a substitution'
+expect 2 'git push origin "$(git branch --show-current)" refs/entire/checkpoints/v1' 'Entire refs after a substitution'
+expect 2 'git push origin HEAD@{0}:develop' 'reflog source to develop'
+expect 0 'git push -u origin "$(git branch --show-current)"' 'current branch by substitution'
 cwd="$personal"
 expect 2 'git push --force-with-lease' 'lease force, no refspec, while on mike'
 expect 2 'git push origin HEAD:refs/heads/develop' 'HEAD to develop from mike'

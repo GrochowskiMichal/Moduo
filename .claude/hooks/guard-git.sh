@@ -16,9 +16,10 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null)
 block() { echo "Blocked: $1" >&2; exit 2; }
 is_long_lived() { case "$1" in develop|mike|maciej) return 0 ;; esac; return 1; }
 
-# One line per simple command: join backslash continuations, split on && || ; | newlines and
-# subshell/group/substitution brackets, so `(git push …)` and `$(git push …)` are seen too.
-pieces=$(printf '%s' "$cmd" | perl -0pe 's/\\\n/ /g; s/&&|\|\||;|\||[(){}\x60]/\n/g')
+# One line per simple command: join backslash continuations, split on && || ; | and newlines.
+# Brackets and backticks become spaces (not breaks), so `(git push …)` is seen and the words after a
+# `$(…)` stay with their push.
+pieces=$(printf '%s' "$cmd" | perl -0pe 's/\\\n/ /g; s/[(){}\x60]/ /g; s/&&|\|\||;|\|/\n/g')
 
 set -f # don't glob-expand the words below
 while IFS= read -r piece; do
