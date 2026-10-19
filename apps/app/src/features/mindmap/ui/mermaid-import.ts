@@ -20,6 +20,24 @@ function edgeClassName(pattern: "solid" | "dashed" | "dotted", animated: boolean
   return `${base}${animated ? "" : " mindmap-edge-no-anim"}`.trim();
 }
 
+/** Mermaid has no backslash escapes: `#`, `"` and `|` in a label go out as entity
+ * codes, `#` first so a label that already reads like an entity survives. */
+export function escapeMermaidText(text: string): string {
+  return text.replace(/#/g, "#35;").replace(/"/g, "#quot;").replace(/\|/g, "#124;");
+}
+
+const NAMED_ENTITIES: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">" };
+
+/** The inverse of `escapeMermaidText`, plus the named and numeric codes Mermaid itself reads. */
+function decodeMermaidEntities(text: string): string {
+  return text.replace(/#(quot|amp|lt|gt|\d{1,7});/g, (match, code: string) => {
+    const named = NAMED_ENTITIES[code];
+    if (named) return named;
+    const point = Number(code);
+    return point <= 0x10ffff ? String.fromCodePoint(point) : match;
+  });
+}
+
 export function parseMermaidToMindmap(source: string): {
   nodes: MindmapNode[];
   edges: MindmapEdge[];
@@ -48,9 +66,9 @@ export function parseMermaidToMindmap(source: string): {
       (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
       (trimmed.startsWith("'") && trimmed.endsWith("'"))
     ) {
-      return trimmed.slice(1, -1).replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      return decodeMermaidEntities(trimmed.slice(1, -1).replace(/\\n/g, "\n"));
     }
-    return trimmed.replace(/\\n/g, "\n");
+    return decodeMermaidEntities(trimmed.replace(/\\n/g, "\n"));
   }
 
   function parseEndpoint(expr: string): { id: string; label?: string; className?: string } | null {
@@ -62,7 +80,7 @@ export function parseMermaidToMindmap(source: string): {
     const quotedLabelMatch = trimmed.match(/"([\s\S]*?)"/);
     let label = quotedLabelMatch?.[1];
     if (typeof label === "string") {
-      label = label.replace(/\\"/g, '"').replace(/\\n/g, "\n");
+      label = decodeMermaidEntities(label.replace(/\\n/g, "\n"));
     }
     return { id, label, className: classMatch?.[1] };
   }

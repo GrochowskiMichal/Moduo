@@ -893,3 +893,32 @@ body {
   position: sticky;
   z-index: 1;
 }
+
+/* ═══ Dashboard grid glide (DB-3) ═══
+   The widgets a drag pushes, and the dropped widget, glide to their cells as a
+   view transition typed `dashboard-grid` (use-grid-drag.ts; each cell is a
+   React <ViewTransition update="dashboard-glide">). The page itself is not
+   captured, so the held widget and the rest of the page stay live while the
+   neighbours move. Timed by the movement tokens, which zero under reduced
+   motion, so the glide is instant there (AC12). */
+:root:active-view-transition-type(dashboard-grid) {
+  view-transition-name: none;
+}
+
+:root:active-view-transition-type(dashboard-grid)::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(.dashboard-glide) {
+  animation-duration: var(--motion-base);
+  animation-timing-function: var(--ease-out);
+}
+
+/* A move, not a change: show the live widget, no crossfade with its old image. */
+::view-transition-old(.dashboard-glide) {
+  display: none;
+}
+
+::view-transition-new(.dashboard-glide) {
+  animation: none;
+}

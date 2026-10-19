@@ -9,6 +9,7 @@ import {
   Unlock,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { escapeMermaidText } from "../mermaid-import";
 import { resolveNodeIcon } from "../node-icons";
 import type { MindmapEdge, MindmapNode } from "../types";
 
@@ -165,10 +166,8 @@ export function MindmapRelations({
   const mermaidNotation = useMemo(() => {
     const lines = ["graph TD"];
     for (const node of nodes) {
-      const title = (node.data.label || "Untitled").replace(/"/g, '\\"');
-      const description = (node.data.description || "")
-        .replace(/\n/g, "<br/>")
-        .replace(/"/g, '\\"');
+      const title = escapeMermaidText(node.data.label || "Untitled");
+      const description = escapeMermaidText(node.data.description || "").replace(/\n/g, "<br/>");
       const safeLabel = description ? `${title}<br/>${description}` : title;
       lines.push(`  ${node.id}["${safeLabel}"]`);
       const fill = node.data.bgColor || "#141414";
@@ -184,7 +183,7 @@ export function MindmapRelations({
       const rawLabel =
         (typeof edge.data?.label === "string" && edge.data.label) ||
         (typeof edge.label === "string" ? edge.label : "");
-      const safeEdgeLabel = rawLabel.replace(/\|/g, "\\|").replace(/"/g, '\\"');
+      const safeEdgeLabel = escapeMermaidText(rawLabel);
       lines.push(
         safeEdgeLabel.trim()
           ? `  ${edge.source} -->|${safeEdgeLabel}| ${edge.target}`

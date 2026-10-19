@@ -1,12 +1,10 @@
 import { fileURLToPath } from "node:url";
 
-import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rstest/core";
 
 // @moduo/backend: the Edge Function and contract tests. Some import app code
 // (`@/types/supabase`, booking and notes helpers), so the app aliases resolve here too.
 export default defineConfig({
-  plugins: [pluginReact()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("../apps/app/src", import.meta.url)),
@@ -24,7 +22,7 @@ export default defineConfig({
           : callback(),
     ],
   },
-  testEnvironment: "jsdom",
+  testEnvironment: "node",
   include: [
     "functions/_shared/contracts/**/*.test.ts",
     "functions/_shared/*.test.ts",

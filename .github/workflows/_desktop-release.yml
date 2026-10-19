@@ -435,7 +435,7 @@ jobs:
         if: runner.environment == 'self-hosted'
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .ci/.nvmrc
 
       - name: Install frontend deps
         run: bun install --frozen-lockfile
@@ -805,7 +805,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           # changes.ts is erasable TypeScript; Node 24 runs it without a build.
-          node-version: 24
+          node-version-file: .ci/.nvmrc
 
       - name: Render the update notes
         env:

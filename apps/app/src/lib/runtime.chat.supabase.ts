@@ -108,8 +108,9 @@ async function attempt<T>(run: () => Promise<ChatResult<T>>): Promise<ChatResult
   }
 }
 
-/** A key in a PostgREST logic tree: quoted, so its `:` and `.` stay part of the value. */
-const q = (value: string) => `"${value.replace(/"/g, '\\"')}"`;
+/** A key in a PostgREST logic tree: quoted, so its `:` and `.` stay part of the value.
+ * Backslashes go first: a value ending in `\` would otherwise escape the closing quote. */
+export const q = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
 export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
   return {

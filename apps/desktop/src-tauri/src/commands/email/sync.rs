@@ -140,10 +140,10 @@ pub(super) fn fetch_envelopes_for_uids(
         let mut read = false;
         let mut starred = false;
         for flag in item.flags() {
-            if matches!(flag, imap::types::Flag::Seen) {
+            if matches!(flag, async_imap::types::Flag::Seen) {
                 read = true;
             }
-            if matches!(flag, imap::types::Flag::Flagged) {
+            if matches!(flag, async_imap::types::Flag::Flagged) {
                 starred = true;
             }
         }
@@ -698,10 +698,10 @@ pub(super) fn sync_account_folder_envelopes(
                     let mut read = false;
                     let mut starred = false;
                     for flag in item.flags() {
-                        if matches!(flag, imap::types::Flag::Seen) {
+                        if matches!(flag, async_imap::types::Flag::Seen) {
                             read = true;
                         }
-                        if matches!(flag, imap::types::Flag::Flagged) {
+                        if matches!(flag, async_imap::types::Flag::Flagged) {
                             starred = true;
                         }
                     }

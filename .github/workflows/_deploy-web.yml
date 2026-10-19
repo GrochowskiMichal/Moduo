@@ -56,10 +56,20 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
 
+      # Node's version comes from the workflow's own commit: a rollback deploys a tag
+      # cut before `.nvmrc` existed (cone mode always brings the root files).
+      - name: Checkout the CI config
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+          sparse-checkout: .github
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .ci/.nvmrc
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -132,10 +142,20 @@ jobs:
           ref: ${{ inputs.sha }}
           persist-credentials: false
 
+      # Node's version comes from the workflow's own commit: a rollback deploys a tag
+      # cut before `.nvmrc` existed (cone mode always brings the root files).
+      - name: Checkout the CI config
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci
+          persist-credentials: false
+          sparse-checkout: .github
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .ci/.nvmrc
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
