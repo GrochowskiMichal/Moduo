@@ -1,0 +1,222 @@
+[
+ {
+  "id": "P001",
+  "name": "Omar",
+  "age": 24,
+  "segment": "Solo operator with an assistant or VA",
+  "income": 128000,
+  "behaviour": "WhatsApp coordinators",
+  "behaviour_how": "Run the business through a WhatsApp chat and a shared Google Sheet.",
+  "objection": "A small startup's chat won't be as reliable as Slack or WhatsApp",
+  "habit": "you lost track of who replied to a client last week"
+ },
+ {
+  "id": "P002",
+  "name": "Raj",
+  "age": 32,
+  "segment": "Solo operator with an assistant or VA",
+  "income": 99000,
+  "behaviour": "Google Workspace pair",
+  "behaviour_how": "Share Gmail, Google Docs and Google Chat through a Workspace plan they already pay for.",
+  "objection": "Getting my partner to switch apps is the hard part",
+  "habit": "you share one Google Calendar for the business"
+ },
+ {
+  "id": "P003",
+  "name": "Emil",
+  "age": 41,
+  "segment": "Partners in a small service business",
+  "income": 91000,
+  "behaviour": "Subscription trimmer",
+  "behaviour_how": "Cuts anything that costs per seat and isn't used daily by both.",
+  "objection": "A small startup's chat won't be as reliable as Slack or WhatsApp",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P004",
+  "name": "Owen",
+  "age": 28,
+  "segment": "Solo operator with an assistant or VA",
+  "income": 157000,
+  "behaviour": "WhatsApp coordinators",
+  "behaviour_how": "Run the business through a WhatsApp chat and a shared Google Sheet.",
+  "objection": "A small startup's chat won't be as reliable as Slack or WhatsApp",
+  "habit": "you and your partner have a standing Monday call to sync on who's doing what"
+ },
+ {
+  "id": "P005",
+  "name": "Sana",
+  "age": 38,
+  "segment": "Partners in a small service business",
+  "income": 149000,
+  "behaviour": "Slack plus Notion pair",
+  "behaviour_how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion.",
+  "objection": "We need it on our phones",
+  "habit": "you share one Google Calendar for the business"
+ },
+ {
+  "id": "P006",
+  "name": "Maya",
+  "age": 36,
+  "segment": "Early-stage startup co-founders",
+  "income": 66000,
+  "behaviour": "WhatsApp coordinators",
+  "behaviour_how": "Run the business through a WhatsApp chat and a shared Google Sheet.",
+  "objection": "Slack's free plan already covers our chat",
+  "habit": "you share one Google Calendar for the business"
+ },
+ {
+  "id": "P007",
+  "name": "Selin",
+  "age": 44,
+  "segment": "Solo operator with an assistant or VA",
+  "income": 116000,
+  "behaviour": "Couple running a business",
+  "behaviour_how": "Mixes household and business admin in the same tools.",
+  "objection": "Getting my partner to switch apps is the hard part",
+  "habit": "you and your partner have a standing Monday call to sync on who's doing what"
+ },
+ {
+  "id": "P008",
+  "name": "Ruby",
+  "age": 30,
+  "segment": "Early-stage startup co-founders",
+  "income": 70000,
+  "behaviour": "Subscription trimmer",
+  "behaviour_how": "Cuts anything that costs per seat and isn't used daily by both.",
+  "objection": "Slack's free plan already covers our chat",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P009",
+  "name": "Nora",
+  "age": 43,
+  "segment": "Partners in a small service business",
+  "income": 56000,
+  "behaviour": "WhatsApp coordinators",
+  "behaviour_how": "Run the business through a WhatsApp chat and a shared Google Sheet.",
+  "objection": "Slack's free plan already covers our chat",
+  "habit": "you lost track of who replied to a client last week"
+ },
+ {
+  "id": "P010",
+  "name": "Fatima",
+  "age": 41,
+  "segment": "Early-stage startup co-founders",
+  "income": 39000,
+  "behaviour": "One partner decides tools",
+  "behaviour_how": "One of the two picks the tools; the other goes along if it's easy.",
+  "objection": "We'd lose our Notion setup and templates",
+  "habit": "you and your partner have a standing Monday call to sync on who's doing what"
+ },
+ {
+  "id": "P011",
+  "name": "Tariq",
+  "age": 26,
+  "segment": "Partners in a small service business",
+  "income": 146000,
+  "behaviour": "Slack plus Notion pair",
+  "behaviour_how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion.",
+  "objection": "A small startup's chat won't be as reliable as Slack or WhatsApp",
+  "habit": "you share one Google Calendar for the business"
+ },
+ {
+  "id": "P012",
+  "name": "Felix",
+  "age": 28,
+  "segment": "Early-stage startup co-founders",
+  "income": 87000,
+  "behaviour": "One partner decides tools",
+  "behaviour_how": "One of the two picks the tools; the other goes along if it's easy.",
+  "objection": "We'd lose our Notion setup and templates",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P013",
+  "name": "Zoe",
+  "age": 39,
+  "segment": "Solo operator with an assistant or VA",
+  "income": 77000,
+  "behaviour": "Google Workspace pair",
+  "behaviour_how": "Share Gmail, Google Docs and Google Chat through a Workspace plan they already pay for.",
+  "objection": "We need it on our phones",
+  "habit": "you share one Google Calendar for the business"
+ },
+ {
+  "id": "P014",
+  "name": "Dev",
+  "age": 38,
+  "segment": "Partners in a small service business",
+  "income": 103000,
+  "behaviour": "One partner decides tools",
+  "behaviour_how": "One of the two picks the tools; the other goes along if it's easy.",
+  "objection": "We'd lose our Notion setup and templates",
+  "habit": "you and your partner have a standing Monday call to sync on who's doing what"
+ },
+ {
+  "id": "P015",
+  "name": "Yusuf",
+  "age": 28,
+  "segment": "Partners in a small service business",
+  "income": 61000,
+  "behaviour": "Couple running a business",
+  "behaviour_how": "Mixes household and business admin in the same tools.",
+  "objection": "We'd lose our Notion setup and templates",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P016",
+  "name": "Theo",
+  "age": 39,
+  "segment": "Early-stage startup co-founders",
+  "income": 105000,
+  "behaviour": "Slack plus Notion pair",
+  "behaviour_how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion.",
+  "objection": "Getting my partner to switch apps is the hard part",
+  "habit": "you and your partner have a standing Monday call to sync on who's doing what"
+ },
+ {
+  "id": "P017",
+  "name": "Alma",
+  "age": 30,
+  "segment": "Early-stage startup co-founders",
+  "income": 116000,
+  "behaviour": "Slack plus Notion pair",
+  "behaviour_how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion.",
+  "objection": "A small startup's chat won't be as reliable as Slack or WhatsApp",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P018",
+  "name": "Freya",
+  "age": 28,
+  "segment": "Partners in a small service business",
+  "income": 126000,
+  "behaviour": "Subscription trimmer",
+  "behaviour_how": "Cuts anything that costs per seat and isn't used daily by both.",
+  "objection": "Slack's free plan already covers our chat",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P019",
+  "name": "Harper",
+  "age": 44,
+  "segment": "Early-stage startup co-founders",
+  "income": 108000,
+  "behaviour": "Early adopter",
+  "behaviour_how": "Likes trying new tools together and moves fast.",
+  "objection": "$20 a month is more than we pay now",
+  "habit": "half your coordination happens in voice notes"
+ },
+ {
+  "id": "P020",
+  "name": "Emma",
+  "age": 40,
+  "segment": "Partners in a small service business",
+  "income": 90000,
+  "behaviour": "Slack plus Notion pair",
+  "behaviour_how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion.",
+  "objection": "Getting my partner to switch apps is the hard part",
+  "habit": "half your coordination happens in voice notes"
+ }
+]

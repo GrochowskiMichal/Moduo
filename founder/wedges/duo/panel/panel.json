@@ -1,0 +1,93 @@
+{
+ "n": 20,
+ "seed": 7,
+ "customer": {
+  "business": "Moduo Duo: an all-in-one workspace with chat for two people working together",
+  "target": "Two-person teams (co-founders, partner pairs, a freelancer plus an assistant) who coordinate across Slack or WhatsApp, Notion and a shared task app",
+  "where": "Online; mostly US, UK and EU",
+  "age": [
+   24,
+   50
+  ],
+  "segments": [
+   {
+    "name": "Early-stage startup co-founders",
+    "share": 0.35,
+    "income": [
+     30000,
+     120000
+    ]
+   },
+   {
+    "name": "Partners in a small service business",
+    "share": 0.4,
+    "income": [
+     50000,
+     160000
+    ]
+   },
+   {
+    "name": "Solo operator with an assistant or VA",
+    "share": 0.25,
+    "income": [
+     60000,
+     200000
+    ]
+   }
+  ],
+  "behaviours": [
+   {
+    "name": "Slack plus Notion pair",
+    "share": 0.25,
+    "how": "Chats in Slack's free plan and keeps docs and tasks in a shared Notion."
+   },
+   {
+    "name": "WhatsApp coordinators",
+    "share": 0.2,
+    "how": "Run the business through a WhatsApp chat and a shared Google Sheet."
+   },
+   {
+    "name": "One partner decides tools",
+    "share": 0.15,
+    "how": "One of the two picks the tools; the other goes along if it's easy."
+   },
+   {
+    "name": "Subscription trimmer",
+    "share": 0.15,
+    "how": "Cuts anything that costs per seat and isn't used daily by both."
+   },
+   {
+    "name": "Couple running a business",
+    "share": 0.1,
+    "how": "Mixes household and business admin in the same tools."
+   },
+   {
+    "name": "Early adopter",
+    "share": 0.05,
+    "how": "Likes trying new tools together and moves fast."
+   },
+   {
+    "name": "Google Workspace pair",
+    "share": 0.1,
+    "how": "Share Gmail, Google Docs and Google Chat through a Workspace plan they already pay for."
+   }
+  ],
+  "objections": [
+   "Slack's free plan already covers our chat",
+   "Getting my partner to switch apps is the hard part",
+   "We'd lose our Notion setup and templates",
+   "What happens when we hire a third person?",
+   "A small startup's chat won't be as reliable as Slack or WhatsApp",
+   "$20 a month is more than we pay now",
+   "We need it on our phones"
+  ],
+  "habits": [
+   "you and your partner have a standing Monday call to sync on who's doing what",
+   "you lost track of who replied to a client last week",
+   "half your coordination happens in voice notes",
+   "you share one Google Calendar for the business"
+  ],
+  "_notes": "Draws on PRODUCT_BRIEF.md section 2 (partner/founder pairs, primary close second) and the 2026-10-02 chat decision. No mobile app is a real gap for this group. Shares and incomes are guesses. Founders' review 2026-10-19: early adopters cut to 5%, added a Google Workspace pair at 10%."
+ },
+ "pitch": "Moduo Duo, one workspace for two people running something together: co-founders, a business partner pair, a freelancer and their assistant.\nShared tasks, notes, calendar and contacts, plus built-in chat, so the conversation sits next to the work. See who's on what without a status meeting.\nEach of you keeps your own email in the app; turn an email into a shared task linked to the client in one click.\n$20 a month for both of you, flat. No seat minimum. Free plan for one person. 14-day trial with no card. Desktop and web.\nExport all your data any time."
+}

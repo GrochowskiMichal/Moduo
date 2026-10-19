@@ -1,0 +1,222 @@
+[
+ {
+  "id": "P001",
+  "name": "Omar",
+  "age": 25,
+  "segment": "Solo founder of a small service business",
+  "income": 93000,
+  "behaviour": "Tool-stack loyalist",
+  "behaviour_how": "Pays for Spark, Todoist and Calendly and is fine with how they fit together.",
+  "objection": "No time tracking or invoicing, so I'd still need Toggl and my invoicing tool",
+  "habit": "you invoice at the end of every month from a spreadsheet"
+ },
+ {
+  "id": "P002",
+  "name": "Raj",
+  "age": 34,
+  "segment": "Consultant or coach",
+  "income": 51000,
+  "behaviour": "Early adopter",
+  "behaviour_how": "Tries new productivity apps on launch day, rarely sticks with one.",
+  "objection": "I don't want my client email synced to someone else's cloud",
+  "habit": "you check email first thing and it decides your day"
+ },
+ {
+  "id": "P003",
+  "name": "Emil",
+  "age": 36,
+  "segment": "Consultant or coach",
+  "income": 129000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Won't try a new tool without Reddit threads and reviews saying it's stable.",
+  "objection": "My email is on Outlook / Microsoft 365",
+  "habit": "you lost a follow-up email last month and nearly lost the client"
+ },
+ {
+  "id": "P004",
+  "name": "Owen",
+  "age": 47,
+  "segment": "Solo founder of a small service business",
+  "income": 135000,
+  "behaviour": "Subscription trimmer",
+  "behaviour_how": "Audits their subscriptions every few months and cancels anything they don't use weekly.",
+  "objection": "All-in-one apps are mediocre at everything; I'd still need my real email client",
+  "habit": "you work from home and a café two days a week"
+ },
+ {
+  "id": "P005",
+  "name": "Sana",
+  "age": 49,
+  "segment": "Freelance designer, developer or writer",
+  "income": 115000,
+  "behaviour": "Tool-stack loyalist",
+  "behaviour_how": "Pays for Spark, Todoist and Calendly and is fine with how they fit together.",
+  "objection": "I don't want my client email synced to someone else's cloud",
+  "habit": "you work from home and a café two days a week"
+ },
+ {
+  "id": "P006",
+  "name": "Maya",
+  "age": 37,
+  "segment": "Freelance designer, developer or writer",
+  "income": 62000,
+  "behaviour": "Tool-stack loyalist",
+  "behaviour_how": "Pays for Spark, Todoist and Calendly and is fine with how they fit together.",
+  "objection": "$12 a month on top of what I already pay",
+  "habit": "you work from home and a café two days a week"
+ },
+ {
+  "id": "P007",
+  "name": "Selin",
+  "age": 26,
+  "segment": "Solo founder of a small service business",
+  "income": 61000,
+  "behaviour": "Freelancer-suite user",
+  "behaviour_how": "Runs clients and invoices in HoneyBook, Dubsado or Bonsai and tracks time in Toggl or Harvest.",
+  "objection": "A new startup could shut down and take my data with it",
+  "habit": "you work from home and a café two days a week"
+ },
+ {
+  "id": "P008",
+  "name": "Ruby",
+  "age": 30,
+  "segment": "Freelance designer, developer or writer",
+  "income": 35000,
+  "behaviour": "Inbox-as-to-do-list",
+  "behaviour_how": "Runs their work from email stars and flags; forgets follow-ups.",
+  "objection": "All-in-one apps are mediocre at everything; I'd still need my real email client",
+  "habit": "you have five active clients and two waiting on a proposal"
+ },
+ {
+  "id": "P009",
+  "name": "Nora",
+  "age": 25,
+  "segment": "Consultant or coach",
+  "income": 124000,
+  "behaviour": "Tool-stack loyalist",
+  "behaviour_how": "Pays for Spark, Todoist and Calendly and is fine with how they fit together.",
+  "objection": "Moving my clients, notes and tasks over is a weekend I don't have",
+  "habit": "you invoice at the end of every month from a spreadsheet"
+ },
+ {
+  "id": "P010",
+  "name": "Fatima",
+  "age": 44,
+  "segment": "Freelance designer, developer or writer",
+  "income": 27000,
+  "behaviour": "Inbox-as-to-do-list",
+  "behaviour_how": "Runs their work from email stars and flags; forgets follow-ups.",
+  "objection": "A new startup could shut down and take my data with it",
+  "habit": "you check email first thing and it decides your day"
+ },
+ {
+  "id": "P011",
+  "name": "Tariq",
+  "age": 37,
+  "segment": "Consultant or coach",
+  "income": 69000,
+  "behaviour": "Notion tinkerer",
+  "behaviour_how": "Has built their own client system in Notion and keeps rebuilding it.",
+  "objection": "I already pay for tools that work well enough",
+  "habit": "you invoice at the end of every month from a spreadsheet"
+ },
+ {
+  "id": "P012",
+  "name": "Felix",
+  "age": 44,
+  "segment": "Freelance designer, developer or writer",
+  "income": 60000,
+  "behaviour": "Subscription trimmer",
+  "behaviour_how": "Audits their subscriptions every few months and cancels anything they don't use weekly.",
+  "objection": "Moving my clients, notes and tasks over is a weekend I don't have",
+  "habit": "you have five active clients and two waiting on a proposal"
+ },
+ {
+  "id": "P013",
+  "name": "Zoe",
+  "age": 40,
+  "segment": "Solo founder of a small service business",
+  "income": 149000,
+  "behaviour": "Early adopter",
+  "behaviour_how": "Tries new productivity apps on launch day, rarely sticks with one.",
+  "objection": "$12 a month on top of what I already pay",
+  "habit": "you work from home and a café two days a week"
+ },
+ {
+  "id": "P014",
+  "name": "Dev",
+  "age": 40,
+  "segment": "Freelance designer, developer or writer",
+  "income": 55000,
+  "behaviour": "Subscription trimmer",
+  "behaviour_how": "Audits their subscriptions every few months and cancels anything they don't use weekly.",
+  "objection": "No time tracking or invoicing, so I'd still need Toggl and my invoicing tool",
+  "habit": "you have five active clients and two waiting on a proposal"
+ },
+ {
+  "id": "P015",
+  "name": "Yusuf",
+  "age": 48,
+  "segment": "Consultant or coach",
+  "income": 95000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Won't try a new tool without Reddit threads and reviews saying it's stable.",
+  "objection": "I already pay for tools that work well enough",
+  "habit": "you work from home and a café two days a week"
+ },
+ {
+  "id": "P016",
+  "name": "Theo",
+  "age": 47,
+  "segment": "Freelance designer, developer or writer",
+  "income": 40000,
+  "behaviour": "Notion tinkerer",
+  "behaviour_how": "Has built their own client system in Notion and keeps rebuilding it.",
+  "objection": "All-in-one apps are mediocre at everything; I'd still need my real email client",
+  "habit": "you lost a follow-up email last month and nearly lost the client"
+ },
+ {
+  "id": "P017",
+  "name": "Alma",
+  "age": 41,
+  "segment": "Freelance designer, developer or writer",
+  "income": 59000,
+  "behaviour": "Notion tinkerer",
+  "behaviour_how": "Has built their own client system in Notion and keeps rebuilding it.",
+  "objection": "All-in-one apps are mediocre at everything; I'd still need my real email client",
+  "habit": "you check email first thing and it decides your day"
+ },
+ {
+  "id": "P018",
+  "name": "Freya",
+  "age": 34,
+  "segment": "Consultant or coach",
+  "income": 177000,
+  "behaviour": "Inbox-as-to-do-list",
+  "behaviour_how": "Runs their work from email stars and flags; forgets follow-ups.",
+  "objection": "Moving my clients, notes and tasks over is a weekend I don't have",
+  "habit": "you invoice at the end of every month from a spreadsheet"
+ },
+ {
+  "id": "P019",
+  "name": "Harper",
+  "age": 41,
+  "segment": "Freelance designer, developer or writer",
+  "income": 60000,
+  "behaviour": "Freelancer-suite user",
+  "behaviour_how": "Runs clients and invoices in HoneyBook, Dubsado or Bonsai and tracks time in Toggl or Harvest.",
+  "objection": "No time tracking or invoicing, so I'd still need Toggl and my invoicing tool",
+  "habit": "you invoice at the end of every month from a spreadsheet"
+ },
+ {
+  "id": "P020",
+  "name": "Emma",
+  "age": 49,
+  "segment": "Consultant or coach",
+  "income": 79000,
+  "behaviour": "Notion tinkerer",
+  "behaviour_how": "Has built their own client system in Notion and keeps rebuilding it.",
+  "objection": "My email is on Outlook / Microsoft 365",
+  "habit": "you lost a follow-up email last month and nearly lost the client"
+ }
+]

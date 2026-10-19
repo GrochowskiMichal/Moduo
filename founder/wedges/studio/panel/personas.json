@@ -1,0 +1,222 @@
+[
+ {
+  "id": "P001",
+  "name": "Omar",
+  "age": 27,
+  "segment": "Marketing or content agency",
+  "income": 96000,
+  "behaviour": "Basecamp flat-pricer",
+  "behaviour_how": "Values flat pricing so clients and contractors cost nothing extra.",
+  "objection": "Basecamp is $59 flat for unlimited people; per seat adds up",
+  "habit": "two freelancers work with you on and off"
+ },
+ {
+  "id": "P002",
+  "name": "Raj",
+  "age": 35,
+  "segment": "Marketing or content agency",
+  "income": 79000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Needs G2 or Capterra reviews and a stable vendor before moving the team.",
+  "objection": "Clients and contractors need access without paying for a seat",
+  "habit": "clients email you for status updates every week"
+ },
+ {
+  "id": "P003",
+  "name": "Emil",
+  "age": 44,
+  "segment": "Dev or product agency",
+  "income": 111000,
+  "behaviour": "Owner decides alone",
+  "behaviour_how": "Picks tools quickly, but switches only if the team won't revolt.",
+  "objection": "Basecamp is $59 flat for unlimited people; per seat adds up",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P004",
+  "name": "Owen",
+  "age": 31,
+  "segment": "Marketing or content agency",
+  "income": 114000,
+  "behaviour": "Trello plus Slack",
+  "behaviour_how": "Runs projects on Trello boards and talks in Slack.",
+  "objection": "Basecamp is $59 flat for unlimited people; per seat adds up",
+  "habit": "you run a Monday stand-up mainly to find out who's on what"
+ },
+ {
+  "id": "P005",
+  "name": "Sana",
+  "age": 41,
+  "segment": "Dev or product agency",
+  "income": 169000,
+  "behaviour": "Basecamp flat-pricer",
+  "behaviour_how": "Values flat pricing so clients and contractors cost nothing extra.",
+  "objection": "We need a 'waiting on client' or 'in review' state",
+  "habit": "clients email you for status updates every week"
+ },
+ {
+  "id": "P006",
+  "name": "Maya",
+  "age": 39,
+  "segment": "Design or creative studio",
+  "income": 96000,
+  "behaviour": "Trello plus Slack",
+  "behaviour_how": "Runs projects on Trello boards and talks in Slack.",
+  "objection": "We need time tracking per client, and this doesn't do it",
+  "habit": "clients email you for status updates every week"
+ },
+ {
+  "id": "P007",
+  "name": "Selin",
+  "age": 47,
+  "segment": "Marketing or content agency",
+  "income": 89000,
+  "behaviour": "Owner decides alone",
+  "behaviour_how": "Picks tools quickly, but switches only if the team won't revolt.",
+  "objection": "Clients and contractors need access without paying for a seat",
+  "habit": "you run a Monday stand-up mainly to find out who's on what"
+ },
+ {
+  "id": "P008",
+  "name": "Ruby",
+  "age": 33,
+  "segment": "Design or creative studio",
+  "income": 100000,
+  "behaviour": "Time-tracking first",
+  "behaviour_how": "Chooses tools by how well they track billable hours per client.",
+  "objection": "We need time tracking per client, and this doesn't do it",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P009",
+  "name": "Nora",
+  "age": 46,
+  "segment": "Marketing or content agency",
+  "income": 59000,
+  "behaviour": "Basecamp flat-pricer",
+  "behaviour_how": "Values flat pricing so clients and contractors cost nothing extra.",
+  "objection": "We need time tracking per client, and this doesn't do it",
+  "habit": "two freelancers work with you on and off"
+ },
+ {
+  "id": "P010",
+  "name": "Fatima",
+  "age": 44,
+  "segment": "Design or creative studio",
+  "income": 69000,
+  "behaviour": "Time-tracking first",
+  "behaviour_how": "Chooses tools by how well they track billable hours per client.",
+  "objection": "Moving the whole team off Slack and Trello is a big ask",
+  "habit": "you run a Monday stand-up mainly to find out who's on what"
+ },
+ {
+  "id": "P011",
+  "name": "Tariq",
+  "age": 29,
+  "segment": "Dev or product agency",
+  "income": 166000,
+  "behaviour": "ClickUp or Asana refugee",
+  "behaviour_how": "Found their last tool overwhelming and wants something simpler.",
+  "objection": "Basecamp is $59 flat for unlimited people; per seat adds up",
+  "habit": "clients email you for status updates every week"
+ },
+ {
+  "id": "P012",
+  "name": "Felix",
+  "age": 31,
+  "segment": "Design or creative studio",
+  "income": 117000,
+  "behaviour": "Trello plus Slack",
+  "behaviour_how": "Runs projects on Trello boards and talks in Slack.",
+  "objection": "Moving the whole team off Slack and Trello is a big ask",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P013",
+  "name": "Zoe",
+  "age": 42,
+  "segment": "Marketing or content agency",
+  "income": 65000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Needs G2 or Capterra reviews and a stable vendor before moving the team.",
+  "objection": "We need a 'waiting on client' or 'in review' state",
+  "habit": "clients email you for status updates every week"
+ },
+ {
+  "id": "P014",
+  "name": "Dev",
+  "age": 41,
+  "segment": "Dev or product agency",
+  "income": 123000,
+  "behaviour": "Trello plus Slack",
+  "behaviour_how": "Runs projects on Trello boards and talks in Slack.",
+  "objection": "Moving the whole team off Slack and Trello is a big ask",
+  "habit": "you run a Monday stand-up mainly to find out who's on what"
+ },
+ {
+  "id": "P015",
+  "name": "Yusuf",
+  "age": 31,
+  "segment": "Dev or product agency",
+  "income": 81000,
+  "behaviour": "Owner decides alone",
+  "behaviour_how": "Picks tools quickly, but switches only if the team won't revolt.",
+  "objection": "Moving the whole team off Slack and Trello is a big ask",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P016",
+  "name": "Theo",
+  "age": 42,
+  "segment": "Design or creative studio",
+  "income": 135000,
+  "behaviour": "ClickUp or Asana refugee",
+  "behaviour_how": "Found their last tool overwhelming and wants something simpler.",
+  "objection": "Clients and contractors need access without paying for a seat",
+  "habit": "you run a Monday stand-up mainly to find out who's on what"
+ },
+ {
+  "id": "P017",
+  "name": "Alma",
+  "age": 33,
+  "segment": "Design or creative studio",
+  "income": 146000,
+  "behaviour": "ClickUp or Asana refugee",
+  "behaviour_how": "Found their last tool overwhelming and wants something simpler.",
+  "objection": "Basecamp is $59 flat for unlimited people; per seat adds up",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P018",
+  "name": "Freya",
+  "age": 31,
+  "segment": "Dev or product agency",
+  "income": 146000,
+  "behaviour": "Time-tracking first",
+  "behaviour_how": "Chooses tools by how well they track billable hours per client.",
+  "objection": "We need time tracking per client, and this doesn't do it",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P019",
+  "name": "Harper",
+  "age": 47,
+  "segment": "Design or creative studio",
+  "income": 138000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Needs G2 or Capterra reviews and a stable vendor before moving the team.",
+  "objection": "A new tool from a two-person startup is a risk for client work",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ },
+ {
+  "id": "P020",
+  "name": "Emma",
+  "age": 43,
+  "segment": "Dev or product agency",
+  "income": 110000,
+  "behaviour": "ClickUp or Asana refugee",
+  "behaviour_how": "Found their last tool overwhelming and wants something simpler.",
+  "objection": "Clients and contractors need access without paying for a seat",
+  "habit": "you estimate projects in a spreadsheet and overrun half of them"
+ }
+]

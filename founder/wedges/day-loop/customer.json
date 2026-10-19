@@ -2,19 +2,67 @@
  "business": "Moduo: an all-in-one workspace, pitched as a time-blocking planner built around finishing what you schedule",
  "target": "Knowledge workers and solo operators who time-block their day and have tried or paid for Motion, Sunsama, Morgen, Akiflow or Reclaim",
  "where": "Online; mostly US, UK and EU",
- "age": [22, 45],
+ "age": [
+  22,
+  45
+ ],
  "segments": [
-  {"name": "Solo operator or freelancer", "share": 0.40, "income": [40000, 130000]},
-  {"name": "Employee at a startup or remote company", "share": 0.40, "income": [55000, 160000]},
-  {"name": "Grad student or early-career", "share": 0.20, "income": [15000, 50000]}
+  {
+   "name": "Solo operator or freelancer",
+   "share": 0.5,
+   "income": [
+    40000,
+    130000
+   ]
+  },
+  {
+   "name": "Employee at a startup or remote company",
+   "share": 0.4,
+   "income": [
+    55000,
+    160000
+   ]
+  },
+  {
+   "name": "Grad student or early-career",
+   "share": 0.1,
+   "income": [
+    15000,
+    50000
+   ]
+  }
  ],
  "behaviours": [
-  {"name": "Planner churner", "share": 0.22, "how": "Has paid for two or three time-blocking apps and cancelled each after a few months."},
-  {"name": "ADHD, tool-hopper", "share": 0.15, "how": "Looks for apps that reduce guilt and decision load; drops anything that nags."},
-  {"name": "Google Calendar purist", "share": 0.18, "how": "Blocks time straight in Google Calendar and keeps tasks in a separate list."},
-  {"name": "Price-sensitive", "share": 0.15, "how": "Balks at $15-30/month planners and looks for a free tier first."},
-  {"name": "Power user", "share": 0.15, "how": "Wants keyboard shortcuts, integrations and automations before switching."},
-  {"name": "Reads every review", "share": 0.15, "how": "Checks Reddit and YouTube comparisons before trying anything."}
+  {
+   "name": "Planner churner",
+   "share": 0.22,
+   "how": "Has paid for two or three time-blocking apps and cancelled each after a few months."
+  },
+  {
+   "name": "ADHD, tool-hopper",
+   "share": 0.15,
+   "how": "Looks for apps that reduce guilt and decision load; drops anything that nags."
+  },
+  {
+   "name": "Google Calendar purist",
+   "share": 0.18,
+   "how": "Blocks time straight in Google Calendar and keeps tasks in a separate list."
+  },
+  {
+   "name": "Price-sensitive",
+   "share": 0.15,
+   "how": "Balks at $15-30/month planners and looks for a free tier first."
+  },
+  {
+   "name": "Power user",
+   "share": 0.15,
+   "how": "Wants keyboard shortcuts, integrations and automations before switching."
+  },
+  {
+   "name": "Reads every review",
+   "share": 0.15,
+   "how": "Checks Reddit and YouTube comparisons before trying anything."
+  }
  ],
  "objections": [
   "I've tried Motion and Sunsama; why would this one stick?",
@@ -30,5 +78,5 @@
   "you keep a running to-do list in Apple Notes",
   "you cancelled a $20/month planner last quarter"
  ],
- "_notes": "Draws on PRODUCT_BRIEF.md section 3 (the execution gap) and .design/calendar/COMPETITIVE_RESEARCH.md (Morgen $15-30, Sunsama ~$20, Akiflow ~$19). Desktop Google/Outlook calendar OAuth isn't proven end-to-end yet, so the pitch doesn't promise it. Shares and incomes are guesses."
+ "_notes": "Draws on PRODUCT_BRIEF.md section 3 (the execution gap) and .design/calendar/COMPETITIVE_RESEARCH.md (Morgen $15-30, Sunsama ~$20, Akiflow ~$19). Desktop Google/Outlook calendar OAuth isn't proven end-to-end yet, so the pitch doesn't promise it. Shares and incomes are guesses. Founders' review 2026-10-19: students cut to 10% (mostly free tier), solo operators raised to 50%."
 }

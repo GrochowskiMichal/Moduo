@@ -1,0 +1,222 @@
+[
+ {
+  "id": "P001",
+  "name": "Omar",
+  "age": 22,
+  "segment": "Employee at a startup or remote company",
+  "income": 106000,
+  "behaviour": "ADHD, tool-hopper",
+  "behaviour_how": "Looks for apps that reduce guilt and decision load; drops anything that nags.",
+  "objection": "Another subscription for something Google Calendar does for free",
+  "habit": "you have a work Google Calendar and a personal iCloud one"
+ },
+ {
+  "id": "P002",
+  "name": "Raj",
+  "age": 30,
+  "segment": "Employee at a startup or remote company",
+  "income": 85000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Checks Reddit and YouTube comparisons before trying anything.",
+  "objection": "My calendar is Google or Outlook through work; will it really sync both ways?",
+  "habit": "you cancelled a $20/month planner last quarter"
+ },
+ {
+  "id": "P003",
+  "name": "Emil",
+  "age": 39,
+  "segment": "Employee at a startup or remote company",
+  "income": 94000,
+  "behaviour": "Power user",
+  "behaviour_how": "Wants keyboard shortcuts, integrations and automations before switching.",
+  "objection": "Another subscription for something Google Calendar does for free",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P004",
+  "name": "Owen",
+  "age": 26,
+  "segment": "Grad student or early-career",
+  "income": 39000,
+  "behaviour": "Google Calendar purist",
+  "behaviour_how": "Blocks time straight in Google Calendar and keeps tasks in a separate list.",
+  "objection": "Another subscription for something Google Calendar does for free",
+  "habit": "you plan tomorrow every evening and abandon the plan by 11am"
+ },
+ {
+  "id": "P005",
+  "name": "Sana",
+  "age": 36,
+  "segment": "Solo operator or freelancer",
+  "income": 121000,
+  "behaviour": "ADHD, tool-hopper",
+  "behaviour_how": "Looks for apps that reduce guilt and decision load; drops anything that nags.",
+  "objection": "Planning apps make me feel guilty when I fall behind",
+  "habit": "you cancelled a $20/month planner last quarter"
+ },
+ {
+  "id": "P006",
+  "name": "Maya",
+  "age": 34,
+  "segment": "Solo operator or freelancer",
+  "income": 76000,
+  "behaviour": "Google Calendar purist",
+  "behaviour_how": "Blocks time straight in Google Calendar and keeps tasks in a separate list.",
+  "objection": "I've tried Motion and Sunsama; why would this one stick?",
+  "habit": "you cancelled a $20/month planner last quarter"
+ },
+ {
+  "id": "P007",
+  "name": "Selin",
+  "age": 42,
+  "segment": "Grad student or early-career",
+  "income": 29000,
+  "behaviour": "Power user",
+  "behaviour_how": "Wants keyboard shortcuts, integrations and automations before switching.",
+  "objection": "My calendar is Google or Outlook through work; will it really sync both ways?",
+  "habit": "you plan tomorrow every evening and abandon the plan by 11am"
+ },
+ {
+  "id": "P008",
+  "name": "Ruby",
+  "age": 28,
+  "segment": "Solo operator or freelancer",
+  "income": 80000,
+  "behaviour": "Price-sensitive",
+  "behaviour_how": "Balks at $15-30/month planners and looks for a free tier first.",
+  "objection": "I've tried Motion and Sunsama; why would this one stick?",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P009",
+  "name": "Nora",
+  "age": 41,
+  "segment": "Employee at a startup or remote company",
+  "income": 61000,
+  "behaviour": "ADHD, tool-hopper",
+  "behaviour_how": "Looks for apps that reduce guilt and decision load; drops anything that nags.",
+  "objection": "I've tried Motion and Sunsama; why would this one stick?",
+  "habit": "you have a work Google Calendar and a personal iCloud one"
+ },
+ {
+  "id": "P010",
+  "name": "Fatima",
+  "age": 39,
+  "segment": "Solo operator or freelancer",
+  "income": 49000,
+  "behaviour": "Price-sensitive",
+  "behaviour_how": "Balks at $15-30/month planners and looks for a free tier first.",
+  "objection": "I don't need email and contacts in my planner",
+  "habit": "you plan tomorrow every evening and abandon the plan by 11am"
+ },
+ {
+  "id": "P011",
+  "name": "Tariq",
+  "age": 24,
+  "segment": "Solo operator or freelancer",
+  "income": 119000,
+  "behaviour": "Planner churner",
+  "behaviour_how": "Has paid for two or three time-blocking apps and cancelled each after a few months.",
+  "objection": "Another subscription for something Google Calendar does for free",
+  "habit": "you cancelled a $20/month planner last quarter"
+ },
+ {
+  "id": "P012",
+  "name": "Felix",
+  "age": 26,
+  "segment": "Solo operator or freelancer",
+  "income": 97000,
+  "behaviour": "Google Calendar purist",
+  "behaviour_how": "Blocks time straight in Google Calendar and keeps tasks in a separate list.",
+  "objection": "I don't need email and contacts in my planner",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P013",
+  "name": "Zoe",
+  "age": 37,
+  "segment": "Employee at a startup or remote company",
+  "income": 68000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Checks Reddit and YouTube comparisons before trying anything.",
+  "objection": "No phone app means I can't check my plan on the go",
+  "habit": "you cancelled a $20/month planner last quarter"
+ },
+ {
+  "id": "P014",
+  "name": "Dev",
+  "age": 37,
+  "segment": "Solo operator or freelancer",
+  "income": 84000,
+  "behaviour": "Google Calendar purist",
+  "behaviour_how": "Blocks time straight in Google Calendar and keeps tasks in a separate list.",
+  "objection": "I've tried Motion and Sunsama; why would this one stick?",
+  "habit": "you have a work Google Calendar and a personal iCloud one"
+ },
+ {
+  "id": "P015",
+  "name": "Yusuf",
+  "age": 25,
+  "segment": "Employee at a startup or remote company",
+  "income": 134000,
+  "behaviour": "Power user",
+  "behaviour_how": "Wants keyboard shortcuts, integrations and automations before switching.",
+  "objection": "Planning apps make me feel guilty when I fall behind",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P016",
+  "name": "Theo",
+  "age": 37,
+  "segment": "Solo operator or freelancer",
+  "income": 115000,
+  "behaviour": "Planner churner",
+  "behaviour_how": "Has paid for two or three time-blocking apps and cancelled each after a few months.",
+  "objection": "My calendar is Google or Outlook through work; will it really sync both ways?",
+  "habit": "you plan tomorrow every evening and abandon the plan by 11am"
+ },
+ {
+  "id": "P017",
+  "name": "Alma",
+  "age": 28,
+  "segment": "Solo operator or freelancer",
+  "income": 126000,
+  "behaviour": "Planner churner",
+  "behaviour_how": "Has paid for two or three time-blocking apps and cancelled each after a few months.",
+  "objection": "Another subscription for something Google Calendar does for free",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P018",
+  "name": "Freya",
+  "age": 26,
+  "segment": "Employee at a startup or remote company",
+  "income": 127000,
+  "behaviour": "Price-sensitive",
+  "behaviour_how": "Balks at $15-30/month planners and looks for a free tier first.",
+  "objection": "I've tried Motion and Sunsama; why would this one stick?",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P019",
+  "name": "Harper",
+  "age": 42,
+  "segment": "Solo operator or freelancer",
+  "income": 118000,
+  "behaviour": "Reads every review",
+  "behaviour_how": "Checks Reddit and YouTube comparisons before trying anything.",
+  "objection": "Planning apps make me feel guilty when I fall behind",
+  "habit": "you keep a running to-do list in Apple Notes"
+ },
+ {
+  "id": "P020",
+  "name": "Emma",
+  "age": 38,
+  "segment": "Employee at a startup or remote company",
+  "income": 94000,
+  "behaviour": "Planner churner",
+  "behaviour_how": "Has paid for two or three time-blocking apps and cancelled each after a few months.",
+  "objection": "My calendar is Google or Outlook through work; will it really sync both ways?",
+  "habit": "you keep a running to-do list in Apple Notes"
+ }
+]
