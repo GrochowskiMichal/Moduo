@@ -34,6 +34,8 @@ jobs:
     permissions:
       contents: read
       actions: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
     steps:
       - name: Owner only
         env:
@@ -51,6 +53,7 @@ jobs:
           persist-credentials: false
 
       - name: Check the tag
+        id: check
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
@@ -66,7 +69,8 @@ jobs:
     secrets: inherit
     with:
       channel: production
-      ref: refs/tags/${{ inputs.tag }}
+      # The commit resolve checked, so a moved tag can't swap in an unchecked one.
+      ref: ${{ needs.resolve.outputs.sha }}
       release_tag: prod-latest
       release_name: "Production — latest build"
       prerelease: false

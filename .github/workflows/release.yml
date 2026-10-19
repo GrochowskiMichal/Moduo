@@ -6,9 +6,10 @@ name: release
 #   resolve  the tag's commit is on develop, `checks` passed on a push of it (waits for a run still
 #            going) and VERSION equals the tag; anything else is refused (AC7)
 #   web      app.moduo.app, then moduo.app (_deploy-web.yml), with the smoke tests
-#   desktop  the production desktop build of the tag (_desktop-release.yml), only when apps/app,
-#            apps/desktop, packages, supabase/functions/_shared or the lockfile changed since the
-#            last tag that shipped desktop (desktop bundles the UI). First run: always.
+#   desktop  the production desktop build of the checked commit (_desktop-release.yml), only when
+#            something the desktop bundle is built from changed since the last tag that shipped
+#            desktop (desktop bundles the UI; the list is in "Does desktop need a build?"). First
+#            tag release: always.
 #   notes    a GitHub release vX.Y.Z on moduo-releases with that version's notes (releases.json)
 #
 # Re-runs: "Re-run failed jobs". To redeploy only web from a tag, run deploy-prod; only desktop,
@@ -17,7 +18,9 @@ on:
   push:
     tags: ["v*"]
 
-# One release at a time; a second tag waits for the first (it never cancels a deploy mid-way).
+# One release at a time, never cancelled mid-way. GitHub keeps only one waiting run per group: a
+# third tag pushed while one runs and one waits cancels the waiting one (/ship refuses to start a
+# release while another is open, REL-3).
 concurrency:
   group: release-production
   cancel-in-progress: false
@@ -65,7 +68,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           # The last tag that shipped desktop is the one the production channel serves.
-          paths=(apps/app apps/desktop packages supabase/functions/_shared bun.lock package.json)
+          paths=(apps/app apps/desktop packages supabase/functions/_shared assets bun.lock package.json tsconfig.base.json .bun-version)
           live="$(curl -sf --max-time 20 "$UPDATE_SERVER_URL/desktop/production/latest.json" | jq -r '.version // empty' || true)"
           if [ -z "$live" ]; then
             reason="the update server didn't say which version production desktop runs"
@@ -114,7 +117,8 @@ jobs:
     secrets: inherit
     with:
       channel: production
-      ref: ${{ github.ref }}
+      # The commit resolve checked, so a moved tag can't swap in an unchecked one.
+      ref: ${{ needs.resolve.outputs.sha }}
       release_tag: prod-latest
       release_name: "Production — latest build"
       prerelease: false
@@ -124,9 +128,10 @@ jobs:
   notes:
     needs: [resolve, web, desktop]
     # After web, and after desktop when it built, so the release page never runs ahead of what ships.
+    # Desktop counts once the update server offers it, even when Windows failed (best-effort).
     if: >-
       always() && needs.web.result == 'success' &&
-      (needs.desktop.result == 'success' || needs.desktop.result == 'skipped')
+      (needs.desktop.result == 'skipped' || needs.desktop.outputs.published == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

@@ -7,7 +7,8 @@
 # A tag ships only when all of these hold; every failing one is reported, then it exits 1:
 #   - the tag is vX.Y.Z and exists in this checkout (fetch-depth 0 brings tags and origin/develop)
 #   - its commit is on origin/develop
-#   - VERSION at that commit is X.Y.Z
+#   - VERSION at that commit is X.Y.Z, and release-notes/releases.json there has an X.Y.Z entry
+#     (the updater manifest and the release page are rendered from it)
 #   - `checks` passed on a push of that commit. With --wait-checks, a run still going is waited
 #     for up to that many minutes (/ship tags the release PR's merge commit while develop's checks
 #     run on it); without, it must have passed already.
@@ -41,6 +42,9 @@ git merge-base --is-ancestor "$sha" origin/develop \
 file_version="$(git show "$sha:VERSION" 2>/dev/null | tr -d '[:space:]' || true)"
 [ "$file_version" = "$version" ] \
   || problems+=("VERSION at ${sha::7} is '${file_version:-missing}', not $version. The release PR bumps VERSION; tag its merge commit.")
+git show "$sha:release-notes/releases.json" 2>/dev/null \
+  | jq -e --arg v "$version" 'any(.releases[]; .version == $v)' > /dev/null 2>&1 \
+  || problems+=("release-notes/releases.json at ${sha::7} has no $version entry. The release PR adds it (changes.ts prepare).")
 
 # No point waiting for checks on a commit that is refused anyway.
 [ "${#problems[@]}" -eq 0 ] || wait_minutes=0
@@ -48,15 +52,16 @@ deadline=$(( $(date +%s) + wait_minutes * 60 ))
 while :; do
   runs="$(gh run list --workflow checks.yml --commit "$sha" --event push --limit 20 --json status,conclusion,url)"
   if jq -e 'any(.[]; .conclusion == "success")' <<< "$runs" > /dev/null; then break; fi
-  if jq -e 'any(.[]; .status != "completed")' <<< "$runs" > /dev/null && [ "$(date +%s)" -lt "$deadline" ]; then
-    echo "checks is still running on ${sha::7}; waiting."
+  # A run still going, or none yet (a push's run can take a moment to appear): wait, if allowed.
+  if { jq -e 'length == 0 or any(.[]; .status != "completed")' <<< "$runs" > /dev/null; } && [ "$(date +%s)" -lt "$deadline" ]; then
+    echo "checks has not finished on ${sha::7}; waiting."
     sleep 30
     continue
   fi
   if jq -e 'length == 0' <<< "$runs" > /dev/null; then
     problems+=("checks has not run on a push of ${sha::7}. Push it to develop and let checks pass first.")
   else
-    problems+=("checks has not passed on a push of ${sha::7} (latest: $(jq -r '.[0] | "\(.status) \(.conclusion // "") \(.url)"' <<< "$runs")). Re-run checks on it, then re-run this.")
+    problems+=("checks has not passed on a push of ${sha::7} (latest: $(jq -r '.[0] | "\(.status) \(.conclusion // "") \(.url)"' <<< "$runs")). A run cancelled by a newer push to develop counts as not passed: re-run checks on it, then re-run this.")
   fi
   break
 done

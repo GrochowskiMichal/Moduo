@@ -94,6 +94,10 @@ on:
         required: false
         type: string
         default: ""
+    outputs:
+      published:
+        description: "true once the update server offers this build (a failed Windows build still turns the run red)"
+        value: ${{ jobs.publish.outputs.published }}
 
 # Jobs get read access only; mac-watchdog alone asks for actions: write (callers grant it).
 permissions:
@@ -272,7 +276,7 @@ jobs:
             esac
             sleep 10
           done
-          echo "::error::moduo-mac didn't start build-mac within 6 minutes (asleep or busy). Cancelling; use Re-run all jobs (or failed jobs) and it builds on GitHub's Mac."
+          echo "::error::moduo-mac didn't start build-mac within 6 minutes (asleep or busy). Cancelling; use Re-run failed jobs and it builds on GitHub's Mac (on a release run, Re-run all jobs would deploy web again)."
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
           exit 1
 
@@ -708,8 +712,10 @@ jobs:
       (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The Cloudflare token (R2 upload) lives in this environment (develop, mike, v* tags).
+    # Only develop, main, mike, prod-app and v* tags may use this environment (REL-6 drops main and prod-app).
     environment: cloudflare-deploy
+    outputs:
+      published: ${{ steps.offered.outputs.published }}
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
       MODUO_BUILD: ${{ needs.version.outputs.build }}
@@ -862,6 +868,7 @@ jobs:
           echo "Update server: \`$UPDATE_SERVER_URL/desktop/$CHANNEL/latest.json\` → \`$MODUO_VERSION\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check the update server offers it
+        id: offered
         env:
           CHANNEL: ${{ inputs.channel }}
         run: |
@@ -881,6 +888,7 @@ jobs:
           curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/Moduo_universal.app.tar.gz"
           code=$(curl -s -o /dev/null -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/aarch64/0.0.1")
           echo "update check from 0.0.1 → $code (204 while the channel is paused or rolled out to 0%)"
+          echo "published=true" >> "$GITHUB_OUTPUT"
 
       # The bridge only (see the top of this file): builds before PLAT-6 only check GitHub. Runs
       # even when the R2 upload failed, so those installs still reach the bridge (the job stays red).
