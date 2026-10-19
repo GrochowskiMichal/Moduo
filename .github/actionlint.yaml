@@ -1,0 +1,11 @@
+# actionlint doesn't know that a reusable workflow's job reads its environment's secrets, so it
+# flags every secret there when the caller uses `secrets: inherit`. Don't "fix" it by declaring
+# or passing secrets explicitly: without inherit the called jobs get their environment's secrets
+# empty (it broke every signed build on 2026-10-19).
+paths:
+  .github/workflows/_desktop-release.yml:
+    ignore:
+      - 'property "[a-z0-9_]+" is not defined in object type'
+  .github/workflows/_deploy-web.yml:
+    ignore:
+      - 'property "[a-z0-9_]+" is not defined in object type'
