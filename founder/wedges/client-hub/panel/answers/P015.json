@@ -1,0 +1,13 @@
+{
+  "id": "P015",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I've never heard of Moduo, and I'm not moving my email, calendar and client notes into an app that has no Reddit threads or reviews telling me it's stable. What I pay for now works well enough, so the switching cost isn't worth $12 a month on a hunch.",
+  "objection": "If this new app syncs my email or calendar badly, or the company folds, my whole client business is sitting in it. I need proof from other consultants that it's reliable before I trust it with that.",
+  "would_change_my_mind": "A good number of independent reviews and Reddit threads from consultants who've used it for six months or more saying the Gmail and calendar sync is solid.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 20,
+  "price_too_expensive": 35
+}

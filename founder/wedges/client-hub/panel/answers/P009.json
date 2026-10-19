@@ -1,0 +1,13 @@
+{
+  "id": "P009",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I already pay for Spark, Todoist and Calendly and they work fine together. My month-end invoicing runs off a spreadsheet and nothing's actually broken, so I'm not giving up a weekend to move clients, notes and tasks into a new app.",
+  "objection": "Migrating is a weekend I don't have, and if it doesn't stick I've lost that time and have to move everything back.",
+  "would_change_my_mind": "A one-click import from Todoist and my client spreadsheet that has me running in under an hour, plus it replacing Calendly so I'm actually cutting a subscription, not adding one.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 30
+}

@@ -1,0 +1,13 @@
+{
+  "id": "P001",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Spark, Todoist and Calendly already work fine together for me, and I've paid for them. This would mean moving my whole setup over, and it still doesn't touch invoicing, which is the part of my month I actually hate.",
+  "objection": "No time tracking or invoicing, so I'd still need Toggl and my invoicing spreadsheet. That's one more app on top of what I have, not fewer apps.",
+  "would_change_my_mind": "If it turned the time and tasks I log against a client into an invoice at the end of the month, so I could drop the spreadsheet.",
+  "price_too_cheap": 3,
+  "price_cheap": 7,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

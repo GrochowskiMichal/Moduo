@@ -1,0 +1,13 @@
+{
+  "id": "P018",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Twelve dollars is nothing to me, but my whole system is stars and flags in my inbox plus a spreadsheet I invoice from, and it mostly works. Moving my clients, notes and tasks over is a weekend I don't have, so I'd probably bookmark it and never start the trial.",
+  "objection": "Setting it up properly would eat a weekend, and if I only half move in I've just added a fifth app to check instead of replacing four.",
+  "would_change_my_mind": "If it could pull in my existing inbox and calendar and build the client view for me in under an hour, so the dropped follow-ups show up without me re-entering anything.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 25,
+  "price_too_expensive": 45
+}

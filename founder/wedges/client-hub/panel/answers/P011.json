@@ -1,0 +1,13 @@
+{
+  "id": "P011",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I've sunk a lot of evenings into my Notion client system and I like being able to bend it however I want. Gmail plus Notion plus my invoicing spreadsheet works well enough, so another $12 a month to move everything feels like a step sideways, not up.",
+  "objection": "It looks like it wants me to work its way. I'd lose the custom setup I've built in Notion, and it doesn't touch invoicing, which is the part of my month I actually find painful.",
+  "would_change_my_mind": "If it imported my Notion client pages and let me track hours and invoice clients from the client view, so it could replace the spreadsheet too.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

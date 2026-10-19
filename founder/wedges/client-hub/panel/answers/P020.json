@@ -1,0 +1,13 @@
+{
+  "id": "P020",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "other",
+  "reason": "My whole client life runs through Outlook on Microsoft 365, and it says right there that Outlook email isn't supported yet, so the email-to-task part that would have saved me last month just doesn't work for me. Without the email, it's one more app next to my Notion setup, not instead of it.",
+  "objection": "No Outlook support. The lost follow-up was an email, and this can't see my email.",
+  "would_change_my_mind": "Full Outlook / Microsoft 365 email and calendar support, plus a way to bring my clients and notes over from Notion.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 30
+}

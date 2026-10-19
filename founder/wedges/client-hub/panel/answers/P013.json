@@ -1,0 +1,13 @@
+{
+  "id": "P013",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I'd sign up for the no-card trial on day one, because that's what I do, but I wouldn't pay. I've moved my whole setup into an all-in-one app three times and drifted back to Gmail and my calendar within a month, and $12 on top of what I already pay only makes sense if I actually drop something.",
+  "objection": "I won't stick with it. Replacing email, calendar, notes and tasks all at once is a big switch, and when a client email lands while I'm at the café I'll open Gmail out of habit, so the client view never fills up enough to be worth it.",
+  "would_change_my_mind": "If after two weeks the client view had really saved me from digging through four apps before a client call, and I could cancel my separate task and notes apps so it doesn't cost me more overall.",
+  "price_too_cheap": 3,
+  "price_cheap": 7,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

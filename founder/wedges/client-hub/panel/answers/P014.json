@@ -1,0 +1,13 @@
+{
+  "id": "P014",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "It replaces my inbox, calendar and notes, which already cost me nothing, but not Toggl or my invoicing tool, which are the subscriptions I actually pay for. So it adds $12 to my stack instead of taking anything off it. I might poke at the free plan or the no-card trial, but I wouldn't pay.",
+  "objection": "I'd still need Toggl and my invoicing tool, so this is one more subscription, not fewer. Moving five clients' worth of email, notes and meetings over is real work, and I'd cancel it at my next audit if I wasn't living in it every week.",
+  "would_change_my_mind": "Built-in time tracking and invoicing tied to each client, so I could cancel Toggl and my invoicing tool and come out even or ahead.",
+  "price_too_cheap": 2,
+  "price_cheap": 5,
+  "price_expensive": 10,
+  "price_too_expensive": 15
+}

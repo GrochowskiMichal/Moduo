@@ -1,0 +1,13 @@
+{
+  "id": "P007",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "need",
+  "reason": "My clients, contracts and invoices already live in HoneyBook and my hours in Toggl, and this doesn't do either, so it would be one more app next to them, not one fewer. I might poke at the free plan, but I wouldn't pay $12 a month on top of what I already pay.",
+  "objection": "It doesn't touch invoicing or time tracking, which is the part of my business that actually makes money, and I'd be moving my whole client history into a new startup that might not be around in a year.",
+  "would_change_my_mind": "If it handled invoices and time tracking well enough that I could cancel HoneyBook and Toggl, so it saves me money instead of adding a subscription.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 20
+}

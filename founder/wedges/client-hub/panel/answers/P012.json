@@ -1,0 +1,13 @@
+{
+  "id": "P012",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "convenience",
+  "reason": "My current mess of apps works well enough, and I've got five clients plus two proposals out, so there's no weekend free to move everything over. A 14-day trial won't help if I can't even find the time to set it up properly.",
+  "objection": "The switching cost. Moving every client, note and task into a new app is days of unpaid work, and if it doesn't stick I've paid for another subscription I'll be cancelling at my next audit.",
+  "would_change_my_mind": "If it pulled in my existing Gmail, calendar and contacts on its own and had my clients set up within an hour, so I wasn't moving anything by hand.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

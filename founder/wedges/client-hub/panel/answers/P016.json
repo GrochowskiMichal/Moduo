@@ -1,0 +1,13 @@
+{
+  "id": "P016",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I'd maybe poke at the free plan after that near-miss with the client, but I've already sunk years into my Notion setup and I'd rather rebuild it one more time than move everything into another app.",
+  "objection": "All-in-one apps are mediocre at everything. I'd still keep my real email client open, so this becomes a fifth app instead of replacing four.",
+  "would_change_my_mind": "If it could import my Notion client pages and the email side was genuinely good enough to drop my mail client, so the follow-up reminders actually live where I read mail.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 20
+}

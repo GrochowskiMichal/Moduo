@@ -1,0 +1,13 @@
+{
+  "id": "P002",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I'd probably start the no-card trial on day one because that's what I do, but I wouldn't pay. Nothing here tells me where my clients' email ends up, and I've dropped every all-in-one app I've tried within a few weeks anyway.",
+  "objection": "I don't want my client email synced to someone else's cloud. My clients trust me with their stuff, and the pitch says nothing about where it's stored or who can read it.",
+  "would_change_my_mind": "A clear promise that my email stays on my machine or is encrypted so the company can't read it, and then the client view actually saving me time every morning past the second week.",
+  "price_too_cheap": 3,
+  "price_cheap": 7,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}
