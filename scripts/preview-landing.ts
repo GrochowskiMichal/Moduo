@@ -7,13 +7,16 @@
  *   /terms     → apps/landing/terms.html
  *   /dpa       → apps/landing/dpa.html
  *   /aup       → apps/landing/aup.html
+ *   /changelog → apps/landing/changelog.mjs over release-notes/releases.json
  *   /parked/x  → apps/landing/parked/x.html (kept for later, never deployed)
  *
  * Usage: bun run preview:landing   (PORT=… to change the port)
  * Re-reads the file on every request — edit, then refresh.
  */
 
+import fs from "node:fs";
 import path from "node:path";
+import { renderChangelogPage } from "../apps/landing/changelog.mjs";
 
 const root = path.resolve(import.meta.dir, "..", "apps", "landing");
 const port = Number(process.env.PORT ?? 8765);
@@ -56,6 +59,14 @@ const server = Bun.serve({
             })
           : new Response("Not found", { status: 404 }),
       );
+    }
+    if (pathname.replace(/\/$/, "") === "/changelog") {
+      const notesFile = path.resolve(root, "..", "..", "release-notes", "releases.json");
+      const notes = fs.existsSync(notesFile) ? JSON.parse(fs.readFileSync(notesFile, "utf8")) : {};
+      const template = fs.readFileSync(path.join(root, "terms.html"), "utf8");
+      return new Response(renderChangelogPage(template, notes), {
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
     }
     const subpage = SUBPAGES[pathname.replace(/\/$/, "")];
     if (subpage) {

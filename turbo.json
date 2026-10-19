@@ -32,7 +32,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/app/public/favicon*",
-        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png"
+        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png",
+        "$TURBO_ROOT$/release-notes/**"
       ],
       "outputs": ["dist/**"]
     },
@@ -40,7 +41,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/app/public/favicon*",
-        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png"
+        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png",
+        "$TURBO_ROOT$/release-notes/**"
       ],
       "outputs": ["dist/**"]
     },

@@ -4,13 +4,13 @@
       "version": "1.1.0",
       "date": "2026-10-18",
       "highlights": [
-        "Desktop updates are smaller and download faster, straight from Moduo's own servers.",
+        "Desktop updates now download straight from Moduo's own servers.",
         "The web app keeps working after an update, instead of showing errors until you reload."
       ],
       "items": [
         {
           "type": "improved",
-          "text": "Desktop updates are smaller and download faster, straight from Moduo's own servers."
+          "text": "Desktop updates now download straight from Moduo's own servers."
         },
         {
           "type": "improved",

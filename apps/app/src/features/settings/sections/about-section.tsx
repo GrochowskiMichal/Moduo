@@ -5,6 +5,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
 import { UpdateBanner } from "../../updater/update-banner";
 import { useUpdater } from "../../updater/use-updater";
+import { ReleaseHistory } from "../../whats-new/release-history";
 import {
   ABOUT_LINKS,
   ABOUT_RUNTIME_LINE,
@@ -80,6 +81,10 @@ export function AboutSection() {
             <dd className="mt-1 text-foreground">{ABOUT_RUNTIME_LINE}</dd>
           </div>
         </dl>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <ReleaseHistory />
+        </div>
 
         {DESKTOP_CHANNEL ? (
           <div className="mt-6 border-t border-border pt-4">

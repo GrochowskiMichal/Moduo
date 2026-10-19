@@ -16,6 +16,8 @@
 import { ArrowDownToLine, CheckCircle2, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { APP_VERSION, IS_DESKTOP } from "../settings/about";
+import { manifestHighlights } from "./manifest-notes";
+import { UpdateHighlights } from "./update-toast";
 import type { UpdaterState } from "./use-updater";
 
 interface Props {
@@ -38,11 +40,7 @@ export function UpdateBanner({ state, onCheck, onDownload, onRestart }: Props) {
           <p className="text-sm font-medium text-foreground">
             Update available — {APP_VERSION} → {nextVersion}
           </p>
-          {(state.update as { body?: string | null }).body ? (
-            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-              {(state.update as { body?: string | null }).body}
-            </p>
-          ) : null}
+          <UpdateHighlights highlights={manifestHighlights(state.update.body)} />
           <button
             onClick={onDownload}
             className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"

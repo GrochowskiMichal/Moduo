@@ -20,6 +20,7 @@ import { normalizeTasksRole, type TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
+import { newerVersion } from "./versions";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
 
@@ -275,6 +276,9 @@ export interface Preferences {
   /** Which Notes UI this person uses while the refresh ships behind a switch
    *  (specs/notes-refresh.md NR-2). Classic until NR-12 flips the default. */
   notesExperience: NotesExperience;
+  /** The newest app version this person has been told about (What's new, REL-4).
+   *  Only moves forward, so the "Updated to X" toast shows once per version. */
+  lastSeenVersion: string | null;
 }
 
 export type NotesExperience = "classic" | "next";
@@ -294,6 +298,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
   tasksFolds: {},
   notesExperience: "classic",
+  lastSeenVersion: null,
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -479,6 +484,13 @@ const preferencesSchema = z.object({
   tasksOnboarding: tasksOnboardingSchema,
   tasksFolds: tasksFoldsSchema,
   notesExperience: z.enum(NOTES_EXPERIENCES).catch(DEFAULT_PREFERENCES.notesExperience),
+  lastSeenVersion: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .nullable()
+    .catch(DEFAULT_PREFERENCES.lastSeenVersion),
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -796,6 +808,7 @@ export function usePreferences(opts?: {
           ...cloud,
           tasksOnboarding: mergeOnboardingForward(store.tasksOnboarding, cloud.tasksOnboarding),
           tasksFolds: mergeFoldsForward(store.tasksFolds, cloud.tasksFolds),
+          lastSeenVersion: newerVersion(store.lastSeenVersion, cloud.lastSeenVersion),
         }
       : cloud;
     setStore(next);
