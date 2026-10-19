@@ -4,7 +4,7 @@ Update files live in the public repo `GrochowskiMichal/moduo-releases` (rolling 
 
 ## Setup
 - [ ] `RELEASES_REPO_TOKEN` (fine-grained PAT, Contents: read/write on `moduo-releases`) is set as a repo secret.
-- [ ] Run **Desktop Release (production)** (after promoting to `prod-app`). Both jobs + publish green → `prod-latest` on `moduo-releases` has `Moduo_universal.dmg`, `Moduo_universal.app.tar.gz`, `Moduo_x64-setup.exe`, `latest.json`.
+- [ ] Run **Desktop Release (production)** (after promoting to `prod-app`). Both jobs + publish green → `prod-latest` on `moduo-releases` has `Moduo_universal.dmg`, `Moduo_aarch64.app.tar.gz`, `Moduo_x64.app.tar.gz`, `Moduo_x64-setup.exe`, `latest.json`.
 - [ ] `latest.json` (open it logged out) has non-empty `signature` for darwin-* and windows-*, and a `version` of `1.0.<run number>`. → both
 
 ## Download
