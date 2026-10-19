@@ -114,6 +114,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Rstest, Stylelint and jsdom run on Node, not Bun: pin it, or the runner's own decides.
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -143,6 +149,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Rstest, Stylelint and jsdom run on Node, not Bun: pin it, or the runner's own decides.
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

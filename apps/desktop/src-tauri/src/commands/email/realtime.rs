@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri::Manager;
 
 use super::account_config::{ensure_account_config, select_mailbox_for_folder};
-use super::connection::{open_idle_imap_session, open_imap_session};
+use super::connection::{open_idle_imap_session, open_imap_session, IdleWaitOutcome};
 use super::constants::*;
 use super::flags::flush_flag_outbox_for_account;
 use super::model::StoredEmailAccount;
@@ -360,7 +360,7 @@ fn run_idle_cycle_blocking(
         };
 
         match wait_result {
-            Ok(imap::extensions::idle::WaitOutcome::MailboxChanged) => {
+            Ok(IdleWaitOutcome::MailboxChanged) => {
                 // Micro-fetch: only the new UIDs via cmd_conn, not a full sync.
                 // Read last_exists from cursor to calculate how many are new.
                 let last_exists = load_folder_cursor(&state, &account.id, folder)
@@ -436,7 +436,7 @@ fn run_idle_cycle_blocking(
                 let _ = patch_account_sync_state(&state, &account.id, "active", None);
                 break Ok(IdleCycleOutcome::MailboxChanged);
             }
-            Ok(imap::extensions::idle::WaitOutcome::TimedOut) => {
+            Ok(IdleWaitOutcome::TimedOut) => {
                 renewal_left = renewal_left.saturating_sub(wait_slice);
                 if renewal_left.is_zero() {
                     // 29-min renewal: DONE + close both connections.

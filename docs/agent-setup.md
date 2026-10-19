@@ -13,7 +13,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - `claude-security`: a deep vulnerability scan of a diff or the repo (paused until beta).
   - `security-guidance`: reviews Claude's own edits for security issues.
   - `rust-analyzer-lsp`: Rust diagnostics after every edit.
-  - `ts7-lsp` (ours, from `tools/claude-plugins/`, marketplace `moduo-local`): TypeScript 7's own language server (`tsc --lsp`) for go-to-definition, references, hover and symbols. It reports no type errors after edits; `bun run typecheck` does.
+  - `ts7-lsp` (ours, from `tools/claude-plugins/`, marketplace `moduo-local`): TypeScript 7's own language server (`tsc --lsp`) for go-to-definition, references, hover and symbols. It reports no type errors after edits; `bun run typecheck` (on `tsc-ts`) does.
   - `skill-creator`: evals for our own skills.
 - **Hooks** (`.claude/hooks/`, wired in `.claude/settings.json`):
   - `session-start.sh`: stale-base preflight and the reading list. `session-title.sh` applies `.claude/SESSION_TITLE`.

@@ -28,11 +28,16 @@ bip39 = { version = "3", features = ["rand"] }
 ed25519-dalek = "3"
 chrono = { version = "0.4", features = ["serde"] }
 fastrand = "2"
-# 3.0 is still alpha. 2.4.1 is the newest stable.
-imap = "2.4.1"
+# Async IMAP on tokio. The sync email engine drives it through the facade in
+# src/commands/email/connection.rs. Replaced the unmaintained `imap` 2.x crate.
+async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
 lettre = "0.11"
 mailparse = "0.18"
 native-tls = "0.2"
+# Per-read/per-write socket timeouts for the async IMAP stream (the old std
+# TcpStream set_read_timeout semantics).
+tokio-io-timeout = "1"
+tokio-native-tls = "0.3"
 rand = "0.10"
 # 4.x cannot open a 2.x database file. Desktop stores (mail, identity) stay on 2.x.
 redb = "2.6"
@@ -46,7 +51,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "query", "rustls", "http2"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
@@ -54,3 +59,7 @@ webbrowser = "1"
 # v4's default `v1` feature picks the native store per OS. The old
 # apple-native / windows-native / linux-native feature names are gone.
 keyring = "4"
+
+[dev-dependencies]
+# Stream collection in the live IMAP harness (tests/imap_live.rs).
+futures-util = "0.3"

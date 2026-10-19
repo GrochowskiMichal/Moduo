@@ -273,7 +273,7 @@ fn run_server_search(
                     !name
                         .attributes()
                         .iter()
-                        .any(|attr| matches!(attr, imap::types::NameAttribute::NoSelect))
+                        .any(|attr| matches!(attr, async_imap::types::NameAttribute::NoSelect))
                 })
                 .map(|name| name.name().to_string())
                 .collect(),

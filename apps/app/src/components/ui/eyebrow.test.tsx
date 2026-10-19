@@ -113,15 +113,12 @@ describe("eyebrow drift guard", () => {
     const root = path.resolve(__dirname, "../../..");
     const srcRoot = path.join(root, "src");
 
-    // Skipped wholesale: src/tw is the RN shim (same exemption lint:tw grants).
-    const skipDirs = new Set([path.join(srcRoot, "tw")]);
-
     const walk = async (dir: string): Promise<string[]> => {
       const out: string[] = [];
       for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-          if (entry.name === "node_modules" || skipDirs.has(full)) continue;
+          if (entry.name === "node_modules") continue;
           out.push(...(await walk(full)));
         } else if (
           entry.name.endsWith(".tsx") &&

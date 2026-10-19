@@ -68,7 +68,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           # The last tag that shipped desktop is the one the production channel serves.
-          paths=(apps/app apps/desktop packages supabase/functions/_shared assets bun.lock package.json tsconfig.base.json .bun-version)
+          paths=(apps/app apps/desktop packages supabase/functions/_shared assets bun.lock package.json tsconfig.base.json .bun-version .nvmrc)
           live="$(curl -sf --max-time 20 "$UPDATE_SERVER_URL/desktop/production/latest.json" | jq -r '.version // empty' || true)"
           if [ -z "$live" ]; then
             reason="the update server didn't say which version production desktop runs"
@@ -154,7 +154,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           # changes.ts is erasable TypeScript; Node 24 runs it without a build.
-          node-version: 24
+          node-version-file: .nvmrc
 
       - name: Publish the GitHub release
         env:

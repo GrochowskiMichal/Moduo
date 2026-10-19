@@ -8,7 +8,7 @@
  * docs/DESIGN_RULES.md (token surface). Allowed: the sanctioned `[var(--token)]`
  * escape hatch, and one-off *geometry* (top-/left-/h-/w-/translate-/inset-[…])
  * which is never a design-system property. Paths in IGNORED_PATHS are skipped
- * (the RN shim + the curated legacy backlog). Exits non-zero on hits.
+ * (the curated legacy backlog). Exits non-zero on hits.
  *
  * Also runs the text rules (scripts/check-text-rules.ts, DS-6): text is never
  * rotated (call 46a), and small caps never carry people's words (call 40).
@@ -102,9 +102,6 @@ const IGNORED_PATHS: string[] = [
   // This gate's own test fixtures — the probe strings ARE violations by design.
   "src/components/design-lint.test.ts",
   "src/components/text-rules.test.ts",
-
-  // React Native compatibility shim — intentionally untouched per AGENTS.md.
-  "src/tw",
 
   // Legacy baseline: files that still hold pre-foundation arbitrary
   // Tailwind values. Each is queued for its own per-feature brief; the

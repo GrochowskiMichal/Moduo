@@ -136,6 +136,11 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
+- 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`; jsdom 30.
+- 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.
+- 2026-10-19 · Desktop IMAP is `async-imap` 0.12 (tokio) over `tokio-native-tls`.
+- 2026-10-19 · Dependency hygiene: unused packages and the RN shim removed, hoisted test imports declared.
 - 2026-10-08 · Subframe is removed.
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.

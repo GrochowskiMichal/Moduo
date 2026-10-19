@@ -73,6 +73,9 @@ Read before working in `.github/`, `scripts/`, `package.json`, `rsbuild.config.t
 - **The Write and Edit tools turn `\uXXXX` in file text into the literal character.** Spell code points as numbers (`chr(n)`, `String.fromCodePoint(n)`) in SQL and TS. (CV-7c)
 - **The worktree guard refuses inline `python3 -c` and `$(…)` edits, and compound commands that name the version-control tool:** write the script to the scratchpad and run it by path; split compound commands. (CV-3)
 
+- **jsdom 30 lets Node's `URL.createObjectURL` show through, and it rejects jsdom's `File`/`Blob`** ("The "obj" argument must be an instance of Blob"). jsdom 28 had none, so tests guarded with `URL.createObjectURL ??= …` silently stopped stubbing. `apps/app/rstest.setup.ts` now installs a browser-like stub (`blob:test/<n>`) for every jsdom test; don't stub it per file.
+- **`tsc-ts` has no `--lsp`.** Keep `typescript` installed: the `ts7-lsp` plugin and editors run `tsc --lsp --stdio`. Only the `typecheck` scripts use `tsc-ts`.
+
 ## Parallel migrations in the Chat v2 build (Checkpoint 4)
 
 - **Migrations built in parallel are re-cut from the LIVE function bodies right before they are applied, and their timestamps follow apply order.** A block that cut a function from the body it saw at branch time redefines it from a stale copy once another block's migration is live; read `pg_get_functiondef` on the stack the day you apply, restate the grants by name, and stamp the files in the order they are applied. (CV-10, CV-11, CV-13, CV-15, CV-17)

@@ -1,6 +1,6 @@
 // The bounded-grid engine — the risk core of the dashboard rebuild (DB-1).
 //
-// Pure, immutable, deterministic. Zero React/DOM/framer-motion imports so it can
+// Pure, immutable, deterministic. Zero React/DOM imports so it can
 // be exhaustively unit-tested and reused from anywhere. Everything here operates
 // on plain `WidgetInstance[]` and returns NEW arrays and NEW widget objects, each
 // with a freshly shallow-copied `config` — inputs are never mutated (the "a
