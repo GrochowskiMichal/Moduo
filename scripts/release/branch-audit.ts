@@ -3,18 +3,27 @@
 //
 //   bun scripts/release/branch-audit.ts            text report, after `git fetch --prune origin`
 //   bun scripts/release/branch-audit.ts --json     the same as JSON
-//   bun scripts/release/branch-audit.ts --names merged   one name per line, for a reviewed deletion
+//   bun scripts/release/branch-audit.ts --names merged   "<name> <sha>" per line, for a reviewed
+//     deletion that leases each sha (git push --force-with-lease=refs/heads/<n>:<sha> origin :refs/heads/<n>),
+//     so a branch that moved after the audit is not deleted
 //   --no-fetch skips the fetch; --base <ref> compares against another ref (default origin/develop)
 //
 // Buckets:
 //   kept      develop, mike, maciej (long-lived; never deleted)
-//   mirror    prod-app, staging-app, prod-landing, main (retired by REL-6; each deleted only on a yes)
+//   mirror    prod-app, staging-app, prod-landing, staging-landing, main (retired by REL-6; each
+//             deleted only on a yes)
 //   merged    fully merged into develop and no open PR uses it as head or base: safe as a group
 //   unmerged  everything else, with its last commit date, author, commits ahead and any open PR
 import { spawnSync } from "node:child_process";
 
 export const KEPT = ["develop", "mike", "maciej"] as const;
-export const MIRRORS = ["prod-app", "staging-app", "prod-landing", "main"] as const;
+export const MIRRORS = [
+  "prod-app",
+  "staging-app",
+  "prod-landing",
+  "staging-landing",
+  "main",
+] as const;
 
 export type Bucket = "kept" | "mirror" | "merged" | "unmerged";
 
@@ -156,16 +165,16 @@ function main(argv: string[]): number {
   const base = value("--base") ?? "origin/develop";
   if (!flag("--no-fetch")) sh("git", ["fetch", "--prune", "--quiet", "origin"]);
   const rows = classify(readBranches(base), readOpenPrs());
-  const names = value("--names") as Bucket | undefined;
-  if (names) {
-    if (!ORDER.includes(names)) {
+  const names = flag("--names") ? value("--names") : undefined;
+  if (flag("--names")) {
+    if (!names || !(ORDER as string[]).includes(names)) {
       console.error(`--names takes one of ${ORDER.join(", ")}`);
       return 1;
     }
     console.log(
       rows
         .filter((r) => r.bucket === names)
-        .map((r) => r.name)
+        .map((r) => `${r.name} ${r.sha}`)
         .join("\n"),
     );
   } else if (flag("--json")) {

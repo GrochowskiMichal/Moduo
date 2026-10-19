@@ -5,8 +5,8 @@ human or AI. Read it before starting a new task; it covers branching, PR
 direction, release cadence, testing gates, and how LLM agents should behave.
 
 > **Effective date:** 2026-05-14; releases from tags since 2026-10-19
-> (Release v2). The mirror branches `main`, `prod-app`, `staging-app` and
-> `prod-landing` were retired in REL-6: production ships only from
+> (Release v2). The mirror branches `main`, `prod-app`, `staging-app`,
+> `prod-landing` and `staging-landing` were retired in REL-6 (no workflow uses them): production ships only from
 > `vX.Y.Z` tags on `develop`, through `/ship` ([docs/release.md](./docs/release.md)).
 
 ## Branch hierarchy
@@ -190,11 +190,11 @@ Activated 2026-05-14:
   merged into `main` and deleted.
 - Mike's pre-split branch preserved as `archive/mike-original`.
 - `main` stayed the release branch until Release v2; REL-6 (2026-10-19)
-  deleted it with `prod-app`, `staging-app` and `prod-landing`.
+  retired it with `prod-app`, `staging-app` and `prod-landing`.
 
 ## GitHub branch protection
 
-- **`develop`**: ruleset "Protect develop": PR required, `static-checks`
+- **`develop`**: a ruleset (with `main` until it is deleted): PR required, `static-checks`
   required, no force-push, no deletion. No approvals required: self-merge is
   intentional so neither dev stalls.
 - **`mike`, `maciej`**: ruleset "Keep personal branches": no deletion, no
