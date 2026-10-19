@@ -61,7 +61,7 @@ This spec makes a release one guarded step:
 - **Two releases started at once:** `release.yml` has a concurrency group per channel and queues the second. `/ship` refuses to open a second release PR while one is open.
 - **What's new with no notes for the installed version** (a build from before this spec): no toast. About still lists the history.
 - **Reload prompt while offline or on an old build** whose `/config.json` lacks `build`: no prompt.
-- **Per-arch updater bundle missing** (one arch failed): that platform key is left out of the manifest, so the app falls back to the universal bundle key if present. Otherwise no update is offered for that arch.
+- **Per-arch updater bundle missing** (one arch failed): the Mac build fails and nothing is published (REL-5: safer than a half release). If a manifest ever lacks a Mac arch's key, the update server falls back to the `darwin-universal` key while manifests carry it; otherwise no update is offered for that arch.
 - **Deleting branches:** only branches fully merged into `develop` are deleted automatically. Unmerged `claude/*` and `t/*` branches are listed for Mike to approve one by one.
 
 ## Acceptance criteria

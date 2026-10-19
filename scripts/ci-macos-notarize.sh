@@ -29,7 +29,8 @@ if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
   AUTH=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE" ${NOTARY_KEYCHAIN:+--keychain "$NOTARY_KEYCHAIN"})
 elif [[ -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY_P8:-}" ]]; then
   KEY_PATH="${RUNNER_TEMP:-/tmp}/AuthKey_$(trim "$APPLE_API_KEY_ID").p8"
-  printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
+  # wait-all runs several of these at once: write the key once, never under a sibling's read.
+  [[ -s "$KEY_PATH" ]] || printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
   AUTH=(--key "$KEY_PATH" --key-id "$(trim "$APPLE_API_KEY_ID")" --issuer "$(trim "$APPLE_API_ISSUER")")
 else
   for v in APPLE_ID APPLE_ID_PASSWORD APPLE_TEAM_ID; do

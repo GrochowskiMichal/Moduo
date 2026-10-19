@@ -466,16 +466,22 @@ jobs:
       # the submissions below do it without blocking. No APPLE_CERTIFICATE either: Tauri would import
       # a second copy into its own keychain, and codesign hung there for 1.5 h (run 37636171897).
       # Per-arch first, then universal: the universal build runs the same two cargo builds and finds
-      # them done, so it only adds lipo and bundling. The web bundle is built once, by the first build.
+      # them done, so it only adds lipo and bundling. The web bundle is built once, up front, and all
+      # three builds get the same config: a different one changes TAURI_CONFIG, which reruns the app's
+      # build script and recompiles the crate.
       - name: Build per-arch macOS apps, then the universal .dmg (signed, with updater bundles)
         run: |
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
           cd "$DESKTOP_DIR"
-          bunx tauri build --target aarch64-apple-darwin --bundles app --config "$RUNNER_TEMP/ci-tauri-config.json"
+          # tauri.conf.json's own beforeBuildCommand, run from the same folder Tauri runs it in.
+          WEB_BUILD="$(node -p 'require("./src-tauri/tauri.conf.json").build.beforeBuildCommand || ""')"
+          bash -c "$WEB_BUILD"
           SKIP_WEB='{"build":{"beforeBuildCommand":""}}'
-          bunx tauri build --target x86_64-apple-darwin --bundles app --config "$RUNNER_TEMP/ci-tauri-config.json" --config "$SKIP_WEB"
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            bunx tauri build --target "$target" --bundles app --config "$RUNNER_TEMP/ci-tauri-config.json" --config "$SKIP_WEB"
+          done
           bunx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/ci-tauri-config.json" --config "$SKIP_WEB"
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -501,7 +507,7 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          TARGET_DIR="${CARGO_TARGET_DIR:-$DESKTOP_DIR/src-tauri/target}"
+          TARGET_DIR="$(cd "${CARGO_TARGET_DIR:-$DESKTOP_DIR/src-tauri/target}" && pwd)"
           mkdir -p "$RUNNER_TEMP/mac" "$RUNNER_TEMP/notary"
           # stage <rust target> <file stem> <expected lipo archs>
           stage() {
@@ -511,7 +517,7 @@ jobs:
             [ -n "$app" ] && [ -f "$tgz" ] && [ -f "$tgz.sig" ] || { echo "::error::$1: the .app, its .app.tar.gz or its .sig is missing in $bundle/macos."; exit 1; }
             codesign --verify --deep --strict --verbose=2 "$app"
             codesign -dv "$app" 2>&1 | grep -q "flags=.*runtime" || { echo "::error::$1: the app is not signed with the hardened runtime; Apple will reject it."; exit 1; }
-            bin="$app/Contents/MacOS/$(defaults read "$app/Contents/Info" CFBundleExecutable)"
+            bin="$app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw -o - "$app/Contents/Info.plist")"
             [ "$(lipo -archs "$bin")" = "$3" ] || { echo "::error::$1: the binary is $(lipo -archs "$bin"), expected $3."; exit 1; }
             cp "$tgz" "$RUNNER_TEMP/mac/$2.app.tar.gz"
             cp "$tgz.sig" "$RUNNER_TEMP/mac/$2.app.tar.gz.sig"
@@ -527,11 +533,17 @@ jobs:
             codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" --keychain "$BUILD_KEYCHAIN" "$DMG"
           fi
           cp "$DMG" "$RUNNER_TEMP/mac/Moduo_universal.dmg"
+          # AC12: each per-arch bundle is at most 60% of the universal one.
+          UNI=$(stat -f %z "$RUNNER_TEMP/mac/Moduo_universal.app.tar.gz")
           {
-            echo "| Updater bundle | Size |"
-            echo "| --- | --- |"
+            echo "| Updater bundle | Bytes | Of universal |"
+            echo "| --- | --- | --- |"
             for f in Moduo_aarch64 Moduo_x64 Moduo_universal; do
-              echo "| \`$f.app.tar.gz\` | $(stat -f %z "$RUNNER_TEMP/mac/$f.app.tar.gz") bytes |"
+              size=$(stat -f %z "$RUNNER_TEMP/mac/$f.app.tar.gz")
+              echo "| \`$f.app.tar.gz\` | $size | $((size * 100 / UNI))% |"
+              if [ "$f" != Moduo_universal ] && [ $((size * 100)) -gt $((UNI * 60)) ]; then
+                echo "::warning::$f.app.tar.gz is $((size * 100 / UNI))% of the universal bundle (expected at most 60%)." >&2
+              fi
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -589,6 +601,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────
   # macOS — only when Apple was slower than build-mac's wait. Waits on the same
   # submissions (the .dmg and both per-arch apps); re-running this job never rebuilds or resubmits.
+  # Only the .dmg is stapled; the per-arch apps' tickets are checked online.
   # ─────────────────────────────────────────────────────────────────
   notarize-mac:
     needs: build-mac
@@ -903,6 +916,10 @@ jobs:
           case "$STATUS" in
             404)
               cd release-artifacts
+              # The Mac files are required (the manifest points at them); Windows is optional.
+              for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig; do
+                [ -f "$f" ] || { echo "::error::$f is missing from the Mac artifacts."; exit 1; }
+              done
               for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
                 [ -f "$f" ] || continue
                 put "$PREFIX/$f" "$f" application/octet-stream
