@@ -36,7 +36,7 @@ Run in this order. Steps 2–3 are agent steps that need Maciej's OK in the sess
    ```bash
    for f in lockup-light lockup-dark mark-light mark-dark; do curl -sI "https://app.moduo.app/email/$f@2x.png" | grep -i '^content-type'; done
    ```
-   If any says `text/html`, the web app hasn't been deployed since BRAND-1 merged. Deploy it first; don't switch the hook on, or every code email shows a broken logo. app.moduo.app deploys from `prod-app`, which only moves when someone runs Actions → "Promote to production" → `app` (Mike so far). The files reached `staging-app` on 2026-10-08, and Vercel's build of it served all four as PNGs at the contracted sizes, so one promotion is all step 1 needs. Steps 4 and 5 are safe before that (the hook stays off); 6 and 7 wait for it.
+   If any says `text/html`, the web app hasn't been deployed since BRAND-1 merged. Deploy it first; don't switch the hook on, or every code email shows a broken logo. app.moduo.app deploys from `vX.Y.Z` tags through `/ship` (docs/release.md; this step predates it). The files reached `staging-app` on 2026-10-08, and Vercel's build of it served all four as PNGs at the contracted sizes, so one promotion is all step 1 needs. Steps 4 and 5 are safe before that (the hook stays off); 6 and 7 wait for it.
 1b. **The privacy policy says it first.** Once the hook is on, Resend sends sign-in codes and `email_outbox` keeps a 30-day record, so moduo.app/privacy must already say both. The lines ship through PR #319 into `prod-landing` (Mike merges it with a merge commit). Check that the page shows the "Emails we sent you" entry:
    ```bash
    curl -s https://moduo.app/privacy | grep -c 'Emails we sent you'
@@ -230,7 +230,7 @@ All agent steps, each needing Maciej's OK in the session, in this order. The wor
    supabase functions deploy booking-public --project-ref wtoonrvuqumihpkbvwvs --no-verify-jwt --import-map supabase/functions/deno.json --use-api
    ```
    then `bun run functions:reconcile`. From here on `booking-public` sends nothing itself (the old `sendGuestEmail` and its `RESEND_FROM` are gone).
-4. **Booking page copy** ships with the app (develop → staging-app → prod-app). Until then the confirmation keeps saying a calendar invite is coming on Zoom-only links.
+4. **Booking page copy** ships with the app (develop, then the next `/ship` release). Until then the confirmation keeps saying a calendar invite is coming on Zoom-only links.
 5. **Live check:** book a slot on a Google-connected link and on a Zoom-only link (docs/testing/ checklist for TX-5), cancel each, and read the rows:
    ```sql
    select kind, status, attempts, last_error, dedupe_key from public.email_outbox
@@ -283,7 +283,7 @@ All agent steps, each needing Maciej's OK in the session, in this order. Until s
    bun run functions:reconcile
    ```
    Expect `404` (the gateway's `NOT_FOUND`) and a clean reconcile. Its secret `WORKSPACE_INVITE_WEBHOOK_SECRET` was never set, so there is nothing to remove.
-4. **The app** (join page mismatch state, the pending-join fix, the "Invite sent" toast) ships through develop → `staging-app` → "Promote to production" → `app`, **in the same train as step 2 or after it**: before the migration, the toast says "Invite sent" while the old trigger still sends nothing. Until then an invitee on the old build who signs in with a code lands in onboarding and has to open the invite link again, and a mismatched address sees the raw `invite_email_mismatch`.
+4. **The app** (join page mismatch state, the pending-join fix, the "Invite sent" toast) ships through develop and the next `/ship` release, **in the same train as step 2 or after it**: before the migration, the toast says "Invite sent" while the old trigger still sends nothing. Until then an invitee on the old build who signs in with a code lands in onboarding and has to open the invite link again, and a mismatched address sees the raw `invite_email_mismatch`.
 5. **Live check** (docs/testing/ checklist for TX-7): invite a throwaway address you can read from Settings → Members and access → B3 "<you> invited you to <workspace>" from "<you> via Moduo", reply-to you → "Accept invite" opens `app.moduo.app/join?invite=…` → sign in with a code → you land in the workspace, not onboarding. Read the rows:
    ```sql
    select kind, status, attempts, last_error, dedupe_key from public.email_outbox

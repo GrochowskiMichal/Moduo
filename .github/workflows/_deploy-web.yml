@@ -44,7 +44,7 @@ jobs:
     if: inputs.target != 'landing'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only develop, main, mike, prod-app and v* tags may use this environment (REL-6 drops main and prod-app).
+    # Only develop, mike and v* tags may use this environment.
     environment: cloudflare-deploy
     env:
       SHA: ${{ inputs.sha }}

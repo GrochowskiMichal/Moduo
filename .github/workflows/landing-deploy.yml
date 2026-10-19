@@ -37,7 +37,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Only develop, main, mike and prod-app may use this environment, which holds the Cloudflare token.
+    # Only develop, mike and v* tags may use this environment, which holds the Cloudflare token.
     environment: cloudflare-deploy
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}

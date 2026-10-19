@@ -11,7 +11,7 @@ name: landing-preview
 # run first. PRs from forks get no secrets and are skipped. Nothing here runs `bun install`.
 on:
   pull_request:
-    branches: [develop, main, mike, maciej]
+    branches: [develop, mike, maciej]
     paths:
       - apps/landing/**
       - apps/app/public/favicon*

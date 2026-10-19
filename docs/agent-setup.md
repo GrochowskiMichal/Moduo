@@ -17,7 +17,8 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - `skill-creator`: evals for our own skills.
 - **Hooks** (`.claude/hooks/`, wired in `.claude/settings.json`):
   - `session-start.sh`: stale-base preflight and the reading list. `session-title.sh` applies `.claude/SESSION_TITLE`.
-  - `guard-git.sh`: blocks direct pushes to `main`/`develop`/`prod-app`/`staging-app` and bare force-pushes.
+  - `guard-git.sh`: blocks direct pushes to `develop`, deleting or force-pushing `develop`/`mike`/`maciej`, and bare force-pushes (tests: `guard-git.test.sh`).
+  - `guard-release.sh`: blocks release tag pushes and prod workflow runs without `/ship`'s one-time marker.
   - `guard-secrets.sh`: gitleaks scan of staged changes on every commit.
   - `guard-prod-db.sh`: asks before any Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`.
   - `guard-design-tokens.sh`: re-runs `lint:tw` + `lint:css` after UI edits, and wakes Claude only on a violation.

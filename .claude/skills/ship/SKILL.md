@@ -50,7 +50,7 @@ In the scratch worktree:
 
 ## 4a. Ship now
 1. `gh pr checks <n> --watch --required` (run it in the background if it may take over 2 minutes). Failing → **stop**: report the failing check and the PR link, leave the PR open, no tag. The fix lands through a normal PR into develop; then `/ship vX.Y.Z` after rebasing the release branch, or close the PR and start over.
-2. Say "Merging Release X.Y.Z into develop", then `gh pr merge <n> --merge` and `git push origin --delete release/vX.Y.Z` (not `--delete-branch`: the branch is checked out in the scratch worktree). Get the commit: `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`.
+2. Say "Merging Release X.Y.Z into develop", then `gh pr merge <n> --merge` (GitHub deletes `release/vX.Y.Z` on merge; don't delete it yourself). Get the commit: `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`.
 3. `git fetch origin develop --tags` and `git tag -a vX.Y.Z -m "Moduo X.Y.Z" <merge sha>` (verify `git show <merge sha>:VERSION` is X.Y.Z first).
 4. **Marker, in its own Bash call from the session's checkout:** `d="$(git rev-parse --show-toplevel)/.claude/release-approved"; mkdir -p "$d" && date -u > "$d/X.Y.Z"`. It is valid for 60 minutes and one command.
 5. Say "Pushing tag vX.Y.Z: this starts the production release (web, landing, desktop when needed)", then, in a separate Bash call: `git push origin vX.Y.Z`. The guard consumes the marker; `rm -f` it afterwards anyway.

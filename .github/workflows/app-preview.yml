@@ -14,7 +14,7 @@ name: app-preview
 # PRs from forks get no secrets and are skipped. Only PRs that can change the app's build run.
 on:
   pull_request:
-    branches: [develop, main, mike, maciej]
+    branches: [develop, mike, maciej]
     paths:
       - apps/app/**
       - supabase/functions/_shared/**

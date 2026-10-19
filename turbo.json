@@ -68,6 +68,7 @@
       "inputs": [
         "scripts/**",
         ".claude/hooks/guard-release*",
+        ".claude/hooks/guard-git*",
         "VERSION",
         "brand/**",
         "apps/app/src/**",

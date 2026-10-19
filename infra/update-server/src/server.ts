@@ -145,7 +145,7 @@ export async function rolloutBucket(seed: string, version: string): Promise<numb
 
 /**
  * Who this request is, for bucketing. Builds with PLAT-6's Rust change send an install id; a build
- * without it (production from a prod-app that predates the change) falls back to the connecting
+ * without it (a production build that predates the change) falls back to the connecting
  * IP, hashed with the version and never stored.
  */
 function rolloutSeed(request: Request): string {
