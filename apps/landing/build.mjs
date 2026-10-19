@@ -30,7 +30,7 @@ fs.mkdirSync(outDir, { recursive: true });
 if (staging) {
   fs.copyFileSync(path.join(root, "staging.html"), path.join(outDir, "index.html"));
   // Staging keeps its portal at /, so the marketing page is published for review at
-  // /landing.html (never indexed) before it's promoted to prod-landing.
+  // /landing.html (never indexed) before a release ships it.
   let page = fs.readFileSync(path.join(root, "index.html"), "utf8");
   if (!/name="robots"/.test(page)) {
     page = page.replace("<head>", '<head>\n    <meta name="robots" content="noindex, nofollow" />');

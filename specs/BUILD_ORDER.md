@@ -6,7 +6,7 @@
 > **How `/s3` uses this:** it ticks blocks finished that session, nothing more (lean mode; moving `[x]` lines to `BUILD_LOG.md` is batch housekeeping).
 > **Invariant:** every block's dependencies appear **above** it, so strict top-to-bottom is always a valid order. Items at the same depth with disjoint deps may be built in parallel/any order.
 
-**Focus:** Tasks (TV-*, AT-*, and the DS-* blocks they need; Tasks v3 released 2026-10-14) · Chat (v2 released 2026-10-16; CV-23 open) · the website (moduo.app, PRs into `prod-landing`: BRAND-4, PRIV-2d) · transactional email templates (TX-*, plus BRAND-1's email logos), **not** the email module · set by Maciej 2026-10-08, updated 2026-10-17 (Mike, docs refresh) — the designer's current focus area, edited by Mike or Maciej. `/s2` and `/s3` turn a 🔎 Found item into a chip or next-session suggestion only when it falls inside this; while it's unset, none do.
+**Focus:** Tasks (TV-*, AT-*, and the DS-* blocks they need; Tasks v3 released 2026-10-14) · Chat (v2 released 2026-10-16; CV-23 open) · the website (moduo.app, shipped by `/ship` since REL-6: BRAND-4, PRIV-2d) · transactional email templates (TX-*, plus BRAND-1's email logos), **not** the email module · set by Maciej 2026-10-08, updated 2026-10-17 (Mike, docs refresh) — the designer's current focus area, edited by Mike or Maciej. `/s2` and `/s3` turn a 🔎 Found item into a chip or next-session suggestion only when it falls inside this; while it's unset, none do.
 
 Legend: `[ ]` not started · `[~]` in progress · `[x]` done (date + branch in the trailing note).
 
@@ -519,7 +519,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 ## Running sessions & parallelism
 
-**Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `main`/`develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
+**Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
 
 **A block is "ready" only when all its deps are *merged into the base the session branches from*.** So parallelism is **fan-out after each merge barrier**, not "start all 12 at once": land a block → merge it into `maciej` → start the next round's sessions off the updated `maciej`. A session whose base is missing its deps is building on sand (the stale-base trap — gotchas.md).
 

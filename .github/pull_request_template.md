@@ -9,7 +9,7 @@
 
 ## Testing gate
 
-Target: <!-- task → personal | personal → develop | develop → main -->
+Target: <!-- task → personal | personal → develop (releases: /ship opens its own PR) -->
 
 - [ ] `bun run typecheck` clean
 - [ ] `bun run lint:tw` clean on files touched
@@ -21,13 +21,6 @@ For **personal → develop** PRs, also:
 - [ ] Adjacent / regressed surfaces checked manually
 - [ ] Storybook renders for any new / changed primitives without console errors
 - [ ] Visual snapshot suite green (or new PNG committed intentionally)
-
-For **develop → main** PRs, also:
-
-- [ ] Full walkthrough on a fresh vault
-- [ ] Full walkthrough on an existing vault (migration check)
-- [ ] CHANGELOG entry written
-- [ ] Both devs signed off
 
 ## Notes
 

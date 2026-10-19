@@ -22,7 +22,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # The write token lives only in this environment, which only develop, main, mike, maciej
+    # The write token lives only in this environment, which only develop, mike, maciej
     # and v* tags may use.
     environment: turbo-cache-write
     # The Cloudflare token is given only to the wrangler steps, never to install or tests.

@@ -308,8 +308,8 @@ jobs:
         with:
           ref: ${{ needs.version.outputs.build_sha }}
 
-      # CI scripts come from the workflow's own commit, so a build of an older branch
-      # (prod-app before a promote) still gets the current signing/notarization logic.
+      # CI scripts come from the workflow's own commit, so a build of an older ref
+      # (a tag cut before a CI fix) still gets the current signing/notarization logic.
       - name: Checkout CI scripts
         uses: actions/checkout@v7
         with:
@@ -395,8 +395,8 @@ jobs:
             exit 1
           fi
 
-      # PLAT-2 moved the Tauri app to apps/desktop. A branch cut before the move (prod-app until the
-      # next promote) still has it at the root, so find it instead of assuming either layout.
+      # PLAT-2 moved the Tauri app to apps/desktop. A ref from before the move (no release tag is;
+      # only a staging run of an old commit) still has it at the root, so find it rather than assume.
       - name: Locate the desktop app
         run: |
           if [ -f apps/desktop/src-tauri/tauri.conf.json ]; then DIR=apps/desktop; else DIR=.; fi
@@ -676,8 +676,8 @@ jobs:
           path: .ci
           sparse-checkout: scripts
 
-      # PLAT-2 moved the Tauri app to apps/desktop. A branch cut before the move (prod-app until the
-      # next promote) still has it at the root, so find it instead of assuming either layout.
+      # PLAT-2 moved the Tauri app to apps/desktop. A ref from before the move (no release tag is;
+      # only a staging run of an old commit) still has it at the root, so find it rather than assume.
       - name: Locate the desktop app
         run: |
           if [ -f apps/desktop/src-tauri/tauri.conf.json ]; then DIR=apps/desktop; else DIR=.; fi
@@ -768,7 +768,7 @@ jobs:
       (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only develop, main, mike, prod-app and v* tags may use this environment (REL-6 drops main and prod-app).
+    # Only develop, mike and v* tags may use this environment.
     environment: cloudflare-deploy
     outputs:
       published: ${{ steps.offered.outputs.published }}

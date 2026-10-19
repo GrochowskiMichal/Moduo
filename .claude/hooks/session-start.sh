@@ -37,14 +37,14 @@ if [ -n "$base" ]; then
   if [ -n "$behind" ] && [ "$behind" != "0" ]; then
     echo "⚠️ STALE BASE — this branch is $behind commit(s) behind $base (${ahead:-?} ahead)."
     echo "   AGENTS.md, specs and tokens.css may be outdated. Reconcile with $base before"
-    echo "   editing. Cut task branches off the latest personal branch, never main/develop;"
+    echo "   editing. Cut task branches off the latest personal branch, never develop;"
     echo "   integrate with a merge commit, never a fast-forward."
   else
     echo "✓ Base current with $base (${ahead:-0} ahead, 0 behind)."
   fi
 else
   echo "• No personal base branch found to compare against — confirm this branch is cut"
-  echo "  off mike or maciej, not main/develop."
+  echo "  off mike or maciej, not develop."
 fi
 echo
 echo "Before building, read: docs/decisions.md · docs/gotchas.md · specs/BUILD_ORDER.md"

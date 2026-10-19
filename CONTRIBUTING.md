@@ -4,15 +4,15 @@ This document is the contract for how Mike and Maciej work in this repo —
 human or AI. Read it before starting a new task; it covers branching, PR
 direction, release cadence, testing gates, and how LLM agents should behave.
 
-> **Effective date:** 2026-05-14. The branch model is active. Branch
-> protection on `main` and `develop` is pending Mike's admin action —
-> until then, the contract is honored by convention.
+> **Effective date:** 2026-05-14; releases from tags since 2026-10-19
+> (Release v2). The mirror branches `main`, `prod-app`, `staging-app` and
+> `prod-landing` were retired in REL-6: production ships only from
+> `vX.Y.Z` tags on `develop`, through `/ship` ([docs/release.md](./docs/release.md)).
 
 ## Branch hierarchy
 
 ```
-main          ← release-quality. Alpha / beta tags live here.
-   ↑                   Only develop merges in.
+vX.Y.Z tags         ← releases. /ship tags a merge commit on develop.
 develop             ← integration. Sync target for personal branches.
    ↑    ↑              Only personal branches merge in.
 maciej  mike        ← personal long-running branches (one per dev).
@@ -25,14 +25,13 @@ t/maciej/* t/mike/* ← task / milestone branches. Short-lived.
 
 | Branch | Owner | Who can merge into it |
 | --- | --- | --- |
-| `main` | shared | `develop` only, at release time, both devs sign off |
 | `develop` | shared | `mike` and `maciej`, via PR, self-merge OK (review optional) |
 | `maciej` | Maciej | `t/maciej/*` task branches, via PR with a merge commit (never fast-forward) |
 | `mike` | Mike | `t/mike/*` task branches, via PR with a merge commit (never fast-forward) |
 
-Nobody pushes directly to `main`. Agents **do** merge into `develop` via PR
+Nobody pushes directly to `develop`. Agents **do** merge into `develop` via PR
 as part of `/s3` when the chunk should show on Entire (standing
-authorization, 2026-08-17) — never to `main`. Personal branches can be
+authorization, 2026-08-17). Releases are tags, cut only by `/ship`. Personal branches can be
 pushed to directly by their owner; PRs are preferred when an LLM did the work
 so there's a diff to review.
 
@@ -48,22 +47,21 @@ remain the canonical base for every new task branch.
   `t/maciej/m2-foundation-polish`. The `t/` prefix is required because
   Git refs can't be both a file (`maciej`) and a directory (`maciej/x`)
   at the same path.
-- Always branch from your **personal branch**, not from `develop` or
-  `main`. The personal branch is your latest known-working state.
+- Always branch from your **personal branch**, not from `develop`. The personal branch is your latest known-working state.
 - Keep them short-lived where possible. If a task grows beyond ~2 weeks,
   consider splitting it.
 
 ## Sync flow
 
 ```
-task branch  →  personal branch  →  develop  →  main
-                  (when ready)     (when ready)   (release)
+task branch  →  personal branch  →  develop  →  vX.Y.Z tag
+                  (when ready)     (when ready)   (/ship)
 ```
 
 - **Task → personal**: as soon as the task is complete and passes its own
   testing. Open a PR and merge it with a **merge commit — never fast-forward**
-  (personal branches are hot; parallel sessions need the merge boundary). Delete
-  the task branch after merge.
+  (personal branches are hot; parallel sessions need the merge boundary). GitHub
+  deletes the task branch on merge.
 - **Personal → develop**: **do this often.** GitHub's default branch is
   `develop`. Entire.io repo Overview/Analytics only count checkpoints that
   have landed there, so bigger chunks (a finished `/s2` block, any
@@ -77,9 +75,10 @@ task branch  →  personal branch  →  develop  →  main
   `develop` after so the two don't drift. Skip the develop sync only when
   the designer said to keep the work on a task branch, or a duplication-guard
   conflict is unresolved.
-- **Develop → main**: only at a tagged release. **This is the gated
-  checkpoint** — both devs sign off in the PR. Tag the merge commit per the
-  release scheme below.
+- **Develop → production**: `/ship` opens the release PR
+  (`release/vX.Y.Z → develop`), merges it and tags the merge commit; the tag
+  deploys web, landing and desktop. It asks one question: ship now, or hand it
+  to the other founder.
 
 ## Testing gates
 
@@ -112,55 +111,34 @@ Everything above, plus:
   intentionally regenerated and the new PNG committed.
 - Either reviewer can request screenshots / a short Loom; if asked, attach.
 
-### Develop → main (release)
+### Release (`/ship`)
 
-Everything above, plus:
-
-- A full release walkthrough on `bun run dev:desktop` against a **fresh
-  vault**: sign-in, workspace create, the golden path for every feature
-  touched in this release.
-- A second walkthrough against an **existing vault** to catch migration /
-  upgrade regressions.
-- CHANGELOG entry written for the release.
-- Both devs sign off in the `develop → main` PR before merging.
+Everything above, plus what `/ship` checks: the release notes pass the leak
+check, migrations and Edge Functions in the release are applied to prod first,
+and the release PR's checks pass. Higher-risk releases (migrations, RLS, auth,
+billing, the updater) are recommended for a hand-off to the other founder.
 
 ## Release tags
 
-Tag format: `alpha-X.Y.Z`, `beta-X.Y.Z`, then plain `X.Y.Z` for 1.0+.
-
-- `alpha-0.1.0`, `alpha-0.2.0` — alpha development. Bump `Y` per release;
-  reserve `Z` for hotfix tags on a previously-shipped alpha.
-- `beta-0.1.0`, `beta-0.2.0` — beta once the feature surface is stable and
-  we're hunting bugs.
-- `1.0.0`, `1.1.0`, `1.1.1` — regular SemVer once we're past beta.
-
-Every release tag points at a commit on `main`. Keep
-[`package.json`](./package.json) `version` field in sync with the tag.
+`vX.Y.Z`, SemVer on 1.x (`VERSION` is the single source). `/ship` picks the
+version from the release notes: any new feature → minor, otherwise patch, major
+only when asked. Every tag points at a release-PR merge commit on `develop`.
 
 ### Hotfix flow
 
-When `main` needs a fix but you don't want to bring in everything
-sitting on `develop`:
-
-1. Branch `hotfix/<owner>/<short-name>` off `main`.
-2. Fix + run the develop-tier testing gate.
-3. PR straight into `main`. Both devs sign off (same as a release).
-4. Tag with `Z` bumped — e.g. `alpha-0.3.0` → `alpha-0.3.1`.
-5. Cherry-pick or merge the hotfix back into `develop` so the fix isn't
-   lost on the next release.
+A fix ships like any release: land it on `develop`, then `/ship` a patch. A fix
+a real user is blocked by goes out the same day, on its own.
 
 ## CHANGELOG
 
-[CHANGELOG.md](./CHANGELOG.md) is updated on every `develop → main`
-release. Section per release tag, dated, with subsections for **Added /
-Changed / Fixed / Removed**. The release PR's description doubles as the
-changelog draft if you keep both in sync.
+[CHANGELOG.md](./CHANGELOG.md) is generated by `/ship` from the `.changes/`
+notes `/s3` writes; never edit it by hand.
 
 ## Conflict policy
 
 If a personal-branch PR into `develop` conflicts with the other dev's recent
-merge, the PR author resolves. If `develop → main` conflicts arise (rare),
-the dev whose work caused the conflict resolves and re-requests review.
+merge, the PR author resolves. A release PR
+conflicts only if `develop` moved; `/ship` re-prepares it.
 
 ## Commit style
 
@@ -175,17 +153,17 @@ These apply to every AI session in this repo regardless of tool:
 
 1. **Default base branch is the user's personal branch.** Unless told otherwise,
    `git checkout -b t/<owner>/<task> <owner>` is the right starting point. Never
-   branch from `main`. Never branch from `develop` unless explicitly
-   instructed.
-2. **Never push to `main` or `develop` directly.** Always go through a PR.
+   branch from `develop` unless explicitly instructed.
+2. **Never push to `develop` directly.** Always go through a PR. Never push a
+   release tag or run a prod workflow outside `/ship`.
 3. **Merging:** `/s3` has standing authorization to merge into the **personal**
    branch and, for bigger chunks, **personal → `develop`** (see AGENTS.md and
-   `/s3`). Never merge to `main` without both-devs sign-off. Never merge or
+   `/s3`). Never merge or
    close *someone else's* PRs.
 4. **Never delete branches without explicit authorization.** Especially personal
    or long-running ones.
 5. **`--force-push` only with `--force-with-lease`** and only on task branches
-   you own. Never force-push personal branches, `develop`, or `main`.
+   you own. Never force-push personal branches or `develop`.
 6. **Run `bun run verify` before any develop PR.**
 7. **Reference [AGENTS.md](./AGENTS.md) and [DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md)
    before touching UI.** They're the design contract.
@@ -200,7 +178,7 @@ Follow [AGENTS.md §Session start](./AGENTS.md#session-start).
 so it pre-fills automatically.)
 
 - [ ] Targets the correct base branch (`maciej` / `mike` for task PRs;
-      `develop` for personal sync; `main` only for releases).
+      `develop` for personal sync; `release/vX.Y.Z` only from `/ship`).
 - [ ] A short "Test this" (step → expected → surface) in the PR body.
 
 ## Branch model activation
@@ -211,21 +189,17 @@ Activated 2026-05-14:
 - `mike-backend`, `mike-ui-upgrade-modal`, and `design/settings-polish-delta`
   merged into `main` and deleted.
 - Mike's pre-split branch preserved as `archive/mike-original`.
-- The originally-planned rename of `main` was skipped; the release-quality
-  branch keeps the name `main`.
+- `main` stayed the release branch until Release v2; REL-6 (2026-10-19)
+  deleted it with `prod-app`, `staging-app` and `prod-landing`.
 
-## GitHub branch protection (pending)
+## GitHub branch protection
 
-Mike (admin) needs to apply via repo Settings → Branches:
-
-- **`main`**: require PR, require both devs' approvals, require status
-  checks to pass (`checks` workflow), require linear history, disallow
-  force-push, disallow deletion.
-- **`develop`**: require PR, require status checks to pass, disallow
-  force-push, disallow deletion. **Do not require approvals** — self-merge
-  is intentional so neither dev stalls.
-- **Personal branches** (`maciej`, `mike`): no protection — the owner is
-  free to push directly. (LLM agents are still constrained by the rules
-  above.)
-
-Until protection lands, the contract is honored by convention.
+- **`develop`**: ruleset "Protect develop": PR required, `static-checks`
+  required, no force-push, no deletion. No approvals required: self-merge is
+  intentional so neither dev stalls.
+- **`mike`, `maciej`**: ruleset "Keep personal branches": no deletion, no
+  force-push (it also stops GitHub's delete-on-merge from removing them after a
+  sync PR). The owner may push directly (the develop merge-back).
+- **Everything else**: GitHub deletes a PR's head branch on merge.
+- **Agents** are also held by `.claude/hooks/guard-git.sh` and
+  `guard-release.sh`.
