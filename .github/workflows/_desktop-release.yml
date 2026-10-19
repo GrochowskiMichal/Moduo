@@ -1,8 +1,9 @@
 name: Desktop Release (shared)
 
 # The one desktop build both channels call (desktop-release.yml = staging, desktop-release-prod.yml = production).
-# Builds a signed, notarised Mac universal .dmg + Windows NSIS installer and publishes them, with
-# a manifest for the in-app updater, to two places:
+# Builds a signed, notarised Mac universal .dmg (the website download), per-arch Mac updater bundles
+# (Apple Silicon, Intel) and a Windows NSIS installer, and publishes them, with a manifest for the
+# in-app updater, to two places:
 #   1. R2 bucket moduo-releases, served by the update server (infra/update-server): every file under
 #      desktop/<channel>/<version>/, never overwritten, then the channel's latest.json last.
 #   2. The rolling GitHub release in GrochowskiMichal/moduo-releases, but only up to the bridge.
@@ -20,9 +21,14 @@ name: Desktop Release (shared)
 # The fallback covers the update check only: the manifest's download URLs use UPDATE_SERVER_URL.
 # To re-issue a bridge (a broken bridge build), delete latest.json from the channel's GitHub release.
 #
-# Mac notarization is one Apple submission (the .dmg; Apple notarises the .app inside it too).
-# build-mac waits for Apple for a while; if Apple is slower than that, notarize-mac keeps waiting on
-# the same submission on its own, and "Re-run failed jobs" there never rebuilds or resubmits.
+# Mac (REL-5): one job builds the Apple Silicon .app, then the Intel .app, then the universal .app +
+# .dmg, which reuses both compiles. Each per-arch .app becomes its own updater bundle (about half the
+# universal one's size), so the manifest's darwin-aarch64 and darwin-x86_64 point at different files.
+# Notarization is three Apple submissions sent together: the .dmg (Apple notarises the universal .app
+# inside it too; stapled) and each per-arch .app as a zip (not stapled: updater-installed apps aren't
+# quarantined, and Gatekeeper checks the ticket online). build-mac waits for Apple for a while; if
+# Apple is slower than that, notarize-mac keeps waiting on the same submissions on its own, and
+# "Re-run failed jobs" there never rebuilds or resubmits.
 # Windows is best-effort: a broken Windows build still publishes the Mac release.
 #
 # The Mac build runs on Mike's Mac (self-hosted runner `moduo-mac`, set up by infra/mac-runner)
@@ -281,7 +287,7 @@ jobs:
           exit 1
 
   # ─────────────────────────────────────────────────────────────────
-  # macOS — universal binary (Apple Silicon + Intel), signed, submitted to Apple
+  # macOS — per-arch updater apps + universal .dmg, signed, submitted to Apple
   # ─────────────────────────────────────────────────────────────────
   build-mac:
     needs: [version, pick-runner]
@@ -451,18 +457,26 @@ jobs:
       # The persistent target dir still holds earlier versions' bundles; staging picks the first .dmg it finds.
       - name: Clear old bundles (moduo-mac)
         if: runner.environment == 'self-hosted'
-        run: rm -rf "${CARGO_TARGET_DIR:?}/universal-apple-darwin/release/bundle"
+        run: |
+          for t in aarch64-apple-darwin x86_64-apple-darwin universal-apple-darwin; do
+            rm -rf "${CARGO_TARGET_DIR:?}/$t/release/bundle"
+          done
 
-      # No APPLE_ID / APPLE_PASSWORD here on purpose: Tauri would notarize the .app and block on Apple,
-      # and the .dmg submission below covers the .app too. No APPLE_CERTIFICATE either: Tauri would import
+      # No APPLE_ID / APPLE_PASSWORD here on purpose: Tauri would notarize each .app and block on Apple;
+      # the submissions below do it without blocking. No APPLE_CERTIFICATE either: Tauri would import
       # a second copy into its own keychain, and codesign hung there for 1.5 h (run 37636171897).
-      - name: Build universal macOS .dmg + updater bundle (signed)
+      # Per-arch first, then universal: the universal build runs the same two cargo builds and finds
+      # them done, so it only adds lipo and bundling. The web bundle is built once, by the first build.
+      - name: Build per-arch macOS apps, then the universal .dmg (signed, with updater bundles)
         run: |
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
           cd "$DESKTOP_DIR"
-          bunx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/ci-tauri-config.json"
+          bunx tauri build --target aarch64-apple-darwin --bundles app --config "$RUNNER_TEMP/ci-tauri-config.json"
+          SKIP_WEB='{"build":{"beforeBuildCommand":""}}'
+          bunx tauri build --target x86_64-apple-darwin --bundles app --config "$RUNNER_TEMP/ci-tauri-config.json" --config "$SKIP_WEB"
+          bunx tauri build --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/ci-tauri-config.json" --config "$SKIP_WEB"
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -479,26 +493,50 @@ jobs:
           PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
 
       # Stable filenames so download URLs don't change between versions. The macOS updater
-      # installs the .app.tar.gz, not the .dmg.
+      # installs the .app.tar.gz, not the .dmg: Moduo_aarch64 and Moduo_x64 for the manifest's
+      # per-arch keys, and Moduo_universal for the one transition release that still carries the
+      # darwin-universal fallback key (see "Generate latest.json"). Each per-arch .app is also
+      # zipped for its notarization submission ($RUNNER_TEMP/notary, never published).
       - name: Verify signatures and stage artifacts
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          BUNDLE="${CARGO_TARGET_DIR:-$DESKTOP_DIR/src-tauri/target}/universal-apple-darwin/release/bundle"
-          APP=$(find "$BUNDLE/macos" -maxdepth 1 -name "*.app" | head -1)
-          DMG=$(find "$BUNDLE/dmg" -name "*.dmg" | head -1)
-          TGZ=$(find "$BUNDLE/macos" -name "*.app.tar.gz" | head -1)
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign -dv "$APP" 2>&1 | grep -q "flags=.*runtime" || { echo "::error::The app is not signed with the hardened runtime; Apple will reject it."; exit 1; }
+          TARGET_DIR="${CARGO_TARGET_DIR:-$DESKTOP_DIR/src-tauri/target}"
+          mkdir -p "$RUNNER_TEMP/mac" "$RUNNER_TEMP/notary"
+          # stage <rust target> <file stem> <expected lipo archs>
+          stage() {
+            local bundle="$TARGET_DIR/$1/release/bundle" app tgz bin
+            app=$(find "$bundle/macos" -maxdepth 1 -name "*.app" | head -1)
+            tgz=$(find "$bundle/macos" -maxdepth 1 -name "*.app.tar.gz" | head -1)
+            [ -n "$app" ] && [ -f "$tgz" ] && [ -f "$tgz.sig" ] || { echo "::error::$1: the .app, its .app.tar.gz or its .sig is missing in $bundle/macos."; exit 1; }
+            codesign --verify --deep --strict --verbose=2 "$app"
+            codesign -dv "$app" 2>&1 | grep -q "flags=.*runtime" || { echo "::error::$1: the app is not signed with the hardened runtime; Apple will reject it."; exit 1; }
+            bin="$app/Contents/MacOS/$(defaults read "$app/Contents/Info" CFBundleExecutable)"
+            [ "$(lipo -archs "$bin")" = "$3" ] || { echo "::error::$1: the binary is $(lipo -archs "$bin"), expected $3."; exit 1; }
+            cp "$tgz" "$RUNNER_TEMP/mac/$2.app.tar.gz"
+            cp "$tgz.sig" "$RUNNER_TEMP/mac/$2.app.tar.gz.sig"
+            APP_PATH="$app"
+          }
+          stage aarch64-apple-darwin Moduo_aarch64 arm64
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/notary/Moduo_aarch64.app.zip"
+          stage x86_64-apple-darwin Moduo_x64 x86_64
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/notary/Moduo_x64.app.zip"
+          stage universal-apple-darwin Moduo_universal "x86_64 arm64"
+          DMG=$(find "$TARGET_DIR/universal-apple-darwin/release/bundle/dmg" -name "*.dmg" | head -1)
           if ! codesign --verify "$DMG" 2>/dev/null; then
             codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" --keychain "$BUILD_KEYCHAIN" "$DMG"
           fi
-          mkdir -p "$RUNNER_TEMP/mac"
           cp "$DMG" "$RUNNER_TEMP/mac/Moduo_universal.dmg"
-          cp "$TGZ" "$RUNNER_TEMP/mac/Moduo_universal.app.tar.gz"
-          cp "$TGZ.sig" "$RUNNER_TEMP/mac/Moduo_universal.app.tar.gz.sig"
+          {
+            echo "| Updater bundle | Size |"
+            echo "| --- | --- |"
+            for f in Moduo_aarch64 Moduo_x64 Moduo_universal; do
+              echo "| \`$f.app.tar.gz\` | $(stat -f %z "$RUNNER_TEMP/mac/$f.app.tar.gz") bytes |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Submit the .dmg to Apple
+      # All three go to Apple before any wait, so Apple works on them at the same time.
+      - name: Submit the .dmg and the per-arch apps to Apple
         id: submit
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -511,10 +549,15 @@ jobs:
           ID=$(bash .ci/scripts/ci-macos-notarize.sh submit "$RUNNER_TEMP/mac/Moduo_universal.dmg")
           echo "$ID" > "$RUNNER_TEMP/mac/notary-id.txt"
           echo "id=$ID" >> "$GITHUB_OUTPUT"
-          echo "Apple notarization submission: \`$ID\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Apple notarization submission (.dmg): \`$ID\`" >> "$GITHUB_STEP_SUMMARY"
+          for arch in aarch64 x64; do
+            ID=$(bash .ci/scripts/ci-macos-notarize.sh submit "$RUNNER_TEMP/notary/Moduo_$arch.app.zip")
+            echo "$ID" > "$RUNNER_TEMP/mac/notary-id-$arch.txt"
+            echo "Apple notarization submission ($arch .app): \`$ID\`" >> "$GITHUB_STEP_SUMMARY"
+          done
 
       # Most submissions finish in a few minutes. A slower one is handed to notarize-mac.
-      - name: Wait for Apple (up to 20 min) and staple
+      - name: Wait for Apple (up to 20 min) and staple the .dmg
         id: wait
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -526,13 +569,13 @@ jobs:
           NOTARY_WAIT_TIMEOUT: 20m
         run: |
           set +e
-          bash .ci/scripts/ci-macos-notarize.sh wait "${{ steps.submit.outputs.id }}" "$RUNNER_TEMP/mac/Moduo_universal.dmg"
+          bash .ci/scripts/ci-macos-notarize.sh wait-all "$RUNNER_TEMP/mac"
           code=$?
           set -e
           case $code in
             0) echo "stapled=true" >> "$GITHUB_OUTPUT" ;;
             3) echo "stapled=false" >> "$GITHUB_OUTPUT"
-               echo "Apple is still processing; notarize-mac keeps waiting on the same submission." >> "$GITHUB_STEP_SUMMARY" ;;
+               echo "Apple is still processing; notarize-mac keeps waiting on the same submissions." >> "$GITHUB_STEP_SUMMARY" ;;
             *) exit "$code" ;;
           esac
 
@@ -545,7 +588,7 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────────
   # macOS — only when Apple was slower than build-mac's wait. Waits on the same
-  # submission; re-running this job never rebuilds or resubmits.
+  # submissions (the .dmg and both per-arch apps); re-running this job never rebuilds or resubmits.
   # ─────────────────────────────────────────────────────────────────
   notarize-mac:
     needs: build-mac
@@ -577,7 +620,7 @@ jobs:
           NOTARY_WAIT_TIMEOUT: 160m
         run: |
           set +e
-          bash scripts/ci-macos-notarize.sh wait "$(cat mac/notary-id.txt)" mac/Moduo_universal.dmg
+          bash scripts/ci-macos-notarize.sh wait-all mac
           code=$?
           set -e
           if [ "$code" = 3 ]; then
@@ -781,6 +824,10 @@ jobs:
       # Manifests for the Tauri in-app updater: one per host, the same apart from the download URLs.
       # Without a fresh Windows build the Windows entry is left out (no update offered) rather than
       # pointing at an older installer under a newer version.
+      # Mac (REL-5): darwin-aarch64 and darwin-x86_64 each point at their own per-arch bundle.
+      # TRANSITION ONLY: "darwin-universal" points at the universal bundle. Tauri never asks for that
+      # key; the update server falls back to it when a darwin-<arch> key is missing. Drop it, the
+      # Moduo_universal.app.tar.gz build and its uploads once one release has shipped per-arch keys.
       - name: Generate latest.json
         id: manifests
         env:
@@ -795,11 +842,16 @@ jobs:
               --arg version "$MODUO_VERSION" \
               --rawfile notes "$RUNNER_TEMP/notes.md" \
               --arg pub_date "$PUB_DATE" \
-              --arg mac_sig "$(cat Moduo_universal.app.tar.gz.sig)" \
-              --arg mac_url "$base/Moduo_universal.app.tar.gz" \
+              --arg arm_sig "$(cat Moduo_aarch64.app.tar.gz.sig)" \
+              --arg arm_url "$base/Moduo_aarch64.app.tar.gz" \
+              --arg x64_sig "$(cat Moduo_x64.app.tar.gz.sig)" \
+              --arg x64_url "$base/Moduo_x64.app.tar.gz" \
+              --arg uni_sig "$(cat Moduo_universal.app.tar.gz.sig)" \
+              --arg uni_url "$base/Moduo_universal.app.tar.gz" \
               '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {
-                 "darwin-aarch64": {signature: $mac_sig, url: $mac_url},
-                 "darwin-x86_64":  {signature: $mac_sig, url: $mac_url}}}' > "$out"
+                 "darwin-aarch64":   {signature: $arm_sig, url: $arm_url},
+                 "darwin-x86_64":    {signature: $x64_sig, url: $x64_url},
+                 "darwin-universal": {signature: $uni_sig, url: $uni_url}}}' > "$out"
             if [ -f Moduo_x64-setup.exe.sig ]; then
               jq --arg sig "$(cat Moduo_x64-setup.exe.sig)" --arg url "$base/Moduo_x64-setup.exe" \
                 '.platforms["windows-x86_64"] = {signature: $sig, url: $url}' "$out" > manifest.tmp && mv manifest.tmp "$out"
@@ -851,7 +903,7 @@ jobs:
           case "$STATUS" in
             404)
               cd release-artifacts
-              for f in Moduo_universal.dmg Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
+              for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_aarch64.app.tar.gz.sig Moduo_x64.app.tar.gz Moduo_x64.app.tar.gz.sig Moduo_universal.app.tar.gz Moduo_universal.app.tar.gz.sig Moduo_x64-setup.exe Moduo_x64-setup.exe.sig; do
                 [ -f "$f" ] || continue
                 put "$PREFIX/$f" "$f" application/octet-stream
               done
@@ -885,9 +937,13 @@ jobs:
               echo "::error::The update server answers ${got:-nothing}, not $MODUO_VERSION"; exit 1
             fi
           fi
-          curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/Moduo_universal.app.tar.gz"
-          code=$(curl -s -o /dev/null -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/aarch64/0.0.1")
-          echo "update check from 0.0.1 → $code (204 while the channel is paused or rolled out to 0%)"
+          for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_x64.app.tar.gz Moduo_universal.app.tar.gz; do
+            curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/$f"
+          done
+          for arch in aarch64 x86_64; do
+            code=$(curl -s -o check.json -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/$arch/0.0.1")
+            echo "darwin/$arch update check from 0.0.1 → $code $(jq -r '.url // empty' check.json 2>/dev/null) (204 while the channel is paused or rolled out to 0%)"
+          done
           echo "published=true" >> "$GITHUB_OUTPUT"
 
       # The bridge only (see the top of this file): builds before PLAT-6 only check GitHub. Runs
@@ -911,6 +967,8 @@ jobs:
             Download the desktop app or let the in-app updater install it automatically.
           files: |
             release-artifacts/Moduo_universal.dmg
+            release-artifacts/Moduo_aarch64.app.tar.gz
+            release-artifacts/Moduo_x64.app.tar.gz
             release-artifacts/Moduo_universal.app.tar.gz
             release-artifacts/Moduo_x64-setup.exe
             release-artifacts/latest.json

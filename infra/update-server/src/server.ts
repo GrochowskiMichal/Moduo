@@ -154,6 +154,12 @@ function rolloutSeed(request: Request): string {
   return `ip:${request.headers.get("cf-connecting-ip") ?? ""}`;
 }
 
+/** The manifest key of the universal Mac bundle. Tauri never asks for it; see checkForUpdate. */
+export const UNIVERSAL_MAC = "darwin-universal";
+
+const usable = (platform: Platform | undefined): platform is Platform =>
+  Boolean(platform?.url && platform.signature);
+
 function isManifest(value: unknown): value is Manifest {
   if (typeof value !== "object" || value === null) return false;
   const m = value as Manifest;
@@ -184,8 +190,15 @@ async function checkForUpdate(
   }
   if (!isManifest(manifest)) return noUpdate();
 
-  const platform = manifest.platforms[`${target}-${arch}`];
-  if (!platform?.url || !platform.signature) return noUpdate();
+  // Macs get their arch's own bundle (REL-5). A release that left an arch's key out falls back to
+  // the universal bundle while manifests still carry `darwin-universal` (one transition release).
+  const own = manifest.platforms[`${target}-${arch}`];
+  const platform = usable(own)
+    ? own
+    : target === "darwin"
+      ? manifest.platforms[UNIVERSAL_MAC]
+      : undefined;
+  if (!usable(platform)) return noUpdate();
   if (compareVersions(manifest.version, currentVersion) !== 1) return noUpdate();
 
   if (config.rollout < 100) {
