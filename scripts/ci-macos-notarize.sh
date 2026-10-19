@@ -3,9 +3,16 @@
 #
 #   ci-macos-notarize.sh check                 fail in seconds if Apple rejects the login
 #   ci-macos-notarize.sh submit <file>         upload without waiting, print the submission id
-#   ci-macos-notarize.sh wait <id> <file>      wait (bounded), staple on success, print Apple's log on rejection
+#   ci-macos-notarize.sh wait <id> [<file>]    wait (bounded), staple <file> on success, print Apple's log on rejection
 #
-# `wait` exits 0 when stapled, 1 when Apple rejected the build, 3 when Apple is still processing.
+# `wait` exits 0 when accepted (and stapled), 1 when Apple rejected the build, 3 when Apple is still
+# processing. Without <file> it staples nothing: a zipped .app (the per-arch updater apps) can't be
+# stapled, and Gatekeeper checks its ticket online.
+#
+#   ci-macos-notarize.sh wait-all <dir>        `wait` on every submission a Mac build made, in parallel:
+#                                              <dir>/notary-id.txt (the .dmg, stapled: <dir>/Moduo_universal.dmg)
+#                                              and each <dir>/notary-id-<arch>.txt (a zipped per-arch .app).
+#                                              Exits 1 if any was rejected, else 3 if any is still processing.
 #
 # Auth: the notarytool keychain profile NOTARY_KEYCHAIN_PROFILE (in NOTARY_KEYCHAIN) when set, as on
 # the moduo-mac runner; else an App Store Connect API key when APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8
@@ -22,7 +29,8 @@ if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then
   AUTH=(--keychain-profile "$NOTARY_KEYCHAIN_PROFILE" ${NOTARY_KEYCHAIN:+--keychain "$NOTARY_KEYCHAIN"})
 elif [[ -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" && -n "${APPLE_API_KEY_P8:-}" ]]; then
   KEY_PATH="${RUNNER_TEMP:-/tmp}/AuthKey_$(trim "$APPLE_API_KEY_ID").p8"
-  printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
+  # wait-all runs several of these at once: write the key once, never under a sibling's read.
+  [[ -s "$KEY_PATH" ]] || printf '%s\n' "$APPLE_API_KEY_P8" > "$KEY_PATH"
   AUTH=(--key "$KEY_PATH" --key-id "$(trim "$APPLE_API_KEY_ID")" --issuer "$(trim "$APPLE_API_ISSUER")")
 else
   for v in APPLE_ID APPLE_ID_PASSWORD APPLE_TEAM_ID; do
@@ -74,7 +82,7 @@ for s in pending[:5]:
     ;;
 
   wait)
-    id="$1"; file="$2"
+    id="$1"; file="${2:-}"
     timeout="${NOTARY_WAIT_TIMEOUT:-60m}"
     echo "Waiting up to $timeout for Apple to finish submission ${id}..."
     set +e
@@ -86,8 +94,10 @@ except Exception: print("")' 2>/dev/null || true)
     echo "Apple status: ${status:-unknown}"
     case "$status" in
       Accepted)
-        with_retry xcrun stapler staple "$file"
-        xcrun stapler validate "$file"
+        if [[ -n "$file" ]]; then
+          with_retry xcrun stapler staple "$file"
+          xcrun stapler validate "$file"
+        fi
         ;;
       Invalid|Rejected)
         echo "::error::Apple rejected the build. Its log:"
@@ -102,8 +112,35 @@ except Exception: print("")' 2>/dev/null || true)
     esac
     ;;
 
+  wait-all)
+    dir="$1"
+    [[ -f "$dir/notary-id.txt" ]] || { echo "::error::$dir/notary-id.txt is missing."; exit 1; }
+    pids=(); names=()
+    bash "$0" wait "$(cat "$dir/notary-id.txt")" "$dir/Moduo_universal.dmg" > "$dir/.notary-dmg.log" 2>&1 &
+    pids+=($!); names+=(dmg)
+    for idfile in "$dir"/notary-id-*.txt; do
+      [[ -f "$idfile" ]] || continue
+      arch="${idfile##*/notary-id-}"; arch="${arch%.txt}"
+      bash "$0" wait "$(cat "$idfile")" > "$dir/.notary-$arch.log" 2>&1 &
+      pids+=($!); names+=("$arch")
+    done
+    rejected=0; pending=0
+    for i in "${!pids[@]}"; do
+      set +e; wait "${pids[$i]}"; code=$?; set -e
+      echo "── ${names[$i]} (exit $code)"
+      cat "$dir/.notary-${names[$i]}.log"; rm -f "$dir/.notary-${names[$i]}.log"
+      case $code in
+        0) ;;
+        3) pending=1 ;;
+        *) rejected=1 ;;
+      esac
+    done
+    [[ $rejected = 0 ]] || exit 1
+    [[ $pending = 0 ]] || exit 3
+    ;;
+
   *)
-    echo "usage: $0 check | submit <file> | wait <id> <file>" >&2
+    echo "usage: $0 check | submit <file> | wait <id> [<file>] | wait-all <dir>" >&2
     exit 2
     ;;
 esac
