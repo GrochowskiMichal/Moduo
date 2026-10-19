@@ -44,24 +44,25 @@ export const DESKTOP_CHANNEL: DesktopChannel | null = resolveDesktopChannel();
 /** Staging builds only — drives the STAGING badge on the login page. */
 export const IS_STAGING_PORTAL = DESKTOP_CHANNEL === "staging";
 
-// Public releases-only repo (installers + auto-update manifests, no source) — no GitHub login needed.
-const RELEASE_BASE = "https://github.com/GrochowskiMichal/moduo-releases/releases/download";
+// The update server (infra/update-server) redirects `latest/<file>` to the channel's current
+// version. The GitHub moduo-releases `*-latest` releases are frozen bridges for old installs.
+const DOWNLOAD_BASE = "https://updates.moduo.app/download/desktop";
 
 export type DesktopDownload = { platform: "mac" | "windows"; label: string; href: string };
 
-/** Signed-in Settings → About installers for a channel (rolling `<tag>-latest` GitHub release). */
+/** Signed-in Settings → About installers for a channel (its current version on the update server). */
 export function desktopDownloads(channel: DesktopChannel): DesktopDownload[] {
-  const tag = channel === "production" ? "prod-latest" : "staging-latest";
+  const base = `${DOWNLOAD_BASE}/${channel}/latest`;
   return [
     {
       platform: "mac",
       label: "Download for Mac",
-      href: `${RELEASE_BASE}/${tag}/Moduo_universal.dmg`,
+      href: `${base}/Moduo_universal.dmg`,
     },
     {
       platform: "windows",
       label: "Download for Windows",
-      href: `${RELEASE_BASE}/${tag}/Moduo_x64-setup.exe`,
+      href: `${base}/Moduo_x64-setup.exe`,
     },
   ];
 }

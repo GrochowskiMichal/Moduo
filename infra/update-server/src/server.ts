@@ -16,6 +16,13 @@
 export interface Bucket {
   get(key: string): Promise<StoredObject | null>;
   head(key: string): Promise<Omit<StoredObject, "body" | "text"> | null>;
+  list(options: { prefix: string; delimiter: string; cursor?: string }): Promise<Listing>;
+}
+
+export interface Listing {
+  delimitedPrefixes: string[];
+  truncated: boolean;
+  cursor?: string;
 }
 
 export interface StoredObject {
@@ -241,6 +248,78 @@ async function download(
   return new Response(head ? null : (object as StoredObject).body, { headers });
 }
 
+/**
+ * The newest version folder in a channel, older than `ceiling`, that holds `file`. Release
+ * folders are never deleted, so this finds the last build that had it (Windows is optional per
+ * release: a run whose Windows build failed still publishes the Mac files).
+ */
+const LATEST_FILES = new Set(["Moduo_universal.dmg", "Moduo_x64-setup.exe"]);
+/** How many older version folders the fallback tries (one HEAD each) before giving up. */
+const FALLBACK_TRIES = 10;
+
+async function newestWith(
+  env: Env,
+  channel: Channel,
+  ceiling: string,
+  file: string,
+): Promise<string | null> {
+  const prefix = `desktop/${channel}/`;
+  const versions: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await env.RELEASES.list({ prefix, delimiter: "/", cursor });
+    for (const folder of page.delimitedPrefixes) {
+      const version = folder.slice(prefix.length, -1);
+      const order = compareVersions(version, ceiling);
+      if (order !== null && order < 0) versions.push(version);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  versions.sort((a, b) => compareVersions(b, a) ?? 0);
+  for (const version of versions.slice(0, FALLBACK_TRIES)) {
+    if (await env.RELEASES.head(`${prefix}${version}/${file}`)) return version;
+  }
+  return null;
+}
+
+/**
+ * /download/desktop/<channel>/latest/<file>: a 302 to the file in the channel's current
+ * version, for the in-app "Download" buttons. It follows latest.json as published and ignores
+ * the rollout and the kill switch: those pace updates of installed copies, while a new download
+ * should get the newest build. To stop handing out a bad build, point latest.json back
+ * (docs/release.md §5). When the current version lacks the file, it falls back to the newest
+ * older version that has it (of the last few); with none, a 404. Only the installers are
+ * served this way, so a made-up name can't make it scan the bucket.
+ */
+async function downloadLatest(
+  request: Request,
+  env: Env,
+  channel: Channel,
+  file: string,
+): Promise<Response> {
+  if (!LATEST_FILES.has(file)) return notFound();
+  const object = await env.RELEASES.get(`desktop/${channel}/latest.json`);
+  if (!object) return notFound();
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(await object.text());
+  } catch {
+    return notFound();
+  }
+  if (!isManifest(manifest) || !SEMVER.test(manifest.version)) return notFound();
+  const version = (await env.RELEASES.head(`desktop/${channel}/${manifest.version}/${file}`))
+    ? manifest.version
+    : await newestWith(env, channel, manifest.version, file);
+  if (!version) return notFound();
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: new URL(`/download/desktop/${channel}/${version}/${file}`, request.url).toString(),
+      "cache-control": "no-store",
+    },
+  });
+}
+
 export async function handle(request: Request, env: Env): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
@@ -280,10 +359,11 @@ export async function handle(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // /download/desktop/<channel>/<version>/<file>
+  // /download/desktop/<channel>/<version>/<file>, or latest/<file> for the current version
   if (parts.length === 5 && parts[0] === "download" && parts[1] === "desktop") {
     const [, , channel, version, file] = parts as [string, string, string, string, string];
     if (!isChannel(channel)) return notFound();
+    if (version === "latest") return downloadLatest(request, env, channel, file);
     return download(request, env, channel, version, file);
   }
 
