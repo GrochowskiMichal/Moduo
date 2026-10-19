@@ -61,7 +61,7 @@ This spec makes a release one guarded step:
 - **Two releases started at once:** `release.yml` has a concurrency group per channel and queues the second. `/ship` refuses to open a second release PR while one is open.
 - **What's new with no notes for the installed version** (a build from before this spec): no toast. About still lists the history.
 - **Reload prompt while offline or on an old build** whose `/config.json` lacks `build`: no prompt.
-- **Per-arch updater bundle missing** (one arch failed): the Mac build fails and nothing is published (REL-5: safer than a half release). If a manifest ever lacks a Mac arch's key, the update server falls back to the `darwin-universal` key while manifests carry it; otherwise no update is offered for that arch.
+- **Per-arch updater bundle missing** (one arch failed): the Mac build fails and nothing is published (REL-5: safer than a half release). If a manifest ever lacks a Mac arch's key, no update is offered for that arch (the `darwin-universal` fallback ended after production 1.2.1).
 - **Deleting branches:** only branches fully merged into `develop` are deleted automatically. Unmerged `claude/*` and `t/*` branches are listed for Mike to approve one by one.
 
 ## Acceptance criteria
@@ -139,7 +139,7 @@ This spec makes a release one guarded step:
 
 - Build per-arch `.app` bundles (`--target aarch64-apple-darwin`, then `x86_64-apple-darwin`), then the universal `.dmg` (`--target universal-apple-darwin`, reusing the two compiles from cache), all in the one Mac job. The Mac runner can't run two jobs at once, and per-arch compile on an M4 is about 65 s each.
 - Each per-arch `.app` is notarized (zip submission, in parallel with the `.dmg`). The updater tarballs aren't stapled: updater-installed apps aren't quarantined, and the ticket is checked online.
-- The manifest gets per-arch URLs. The universal `.app.tar.gz` is still produced for one release as the fallback key, then dropped.
+- The manifest gets per-arch URLs. The universal `.app.tar.gz` was published for one transition release as the fallback key, then dropped after production 1.2.1.
 - *Rejected:* separate Mac jobs per arch (there's only one Mac runner, and it doubles fallback cost); per-arch `.dmg` on the website (arch detection in browsers is unreliable).
 
 **Branches:**

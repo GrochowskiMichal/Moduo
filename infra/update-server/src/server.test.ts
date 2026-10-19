@@ -116,7 +116,6 @@ describe("update check", () => {
         "desktop/staging/latest.json": manifest("1.2.0-rc.60", [
           "darwin-aarch64",
           "darwin-x86_64",
-          "darwin-universal",
           "windows-x86_64",
         ]),
       },
@@ -131,26 +130,14 @@ describe("update check", () => {
     }
   });
 
-  it("falls back to the universal Mac bundle when an arch's key is missing", async () => {
+  it("answers 204 for a Mac arch the release left out, even with a universal key", async () => {
     const { call } = setup({
       files: {
-        "desktop/staging/latest.json": manifest("1.2.0-rc.60", [
+        "desktop/staging/latest.json": manifest("1.2.0-rc.61", [
           "darwin-aarch64",
           "darwin-universal",
         ]),
       },
-    });
-    expect(await (await call("/desktop/staging/darwin/x86_64/1.2.0-rc.3")).json()).toMatchObject({
-      url: `${BASE}/download/desktop/x/1.2.0-rc.60/darwin-universal`,
-      signature: "sig-darwin-universal",
-    });
-    // Only the Mac falls back: Windows still gets nothing without its own key.
-    expect((await call("/desktop/staging/windows/x86_64/1.2.0-rc.3")).status).toBe(204);
-  });
-
-  it("answers 204 for a missing Mac arch once the universal key is dropped", async () => {
-    const { call } = setup({
-      files: { "desktop/staging/latest.json": manifest("1.2.0-rc.61", ["darwin-aarch64"]) },
     });
     expect((await call("/desktop/staging/darwin/x86_64/1.2.0-rc.3")).status).toBe(204);
     expect((await call("/desktop/staging/darwin/aarch64/1.2.0-rc.3")).status).toBe(200);
