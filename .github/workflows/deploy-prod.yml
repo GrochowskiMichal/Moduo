@@ -69,8 +69,9 @@ jobs:
   web:
     needs: resolve
     uses: ./.github/workflows/_deploy-web.yml
-    secrets:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    # inherit is required for the called jobs to see their environment's secrets (an explicit
+    # list leaves them empty); the sensitive ones live only in those environments.
+    secrets: inherit
     with:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ inputs.tag }}

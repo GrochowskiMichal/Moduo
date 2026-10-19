@@ -27,10 +27,6 @@ on:
         required: false
         type: string
         default: both
-    # The Cloudflare token lives in the jobs' environment; only the account id is passed.
-    secrets:
-      CLOUDFLARE_ACCOUNT_ID:
-        required: false
 
 permissions:
   contents: read

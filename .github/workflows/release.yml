@@ -97,8 +97,9 @@ jobs:
       group: deploy-web-production
       cancel-in-progress: false
     uses: ./.github/workflows/_deploy-web.yml
-    secrets:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    # inherit is required for the called jobs to see their environment's secrets (an explicit
+    # list leaves them empty); the sensitive ones live only in those environments.
+    secrets: inherit
     with:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ github.ref_name }}
@@ -115,10 +116,9 @@ jobs:
     permissions:
       contents: read
       actions: write
-    secrets:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-      RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+    # inherit is required for the called jobs to see their environment's secrets (an explicit
+    # list leaves them empty); the sensitive ones live only in those environments.
+    secrets: inherit
     with:
       channel: production
       # The commit resolve checked, so a moved tag can't swap in an unchecked one.
