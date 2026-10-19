@@ -26,7 +26,7 @@ You each want a stable **$8–10k a month** before you stop other projects. That
 
 - **The line to watch is pay, not infrastructure.** Every $1,000 a month of founder pay needs about **90 more paid seats at $12**, or 140 at $8. Infrastructure is under 3% of the full-time cost base.
 - **How far away that is.** You have no waitlist yet, so there's no real ramp to model. Freemium tools often convert **about 2–5% of free signups** to paid (an estimate, not a Moduo number). At that rate, 1,500 paid seats means roughly **30,000–75,000 people trying the free plan**.
-- **Founding pricing is expensive at this scale.** Locking the first ~1,000 members at $8 for as long as they stay subscribed raises the full-time break-even from 1,483 seats to about **1,800** (1,000 at $8 plus about 800 more at $12).
+- **Founding pricing is expensive at this scale.** Locking the first ~1,000 members at $8 for as long as they stay subscribed raises the full-time break-even from 1,483 seats to about **1,840** (1,000 at $8 plus about 840 more at $12).
 
 ## Three ways to bring the full-time target closer
 
