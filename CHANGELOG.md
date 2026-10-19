@@ -5,6 +5,16 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.2.0 · 2026-10-19
+
+### New
+
+- After an update, Moduo tells you once what changed. Earlier releases are in Settings, under About, and on the changelog page of our website.
+
+### Improved
+
+- A browser tab left open across an update now offers a reload, and never reloads on its own.
+
 ## 1.1.0 · 2026-10-18
 
 ### Improved
