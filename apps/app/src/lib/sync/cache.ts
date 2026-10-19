@@ -7,9 +7,10 @@
 // richer store goes.
 //
 // Records are keyed `<person>:<workspace>`, so one browser never shows a
-// person another's copy; every copy is wiped on sign-out (account deletion
-// signs out too), and when someone else signs in on the device every copy but
-// theirs goes. A copy holds only the rows the views read: never a token, key
+// person another's copy. On sign-out, and when someone else signs in on the
+// device, every copy but theirs is cut down to what still waits to sync (no
+// rows), kept under its person's key until they sign in here again; account
+// deletion wipes everything. A copy holds only the rows the views read: never a token, key
 // or session, comments without their text, files as marks only (no name, path
 // or size), no time entries or agent sessions.
 // Where IndexedDB is missing (tests, a locked-down browser) there is no copy:
@@ -53,7 +54,9 @@ export interface SyncCache {
     key: string,
     next: (stored: CachedWorkspace | null) => CachedWorkspace,
   ): Promise<CachedWorkspace | null>;
-  /** Wipe every copy (sign-out). */
+  /** Every record's key. */
+  keys(): Promise<string[]>;
+  /** Wipe every copy (account deletion). */
   clear(): Promise<void>;
   /** Wipe the copies whose key matches (another person's, a workspace you left). */
   deleteWhere(match: (key: string) => boolean): Promise<void>;
@@ -85,6 +88,9 @@ export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspac
       const before = stored ? structuredCloneSafe(stored) : null;
       records.set(key, structuredCloneSafe(next(before)));
       return before;
+    },
+    async keys() {
+      return [...records.keys()];
     },
     async clear() {
       records.clear();
@@ -192,6 +198,14 @@ export function idbCache(factory: IDBFactory): SyncCache {
         return null;
       }
     },
+    async keys() {
+      try {
+        const keys = (await requestToPromise((await tx("readonly")).getAllKeys())) as IDBValidKey[];
+        return keys.filter((key): key is string => typeof key === "string");
+      } catch {
+        return [];
+      }
+    },
     async clear() {
       try {
         await requestToPromise((await tx("readwrite")).clear());
@@ -220,6 +234,7 @@ export const noCache: SyncCache = {
   read: async () => null,
   write: async () => {},
   update: async () => null,
+  keys: async () => [],
   clear: async () => {},
   deleteWhere: async () => {},
 };

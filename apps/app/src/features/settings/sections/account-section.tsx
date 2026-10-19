@@ -8,7 +8,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
-import { wipeSyncCopies } from "../../../lib/sync/store";
+import { waitingSyncCount, wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
@@ -112,8 +112,9 @@ export function AccountSection() {
           forgetFocusUser(userId);
           forgetRunUser(userId);
           forgetCaptureDrafts(userId);
-          // The Tasks device copy (TV-D11a): the account is gone, so is its copy.
-          void wipeSyncCopies();
+          // The Tasks device copy (TV-D11a): the account is gone, so is its copy
+          // (what still waited to sync too: there is no account to send it to).
+          void wipeSyncCopies({ keepWaiting: false });
           void wipeChatCopies();
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
@@ -276,7 +277,17 @@ export function AccountSection() {
     setIsPhraseVisible(true);
   };
 
-  const handleLogout = async () => {
+  // Writes still waiting to sync when "Log out" was pressed: say so first. They
+  // stay on this device and go out the next time this person signs in here.
+  const [unsyncedOnLogout, setUnsyncedOnLogout] = useState(0);
+
+  const handleLogout = async (opts: { anyway?: boolean } = {}) => {
+    const waiting = waitingSyncCount();
+    if (waiting > 0 && !opts.anyway) {
+      setUnsyncedOnLogout(waiting);
+      return;
+    }
+    setUnsyncedOnLogout(0);
     try {
       await signOut();
     } finally {
@@ -536,16 +547,46 @@ export function AccountSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-lg text-foreground">Session</h3>
         <p className="mt-1 text-sm text-muted-foreground">Sign out of Moduo on this device.</p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          onClick={() => void handleLogout()}
-        >
-          <LogOut className="size-4" aria-hidden />
-          Log out
-        </Button>
+        {unsyncedOnLogout > 0 ? (
+          <div className="mt-4" role="alert">
+            <p className="text-sm text-foreground">
+              {unsyncedOnLogout === 1
+                ? "1 change hasn't synced yet."
+                : `${unsyncedOnLogout} changes haven't synced yet.`}{" "}
+              It stays on this device and syncs the next time you sign in here.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleLogout({ anyway: true })}
+              >
+                <LogOut className="size-4" aria-hidden />
+                Log out anyway
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setUnsyncedOnLogout(0)}
+              >
+                Stay signed in
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={() => void handleLogout()}
+          >
+            <LogOut className="size-4" aria-hidden />
+            Log out
+          </Button>
+        )}
       </section>
 
       {/* Danger zone — delete account (cloud accounts only; local-vault future-lite

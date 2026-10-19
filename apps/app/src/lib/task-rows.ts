@@ -78,6 +78,18 @@ export function localDayOf(iso: string | null | undefined): string | null {
 }
 
 /**
+ * A patch that sets the due date also sets `dueOn`, the day it stands for on
+ * this device (TV-D9), so the copy never shows a new date with an old day.
+ * One that sets `dueOn` itself (a repeat's occurrence) keeps it.
+ */
+export function withDueOn<T extends { dueDate?: string | null; dueOn?: string | null }>(
+  patch: T,
+): T {
+  if (patch.dueDate === undefined || patch.dueOn !== undefined) return patch;
+  return { ...patch, dueOn: localDayOf(patch.dueDate) };
+}
+
+/**
  * A due date (YYYY-MM-DD) as the instant the app's date readers expect: its
  * local midnight on this device. So every viewer sees the same date (TV-D9),
  * whatever their zone.

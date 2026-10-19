@@ -19,10 +19,14 @@ const h = rs.hoisted(() => {
   const state: {
     cloud: Record<string, unknown> | null;
     setPatches: Record<string, unknown>[];
-  } = { cloud: null, setPatches: [] };
+    getError: Error | null;
+  } = { cloud: null, setPatches: [], getError: null };
   const runtime = {
     preferences: {
-      get: async () => state.cloud,
+      get: async () => {
+        if (state.getError) throw state.getError;
+        return state.cloud;
+      },
       set: async (patch: Record<string, unknown>) => {
         state.setPatches.push(patch);
         state.cloud = { ...(state.cloud ?? emptyRow()), ...patch };
@@ -39,10 +43,13 @@ rs.mock("./runtime", () => ({
 }));
 
 import {
+  getSyncMeta,
   invalidateCloudPrefs,
+  isDomainReconciled,
   nowIso,
   pushDomain,
   reconcileDomain,
+  setDomainReconciledForTest,
   setSyncMeta,
 } from "./prefs-sync";
 
@@ -50,7 +57,9 @@ beforeEach(() => {
   localStorage.clear();
   h.state.cloud = null;
   h.state.setPatches = [];
+  h.state.getError = null;
   invalidateCloudPrefs();
+  setDomainReconciledForTest("preferences", null);
 });
 
 describe("preferences domain — prefs-sync routing (DF-19f)", () => {
@@ -127,5 +136,47 @@ describe("preferences domain — prefs-sync routing (DF-19f)", () => {
       preferencesUpdatedAt: localTs,
     });
     expect(applied).toHaveLength(0);
+  });
+
+  it("a failed cloud read applies and pushes nothing (it is not 'no row')", async () => {
+    // The account has real prefs, but this read fails (network, 5xx, RLS hiccup).
+    h.state.cloud = {
+      ...h.emptyRow(),
+      preferences: { landingView: "email" },
+      preferencesUpdatedAt: "2026-07-12T12:00:00.000Z",
+    };
+    h.state.getError = new Error("network down");
+    // Local belongs to a different prior user: the "no row" branch would reset to
+    // defaults and push them over the account's real row.
+    setSyncMeta("preferences", { userId: "user-old", updatedAt: null, dirty: false });
+    const applied: unknown[] = [];
+    const outcome = await reconcileDomain({
+      domain: "preferences",
+      userId: "user-D",
+      localValue: { landingView: "tasks" },
+      defaults: { landingView: "home" },
+      sanitizeCloud: (raw) => raw,
+      apply: (v) => applied.push(v),
+    });
+    expect(outcome).toBe("error");
+    expect(h.state.setPatches).toHaveLength(0);
+    expect(applied).toHaveLength(0);
+    expect(getSyncMeta("preferences").userId).toBe("user-old");
+    expect(isDomainReconciled("preferences", "user-D")).toBe(false);
+
+    // The retry, once the read works, adopts the account's real value.
+    h.state.getError = null;
+    const retried = await reconcileDomain({
+      domain: "preferences",
+      userId: "user-D",
+      localValue: { landingView: "tasks" },
+      defaults: { landingView: "home" },
+      sanitizeCloud: (raw) => raw,
+      apply: (v) => applied.push(v),
+    });
+    expect(retried).toBe("ok");
+    expect(applied).toEqual([{ landingView: "email" }]);
+    expect(h.state.setPatches).toHaveLength(0);
+    expect(isDomainReconciled("preferences", "user-D")).toBe(true);
   });
 });

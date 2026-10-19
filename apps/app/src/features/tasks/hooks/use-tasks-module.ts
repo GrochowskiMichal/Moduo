@@ -26,7 +26,7 @@ import type { ProjectFields } from "../../../lib/runtime.web.structure";
 import { isNetworkError } from "../../../lib/sync/network";
 import { useStoreSnapshot, useWorkspaceStore } from "../../../lib/sync/react";
 import type { OverlayChange, PendingWrite } from "../../../lib/sync/store";
-import { dueOnToLocalInstant, editableTaskFields } from "../../../lib/task-rows";
+import { dueOnToLocalInstant, editableTaskFields, withDueOn } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import type { FocusTaskRef } from "../../focus/engine";
 import { focusOn } from "../../focus/timer";
@@ -658,9 +658,15 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
           : null;
       const shown = { ...optimistic, ...toTodo, updatedAt: new Date().toISOString() };
       const queueing = opts.offline;
-      // Offline (or a capture still waiting to sync): a check-off waits on the
-      // device, behind the capture; anything else says "Offline".
-      if (store.isOffline() || store.isQueuedCreate(id)) {
+      // Offline, a capture still waiting to sync, or an older check-off still
+      // waiting for this task: a check-off waits on the device, behind them (sent
+      // live it would land first and the older one would win); anything else
+      // says "Offline" (or "still saving" for a waiting capture).
+      if (
+        store.isOffline() ||
+        store.isQueuedCreate(id) ||
+        (queueing && store.hasOutboxEntries(id))
+      ) {
         if (!queueing) {
           if (store.isOffline()) sayOffline();
           else toast.error(STILL_SAVING);
@@ -1243,6 +1249,8 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     (id: string, patch: Partial<Task>) => {
       const existing = tasksRef.current.find((t) => t.id === id);
       if (!existing || archivedBlocked(id)) return;
+      // A new due date shows its day at once too (as bulk edits do).
+      patch = withDueOn(patch);
       // A status by category (or a legacy value: the checkbox, Won't do)
       // shows the project's status for it at once (TV-D9); the server is told
       // the category, and picks the same one (or keeps one already in it).
