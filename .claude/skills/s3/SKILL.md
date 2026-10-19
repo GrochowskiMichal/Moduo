@@ -16,7 +16,7 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
 - **Lean mode (pre-alpha):** a Tier 2 diff needs the `validator` subagent, nothing more. `/code-review ultra`, the `claude-security` scan and per-PR `/code-review` are paused until the live beta (designer's call, 2026-10-15 and 2026-10-16): don't run, ask for or block on them.
 - Force-push only your own task branch, only with `--force-with-lease`.
 
-Shipping to prod is not part of `/s3`: it follows [docs/release.md](../../../docs/release.md).
+Shipping to prod is not part of `/s3`: that is `/ship` ([docs/release.md](../../../docs/release.md)).
 
 ## Steps
 1. **Test this.** Put 3 to 5 steps (step → expected → surface) in the PR body, live-verified where you can. No `docs/testing/` file unless the designer asks.
