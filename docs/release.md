@@ -1,14 +1,24 @@
 # Release runbook
 
-How a change gets from `develop` to prod: database, Edge Functions, web, desktop, then a check of what is live. Why it works this way: [decisions/workflow.md](./decisions/workflow.md) (2026-10-17, 2026-10-14, 2026-10-09). Traps: [gotchas/supabase.md](./gotchas/supabase.md), [gotchas/build-ci.md](./gotchas/build-ci.md).
+How a change gets from `develop` to prod. **`/ship` is the only way to release** (since REL-3, 2026-10-19): it prepares the release, asks one question and does the rest; this file is what it runs and what to do by hand when something breaks. Why it works this way: [decisions/workflow.md](./decisions/workflow.md) (2026-10-19, 2026-10-17, 2026-10-14). Traps: [gotchas/supabase.md](./gotchas/supabase.md), [gotchas/build-ci.md](./gotchas/build-ci.md).
 
-Every prod database or function action asks a human first (`guard-prod-db.sh`). Record each release in [specs/BUILD_LOG.md](../specs/BUILD_LOG.md) (the Chat v2 release record is the model).
+Every prod database or function action asks a human first (`guard-prod-db.sh`). Every release tag and prod workflow run needs `/ship`'s approval (`guard-release.sh`).
 
-## 1. When a train runs
+## 1. Releasing: `/ship`
 
-Blocks land on the personal branch, then sync to `develop` in batches. Prod ships as a **train**, on the first of: two syncs on `develop`, two weeks, or a fix a real user is blocked by (that one goes alone, the same day).
+Blocks land on the personal branch with a release note (`.changes/`, written by `/s3`), then sync to `develop` in batches. When `develop` has something worth shipping, either founder runs **`/ship`** in Claude ([.claude/skills/ship/SKILL.md](../.claude/skills/ship/SKILL.md)):
 
-**Risky trains ship small.** Anything touching billing, auth, account deletion, RLS/policies or `moduo-mcp` (Tier 2) is its own small train, never bundled into a large one.
+1. **Preflight** (read-only): no other release PR open and no release running; the notes since the last `vX.Y.Z` tag (`changes.ts status` and the leak check `lint:notes`); a release PR merged without its tag (it offers to tag it) and the next version (any `new` note → minor, else patch); the risk label (**Higher** when the release touches migrations, RLS/policies, auth, billing, account deletion, `moduo-mcp`, the updater or signing; else **Normal**); whether desktop will build (§5).
+2. **Manual prerequisites:** `git diff --name-only <last tag>..origin/develop -- supabase/migrations supabase/functions`. Anything listed stops `/ship` until you confirm it's applied to prod by §2–3. `/ship` never applies it.
+3. **One question:** ship it yourself now, or hand it to the other founder (Mike `GrochowskiMichal` ↔ Maciej `En5hi`). Higher risk recommends the hand-off; nothing is forced.
+4. **Either way** it opens the PR **Release X.Y.Z** (`release/vX.Y.Z → develop`): `changes.ts prepare` bumps `VERSION`, adds the release to `release-notes/releases.json`, rewrites `CHANGELOG.md` and removes the consumed notes. The PR body is the release summary and the record of the release.
+   - **Ship now:** it waits for the PR's checks (failing → it stops, no tag), merges with a merge commit, writes the one-time marker `.claude/release-approved/X.Y.Z` (gitignored), pushes the annotated tag `vX.Y.Z` on the merge commit, watches `release.yml` (§4) and reports what's live (§6).
+   - **Hand off:** the PR stays open, assigned to the other founder. `/ship vX.Y.Z` (from either of you) finishes it.
+5. **Nothing user-facing** since the last tag: `/ship` asks whether to ship a patch with "Reliability improvements." or not ship.
+
+**Risky releases ship small.** Anything Higher-risk ships on its own, not bundled into a large release, and a fix a real user is blocked by goes out the same day.
+
+**By hand** (only if `/ship` can't run): a person runs the same steps in a terminal; `guard-release.sh` only sees Claude's commands, so nothing blocks a person. An agent never writes the marker itself: only `/ship` does, after the person answers "Ship now" (or "Ship Release X.Y.Z now?" on a resume). The marker works once, for 60 minutes.
 
 ## 2. Database migrations
 
@@ -20,7 +30,7 @@ Before either path:
 - **Check prod's real function bodies first.** A migration that `CREATE OR REPLACE`s a function must start from prod's `pg_get_functiondef`, not from this branch's newest file, or it silently drops another branch's change. Restate grants by name.
 - Stamp files in the order they will be applied.
 
-**Many files (a train): a scratch-folder push.**
+**Many files (a big release): a scratch-folder push.**
 
 1. Make a scratch folder with `supabase/migrations/` holding only the release files, plus one empty placeholder file per version prod already has.
 2. Dry run: `supabase db push --include-all --skip-vault --dry-run`. It must list only the release files.
@@ -68,9 +78,9 @@ Every PR that touches the app or the landing also gets a preview URL comment on 
 3. `desktop` builds and publishes the production desktop app from the tag's commit (§5), but only when `apps/app`, `apps/desktop`, `packages`, `supabase/functions/_shared`, `assets`, `bun.lock`, `package.json`, `tsconfig.base.json` or `.bun-version` changed since the tag of the version production desktop runs now (`updates.moduo.app/desktop/production/latest.json`). Otherwise the summary says "Desktop: skipped" and why. With no tag for that version (the first tag release), it always builds.
 4. `notes` creates the GitHub release `vX.Y.Z` on **GrochowskiMichal/moduo-releases** with that version's notes from `releases.json`.
 
-`/ship` (REL-3) will make the release PR, merge it and push the tag. Until then, by hand: run `bun scripts/release/changes.ts prepare` on a branch (it bumps `VERSION`, adds the release to `releases.json`, rewrites `CHANGELOG.md` and removes the consumed notes), merge it into `develop` through a PR, then `git tag -a vX.Y.Z -m "Moduo X.Y.Z" <merge commit>` and push the tag. Releases run one at a time (`release-production`); GitHub keeps only one waiting, so a third tag cancels the waiting one.
+`/ship` (§1) makes the release PR, merges it and pushes the tag. Releases run one at a time (`release-production`); GitHub keeps only one waiting, so a third tag cancels the waiting one, and `/ship` refuses to start while a release runs.
 
-**Re-runs:** a failed job → **Re-run failed jobs** on the release run. To redeploy web from a tag (after a rollback, or one target alone), run **deploy-prod** (owner only) with `tag` and `target`; it runs the same check and the same deploy. `prod-app` is no longer moved by any workflow (REL-6 deletes it).
+**Re-runs:** a failed job → **Re-run failed jobs** on the release run. To redeploy web from a tag (after a rollback, or one target alone), run **deploy-prod** (owner only) with `tag` and `target`; it runs the same check and the same deploy. From Claude, `gh workflow run` of deploy-prod or Desktop Release (production) is blocked unless `/ship` approved that version; a person can run them from the Actions tab or a terminal. `prod-app` is no longer moved by any workflow (REL-6 deletes it).
 
 **Roll back (under a minute):** Cloudflare dashboard → Workers & Pages → `moduo-app-production` (or `moduo-landing-production`) → Deployments → the previous version → Rollback. From a terminal: `npx wrangler rollback --env production` in `apps/app` (or `apps/landing`). A rollback keeps the custom domain; run deploy-prod with the release's tag to move forward again.
 

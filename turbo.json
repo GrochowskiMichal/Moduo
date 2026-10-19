@@ -67,6 +67,7 @@
     "//#test:scripts": {
       "inputs": [
         "scripts/**",
+        ".claude/hooks/guard-release*",
         "VERSION",
         "brand/**",
         "apps/app/src/**",
