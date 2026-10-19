@@ -16,15 +16,16 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null)
 block() { echo "Blocked: $1" >&2; exit 2; }
 is_long_lived() { case "$1" in develop|mike|maciej) return 0 ;; esac; return 1; }
 
-# One line per simple command: join backslash continuations, split on && || ; | and newlines.
-pieces=$(printf '%s' "$cmd" | perl -0pe 's/\\\n/ /g; s/&&|\|\||;|\|/\n/g')
+# One line per simple command: join backslash continuations, split on && || ; | newlines and
+# subshell/group/substitution brackets, so `(git push …)` and `$(git push …)` are seen too.
+pieces=$(printf '%s' "$cmd" | perl -0pe 's/\\\n/ /g; s/&&|\|\||;|\||[(){}\x60]/\n/g')
 
 set -f # don't glob-expand the words below
 while IFS= read -r piece; do
   # The push's own arguments, after `git [-C dir | -c k=v]… push`.
-  args=$(printf '%s' "$piece" | perl -ne 'print "$2\n" if /(?:^|\s)git((?:\s+-[Cc]\s+\S+)*)\s+push(?:\s+(.*))?$/' )
-  printf '%s' "$piece" | perl -ne 'exit(/(?:^|\s)git(?:\s+-[Cc]\s+\S+)*\s+push(?:\s|$)/ ? 0 : 1)' || continue
-  dir=$(printf '%s' "$piece" | perl -ne 'print $1 if /(?:^|\s)git(?:\s+-c\s+\S+)*\s+-C\s+(\S+)/')
+  args=$(printf '%s' "$piece" | perl -ne 'print "$2\n" if /(?:^|[\s"\x27\/])git((?:\s+-[Cc]\s+\S+)*)\s+push(?:\s+(.*))?$/' )
+  printf '%s' "$piece" | perl -ne 'exit(/(?:^|[\s"\x27\/])git(?:\s+-[Cc]\s+\S+)*\s+push(?:\s|$)/ ? 0 : 1)' || continue
+  dir=$(printf '%s' "$piece" | perl -ne 'print $1 if /(?:^|[\s"\x27\/])git(?:\s+-c\s+\S+)*\s+-C\s+(\S+)/')
   dir="${dir//\"/}"; dir="${dir//\'/}"
 
   deleting=0; forcing=0; leasing=0; skip=0; positional=()
