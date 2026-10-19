@@ -15,8 +15,9 @@ Checked 2026-10-19. **Public prices** are list prices from memory of each vendor
 | GitHub + Actions | $24/month | Estimate | GitHub Pro $4, plus metered macOS/Windows build minutes now that Actions isn't free ([docs/decisions/workflow.md](../docs/decisions/workflow.md)). |
 | Apple Developer | $99/year | Public price | Individual today; must re-enrol as an Organization before iOS. |
 | Domain | ~$15/year | Estimate | moduo.app renewal. |
-| Founders' pay | TBD | Founders only | Set to 0 in this run. |
-| Founders' tooling | TBD | Founders only | Claude Max and similar; set to 0. |
-| Incorporation | TBD | Founders only | Needed before the first payment (interim controller is Ringdove). |
+| Founders' pay | $8–10k/month each (gross) | Founders, 2026-10-19 | Modelled at $16k (numbers-fulltime.json) and $20k for two. Employer costs depend on the country and aren't included. |
+| Claude Max 20x | $400/month | Founders, 2026-10-19 | Assumed two seats at $200 (confirm the seat count). Claude through the Anthropic Startup program is free and not counted. |
+| Incorporation | TBD | Founders, 2026-10-19 | The country isn't decided: Poland, the USA or Japan. Needed before the first payment (interim controller is Ringdove). |
 | Calls / Meet (not in the model) | $330–380/month base + usage | Estimate in the repo | [specs/moduo-meet.md](../specs/moduo-meet.md); now being re-planned as Calls. |
-| Ramp (10 → 160 paid seats) | — | Placeholder | No real anchor yet: 0/80 panel buys, and the waitlist size is TBD. |
+| Ramp (10 → 160 paid seats) | — | Placeholder | No real anchor: 0/80 panel buys and no waitlist yet (founders, 2026-10-19: nothing published, iterating before release). |
+| Freemium conversion | 2–5% | Estimate | A common range for freemium productivity tools. Not a Moduo number; used only to size the funnel. |
