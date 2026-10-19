@@ -637,7 +637,7 @@ jobs:
           code=$?
           set -e
           if [ "$code" = 3 ]; then
-            echo "::error::Apple still hasn't finished. Use \"Re-run failed jobs\" — it waits on the same submission without rebuilding."
+            echo "::error::Apple still hasn't finished. Use \"Re-run failed jobs\" — it waits on the same submissions without rebuilding."
           fi
           exit "$code"
 
