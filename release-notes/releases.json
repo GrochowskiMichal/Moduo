@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "1.2.1",
+      "date": "2026-10-19",
+      "highlights": [
+        "The privacy policy now covers booking reminders, chat files and statuses, email when away, who has a note open, and what account deletion removes."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "The privacy policy now covers booking reminders, chat files and statuses, email when away, who has a note open, and what account deletion removes."
+        }
+      ]
+    },
+    {
       "version": "1.2.0",
       "date": "2026-10-19",
       "highlights": [
