@@ -498,9 +498,23 @@ export class WorkspaceStore {
     return this.disposed;
   }
 
+  /** What waits to sync, in order (a sign-out keeps it on the device). */
+  waitingEntries(): OutboxEntry[] {
+    return [...this.outbox];
+  }
+
   /** Whether a capture is waiting in the outbox under this task id. */
   isQueuedCreate(taskId: string): boolean {
     return this.outbox.some((e) => e.kind === "create" && e.task.id === taskId);
+  }
+
+  /**
+   * Whether anything for this task still waits in the outbox, including the
+   * entry a flush is sending right now. A later write for it must queue behind
+   * those: sent live, it would land first and the older queued one would win.
+   */
+  hasOutboxEntries(taskId: string): boolean {
+    return this.outbox.some((e) => (e.kind === "create" ? e.task.id : e.taskId) === taskId);
   }
 
   /** Claim the repeat roll-over for a load stamp: true once per stamp. */
@@ -1669,7 +1683,9 @@ export class WorkspaceStore {
       });
       return "queued";
     };
-    if (this.offline || this.isQueuedCreate(input.taskId)) return queue();
+    // Behind anything already waiting for this task (a capture, or an older
+    // check-off the flush hasn't finished), so the writes land in order.
+    if (this.offline || this.hasOutboxEntries(input.taskId)) return queue();
     const write = this.begin([
       {
         table: "tasks",
@@ -2176,7 +2192,9 @@ function disposeStores(keep: (store: WorkspaceStore) => boolean, persist: boolea
 /**
  * Who is signed in now (the auth shell calls this on every change).
  *  - Someone: stores and device copies of anyone else go, so a second
- *    account on this device never reads the first one's rows.
+ *    account on this device never reads the first one's rows. What another
+ *    person still has waiting to sync stays (no rows, under their key) until
+ *    they sign in here again.
  *  - Nobody (null): the stores stop, but the copy stays. A session can be
  *    null without a sign-out (an expired token that couldn't refresh offline);
  *    its waiting captures must survive until it's back. A real sign-out calls
@@ -2187,14 +2205,84 @@ export function attachSyncUser(userId: string | null): Promise<void> {
     disposeStores(() => false, true);
     return Promise.resolve();
   }
+  const leaving = waitingByKey((store) => store.userId !== userId);
   disposeStores((store) => store.userId === userId, false);
-  return (storeOptions.cache ?? deviceCache()).deleteWhere((key) => !isKeyOf(key, userId));
+  return keepOnlyWaiting((key) => !isKeyOf(key, userId), leaving);
 }
 
-/** Signed out, or the account was deleted: every store and every device copy go. */
-export function wipeSyncCopies(): Promise<void> {
+/**
+ * Signed out (by the person, or by auth-js on its own when a refresh token
+ * dies): every store stops and every device copy loses its rows, but what
+ * still waits to sync stays under its person's key and goes out the next time
+ * they sign in here. Account deletion passes `keepWaiting: false`: the
+ * account is gone, so is everything.
+ */
+export function wipeSyncCopies(opts: { keepWaiting?: boolean } = {}): Promise<void> {
+  const cache = storeOptions.cache ?? deviceCache();
+  if (opts.keepWaiting === false) {
+    disposeStores(() => false, false);
+    return cache.clear();
+  }
+  const leaving = waitingByKey(() => true);
   disposeStores(() => false, false);
-  return (storeOptions.cache ?? deviceCache()).clear();
+  return keepOnlyWaiting(() => true, leaving);
+}
+
+/** How many writes wait to sync in the running stores (a sign-out warns first). */
+export function waitingSyncCount(): number {
+  let count = 0;
+  for (const store of everyStore) count += store.waitingEntries().length;
+  return count;
+}
+
+/** The outbox each matching running store holds, by its copy's key (some may not be written yet). */
+function waitingByKey(match: (store: WorkspaceStore) => boolean): Map<string, OutboxEntry[]> {
+  const byKey = new Map<string, OutboxEntry[]>();
+  for (const store of everyStore) {
+    if (!match(store)) continue;
+    const waiting = store.waitingEntries();
+    if (waiting.length > 0) byKey.set(cacheKey(store.userId, store.workspaceId), waiting);
+  }
+  return byKey;
+}
+
+/**
+ * Cut each matching device copy down to its outbox (plus what the stores that
+ * just stopped held): no rows stay. An older version stamp makes the next
+ * store that opens it take the outbox and read everything else again. A copy
+ * with nothing waiting goes.
+ */
+async function keepOnlyWaiting(
+  match: (key: string) => boolean,
+  inMemory: ReadonlyMap<string, OutboxEntry[]>,
+): Promise<void> {
+  const cache = storeOptions.cache ?? deviceCache();
+  const keys = new Set([...(await cache.keys()), ...inMemory.keys()]);
+  const empty: string[] = [];
+  for (const key of keys) {
+    if (!match(key)) continue;
+    let kept = 0;
+    await cache.update(key, (stored) => {
+      const outbox: OutboxEntry[] = [];
+      const seen = new Set<string>();
+      const stack = [
+        ...(Array.isArray(stored?.outbox) ? (stored.outbox as OutboxEntry[]) : []),
+        ...(inMemory.get(key) ?? []),
+      ];
+      for (const entry of stack) {
+        if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
+        seen.add(entry.id);
+        outbox.push(entry);
+      }
+      kept = outbox.length;
+      return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
+    });
+    if (kept === 0) empty.push(key);
+  }
+  if (empty.length > 0) {
+    const gone = new Set(empty);
+    await cache.deleteWhere((key) => gone.has(key));
+  }
 }
 
 /**

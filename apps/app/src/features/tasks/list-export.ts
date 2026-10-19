@@ -5,6 +5,7 @@
 
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
 
+import { localDayOf } from "../../lib/task-rows";
 import { formatDate } from "../../lib/time-format";
 import { estimateOf, type Task } from "./model";
 import { formatMinutes } from "./time-format";
@@ -149,12 +150,13 @@ export function tasksAsCsv(tasks: readonly Task[], ctx: ListExportContext): stri
         ctx.projectName(task.bucketId),
         task.parentId ? (titleById.get(task.parentId) ?? "") : "",
         ctx.assigneeName(task.assigneeId ?? null) ?? "",
-        task.dueOn ?? (task.dueDate ? task.dueDate.slice(0, 10) : ""),
+        // The day on this device (TV-D9), never the instant's UTC day.
+        task.dueOn ?? localDayOf(task.dueDate) ?? "",
         task.priority ?? "",
         estimate ? formatMinutes(estimate) : "",
         task.timeSpentSeconds > 0 ? decimalHours(task.timeSpentSeconds) : "",
-        task.createdAt ? task.createdAt.slice(0, 10) : "",
-        task.completedAt ? task.completedAt.slice(0, 10) : "",
+        localDayOf(task.createdAt) ?? "",
+        localDayOf(task.completedAt) ?? "",
       ]),
     );
   }

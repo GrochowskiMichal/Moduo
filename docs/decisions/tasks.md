@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-20 · A sign-out keeps what waits to sync (supersedes part of TV-D11a)
+
+- **Sign-out cuts the Tasks device copy down to its outbox instead of wiping it** → `wipeSyncCopies` / `attachSyncUser` / `keepOnlyWaiting` (`lib/sync/store.ts`), Settings → Account's "Log out" warning
+  - Who: agent, from the 2026-10-20 audit of `origin/mike` (data-loss fixes); revisitable.
+  - Decision: on SIGNED_OUT (which auth-js also fires on its own when a refresh token dies), on an explicit sign-out, and when another person signs in on the device, each copy loses its rows but keeps its waiting captures and check-offs under its person's key (written with an old version stamp, so the next store takes only the outbox). They go out the next time that person signs in here. A copy with nothing waiting is deleted as before. Account deletion still wipes everything (`keepWaiting: false`). Settings → Account's "Log out" first says how many changes haven't synced, with "Log out anyway" / "Stay signed in".
+  - Why: the old wipe deleted offline captures whenever auth-js signed the person out by itself.
+  - The cost: a waiting capture's title stays in this browser's IndexedDB after sign-out, under the person's key, until they sign in here again. It is never shown to anyone else.
+
 ## 2026-10-16 · The Project view shares the task details' hierarchy (MOD-152)
 
 No migration. Frames matched: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html)'s `.dbody` (16 px between blocks) and `.shead` (13 px medium, sentence case, its `.num` in `--text-3`), and [structure](../../.design/tasks-v3/prototypes/structure.html) frame 2's `.shead Progress` with its count. The before/after canvas (measured live, approved item by item) stayed in the session's scratch folder, not in git.

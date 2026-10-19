@@ -101,7 +101,16 @@ export function setSyncMeta(domain: SyncDomain, meta: SyncMeta): void {
 const PREFS_CACHE_TTL_MS = 3_000;
 const prefsReads = createRequestCache();
 
-export function getCloudPrefs(userId: string): Promise<UserPreferences | null> {
+/**
+ * The cloud row read, tagged so a failed read can never pass for "no row yet":
+ * reconcile treats `none` as "seed the cloud" and `error` as "touch nothing".
+ */
+export type CloudPrefsRead =
+  | { kind: "row"; prefs: UserPreferences }
+  | { kind: "none" }
+  | { kind: "error"; error: unknown };
+
+export function getCloudPrefs(userId: string): Promise<CloudPrefsRead> {
   return prefsReads
     .read(
       `prefs:${userId}`,
@@ -111,7 +120,10 @@ export function getCloudPrefs(userId: string): Promise<UserPreferences | null> {
       },
       PREFS_CACHE_TTL_MS,
     )
-    .catch(() => null);
+    .then(
+      (prefs): CloudPrefsRead => (prefs ? { kind: "row", prefs } : { kind: "none" }),
+      (error: unknown): CloudPrefsRead => ({ kind: "error", error }),
+    );
 }
 
 /** Drop every cached prefs read so the next reconcile re-fetches (after a write). */
@@ -175,6 +187,9 @@ export async function pushDomain(
  *    leaking into another's row on a shared browser.
  *  - no cloud row yet → seed from local if it's ours or anonymous (adopting
  *    pre-sign-in edits); otherwise reset to defaults so a new user starts clean.
+ *  - the read failed → apply nothing, push nothing, and report `"error"` so the
+ *    caller retries later. A failed read must never look like "no row": seeding
+ *    then would overwrite the account's real prefs with local or defaults.
  */
 export async function reconcileDomain(opts: {
   domain: SyncDomain;
@@ -183,12 +198,15 @@ export async function reconcileDomain(opts: {
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
   apply: (value: Json, userId: string) => void;
-}): Promise<void> {
+}): Promise<"ok" | "error"> {
+  let outcome: "ok" | "error" = "error";
   try {
-    await reconcileOnce(opts);
+    outcome = await reconcileOnce(opts);
   } finally {
-    markReconciled(opts.domain, opts.userId);
+    // A failed read hasn't read anything: leave the domain unread for this user.
+    if (outcome === "ok") markReconciled(opts.domain, opts.userId);
   }
+  return outcome;
 }
 
 // ── "Read this session" (TV-U17) ──────────────────────────────────────────────
@@ -233,10 +251,12 @@ async function reconcileOnce(opts: {
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
   apply: (value: Json, userId: string) => void;
-}): Promise<void> {
+}): Promise<"ok" | "error"> {
   const { domain, userId, localValue, defaults, sanitizeCloud, apply } = opts;
 
-  const cloud = await getCloudPrefs(userId);
+  const read = await getCloudPrefs(userId);
+  if (read.kind === "error") return "error";
+  const cloud = read.kind === "row" ? read.prefs : null;
   const { value: cloudRaw, updatedAt: cloudUpdatedAt } = domainValue(cloud, domain);
   // An empty {} domain means "never synced" (e.g. the row was seeded by the
   // other domain) — treat it as absent so local seeds it.
@@ -261,7 +281,7 @@ async function reconcileOnce(opts: {
     } else {
       adoptCloud(cloudRaw as Json, cloudUpdatedAt as string);
     }
-    return;
+    return "ok";
   }
 
   // No usable cloud value for this user yet.
@@ -275,7 +295,11 @@ async function reconcileOnce(opts: {
     const ok = await pushDomain(domain, defaults, updatedAt);
     setSyncMeta(domain, { userId, updatedAt, dirty: !ok });
   }
+  return "ok";
 }
+
+const RECONCILE_RETRY_BASE_MS = 5_000;
+const RECONCILE_RETRY_MAX_MS = 5 * 60_000;
 
 /**
  * Wires a preference domain to the cloud. Reconciles on sign-in / app start and
@@ -297,10 +321,17 @@ export function useDomainSync(opts: {
     optsRef.current = opts;
   });
   const userIdRef = useRef<string | null>(null);
+  const retryRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; attempt: number }>({
+    timer: null,
+    attempt: 0,
+  });
 
-  const runReconcile = useCallback((userId: string) => {
+  const runReconcile = useCallback(async (userId: string): Promise<void> => {
+    const retry = retryRef.current;
+    if (retry.timer) clearTimeout(retry.timer);
+    retry.timer = null;
     const o = optsRef.current;
-    return reconcileDomain({
+    const outcome = await reconcileDomain({
       domain: o.domain,
       userId,
       localValue: o.getLocalSyncable(),
@@ -308,6 +339,18 @@ export function useDomainSync(opts: {
       sanitizeCloud: o.sanitizeCloud,
       apply: o.apply,
     });
+    if (outcome === "ok") {
+      retry.attempt = 0;
+      return;
+    }
+    // The read failed: nothing was applied or pushed. Try again later (backing
+    // off), as long as the same user is still signed in; `online` also retries.
+    const delay = Math.min(RECONCILE_RETRY_BASE_MS * 2 ** retry.attempt, RECONCILE_RETRY_MAX_MS);
+    retry.attempt += 1;
+    retry.timer = setTimeout(() => {
+      retry.timer = null;
+      if (userIdRef.current === userId) void runReconcile(userId);
+    }, delay);
   }, []);
 
   useEffect(() => {
@@ -336,6 +379,7 @@ export function useDomainSync(opts: {
     return () => {
       cancelled = true;
       unsub?.();
+      if (retryRef.current.timer) clearTimeout(retryRef.current.timer);
       if (typeof window !== "undefined") window.removeEventListener("online", onOnline);
     };
   }, [runReconcile]);

@@ -199,8 +199,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // brings back the PostHog person the deletion erased (PRIV-3).
         void setAnalyticsUser(null);
         // A real sign-out (never a session that merely failed to load, e.g. an
-        // expired token offline): the Tasks device copy, its waiting captures
-        // and the remembered workspace list go (TV-D11a).
+        // expired token offline): the Tasks device copy's rows and the
+        // remembered workspace list go (TV-D11a). What still waits to sync
+        // stays under the person's key: auth-js fires this on its own when a
+        // refresh token dies, and offline captures must survive that.
         void wipeSyncCopies();
         void wipeChatCopies();
         // Chat's remembered searches are the person's words too (CV-19).
@@ -257,7 +259,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await rt.auth.signOut();
     // The person chose to sign out: their Tasks device copy goes even when
     // auth-js couldn't end the session (offline with an expired token, so no
-    // SIGNED_OUT event follows) (TV-D11a).
+    // SIGNED_OUT event follows) (TV-D11a); what waits to sync stays until they
+    // sign in here again (Settings warns before this).
     void wipeSyncCopies();
     void wipeChatCopies();
     forgetSearches();

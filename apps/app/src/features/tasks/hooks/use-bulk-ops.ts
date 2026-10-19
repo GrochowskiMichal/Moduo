@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, WorkspaceStore } from "../../../lib/sync/store";
-import { dueOnToLocalInstant, editableTaskFields, localDayOf } from "../../../lib/task-rows";
+import { dueOnToLocalInstant, editableTaskFields, withDueOn } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import { attachOrDetachMany, type TagContext, tagNamed } from "../../tags/store";
 import { type BulkRefusal, type BulkWrite, bulkResultText, dueDayOf, tasksWord } from "../bulk";
@@ -269,9 +269,7 @@ export function useBulkOps(deps: BulkOpsDeps) {
         const shown: Partial<Task> = {
           ...fields,
           ...(write.position !== undefined ? { position: write.position } : {}),
-          ...(write.dueDate !== undefined
-            ? { dueDate: write.dueDate, dueOn: localDayOf(write.dueDate) }
-            : {}),
+          ...(write.dueDate !== undefined ? withDueOn({ dueDate: write.dueDate }) : {}),
           ...(write.occurrenceOn !== undefined
             ? { dueOn: write.occurrenceOn, dueDate: dueOnToLocalInstant(write.occurrenceOn) }
             : {}),
