@@ -69,6 +69,8 @@ jobs:
   web:
     needs: resolve
     uses: ./.github/workflows/_deploy-web.yml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     with:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ inputs.tag }}
