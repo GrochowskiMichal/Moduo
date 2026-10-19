@@ -1,0 +1,29 @@
+{
+  "business": "Moduo Pro (day-loop wedge): run-cost model, founders unpaid",
+  "unit": "paid seat",
+  "price": 12.00,
+  "variable": [
+    {"label": "Stripe card fee (2.9% + $0.30, US standard) [public price]", "cost": 0.65},
+    {"label": "Stripe Billing (0.7% of billing volume) [public price]", "cost": 0.08},
+    {"label": "Storage for the seat's files (~2 GB avg x $0.021/GB over Supabase Pro quota) [estimate]", "cost": 0.04},
+    {"label": "Share of free users carried per paid seat (~5 free users x ~$0.02) [estimate]", "cost": 0.10}
+  ],
+  "fixed_monthly": [
+    {"label": "Supabase Pro (one project; Micro compute covered by credits) [public price]", "cost": 25},
+    {"label": "Supabase compute step-up to Small for Realtime headroom [estimate]", "cost": 15},
+    {"label": "Cloudflare Workers Paid (app, landing, update server, R2) [public price]", "cost": 5},
+    {"label": "Resend Pro (transactional email) [public price]", "cost": 20},
+    {"label": "GitHub Pro + metered Actions minutes for macOS/Windows builds [estimate]", "cost": 24},
+    {"label": "Apple Developer Program ($99/yr) [public price]", "cost": 8.25},
+    {"label": "moduo.app domain (~$15/yr) [estimate]", "cost": 1.25},
+    {"label": "Founders' pay [TBD, founders only; 0 in this run]", "cost": 0},
+    {"label": "Founders' tooling, e.g. Claude Max [TBD; 0 in this run]", "cost": 0}
+  ],
+  "startup": [
+    {"label": "Company incorporation (needed before the first payment) [TBD]", "cost": 0},
+    {"label": "Apple Developer re-enrolment as an Organization [TBD; fee covered by the yearly $99]", "cost": 0}
+  ],
+  "days_per_month": 1,
+  "plan_per_day": 200,
+  "ramp_per_day": [10, 20, 30, 40, 55, 70, 85, 100, 115, 130, 145, 160]
+}
