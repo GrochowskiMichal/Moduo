@@ -22,9 +22,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # The write token lives only in this environment, which only develop, mike, maciej
-    # and v* tags may use.
-    environment: turbo-cache-write
+    # The production Cloudflare token and a copy of the write token live in this environment
+    # (develop, mike, v* only). turbo-cache-write, which maciej's pushes also use, never holds
+    # the Cloudflare token.
+    environment: cloudflare-deploy
     # The Cloudflare token is given only to the wrangler steps, never to install or tests.
     env:
       WRANGLER: npx --yes wrangler@4.147.0

@@ -46,8 +46,8 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # CLOUDFLARE_API_TOKEN lives in this environment (a repo-level secret of the same name is the
-    # fallback until it is moved; see docs/decisions/workflow.md, PLAT-4).
+    # A preview-only CLOUDFLARE_API_TOKEN lives in this environment (Workers Scripts and R2 Edit
+    # only; Cloudflare can't scope it to one Worker or bucket); there is no repo-level token.
     environment: cloudflare-preview
     permissions:
       contents: read

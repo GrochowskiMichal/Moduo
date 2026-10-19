@@ -39,6 +39,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # A preview-only CLOUDFLARE_API_TOKEN lives in this environment; there is no repo-level token.
     environment: cloudflare-preview
     permissions:
       contents: read

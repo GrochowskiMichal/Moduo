@@ -27,10 +27,10 @@ Each step needs your password, your Apple login or a GitHub UI action, so run th
    2. Name it `moduo-runner-status` and give it a 1-year expiration.
    3. Set **Resource owner** to **GrochowskiMichal**. Under **Repository access**, choose **Only select repositories** → **Moduo**.
    4. Under **Permissions** → **Repository permissions**, set **Administration** to **Read-only**. Metadata becomes read-only by itself.
-   5. Click **Generate token**, then store it as a repo secret (paste the token when asked):
+   5. Click **Generate token**, then store it in the `desktop-signing` environment (paste the token when asked; a repo-level copy is invisible to the build):
 
       ```bash
-      gh secret set RUNNER_STATUS_TOKEN --repo GrochowskiMichal/Moduo
+      gh secret set RUNNER_STATUS_TOKEN --env desktop-signing --repo GrochowskiMichal/Moduo
       ```
 
    Without this secret, every build goes to GitHub-hosted macOS.

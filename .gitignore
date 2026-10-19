@@ -109,3 +109,6 @@ playwright-report/
 
 # Storybook static build (bun run build-storybook)
 storybook-static/
+
+# Deno writes a lock wherever it runs; the real one is supabase/functions/deno.lock.
+/deno.lock
