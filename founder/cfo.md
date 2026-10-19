@@ -7,7 +7,7 @@
 - **The line to watch: the founders' pay.** Every **$1,000 a month** the founders pay themselves needs about **90 more paid seats at $12, or 140 at $8** (that's $1,000 divided by the contribution per seat). Infrastructure is a rounding error next to it.
 - **Second line to watch: real-time features.** The planned Calls/Meet stack was estimated at **$330–380 a month base plus usage** ([specs/moduo-meet.md](../specs/moduo-meet.md)). That alone would quadruple fixed costs, so price Duo and Team (the only plans with chat or calls) with it in.
 - **Cash.** No startup spend has been entered, so the tool reports $0 needed. Incorporating the company (required before the first payment) and the Apple Organization enrolment are **TBD**.
-- **Three ways to improve the margin** (each run as a what-if):
+- **Three ways to improve the margin** (2 and 3 come from the tool's what-ifs; 1 is arithmetic on the Stripe line):
   1. **Yearly billing.** Stripe's $0.30 fixed fee is charged once a year instead of 12 times, so the fee per seat-month drops from $0.65 to about $0.37 at $12. Contribution rises by about $0.28 a seat (about 3 points of margin).
   2. **Keep $12 as the list price and reserve $8 for founders only.** At $8 the year-1 profit falls from $9,503 to **$2,240** on the same placeholder ramp, and break-even moves from 9 to 14 seats.
   3. **Volume matters less than pay.** At 20% fewer seats the year-1 profit falls only from $9,503 to $7,366. The month-by-month ramp barely moves the result next to the founders' pay line.
