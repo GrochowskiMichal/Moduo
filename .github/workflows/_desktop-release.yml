@@ -879,7 +879,7 @@ jobs:
           mkdir -p ../r2-manifest
           manifest "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION" ../r2-manifest/latest.json
           if [ ! -f Moduo_x64-setup.exe.sig ]; then
-            echo "::warning::No Windows build this run — the release keeps its previous Windows installer and the updater offers Windows nothing new."
+            echo "::warning::No Windows build this run — the updater offers Windows nothing new, and the Windows download link keeps serving the newest earlier version that has an installer."
           fi
           cat latest.json ../r2-manifest/latest.json
 
@@ -955,6 +955,12 @@ jobs:
           for f in Moduo_universal.dmg Moduo_aarch64.app.tar.gz Moduo_x64.app.tar.gz; do
             curl -sSf -o /dev/null -I "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/$MODUO_VERSION/$f"
           done
+          # The in-app "Download for Mac" button: latest/ must redirect to this version's .dmg.
+          if [ "$got" = "$MODUO_VERSION" ]; then
+            loc=$(curl -s -o /dev/null -w '%{redirect_url}' "$UPDATE_SERVER_URL/download/desktop/$CHANNEL/latest/Moduo_universal.dmg")
+            echo "latest/Moduo_universal.dmg → $loc"
+            case "$loc" in */$MODUO_VERSION/Moduo_universal.dmg) ;; *) echo "::error::The Mac download link does not point at $MODUO_VERSION"; exit 1 ;; esac
+          fi
           for arch in aarch64 x86_64; do
             code=$(curl -s -o check.json -w '%{http_code}' "$UPDATE_SERVER_URL/desktop/$CHANNEL/darwin/$arch/0.0.1")
             echo "darwin/$arch update check from 0.0.1 → $code $(jq -r '.url // empty' check.json 2>/dev/null) (204 while the channel is paused or rolled out to 0%)"

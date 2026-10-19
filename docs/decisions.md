@@ -118,6 +118,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-19 · Desktop download links go to the update server's `latest/` redirect (current manifest version, Windows falls back to the last version with an installer), ignoring rollout and kill switch; the GitHub bridges stay frozen.
 - 2026-10-19 · REL-5: Mac updater bundles are per-arch (darwin-aarch64, darwin-x86_64), each .app notarized as a zip; the website .dmg stays universal; the darwin-universal transition key and its fallback were dropped after production 1.2.1.
 - 2026-10-17 · PLAT-6: desktop updates come from the update-server Worker on R2 (versioned, never overwritten; rollout and kill switch in KV, fail closed), and the GitHub `latest.json` freezes at each channel's bridge release.
 - 2026-10-17 · Web and desktop take one version from `VERSION` (1.1.0, above the installed 1.0.22/1.0.41); prod desktop needs a bump; `min_build` holds back desktop only.
