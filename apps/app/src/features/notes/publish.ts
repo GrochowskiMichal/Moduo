@@ -7,12 +7,16 @@
  * derives server-side, so the header control can say "includes N nested pages"
  * and a test can pin the invariant without a live DB.
  *
- * Scope rules (mirrored in supabase/functions/notes-public):
+ * Scope rules (mirrored server-side by notes_public_subtree, which
+ * supabase/functions/notes-public calls):
  *   - The ROOT must be live (not trashed) AND published (publishedAt +
  *     publishToken). No token → empty scope (revocation empties it).
  *   - Descendants are included only while live AND not archived — a trashed or
  *     archived child leaves the public subtree immediately (edge case in the
  *     spec: "publish a note whose child is later trashed → child disappears").
+ *   - Descendants are included only while they inherit their parent's sharing
+ *     (shareMode "inherit"): a sub-note with its own sharing, and everything
+ *     below it, stays off the parent's link (notes_public_subtree, 2026-10-20).
  *   - Depth-first, position-ordered (the sidebar tree order), depth-capped so
  *     corrupt legacy cycles can never hang the walk.
  */
@@ -28,6 +32,9 @@ function liveChildrenMap(notes: Note[]): Map<string | null, Note[]> {
   for (const n of notes) {
     if (n.deletedAt || n.isArchived) continue; // never public
     const key = n.parentId && byId.has(n.parentId) ? n.parentId : null;
+    // A sub-note with its own sharing doesn't follow its parent's link
+    // (can_access stops walking up at it), and neither does anything below it.
+    if (key && n.shareMode !== "inherit") continue;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(n);
   }
