@@ -68,7 +68,7 @@ on:
         required: true
         type: string
       ref:
-        description: "Branch or tag to build, e.g. refs/tags/v1.2.0 (empty = the commit that triggered the run)"
+        description: "Branch, tag or full commit to build (empty = the commit that triggered the run)"
         required: false
         type: string
         default: ""
