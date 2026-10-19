@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "1.2.2",
+      "date": "2026-10-19",
+      "highlights": [
+        "Reliability improvements."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "Reliability improvements."
+        }
+      ]
+    },
+    {
       "version": "1.2.1",
       "date": "2026-10-19",
       "highlights": [
