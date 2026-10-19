@@ -1,0 +1,11 @@
+# actionlint doesn't know that a reusable workflow's job reads its environment's secrets, so it
+# flags every environment-held name there. Declaring them in `workflow_call.secrets` instead is
+# NOT a fix: a declared secret the caller doesn't pass reaches the job empty and hides the
+# environment's value (it broke every signed build on 2026-10-19).
+paths:
+  .github/workflows/_desktop-release.yml:
+    ignore:
+      - 'property "(cloudflare_api_token|apple_[a-z0-9_]+|tauri_signing_private_key(_password)?)" is not defined in object type'
+  .github/workflows/_deploy-web.yml:
+    ignore:
+      - 'property "cloudflare_api_token" is not defined in object type'

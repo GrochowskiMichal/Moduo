@@ -106,32 +106,6 @@ on:
         required: false
       RUNNER_STATUS_TOKEN:
         required: false
-      # Read from the jobs' environments (desktop-signing / cloudflare-deploy); declared so the
-      # names are known, never passed by a caller. An environment secret wins over a passed one.
-      CLOUDFLARE_API_TOKEN:
-        required: false
-      APPLE_CERTIFICATE:
-        required: false
-      APPLE_CERTIFICATE_PASSWORD:
-        required: false
-      APPLE_SIGNING_IDENTITY:
-        required: false
-      APPLE_TEAM_ID:
-        required: false
-      APPLE_ID:
-        required: false
-      APPLE_ID_PASSWORD:
-        required: false
-      APPLE_API_KEY_ID:
-        required: false
-      APPLE_API_ISSUER:
-        required: false
-      APPLE_API_KEY_P8:
-        required: false
-      TAURI_SIGNING_PRIVATE_KEY:
-        required: false
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
-        required: false
     outputs:
       published:
         description: "true once the update server offers this build (a failed Windows build still turns the run red)"
