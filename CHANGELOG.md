@@ -9,7 +9,7 @@ https://moduo.app/changelog.
 
 ### Improved
 
-- Desktop updates are smaller and download faster, straight from Moduo's own servers.
+- Desktop updates now download straight from Moduo's own servers.
 - Web and desktop now show the same version number, so it's easy to tell which release you're on.
 
 ### Fixed

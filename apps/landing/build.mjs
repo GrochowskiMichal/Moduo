@@ -1,7 +1,7 @@
 /**
  * Builds the static landing into apps/landing/dist, without building the app.
  *
- *   node build.mjs             → moduo.app: index, subpages, assets, favicons
+ *   node build.mjs             → moduo.app: index, subpages, /changelog, assets, favicons
  *   node build.mjs --staging   → staging.moduo.app: the staging portal at /, the
  *                                marketing page at /landing (noindex)
  *   node build.mjs --noindex   → the moduo.app build for a PR preview, never indexed
@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderChangelogPage } from "./changelog.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(root, "dist");
@@ -40,6 +41,11 @@ if (staging) {
   for (const page of SUBPAGES) {
     fs.copyFileSync(path.join(root, page), path.join(outDir, page));
   }
+  // /changelog: every release from the notes the app ships with (REL-4).
+  const notesFile = path.join(root, "..", "..", "release-notes", "releases.json");
+  const notes = fs.existsSync(notesFile) ? JSON.parse(fs.readFileSync(notesFile, "utf8")) : {};
+  const template = fs.readFileSync(path.join(root, "terms.html"), "utf8");
+  fs.writeFileSync(path.join(outDir, "changelog.html"), renderChangelogPage(template, notes));
 }
 
 // The landing's own static files (share image, founder photos, …) go to /assets.

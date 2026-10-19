@@ -513,7 +513,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **REL-1 — Release notes pipeline (.changes, leak check in verify + CI, releases.json, /s3 step)** · deps: — · 2026-10-19 · `t/mike/rel-1-release-notes`
 - [ ] **REL-2 — Tag release workflow (release.yml on v*, _deploy-web.yml, desktop on change, notes into the manifest)** · deps: REL-1
 - [ ] **REL-3 — /ship skill + guard-release.sh hook; first release v1.2.0 through /ship** · deps: REL-2
-- [ ] **REL-4 — What's new, update toast highlights, About history, web reload prompt, moduo.app/changelog** · deps: REL-1
+- [x] **REL-4 — What's new, update toast highlights, About history, web reload prompt, moduo.app/changelog** · deps: REL-1 · 2026-10-19 · `t/mike/rel-4-whats-new`
 - [ ] **REL-5 — Split Mac builds (per-arch updater bundles, universal .dmg kept)** · deps: REL-2
 - [ ] **REL-6 — Retire prod-app/staging-app/prod-landing/main, branch cleanup, delete-on-merge** · deps: REL-3
 

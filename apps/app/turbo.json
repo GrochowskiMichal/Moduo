@@ -2,9 +2,14 @@
   "$schema": "https://turborepo.com/schema.json",
   "extends": ["//"],
   "tasks": {
+    "build": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/release-notes/**"],
+      "outputs": ["dist/**"]
+    },
     "typecheck": {
       "inputs": [
         "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/release-notes/**",
         "$TURBO_ROOT$/supabase/functions/_shared/**",
         "$TURBO_ROOT$/scripts/**"
       ]
@@ -19,7 +24,8 @@
         "$TURBO_ROOT$/scripts/**",
         "$TURBO_ROOT$/e2e/tests/fixtures/**",
         "$TURBO_ROOT$/assets/**",
-        "$TURBO_ROOT$/VERSION"
+        "$TURBO_ROOT$/VERSION",
+        "$TURBO_ROOT$/release-notes/**"
       ]
     }
   }
