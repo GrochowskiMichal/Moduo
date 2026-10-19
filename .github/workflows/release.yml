@@ -97,6 +97,8 @@ jobs:
       group: deploy-web-production
       cancel-in-progress: false
     uses: ./.github/workflows/_deploy-web.yml
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     with:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ github.ref_name }}
@@ -113,6 +115,10 @@ jobs:
     permissions:
       contents: read
       actions: write
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+      RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
     with:
       channel: production
       # The commit resolve checked, so a moved tag can't swap in an unchecked one.
@@ -132,8 +138,6 @@ jobs:
       (needs.desktop.result == 'skipped' || needs.desktop.outputs.published == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # RELEASES_REPO_TOKEN lives in this environment (develop, mike, v* only).
-    environment: cloudflare-deploy
     env:
       TAG: ${{ github.ref_name }}
       VERSION: ${{ needs.resolve.outputs.version }}

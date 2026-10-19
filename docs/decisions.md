@@ -8,7 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
-- 2026-10-19 · CI secrets live in environments (desktop-signing, cloudflare-deploy, a narrower cloudflare-preview); no `secrets: inherit`.
+- 2026-10-19 · The sensitive CI secrets live in environments (desktop-signing, cloudflare-deploy, a narrower cloudflare-preview); low-value ones stay repo-level and are passed by name; no `secrets: inherit`.
 - 2026-10-19 · REL-6: mirror branches retired (prod is tags only); ruleset keeps `mike`/`maciej` safe from delete-on-merge; `guard-git.sh` guards `develop`/`mike`/`maciej`; `turbo-cache-write` keeps `maciej`; `branch-audit.ts` holds merged branches an open PR still uses → decisions/workflow.md
 - 2026-10-19 · REL-3: `guard-release.sh` consumes the `/ship` marker and ignores it after 60 minutes; `--tags` and API dispatches are blocked; the first release diffs from the live web build; the release PR is the release record → decisions/workflow.md
 - 2026-10-19 · REL-4: What's new's last-seen version lives in synced preferences and only moves forward; no recorded version → toast only for people with a pre-release stamp; update toast reads highlights from the manifest Markdown; reload prompt ignores unreadable builds; /changelog reuses the Terms page → decisions/workflow.md

@@ -41,26 +41,20 @@ name: Desktop Release (shared)
 # Cargo target dir between runs (CARGO_TARGET_DIR) and skips the GitHub Rust cache. The
 # GitHub-hosted path is unchanged. notarize-mac (only when Apple is slow) always runs on GitHub.
 #
-# Secrets live in environments, never at repo level, and callers pass none:
-#   desktop-signing (develop, mike, v* tags): pick-runner, build-mac, notarize-mac, build-windows.
-#   cloudflare-deploy (develop, mike, v* tags): publish (CLOUDFLARE_*, RELEASES_REPO_TOKEN).
 # Secrets:
-#   APPLE_CERTIFICATE             base64-encoded p12 Developer ID Application certificate
-#   APPLE_CERTIFICATE_PASSWORD    p12 password
-#   APPLE_SIGNING_IDENTITY        "Developer ID Application: <Name> (<TeamID>)"
-#   APPLE_TEAM_ID                 10-character Apple team id
-#   APPLE_ID                      Apple ID email used for notarization
-#   APPLE_ID_PASSWORD             App-specific password for that Apple ID
-#   (optional, preferred) APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8 — an App Store Connect
-#                                 API key; used for notarization instead of the Apple ID when all three are set
-#   RELEASES_REPO_TOKEN           fine-grained PAT, contents:write on GrochowskiMichal/moduo-releases
-#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID  R2 upload (Workers R2 Storage: Edit)
-#   RUNNER_STATUS_TOKEN           fine-grained PAT, Administration: read on this repo (lists runners for
-#                                 pick-runner); unset → always GitHub-hosted
-#   TAURI_SIGNING_PRIVATE_KEY     private key from `bunx tauri signer generate`
-#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  key password (empty string if none)
-#   PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-#   PUBLIC_STRIPE_PUBLISHABLE_KEY, PUBLIC_STRIPE_PRICE_{PRO,TEAM}_{MONTHLY,YEARLY}
+#   desktop-signing environment (develop, mike, v* tags), read by pick-runner, build-mac,
+#   notarize-mac and build-windows:
+#     APPLE_CERTIFICATE             base64-encoded p12 Developer ID Application certificate
+#     APPLE_CERTIFICATE_PASSWORD    p12 password
+#     APPLE_SIGNING_IDENTITY        "Developer ID Application: <Name> (<TeamID>)"
+#     APPLE_TEAM_ID                 10-character Apple team id
+#     APPLE_ID / APPLE_ID_PASSWORD  notarization Apple ID and its app-specific password
+#     (optional, preferred) APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8
+#     TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD if the key has one)
+#   cloudflare-deploy environment (develop, mike, v*), read by publish: CLOUDFLARE_API_TOKEN.
+#   Repo level, passed by name by the caller (not `secrets: inherit`):
+#     CLOUDFLARE_ACCOUNT_ID, RELEASES_REPO_TOKEN (contents:write on moduo-releases),
+#     RUNNER_STATUS_TOKEN (Administration: read on this repo; unset → always GitHub-hosted)
 # (The Rust shell reads MODUO_* settings such as the Google OAuth clients at run time, not at
 # build time, so passing them to `tauri build` did nothing; they are not passed any more.)
 #
@@ -103,6 +97,41 @@ on:
         required: false
         type: string
         default: ""
+    # Low-value secrets that stay at repo level, so the caller passes them by name. The signing
+    # and Cloudflare tokens are not here: they live in the jobs' environments.
+    secrets:
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      RELEASES_REPO_TOKEN:
+        required: false
+      RUNNER_STATUS_TOKEN:
+        required: false
+      # Read from the jobs' environments (desktop-signing / cloudflare-deploy); declared so the
+      # names are known, never passed by a caller. An environment secret wins over a passed one.
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      APPLE_CERTIFICATE:
+        required: false
+      APPLE_CERTIFICATE_PASSWORD:
+        required: false
+      APPLE_SIGNING_IDENTITY:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      APPLE_ID:
+        required: false
+      APPLE_ID_PASSWORD:
+        required: false
+      APPLE_API_KEY_ID:
+        required: false
+      APPLE_API_ISSUER:
+        required: false
+      APPLE_API_KEY_P8:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: false
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
     outputs:
       published:
         description: "true once the update server offers this build (a failed Windows build still turns the run red)"
@@ -494,13 +523,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-          PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_STRIPE_PUBLISHABLE_KEY }}
-          PUBLIC_STRIPE_PRICE_PRO_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_MONTHLY }}
-          PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
-          PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
-          PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
+          # Public, and the same values apps/app/wrangler.jsonc commits.
+          PUBLIC_SUPABASE_URL: https://wtoonrvuqumihpkbvwvs.supabase.co
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so
           PUBLIC_WEB_ORIGIN: ${{ inputs.web_origin }}
           PUBLIC_STAGING_PORTAL: ${{ inputs.staging_portal && 'true' || '' }}
           PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
@@ -746,13 +771,9 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          PUBLIC_SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-          PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_STRIPE_PUBLISHABLE_KEY }}
-          PUBLIC_STRIPE_PRICE_PRO_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_MONTHLY }}
-          PUBLIC_STRIPE_PRICE_PRO_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_PRO_YEARLY }}
-          PUBLIC_STRIPE_PRICE_TEAM_MONTHLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_MONTHLY }}
-          PUBLIC_STRIPE_PRICE_TEAM_YEARLY: ${{ secrets.PUBLIC_STRIPE_PRICE_TEAM_YEARLY }}
+          # Public, and the same values apps/app/wrangler.jsonc commits.
+          PUBLIC_SUPABASE_URL: https://wtoonrvuqumihpkbvwvs.supabase.co
+          PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so
           PUBLIC_WEB_ORIGIN: ${{ inputs.web_origin }}
           PUBLIC_STAGING_PORTAL: ${{ inputs.staging_portal && 'true' || '' }}
           PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
