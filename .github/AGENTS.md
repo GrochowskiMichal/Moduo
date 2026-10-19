@@ -29,6 +29,8 @@ How a release is applied: [docs/release.md](../docs/release.md).
 
 ## Mac build runner (PLAT-7)
 
+- The signing jobs run in the `desktop-signing` environment (develop, mike, `v*` only), so a build started from a task branch stops there. Test `_desktop-release.yml` changes by landing them on `mike` and starting the staging build from `mike`.
+
 - `build-mac` runs on Mike's Mac (`moduo-mac`, set up by `infra/mac-runner/setup.sh`) when `pick-runner` finds it online and idle, otherwise on `macos-latest`. Steps that differ use `runner.environment == 'self-hosted'`; keep the GitHub-hosted path working on its own.
 - Only pushes to `develop`/`mike`, `v*` tags and the owner's manual runs may use it; the Mac's job-started hook refuses anything else. Never point a `pull_request` job at it. Any re-run builds on GitHub.
 

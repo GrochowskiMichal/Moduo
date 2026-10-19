@@ -66,7 +66,6 @@ jobs:
     permissions:
       contents: read
       actions: write
-    secrets: inherit
     with:
       channel: production
       # The commit resolve checked, so a moved tag can't swap in an unchecked one.

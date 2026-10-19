@@ -30,7 +30,6 @@ jobs:
     permissions:
       contents: read
       actions: write
-    secrets: inherit
     with:
       channel: staging
       release_tag: staging-latest

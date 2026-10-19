@@ -41,7 +41,10 @@ name: Desktop Release (shared)
 # Cargo target dir between runs (CARGO_TARGET_DIR) and skips the GitHub Rust cache. The
 # GitHub-hosted path is unchanged. notarize-mac (only when Apple is slow) always runs on GitHub.
 #
-# Required secrets (GitHub → Settings → Secrets → Actions), passed with `secrets: inherit`:
+# Secrets live in environments, never at repo level, and callers pass none:
+#   desktop-signing (develop, mike, v* tags): pick-runner, build-mac, notarize-mac, build-windows.
+#   cloudflare-deploy (develop, mike, v* tags): publish (CLOUDFLARE_*, RELEASES_REPO_TOKEN).
+# Secrets:
 #   APPLE_CERTIFICATE             base64-encoded p12 Developer ID Application certificate
 #   APPLE_CERTIFICATE_PASSWORD    p12 password
 #   APPLE_SIGNING_IDENTITY        "Developer ID Application: <Name> (<TeamID>)"
@@ -209,6 +212,8 @@ jobs:
   # ─────────────────────────────────────────────────────────────────
   pick-runner:
     runs-on: ubuntu-latest
+    # Signing keys and build inputs live in this environment (develop, mike, v* only).
+    environment: desktop-signing
     timeout-minutes: 2
     outputs:
       runner: ${{ steps.pick.outputs.runner }}
@@ -294,6 +299,8 @@ jobs:
     # Any re-run (all jobs or failed ones) builds on GitHub: "Re-run failed jobs" reuses pick-runner's
     # old answer, and the Mac that failed or never answered is the likely reason for the re-run.
     runs-on: ${{ fromJSON(github.run_attempt == '1' && needs.pick-runner.outputs.runner || '"macos-latest"') }}
+    # Signing keys and build inputs live in this environment (develop, mike, v* only).
+    environment: desktop-signing
     timeout-minutes: 60
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
@@ -611,6 +618,8 @@ jobs:
     needs: build-mac
     if: needs.build-mac.outputs.stapled == 'false'
     runs-on: macos-latest
+    # Signing keys and build inputs live in this environment (develop, mike, v* only).
+    environment: desktop-signing
     timeout-minutes: 180
 
     steps:
@@ -659,6 +668,8 @@ jobs:
   build-windows:
     needs: version
     runs-on: windows-latest
+    # Signing keys and build inputs live in this environment (develop, mike, v* only).
+    environment: desktop-signing
     timeout-minutes: 60
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}

@@ -1,9 +1,6 @@
 import "./lib/auth-url-boot";
 import { RouterProvider } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
-import "@fontsource/nunito/400.css";
-import "@fontsource/nunito/600.css";
-import "@fontsource/nunito/700.css";
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";

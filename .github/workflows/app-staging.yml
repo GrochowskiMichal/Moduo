@@ -38,8 +38,7 @@ jobs:
       github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only develop, mike and v* tags may use this environment, which holds CLOUDFLARE_API_TOKEN (a
-    # repo-level secret of the same name is the fallback until it is moved).
+    # Only develop, mike and v* tags may use this environment, which holds CLOUDFLARE_API_TOKEN.
     environment: cloudflare-deploy
     env:
       SHA: ${{ github.event.workflow_run.head_sha }}

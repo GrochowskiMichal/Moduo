@@ -69,7 +69,6 @@ jobs:
   web:
     needs: resolve
     uses: ./.github/workflows/_deploy-web.yml
-    secrets: inherit
     with:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ inputs.tag }}
