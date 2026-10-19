@@ -27,7 +27,7 @@ You each take $8k gross. A Polish employment contract adds up to **~22%** on top
 | --- | ---: | ---: | ---: | ---: |
 | Paid seats to break even | 2,840 | **1,820** | 1,434 | 1,059 |
 
-At $10k each, add about **450 seats at $12** (another $5,000 a month of pay and on-costs ÷ $11.13 a seat).
+At $10k each, add about **440 seats at $12** (another ~$4,900 a month of pay and on-costs ÷ $11.13 a seat).
 
 - **The line to watch is pay, and how it's structured.** Infrastructure is under 1% of the full-time cost base. Choosing B2B or board-appointment pay over employment could save up to ~$3,500 a month, the same as ~315 paid seats at $12. That's an accountant's call, not a product one.
 - **Funnel size.** At a 2–5% free-to-paid conversion (a common freemium range, not a Moduo number), 1,800 paid seats means roughly **36,000–90,000 free signups**.
@@ -47,13 +47,13 @@ The old plan (self-hosted LiveKit on Azure, [specs/moduo-meet.md](../specs/moduo
   - a Team of 4 on a one-hour call every workday costs about **$8.90 a month** against $60 (15%).
 - **What that means.** Calls are cheap for Duo and noticeable for Team, but they never threaten the margin as long as calls stay on paid Duo and Team plans. Keeping them off Free and Pro is already the plan.
 - **Transcripts or captions** (Azure AI Speech in the old plan) would add roughly **$1 per call-hour**. That's an estimate, so make them opt-in.
-- **Verdict:** keep Calls, and build them on a managed relay rather than an always-on server. A self-hosted server only becomes cheaper above ~7,600 GB a month (about 940 four-person hours). The provider choice belongs in the Calls spec; these numbers should hold for any usage-priced relay.
+- **Verdict:** keep Calls, and build them on a managed relay rather than an always-on server. A self-hosted server only becomes cheaper above ~8,600 GB a month (the $380 base ÷ $0.05/GB, plus the free 1,000 GB; about 1,060 four-person hours). The provider choice belongs in the Calls spec; these numbers should hold for any usage-priced relay.
 
 ## Three ways to bring the full-time target closer
 
 1. **Sell more per account.** At $20 per paying account (Duo, or a mix of Pro and Team), the full-time break-even drops from 1,820 to **1,059**.
 2. **Get the pay structure right.** Up to ~$3,500 a month (about 315 seats) depends on how a Polish accountant sets up your pay.
-3. **Keep founding pricing to year one.** If the first 1,000 seats stay at $8 for as long as members stay subscribed, the target rises to about **2,170 seats**: 1,000 at $8 plus about 1,170 at $12.
+3. **Keep founding pricing to year one.** If the first 1,000 seats stay at $8 for as long as members stay subscribed, the target rises to about **2,180 seats**: 1,000 at $8 plus about 1,180 at $12.
 
 ## Still open
 
