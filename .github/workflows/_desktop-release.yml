@@ -68,7 +68,7 @@ on:
         required: true
         type: string
       ref:
-        description: "Branch to build (empty = the commit that triggered the run)"
+        description: "Branch or tag to build, e.g. refs/tags/v1.2.0 (empty = the commit that triggered the run)"
         required: false
         type: string
         default: ""
@@ -114,7 +114,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       github_frozen: ${{ steps.version.outputs.github_frozen }}
-      # The commit being built (inputs.ref, e.g. prod-app), not github.sha: that is the commit
+      # The commit being built (inputs.ref, e.g. a release tag), not github.sha: that is the commit
       # the workflow file came from, which differs when a channel builds another branch.
       # Build jobs check out build_sha, so a branch that moves mid-run (or a later "Re-run failed
       # jobs") still builds and labels the same tree. `build` is its 7-character form, shown in
@@ -708,7 +708,7 @@ jobs:
       (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The Cloudflare token (R2 upload) lives in this environment (develop, main, mike, prod-app).
+    # The Cloudflare token (R2 upload) lives in this environment (develop, mike, v* tags).
     environment: cloudflare-deploy
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
@@ -721,6 +721,43 @@ jobs:
           ref: ${{ github.workflow_sha }}
           path: .ci
           sparse-checkout: scripts
+
+      # The manifest's notes come from the built commit's own notes (REL-2): production gets its
+      # version's entry in release-notes/releases.json, staging the pending .changes as "Coming next".
+      - name: Checkout the release notes of the built commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.build_sha }}
+          path: .notes
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release
+            release-notes
+            .changes
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          # changes.ts is erasable TypeScript; Node 24 runs it without a build.
+          node-version: 24
+
+      - name: Render the update notes
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          out="$RUNNER_TEMP/notes.md"
+          changes=.notes/scripts/release/changes.ts
+          if [ ! -f "$changes" ]; then
+            echo "::warning::The built commit has no release-notes pipeline; the update notes name the build only."
+            echo "$CHANNEL build from commit $MODUO_BUILD" > "$out"
+          elif [ "$CHANNEL" = production ]; then
+            # Production ships VERSION as is, the releases.json key. A build without its entry
+            # fails here: the release PR (/ship) writes it.
+            node "$changes" notes "$MODUO_VERSION" > "$out"
+          else
+            node "$changes" coming-next > "$out"
+          fi
+          cat "$out"
 
       - name: Download Mac artifacts
         uses: actions/download-artifact@v8
@@ -750,7 +787,7 @@ jobs:
             local base="$1" out="$2"
             jq -n \
               --arg version "$MODUO_VERSION" \
-              --arg notes "$CHANNEL build from commit $MODUO_BUILD" \
+              --rawfile notes "$RUNNER_TEMP/notes.md" \
               --arg pub_date "$PUB_DATE" \
               --arg mac_sig "$(cat Moduo_universal.app.tar.gz.sig)" \
               --arg mac_url "$base/Moduo_universal.app.tar.gz" \

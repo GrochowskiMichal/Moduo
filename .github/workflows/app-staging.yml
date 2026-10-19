@@ -7,7 +7,7 @@ name: app-staging
 # its chunks (AC8). A smoke test runs against the live Worker afterwards.
 #
 # Staging is https://app.staging.moduo.app (a custom domain in apps/app/wrangler.jsonc); the smoke
-# test runs there. Production gets a commit from here through deploy-prod.yml. Roll back from the
+# test runs there. Production gets a commit from here through a release tag (release.yml). Roll back from the
 # Cloudflare dashboard or `wrangler rollback --env staging`.
 on:
   workflow_run:

@@ -54,16 +54,25 @@ Web and landing run on Cloudflare Workers (since PLAT-8, 2026-10-17); moduo.app'
 | --- | --- | --- |
 | app.staging.moduo.app | `moduo-app-staging` | `app-staging.yml`, after `checks` passes on a develop push |
 | staging.moduo.app | `moduo-landing-staging` | `landing-deploy.yml`, same trigger |
-| app.moduo.app | `moduo-app-production` | `deploy-prod.yml`, by hand |
-| moduo.app | `moduo-landing-production` | `deploy-prod.yml`, by hand |
+| app.moduo.app | `moduo-app-production` | `release.yml`, on a `vX.Y.Z` tag (re-run: `deploy-prod.yml`) |
+| moduo.app | `moduo-landing-production` | `release.yml`, same (re-run: `deploy-prod.yml`) |
 | www.moduo.app | none: a zone Redirect Rule, 308 to https://moduo.app | n/a |
 | updates.moduo.app | `moduo-update-server` | `update-server.yml` |
 
 Every PR that touches the app or the landing also gets a preview URL comment on workers.dev (`app-preview.yml`, `landing-preview.yml`). Custom domains are declared in each `wrangler.jsonc` (`routes` with `custom_domain`), so a deploy keeps them.
 
-**To ship:** run **deploy-prod** (owner only). Leave `sha` empty to ship the build app.staging.moduo.app serves now, or give a develop commit that passed `checks`. It rebuilds that commit with the production version (`VERSION`, no `-rc`), deploys the app and then the landing, smoke-tests both hosts and moves `prod-app` to the commit (the desktop release builds from `prod-app`). `target` deploys only one of the two.
+**To ship: a release tag** (since REL-2, 2026-10-19). A release is one commit on `develop` whose `VERSION` and `release-notes/releases.json` already name the new version (the release PR). Pushing its tag `vX.Y.Z` starts **release** (`release.yml`), which ships that commit everywhere:
 
-**Roll back (under a minute):** Cloudflare dashboard → Workers & Pages → `moduo-app-production` (or `moduo-landing-production`) → Deployments → the previous version → Rollback. From a terminal: `npx wrangler rollback --env production` in `apps/app` (or `apps/landing`). A rollback keeps the custom domain; run deploy-prod again to move forward. A rollback (or a deploy of an older commit) leaves `prod-app` ahead of what's live, so don't run the production desktop release until web is forward again.
+1. `resolve` refuses the tag unless its commit is on `develop`, `checks` passed on a push of it (it waits up to 40 minutes for a run still going) and `VERSION` equals the tag without the `v`. Every failing reason is listed in the run summary.
+2. `web` rebuilds the commit with the production version (`VERSION`, no `-rc`), deploys the app and then the landing (`_deploy-web.yml`), keeps the previous 3 builds' files and smoke-tests both hosts.
+3. `desktop` builds and publishes the production desktop app from the tag (§5), but only when `apps/app`, `apps/desktop`, `packages`, `supabase/functions/_shared`, `bun.lock` or `package.json` changed since the tag of the version production desktop runs now (`updates.moduo.app/desktop/production/latest.json`). Otherwise the summary says "Desktop: skipped" and why. With no tag for that version (the first tag release), it always builds.
+4. `notes` creates the GitHub release `vX.Y.Z` on **GrochowskiMichal/moduo-releases** with that version's notes from `releases.json`.
+
+`/ship` (REL-3) will make the release PR, merge it and push the tag. Until then, by hand: run `bun scripts/release/changes.ts prepare` on a branch (it bumps `VERSION`, adds the release to `releases.json`, rewrites `CHANGELOG.md` and removes the consumed notes), merge it into `develop` through a PR, then `git tag -a vX.Y.Z -m "Moduo X.Y.Z" <merge commit>` and push the tag. Releases queue one at a time (`release-production`).
+
+**Re-runs:** a failed job → **Re-run failed jobs** on the release run. To redeploy web from a tag (after a rollback, or one target alone), run **deploy-prod** (owner only) with `tag` and `target`; it runs the same check and the same deploy. `prod-app` is no longer moved by any workflow (REL-6 deletes it).
+
+**Roll back (under a minute):** Cloudflare dashboard → Workers & Pages → `moduo-app-production` (or `moduo-landing-production`) → Deployments → the previous version → Rollback. From a terminal: `npx wrangler rollback --env production` in `apps/app` (or `apps/landing`). A rollback keeps the custom domain; run deploy-prod with the release's tag to move forward again.
 
 **www and the wildcard:** the www Redirect Rule (`http.host eq "www.moduo.app"` → `https://moduo.app${http.request.uri.path}`, 308, query kept) only runs on proxied traffic, so `www` has a proxied placeholder record (AAAA `100::`). There is no `*` record: Vercel's wildcard is deleted at cutover, so an unnamed subdomain doesn't resolve rather than pointing at a provider we left. Cutover order (each step keeps every host up): deploy-prod (app.moduo.app and moduo.app get their own records) → the Redirect Rule, then the www placeholder → delete the wildcard → remove Vercel.
 
@@ -71,16 +80,17 @@ Every PR that touches the app or the landing also gets a preview URL comment on 
 
 ## 5. Desktop
 
-The desktop app bundles its own copy of the UI at build time, so a web change reaches desktop users only when a desktop build ships. Run it on every train that changes the app, after deploy-prod.
+The desktop app bundles its own copy of the UI at build time, so a web change reaches desktop users only when a desktop build ships. The release run builds it whenever something it bundles changed (§4).
 
-- **Desktop Release (production)** (`desktop-release-prod.yml`, manual) builds from `prod-app` (the Tauri app is in `apps/desktop`; the workflow also builds a `prod-app` from before that move): the signed Mac universal `.dmg` and the Windows NSIS installer. It publishes them, with `latest.json` for the in-app updater, to the rolling `prod-latest` release in the separate repo **GrochowskiMichal/moduo-releases**.
+- **The build** (`_desktop-release.yml`, channel production, from the tag): the signed Mac universal `.dmg` and the Windows NSIS installer, published with `latest.json` for the in-app updater through the update server (R2 `moduo-releases`). The manifest's notes are that version's entry in `releases.json`, as Markdown (`changes.ts notes`); the update toast shows its two highlights. Staging's manifest carries the pending `.changes` notes as "Coming next".
+- **Desktop Release (production)** (`desktop-release-prod.yml`, manual, owner only) builds a tag again: a release whose desktop job failed, or one that skipped desktop. It takes `tag` and runs the same check as the release.
 - **Notarization:** `build-mac` waits up to 20 minutes for Apple and staples. `notarize-mac` runs only when Apple was slower; "skipped" is normal when `build-mac`'s log says the staple worked (the 2026-10-16 run). A skipped `notarize-mac` with no staple in `build-mac` is a problem.
 - **Not the source of truth:** the main repo's own `prod-latest` release (last published 2026-10-05) is stale; don't judge what's live from it.
-- **Bump `VERSION` first.** Production ships the `VERSION` file as is (staging adds `-rc.<run>`), and the updater only installs a higher version, so a production run on an unchanged `VERSION` fails in its `version` job before any build starts. Bump it on `develop`, run deploy-prod (which moves `prod-app`), then run the release. After a run has published, use **Re-run failed jobs**, not "Re-run all jobs": a full re-run asks for the same version again and the check refuses it.
+- **Bump `VERSION` first.** Production ships the `VERSION` file as is (staging adds `-rc.<run>`), and the updater only installs a higher version, so a production run on an unchanged `VERSION` fails in its `version` job before any build starts. The release PR bumps it. After a run has published, use **Re-run failed jobs**, not "Re-run all jobs": a full re-run asks for the same version again and the check refuses it.
 
 ## 6. Verify what's live
 
-- **Web:** `curl -s https://app.moduo.app/config.json | jq -r .build` is the short commit production serves (staging: app.staging.moduo.app). `prod-app` can be ahead of it after a rollback.
+- **Web:** `curl -s https://app.moduo.app/config.json | jq -r .build` is the short commit production serves (staging: app.staging.moduo.app). After a Cloudflare rollback it is older than the newest tag.
 - **Database:** `select version, name from supabase_migrations.schema_migrations order by version desc limit 20;`
 - **Functions:** `supabase functions list` (version and updated time per function); call one new tool through the connector.
 - **Desktop:** `curl -s https://updates.moduo.app/desktop/production/latest.json | jq '.version,.notes'` (staging: `/desktop/staging/`). The note names the short commit that was built (from 2026-10-19; 1.1.0's note shows the workflow's commit instead, `37bb493`, while it was built from `0670dbe`). The GitHub `prod-latest` manifest is frozen at the bridge release (1.1.0), so it no longer shows what's live.

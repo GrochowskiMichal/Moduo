@@ -1,0 +1,179 @@
+name: release
+
+# A release is a vX.Y.Z tag (specs/release-v2.md, REL-2). /ship (REL-3) bumps VERSION and the notes
+# in a release PR, merges it into develop and tags the merge commit; this workflow then ships that
+# one commit everywhere:
+#   resolve  the tag's commit is on develop, `checks` passed on a push of it (waits for a run still
+#            going) and VERSION equals the tag; anything else is refused (AC7)
+#   web      app.moduo.app, then moduo.app (_deploy-web.yml), with the smoke tests
+#   desktop  the production desktop build of the tag (_desktop-release.yml), only when apps/app,
+#            apps/desktop, packages, supabase/functions/_shared or the lockfile changed since the
+#            last tag that shipped desktop (desktop bundles the UI). First run: always.
+#   notes    a GitHub release vX.Y.Z on moduo-releases with that version's notes (releases.json)
+#
+# Re-runs: "Re-run failed jobs". To redeploy only web from a tag, run deploy-prod; only desktop,
+# Desktop Release (production). Both take the tag and run the same check.
+on:
+  push:
+    tags: ["v*"]
+
+# One release at a time; a second tag waits for the first (it never cancels a deploy mid-way).
+concurrency:
+  group: release-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  RELEASES_REPO: GrochowskiMichal/moduo-releases
+  UPDATE_SERVER_URL: ${{ vars.UPDATE_SERVER_URL || 'https://updates.moduo.app' }}
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+      version: ${{ steps.check.outputs.version }}
+      desktop: ${{ steps.desktop.outputs.desktop }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: bash scripts/release/check-tag.sh "$TAG" --wait-checks 40
+
+      - name: Does desktop need a build?
+        id: desktop
+        env:
+          SHA: ${{ steps.check.outputs.sha }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # The last tag that shipped desktop is the one the production channel serves.
+          paths=(apps/app apps/desktop packages supabase/functions/_shared bun.lock package.json)
+          live="$(curl -sf --max-time 20 "$UPDATE_SERVER_URL/desktop/production/latest.json" | jq -r '.version // empty' || true)"
+          if [ -z "$live" ]; then
+            reason="the update server didn't say which version production desktop runs"
+            desktop=true
+          elif ! git rev-parse --verify --quiet "refs/tags/v$live^{commit}" > /dev/null; then
+            reason="production desktop runs $live, which has no tag (the first tag release)"
+            desktop=true
+          elif git diff --quiet "v$live" "$SHA" -- "${paths[@]}"; then
+            reason="nothing in ${paths[*]} changed since v$live, which production desktop runs"
+            desktop=false
+          else
+            reason="$(git diff --name-only "v$live" "$SHA" -- "${paths[@]}" | wc -l | tr -d ' ') file(s) in ${paths[*]} changed since v$live"
+            desktop=true
+          fi
+          echo "desktop=$desktop" >> "$GITHUB_OUTPUT"
+          if [ "$desktop" = true ]; then
+            echo "Desktop: **builds** ($reason)." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Desktop: **skipped** ($reason)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  web:
+    needs: resolve
+    # One production web deploy at a time, shared with deploy-prod.
+    concurrency:
+      group: deploy-web-production
+      cancel-in-progress: false
+    uses: ./.github/workflows/_deploy-web.yml
+    secrets: inherit
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
+      label: ${{ github.ref_name }}
+
+  desktop:
+    needs: [resolve, web]
+    if: needs.resolve.outputs.desktop == 'true'
+    # Shared with Desktop Release (production): never two production builds at once.
+    concurrency:
+      group: desktop-release-production
+      cancel-in-progress: false
+    uses: ./.github/workflows/_desktop-release.yml
+    # actions: write is for mac-watchdog alone (it cancels a run stuck waiting on the Mac).
+    permissions:
+      contents: read
+      actions: write
+    secrets: inherit
+    with:
+      channel: production
+      ref: ${{ github.ref }}
+      release_tag: prod-latest
+      release_name: "Production — latest build"
+      prerelease: false
+      web_origin: "https://app.moduo.app"
+      desktop_channel: "production"
+
+  notes:
+    needs: [resolve, web, desktop]
+    # After web, and after desktop when it built, so the release page never runs ahead of what ships.
+    if: >-
+      always() && needs.web.result == 'success' &&
+      (needs.desktop.result == 'success' || needs.desktop.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      SHA: ${{ needs.resolve.outputs.sha }}
+      DESKTOP: ${{ needs.resolve.outputs.desktop }}
+    steps:
+      - name: Checkout the release notes
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/release
+            release-notes
+            .changes
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          # changes.ts is erasable TypeScript; Node 24 runs it without a build.
+          node-version: 24
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: |
+          node scripts/release/changes.ts notes "$VERSION" > notes.md
+          {
+            echo
+            echo "---"
+            echo
+            echo "Web: https://app.moduo.app · Changelog: https://moduo.app/changelog"
+            if [ "$DESKTOP" = true ]; then
+              echo "Desktop: installed apps update themselves."
+            else
+              echo "Desktop: no new desktop build in this release (nothing it bundles changed)."
+            fi
+            echo
+            echo "Commit: ${SHA::7}"
+          } >> notes.md
+          if gh release view "$TAG" --repo "$RELEASES_REPO" > /dev/null 2>&1; then
+            gh release edit "$TAG" --repo "$RELEASES_REPO" --title "Moduo $VERSION" --notes-file notes.md
+          else
+            # --latest=false: the rolling prod-latest / staging-latest releases stay as they are.
+            gh release create "$TAG" --repo "$RELEASES_REPO" --title "Moduo $VERSION" --notes-file notes.md --latest=false
+          fi
+          url="$(gh release view "$TAG" --repo "$RELEASES_REPO" --json url --jq .url)"
+          echo "Release notes: $url" | tee -a "$GITHUB_STEP_SUMMARY"
