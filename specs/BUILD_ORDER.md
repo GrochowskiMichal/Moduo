@@ -515,7 +515,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **REL-3 — /ship skill + guard-release.sh hook; first release v1.2.0 through /ship** · deps: REL-2 · 2026-10-19 · `t/mike/rel-3-ship` · v1.2.0 shipped (#487)
 - [x] **REL-4 — What's new, update toast highlights, About history, web reload prompt, moduo.app/changelog** · deps: REL-1 · 2026-10-19 · `t/mike/rel-4-whats-new`
 - [x] **REL-5 — Split Mac builds (per-arch updater bundles, universal .dmg kept)** · deps: REL-2 · 2026-10-19 · `t/mike/rel-5-split-mac` · #489; staging 1.2.0-rc.54 per-arch (51.7% / 54.2%). Follow-up: drop `darwin-universal` + the universal tarball after the next production release
-- [~] **REL-6 — Retire prod-app/staging-app/prod-landing/main, branch cleanup, delete-on-merge** · deps: REL-3 · 2026-10-19 · `t/mike/rel-6-branches` (#492) · code, guard, environments, delete-on-merge done; branch deletions wait for Mike's approvals; `prod-landing` waits until its privacy/landing commits reach develop
+- [x] **REL-6 — Retire prod-app/staging-app/prod-landing/main, branch cleanup, delete-on-merge** · deps: REL-3 · 2026-10-19 · `t/mike/rel-6-branches` (#492) · mirror branches deleted; prod-landing last, after its content was ported to apps/landing (#494) and shipped in v1.2.1 (#496), tip 7e3823fd
 
 ## Running sessions & parallelism
 
