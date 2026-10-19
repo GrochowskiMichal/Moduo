@@ -1,0 +1,13 @@
+{
+  "id": "P009",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "No more guilty red wall sounds nice, and I'd probably start the no-card trial. But I've paid for Motion and Sunsama and dropped both within weeks, so I'm not paying for another one in month one before I see it survive a bad week.",
+  "objection": "Something asking me 'done, push, shrink or drop?' every time a block ends sounds like nagging with nicer words. On a scattered day that's six little guilt pop-ups, and that's exactly when I close the app for good. Also it doesn't say whether my iCloud calendar shows up next to my work Google one.",
+  "would_change_my_mind": "If I could turn the end-of-block check-in into one quiet end-of-day review, and both my Google and iCloud calendars showed up in one view, and I was still opening it on day 14 of the trial.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}

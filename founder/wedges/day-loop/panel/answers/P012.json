@@ -1,0 +1,13 @@
+{
+  "id": "P012",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Google Calendar plus a list in Apple Notes already works for me and costs nothing. I don't want to move my calendar into another app, and I definitely don't need email and contacts bundled into my planner.",
+  "objection": "It's an all-in-one app pitched as a planner. I'd be paying $12 a month to replace two free tools I'm happy with, plus a bunch of extra stuff I'd never open.",
+  "would_change_my_mind": "If it worked as a thin layer on top of Google Calendar, with blocks written straight into my existing calendar and no switching apps, I might try the free plan for the end-of-block done/push/drop prompt.",
+  "price_too_cheap": 2,
+  "price_cheap": 4,
+  "price_expensive": 8,
+  "price_too_expensive": 12
+}

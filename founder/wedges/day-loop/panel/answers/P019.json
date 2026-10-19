@@ -1,0 +1,13 @@
+{
+  "id": "P019",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "The done/push/shrink/drop prompt is a nicer take on the guilt problem than what Sunsama gave me, and $12 undercuts it, but I can't find a single Reddit thread or YouTube comparison on Moduo. I'd maybe poke at the free plan, but I'm not paying for a new all-in-one app with no track record while my Apple Notes list still works.",
+  "objection": "It's an unknown app trying to also be my notes, contacts and email. I've been burned by planners I abandoned after two weeks, and the end-of-block prompt could easily turn into a fresh nag that makes me feel behind all over again.",
+  "would_change_my_mind": "Honest reviews or a side-by-side YouTube comparison against Sunsama and Akiflow from people who've used it for a few months, plus a way to bring in my existing Apple Notes list without retyping it.",
+  "price_too_cheap": 3,
+  "price_cheap": 7,
+  "price_expensive": 16,
+  "price_too_expensive": 22
+}

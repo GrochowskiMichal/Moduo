@@ -1,0 +1,13 @@
+{
+  "id": "P006",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I already tried Motion and Sunsama and cancelled a $20 planner last quarter; every time, I drift back to blocking straight in Google Calendar with a plain task list. The 'done, push, shrink or drop' prompt is basically Sunsama's shutdown ritual, and the notes, contacts and email bundle is more than I want to move into.",
+  "objection": "I've tried Motion and Sunsama, so why would this one stick? Planners die for me when I stop opening a second app, and this asks me to move even more of my life into it.",
+  "would_change_my_mind": "If it worked as a thin layer on top of my actual Google Calendar, with blocks written straight to GCal and the end-of-block prompt arriving where I already am, I'd try the free plan and maybe pay after the trial.",
+  "price_too_cheap": 3,
+  "price_cheap": 5,
+  "price_expensive": 10,
+  "price_too_expensive": 15
+}

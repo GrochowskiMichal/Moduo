@@ -1,0 +1,13 @@
+{
+  "id": "P018",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I've already paid for Motion and Sunsama and drifted back to Apple Notes both times, so the problem is me sticking with it, not the features. I'd poke at the free plan, but I'm not paying $12 until it's lasted longer than the last two did.",
+  "objection": "The done/push/shrink/drop check-in sounds like Sunsama's daily ritual again, and I dropped that once it turned into a chore. Bundling notes, contacts and email doesn't help me either. I'd have to move my whole setup over just to try it.",
+  "would_change_my_mind": "If I use the free plan for a month and still open it every morning instead of Apple Notes, I'd pay. Something like $6 a month billed yearly would make that an easy call.",
+  "price_too_cheap": 2,
+  "price_cheap": 5,
+  "price_expensive": 10,
+  "price_too_expensive": 16
+}

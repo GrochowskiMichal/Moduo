@@ -1,0 +1,13 @@
+{
+  "id": "P007",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "The done/push/shrink/drop prompt is exactly the moment my plan dies at 11am, so I'd try the free plan, but nothing here says it syncs two ways with my work Google/Outlook calendar or has keyboard shortcuts and integrations. On $29k I'm not paying $12 a month for a tool I'd be double-entering meetings into.",
+  "objection": "If it can't read and write my work calendar both ways, every block I drag in is a lie by noon and I'm back to maintaining two calendars. I've been burned by that with these apps before.",
+  "would_change_my_mind": "Proof of real two-way sync with both Google and Outlook work calendars, plus a full keyboard-driven flow, shown during the no-card trial.",
+  "price_too_cheap": 2,
+  "price_cheap": 5,
+  "price_expensive": 10,
+  "price_too_expensive": 15
+}

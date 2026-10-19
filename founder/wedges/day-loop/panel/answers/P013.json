@@ -1,0 +1,13 @@
+{
+  "id": "P013",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "convenience",
+  "reason": "I just cancelled a $20 planner, and half the reason I time-block is checking the plan between meetings and on the go. Without a phone app this would only cover part of my day, and there are no reviews or Reddit threads yet to tell me it beats what I already tried.",
+  "objection": "No phone app means I can't check or reflow my plan once I'm away from my desk, and I can't find any independent reviews or comparisons with Sunsama or Motion.",
+  "would_change_my_mind": "A real mobile app plus a few honest Reddit or YouTube comparisons against Sunsama showing the end-of-block check-in actually sticks.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}

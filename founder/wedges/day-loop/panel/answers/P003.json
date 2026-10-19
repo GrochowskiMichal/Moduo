@@ -1,0 +1,13 @@
+{
+  "id": "P003",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "quality",
+  "reason": "The done/push/shrink/drop prompt is a nice idea, but nothing here says keyboard shortcuts, integrations or automations, and that's the bar before I move off Apple Notes plus Google Calendar. I've churned out of Sunsama and Motion already, so I'd poke at the free plan maybe, but I'm not paying $12 for another planner on faith.",
+  "objection": "It wants me to move notes, contacts and email into one more app, but it doesn't say whether it syncs both ways with my Google Calendar, has a command palette, or connects to Slack and Linear. If it doesn't, it's a prettier version of what Google Calendar does for free.",
+  "would_change_my_mind": "Seeing a keyboard-first demo with two-way Google Calendar sync and integrations with the tools my company already uses, where the end-of-block reflow takes one shortcut instead of clicks.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}

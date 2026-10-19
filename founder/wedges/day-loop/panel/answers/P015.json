@@ -1,0 +1,13 @@
+{
+  "id": "P015",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "quality",
+  "reason": "The no-guilt reflow pitch actually speaks to me, but nothing here says keyboard shortcuts, integrations or automations, and I'm not moving off Apple Notes for another closed planner. I might poke at the free plan, but I wouldn't pay $12 based on this.",
+  "objection": "It wants to be my notes, contacts and email too, and I have no idea if it plugs into my Google Calendar, Slack, Linear or GitHub, or if it has a command palette. Every all-in-one I've tried ends up being a walled garden I abandon after two weeks.",
+  "would_change_my_mind": "A keyboard-first command palette plus solid two-way sync with Google Calendar and my work tools (Slack, Linear, GitHub), shown in the first screen",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 20
+}

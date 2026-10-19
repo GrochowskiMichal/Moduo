@@ -1,0 +1,13 @@
+{
+  "id": "P004",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "price",
+  "reason": "I'm on a grad-student budget and Google Calendar plus a free task list already covers what I do. Honestly the done/push/shrink/drop prompt sounds nice, and I might poke at the free plan, but $12 a month is $144 a year for a nicer way to watch my plan fall apart by 11am.",
+  "objection": "My plan doesn't fail because of the tool, it fails because my day blows up. A prompt asking me to push or drop a block won't change that, and I don't want to move my calendar, notes and email into yet another app I'll stop opening in three weeks.",
+  "would_change_my_mind": "If it worked right on top of my existing Google Calendar, and the free plan let me do the end-of-block push/reflow thing for real, then I'd use it free for a couple of months and maybe pay at around $5 a month.",
+  "price_too_cheap": 1,
+  "price_cheap": 3,
+  "price_expensive": 6,
+  "price_too_expensive": 10
+}

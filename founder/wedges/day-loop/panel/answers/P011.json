@@ -1,0 +1,13 @@
+{
+  "id": "P011",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I've paid for this exact pitch two or three times and cancelled every one after a few months; I literally killed a $20 planner last quarter. I might poke at the free plan, but I'm not paying $12 a month for another time-blocking app when I'm back on Google Calendar by week six anyway.",
+  "objection": "The done/push/shrink/drop prompt is nice, but my plans don't fall apart because of the app. They fall apart because of me, and every planner I've paid for ends the same way. The notes, contacts and email bundle is just more stuff I'd have to migrate off when I quit.",
+  "would_change_my_mind": "If the free plan held up for a month or two and I was still opening it every morning without forcing myself, I'd pay. Basically, proof that I don't churn this time.",
+  "price_too_cheap": 2,
+  "price_cheap": 5,
+  "price_expensive": 10,
+  "price_too_expensive": 15
+}

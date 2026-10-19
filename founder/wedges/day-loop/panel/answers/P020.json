@@ -1,0 +1,13 @@
+{
+  "id": "P020",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "I've paid for and cancelled this exact kind of app two or three times, and I'm back to Apple Notes because it costs nothing and never nags me. The done/push/shrink/drop prompt sounds nice, but the page never says it works with my work Google or Outlook calendar, and without that it's useless to me.",
+  "objection": "My meetings live on a work calendar I don't control. If Moduo doesn't sync both ways with it, my blocks and my real meetings end up on two calendars and the whole plan falls apart, which is exactly why I quit the last ones.",
+  "would_change_my_mind": "A clear, specific promise that it syncs two-way with Google and Outlook work calendars, which I could check in the no-card trial before paying anything.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}

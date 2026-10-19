@@ -1,0 +1,13 @@
+{
+  "id": "P014",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I've paid for Motion and Sunsama and both died within a month; I always drift back to blocking straight in Google Calendar. The done/push/shrink/drop prompt is basically Sunsama's shutdown ritual, so I'd maybe poke at the free plan but I won't pay $12 for another layer on top of my calendar.",
+  "objection": "Nothing here tells me why this one sticks when the others didn't, and it doesn't say whether it handles my personal iCloud calendar alongside the work Google one. Notes, contacts and email in the same app sounds like it wants me to move my whole life in, which I won't do.",
+  "would_change_my_mind": "If it worked on top of Google Calendar and iCloud together, so blocks I make there just show up, and the end-of-block prompt actually got me to replan midday for two weeks of the free trial without me opening a separate app.",
+  "price_too_cheap": 3,
+  "price_cheap": 6,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}

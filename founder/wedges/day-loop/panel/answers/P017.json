@@ -1,0 +1,13 @@
+{
+  "id": "P017",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "I've paid for this exact dream two or three times and every time I drifted back to Apple Notes within a few months. The done/push/shrink/drop prompt sounds nice, but I'd probably poke at the free trial and never put a card in.",
+  "objection": "The app was never the problem, I am. Another planner won't make me stick to blocks, and Google Calendar already lets me drag stuff around for free.",
+  "would_change_my_mind": "If the free plan alone kept me using it daily for a month without me forcing it, and then the paid tier unlocked something I actually missed.",
+  "price_too_cheap": 2,
+  "price_cheap": 5,
+  "price_expensive": 12,
+  "price_too_expensive": 18
+}
