@@ -5,6 +5,12 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.2.1 · 2026-10-19
+
+### Improved
+
+- The privacy policy now covers booking reminders, chat files and statuses, email when away, who has a note open, and what account deletion removes.
+
 ## 1.2.0 · 2026-10-19
 
 ### New
