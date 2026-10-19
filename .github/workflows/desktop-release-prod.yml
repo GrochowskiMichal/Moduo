@@ -5,7 +5,7 @@ name: Desktop Release (production)
 # build a tag again (a failed release's desktop half) or one release.yml skipped. Same check as the
 # release (scripts/release/check-tag.sh). Builds the signed Mac universal .dmg + Windows NSIS
 # installer, pointed at app.moduo.app, and publishes them through the update server. The build
-# itself lives in _desktop-release.yml. No longer builds prod-app (REL-6 retires that branch).
+# itself lives in _desktop-release.yml. Production builds only from vX.Y.Z tags.
 
 on:
   workflow_dispatch:

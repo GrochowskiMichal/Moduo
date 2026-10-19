@@ -1,7 +1,7 @@
 name: checks
 
-# Lean mode (pre-alpha): the full suite runs on PRs into develop/main and on pushes to develop, main
-# and the personal branches. Task branches get only the fast secret scan (secret-scan.yml). The push
+# Lean mode (pre-alpha): the full suite runs on PRs into develop and on pushes to develop and
+# the personal branches. Task branches get only the fast secret scan (secret-scan.yml). The push
 # runs are what fill the remote cache: a personal-branch push writes it, so the later sync PR into
 # develop restores almost everything. The develop push run also tests the merged commit, and
 # the staging deploys (app-staging.yml, landing-deploy.yml) wait for it before staging gets that commit.
@@ -12,8 +12,8 @@ name: checks
 # supabase/functions/_shared and scripts/ through aliases, so a contracts change would skip the
 # app's tests (docs/decisions/workflow.md, 2026-10-17 · PLAT-3).
 #
-# Cache access: pushes use the turbo-cache-write environment (write token; only develop, main, mike,
-# maciej and v* tags may use it). Pull requests get the read-only token, which the Worker refuses
+# Cache access: pushes use the turbo-cache-write environment (write token; only develop, mike, maciej
+# and v* tags may use it). Pull requests get the read-only token, which the Worker refuses
 # for writes, plus TURBO_CACHE=local:rw,remote:r. The signing key is given to both, because turbo can't
 # verify a signed artifact without it.
 #
@@ -21,9 +21,9 @@ name: checks
 # passed and lint and every test shard passed, or a docs-only PR skipped them.
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [develop]
   push:
-    branches: [develop, main, mike, maciej]
+    branches: [develop, mike, maciej]
 
 concurrency:
   group: checks-${{ github.ref }}

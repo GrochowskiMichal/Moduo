@@ -6,7 +6,7 @@ name: deploy-prod
 # Cloudflare rollback. Same check as the release (scripts/release/check-tag.sh): the tag's commit
 # is on develop, passed `checks`, and VERSION equals the tag. The deploy itself is _deploy-web.yml.
 #
-# Manual, owner only. It no longer moves prod-app: Desktop Release (production) takes a tag too.
+# Manual, owner only. Production is tags only: Desktop Release (production) takes a tag too.
 # Rollback: docs/release.md §4.
 on:
   workflow_dispatch:

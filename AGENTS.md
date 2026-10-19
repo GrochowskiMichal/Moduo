@@ -6,14 +6,14 @@ The single source of truth for coding agents in Moduo. Claude Code loads it auto
 
 Marked rules are enforced in code; the rest you hold yourself.
 
-1. **Branch before editing.** Work on `t/<owner>/<kebab>` cut off the latest personal branch (`mike` or `maciej`), never `main`/`develop`. *(Hook `guard-git.sh` blocks direct pushes to `main`, `develop`, `prod-app`, `staging-app` and bare force-pushes.)*
+1. **Branch before editing.** Work on `t/<owner>/<kebab>` cut off the latest personal branch (`mike` or `maciej`), never `develop`. *(Hook `guard-git.sh` blocks direct pushes to `develop`, deleting or force-pushing `develop`/`mike`/`maciej`, and bare force-pushes; GitHub rulesets hold the same server-side.)*
 2. **The repo is public: everything committed is published.** No secrets, tokens, session files or customer data in git; keys go in env vars, private notes in `docs/local/`. *(Hook `guard-secrets.sh` runs gitleaks on every commit; CI scans each push.)*
 3. **Tokens only in UI.** No raw hex, no arbitrary Tailwind values for color/spacing/radius/font, no inline-style design properties; primitives wrap shadcn. *(Hook `guard-design-tokens.sh` re-runs `lint:tw` + `lint:css` after UI edits; CI gates both.)* Full rules: [docs/DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md), relational rules R1–R10: [docs/DESIGN_RULES.md](./docs/DESIGN_RULES.md).
 4. **Closed vocabularies live once** in `supabase/functions/_shared/contracts/` (`@contracts/*`), with a matching Postgres CHECK. *(Drift-gate tests.)* See §Domain contracts.
 5. **Applied migrations are history.** Never edit one; add a new migration. See `supabase/AGENTS.md`.
 6. **Always `getRuntime()`**, never a bare `{ runtime }` import. redb is paused: never make it load-bearing for a new feature.
 7. **No new top-level routes and no IA refactors** without the designer's explicit ask (converging from 23 routes to 5–7).
-8. **Never push or merge to `main`** without both devs. Never merge or close unrelated PRs. Force-push only your own task branch, with `--force-with-lease`.
+8. **Production ships only from a `vX.Y.Z` tag cut by `/ship`** (there is no `main` or mirror branch). Never merge or close unrelated PRs. Force-push only your own task branch, with `--force-with-lease`. *(Hook `guard-release.sh` blocks tag pushes and prod workflow runs without `/ship`'s marker.)*
 9. **Never commit `docs/local/`. Never push `refs/entire/*`** (session transcripts stay local; the guard blocks it) and never wipe local Entire data.
 10. **Never read a teammate's private Moduo data** (private tasks, queue, focus runs, agent sessions, notes) through the admin/service-role Supabase connection. Read through your own permissions, or ask them.
 11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function`; `.claude/settings.json` asks before `supabase db push`, `db query --linked` and `functions deploy`.)*

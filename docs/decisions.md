@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-19 · REL-6: mirror branches retired (prod is tags only); ruleset keeps `mike`/`maciej` safe from delete-on-merge; `guard-git.sh` guards `develop`/`mike`/`maciej`; `turbo-cache-write` keeps `maciej`; `branch-audit.ts` holds merged branches an open PR still uses → decisions/workflow.md
 - 2026-10-19 · REL-3: `guard-release.sh` consumes the `/ship` marker and ignores it after 60 minutes; `--tags` and API dispatches are blocked; the first release diffs from the live web build; the release PR is the release record → decisions/workflow.md
 - 2026-10-19 · REL-4: What's new's last-seen version lives in synced preferences and only moves forward; no recorded version → toast only for people with a pre-release stamp; update toast reads highlights from the manifest Markdown; reload prompt ignores unreadable builds; /changelog reuses the Terms page → decisions/workflow.md
 - 2026-10-17 · The local Supabase stack is shared (Maciej) · `local:reset` / `local:down` refuse without `MODUO_SHARED_STACK_OK=1` (the user's go-ahead), the raw `supabase db reset` / `stop --no-backup` are denied, and migrations are tested on top with psql · one reset would wipe other sessions' work mid-run · rejected: a stack per worktree, a docs-only rule → decisions/workflow.md
