@@ -1,0 +1,13 @@
+{
+  "id": "P012",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Our whole company brain lives in Notion and we talk in WhatsApp voice notes; $20 is fine money-wise but moving everything over is a week we don't have. My co-founder picks tools and he'd never sign off on rebuilding our templates.",
+  "objection": "We'd lose our Notion setup and templates, and there's no mention of importing them or of voice notes, which is how half our coordination actually happens.",
+  "would_change_my_mind": "A one-click Notion import that keeps our pages and templates, plus voice notes in the chat, so switching costs us an afternoon instead of a week.",
+  "price_too_cheap": 5,
+  "price_cheap": 12,
+  "price_expensive": 30,
+  "price_too_expensive": 50
+}

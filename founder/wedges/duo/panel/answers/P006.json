@@ -1,0 +1,13 @@
+{
+  "id": "P006",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "My co-founder and I already run everything through WhatsApp, a shared Google Sheet and one Google Calendar, and it costs us nothing. Moving both of us into a new app means rebuilding all of that for a problem we don't really feel yet.",
+  "objection": "Slack's free plan already covers our chat, and the sheet does the tasks. I can't see what $20 a month buys us that our free setup doesn't, and getting my co-founder to switch tools is a fight I don't want this week.",
+  "would_change_my_mind": "If it synced both ways with our Google Calendar and imported our Google Sheet in one go, so we could try it during the free trial without moving anything by hand.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 30
+}

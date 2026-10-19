@@ -1,0 +1,142 @@
+{
+ "business": "Moduo Duo: an all-in-one workspace with chat for two people working together",
+ "seed": 7,
+ "dealt": 20,
+ "answered": 20,
+ "skipped": [],
+ "buys": 0,
+ "passes": 20,
+ "buy_rate": 0.0,
+ "by_segment": [
+  [
+   "Solo operator with an assistant or VA",
+   5,
+   0.0
+  ],
+  [
+   "Partners in a small service business",
+   8,
+   0.0
+  ],
+  [
+   "Early-stage startup co-founders",
+   7,
+   0.0
+  ]
+ ],
+ "by_behaviour": [
+  [
+   "WhatsApp coordinators",
+   4,
+   0.0
+  ],
+  [
+   "Google Workspace pair",
+   2,
+   0.0
+  ],
+  [
+   "Subscription trimmer",
+   3,
+   0.0
+  ],
+  [
+   "Slack plus Notion pair",
+   5,
+   0.0
+  ],
+  [
+   "Couple running a business",
+   2,
+   0.0
+  ],
+  [
+   "One partner decides tools",
+   3,
+   0.0
+  ],
+  [
+   "Early adopter",
+   1,
+   0.0
+  ]
+ ],
+ "by_income": [
+  [
+   "$116,000 and up",
+   7,
+   0.0
+  ],
+  [
+   "$87,000 to $116,000",
+   7,
+   0.0
+  ],
+  [
+   "under $87,000",
+   6,
+   0.0
+  ]
+ ],
+ "why_not": [
+  [
+   "habit",
+   17,
+   [
+    "My VA and I live in WhatsApp and the Sheet, and clients reach us there too, so moving our chat into a new app means two places to check, not one. The money is nothing, but dropping a client reply because the new app's notifications flaked costs me more than $20.",
+    "My VA and I already live in Google Workspace: shared Gmail, Docs, Chat and one business calendar, and I'm already paying for it. Another $20 a month to move both of us into a new app solves a problem I don't really feel."
+   ],
+   [
+    "P001",
+    "P002"
+   ]
+  ],
+  [
+   "trust",
+   2,
+   [
+    "Half of how my partner and I actually work is voice notes on WhatsApp, and I'm not moving that into a small startup's chat that might drop messages or vanish in a year. If we keep WhatsApp anyway, this is just one more subscription that we won't both open every day, and that's exactly what I cut.",
+    "Slack free plus our shared Notion already costs us nothing and works, and half our coordination is voice notes anyway. I'm not moving the conversation that runs our company onto a small startup's chat and paying $20 a month for the privilege."
+   ],
+   [
+    "P003",
+    "P017"
+   ]
+  ],
+  [
+   "convenience",
+   1,
+   [
+    "It says desktop and web only, and half of our coordinating happens on our phones between client visits. Slack and Notion already work for us and Slack is free, so I'm not moving both of us over to something we can't use from our pockets."
+   ],
+   [
+    "P005"
+   ]
+  ]
+ ],
+ "why_yes": [],
+ "flip": [
+  "If it pulled our WhatsApp threads in and showed who last replied to each client, so we never had to leave WhatsApp to use it.",
+  "If it plugged straight into our existing Google Calendar and Gmail so my VA could keep working where she is and the shared task view just appeared, with nothing to migrate.",
+  "If it took voice notes properly (record, play, ideally turn one into a task) and my partner actually used it daily through the trial without being nagged.",
+  "If it pulled our WhatsApp messages in, or my VA asked to switch because the Sheet had become a mess, I'd try the free trial.",
+  "Real iOS and Android apps with chat notifications and tasks, plus a painless import from Notion and syncing with our shared Google Calendar.",
+  "If it synced both ways with our Google Calendar and imported our Google Sheet in one go, so we could try it during the free trial without moving anything by hand.",
+  "If my partner tried the trial himself and said he actually liked it more than WhatsApp plus our list, I'd pay without thinking about it.",
+  "If it could replace Notion and our paid task app at the same time, so it actually cuts our bill instead of adding a line to it, and it handled voice notes in the chat.",
+  "If it plugged into the WhatsApp chat we already use, so a client message could become a shared task with who's replying, without either of us leaving WhatsApp.",
+  "A one-click Notion import that brings our pages and templates over intact, so trying it costs us an afternoon instead of a week.",
+  "A one-click import of our Notion workspace and Slack history, plus a track record from other two-person businesses showing the chat is as dependable as Slack.",
+  "A one-click Notion import that keeps our pages and templates, plus voice notes in the chat, so switching costs us an afternoon instead of a week.",
+  "Real iOS and Android apps plus a two-way sync with our Google Calendar and Gmail, so I'm adding to Workspace instead of replacing it.",
+  "A one-click import of our Notion pages and templates that actually keeps them intact, so switching takes an afternoon instead of weeks.",
+  "A one-click import of our Notion pages and templates, plus voice notes in the built-in chat that turn into tasks.",
+  "A one-click import of our Notion workspace and Slack history, so moving takes an afternoon instead of a weekend and my partner doesn't have to rebuild anything.",
+  "Hitting Slack free's history limit right when we need old threads, plus proof from other co-founder pairs that the chat is solid and voice notes work in it.",
+  "If it handled voice notes well, letting us record, transcribe and turn them into tasks right next to the work, and it clearly replaced a paid tool we cancel, I'd try the free trial with my partner.",
+  "If it took voice notes natively and turned them into tasks or notes, so it could actually replace WhatsApp for us instead of adding another place to check.",
+  "My partner getting fed up with Slack and Notion first and asking to switch, plus an easy import of our Notion docs and tasks and proper voice notes in the chat."
+ ],
+ "purchases_first_month_per_buyer": null,
+ "price_answers": 20
+}

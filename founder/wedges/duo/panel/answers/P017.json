@@ -1,0 +1,13 @@
+{
+  "id": "P017",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "trust",
+  "reason": "Slack free plus our shared Notion already costs us nothing and works, and half our coordination is voice notes anyway. I'm not moving the conversation that runs our company onto a small startup's chat and paying $20 a month for the privilege.",
+  "objection": "If their chat drops messages or goes down on a launch day, we're stuck. Slack and WhatsApp just work, and I don't know these people.",
+  "would_change_my_mind": "Hitting Slack free's history limit right when we need old threads, plus proof from other co-founder pairs that the chat is solid and voice notes work in it.",
+  "price_too_cheap": 4,
+  "price_cheap": 10,
+  "price_expensive": 25,
+  "price_too_expensive": 40
+}

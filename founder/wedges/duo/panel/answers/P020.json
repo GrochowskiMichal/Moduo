@@ -1,0 +1,13 @@
+{
+  "id": "P020",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Slack free plus our shared Notion already works and costs us nothing, and half our coordination is voice notes anyway. I might poke at the free trial myself, but I'm not dragging my partner into a third app migration for $20 a month.",
+  "objection": "Getting my partner to switch is the real cost, not the $20. If they don't move their whole day into it, I'm just keeping two systems in sync, and I don't see voice notes mentioned anywhere.",
+  "would_change_my_mind": "My partner getting fed up with Slack and Notion first and asking to switch, plus an easy import of our Notion docs and tasks and proper voice notes in the chat.",
+  "price_too_cheap": 5,
+  "price_cheap": 12,
+  "price_expensive": 25,
+  "price_too_expensive": 40
+}

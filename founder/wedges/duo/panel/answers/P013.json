@@ -1,0 +1,13 @@
+{
+  "id": "P013",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "My assistant and I already share Gmail, Docs, Chat and one calendar through the Workspace plan I pay for, so this would mean moving everything for $20 more a month. And it says desktop and web only, while half our coordination happens on our phones.",
+  "objection": "No phone app. If my VA can't check a task or reply in chat from her phone, it's useless to us, and Google already does that.",
+  "would_change_my_mind": "Real iOS and Android apps plus a two-way sync with our Google Calendar and Gmail, so I'm adding to Workspace instead of replacing it.",
+  "price_too_cheap": 4,
+  "price_cheap": 8,
+  "price_expensive": 18,
+  "price_too_expensive": 30
+}

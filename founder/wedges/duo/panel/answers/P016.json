@@ -1,0 +1,13 @@
+{
+  "id": "P016",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Twenty bucks is nothing, but our Slack and Notion setup already works and costs us basically zero. Moving all our docs and tasks, and talking my co-founder into a new app mid-sprint, is a cost I'm not paying for a nicer version of what we have.",
+  "objection": "My partner won't switch, and a two-person tool only works if both of us actually live in it. I'm also wary of putting the company's docs into a new tool from a company I've never heard of.",
+  "would_change_my_mind": "A one-click import of our Notion workspace and Slack history, so moving takes an afternoon instead of a weekend and my partner doesn't have to rebuild anything.",
+  "price_too_cheap": 5,
+  "price_cheap": 12,
+  "price_expensive": 30,
+  "price_too_expensive": 50
+}

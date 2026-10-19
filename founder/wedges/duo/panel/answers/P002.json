@@ -1,0 +1,13 @@
+{
+  "id": "P002",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "My VA and I already live in Google Workspace: shared Gmail, Docs, Chat and one business calendar, and I'm already paying for it. Another $20 a month to move both of us into a new app solves a problem I don't really feel.",
+  "objection": "Getting my assistant to switch apps is the hard part, and this doesn't replace Workspace, it sits on top of it, so we'd be paying twice and checking two places.",
+  "would_change_my_mind": "If it plugged straight into our existing Google Calendar and Gmail so my VA could keep working where she is and the shared task view just appeared, with nothing to migrate.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

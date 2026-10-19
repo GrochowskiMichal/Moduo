@@ -1,0 +1,13 @@
+{
+  "id": "P011",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Slack free and a shared Notion already cover us for close to nothing, and moving the whole business's chat, docs and tasks into a new tool is a weekend I don't have. The price isn't the problem; the switch is.",
+  "objection": "If the chat drops messages or goes down, my partner and I lose our main line to each other and to client context. Slack has never let us down, and I don't want our business riding on a small startup's chat.",
+  "would_change_my_mind": "A one-click import of our Notion workspace and Slack history, plus a track record from other two-person businesses showing the chat is as dependable as Slack.",
+  "price_too_cheap": 5,
+  "price_cheap": 12,
+  "price_expensive": 35,
+  "price_too_expensive": 60
+}

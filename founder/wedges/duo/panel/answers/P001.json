@@ -1,0 +1,13 @@
+{
+  "id": "P001",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "My VA and I live in WhatsApp and the Sheet, and clients reach us there too, so moving our chat into a new app means two places to check, not one. The money is nothing, but dropping a client reply because the new app's notifications flaked costs me more than $20.",
+  "objection": "A small startup's chat won't be as reliable as WhatsApp, and my assistant won't actually open another app every day.",
+  "would_change_my_mind": "If it pulled our WhatsApp threads in and showed who last replied to each client, so we never had to leave WhatsApp to use it.",
+  "price_too_cheap": 5,
+  "price_cheap": 12,
+  "price_expensive": 40,
+  "price_too_expensive": 70
+}

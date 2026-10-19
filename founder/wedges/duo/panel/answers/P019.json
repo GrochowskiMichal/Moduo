@@ -1,0 +1,13 @@
+{
+  "id": "P019",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "We'd probably spin up the free trial on a whim, but half of how my co-founder and I actually coordinate is voice notes on WhatsApp, and nothing here says it handles that, so the chat would sit empty and we'd drift back. Paying $20 a month on top of what we already use free doesn't happen for a tool we've stopped opening.",
+  "objection": "$20 a month is more than we pay now for a stack that already works, and it doesn't replace the voice-note habit where our real decisions happen.",
+  "would_change_my_mind": "If it took voice notes natively and turned them into tasks or notes, so it could actually replace WhatsApp for us instead of adding another place to check.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

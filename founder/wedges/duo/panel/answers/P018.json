@@ -1,0 +1,13 @@
+{
+  "id": "P018",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "habit",
+  "reason": "Slack's free plan already handles our chat, and half of what we coordinate happens in voice notes, which this doesn't even mention. Flat $20 for two is fairer than per-seat pricing, but I'd be paying to move tools we already have for free, and I doubt my partner would open it every day.",
+  "objection": "We'd both have to switch everything over and use it daily. If one of us drifts back to Slack and voice notes, I'm paying $240 a year for a fancy task list.",
+  "would_change_my_mind": "If it handled voice notes well, letting us record, transcribe and turn them into tasks right next to the work, and it clearly replaced a paid tool we cancel, I'd try the free trial with my partner.",
+  "price_too_cheap": 3,
+  "price_cheap": 8,
+  "price_expensive": 15,
+  "price_too_expensive": 25
+}

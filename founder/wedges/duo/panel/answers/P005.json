@@ -1,0 +1,13 @@
+{
+  "id": "P005",
+  "buys": false,
+  "purchases_first_month": 0,
+  "reason_code": "convenience",
+  "reason": "It says desktop and web only, and half of our coordinating happens on our phones between client visits. Slack and Notion already work for us and Slack is free, so I'm not moving both of us over to something we can't use from our pockets.",
+  "objection": "No phone app. If my partner pings me about a client and I can't see it or check the task on my phone, the built-in chat is worse than what we have now.",
+  "would_change_my_mind": "Real iOS and Android apps with chat notifications and tasks, plus a painless import from Notion and syncing with our shared Google Calendar.",
+  "price_too_cheap": 5,
+  "price_cheap": 12,
+  "price_expensive": 30,
+  "price_too_expensive": 45
+}
