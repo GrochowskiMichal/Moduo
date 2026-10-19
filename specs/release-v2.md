@@ -139,7 +139,7 @@ This spec makes a release one guarded step:
 
 - Build per-arch `.app` bundles (`--target aarch64-apple-darwin`, then `x86_64-apple-darwin`), then the universal `.dmg` (`--target universal-apple-darwin`, reusing the two compiles from cache), all in the one Mac job. The Mac runner can't run two jobs at once, and per-arch compile on an M4 is about 65 s each.
 - Each per-arch `.app` is notarized (zip submission, in parallel with the `.dmg`). The updater tarballs aren't stapled: updater-installed apps aren't quarantined, and the ticket is checked online.
-- The manifest gets per-arch URLs. The universal `.app.tar.gz` is still produced for one release as the fallback key, then dropped.
+- The manifest gets per-arch URLs. The universal `.app.tar.gz` was published for one transition release as the fallback key, then dropped after production 1.2.1.
 - *Rejected:* separate Mac jobs per arch (there's only one Mac runner, and it doubles fallback cost); per-arch `.dmg` on the website (arch detection in browsers is unreliable).
 
 **Branches:**

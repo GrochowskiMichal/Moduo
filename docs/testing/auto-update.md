@@ -4,7 +4,7 @@ Update files live in the public repo `GrochowskiMichal/moduo-releases` (rolling 
 
 ## Setup
 - [ ] `RELEASES_REPO_TOKEN` (fine-grained PAT, Contents: read/write on `moduo-releases`) is set as a repo secret.
-- [ ] Run **Desktop Release (production)** (after promoting to `prod-app`). Both jobs + publish green → `prod-latest` on `moduo-releases` has `Moduo_universal.dmg`, `Moduo_aarch64.app.tar.gz`, `Moduo_x64.app.tar.gz`, `Moduo_x64-setup.exe`, `latest.json`.
+- [ ] Ship a production release with `/ship`. Both jobs + publish green → the update server has `Moduo_universal.dmg`, `Moduo_aarch64.app.tar.gz`, `Moduo_x64.app.tar.gz`, `Moduo_x64-setup.exe` and `latest.json` under `/download/desktop/production/<version>/`. (`prod-latest` on `moduo-releases` is the frozen 1.1.0 bridge and doesn't change.)
 - [ ] `latest.json` (open it logged out) has non-empty `signature` for darwin-* and windows-*, and a `version` of `1.0.<run number>`. → both
 
 ## Download
