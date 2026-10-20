@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
+import { devtools } from "@tanstack/devtools-rspack";
 
 function readLocalEnvValue(name: string): string {
   // .env.local lives at the repo root (scripts/local/env.ts writes it there).
@@ -130,6 +131,13 @@ export default defineConfig({
   html: {
     template: "./index.html",
   },
+  tools: {
+    // TanStack Devtools (TS-1): source links and console helpers in dev only;
+    // production builds never load the plugin or the panel (src/main.tsx).
+    rspack: (_config, { isDev, prependPlugins }) => {
+      if (isDev) prependPlugins(devtools());
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname),
@@ -164,6 +172,9 @@ export default defineConfig({
     strictPort: true,
   },
   output: {
+    // MODUO_SOURCEMAP=1 emits .map files for bundle attribution (Rsbuild 2 has
+    // no webpack analyzer); release builds leave it off.
+    ...(process.env.MODUO_SOURCEMAP ? { sourceMap: { js: "source-map" as const } } : {}),
     distPath: {
       root: isWeb ? "dist/web" : "dist",
     },
@@ -178,11 +189,17 @@ export default defineConfig({
     // Fetch route chunks in the background so the next screen opens from
     // cache. On desktop the files are already local; on web this is idle
     // bandwidth after the first paint.
+    // Geist 400/500 are the first-paint faces: preload them (as="font" with
+    // crossorigin) so text does not wait for the stylesheet to be parsed.
+    preload: {
+      type: "all-assets",
+      include: [/geist-sans-latin-(?:400|500)-normal\.[0-9a-f]+\.woff2$/],
+    },
     prefetch: {
       type: "async-chunks",
       // Except posthog-js: analytics code is fetched only once someone opts in
       // (src/lib/analytics.ts names that chunk). The first pattern is Rsbuild's default.
-      exclude: [/\.(?:webmanifest|pdf|txt)$/i, /(?:^|\/)posthog\./],
+      exclude: [/\.(?:webmanifest|pdf|txt)$/i, /(?:^|\/)posthog\./, /\.woff2?$/],
     },
   },
 });

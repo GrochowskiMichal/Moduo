@@ -1,7 +1,7 @@
 // What a drop writes, and what its Undo toast says (TV-U4). Pure: no React,
 // no IO. Every surface that drops a task — the List, the Board, the rail, the
 // List's move keys — turns its gesture into one `TaskDropWrite`, and
-// `useTasksModule.dropTask` saves it in order and offers the Undo (call a).
+// the `dropTask` command saves it in order and offers the Undo (call a).
 
 import { PRIORITY_LABELS } from "../helpers";
 import type { PriorityLevel, Task } from "../model";

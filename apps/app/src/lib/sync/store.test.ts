@@ -32,6 +32,7 @@ import {
   setStoreOptionsForTests,
   stampMinus,
   WorkspaceStore,
+  waitingSyncCount,
   wipeSyncCopies,
   workspaceStore,
 } from "./store";
@@ -604,6 +605,34 @@ describe("offline: captures and check-offs (default g)", () => {
     release();
   });
 
+  it("a capture queued before the copy is read shows once and is sent once, with the copy's", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const first = makeStore(server);
+    await settled(first.store);
+    server.goOffline();
+    first.store.wentOffline();
+    first.store.enqueue({ kind: "create", id: "op-old", task: task("old", { title: "Old" }) });
+    first.release();
+    await first.store.whenPersisted();
+    first.store.dispose();
+
+    // The next store queues a capture before it was ever held (no copy read yet).
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache: first.cache,
+      timing: { persistMs: 0, throttleMs: 0 },
+    });
+    store.enqueue({ kind: "create", id: "op-new", task: task("new", { title: "New" }) });
+    await store.whenPersisted();
+    server.goOnline();
+    const release = store.acquire();
+    await settled(store);
+    expect(store.getSnapshot().pending).toBe(0);
+    expect(server.created.map((t) => t.id).sort()).toEqual(["new", "old"]);
+    expect(store.getSnapshot().bundle.tasks.filter((t) => t.id === "new")).toHaveLength(1);
+    release();
+  });
+
   it("queue on the device and flush in order on reconnect, without duplicates", async () => {
     const server = fakeServer();
     server.tables.tasks = [task("a", { updatedAt: at(5) })];
@@ -677,6 +706,57 @@ describe("offline: captures and check-offs (default g)", () => {
   });
 });
 
+describe("outbox order (a live write never jumps a waiting one)", () => {
+  it("a check-off made while an older one for the same task is flushing waits behind it", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+
+    // Hold the server's answer to the first (queued) status write.
+    const tasksApi = server.runtime.tasks as unknown as {
+      opSetStatus: (input: { taskId: string; status: string }) => Promise<Task>;
+    };
+    const real = tasksApi.opSetStatus;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    tasksApi.opSetStatus = async (input) => {
+      calls += 1;
+      if (calls === 1) await gate;
+      return real(input);
+    };
+
+    // An older check-off waits in the outbox; the flush is sending it now.
+    store.enqueue({
+      kind: "status",
+      id: "op-old",
+      taskId: "a",
+      status: "done",
+      fields: { status: "done", statusCategory: "done" },
+    });
+    await tick();
+    expect(store.hasOutboxEntries("a")).toBe(true);
+
+    // The person un-checks it before that answer comes back.
+    const sent = store.sendStatus({
+      taskId: "a",
+      status: "todo",
+      fields: { status: "todo", statusCategory: "todo" },
+    });
+    expect(await sent).toBe("queued");
+
+    release();
+    await settled(store);
+    // In the order they were made: the newer change is the one that stays.
+    expect(server.statusCalls.map((c) => c.status)).toEqual(["done", "todo"]);
+    expect((server.tables.tasks as Task[]).find((t) => t.id === "a")?.status).toBe("todo");
+    expect(store.getSnapshot().pending).toBe(0);
+  });
+});
+
 describe("the device copy is one person's", () => {
   async function persisted(store: WorkspaceStore) {
     await settled(store);
@@ -701,6 +781,67 @@ describe("the device copy is one person's", () => {
       // Nothing is written back after sign-out.
       store.persistNow();
       await store.whenPersisted();
+      expect(cache.records.size).toBe(0);
+      release();
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+
+  it("sign-out keeps what waits to sync (rows go) and sends it when that person signs back in", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      server.tables.tasks = [task("private-plan")];
+      const store = workspaceStore(server.runtime, ME, WS);
+      const release = store.acquire();
+      await persisted(store);
+      // Captured offline; then auth-js signs the person out on its own (the
+      // refresh token died). The capture isn't written to the copy yet.
+      server.goOffline();
+      store.wentOffline();
+      store.enqueue({ kind: "create", id: "op-1", task: task("on-the-plane") });
+      expect(waitingSyncCount()).toBe(1);
+
+      await wipeSyncCopies();
+      const copy = cache.records.get(cacheKey(ME, WS));
+      expect(copy?.outbox).toHaveLength(1);
+      expect(copy?.tables).toEqual({}); // no rows stay
+      release();
+
+      // Someone else signs in on this device: the first person's capture stays.
+      await attachSyncUser("user-other");
+      expect(cache.records.get(cacheKey(ME, WS))?.outbox).toHaveLength(1);
+
+      // The person signs back in: the capture goes out, once.
+      server.goOnline();
+      await attachSyncUser(ME);
+      const back = workspaceStore(server.runtime, ME, WS);
+      const releaseBack = back.acquire();
+      await settled(back);
+      await back.flush();
+      await settled(back);
+      expect(server.created.map((t) => t.id)).toEqual(["on-the-plane"]);
+      expect(back.getSnapshot().pending).toBe(0);
+      releaseBack();
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+
+  it("account deletion wipes what waits too", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      const store = workspaceStore(server.runtime, ME, WS);
+      const release = store.acquire();
+      await persisted(store);
+      store.wentOffline();
+      store.enqueue({ kind: "create", id: "op-1", task: task("gone-with-it") });
+      await store.whenPersisted();
+      await wipeSyncCopies({ keepWaiting: false });
       expect(cache.records.size).toBe(0);
       release();
     } finally {

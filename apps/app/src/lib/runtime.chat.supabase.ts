@@ -21,9 +21,9 @@
  */
 
 import { CUSTOM_EMOJI_PER_WORKSPACE } from "@contracts/vocabularies";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import { mapCustomEmoji } from "../features/chat/emoji/model";
+import { type Db, DbError, type Json } from "./runtime.db";
 
 /** The private bucket custom emoji images live in (CV-20). */
 const CHAT_EMOJI_BUCKET = "chat-emoji";
@@ -71,7 +71,7 @@ function single<T>(data: unknown, mapper: (r: unknown) => T | null, what: string
 }
 
 function fail(error: { message: string } | null): void {
-  if (error) throw new Error(error.message);
+  if (error) throw new DbError(error);
 }
 
 // ── Results (the store's transport never throws) ────────────────────────────
@@ -112,7 +112,7 @@ async function attempt<T>(run: () => Promise<ChatResult<T>>): Promise<ChatResult
  * Backslashes go first: a value ending in `\` would otherwise escape the closing quote. */
 export const q = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
-export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
+export function chatRuntimeOn(db: () => Db): ChatRuntime {
   return {
     // ── the store's transport ──────────────────────────────────────────────────
 
@@ -799,7 +799,7 @@ export function chatRuntimeOn(db: () => SupabaseClient): ChatRuntime {
       if (patch.showFocusTask !== undefined) body.show_focus_task = patch.showFocusTask;
       if (patch.noticeShowText !== undefined) body.notice_show_text = patch.noticeShowText;
       if (patch.emailWhenAway !== undefined) body.email_when_away = patch.emailWhenAway;
-      const { data, error } = await db().rpc("user_op_set_chat_prefs", { p_patch: body });
+      const { data, error } = await db().rpc("user_op_set_chat_prefs", { p_patch: body as Json });
       fail(error);
       return mapUserChatPrefs(data);
     },

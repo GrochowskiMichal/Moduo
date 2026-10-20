@@ -10,13 +10,17 @@
 //             (conversations, memberships, people, counts) so a cold open paints.
 //
 // Rows are keyed by person as well as workspace (Tasks' copy does the same):
-// one browser never shows a person another's rows. Only server rows are kept
+// one browser never shows a person another's rows. On sign-out, and when
+// someone else signs in, a person's copy is cut down to its outbox
+// (`keepOnlyWaiting`): the rows, drafts and sidebar go, the waiting sends stay
+// under their key until that person signs in here again. Only server rows are kept
 // (an unsent message lives in the outbox, in meta); the newest `keep` per
 // conversation, evicted in the same transaction that writes them, at most
 // 200 rows a transaction. Every failure reads as "no copy": the server keeps
 // the truth. Where IndexedDB is missing (tests, a locked-down browser) the
 // memory copy stands in, and the store opens from the server.
 
+import { idbDone, idbOpener, idbRequest } from "../../../lib/sync/kernel/idb";
 import type {
   ChatChannel,
   ChatKey,
@@ -88,8 +92,34 @@ export function emptyMeta(): ChatMeta {
   };
 }
 
-// The owner key is the sync copy's record key (`<person>:<workspace>`).
-export { cacheKey as ownerKey, isKeyOf as isOwnerOf } from "../../../lib/sync/cache";
+// The owner key is every sync copy's record key (`<person>:<workspace>`).
+export { isOwnedBy as isOwnerOf, ownerKey } from "../../../lib/sync/kernel/registry";
+
+/** Waiting sends, stored ones first, each id once (a sign-out keeps them). */
+function mergeWaiting(
+  stored: readonly ChatOutboxEntry[] | undefined,
+  inMemory: readonly ChatOutboxEntry[],
+  handled: ReadonlySet<string> = new Set(),
+): ChatOutboxEntry[] {
+  const out: ChatOutboxEntry[] = [];
+  const seen = new Set<string>();
+  for (const entry of [...(Array.isArray(stored) ? stored : []), ...inMemory]) {
+    if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    // Sent or discarded by a store whose last write may not have landed.
+    if (handled.has(entry.id)) continue;
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * The meta a copy cut down to its outbox keeps: an older version stamp makes
+ * the next store that opens it take the outbox and read everything else again.
+ */
+function waitingOnlyMeta(outbox: ChatOutboxEntry[]): ChatMeta {
+  return { ...emptyMeta(), v: 0, savedAt: Date.now(), outbox };
+}
 
 export interface ChatDeviceCopy {
   readMeta(owner: string): Promise<ChatMeta | null>;
@@ -107,7 +137,18 @@ export interface ChatDeviceCopy {
   ): Promise<void>;
   removeIds(owner: string, ids: readonly string[]): Promise<void>;
   removeConversations(owner: string, channelIds: readonly string[]): Promise<void>;
-  /** Everything goes (sign-out, account deletion). */
+  /** Every owner the copy holds anything for (meta or rows). */
+  owners(): Promise<string[]>;
+  /**
+   * Cut one owner's copy down to its outbox (what it stored plus `inMemory`):
+   * its rows, drafts and sidebar go. Answers how many sends stayed.
+   */
+  keepOnlyWaiting(
+    owner: string,
+    inMemory: readonly ChatOutboxEntry[],
+    handled?: ReadonlySet<string>,
+  ): Promise<number>;
+  /** Everything goes (account deletion). */
   clear(): Promise<void>;
   /** The copies whose owner matches go (another person signed in, a workspace left). */
   deleteWhere(match: (owner: string) => boolean): Promise<void>;
@@ -186,6 +227,17 @@ export function memoryChatCopy(): ChatDeviceCopy & {
       const held = of(owner);
       for (const [id, r] of held) if (drop.has(r.channelId)) held.delete(id);
     },
+    async owners() {
+      return [
+        ...new Set([...metas.keys(), ...[...rows].filter(([, m]) => m.size > 0).map(([o]) => o)]),
+      ];
+    },
+    async keepOnlyWaiting(owner, inMemory, handled) {
+      const outbox = mergeWaiting(metas.get(owner)?.outbox, inMemory, handled);
+      rows.delete(owner);
+      metas.set(owner, clone(waitingOnlyMeta(outbox)));
+      return outbox.length;
+    },
     async clear() {
       rows.clear();
       metas.clear();
@@ -207,56 +259,24 @@ const TOP = "￿";
 
 type Stored = { k: [string, string, string, string]; i: [string, string]; row: ChatMessage };
 
-function done(tx: IDBTransaction): Promise<void> {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? new Error("The chat copy's transaction aborted."));
-    tx.onerror = () => reject(tx.error ?? new Error("The chat copy's transaction failed."));
-  });
-}
-
-function request<T>(req: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
+const done = (tx: IDBTransaction) => idbDone(tx, "The chat copy's transaction");
+const request = idbRequest;
 
 const conversationRange = (owner: string, channelId: string) =>
   IDBKeyRange.bound([owner, channelId], [owner, channelId, TOP]);
 
 /** The copy in IndexedDB. */
 export function idbChatCopy(factory: IDBFactory): ChatDeviceCopy {
-  let db: Promise<IDBDatabase> | null = null;
-  const open = (): Promise<IDBDatabase> => {
-    db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const req = factory.open(DB_NAME, 1);
-      req.onupgradeneeded = () => {
-        const d = req.result;
-        if (!d.objectStoreNames.contains(MESSAGES)) {
-          d.createObjectStore(MESSAGES, { keyPath: "k" }).createIndex("byId", "i", {
-            unique: true,
-          });
-        }
-        if (!d.objectStoreNames.contains(META)) d.createObjectStore(META);
-      };
-      req.onsuccess = () => {
-        const opened = req.result;
-        // Another tab upgrading must not wait on this one; the next call reopens.
-        opened.onversionchange = () => {
-          opened.close();
-          db = null;
-        };
-        resolve(opened);
-      };
-      req.onerror = () => reject(req.error);
-      req.onblocked = () => reject(new Error("The chat copy is blocked by another tab."));
-    }).catch((e) => {
-      db = null;
-      throw e;
-    });
-    return db;
-  };
+  // A database left without one of its stores is reopened one version up (kernel).
+  const db = idbOpener(factory, {
+    name: DB_NAME,
+    stores: {
+      [MESSAGES]: (d) =>
+        d.createObjectStore(MESSAGES, { keyPath: "k" }).createIndex("byId", "i", { unique: true }),
+      [META]: (d) => d.createObjectStore(META),
+    },
+  });
+  const open = () => db.open();
 
   /** Evict all but the newest `keep` of one conversation, inside `store`'s transaction. */
   const evict = (store: IDBObjectStore, owner: string, channelId: string, keep: number) => {
@@ -373,6 +393,61 @@ export function idbChatCopy(factory: IDBFactory): ChatDeviceCopy {
         await done(tx);
       } catch {
         // Nothing to drop.
+      }
+    },
+    async owners() {
+      try {
+        const d = await open();
+        const tx = d.transaction([MESSAGES, META], "readonly");
+        const finished = done(tx);
+        const owners = new Set<string>();
+        // Both requests go out in this turn: an older WebKit may commit a
+        // transaction that waits on a promise between them.
+        const metaKeys = tx.objectStore(META).getAllKeys();
+        metaKeys.onsuccess = () => {
+          for (const key of metaKeys.result) if (typeof key === "string") owners.add(key);
+        };
+        await new Promise<void>((resolve, reject) => {
+          const cursor = tx.objectStore(MESSAGES).openKeyCursor();
+          cursor.onsuccess = () => {
+            const c = cursor.result;
+            if (!c) return resolve();
+            const owner = (c.primaryKey as Stored["k"])[0];
+            if (typeof owner !== "string") return c.continue();
+            owners.add(owner);
+            // On to the next owner's first row.
+            c.continue([owner, TOP]);
+          };
+          cursor.onerror = () => reject(cursor.error);
+        });
+        await finished;
+        return [...owners];
+      } catch {
+        return [];
+      }
+    },
+    async keepOnlyWaiting(owner, inMemory, handled) {
+      try {
+        const d = await open();
+        const tx = d.transaction([MESSAGES, META], "readwrite");
+        const meta = tx.objectStore(META);
+        let kept = 0;
+        const get = meta.get(owner);
+        get.onsuccess = () => {
+          const outbox = mergeWaiting(
+            (get.result as ChatMeta | undefined)?.outbox,
+            inMemory,
+            handled,
+          );
+          kept = outbox.length;
+          meta.put(waitingOnlyMeta(outbox), owner);
+        };
+        tx.objectStore(MESSAGES).delete(IDBKeyRange.bound([owner], [owner, TOP]));
+        await done(tx);
+        return kept;
+      } catch {
+        // Couldn't cut it down: say nothing stayed, so the caller deletes it.
+        return 0;
       }
     },
     async clear() {

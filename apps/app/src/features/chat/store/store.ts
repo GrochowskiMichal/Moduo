@@ -1,6 +1,9 @@
 // The chat store (CV-3, spec #2, round-3 §1.2 and §2.7, CV-0 spikes 2 and 3):
-// one copy of a workspace's chat per person, on the shared pattern Tasks'
-// store set (`src/lib/sync/store.ts`).
+// one copy of a workspace's chat per person, on the sync kernel Tasks' store
+// runs on too (`lib/sync/kernel/`): its stamps and landing rule, the delta
+// loop, op-keyed overlays, the outbox (holding a refused send for Retry), the
+// registry and the person lifecycle. Conversations page by key in windows of
+// their own, so the rows live here rather than in a synced collection.
 //
 // How the copy stays right:
 //   - **Opens from the device.** The sidebar (conversations, memberships,
@@ -35,11 +38,25 @@
 // only that overlay (one write rolls back); offline they say "Offline".
 // The read mark is the last message that was on screen, never "now", and it
 // moves forward only.
+//
+// Sign-out (or someone else signing in) cuts the person's copy down to its
+// outbox: rows, drafts and the sidebar go, waiting sends stay under their key
+// and go out the next time they sign in here (as Tasks' captures do). A null
+// session is not a sign-out: the stores stop, the copy stays whole.
 
 import { currentPreferences } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { readDelta } from "../../../lib/sync/kernel/delta";
+import { Backoff, drainOutbox, Outbox } from "../../../lib/sync/kernel/outbox";
+import { nextOp, OverlayStack } from "../../../lib/sync/kernel/overlay";
+import {
+  type OwnedCopies,
+  personLifecycle,
+  refcount,
+  StoreRegistry,
+} from "../../../lib/sync/kernel/registry";
+import { micros as stampMicros } from "../../../lib/sync/kernel/stamps";
 import { browserOffline } from "../../../lib/sync/network";
-import { timestampMicros } from "../../tasks/live";
 import type { ChatFileGate } from "../files/gate";
 import type {
   ChatChannel,
@@ -66,10 +83,9 @@ import {
   type ChatOutboxEntry,
   chatDeviceCopy,
   emptyMeta,
-  isOwnerOf,
   ownerKey,
 } from "./device-copy";
-import { compareKeys, compareRows, isNewerRow, keyOf, laterStamp, stampMinus } from "./keys";
+import { compareKeys, compareRows, isNewerRow, keyOf, laterStamp } from "./keys";
 import { classifyChatError, newMessageId } from "./outbox";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -154,7 +170,8 @@ type Conv = {
   target: string | null;
 };
 
-type Overlay = { op: number; id: string; apply: (row: ChatMessage) => ChatMessage };
+/** A write shown over one message until its answer comes back. */
+type Overlay = { id: string; apply: (row: ChatMessage) => ChatMessage };
 
 // ── Timing and sizes ────────────────────────────────────────────────────────
 
@@ -221,8 +238,6 @@ export type ChatStoreOptions = {
   keyRepliesOn?: (keyId: string) => boolean;
 };
 
-let nextOp = 1;
-
 const ZERO = (channelId: string): ChatUnread => ({
   channelId,
   unread: 0,
@@ -231,7 +246,7 @@ const ZERO = (channelId: string): ChatUnread => ({
   catchup: 0,
 });
 
-const micros = (at: string | null | undefined) => timestampMicros(at) ?? 0;
+const micros = (at: string | null | undefined) => stampMicros(at, 0);
 
 /**
  * A line that takes ids away from the conversation it's in: a live moved_out
@@ -279,13 +294,15 @@ export class ChatStore {
   /** When a row last landed (`seq`): a reconcile never drops a row that arrived after its read began. */
   private landedAt = new Map<string, number>();
   private seq = 0;
-  private overlays: Overlay[] = [];
-  private outbox: ChatOutboxEntry[] = [];
-  /** Outbox ids this tab sent or discarded (another tab's waiting sends are kept). */
-  private handled = new Set<string>();
+  private overlays = new OverlayStack<Overlay>();
+  /**
+   * Sends not confirmed yet, in order. A refused one stays as "Not sent ·
+   * Retry" and later ones go on. What this tab sent or discarded is handled
+   * (another tab's waiting sends are kept); sends read from the device may be
+   * sent or discarded by another tab meanwhile (adopted).
+   */
+  private outbox = new Outbox<ChatOutboxEntry>("hold-failed-for-retry", (e) => !!e.failed);
   private inFlight: string | null = null;
-  /** Waiting sends read from the device at start: another tab may send or discard them. */
-  private adopted = new Set<string>();
   private draining: Promise<void> | null = null;
   private drainAgain = false;
   private chainState = new Map<string, { loading: boolean; loaded: boolean }>();
@@ -313,7 +330,10 @@ export class ChatStore {
   private markTimer: ReturnType<typeof setTimeout> | null = null;
   private countsTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private refs = 0;
+  private readonly refs = refcount(
+    () => this.start(),
+    () => this.stop(),
+  );
   private running = false;
   private disposed = false;
   /** Disposed without persisting (sign-out, another person): the copy is being wiped. */
@@ -350,6 +370,7 @@ export class ChatStore {
     this.live = opts.live ?? null;
     this.timing = { ...DEFAULT_CHAT_TIMING, ...opts.timing };
     this.deltaLimit = opts.deltaLimit ?? DELTA_LIMIT;
+    this.backoff = new Backoff(this.timing.retryMs, this.timing.retryMs);
     this.files = opts.files ?? null;
     this.keyRepliesOn =
       opts.keyRepliesOn ?? ((keyId) => currentPreferences().chatKeyReplies[keyId] ?? true);
@@ -418,13 +439,13 @@ export class ChatStore {
       unread: Object.fromEntries(this.unread),
       windows,
       chains,
-      waiting: this.outbox.filter((e) => !e.deleted).length,
+      waiting: this.outbox.list().filter((e) => !e.deleted).length,
     };
   }
 
   private shown(row: ChatMessage): ChatMessage {
     let out = row;
-    for (const o of this.overlays) if (o.id === row.id) out = o.apply(out);
+    for (const o of this.overlays.list()) if (o.id === row.id) out = o.apply(out);
     return out;
   }
 
@@ -451,7 +472,7 @@ export class ChatStore {
     }
     rows.sort(compareRows);
     if (!conv.hi) {
-      for (const entry of this.outbox) {
+      for (const entry of this.outbox.list()) {
         if (entry.channelId === channelId && !entry.deleted && !conv.rows.has(entry.id)) {
           rows.push(this.unsentRow(entry));
         }
@@ -480,7 +501,7 @@ export class ChatStore {
       }
     }
     replies.sort(compareRows);
-    for (const entry of this.outbox) {
+    for (const entry of this.outbox.list()) {
       if (
         !entry.deleted &&
         entry.replyToId &&
@@ -573,15 +594,17 @@ export class ChatStore {
 
   /** Hold the store while mounted; the last release stops its sockets (the copy stays). */
   acquire(): () => void {
-    this.refs += 1;
-    if (this.refs === 1) this.start();
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      this.refs -= 1;
-      if (this.refs <= 0) this.stop();
-    };
+    return this.refs.acquire();
+  }
+
+  /** Outbox ids this store sent or discarded (a sign-out must not keep them). */
+  handledEntryIds(): string[] {
+    return this.outbox.handledIds();
+  }
+
+  /** What waits to send, in order (a sign-out keeps it on the device). */
+  waitingEntries(): ChatOutboxEntry[] {
+    return this.outbox.list();
   }
 
   /** The first load is done (or settled on error / offline). */
@@ -605,7 +628,7 @@ export class ChatStore {
     // queue repaints many times a second while anything uploads.
     this.stopFiles =
       this.files?.subscribe(() => {
-        if (this.offline || !this.outbox.some((e) => e.files && !e.failed)) return;
+        if (this.offline || !this.outbox.some((e) => !!e.files && !e.failed)) return;
         void this.drain();
       }) ?? null;
     this.booting = this.boot();
@@ -708,11 +731,14 @@ export class ChatStore {
     const meta = await this.copy.readMeta(this.owner);
     if (!meta) return;
     if (meta.v !== CHAT_COPY_VERSION) {
-      // An older shape: its rows go, its waiting sends stay.
-      this.outbox = Array.isArray(meta.outbox) ? meta.outbox : [];
-      for (const e of this.outbox) this.adopted.add(e.id);
+      // An older shape (or a copy a sign-out cut down): its rows go, its
+      // waiting sends stay.
+      this.outbox.adopt(meta.outbox, { first: true });
       await this.copy.deleteWhere((o) => o === this.owner);
+      // Written back at once (a current meta holding only the outbox): the
+      // sends a sign-out kept must survive a reload before the first sync.
       this.metaDirty = true;
+      await this.persistNow();
       return;
     }
     for (const c of meta.channels) this.channels.set(c.id, c);
@@ -723,8 +749,7 @@ export class ChatStore {
     this.cursor = meta.cursor;
     this.accessSince = meta.accessSince;
     this.drafts = { ...meta.drafts };
-    this.outbox = [...meta.outbox];
-    for (const e of this.outbox) this.adopted.add(e.id);
+    this.outbox.adopt(meta.outbox, { first: true });
     if (this.channels.size > 0) {
       this.status = "ready";
       this.fromDevice = true;
@@ -772,6 +797,9 @@ export class ChatStore {
     this.notify();
   };
 
+  /** While offline, the server is tried again every `retryMs`. */
+  private readonly backoff: Backoff;
+
   private goOffline(): void {
     this.offline = true;
     if (this.retryTimer || !this.running) return;
@@ -779,7 +807,7 @@ export class ChatStore {
       this.retryTimer = null;
       if (!browserOffline()) this.onOnline();
       else this.goOffline();
-    }, this.timing.retryMs);
+    }, this.backoff.next());
   }
 
   private wentOnline(): void {
@@ -788,6 +816,7 @@ export class ChatStore {
     for (const id of this.convs.keys()) this.touch(id);
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.backoff.reset();
   }
 
   /** Note a failed request: the network → offline; anything else is the server's answer. */
@@ -901,46 +930,51 @@ export class ChatStore {
     return ids.length > 0 && ids.length <= DELTA_SCOPE_MAX ? ids : undefined;
   }
 
-  /** Rows changed since the cursor, five minutes early, in (updated_at, id) pages. */
+  /** Rows changed since the cursor, five minutes early, in (updated_at, id) pages (kernel). */
   private async runDelta(): Promise<boolean> {
     if (!this.cursor) return true;
-    const since = stampMinus(this.cursor, this.timing.lagMs);
-    let after: { updatedAt: string; id: string } | null = null;
-    let newest: string | null = this.cursor;
-    for (let pages = 1; ; pages += 1) {
-      const res = await this.transport.delta({
-        workspaceId: this.workspaceId,
-        since,
-        after,
-        limit: this.deltaLimit,
-        channelIds: this.deltaScope(),
-      });
-      if (res.error) {
-        this.noteError(res.error);
-        return false;
-      }
-      this.wentOnline();
-      for (const row of res.data) {
-        this.landRow(row);
-        newest = laterStamp(newest, row.updatedAt);
-      }
-      // The next read starts where this one stopped (the cursor moves only over what was read).
-      this.cursor = newest;
-      if (res.data.length < this.deltaLimit) break;
-      const last = res.data[res.data.length - 1]!;
-      after = { updatedAt: last.updatedAt, id: last.id };
-      if (pages >= DELTA_MAX_PAGES) {
-        // Too far behind for one read: the rest comes with the next one, and
-        // what's open reads its newest page again (its window may have a gap).
-        for (const [id, conv] of this.convs) {
-          conv.loaded = false;
-          this.touch(id);
+    const read = await readDelta<ChatMessage[]>({
+      cursor: this.cursor,
+      lagMs: this.timing.lagMs,
+      maxPages: DELTA_MAX_PAGES,
+      missing: "oldest",
+      page: async (since, prev) => {
+        const last = prev?.page.at(-1);
+        const res = await this.transport.delta({
+          workspaceId: this.workspaceId,
+          since,
+          after: last ? { updatedAt: last.updatedAt, id: last.id } : null,
+          limit: this.deltaLimit,
+          channelIds: this.deltaScope(),
+        });
+        if (res.error) {
+          this.noteError(res.error);
+          return null;
         }
-        // Pages by change time: new rows read so far may sit past rows it didn't reach.
-        for (const id of Object.keys(this.held)) this.setEdge(id, null);
-        if (this.openId) void this.open(this.openId);
-        break;
+        this.wentOnline();
+        let newest: string | null = null;
+        for (const row of res.data) newest = laterStamp(newest, row.updatedAt);
+        return { page: res.data, newest, more: res.data.length >= this.deltaLimit };
+      },
+      land: (rows) => {
+        for (const row of rows) this.landRow(row);
+      },
+      // The next read starts where this one stopped (the cursor moves only over what was read).
+      advance: (cursor) => {
+        this.cursor = cursor;
+      },
+    });
+    if (read.failed) return false;
+    if (read.capped) {
+      // Too far behind for one read: the rest comes with the next one, and
+      // what's open reads its newest page again (its window may have a gap).
+      for (const [id, conv] of this.convs) {
+        conv.loaded = false;
+        this.touch(id);
       }
+      // Pages by change time: new rows read so far may sit past rows it didn't reach.
+      for (const id of Object.keys(this.held)) this.setEdge(id, null);
+      if (this.openId) void this.open(this.openId);
     }
     // Rows a delta brought for conversations that aren't open don't stay in memory.
     if (this.openId) this.trimOthers(this.openId);
@@ -1063,11 +1097,8 @@ export class ChatStore {
     // Live while the window reaches the newest message: the run goes on.
     if (conv.loaded && !conv.hi) this.advanceEdge(channelId, keyOf(row));
     // A confirmed send leaves the outbox (its echo may beat the op's answer).
-    const i = this.outbox.findIndex((e) => e.id === row.id);
-    if (i >= 0 && row.authorId === this.userId) {
-      const [entry] = this.outbox.splice(i, 1);
-      this.handled.add(row.id);
-      this.adopted.delete(row.id);
+    if (row.authorId === this.userId && this.outbox.has(row.id)) {
+      const entry = this.outbox.remove(row.id);
       this.metaDirty = true;
       // Deleted while it was on its way: now it's on the server, delete it there.
       if (entry?.deleted && !row.deletedAt) queueMicrotask(() => void this.remove(row.id));
@@ -1487,8 +1518,7 @@ export class ChatStore {
     switch (event.type) {
       case "message": {
         const row = event.row;
-        const isNew =
-          event.insert && !this.where.has(row.id) && !this.outbox.some((e) => e.id === row.id);
+        const isNew = event.insert && !this.where.has(row.id) && !this.outbox.has(row.id);
         const changed = this.landRow(row);
         const counted = isNew && this.countArrival(row);
         if (changed || counted) this.notify();
@@ -1735,11 +1765,8 @@ export class ChatStore {
 
   /** An outbox entry leaves (sent, discarded or gone in another tab). Doesn't notify. */
   private dropEntry(id: string): boolean {
-    const i = this.outbox.findIndex((e) => e.id === id);
-    if (i < 0) return false;
-    const [entry] = this.outbox.splice(i, 1);
-    this.handled.add(id);
-    this.adopted.delete(id);
+    if (!this.outbox.has(id)) return false;
+    const entry = this.outbox.remove(id);
     if (entry) this.touch(entry.channelId);
     this.metaDirty = true;
     return true;
@@ -1802,58 +1829,65 @@ export class ChatStore {
   }
 
   private async runDrain(): Promise<void> {
-    for (;;) {
-      if (!this.running || this.disposed) return;
-      const entry = this.outbox.find((e) => !e.failed && this.filesUp(e));
-      if (!entry) return;
-      if (browserOffline()) {
-        this.goOffline();
+    await drainOutbox(this.outbox, {
+      running: () => this.running && !this.disposed,
+      // CV-9: a send waiting on its files holds only itself.
+      ready: (entry) => this.filesUp(entry),
+      before: async (entry) => {
+        if (browserOffline()) {
+          this.goOffline();
+          this.touch(entry.channelId);
+          this.notify();
+          return "stop";
+        }
+        if (this.outbox.isAdopted(entry.id) && (await this.handledElsewhere(entry.id))) {
+          return "skip";
+        }
+        if (!this.running || this.disposed) return "stop";
+        this.inFlight = entry.id;
         this.touch(entry.channelId);
         this.notify();
-        return;
-      }
-      if (this.adopted.has(entry.id) && (await this.handledElsewhere(entry.id))) continue;
-      if (!this.running || this.disposed) return;
-      this.inFlight = entry.id;
-      this.touch(entry.channelId);
-      this.notify();
-      const res = await this.transport.send({
-        id: entry.id,
-        channelId: entry.channelId,
-        body: entry.body,
-        replyToId: entry.replyToId,
-      });
-      this.inFlight = null;
-      if (res.error) {
-        if (classifyChatError(res.error) === "network") {
-          // Waiting to send: it goes by itself when the network is back.
-          this.goOffline();
-          for (const e of this.outbox) this.touch(e.channelId);
-          this.notify();
-          return;
-        }
-        if (entry.deleted) {
-          // Refused, and you had deleted it anyway: it goes.
-          this.dropEntry(entry.id);
-        } else {
-          entry.failed = res.error.message || "Not sent";
-        }
-      } else {
+        return "send";
+      },
+      send: async (entry) => {
+        const res = await this.transport.send({
+          id: entry.id,
+          channelId: entry.channelId,
+          body: entry.body,
+          replyToId: entry.replyToId,
+        });
+        this.inFlight = null;
+        return res.error ? { ok: false, error: res.error } : { ok: true, value: res.data };
+      },
+      isNetwork: (error) => classifyChatError(error as ChatError) === "network",
+      // Waiting to send: it goes by itself when the network is back.
+      offline: () => {
+        this.goOffline();
+        for (const e of this.outbox.list()) this.touch(e.channelId);
+        this.notify();
+      },
+      refused: (entry, error) => {
+        // Refused, and you had deleted it anyway: it goes. Otherwise "Not sent · Retry".
+        if (entry.deleted) this.dropEntry(entry.id);
+        else entry.failed = (error as ChatError).message || "Not sent";
+        this.afterSend(entry);
+      },
+      sent: (entry, row, wasQueued) => {
         this.wentOnline();
-        const i = this.outbox.findIndex((e) => e.id === entry.id);
-        const sent = i >= 0 ? this.outbox.splice(i, 1)[0] : undefined;
-        this.handled.add(entry.id);
-        this.adopted.delete(entry.id);
-        this.ensureConv(res.data.channelId);
-        this.landRow(res.data);
+        this.ensureConv(row.channelId);
+        this.landRow(row);
         // Deleted while it was on its way (its echo didn't come first).
-        if (sent?.deleted) void this.remove(entry.id);
-      }
-      this.touch(entry.channelId);
-      this.metaDirty = true;
-      this.notify();
-      void this.persistNow();
-    }
+        if (wasQueued && entry.deleted) void this.remove(entry.id);
+        this.afterSend(entry);
+      },
+    });
+  }
+
+  private afterSend(entry: ChatOutboxEntry): void {
+    this.touch(entry.channelId);
+    this.metaDirty = true;
+    this.notify();
+    void this.persistNow();
   }
 
   // ── Writes over a row: one overlay each ───────────────────────────────────
@@ -1872,14 +1906,14 @@ export class ChatStore {
   ): Promise<ChatWriteResult> {
     if (browserOffline()) return { ok: false, offline: true, message: "Offline" };
     const channelId = this.where.get(id);
-    const op = nextOp++;
-    this.overlays.push({ op, id, apply });
+    const op = nextOp();
+    this.overlays.add(op, { id, apply });
     if (channelId) this.touch(channelId);
     this.chainCache.clear();
     this.notify();
     const res = await call();
     // Its answer (or its refusal) replaces the overlay: only this write rolls back.
-    this.overlays = this.overlays.filter((o) => o.op !== op);
+    this.overlays.drop(op);
     const now = this.where.get(id);
     if (now) this.touch(now);
     this.chainCache.clear();
@@ -2234,18 +2268,10 @@ export class ChatStore {
     if (current) {
       // A waiting send read from the device that another tab sent or discarded
       // since: writing it back would bring it back.
-      const stillThere = new Set(current.outbox.map((e) => e.id));
-      for (const id of [...this.adopted]) {
-        if (!stillThere.has(id) && this.inFlight !== id && this.dropEntry(id)) {
-          queueMicrotask(() => this.notify());
-        }
+      for (const id of this.outbox.goneElsewhere(current.outbox, this.inFlight)) {
+        if (this.dropEntry(id)) queueMicrotask(() => this.notify());
       }
     }
-    const mine = new Set(this.outbox.map((e) => e.id));
-    // Another tab's waiting sends stay; what this tab sent or discarded goes.
-    const others = (current?.outbox ?? []).filter(
-      (e) => !mine.has(e.id) && !this.handled.has(e.id),
-    );
     // Another tab's conversations and drafts stay registered: the check must
     // see every conversation the copy keeps rows for. What this tab dropped goes.
     const conversations: ChatMeta["conversations"] = {};
@@ -2264,7 +2290,8 @@ export class ChatStore {
       conversations,
       cursor: this.cursor,
       accessSince: this.accessSince,
-      outbox: [...this.outbox, ...others],
+      // Another tab's waiting sends stay; what this tab sent or discarded goes.
+      outbox: this.outbox.merged(current?.outbox ?? []),
       drafts,
       channels: [...this.channels.values()],
       mine: [...this.mine.values()],
@@ -2276,8 +2303,7 @@ export class ChatStore {
 
 // ── One store per person and workspace ──────────────────────────────────────
 
-const registries = new WeakMap<object, Map<string, ChatStore>>();
-const everyStore = new Set<ChatStore>();
+const registry = new StoreRegistry<ChatStore>();
 let storeOptions: ChatStoreOptions = {};
 let defaultLive: (() => ChatLiveSource) | null = null;
 
@@ -2304,65 +2330,63 @@ export function setDefaultChatFiles(make: () => ChatFileGate): void {
  * person is thrown away.
  */
 export function chatStore(runtime: ModuoRuntime, userId: string, workspaceId: string): ChatStore {
-  let byWorkspace = registries.get(runtime.chat);
-  if (!byWorkspace) {
-    byWorkspace = new Map();
-    registries.set(runtime.chat, byWorkspace);
-  }
-  let store = byWorkspace.get(workspaceId);
-  if (store && store.userId !== userId) {
-    store.dispose({ persist: false });
-    everyStore.delete(store);
-    store = undefined;
-  }
-  if (!store) {
-    store = new ChatStore(runtime.chat, userId, workspaceId, {
-      ...storeOptions,
-      live: storeOptions.live ?? defaultLive?.() ?? undefined,
-      files: storeOptions.files ?? defaultFiles?.() ?? undefined,
-    });
-    byWorkspace.set(workspaceId, store);
-    everyStore.add(store);
-  }
-  return store;
-}
-
-function disposeStores(keep: (store: ChatStore) => boolean, persist: boolean): void {
-  for (const store of [...everyStore]) {
-    if (keep(store)) continue;
-    store.dispose({ persist });
-    if (registries.get(store.transport)?.get(store.workspaceId) === store) {
-      registries.get(store.transport)?.delete(store.workspaceId);
-    }
-    everyStore.delete(store);
-  }
+  return registry.get(
+    runtime.chat,
+    userId,
+    workspaceId,
+    () =>
+      new ChatStore(runtime.chat, userId, workspaceId, {
+        ...storeOptions,
+        live: storeOptions.live ?? defaultLive?.() ?? undefined,
+        files: storeOptions.files ?? defaultFiles?.() ?? undefined,
+      }),
+  );
 }
 
 const copyOf = () => storeOptions.copy ?? chatDeviceCopy();
 
-/**
- * Who is signed in now (beside Tasks' `attachSyncUser`). Someone: stores and
- * copies of anyone else go. Nobody: the stores stop, the copy stays (a session
- * that failed to load offline comes back with its waiting sends).
- */
-export function attachChatUser(userId: string | null): Promise<void> {
-  if (userId === null) {
-    disposeStores(() => false, true);
-    return Promise.resolve();
-  }
-  disposeStores((store) => store.userId === userId, false);
-  return copyOf().deleteWhere((owner) => !isOwnerOf(owner, userId));
+/** Chat's device copies as the person lifecycle sees them. */
+function chatCopies(copy: ChatDeviceCopy): OwnedCopies<ChatOutboxEntry> {
+  return {
+    keys: () => copy.owners(),
+    keepOnlyWaiting: (owner, inMemory, handled) => copy.keepOnlyWaiting(owner, inMemory, handled),
+    deleteWhere: (match) => copy.deleteWhere(match),
+    clear: () => copy.clear(),
+  };
 }
 
-/** Signed out, or the account was deleted: every store and the whole chat copy go. */
-export function wipeChatCopies(): Promise<void> {
-  disposeStores(() => false, false);
-  return copyOf().clear();
+const people = personLifecycle({
+  registry,
+  scopeOf: (store) => store.transport,
+  copies: () => chatCopies(copyOf()),
+  waiting: (store) => store.waitingEntries(),
+  handled: (store) => store.handledEntryIds(),
+  // The warning says they sync next time: a hidden (deleted) send isn't
+  // waiting, and a refused one needs Retry (it stays on the device all the same).
+  counted: (entry) => !entry.deleted && !entry.failed,
+});
+
+/**
+ * Who is signed in now (beside Tasks' `attachSyncUser`). Someone: stores of
+ * anyone else stop, and their copies are cut down to what waits to send
+ * (kept under their key until they sign in here again). Nobody: the stores
+ * stop, the copy stays whole (a session that failed to load offline comes
+ * back with its waiting sends).
+ */
+export function attachChatUser(userId: string | null): Promise<void> {
+  return people.attachUser(userId);
+}
+
+/**
+ * Signed out: every store stops and every chat copy loses its rows, drafts
+ * and sidebar; waiting sends stay under their person's key and go out the next
+ * time they sign in here. Account deletion passes `keepWaiting: false`.
+ */
+export function wipeChatCopies(opts: { keepWaiting?: boolean } = {}): Promise<void> {
+  return people.wipe(opts);
 }
 
 /** The person's workspace list came back: copies of workspaces not on it go. */
 export function keepChatWorkspaces(userId: string, workspaceIds: readonly string[]): Promise<void> {
-  const keep = new Set(workspaceIds.map((ws) => ownerKey(userId, ws)));
-  disposeStores((store) => store.userId !== userId || keep.has(store.owner), false);
-  return copyOf().deleteWhere((owner) => isOwnerOf(owner, userId) && !keep.has(owner));
+  return people.keepWorkspaces(userId, workspaceIds);
 }

@@ -8,7 +8,6 @@
 
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { shareFollowParent } from "../../sharing/follow-parent";
 import { noteIsPrivate } from "../../sharing/rules";
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
@@ -99,12 +98,9 @@ export function useShellActions(
       const q = questionRef.current;
       setSharingQuestion(null);
       if (!q) return;
-      void module.moveNote(q.noteId, q.parentId, q.position).then((moved) => {
-        if (!moved || !match) return;
-        shareFollowParent(q.noteId).catch(() => {
-          toast.error("Moved, but couldn't change who can see it. Check its sharing.");
-        });
-      });
+      // One server operation: the move and, for "Match the new parent", the
+      // sharing change land together or not at all (a refusal toasts).
+      void module.moveNote(q.noteId, q.parentId, q.position, { followParent: match });
     },
     [module, setSharingQuestion],
   );

@@ -1,12 +1,21 @@
 // Shared fixtures for the Tasks List and Board stories (TV-U1): a two-person
-// workspace, a handful of tasks covering every row mark, and a stub api.
+// workspace, a handful of tasks covering every row mark, and the Tasks context
+// over a fake runtime seeded with them (`StoryTasks`, A4).
 // Story-only; nothing in the app imports it.
 
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import type { CommentMark } from "../../../lib/sync/types";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
-import { makeTask, subtaskProgress } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Task } from "../model";
+import { makeTask } from "../helpers";
+import type { Bucket, Tag, Task, TaskWaitingEntry } from "../model";
+import {
+  FakeTasksProvider,
+  type FakeTasksSeed,
+  fakeTasksRuntime,
+  queueEntry,
+  relation,
+  tagLink,
+} from "../testing/fake-tasks";
 
 const MEMBERS = [
   {
@@ -145,63 +154,89 @@ const TAGS: Record<string, Array<{ id: string; name: string; color: string }>> =
   schedule: [{ id: "g2", name: "ui", color: "gray" }],
 };
 
-/** Enough of the module api for the List and Board to render every mark. */
-export function stubApi(
-  tasks: Task[] = TASKS,
-  extra: Partial<Record<keyof TasksModuleApi, unknown>> = {},
-): TasksModuleApi {
-  const byParent = new Map<string, Task[]>();
-  for (const t of tasks) {
-    if (!t.parentId) continue;
-    byParent.set(t.parentId, [...(byParent.get(t.parentId) ?? []), t]);
-  }
-  const progress = new Map([...byParent].map(([id, kids]) => [id, subtaskProgress(kids)]));
-  const blocker = tasks.find((t) => t.id === "policy");
+function tagRow(id: string, name: string): Tag {
   return {
-    loading: false,
-    loaded: true,
-    restLoaded: true,
-    offline: false,
-    pendingSync: 0,
+    id,
+    workspaceId: "w1",
+    ownerId: "u1",
+    name,
+    color: "gray",
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
+  };
+}
+
+/** Three comments on the review task (TV-U10's row facts). */
+export function commentsOn(taskId: string, count: number): CommentMark[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `c-${taskId}-${i}`,
+    taskId,
+    updatedAt: "2026-10-10T09:00:00.000Z",
+    deletedAt: null,
+  }));
+}
+
+const WAITING: TaskWaitingEntry = {
+  id: "w1",
+  workspaceId: "w",
+  taskId: "accounts",
+  kind: "text",
+  ref: null,
+  label: "Anna",
+  since: "2026-10-10T09:00:00.000Z",
+  createdBy: null,
+  updatedAt: "2026-10-10T09:00:00.000Z",
+};
+
+/**
+ * What the store reads for the List and Board stories: the projects, the
+ * tasks, two of them in my Focus and Mike's, tags, a blocker, comments and a
+ * waiting line, so every row mark shows. `extra` adds or replaces tables.
+ */
+export function storySeed(tasks: Task[] = TASKS, extra: FakeTasksSeed = {}): FakeTasksSeed {
+  const ids = new Set(tasks.map((t) => t.id));
+  const tagged = Object.entries(TAGS).filter(([taskId]) => ids.has(taskId));
+  const tags = new Map(tagged.flatMap(([, list]) => list.map((g) => [g.id, g.name] as const)));
+  return {
+    buckets: [INBOX, ...BUCKETS],
     tasks,
-    queuedTaskIds: new Set(["review", "notes"]),
-    queueClaims: new Map([
-      ["accounts", ["u2"]],
-      ["notes", ["u2"]],
-    ]),
-    subtasksByParent: byParent,
-    statuses: [],
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    setTaskStatus: () => {},
-    subtaskProgressByTask: progress,
-    tagsByTask: new Map(Object.entries(TAGS)),
-    blockedTaskIds: new Set(["schedule"]),
-    blockersByTask: new Map(blocker ? [["schedule", [blocker]]] : []),
-    toggleDone: () => {},
-    toggleQueue: () => {},
-    patchTask: () => {},
-    deleteTask: () => {},
-    setTaskParent: () => {},
-    skipOccurrence: () => {},
-    // TV-U10's row facts: a comment count and a waiting line to show.
-    commentCounts: new Map([["review", 3]]),
-    waiting: [
-      {
-        id: "w1",
-        workspaceId: "w",
-        taskId: "accounts",
-        kind: "text",
-        ref: null,
-        label: "Anna",
-        since: "2026-10-10T09:00:00.000Z",
-        createdBy: null,
-        updatedAt: "2026-10-10T09:00:00.000Z",
-      },
-    ],
-    pendingTaskIds: new Set<string>(),
+    queue: [
+      queueEntry("review", "u1"),
+      queueEntry("notes", "u1", { position: "b" }),
+      queueEntry("accounts", "u2"),
+      queueEntry("notes", "u2"),
+    ].filter((q) => ids.has(q.taskId)),
+    tags: [...tags].map(([id, name]) => tagRow(id, name)),
+    tagLinks: tagged.flatMap(([taskId, list]) => list.map((g) => tagLink(g.id, taskId))),
+    relations: ids.has("policy") && ids.has("schedule") ? [relation("policy", "schedule")] : [],
+    comments: ids.has("review") ? commentsOn("review", 3) : [],
+    waiting: ids.has("accounts") ? [WAITING] : [],
     ...extra,
-  } as unknown as TasksModuleApi;
+  };
+}
+
+/**
+ * The Tasks context the views read (A4), over a fake runtime that answers
+ * from `seed`. Writes go to that runtime and show at once, as on the page.
+ */
+export function StoryTasks({
+  seed = storySeed(),
+  userId = "u1",
+  workspaceId = "w1",
+  children,
+}: {
+  seed?: FakeTasksSeed;
+  userId?: string;
+  workspaceId?: string;
+  children: ReactNode;
+}) {
+  const [runtime] = useState(() => fakeTasksRuntime(seed).runtime);
+  return (
+    <FakeTasksProvider runtime={runtime} userId={userId} workspaceId={workspaceId}>
+      {children}
+    </FakeTasksProvider>
+  );
 }
 
 export const bucketNameById = (id: string) =>

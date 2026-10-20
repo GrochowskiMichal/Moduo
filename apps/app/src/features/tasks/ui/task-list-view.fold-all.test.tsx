@@ -11,7 +11,7 @@
 // a line only for a selection that arrives inside it.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { useEffect, useRef, useState } from "react";
 
 rs.mock("../assignees", () => ({
@@ -25,6 +25,7 @@ import { resetFoldsForTests } from "../folds";
 import { type GroupBy, makeTask } from "../helpers";
 import type { Section, Task } from "../model";
 import { backstopPick } from "../selection";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskListView } from "./task-list-view";
 
 beforeAll(() => {
@@ -72,14 +73,14 @@ const sections = [section("s1", "Triage", 1), section("s2", "Visual", 2)];
 // The board as it was: one task with no section, the rest in Triage, Visual empty.
 const boardTasks = [task("a"), task("b", { sectionId: "s1" }), task("c", { sectionId: "s1" })];
 
-function renderPage({
+async function renderPage({
   tasks: initialTasks = boardTasks,
   groupBy = "section",
 }: {
   tasks?: Task[];
   groupBy?: GroupBy;
 } = {}) {
-  const fns = {
+  const api = {
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     patchTask: rs.fn(),
@@ -89,26 +90,9 @@ function renderPage({
     setTaskStatus: rs.fn(),
     dropTask: rs.fn(async () => true),
   };
-  const apiOf = (tasks: Task[]) => ({
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    statuses: [],
-    sections,
-    ...fns,
-  });
   const picks: (string | null)[] = [];
   const shown = { nothing: false, reports: 0 };
   function Page({ tasks }: { tasks: Task[] }) {
-    const api = apiOf(tasks);
     const inScope = (id: string) => tasks.some((t) => t.id === id);
     const [selected, setSelected] = useState<string | null>(null);
     const orderRef = useRef<readonly string[]>([]);
@@ -143,7 +127,6 @@ function renderPage({
         bucketNameById={() => "Dogfood"}
         canEdit
         onRequestCapture={() => {}}
-        api={api as never}
         sections={sections}
         collapseKey={FOLD_KEY}
         selectedTaskId={selected}
@@ -156,18 +139,23 @@ function renderPage({
       />
     );
   }
-  const view = render(
+  // The store holds the scope's tasks and the project's sections; the page
+  // hands the List its scope in its own order (the first one is the backstop's).
+  const view = await renderWithTasks(
     <TooltipProvider>
       <Page tasks={initialTasks} />
     </TooltipProvider>,
+    { seed: { tasks: initialTasks, sections }, workspaceId: "w", commands: api },
   );
   /** The store moves on (a status change, a remote edit): the same page, new tasks. */
-  const update = (tasks: Task[]) =>
+  const update = (tasks: Task[]) => {
+    act(() => view.store.answer({ tasks }));
     view.rerender(
       <TooltipProvider>
         <Page tasks={tasks} />
       </TooltipProvider>,
     );
+  };
   return { picks, shown, update };
 }
 
@@ -175,8 +163,8 @@ const row = (title: string) => screen.queryByRole("button", { name: title });
 const backlogLine = () => screen.getByRole("button", { name: /^Backlog, / });
 
 describe("folding every group that holds tasks (MOD-122, MOD-123)", () => {
-  it("settles instead of looping, and stays settled when the project opens again", () => {
-    const { picks, shown } = renderPage();
+  it("settles instead of looping, and stays settled when the project opens again", async () => {
+    const { picks, shown } = await renderPage();
     expect(shown.nothing).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
     // Task a hid, so the List moved to Triage's first row.
@@ -199,7 +187,7 @@ describe("folding every group that holds tasks (MOD-122, MOD-123)", () => {
     // The folds are remembered: opening the project again starts all folded,
     // with nothing selected (no row to pick), and settles there.
     cleanup();
-    const again = renderPage();
+    const again = await renderPage();
     expect(row("Task a")).toBeNull();
     expect(again.picks).toEqual([]);
     expect(again.shown.nothing).toBe(true);
@@ -209,8 +197,8 @@ describe("folding every group that holds tasks (MOD-122, MOD-123)", () => {
     expect(again.shown.nothing).toBe(false);
   });
 
-  it("says nothing more while the rows it shows change but some still show", () => {
-    const { shown } = renderPage();
+  it("says nothing more while the rows it shows change but some still show", async () => {
+    const { shown } = await renderPage();
     fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
     fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
     // Only a change between "some rows" and "none" is news (no extra draws).
@@ -228,8 +216,8 @@ describe("a project with only completed work (MOD-148)", () => {
   ];
   const endLine = () => screen.getByRole("button", { name: /^\d+ completed, (show|hide)$/ });
 
-  it("settles on nothing, then Show picks the first row it lists, and Hide keeps it", () => {
-    const { picks, shown } = renderPage({ tasks: allDone });
+  it("settles on nothing, then Show picks the first row it lists, and Hide keeps it", async () => {
+    const { picks, shown } = await renderPage({ tasks: allDone });
     expect(row("Task a")).toBeNull();
     expect(endLine().textContent).toBe("3 completed · Show");
     expect(picks).toEqual([]);
@@ -252,8 +240,8 @@ describe("a project with only completed work (MOD-148)", () => {
     expect(picks).toEqual(["a"]);
   });
 
-  it("with its only task done, Show selects it and the line stays to hide it again", () => {
-    const { picks } = renderPage({ tasks: [allDone[0] as Task] });
+  it("with its only task done, Show selects it and the line stays to hide it again", async () => {
+    const { picks } = await renderPage({ tasks: [allDone[0] as Task] });
     fireEvent.click(endLine());
     expect(picks).toEqual(["a"]);
     expect(endLine().textContent).toBe("1 completed · Hide");
@@ -271,15 +259,15 @@ describe("a closed Backlog line stays closed (MOD-124)", () => {
     task("v", { sectionId: "s2" }),
   ];
 
-  it("opening the project picks the first row shown, never the Backlog task", () => {
-    const { picks } = renderPage({ tasks: backlogFirst });
+  it("opening the project picks the first row shown, never the Backlog task", async () => {
+    const { picks } = await renderPage({ tasks: backlogFirst });
     expect(row("Task x")).toBeNull();
     expect(backlogLine().getAttribute("aria-expanded")).toBe("false");
     expect(picks.at(-1)).toBe("a");
   });
 
-  it("closing the line that holds the selection moves it to a row still shown", () => {
-    const { picks } = renderPage({ tasks: backlogFirst });
+  it("closing the line that holds the selection moves it to a row still shown", async () => {
+    const { picks } = await renderPage({ tasks: backlogFirst });
     fireEvent.click(backlogLine());
     fireEvent.click(screen.getByRole("button", { name: "Task x" }));
     expect(picks.at(-1)).toBe("x");
@@ -289,21 +277,26 @@ describe("a closed Backlog line stays closed (MOD-124)", () => {
     expect(picks.at(-1)).toBe("a");
   });
 
-  it("a selected task set to Backlog keeps the selection, and its line opens for it", () => {
+  it("a selected task set to Backlog keeps the selection, and its line opens for it", async () => {
     const start = [task("a"), task("x", { sectionId: "s1" }), task("y", { sectionId: "s1" })];
-    const { picks, update } = renderPage({ tasks: start });
+    const { picks, update } = await renderPage({ tasks: start });
     fireEvent.click(screen.getByRole("button", { name: "Task x" }));
     expect(picks.at(-1)).toBe("x");
     const before = picks.length;
     // Its status moves to Backlog (the panel's picker, Undo, a teammate).
-    update([task("a"), task("x", { sectionId: "s1", statusCategory: "backlog" }), start[2]]);
+    const later = "2026-01-02T00:00:00.000Z";
+    update([
+      task("a"),
+      task("x", { sectionId: "s1", statusCategory: "backlog", updatedAt: later }),
+      start[2],
+    ]);
     expect(picks.length).toBe(before);
     expect(row("Task x")).toBeTruthy();
     expect(backlogLine().getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("closing the line on it, then reopening it, still opens for the selection after", () => {
-    const { picks } = renderPage({ tasks: backlogFirst });
+  it("closing the line on it, then reopening it, still opens for the selection after", async () => {
+    const { picks } = await renderPage({ tasks: backlogFirst });
     fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Visual/ }));
     fireEvent.click(backlogLine());
@@ -314,8 +307,8 @@ describe("a closed Backlog line stays closed (MOD-124)", () => {
     expect(picks.at(-1)).toBe("x");
   });
 
-  it("opening another Backlog line leaves the one closed on the selection shut", () => {
-    const { picks } = renderPage({
+  it("opening another Backlog line leaves the one closed on the selection shut", async () => {
+    const { picks } = await renderPage({
       tasks: [
         task("a"),
         task("x", { sectionId: "s1", statusCategory: "backlog" }),
@@ -335,8 +328,8 @@ describe("a closed Backlog line stays closed (MOD-124)", () => {
     expect(picks.at(-1)).toBe("z");
   });
 
-  it("with no other row shown, the selection stays put and the line stays closed", () => {
-    const { picks, shown } = renderPage({ tasks: backlogFirst });
+  it("with no other row shown, the selection stays put and the line stays closed", async () => {
+    const { picks, shown } = await renderPage({ tasks: backlogFirst });
     fireEvent.click(screen.getByRole("button", { name: /^No section/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Visual/ }));
     fireEvent.click(backlogLine());

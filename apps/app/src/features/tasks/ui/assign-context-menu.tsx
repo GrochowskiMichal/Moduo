@@ -1,6 +1,6 @@
 // The "Assign to" submenu of a task's context menu, shared by list rows and
 // board cards: Unassigned, then the members (view-only ones listed, not
-// pickable). Assigning goes through tasks_op_assign (api.patchTask).
+// pickable). Assigning goes through tasks_op_assign (the `patchTask` command).
 
 import { toast } from "sonner";
 import {
@@ -12,15 +12,16 @@ import {
 } from "../../../components/ui/context-menu";
 import { assigneeOptions, fromAssigneeValue, toAssigneeValue } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { TaskCommands } from "../commands";
 import type { Task } from "../model";
 
 export function AssignContextMenu({
   task,
-  api,
+  patchTask,
 }: {
   task: Task;
-  api: Pick<TasksModuleApi, "patchTask">;
+  /** The row's own (its actions object), so a row needs no provider. */
+  patchTask: TaskCommands["patchTask"];
 }) {
   const { assignees } = useAssignees();
   // Solo workspaces have nobody to hand a task to.
@@ -41,7 +42,7 @@ export function AssignContextMenu({
                 if (msg) toast.message(msg);
               });
             }
-            api.patchTask(task.id, { assigneeId: next });
+            patchTask(task.id, { assigneeId: next });
           }}
         >
           {assigneeOptions(assignees).map((o) => (

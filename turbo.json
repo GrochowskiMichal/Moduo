@@ -22,8 +22,20 @@
     "lint:tw": {
       "outputs": []
     },
+    "lint:boundaries": {
+      "outputs": []
+    },
     "lint:css": {
       "outputs": []
+    },
+    "size": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!dist/**",
+        "$TURBO_ROOT$/scripts/check-bundle-size.ts",
+        "$TURBO_ROOT$/supabase/functions/_shared/**"
+      ],
+      "outputs": ["dist/web/**"]
     },
     "test": {
       "outputs": []

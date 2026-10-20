@@ -3,7 +3,7 @@
 // the queued task it followed, or the nearest earlier one still queued.
 
 import { describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -20,7 +20,7 @@ rs.mock("sonner", () => ({ toast: Object.assign(() => {}, { error: () => {} }) }
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const ME = "u1";
 const BUCKET = {
@@ -115,14 +115,16 @@ describe("a drop into Done, then Undo (TV-U4's gap)", () => {
       [task("a"), task("b"), task("c")],
       [row("a", "000000mh34"), row("b", "00000168g8"), row("c", "000001ilsc")],
     );
-    const hook = renderHook(() =>
-      useTasksModule(fake.runtime, { userId: ME, workspaceId: "w1", modulePermission: "edit" }),
-    );
+    const hook = renderTasksHook(fake.runtime, {
+      userId: ME,
+      workspaceId: "w1",
+      modulePermission: "edit",
+    });
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     expect(hook.result.current.queuedTasks.map((t) => t.id)).toEqual(["a", "b", "c"]);
 
     await act(async () => {
-      await hook.result.current.dropTask({ taskId: "b", status: "done" }, "Moved to Done");
+      await hook.result.current.commands.dropTask({ taskId: "b", status: "done" }, "Moved to Done");
     });
     // Out of my line-up on the server; still shown, done, in its place.
     expect(hook.result.current.queuedTaskIds.has("b")).toBe(false);

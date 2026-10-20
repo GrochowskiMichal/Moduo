@@ -16,24 +16,14 @@ import {
   insertGoogleEvent,
   listGoogleCalendars,
   listGoogleEvents,
-  refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
+import { googleAccessForRow, googleClients } from "../_shared/google-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
-import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
 const ENC = Deno.env.get("MODUO_TOKEN_ENCRYPTION_SECRET") ?? "";
-const GOOGLE_CLIENTS = [
-  {
-    id: Deno.env.get("GOOGLE_CALENDAR_CLIENT_ID") ?? "",
-    secret: Deno.env.get("GOOGLE_CALENDAR_CLIENT_SECRET") ?? "",
-  },
-  {
-    id: Deno.env.get("GOOGLE_CALENDAR_WEB_CLIENT_ID") ?? "",
-    secret: Deno.env.get("GOOGLE_CALENDAR_WEB_CLIENT_SECRET") ?? "",
-  },
-].filter((client) => client.id.length > 0 && client.secret.length > 0);
+const GOOGLE_CLIENTS = googleClients((name) => Deno.env.get(name));
 
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -70,53 +60,8 @@ async function accessForRow(
   userId: string,
   row: TokenRow,
 ): Promise<{ accessToken: string; email: string } | null> {
-  if (!ENC || !row.refresh_token_enc || GOOGLE_CLIENTS.length === 0) return null;
-  let refresh: string;
-  try {
-    refresh = await decryptToken(row.refresh_token_enc, ENC, userId);
-  } catch {
-    return null;
-  }
-  const expiry = row.token_expiry ? Date.parse(row.token_expiry) : 0;
-  let access = "";
-  if (expiry > Date.now() + 60_000 && row.access_token_enc) {
-    try {
-      access = await decryptToken(row.access_token_enc, ENC, userId);
-    } catch {
-      access = "";
-    }
-  }
-  if (!access) {
-    let fresh: { accessToken: string; expiresAt: string; refreshToken: string } | null = null;
-    for (const client of GOOGLE_CLIENTS) {
-      try {
-        fresh = await refreshGoogleAccess({
-          clientId: client.id,
-          clientSecret: client.secret,
-          refreshToken: refresh,
-        });
-        break;
-      } catch {
-        fresh = null;
-      }
-    }
-    if (!fresh) return null;
-    access = fresh.accessToken;
-    const accessEnc = await encryptToken(fresh.accessToken, ENC, userId);
-    const refreshOut =
-      fresh.refreshToken === refresh
-        ? row.refresh_token_enc
-        : await encryptToken(fresh.refreshToken, ENC, userId);
-    await db
-      .from("user_integrations")
-      .update({
-        access_token_enc: accessEnc,
-        refresh_token_enc: refreshOut,
-        token_expiry: fresh.expiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", row.id);
-  }
+  const access = await googleAccessForRow({ db, encSecret: ENC, clients: GOOGLE_CLIENTS }, userId, row);
+  if (!access) return null;
   const email = (await googleUserEmail(access))?.toLowerCase() ?? row.account_key;
   if (!email) return null;
   if (row.account_key !== email) {

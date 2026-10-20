@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import type { CalendarSearch } from "../../features/calendar/search";
 import { CalendarPageView } from "../../features/calendar/ui/calendar-page-view";
-import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
+import { TasksProvider } from "../../features/tasks/tasks-context";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
@@ -33,12 +33,6 @@ export function CalendarPage() {
       },
     });
   }, [navigate]);
-
-  const api = useTasksModule(runtime, {
-    userId,
-    workspaceId: selectedWorkspaceId,
-    modulePermission: modulePermissions.tasks,
-  });
 
   const canRender = useMemo(
     () =>
@@ -71,13 +65,19 @@ export function CalendarPage() {
   }
 
   return (
-    <CalendarPageView
-      api={api}
+    <TasksProvider
       runtime={runtime}
-      userId={userId as string}
-      workspaceId={selectedWorkspaceId as string}
-      urlEventId={urlEventId}
-      onConsumeEventDeepLink={clearEventParam}
-    />
+      userId={userId}
+      workspaceId={selectedWorkspaceId}
+      modulePermission={modulePermissions.tasks}
+    >
+      <CalendarPageView
+        runtime={runtime}
+        userId={userId as string}
+        workspaceId={selectedWorkspaceId as string}
+        urlEventId={urlEventId}
+        onConsumeEventDeepLink={clearEventParam}
+      />
+    </TasksProvider>
   );
 }

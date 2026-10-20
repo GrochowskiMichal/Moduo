@@ -4,14 +4,15 @@
 // `@name` turn into chips; the `/` and `f` keys; and what New pre-fills.
 
 import { afterEach, beforeAll, describe, expect, it } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
+import { type ReactElement, useState } from "react";
 import type { FilterCondition } from "../../../components/ui/filter-model";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { Assignee } from "../assignees";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Tag, Task } from "../model";
+import { tagLink } from "../testing/fake-tasks";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { type ProjectFilterChoices, useTasksFilters } from "./use-tasks-filters";
 
 beforeAll(() => {
@@ -70,14 +71,13 @@ const TASKS = [
   task("b", "Filter chips", { assigneeId: "u2" }),
   task("c", "Search box"),
 ];
-const api = {
-  tags: TAGS,
-  openTaskCountByTag: new Map([["t1", 1]]),
-  tagsByTask: new Map([["b", [TAGS[0]]]]),
-  queuedTaskIds: new Set<string>(),
-  blockedTaskIds: new Set<string>(),
-  subtasksByParent: new Map<string, Task[]>(),
-} as unknown as TasksModuleApi;
+
+/**
+ * The workspace as the store holds it: the three tasks, and "design" on
+ * "Filter chips" (one open task, the menu's count). Nothing queued or blocked.
+ */
+const show = (ui: ReactElement) =>
+  renderWithTasks(ui, { seed: { tasks: TASKS, tags: TAGS, tagLinks: [tagLink("t1", "b")] } });
 
 function Harness({
   initial = [] as FilterCondition[],
@@ -93,7 +93,6 @@ function Harness({
     scopeTasks,
     conditions,
     onConditionsChange: setConditions,
-    api,
     runtime: null,
     assignees: ASSIGNEES,
     enabled: true,
@@ -122,8 +121,8 @@ function Harness({
 const rows = () => screen.queryAllByRole("listitem").map((li) => li.textContent);
 
 describe("Filter", () => {
-  it("chips read as sentences, with a count badge and 'N of M · Clear'", () => {
-    render(<Harness initial={[{ dimension: "priority", operator: "is", values: ["high"] }]} />);
+  it("chips read as sentences, with a count badge and 'N of M · Clear'", async () => {
+    await show(<Harness initial={[{ dimension: "priority", operator: "is", values: ["high"] }]} />);
     expect(rows()).toEqual(["Toolbar polish"]);
     expect(screen.getByRole("button", { name: "Filter, 1 active" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Priority is High" })).toBeTruthy();
@@ -134,8 +133,8 @@ describe("Filter", () => {
     expect(screen.getByRole("button", { name: "Filter" })).toBeTruthy();
   });
 
-  it("an assignee filter reads the member's name; a deleted tag still has a chip", () => {
-    render(
+  it("an assignee filter reads the member's name; a deleted tag still has a chip", async () => {
+    await show(
       <Harness
         initial={[
           { dimension: "assignee", operator: "is", values: ["u2"] },
@@ -148,8 +147,8 @@ describe("Filter", () => {
     expect(rows()).toEqual(["Filter chips"]);
   });
 
-  it("Status reads To do and Won’t do, the words every surface uses", () => {
-    render(
+  it("Status reads To do and Won’t do, the words every surface uses", async () => {
+    await show(
       <Harness
         initial={[
           { dimension: "status", operator: "is", values: ["archived"] },
@@ -159,15 +158,17 @@ describe("Filter", () => {
     );
     expect(screen.getByRole("group", { name: "Status is Won’t do" })).toBeTruthy();
     cleanup();
-    render(<Harness initial={[{ dimension: "status", operator: "is_not", values: ["todo"] }]} />);
+    await show(
+      <Harness initial={[{ dimension: "status", operator: "is_not", values: ["todo"] }]} />,
+    );
     expect(screen.getByRole("group", { name: "Status is not To do" })).toBeTruthy();
   });
 
-  it("a deep-linked task stays listed past the filters, which stay as they were", () => {
+  it("a deep-linked task stays listed past the filters, which stay as they were", async () => {
     const filters: FilterCondition[] = [
       { dimension: "priority", operator: "is", values: ["high"] },
     ];
-    render(<Harness initial={filters} keep="b" />);
+    await show(<Harness initial={filters} keep="b" />);
     // In scope order: the linked task joins the one the filter lets through.
     expect(rows()).toEqual(["Toolbar polish", "Filter chips"]);
     expect(screen.getByTestId("conditions").textContent).toBe(JSON.stringify(filters));
@@ -180,12 +181,12 @@ describe("Filter", () => {
     });
     expect(rows()).toEqual(["Toolbar polish"]);
     cleanup();
-    render(<Harness initial={filters} />);
+    await show(<Harness initial={filters} />);
     expect(rows()).toEqual(["Toolbar polish"]);
   });
 
-  it("New pre-fills what the filter asks for", () => {
-    render(
+  it("New pre-fills what the filter asks for", async () => {
+    await show(
       <Harness
         initial={[
           { dimension: "tag", operator: "is", values: ["t1"] },
@@ -199,16 +200,16 @@ describe("Filter", () => {
     });
   });
 
-  it("f opens the Filter menu; not while typing", () => {
-    render(<Harness />);
+  it("f opens the Filter menu; not while typing", async () => {
+    await show(<Harness />);
     act(() => {
       fireEvent.keyDown(document.body, { key: "f" });
     });
     expect(screen.getByRole("combobox", { name: "Filter by" })).toBeTruthy();
   });
 
-  it("lists you as your name plus (you), and the chip reads You (MOD-137)", () => {
-    render(<Harness />);
+  it("lists you as your name plus (you), and the chip reads You (MOD-137)", async () => {
+    await show(<Harness />);
     act(() => {
       fireEvent.keyDown(document.body, { key: "f" });
     });
@@ -218,8 +219,8 @@ describe("Filter", () => {
     expect(screen.getByRole("group", { name: "Assignee is You" })).toBeTruthy();
   });
 
-  it("finds you by typing me", () => {
-    render(<Harness />);
+  it("finds you by typing me", async () => {
+    await show(<Harness />);
     act(() => {
       fireEvent.keyDown(document.body, { key: "f" });
     });
@@ -255,8 +256,8 @@ describe("Project (MOD-141)", () => {
   ];
   const offered = { projects: [SITE, LAUNCH], inbox: true };
 
-  it("names the project, and your Inbox as Inbox", () => {
-    render(
+  it("names the project, and your Inbox as Inbox", async () => {
+    await show(
       <Harness
         scopeTasks={SPREAD}
         projects={offered}
@@ -268,8 +269,8 @@ describe("Project (MOD-141)", () => {
     expect(rows()).toEqual(["Toolbar polish", "Search box"]);
   });
 
-  it("is offered in the menu, the projects in the order given", () => {
-    render(<Harness scopeTasks={SPREAD} projects={offered} inboxId="inbox-1" />);
+  it("is offered in the menu, the projects in the order given", async () => {
+    await show(<Harness scopeTasks={SPREAD} projects={offered} inboxId="inbox-1" />);
     act(() => {
       fireEvent.keyDown(document.body, { key: "f" });
     });
@@ -278,15 +279,15 @@ describe("Project (MOD-141)", () => {
     expect(names.slice(0, 3)).toEqual(["Inbox", "Website", "Launch v1"]);
   });
 
-  it("isn't offered inside one project, unless a condition already uses it", () => {
-    render(<Harness scopeTasks={SPREAD} />);
+  it("isn't offered inside one project, unless a condition already uses it", async () => {
+    await show(<Harness scopeTasks={SPREAD} />);
     act(() => {
       fireEvent.keyDown(document.body, { key: "f" });
     });
     expect(screen.queryByRole("option", { name: /^Project/ })).toBeNull();
     cleanup();
     // A stored one still shows its chip, so it never filters out of sight.
-    render(
+    await show(
       <Harness
         scopeTasks={SPREAD}
         initial={[{ dimension: "project", operator: "is", values: ["gone"] }]}
@@ -297,8 +298,8 @@ describe("Project (MOD-141)", () => {
 });
 
 describe("Search", () => {
-  it("/ opens the field; typing filters by title and description", () => {
-    render(<Harness />);
+  it("/ opens the field; typing filters by title and description", async () => {
+    await show(<Harness />);
     act(() => {
       fireEvent.keyDown(document.body, { key: "/" });
     });
@@ -313,8 +314,8 @@ describe("Search", () => {
     expect(screen.queryByRole("combobox", { name: "Filter by" })).toBeNull();
   });
 
-  it("#tag and @name become chips and leave the query", () => {
-    render(<Harness />);
+  it("#tag and @name become chips and leave the query", async () => {
+    await show(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     const box = screen.getByRole("searchbox", { name: "Search tasks" }) as HTMLInputElement;
     fireEvent.change(box, { target: { value: "#design " } });
@@ -328,8 +329,8 @@ describe("Search", () => {
     expect(rows()).toEqual([]);
   });
 
-  it("Esc clears, then closes", () => {
-    render(<Harness />);
+  it("Esc clears, then closes", async () => {
+    await show(<Harness />);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     const box = screen.getByRole("searchbox", { name: "Search tasks" });
     fireEvent.change(box, { target: { value: "chips" } });

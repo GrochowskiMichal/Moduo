@@ -20,4 +20,4 @@ Read [docs/gotchas/supabase.md](../docs/gotchas/supabase.md) before changing any
 - A new closed value goes into `functions/_shared/contracts/` (`parse*`, `normalize*`, `is*`) and into a Postgres CHECK in the same change.
 - Edge Functions run on Deno and import contracts relatively. Deploy with `--import-map supabase/functions/deno.json` when they import Zod. Use `verify_jwt=false` only for guest endpoints, and then verify the user JWT inside.
 - Deleting `functions/<name>/` does not undeploy the function; undeploy it explicitly.
-- The Supabase JS client is untyped (no `Database` generic): column-name mistakes compile, so test the real query.
+- The app's Supabase client is typed from prod (`Database`, `apps/app/src/lib/runtime.db.ts`). After a migration reaches prod, run `bun run db:types`; code for a migration not on prod yet uses `bun run db:types:local` on the local stack. Types check names and argument shapes, not RLS or behaviour: still test the real query.

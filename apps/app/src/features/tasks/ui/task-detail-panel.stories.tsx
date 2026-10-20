@@ -1,15 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 
 import type { AttachmentRecord, ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { getUploadQueue } from "@/lib/uploads";
 import { RightPanel } from "../../../components/app/right-panel";
 import type { WorkspaceMember } from "../../workspaces/types";
 import { useWorkspace, WorkspaceContext } from "../../workspaces/workspace-context";
+import type { TaskCommands } from "../commands";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { ActivityEntry, Bucket, Tag, Task } from "../model";
+import { FakeTasksProvider, fakeTasksRuntime, queueEntry, tagLink } from "../testing/fake-tasks";
 import { TaskDetailPanel } from "./task-detail-panel";
 
 // The detail panel per tasks-v2 comp §1 + §5 option C (TV-U3, U3-1/U3-3).
@@ -129,66 +130,73 @@ function tag(id: string, name: string, color: string): Tag {
 const TAGS = [tag("g1", "tasks", "violet"), tag("g2", "UI", "green"), tag("g3", "UX", "amber")];
 
 /**
- * What the panel reads of the module. The hook returns far more than a story
- * needs, so this is typed as a part of it: every field here is checked, and a
- * field the panel starts reading must be added (or the story throws).
+ * What the panel's commands answer in a story: nothing is saved (as before
+ * A4), the trail shows ACTIVITY, and "Focus on this" starts.
  */
-function stubApi(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
-  const api: Partial<TasksModuleApi> = {
-    canEdit: true,
-    tasks: [t],
-    tags: TAGS,
-    tagsByTask: new Map([["t1", TAGS]]),
-    subtasksByParent: new Map(),
-    statuses: [],
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    setTaskStatus: () => {},
-    subtaskProgressByTask: new Map(),
-    blockersByTask: new Map(),
-    dependentsByTask: new Map(),
-    taskRelations: [],
-    queuedTaskIds: new Set(["t1"]),
-    queueClaims: new Map(),
-    activityStamp: 0,
-    currentUserId: "storybook-user",
-    loadActivity: async () => ACTIVITY,
-    patchTask: () => {},
-    toggleDone: () => {},
-    toggleQueue: () => {},
-    setTimeSpent: () => {},
-    logTime: async () => true,
-    editTimeEntry: async () => true,
-    removeTimeEntry: async () => true,
-    listMyTimeEntries: async () => [],
-    createTask: async () => null,
-    createTagForTask: () => {},
-    archiveTask: () => {},
-    deleteTask: () => {},
-    setTaskParent: () => {},
-    focusOnTask: () => true,
-    restoreTask: async () => true,
-    // The task's own rows and structure (TV-U13), none in these stories.
-    sessions: [],
-    reminders: [],
-    waiting: [],
-    agentSessions: [],
-    teams: [],
-    areas: [],
-    sections: [],
-    inbox: INBOX,
-    commentStamps: new Map(),
-    attachmentStamps: new Map(),
-    addSession: () => true,
-    updateSession: () => true,
-    removeSession: () => true,
-    addReminder: () => true,
-    removeReminder: () => {},
-    addWaiting: () => null,
-    removeWaiting: () => {},
-    ...over,
-  };
-  return api as TasksModuleApi;
+const STORY_COMMANDS: Partial<TaskCommands> = {
+  loadActivity: async () => ACTIVITY,
+  patchTask: () => {},
+  setTaskStatus: () => {},
+  toggleDone: () => {},
+  toggleQueue: () => {},
+  setTimeSpent: () => {},
+  logTime: async () => true,
+  editTimeEntry: async () => true,
+  removeTimeEntry: async () => true,
+  listMyTimeEntries: async () => [],
+  createTask: async () => null,
+  createTagForTask: () => {},
+  archiveTask: () => {},
+  deleteTask: () => {},
+  setTaskParent: () => {},
+  focusOnTask: () => true,
+  restoreTask: async () => true,
+  addSession: () => true,
+  updateSession: () => true,
+  removeSession: () => true,
+  addReminder: () => true,
+  removeReminder: () => {},
+  addWaiting: () => null,
+  removeWaiting: () => {},
+};
+
+/**
+ * The page's Tasks context for a story (A4): a store holding the story's
+ * task with its tags, in my Focus unless the story says otherwise.
+ */
+function StoryTasks({
+  task,
+  queued,
+  canEdit,
+  children,
+}: {
+  task: Task | null;
+  queued: boolean;
+  canEdit: boolean;
+  children: ReactNode;
+}) {
+  const runtime = useMemo(
+    () =>
+      fakeTasksRuntime({
+        buckets: [INBOX, APP],
+        tasks: task ? [task] : [],
+        tags: TAGS,
+        tagLinks: TAGS.map((g) => tagLink(g.id, "t1")),
+        queue: queued ? [queueEntry("t1", "storybook-user")] : [],
+      }).runtime,
+    [task, queued],
+  );
+  return (
+    <FakeTasksProvider
+      runtime={runtime}
+      userId="storybook-user"
+      workspaceId="w1"
+      permission={canEdit ? "edit" : "view"}
+      commands={STORY_COMMANDS}
+    >
+      {children}
+    </FakeTasksProvider>
+  );
 }
 
 /** A flat picture standing in for a screenshot (no network in stories). */
@@ -365,22 +373,25 @@ const meta = {
   component: TaskDetailPanel,
   parameters: { layout: "fullscreen" },
   decorators: [
-    (Story) => (
+    (Story, { args, parameters }) => (
       <WithMembers>
-        <div className="h-dvh w-96 border-l border-border bg-card p-3">
-          <Story />
-        </div>
+        <StoryTasks
+          task={args.task ?? null}
+          queued={parameters.queued !== false}
+          canEdit={args.canEdit !== false}
+        >
+          <div className="h-dvh w-96 border-l border-border bg-card p-3">
+            <Story />
+          </div>
+        </StoryTasks>
       </WithMembers>
     ),
   ],
   args: {
     task: FULL,
-    buckets: [APP],
-    inbox: INBOX,
     canEdit: true,
     onRequestCapture: () => {},
     onSelectTask: () => {},
-    api: stubApi(FULL),
     runtime: stubRuntime(COMMENTS, 3000),
     workspaceId: "w1",
   },
@@ -396,14 +407,15 @@ export const Populated: Story = {};
 export const CorePropertiesOnly: Story = {
   args: {
     task: CORE_ONLY,
-    api: stubApi(CORE_ONLY, { queuedTaskIds: new Set() }),
     runtime: stubRuntime([], 0, false),
   },
+  // Not in my Focus.
+  parameters: { queued: false },
 };
 
 /** A view-only member: values without editors, no quiet line, no ⋯. */
 export const ReadOnly: Story = {
-  args: { canEdit: false, api: stubApi(FULL, { canEdit: false }) },
+  args: { canEdit: false },
 };
 
 export const NothingSelected: Story = {
@@ -439,7 +451,7 @@ const MARKDOWN = task({
  * are the agent's layout, revisitable.
  */
 export const MarkdownDescription: Story = {
-  args: { task: MARKDOWN, api: stubApi(MARKDOWN) },
+  args: { task: MARKDOWN },
 };
 
 /**

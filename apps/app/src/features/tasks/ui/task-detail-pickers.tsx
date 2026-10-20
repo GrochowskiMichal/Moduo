@@ -26,11 +26,11 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
-import { Calendar } from "../../../components/ui/calendar";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
   DatePickerPanel,
   formatTimeText,
+  LazyCalendar,
   TimeInput,
   useDateDraft,
 } from "../../../components/ui/date-field";
@@ -50,7 +50,6 @@ import { formatDayTime, formatDuration } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import type { Assignee } from "../assignee-options";
 import { useAssignees } from "../assignees";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
   estimateOf,
   type Task,
@@ -73,6 +72,7 @@ import {
   type WeekdayCode,
 } from "../repeat";
 import { cycleLine, historySummary } from "../repeat-history";
+import { useTaskCommands, useTasksSelector } from "../tasks-context";
 import { formatMinutes, formatTracked, parseMinutes, timeRow } from "../time-format";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { TaskTimeEntries } from "./task-time-entries";
@@ -80,20 +80,13 @@ import { TaskTimeEntries } from "./task-time-entries";
 // ── Due time ──────────────────────────────────────────────────────────────────
 
 /** The due date's optional clock time: "3:00 PM", or a quiet "Add time". */
-export function DueTimeValue({
-  task,
-  api,
-  canEdit,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  canEdit: boolean;
-}) {
+export function DueTimeValue({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { patchTask } = useTaskCommands();
   const [open, setOpen] = useState(false);
   const time = task.dueTime ? task.dueTime.slice(0, 5) : "";
   if (!task.dueDate || (!canEdit && !time)) return null;
   const save = (hhmm: string | null) => {
-    if ((hhmm ?? "") !== time) api.patchTask(task.id, { dueTime: hhmm });
+    if ((hhmm ?? "") !== time) patchTask(task.id, { dueTime: hhmm });
     setOpen(false);
   };
   return (
@@ -170,7 +163,6 @@ type SessionsView = { kind: "list" } | { kind: "add" } | { kind: "move"; session
 export function SessionsValue({
   task,
   sessions,
-  api,
   canEdit,
   me,
   assignee,
@@ -178,12 +170,12 @@ export function SessionsValue({
 }: {
   task: Task;
   sessions: TaskSession[];
-  api: TasksModuleApi;
   canEdit: boolean;
   me: Assignee | null;
   assignee: Assignee | null;
   defaultOpen?: boolean;
 }) {
+  const { addSession, updateSession, removeSession } = useTaskCommands();
   const [open, setOpen] = useState(defaultOpen && canEdit);
   const [view, setView] = useState<SessionsView>(() =>
     defaultOpen && sessions.length === 0 ? { kind: "add" } : { kind: "list" },
@@ -225,7 +217,7 @@ export function SessionsValue({
             assignee={assignee}
             onCancel={sorted.length > 0 ? () => setView({ kind: "list" }) : undefined}
             onAdd={(input) => {
-              api.addSession(task.id, input);
+              addSession(task.id, input);
               setView({ kind: "list" });
             }}
           />
@@ -234,7 +226,7 @@ export function SessionsValue({
             session={moving}
             onCancel={() => setView({ kind: "list" })}
             onMove={(patch) => {
-              api.updateSession(moving.id, patch);
+              updateSession(moving.id, patch);
               setView({ kind: "list" });
             }}
           />
@@ -249,8 +241,8 @@ export function SessionsValue({
                     canEdit={canEdit}
                     me={me}
                     onMove={() => setView({ kind: "move", sessionId: s.id })}
-                    onResize={(endsAt) => api.updateSession(s.id, { endsAt })}
-                    onRemove={() => api.removeSession(s.id)}
+                    onResize={(endsAt) => updateSession(s.id, { endsAt })}
+                    onRemove={() => removeSession(s.id)}
                   />
                 ))}
               </ul>
@@ -494,20 +486,19 @@ export function reminderLabel(r: Pick<TaskReminder, "kind" | "at">, now = new Da
 export function ReminderValue({
   task,
   reminders,
-  api,
   defaultOpen = false,
 }: {
   task: Task;
   reminders: TaskReminder[];
-  api: TasksModuleApi;
   defaultOpen?: boolean;
 }) {
+  const { addReminder, removeReminder, restoreReminders } = useTaskCommands();
   const [open, setOpen] = useState(defaultOpen);
   const [picking, setPicking] = useState(false);
   const first = reminders[0] ?? null;
   const has = (kind: TaskReminderKind) => reminders.some((r) => r.kind === kind);
   const add = (kind: TaskReminderKind, when: string | null = null) => {
-    api.addReminder(task.id, kind, when);
+    addReminder(task.id, kind, when);
   };
   // Backlog and Won't do pause reminders (TV-D12); they come back by asking,
   // once the task is To do or In progress again.
@@ -579,7 +570,7 @@ export function ReminderValue({
                       <IconButton
                         icon={X}
                         label="Remove reminder"
-                        onClick={() => api.removeReminder(r.id)}
+                        onClick={() => removeReminder(r.id)}
                         className="opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
                       />
                     </li>
@@ -595,7 +586,7 @@ export function ReminderValue({
                     size="sm"
                     className="justify-start"
                     onClick={() => {
-                      api.restoreReminders(task.id);
+                      restoreReminders(task.id);
                       setOpen(false);
                     }}
                   >
@@ -673,13 +664,11 @@ const ESTIMATE_PRESETS = [15, 30, 45, 60, 120, 240];
  */
 export function EstimateValue({
   task,
-  api,
   canEdit,
   mySeconds,
   defaultOpen = false,
 }: {
   task: Task;
-  api: TasksModuleApi;
   canEdit: boolean;
   mySeconds: number | null;
   defaultOpen?: boolean;
@@ -713,7 +702,7 @@ export function EstimateValue({
           </PropertyValue>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-3">
-          <EstimateEditor task={task} api={api} onDone={() => setOpen(false)} />
+          <EstimateEditor task={task} onDone={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
       {/* The bar and "you 50m" share a line of their own under the value, so
@@ -765,15 +754,8 @@ function progressWidth(progress: number): string {
  * total records one adjustment that makes the total exactly that (TV-D3
  * `set_total`); a field left as it was writes nothing.
  */
-function EstimateEditor({
-  task,
-  api,
-  onDone,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  onDone: () => void;
-}) {
+function EstimateEditor({ task, onDone }: { task: Task; onDone: () => void }) {
+  const { patchTask, setTimeSpent } = useTaskCommands();
   // What each field last showed as saved: Focus can save while the editor is
   // open, and a field left alone must never write back an older total.
   const baseline = useRef({
@@ -799,7 +781,7 @@ function EstimateEditor({
     const next = minutes && minutes > 0 ? minutes : null;
     baseline.current.estimate = next ? formatMinutes(next) : "";
     setEstimate(baseline.current.estimate);
-    if (next !== estimateOf(task)) api.patchTask(task.id, { estimateMinutes: next });
+    if (next !== estimateOf(task)) patchTask(task.id, { estimateMinutes: next });
   };
   const commitEstimate = () => {
     const typed = estimate.trim();
@@ -820,7 +802,7 @@ function EstimateEditor({
       return;
     }
     baseline.current.tracked = typed;
-    api.setTimeSpent(task.id, minutes * 60);
+    setTimeSpent(task.id, minutes * 60);
   };
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -876,7 +858,7 @@ function EstimateEditor({
         />
       </div>
       {/* "Add time…" and your own entries (TV-D14). */}
-      <TaskTimeEntries task={task} api={api} />
+      <TaskTimeEntries task={task} />
     </div>
   );
 }
@@ -895,15 +877,14 @@ function presetOf(task: Task): RecurrencePreset | null {
 
 export function RepeatValue({
   task,
-  api,
   canEdit,
   defaultOpen = false,
 }: {
   task: Task;
-  api: TasksModuleApi;
   canEdit: boolean;
   defaultOpen?: boolean;
 }) {
+  const { patchTask, skipOccurrence } = useTaskCommands();
   const [open, setOpen] = useState(defaultOpen && canEdit);
   const [custom, setCustom] = useState(false);
   const label = task.recurrence ? repeatSummary(task.recurrence) : "Doesn’t repeat";
@@ -912,12 +893,12 @@ export function RepeatValue({
   const setRule = (next: Task["recurrence"]) => {
     if (!next) {
       // Clearing the rule keeps the task and its current occurrence (one-off).
-      api.patchTask(task.id, { recurrence: null });
+      patchTask(task.id, { recurrence: null });
       return;
     }
     // A task with no date takes the rule's first occurrence as its due date
     // (the occurrence is the task's date in the one-task model).
-    api.patchTask(
+    patchTask(
       task.id,
       task.scheduledAt || task.dueDate
         ? { recurrence: next }
@@ -980,7 +961,7 @@ export function RepeatValue({
                 <span aria-hidden className="my-1 h-px bg-hairline" />
                 <RepeatOption
                   onClick={() => {
-                    api.skipOccurrence(task.id);
+                    skipOccurrence(task.id);
                     setOpen(false);
                   }}
                 >
@@ -1001,15 +982,16 @@ export function RepeatValue({
  * beside the rule, opening each cycle, newest first — who closed it, and your
  * own time in it (nobody sees anyone else's). Read when opened; viewers too.
  */
-export function RepeatHistory({ task, api }: { task: Task; api: TasksModuleApi }) {
+export function RepeatHistory({ task }: { task: Task }) {
+  const { taskHistory } = useTaskCommands();
+  const completions = useTasksSelector((_, snap) => snap.completions);
   const [open, setOpen] = useState(false);
   const [cycles, setCycles] = useState<TaskCycle[] | null>(null);
   const [failed, setFailed] = useState(false);
   const { byId, currentUserId } = useAssignees();
-  const summary = historySummary(api.completions, task.id);
+  const summary = historySummary(completions, task.id);
   // Read on open, and again when a cycle closes while it's open.
-  const doneCount = api.completions.filter((c) => c.taskId === task.id && !c.deletedAt).length;
-  const { taskHistory } = api;
+  const doneCount = completions.filter((c) => c.taskId === task.id && !c.deletedAt).length;
   // biome-ignore lint/correctness/useExhaustiveDependencies: a cycle closing (doneCount) re-reads it.
   useEffect(() => {
     if (!open) return;
@@ -1311,7 +1293,7 @@ function CustomRepeat({
         </Select>
         {spec.end.kind === "until" ? (
           // In place, not a popover inside this one (it would lose its clicks).
-          <Calendar
+          <LazyCalendar
             mode="single"
             aria-label="Last day"
             selected={new Date(`${spec.end.day}T12:00:00`)}

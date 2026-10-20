@@ -2,13 +2,32 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import type { TasksSearch } from "../../features/tasks/search";
+import { TasksProvider } from "../../features/tasks/tasks-context";
 import { TasksPlanView } from "../../features/tasks/ui/tasks-plan-view";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 export function TasksPage() {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  // One Tasks root for the page (A4): everything under it reads the module
+  // through the provider's narrow hooks.
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={selectedWorkspaceId}
+      modulePermission={modulePermissions.tasks}
+      // Recently deleted opens from the Tasks sidebar's ⋯ only (TV-U6).
+      includeTrash
+    >
+      <TasksPageBody />
+    </TasksProvider>
+  );
+}
+
+function TasksPageBody() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
 
@@ -18,7 +37,7 @@ export function TasksPage() {
   // cursor (j/k moves it constantly), not a document — back should leave
   // /tasks, not walk the cursor history. The functional updater guards any
   // future /tasks params (an object `search` replaces the whole query string —
-  // the gotcha that bit FX-1); today `id` is the only validated param.
+  // the gotcha that bit FX-1).
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as TasksSearch;
   const urlTaskId = search.id ?? null;
@@ -36,19 +55,23 @@ export function TasksPage() {
       },
     });
   }, [navigate]);
-  // A place to open (Home's Upcoming "+n more"): opened once, then taken off.
+  // The place open in the centre (DF-1): `?place=`, its only source. Writes
+  // replace too, so Back and Forward never walk through places. `place` goes
+  // before `id`, so the address bar ends with the task (MOD-28).
   const urlPlace = search.place ?? null;
-  const onUrlPlaceConsumed = useCallback(() => {
-    void navigate({
-      to: "/tasks",
-      replace: true,
-      search: (prev: Record<string, unknown>) => {
-        const next = { ...prev };
-        delete next.place;
-        return next;
-      },
-    });
-  }, [navigate]);
+  const onUrlPlaceChange = useCallback(
+    (place: string) => {
+      void navigate({
+        to: "/tasks",
+        replace: true,
+        search: (prev: TasksSearch) => {
+          const { id, ...rest } = prev;
+          return { ...rest, place, ...(id ? { id } : {}) };
+        },
+      });
+    },
+    [navigate],
+  );
   const onUrlTaskIdChange = useCallback(
     (id: string | null) => {
       void navigate({
@@ -64,14 +87,6 @@ export function TasksPage() {
     },
     [navigate],
   );
-
-  const api = useTasksModule(runtime, {
-    userId,
-    workspaceId: selectedWorkspaceId,
-    modulePermission: modulePermissions.tasks,
-    // Recently deleted opens from the Tasks sidebar's ⋯ only (TV-U6).
-    includeTrash: true,
-  });
 
   const canRender = useMemo(
     () =>
@@ -105,7 +120,6 @@ export function TasksPage() {
 
   return (
     <TasksPlanView
-      api={api}
       workspaceId={selectedWorkspaceId as string}
       runtime={runtime}
       urlTaskId={urlTaskId}
@@ -113,7 +127,7 @@ export function TasksPage() {
       urlViewId={urlViewId}
       onUrlViewConsumed={onUrlViewConsumed}
       urlPlace={urlPlace}
-      onUrlPlaceConsumed={onUrlPlaceConsumed}
+      onUrlPlaceChange={onUrlPlaceChange}
     />
   );
 }

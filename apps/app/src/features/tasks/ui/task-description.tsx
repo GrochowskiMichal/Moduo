@@ -10,10 +10,10 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { Button } from "../../../components/ui/button";
 import { cn } from "../../../lib/utils";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { referenceKind, referenceNoun } from "../../spine/references/kinds";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
+import { useTaskCommands } from "../tasks-context";
 
 /** "2 tasks · 1 email" for the references below the fold, by kind, in first-seen order. */
 export function hiddenCounts(types: readonly string[]): string {
@@ -27,7 +27,6 @@ export function hiddenCounts(types: readonly string[]): string {
 
 export function TaskDescription({
   task,
-  api,
   canEdit,
   runtime,
   workspaceId,
@@ -35,7 +34,6 @@ export function TaskDescription({
   onFiles,
 }: {
   task: Task;
-  api: TasksModuleApi;
   canEdit: boolean;
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
@@ -44,6 +42,7 @@ export function TaskDescription({
   /** Files pasted or dropped into the text (AT-2: they attach to the task). */
   onFiles?: (files: File[]) => void;
 }) {
+  const { patchTask } = useTaskCommands();
   const boxRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -127,7 +126,7 @@ export function TaskDescription({
           className="min-h-6 text-base text-foreground/85"
           placeholderClassName="truncate text-base"
           onCommit={(markdown) => {
-            if (markdown !== task.description) api.patchTask(task.id, { description: markdown });
+            if (markdown !== task.description) patchTask(task.id, { description: markdown });
           }}
           onFiles={onFiles}
           // TV-D12: an @person in the description notifies them (people who

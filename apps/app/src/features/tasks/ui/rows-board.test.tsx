@@ -3,15 +3,7 @@
 // (U1-3), and board columns and cards (U1-4).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  renderHook,
-  screen,
-  within,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, renderHook, screen, within } from "@testing-library/react";
 
 const PEOPLE = {
   u1: {
@@ -37,9 +29,13 @@ rs.mock("../assignees", () => ({
 
 import { SELECTED_OPTION } from "../../../components/ui/selection";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import type { AgentSession } from "../../spine/agent-session";
+import { resetTagStore } from "../../tags/store";
 import { useJustCompleted } from "../completed";
 import { makeTask } from "../helpers";
-import type { Task } from "../model";
+import type { Section, Tag, Task } from "../model";
+import { type FakeTasksSeed, queueEntry, relation, tagLink } from "../testing/fake-tasks";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskBoardView } from "./task-board-view";
 import { TaskListView } from "./task-list-view";
 
@@ -51,7 +47,11 @@ beforeAll(() => {
   } as never;
   Element.prototype.scrollIntoView ??= () => {};
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // The tag store is per workspace, not per render: no tags carry over.
+  resetTagStore();
+});
 
 const OLD = "2026-01-01T00:00:00.000Z";
 
@@ -65,32 +65,66 @@ function task(id: string, over: Partial<Task> = {}): Task {
   };
 }
 
-function viewApi(tasks: Task[], extra: Record<string, unknown> = {}) {
-  return {
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
-    toggleDone: rs.fn(),
-    toggleQueue: rs.fn(),
-    patchTask: rs.fn(),
-    deleteTask: rs.fn(),
-    setTaskParent: rs.fn(),
-    skipOccurrence: rs.fn(),
-    ...extra,
-  };
+// What the store holds beside the view's own tasks, as rows (A4): the views
+// read tags, counts, blockers, subtasks and the queue from the Tasks context.
+
+/** `tags` on task `taskId`: the tag rows and their links. */
+function tagged(taskId: string, tags: { id: string; name: string; color?: string }[]) {
+  const rows: Tag[] = tags.map((t) => ({
+    id: t.id,
+    workspaceId: "w",
+    ownerId: "u1",
+    name: t.name,
+    color: t.color ?? null,
+    createdAt: OLD,
+    updatedAt: OLD,
+    deletedAt: null,
+  }));
+  return { tags: rows, tagLinks: rows.map((t) => tagLink(t.id, taskId, "w")) };
 }
+
+/** `n` live comments on a task. */
+const comments = (taskId: string, n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `c-${taskId}-${i}`,
+    taskId,
+    updatedAt: OLD,
+    deletedAt: null,
+  }));
+
+/** `n` finished files on a task. */
+const files = (taskId: string, n: number) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `f-${taskId}-${i}`,
+    taskId,
+    status: "ready",
+    updatedAt: OLD,
+    deletedAt: null,
+  }));
+
+/** Section "Design" of the project. */
+const DESIGN: Section = {
+  id: "s1",
+  workspaceId: "w",
+  projectId: "b1",
+  name: "Design",
+  position: 1,
+  startsOn: null,
+  endsOn: null,
+  createdAt: OLD,
+  updatedAt: OLD,
+};
+
+/** The view's tasks, plus whatever else the store holds. */
+const seedOf = (tasks: Task[], rows: FakeTasksSeed): FakeTasksSeed => ({
+  ...rows,
+  tasks: [...tasks, ...(rows.tasks ?? [])],
+});
 
 type ListExtra = Partial<Parameters<typeof TaskListView>[0]>;
 
-function renderList(tasks: Task[], extra: ListExtra = {}, apiExtra: Record<string, unknown> = {}) {
-  const api = viewApi(tasks, apiExtra);
-  render(
+async function renderList(tasks: Task[], extra: ListExtra = {}, rows: FakeTasksSeed = {}) {
+  await renderWithTasks(
     <TooltipProvider>
       <TaskListView
         tasks={tasks}
@@ -106,12 +140,11 @@ function renderList(tasks: Task[], extra: ListExtra = {}, apiExtra: Record<strin
         onRequestCapture={() => {}}
         selectedTaskId={null}
         onSelectTask={() => {}}
-        api={api as never}
         {...extra}
       />
     </TooltipProvider>,
+    { seed: seedOf(tasks, rows), workspaceId: "w" },
   );
-  return api;
 }
 
 const rowOf = (title: string) =>
@@ -120,8 +153,8 @@ const cols = (row: HTMLElement) =>
   [...row.querySelectorAll<HTMLElement>("[data-col]")].map((el) => el.dataset.col);
 
 describe("Row anatomy (U1-1, U1-2)", () => {
-  it("every row carries the same fixed columns, in order, so they line up", () => {
-    renderList([
+  it("every row carries the same fixed columns, in order, so they line up", async () => {
+    await renderList([
       task("a", { priority: "high", dueDate: "2026-10-20T00:00:00.000Z", assigneeId: "u2" }),
       task("b"),
     ]);
@@ -130,23 +163,23 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(cols(rowOf("Task b"))).toEqual(["priority", "date", "assignee", "queue"]);
   });
 
-  it("collapses a column that's empty on every row", () => {
-    renderList([task("a"), task("b")]);
+  it("collapses a column that's empty on every row", async () => {
+    await renderList([task("a"), task("b")]);
     expect(cols(rowOf("Task a"))).toEqual(["queue"]);
   });
 
-  it("energy stays off on rows until Display turns it on", () => {
+  it("energy stays off on rows until Display turns it on", async () => {
     const rows = [task("a", { energyLevel: "high" })];
-    renderList(rows);
+    await renderList(rows);
     expect(cols(rowOf("Task a"))).not.toContain("energy");
     cleanup();
-    renderList(rows, { properties: ["priority", "energy", "date", "assignee"] });
+    await renderList(rows, { properties: ["priority", "energy", "date", "assignee"] });
     expect(cols(rowOf("Task a"))).toContain("energy");
     expect(screen.getByLabelText("High energy")).toBeTruthy();
   });
 
-  it("priority is a fixed three-bar glyph read by fill (ghost bars stay)", () => {
-    renderList([task("a", { priority: "medium" })]);
+  it("priority is a fixed three-bar glyph read by fill (ghost bars stay)", async () => {
+    await renderList([task("a", { priority: "medium" })]);
     const svg = screen.getByLabelText("Medium priority").querySelector("svg") as SVGElement;
     expect(svg.querySelectorAll("rect")).toHaveLength(3);
     expect(svg.getAttribute("data-level")).toBe("2");
@@ -163,9 +196,10 @@ describe("Row anatomy (U1-1, U1-2)", () => {
       { id: "t2", name: "notes" },
       { id: "t3", name: "bug" },
     ];
-    renderList([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
+    await renderList([task("a")], {}, tagged("a", tags));
     const row = rowOf("Task a");
-    const spoken = screen.getByText("3 tags: ui, notes, bug");
+    // Name-sorted, as the tag store hands them.
+    const spoken = screen.getByText("3 tags: bug, notes, ui");
     expect(spoken.className).toContain("sr-only");
     // The same icon size and colour as files, comments and subtasks (MetaCount).
     // (Its tooltip trigger takes over the span's data-slot.)
@@ -173,12 +207,12 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(count.querySelector("svg")?.getAttribute("class")).toContain("lucide-tag");
     expect(count.querySelector("svg")?.getAttribute("class")).toContain("size-icon-xs");
     expect(count.className).toContain("text-muted-foreground");
-    expect(count.textContent).toBe("33 tags: ui, notes, bug");
+    expect(count.textContent).toBe("33 tags: bug, notes, ui");
     expect(row.querySelector('[data-slot="tag-chip"]')).toBeNull();
     expect(row.textContent).not.toContain("#");
     // Hovering names them as words, in the kit tooltip.
     fireEvent.pointerMove(count, { pointerType: "mouse" });
-    expect((await screen.findByRole("tooltip")).textContent).toBe("ui, notes, bug");
+    expect((await screen.findByRole("tooltip")).textContent).toBe("bug, notes, ui");
     // The count sits in the title cell, in the row's details (MOD-138).
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
     expect(title.querySelector('[data-slot="row-details"]')?.contains(count)).toBe(true);
@@ -190,34 +224,40 @@ describe("Row anatomy (U1-1, U1-2)", () => {
       { id: "t2", name: "notes", color: "green" },
       { id: "t3", name: "bug", color: "red" },
     ];
-    renderList([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    await renderList([task("a")], { rows: "detailed" }, tagged("a", tags));
     const title = rowOf("Task a").querySelector('[data-slot="row-title"]') as HTMLElement;
     const names = title.querySelector('[data-slot="row-tag-names"]') as HTMLElement;
     const chips = [...names.querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
-    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes"]);
-    expect(chips.map((c) => c.dataset.label)).toEqual(["blue", "green"]);
+    // Name-sorted, as the tag store hands them.
+    expect(chips.map((c) => c.textContent)).toEqual(["bug", "notes"]);
+    expect(chips.map((c) => c.dataset.label)).toEqual(["red", "green"]);
     expect(chips[0]?.className).toContain("h-4.5");
     // The names stay at full width, so each chip is capped: the title keeps its room.
     expect(names.className).toContain("shrink-0");
     for (const chip of chips) expect(chip.className).toContain("max-w-24");
-    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+    expect(screen.getByTitle("Tag: bug").closest('[data-slot="tag-chip"]')).toBe(
       chips[0] as HTMLElement,
     );
     const more = names.querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
     expect(more.textContent).toBe("+1");
     act(() => more.focus());
-    expect((await screen.findByRole("tooltip")).textContent).toBe("bug");
+    expect((await screen.findByRole("tooltip")).textContent).toBe("ui");
     expect(names.textContent).not.toContain("#");
   });
 
-  it("counts subtasks as done/total and marks blocked and repeating tasks", () => {
-    renderList(
+  it("counts subtasks as done/total and marks blocked and repeating tasks", async () => {
+    await renderList(
       [task("a", { recurrence: { rrule: "FREQ=DAILY", dtstart: null, nextOccurrence: null } })],
       {},
       {
-        subtaskProgressByTask: new Map([["a", { done: 1, total: 3 }]]),
-        blockedTaskIds: new Set(["a"]),
-        blockersByTask: new Map([["a", [task("z", { title: "Spec" })]]]),
+        // Three subtasks, one done; "Spec" (open) blocks it.
+        tasks: [
+          task("s1", { parentId: "a", status: "done" }),
+          task("s2", { parentId: "a" }),
+          task("s3", { parentId: "a" }),
+          task("z", { title: "Spec" }),
+        ],
+        relations: [relation("z", "a", "w")],
       },
     );
     const row = rowOf("Task a");
@@ -227,21 +267,23 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(screen.getByLabelText("Repeats")).toBeTruthy();
   });
 
-  it("in a cross-bucket flat view the bucket is dot + name text, not a pill", () => {
-    renderList([task("a")], { selection: "all" });
+  it("in a cross-bucket flat view the bucket is dot + name text, not a pill", async () => {
+    await renderList([task("a")], { selection: "all" });
     const bucket = screen.getByRole("button", { name: "Project: Work" });
     expect(bucket.textContent).toBe("Work");
     expect(bucket.querySelector('[data-slot="badge"]')).toBeNull();
     expect(bucket.querySelector('[data-slot="nav-row-dot"]')).not.toBeNull();
   });
 
-  it("the queue toggle hides until hover, focus or selection, unless queued or claimed", () => {
-    renderList(
+  it("the queue toggle hides until hover, focus or selection, unless queued or claimed", async () => {
+    await renderList(
       [task("a"), task("b"), task("c")],
       {},
       {
-        queuedTaskIds: new Set(["b"]),
-        queueClaims: new Map([["c", ["u2"]]]),
+        queue: [
+          queueEntry("b", "u1", { workspaceId: "w" }),
+          queueEntry("c", "u2", { workspaceId: "w" }),
+        ],
       },
     );
     const toggle = (title: string) =>
@@ -253,8 +295,8 @@ describe("Row anatomy (U1-1, U1-2)", () => {
     expect(toggle("Task c").className).not.toContain("opacity-0");
   });
 
-  it("the date cell is named by its dates", () => {
-    renderList([task("a", { dueDate: "2026-10-20T00:00:00.000Z" })]);
+  it("the date cell is named by its dates", async () => {
+    await renderList([task("a", { dueDate: "2026-10-20T00:00:00.000Z" })]);
     const cell = rowOf("Task a").querySelector('[data-col="date"]') as HTMLElement;
     // The one grammar (decision 41): the year shows only when it isn't this one.
     expect(cell.getAttribute("aria-label")).toMatch(/^Due (\S+ \d+|\d+ \S+)(,? \d{4})?$/);
@@ -284,14 +326,14 @@ describe("Display → Rows: Standard · Detailed", () => {
   const projectShown = (row: HTMLElement) =>
     !row.querySelector('[aria-label="Project: Work"]')?.hasAttribute("data-implied");
 
-  it("Standard keeps TV-U1's columns", () => {
-    renderList(rows);
+  it("Standard keeps TV-U1's columns", async () => {
+    await renderList(rows);
     expect(cols(rowOf("Task a"))).toEqual(["date", "assignee", "queue"]);
     expect(projectShown(rowOf("Task a"))).toBe(false);
   });
 
-  it("Detailed (TV-U10): Project › Section, status name, Due, time, assignee name, updated", () => {
-    renderList(rows, { rows: "detailed" }, { sections: [{ id: "s1", name: "Design" }] });
+  it("Detailed (TV-U10): Project › Section, status name, Due, time, assignee name, updated", async () => {
+    await renderList(rows, { rows: "detailed" }, { sections: [DESIGN] });
     const a = rowOf("Task a");
     expect(cols(a)).toEqual(["project", "status", "due", "time", "assignee", "updated", "queue"]);
     const cell = (row: HTMLElement, col: string) =>
@@ -306,9 +348,9 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(projectShown(a)).toBe(true);
   });
 
-  it("Display → Columns turns Detailed's own columns off, header and rows (MOD-128, MOD-136)", () => {
+  it("Display → Columns turns Detailed's own columns off, header and rows (MOD-128, MOD-136)", async () => {
     // A project's defaults: no Project (the page's title), no Updated.
-    renderList(rows, {
+    await renderList(rows, {
       rows: "detailed",
       detailedColumns: ["handle", "status", "time", "waiting"],
     });
@@ -320,20 +362,16 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(within(header).queryByRole("button", { name: /updated/i })).toBeNull();
   });
 
-  it("Detailed with every own column off is still Detailed, not Standard's date (MOD-128)", () => {
-    renderList(rows, { rows: "detailed", detailedColumns: [] });
+  it("Detailed with every own column off is still Detailed, not Standard's date (MOD-128)", async () => {
+    await renderList(rows, { rows: "detailed", detailedColumns: [] });
     // Due stays Detailed's own cell; Standard's one date never comes back.
     expect(cols(rowOf("Task a"))).toEqual(["due", "assignee", "queue"]);
     expect(document.querySelector('[data-slot="task-list-header"]')).not.toBeNull();
   });
 
-  it("Detailed names the section after the project, and the handle before the title", () => {
+  it("Detailed names the section after the project, and the handle before the title", async () => {
     const withSection = [task("a", { sectionId: "s1", number: 142 })];
-    renderList(
-      withSection,
-      { rows: "detailed", taskKey: "MOD" },
-      { sections: [{ id: "s1", name: "Design" }] },
-    );
+    await renderList(withSection, { rows: "detailed", taskKey: "MOD" }, { sections: [DESIGN] });
     const a = rowOf("Task a");
     expect(a.querySelector('[data-col="project"]')?.textContent).toBe("Work › Design");
     const handle = a.querySelector('[data-col="handle"]') as HTMLElement;
@@ -343,10 +381,10 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(handle.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("Detailed's ID header sorts by the number and says which way (MOD-144)", () => {
+  it("Detailed's ID header sorts by the number and says which way (MOD-144)", async () => {
     const onSort = rs.fn();
     const numbered = [task("a", { number: 10 }), task("b", { number: 2 })];
-    renderList(numbered, { rows: "detailed", taskKey: "MOD", onSort, order: "id" });
+    await renderList(numbered, { rows: "detailed", taskKey: "MOD", onSort, order: "id" });
     const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
     const id = within(header).getByRole("button", { name: "ID, sorted ascending" });
     fireEvent.click(id);
@@ -356,9 +394,9 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(titles.filter(Boolean)).toEqual(["b", "a"]);
   });
 
-  it("Detailed has sortable column headers on the rows' widths", () => {
+  it("Detailed has sortable column headers on the rows' widths", async () => {
     const onSort = rs.fn();
-    renderList(rows, { rows: "detailed", onSort });
+    await renderList(rows, { rows: "detailed", onSort });
     const header = document.querySelector('[data-slot="task-list-header"]') as HTMLElement;
     expect(header).not.toBeNull();
     fireEvent.click(within(header).getByRole("button", { name: "Sort by due" }));
@@ -370,8 +408,8 @@ describe("Display → Rows: Standard · Detailed", () => {
     expect(frame.style.getPropertyValue("--tl-col-status")).toMatch(/ch$/);
   });
 
-  it("nothing in Detailed's cells truncates: they hold the list's width", () => {
-    renderList(rows, { rows: "detailed" });
+  it("nothing in Detailed's cells truncates: they hold the list's width", async () => {
+    await renderList(rows, { rows: "detailed" });
     for (const col of ["status", "time", "assignee", "updated"]) {
       const el = rowOf("Task a").querySelector<HTMLElement>(`[data-col="${col}"]`);
       expect(el?.className).toContain("whitespace-nowrap");
@@ -380,8 +418,8 @@ describe("Display → Rows: Standard · Detailed", () => {
     }
   });
 
-  it("the title takes the free width (checkpoint 1): the only flexible cell", () => {
-    renderList(rows, { rows: "detailed" });
+  it("the title takes the free width (checkpoint 1): the only flexible cell", async () => {
+    await renderList(rows, { rows: "detailed" });
     const title = rowOf("Task a").querySelector('[data-slot="row-title"]') as HTMLElement;
     expect(title.className).toContain("flex-1");
     const columns = rowOf("Task a").querySelector('[data-slot="row-columns"]') as HTMLElement;
@@ -390,7 +428,7 @@ describe("Display → Rows: Standard · Detailed", () => {
 });
 
 describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
-  const working = {
+  const working: AgentSession = {
     id: "s1",
     workspaceId: "w",
     taskId: "a",
@@ -413,13 +451,13 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
   const titleCell = (row: HTMLElement) =>
     row.querySelector('[data-slot="row-title"]') as HTMLElement;
 
-  it("Standard: the agent's mark and the counts are one group at the title cell's end", () => {
-    renderList(
+  it("Standard: the agent's mark and the counts are one group at the title cell's end", async () => {
+    await renderList(
       [task("a", { title: "Hero banner for the homepage" })],
       { selection: "all", scopeTitle: "All" },
       {
-        commentCounts: new Map([["a", 3]]),
-        attachmentCounts: new Map([["a", 2]]),
+        comments: comments("a", 3),
+        attachments: files("a", 2),
         agentSessions: [working],
       },
     );
@@ -457,8 +495,8 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     expect((details.lastElementChild as HTMLElement).className).toContain("overflow-x-clip");
   });
 
-  it("the title gives way first, never below about ten characters", () => {
-    renderList([
+  it("the title gives way first, never below about ten characters", async () => {
+    await renderList([
       task("a", { title: "Hero banner for the homepage" }),
       task("b", { title: "Pay rent" }),
     ]);
@@ -478,7 +516,7 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
   });
 
   it("the agent's mark is a dot, its agent and what it does, shorter as the cell narrows", async () => {
-    renderList([task("a", { title: "Hero banner" })], {}, { agentSessions: [working] });
+    await renderList([task("a", { title: "Hero banner" })], {}, { agentSessions: [working] });
     const agent = rowOf("Hero banner").querySelector('[data-slot="row-agent"]') as HTMLElement;
     // Needs you reads in the text colour (round-1c `.agent.needs`).
     expect(agent.dataset.tone).toBe("loud");
@@ -495,8 +533,8 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     );
   });
 
-  it("an agent's dot always keeps its room beside the title's floor (MOD-125)", () => {
-    renderList(
+  it("an agent's dot always keeps its room beside the title's floor (MOD-125)", async () => {
+    await renderList(
       [task("a", { title: "Hero banner for the homepage" })],
       {},
       { agentSessions: [working] },
@@ -508,11 +546,11 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     expect((detailsOf(row) as HTMLElement).className).toContain("min-w-3");
   });
 
-  it("Detailed keeps them right after the title", () => {
-    renderList(
+  it("Detailed keeps them right after the title", async () => {
+    await renderList(
       [task("a", { title: "Hero banner" })],
       { rows: "detailed" },
-      { commentCounts: new Map([["a", 3]]) },
+      { comments: comments("a", 3) },
     );
     const row = rowOf("Hero banner");
     const details = detailsOf(row) as HTMLElement;
@@ -525,11 +563,11 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     expect(counts.className).toContain("justify-end");
   });
 
-  it("a late row's fixes sit beside the details, never over them", () => {
-    renderList(
+  it("a late row's fixes sit beside the details, never over them", async () => {
+    await renderList(
       [task("a", { title: "Hero banner", dueOn: "2020-01-01", dueDate: "2020-01-01T00:00:00Z" })],
       {},
-      { commentCounts: new Map([["a", 3]]), setTaskStatus: rs.fn() },
+      { comments: comments("a", 3) },
     );
     const details = detailsOf(rowOf("Hero banner")) as HTMLElement;
     const fixes = details.querySelector('[data-slot="row-late-fixes"]')?.parentElement
@@ -547,8 +585,8 @@ describe("Done and completed (U1-3)", () => {
     task("new-done", { status: "done", updatedAt: new Date().toISOString() }),
   ];
 
-  it('hides completed tasks by default behind the list\'s one "N completed · Show" (MOD-148)', () => {
-    renderList(tasks());
+  it('hides completed tasks by default behind the list\'s one "N completed · Show" (MOD-148)', async () => {
+    await renderList(tasks());
     expect(screen.getAllByRole("row")).toHaveLength(1);
     const line = screen.getByRole("button", { name: "2 completed, show" });
     expect(line.textContent).toBe("2 completed · Show");
@@ -560,8 +598,8 @@ describe("Done and completed (U1-3)", () => {
     );
   });
 
-  it('"7 days" lists the recent ones, the older behind the end line; "All" lists every one', () => {
-    renderList(tasks(), { completed: "week" });
+  it('"7 days" lists the recent ones, the older behind the end line; "All" lists every one', async () => {
+    await renderList(tasks(), { completed: "week" });
     expect(screen.getAllByRole("row")).toHaveLength(2);
     // The list's one end line, for the older ones (MOD-148 follow-up).
     expect(
@@ -571,13 +609,13 @@ describe("Done and completed (U1-3)", () => {
         ?.getAttribute("data-slot"),
     ).toBe("completed-end-line");
     cleanup();
-    renderList(tasks(), { completed: "all" });
+    await renderList(tasks(), { completed: "all" });
     expect(screen.getAllByRole("row")).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /completed/ })).toBeNull();
   });
 
-  it("a task just checked off stays listed, struck through", () => {
-    renderList(tasks(), { stayingIds: new Set(["old-done"]) });
+  it("a task just checked off stays listed, struck through", async () => {
+    await renderList(tasks(), { stayingIds: new Set(["old-done"]) });
     expect(screen.getAllByRole("row")).toHaveLength(2);
     const row = rowOf("Task old-done");
     expect(screen.getByRole("button", { name: "Task old-done" }).className).toContain(
@@ -587,9 +625,9 @@ describe("Done and completed (U1-3)", () => {
     expect(row.dataset.done).toBe("");
   });
 
-  it("a selected or deep-linked completed task stays listed (no fallback to another task)", () => {
+  it("a selected or deep-linked completed task stays listed (no fallback to another task)", async () => {
     const onSelectTask = rs.fn();
-    renderList([task("a"), task("b", { status: "done" })], {
+    await renderList([task("a"), task("b", { status: "done" })], {
       selectedTaskId: "b",
       onSelectTask,
       revealRequest: { id: "b", seq: 1 },
@@ -601,22 +639,22 @@ describe("Done and completed (U1-3)", () => {
     expect(screen.getByRole("button", { name: "1 completed, show" })).toBeTruthy();
   });
 
-  it("a deep link to a done subtask of a done parent lands: the parent stays and expands", () => {
+  it("a deep link to a done subtask of a done parent lands: the parent stays and expands", async () => {
     const onSelectTask = rs.fn();
     const parent = task("p", { status: "done" });
     const child = task("c", { status: "done", parentId: "p" });
-    renderList(
+    await renderList(
       [task("a"), parent, child],
+      // The store nests c under p by its parentId.
       { selectedTaskId: "c", onSelectTask, revealRequest: { id: "c", seq: 1 } },
-      { tasks: [task("a"), parent, child], subtasksByParent: new Map([["p", [child]]]) },
     );
     expect(rowOf("Task p")).toBeTruthy();
     expect(rowOf("Task c")).toBeTruthy();
     expect(onSelectTask).not.toHaveBeenCalled();
   });
 
-  it("a done row dims as a whole except its status icon", () => {
-    renderList(tasks(), { completed: "all" });
+  it("a done row dims as a whole except its status icon", async () => {
+    await renderList(tasks(), { completed: "all" });
     const row = rowOf("Task old-done");
     const title = row.querySelector('[data-slot="row-title"]') as HTMLElement;
     const columns = row.querySelector('[data-slot="row-columns"]') as HTMLElement;
@@ -632,15 +670,16 @@ describe("Done and completed (U1-3)", () => {
     expect(title.contains(glyph) || columns.contains(glyph)).toBe(false);
   });
 
-  it("a done parent with open subtasks stays, so they aren't hidden with it", () => {
+  it("a done parent with open subtasks stays, so they aren't hidden with it", async () => {
     const parent = task("p", { status: "done" });
     const child = task("c", { parentId: "p" });
-    renderList([parent, child], {}, { subtasksByParent: new Map([["p", [child]]]) });
+    // The store nests c under p by its parentId.
+    await renderList([parent, child]);
     expect(rowOf("Task p")).toBeTruthy();
   });
 
-  it("the Queue ignores Completed (TV-D4 keeps a checked-off task until reload)", () => {
-    renderList(tasks(), { selection: "today", reorderable: false });
+  it("the Queue ignores Completed (TV-D4 keeps a checked-off task until reload)", async () => {
+    await renderList(tasks(), { selection: "today", reorderable: false });
     expect(screen.getAllByRole("row")).toHaveLength(3);
   });
 });
@@ -661,13 +700,12 @@ describe("useJustCompleted", () => {
 });
 
 describe("Board (U1-4)", () => {
-  function renderBoard(
+  async function renderBoard(
     tasks: Task[],
     extra: Record<string, unknown> = {},
-    apiExtra: Record<string, unknown> = {},
+    rows: FakeTasksSeed = {},
   ) {
-    const api = viewApi(tasks, apiExtra);
-    render(
+    await renderWithTasks(
       <TooltipProvider>
         <TaskBoardView
           tasks={tasks}
@@ -683,16 +721,16 @@ describe("Board (U1-4)", () => {
           onRequestCapture={() => {}}
           selectedTaskId="a"
           onSelectTask={() => {}}
-          api={api as never}
           {...extra}
         />
       </TooltipProvider>,
+      { seed: seedOf(tasks, rows), workspaceId: "w" },
     );
   }
   const card = (title: string) => screen.getByText(title).closest("[data-task-id]") as HTMLElement;
 
-  it("columns keep one fixed width per density, and their cards fill them (default o, TV-U11)", () => {
-    renderBoard([task("a")]);
+  it("columns keep one fixed width per density, and their cards fill them (default o, TV-U11)", async () => {
+    await renderBoard([task("a")]);
     const column = card("Task a").closest("section") as HTMLElement;
     expect(column.className).toContain("w-(--board-col-w)");
     expect(column.className).toContain("shrink-0");
@@ -705,13 +743,13 @@ describe("Board (U1-4)", () => {
     expect(scroller.className).toContain("overflow-y-auto");
   });
 
-  it("a long title wraps to three lines at most (MOD-143)", () => {
-    renderBoard([task("a")]);
+  it("a long title wraps to three lines at most (MOD-143)", async () => {
+    await renderBoard([task("a")]);
     expect(screen.getByText("Task a").className).toContain("line-clamp-3");
   });
 
-  it("a card has one quiet meta line, and selection is the tint", () => {
-    renderBoard([
+  it("a card has one quiet meta line, and selection is the tint", async () => {
+    await renderBoard([
       task("a", {
         priority: "high",
         dueDate: "2026-10-20T00:00:00.000Z",
@@ -727,13 +765,14 @@ describe("Board (U1-4)", () => {
     expect(meta.contains(screen.getByLabelText("Assignee: Mike"))).toBe(true);
   });
 
-  it("Standard cards count tags with the tag icon, as rows do (MOD-97)", () => {
+  it("Standard cards count tags with the tag icon, as rows do (MOD-97)", async () => {
     const tags = [
       { id: "t1", name: "ui", color: "blue" },
       { id: "t2", name: "notes", color: "green" },
     ];
-    renderBoard([task("a")], {}, { tagsByTask: new Map([["a", tags]]) });
-    const spoken = within(card("Task a")).getByText("2 tags: ui, notes");
+    await renderBoard([task("a")], {}, tagged("a", tags));
+    // Name-sorted, as the tag store hands them.
+    const spoken = within(card("Task a")).getByText("2 tags: notes, ui");
     expect(spoken.parentElement?.querySelector("svg")?.getAttribute("class")).toContain(
       "lucide-tag",
     );
@@ -747,13 +786,14 @@ describe("Board (U1-4)", () => {
       name,
       color: "violet",
     }));
-    renderBoard([task("a")], { rows: "detailed" }, { tagsByTask: new Map([["a", tags]]) });
+    await renderBoard([task("a")], { rows: "detailed" }, tagged("a", tags));
     const chips = [...card("Task a").querySelectorAll<HTMLElement>('[data-slot="tag-chip"]')];
-    expect(chips.map((c) => c.textContent)).toEqual(["ui", "notes", "bug"]);
+    // Name-sorted, as the tag store hands them.
+    expect(chips.map((c) => c.textContent)).toEqual(["bug", "copy", "notes"]);
     const more = card("Task a").querySelector('[data-slot="tag-chip-more"]') as HTMLElement;
     expect(more.textContent).toBe("+1");
     act(() => more.focus());
-    expect((await screen.findByRole("tooltip")).textContent).toBe("copy");
+    expect((await screen.findByRole("tooltip")).textContent).toBe("ui");
     // 18 px chips in a 16 px text line: the list takes -1 px top and bottom,
     // so the card keeps its height.
     const list = chips[0]?.closest('[data-slot="tag-chip-list"]') as HTMLElement;
@@ -762,14 +802,14 @@ describe("Board (U1-4)", () => {
     // One line, never wrapping: long names shorten instead (full name on hover).
     expect(list.className).not.toContain("flex-wrap");
     for (const chip of chips) expect(chip.className).toContain("max-w-24");
-    expect(screen.getByTitle("Tag: ui").closest('[data-slot="tag-chip"]')).toBe(
+    expect(screen.getByTitle("Tag: bug").closest('[data-slot="tag-chip"]')).toBe(
       chips[0] as HTMLElement,
     );
     expect(card("Task a").textContent).not.toContain("#");
   });
 
-  it("done cards fade, and completed cards hide behind the board's one line (MOD-148)", () => {
-    renderBoard([task("a"), task("d", { status: "done" })]);
+  it("done cards fade, and completed cards hide behind the board's one line (MOD-148)", async () => {
+    await renderBoard([task("a"), task("d", { status: "done" })]);
     expect(screen.queryByText("Task d")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "1 completed, show" }));
     // The kit card fades its title and meta, never its status icon (it reopens).
@@ -779,8 +819,8 @@ describe("Board (U1-4)", () => {
     act(() => {});
   });
 
-  it("keeps the selected card even when Display hides completed ones", () => {
-    renderBoard([task("a"), task("d", { status: "done" })], { selectedTaskId: "d" });
+  it("keeps the selected card even when Display hides completed ones", async () => {
+    await renderBoard([task("a"), task("d", { status: "done" })], { selectedTaskId: "d" });
     expect(card("Task d")).toBeTruthy();
   });
 
@@ -790,28 +830,28 @@ describe("Board (U1-4)", () => {
       (h) => h.querySelector('[data-slot="group-header-label"]')?.textContent,
     );
 
-  it("Filter → Status shows only the groups it lets through: Won't do on its own", () => {
-    renderBoard([task("w", { status: "archived" })], {
+  it("Filter → Status shows only the groups it lets through: Won't do on its own", async () => {
+    await renderBoard([task("w", { status: "archived" })], {
       statusFilter: new Set(["archived"]),
       selectedTaskId: "w",
     });
     expect(headers()).toEqual(["Won’t do"]);
     expect(card("Task w")).toBeTruthy();
     cleanup();
-    renderBoard([task("a")], { statusFilter: new Set(["todo", "in_progress"]) });
+    await renderBoard([task("a")], { statusFilter: new Set(["todo", "in_progress"]) });
     expect(headers()).toEqual(["To do", "In progress"]);
     cleanup();
-    renderBoard([task("a")]);
+    await renderBoard([task("a")]);
     expect(headers()).toEqual(["To do", "In progress", "Done"]);
   });
 
-  it("a Won't do card kept in view (TV-P0) brings its group with it", () => {
-    renderBoard([task("a"), task("w", { status: "archived" })], { selectedTaskId: "w" });
+  it("a Won't do card kept in view (TV-P0) brings its group with it", async () => {
+    await renderBoard([task("a"), task("w", { status: "archived" })], { selectedTaskId: "w" });
     expect(headers()).toEqual(["To do", "In progress", "Done", "Won’t do"]);
   });
 
-  it("a card with nothing to show has no empty meta line", () => {
-    renderBoard([task("d", { status: "done" })], { completed: "all", canEdit: false });
+  it("a card with nothing to show has no empty meta line", async () => {
+    await renderBoard([task("d", { status: "done" })], { completed: "all", canEdit: false });
     expect(card("Task d").querySelector(".whitespace-nowrap")).toBeNull();
   });
 });
@@ -819,8 +859,8 @@ describe("Board (U1-4)", () => {
 // TV-U2 · U2-1/U2-3 — Display drives the List and the Board: group, order and
 // subtasks; the toolbar carries the page's search, Filter, Display and count.
 describe("Display on the List and Board (U2-1, U2-3)", () => {
-  it("the toolbar shows the title, its count and the page's controls; Group isn't in it", () => {
-    renderList([task("a")], {
+  it("the toolbar shows the title, its count and the page's controls; Group isn't in it", async () => {
+    await renderList([task("a")], {
       header: {
         count: 7,
         search: <button type="button">Search</button>,
@@ -838,8 +878,8 @@ describe("Display on the List and Board (U2-1, U2-3)", () => {
     expect(within(toolbar).queryByRole("combobox")).toBeNull();
   });
 
-  it("orders rows inside each group", () => {
-    renderList(
+  it("orders rows inside each group", async () => {
+    await renderList(
       [
         task("a", { priority: "low" }),
         task("b", { priority: "high", status: "in_progress" }),
@@ -858,31 +898,31 @@ describe("Display on the List and Board (U2-1, U2-3)", () => {
     ]);
   });
 
-  it("each task is listed once, whatever the grouping (no Tag grouping)", () => {
+  it("each task is listed once, whatever the grouping (no Tag grouping)", async () => {
     const tasks = [
       task("a", { dueDate: new Date().toISOString(), priority: "high" }),
       task("b", { assigneeId: null }),
     ];
     for (const groupBy of ["status", "priority", "assignee", "date"] as const) {
-      renderList(tasks, { groupBy });
+      await renderList(tasks, { groupBy });
       expect(screen.getAllByRole("button", { name: "Task a" })).toHaveLength(1);
       cleanup();
     }
   });
 
-  it("Subtasks · Flat lists a subtask as its own row", () => {
+  it("Subtasks · Flat lists a subtask as its own row", async () => {
     const parent = task("p");
     const child = task("c", { parentId: "p" });
-    const apiExtra = { subtasksByParent: new Map([["p", [child]]]) };
-    renderList([parent, child], { subtasks: "nested" }, apiExtra);
+    // The store nests c under p by its parentId.
+    await renderList([parent, child], { subtasks: "nested" });
     expect(screen.queryByRole("button", { name: "Task c" })).toBeNull();
     cleanup();
-    renderList([parent, child], { subtasks: "flat" }, apiExtra);
+    await renderList([parent, child], { subtasks: "flat" });
     expect(screen.getByRole("button", { name: "Task c" })).toBeTruthy();
   });
 
-  it("the Queue keeps its line-up whatever Order says", () => {
-    renderList([task("a", { priority: "low" }), task("b", { priority: "high" })], {
+  it("the Queue keeps its line-up whatever Order says", async () => {
+    await renderList([task("a", { priority: "low" }), task("b", { priority: "high" })], {
       selection: "today",
       order: "priority",
     });
@@ -892,11 +932,11 @@ describe("Display on the List and Board (U2-1, U2-3)", () => {
     ]);
   });
 
-  it("the Board orders cards inside each column, and flattens subtasks on Flat", () => {
+  it("the Board orders cards inside each column, and flattens subtasks on Flat", async () => {
     const parent = task("p", { dueDate: "2026-10-20T00:00:00.000Z" });
     const child = task("c", { parentId: "p", dueDate: "2026-10-10T00:00:00.000Z" });
-    const api = viewApi([parent, child], { subtasksByParent: new Map([["p", [child]]]) });
-    render(
+    // The store nests c under p by its parentId.
+    await renderWithTasks(
       <TooltipProvider>
         <TaskBoardView
           tasks={[parent, child]}
@@ -914,9 +954,9 @@ describe("Display on the List and Board (U2-1, U2-3)", () => {
           onSelectTask={() => {}}
           order="due"
           subtasks="flat"
-          api={api as never}
         />
       </TooltipProvider>,
+      { seed: { tasks: [parent, child] }, workspaceId: "w" },
     );
     const cards = [...document.querySelectorAll<HTMLElement>("[data-task-id]")].map(
       (el) => el.dataset.taskId,

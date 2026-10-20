@@ -24,7 +24,13 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import type { Contact } from "../../contacts/model";
 import { endPosition, makeTask } from "../../tasks/helpers";
-import { useTasksModule } from "../../tasks/hooks/use-tasks-module";
+import {
+  TasksProvider,
+  useTaskById,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+} from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSyncHealth, resolveAccountHues } from "../accounts";
 import { type EmailSection, flattenSections, groupThreadsBySection, senderKey } from "../classify";
@@ -161,19 +167,30 @@ type EmailPageViewProps = {
   onConsumeThreadDeepLink?: () => void;
 };
 
-export function EmailPageView({
-  urlThreadId = null,
-  onConsumeThreadDeepLink,
-}: EmailPageViewProps = {}) {
+export function EmailPageView(props: EmailPageViewProps = {}) {
   const { runtime, userId } = useAuth();
   const { selectedWorkspaceId: workspaceId, modulePermissions } = useWorkspace();
-  const email = useEmailModule({ runtime, workspaceId, isDesktop: IS_DESKTOP });
   // Tasks module — powers the convert great-moment + the Task right-panel variant.
-  const tasksApi = useTasksModule(runtime, {
-    userId,
-    workspaceId,
-    modulePermission: modulePermissions?.tasks ?? "none",
-  });
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={workspaceId}
+      modulePermission={modulePermissions?.tasks ?? "none"}
+    >
+      <EmailPageBody {...props} />
+    </TasksProvider>
+  );
+}
+
+function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPageViewProps) {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId: workspaceId } = useWorkspace();
+  const email = useEmailModule({ runtime, workspaceId, isDesktop: IS_DESKTOP });
+  // Tasks, read narrowly from the provider above (A4).
+  const { load: reloadTasks } = useTaskCommands();
+  const { canEdit: tasksCanEdit } = useTasksStatus();
+  const tasksInbox = useTasksSelector((d) => d.inbox);
   // Contacts, for resolving a sender → an existing contact (AC9).
   const [contacts, setContacts] = useState<Contact[]>([]);
   useEffect(() => {
@@ -211,6 +228,7 @@ export function EmailPageView({
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState<EmailThread | null>(null);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const detailTask = useTaskById(detailTaskId);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const accountHues = useMemo(() => resolveAccountHues(email.accounts), [email.accounts]);
@@ -707,16 +725,16 @@ export function EmailPageView({
       await deleteConvertArtifacts(plan);
       setDetailTaskId(null);
       setPanelVariant("reader");
-      void tasksApi.reload();
+      void reloadTasks();
       void email.refreshTissue();
     },
-    [deleteConvertArtifacts, tasksApi, email],
+    [deleteConvertArtifacts, reloadTasks, email],
   );
 
   const runConvert = useCallback(
     async (thread: EmailThread) => {
       if (!runtime || !workspaceId) return;
-      const inbox = tasksApi.inbox;
+      const inbox = tasksInbox;
       if (!inbox) {
         toast.error("Your Tasks inbox isn't ready yet.");
         return;
@@ -797,7 +815,7 @@ export function EmailPageView({
 
         setDetailTaskId(saved.id);
         setPanelVariant("task");
-        void tasksApi.reload();
+        void reloadTasks();
         void email.refreshTissue();
 
         const plan = {
@@ -832,7 +850,7 @@ export function EmailPageView({
           refId: createdRefId,
           refCreated: !refExisted,
         });
-        void tasksApi.reload();
+        void reloadTasks();
         void email.refreshTissue();
         toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
       }
@@ -840,7 +858,8 @@ export function EmailPageView({
     [
       runtime,
       workspaceId,
-      tasksApi,
+      tasksInbox,
+      reloadTasks,
       email,
       contactIndex,
       contacts,
@@ -889,7 +908,7 @@ export function EmailPageView({
   const makeTaskFromRef = useCallback(
     async (ref: EmailThreadRef) => {
       if (!runtime || !workspaceId) return;
-      const inbox = tasksApi.inbox;
+      const inbox = tasksInbox;
       if (!inbox) {
         toast.error("Your Tasks inbox isn't ready yet.");
         return;
@@ -921,7 +940,7 @@ export function EmailPageView({
         });
         setDetailTaskId(saved.id);
         setPanelVariant("task");
-        void tasksApi.reload();
+        void reloadTasks();
         toast("Task created");
       } catch (e) {
         // DF-6: don't strand a linkless orphan task when the spawn link fails.
@@ -934,12 +953,12 @@ export function EmailPageView({
             refId: null,
             refCreated: false,
           });
-          void tasksApi.reload();
+          void reloadTasks();
         }
         toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
       }
     },
-    [runtime, workspaceId, tasksApi, deleteConvertArtifacts],
+    [runtime, workspaceId, tasksInbox, reloadTasks, deleteConvertArtifacts],
   );
 
   const togglePin = useCallback(
@@ -1073,7 +1092,7 @@ export function EmailPageView({
           fromName={selectedThread?.fromName ?? ""}
           fromAddr={selectedThread?.fromEmail ?? ""}
           contact={resolvedContact}
-          canEdit={tasksApi.canEdit}
+          canEdit={tasksCanEdit}
           onAddContact={addAsContact}
           onOpenEntity={openEntity}
         />
@@ -1083,20 +1102,16 @@ export function EmailPageView({
           runtime={runtime}
           workspaceId={workspaceId}
           refId={selectedRefId}
-          canEdit={tasksApi.canEdit}
+          canEdit={tasksCanEdit}
           onOpenEntity={openEntity}
         />
       ),
       task: () =>
         detailTaskId ? (
           <TaskDetailPanel
-            task={tasksApi.tasks.find((t) => t.id === detailTaskId) ?? null}
-            buckets={tasksApi.buckets}
-            inbox={tasksApi.inbox}
-            canEdit={tasksApi.canEdit}
+            task={detailTask}
             onRequestCapture={() => {}}
             onSelectTask={setDetailTaskId}
-            api={tasksApi}
             runtime={runtime}
             workspaceId={workspaceId}
             onOpenEntity={openEntity}
@@ -1124,7 +1139,8 @@ export function EmailPageView({
       resolvedContact,
       selectedRefId,
       detailTaskId,
-      tasksApi,
+      detailTask,
+      tasksCanEdit,
       addAsContact,
       openEntity,
     ],

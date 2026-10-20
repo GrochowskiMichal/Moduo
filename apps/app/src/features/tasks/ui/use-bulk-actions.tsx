@@ -36,11 +36,18 @@ import {
 } from "../bulk";
 import { daysLeftInWeek } from "../day-buckets";
 import { LEVEL_OPTIONS, todayStr } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { PriorityLevel, Task } from "../model";
 import { engineZone } from "../recurrence-engine";
+import { byIdOf } from "../selectors";
 import { bucketDotColor } from "../sidebar";
 import { CATEGORY_LABELS, statusesByCategory } from "../statuses";
+import {
+  useStatusesForBucket,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksUserId,
+  useTaskTagIndex,
+} from "../tasks-context";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { BulkPickerDialog, type BulkPickerItem } from "./bulk-picker";
 import { DayPickerDialog } from "./day-picker-dialog";
@@ -58,25 +65,6 @@ export type BulkPickerKind =
   | "priority"
   | "waiting"
   | "team";
-
-type BulkApi = Pick<
-  TasksModuleApi,
-  | "tasks"
-  | "buckets"
-  | "sections"
-  | "teams"
-  | "tags"
-  | "tagsByTask"
-  | "waiting"
-  | "queuedTaskIds"
-  | "currentUserId"
-  | "statusesForBucket"
-  | "bulkWrite"
-  | "bulkDelete"
-  | "bulkQueue"
-  | "bulkWaiting"
-  | "bulkTag"
->;
 
 export type BulkActions = {
   /** The bar's keys on a selection: true when one was handled. */
@@ -96,12 +84,10 @@ function nextWeekDay(now: Date): string {
 }
 
 export function useBulkActions({
-  api,
   ids,
   canEdit,
   bucketNameById,
 }: {
-  api: BulkApi;
   /** The selected tasks, in the view's order, while two or more are; else empty. */
   ids: readonly string[];
   canEdit: boolean;
@@ -109,21 +95,41 @@ export function useBulkActions({
 }): BulkActions {
   const multi = ids.length >= 2;
   const { assignees, byId } = useAssignees();
+  const commands = useTaskCommands();
+  const me = useTasksUserId();
+  const allTasks = useTasksSelector((d) => d.liveTasks);
+  const buckets = useTasksSelector((d) => d.buckets);
+  const sections = useTasksSelector((d) => d.sections);
+  const teams = useTasksSelector((d) => d.teams);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
+  const { tags, tagsByTask } = useTaskTagIndex();
+  const statusesForBucket = useStatusesForBucket();
   const tasks = useMemo(() => {
     if (!multi) return [];
-    const map = new Map(api.tasks.map((t) => [t.id, t]));
+    const map = byIdOf(allTasks);
     return ids.map((id) => map.get(id)).filter((t): t is Task => !!t);
-  }, [multi, ids, api.tasks]);
+  }, [multi, ids, allTasks]);
 
   // The newest of everything, for the actions (they run from keys, the bar,
   // a picker and a toast, after this render).
-  const latest = useRef({ api, tasks, bucketNameById, byId });
+  const current = {
+    commands,
+    me,
+    allTasks,
+    sections,
+    teams,
+    statusesForBucket,
+    tasks,
+    bucketNameById,
+    byId,
+  };
+  const latest = useRef(current);
   useLayoutEffect(() => {
-    latest.current = { api, tasks, bucketNameById, byId };
+    latest.current = current;
   });
 
   const names = useCallback((): BulkNames => {
-    const { api: a, bucketNameById: projectName, byId: person } = latest.current;
+    const { bucketNameById: projectName, byId: person, ...a } = latest.current;
     return {
       project: projectName,
       person: (id) => {
@@ -138,10 +144,10 @@ export function useBulkActions({
 
   const apply = useCallback(
     (change: BulkChange) => {
-      const { api: a, tasks: chosen } = latest.current;
+      const { tasks: chosen, ...a } = latest.current;
       if (chosen.length === 0) return;
       const plan = planBulk(chosen, change, {
-        all: a.tasks,
+        all: a.allTasks,
         statusesFor: a.statusesForBucket,
         names: names(),
         now: new Date(),
@@ -151,7 +157,7 @@ export function useBulkActions({
         toast("They already have that.");
         return;
       }
-      void a.bulkWrite(plan.writes, { label: plan.label, followers: plan.followers });
+      void a.commands.bulkWrite(plan.writes, { label: plan.label, followers: plan.followers });
     },
     [names],
   );
@@ -197,13 +203,13 @@ export function useBulkActions({
 
   const complete = useCallback(() => apply({ kind: "complete" }), [apply]);
   const focus = useCallback(() => {
-    latest.current.api.bulkQueue(latest.current.tasks.map((t) => t.id));
+    latest.current.commands.bulkQueue(latest.current.tasks.map((t) => t.id));
   }, []);
   const remove = useCallback(() => {
-    void latest.current.api.bulkDelete(latest.current.tasks.map((t) => t.id));
+    void latest.current.commands.bulkDelete(latest.current.tasks.map((t) => t.id));
   }, []);
   const assignToMe = useCallback(() => {
-    const me = latest.current.api.currentUserId;
+    const { me } = latest.current;
     if (me) apply({ kind: "assign", assigneeId: me });
   }, [apply]);
 
@@ -273,9 +279,9 @@ export function useBulkActions({
   // ── the bar's row (82b): six with their keys, then More ▾ ────────────────
   const count = tasks.length;
   const project = singleProject(tasks);
-  const hasSections = !!project && api.sections.some((s) => s.projectId === project);
+  const hasSections = !!project && sections.some((s) => s.projectId === project);
   const allClosed = count > 0 && tasks.every((t) => t.status === "done" || t.status === "archived");
-  const hasTeams = api.teams.length > 0;
+  const hasTeams = teams.length > 0;
   const mode = useMemo<BottomBarMode | null>(() => {
     if (!multi) return null;
     const note = `${count} selected · Esc`;
@@ -377,11 +383,11 @@ export function useBulkActions({
         };
       case "tag": {
         const has = (tagId: string) => (id: string) =>
-          (api.tagsByTask.get(id) ?? []).some((t) => t.id === tagId);
+          (tagsByTask.get(id) ?? []).some((t) => t.id === tagId);
         return {
           title: `Tag ${n}`,
           placeholder: "Tag…",
-          items: [...api.tags]
+          items: [...tags]
             .filter((t) => !t.deletedAt)
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((t) => ({
@@ -391,7 +397,7 @@ export function useBulkActions({
               checked: tasks.every((task) => has(t.id)(task.id)),
               onPick: () => {
                 close();
-                void api.bulkTag(
+                void commands.bulkTag(
                   tasks.map((x) => x.id),
                   { id: t.id, name: t.name },
                   has(t.id),
@@ -403,7 +409,7 @@ export function useBulkActions({
             label: `Create tag “${q}”`,
             onPick: () => {
               close();
-              void api.bulkTag(
+              void commands.bulkTag(
                 tasks.map((x) => x.id),
                 { name: q },
                 () => false,
@@ -447,7 +453,7 @@ export function useBulkActions({
         return {
           title: `Move ${n} to…`,
           placeholder: "Move to…",
-          items: api.buckets
+          items: buckets
             .filter((b) => !b.isSystem)
             .map((b) => ({
               key: b.id,
@@ -462,7 +468,7 @@ export function useBulkActions({
         };
       case "status": {
         // One project's own statuses by name; across projects, the categories.
-        const set = project ? api.statusesForBucket(project) : [];
+        const set = project ? statusesForBucket(project) : [];
         const own = set.length > 0;
         return {
           title: `Status for ${n}`,
@@ -499,7 +505,7 @@ export function useBulkActions({
           title: `Section for ${n}`,
           placeholder: "Section…",
           items: [
-            ...api.sections
+            ...sections
               .filter((s) => s.projectId === project)
               .map((s) => ({
                 key: s.id,
@@ -549,11 +555,11 @@ export function useBulkActions({
               icon: <AssigneeAvatar assignee={a} size="icon" />,
               onPick: () => {
                 close();
-                void api.bulkWaiting(
+                void commands.bulkWaiting(
                   tasks.map((t) => t.id),
                   { kind: "person", ref: a.userId },
                   a.fullName || a.name,
-                  api.waiting,
+                  waiting,
                 );
               },
             })),
@@ -562,11 +568,11 @@ export function useBulkActions({
             label: `Waiting on “${q}”`,
             onPick: () => {
               close();
-              void api.bulkWaiting(
+              void commands.bulkWaiting(
                 tasks.map((t) => t.id),
                 { kind: "text", label: q },
                 `“${q}”`,
-                api.waiting,
+                waiting,
               );
             },
           }),
@@ -576,7 +582,7 @@ export function useBulkActions({
           title: `Team for ${n}`,
           placeholder: "Team…",
           items: [
-            ...api.teams.map((t) => ({
+            ...teams.map((t) => ({
               key: t.id,
               label: t.name,
               icon: <TeamMark name={t.name} id={t.id} letters={t.mark} color={t.color} />,
