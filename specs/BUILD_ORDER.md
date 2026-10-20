@@ -521,10 +521,10 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat stores; Notes shares its infrastructure. Runs beside Track A (useTasksModule split) and Track B (plan view); it never changes `WorkspaceStore`'s public API or `StoreSnapshot`. Each block is one PR into `mike`; C2–C4 get the `validator`.
 
-- [~] **SK-C1 — Kernel + characterization tests** · deps: — · `t/mike/sync-kernel` · stamps (one `micros`, each caller's missing-stamp rule pinned), idb (self-healing open), delta (keyset, lookback, page cap), landing (strictly-newer rule, delete marks), overlay, outbox (two policies, cross-tab), registry (refcount, person lifecycle), `createSyncedCollection`.
-- [ ] **SK-C2 — Tasks `WorkspaceStore` on the kernel** · deps: SK-C1 · no behaviour change; the store, hook, capture and command-palette tests are the guard; the runtime's delta readers use the kernel's keyset.
-- [ ] **SK-C3 — Chat store on the kernel; a sign-out keeps waiting messages** · deps: SK-C2 · keeps Chat's hold-failed-for-retry outbox; sign-out cuts the chat copy down to its outbox per person (as Tasks since #509).
-- [ ] **SK-C4 — Notes on kernel idb, network and registry; per-person notes caches** · deps: SK-C3 · `moduo-notes-v2` and the per-note y-indexeddb databases keyed `user:ws` with a migration; wiped on a user switch.
+- [~] **SK-C1 — Kernel + characterization tests** · deps: — · `t/mike/sync-kernel` (#515, in review) · stamps (one `micros`, each caller's missing-stamp rule pinned), idb (self-healing open), delta (keyset, lookback, page cap), landing (strictly-newer rule, delete marks), overlay, outbox (two policies, cross-tab), registry (refcount, person lifecycle), `createSyncedCollection`.
+- [~] **SK-C2 — Tasks `WorkspaceStore` on the kernel** · deps: SK-C1 · `t/mike/sync-kernel-tasks` (#517, validator: no blocker/major) · no behaviour change; the store, hook, capture and command-palette tests are the guard; the runtime's delta readers use the kernel's keyset.
+- [~] **SK-C3 — Chat store on the kernel; a sign-out keeps waiting messages** · deps: SK-C2 · `t/mike/sync-kernel-chat` (#519, validator's major fixed) · keeps Chat's hold-failed-for-retry outbox; sign-out cuts the chat copy down to its outbox per person (as Tasks since #509).
+- [~] **SK-C4 — Notes on kernel idb, network and registry; per-person notes caches** · deps: SK-C3 · `t/mike/sync-kernel-notes` (#522, validator's majors fixed) · `moduo-notes-v2` and the per-note y-indexeddb databases keyed `user:ws` with a migration; wiped on a user switch.
 
 ## Running sessions & parallelism
 
