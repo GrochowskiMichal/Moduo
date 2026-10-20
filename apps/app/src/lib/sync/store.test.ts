@@ -420,6 +420,54 @@ describe("echo skip (AC12.2)", () => {
   });
 });
 
+describe("TS-3a: the snapshot comes from the collections", () => {
+  it("shows what the collection holds, with overlays on top, and keeps arrays while nothing changed", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { title: "Server", updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+    const tasks = store.collection("tasks");
+    expect(tasks?.status).toBe("ready");
+    expect(tasks?.has("a")).toBe(true);
+    const first = store.getSnapshot();
+    expect(first.bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+
+    // A live row lands in the collection and the snapshot together.
+    emit({ table: "tasks", kind: "upsert", row: task("b", { updatedAt: at(6) }) });
+    expect(tasks?.has("b")).toBe(true);
+    const second = store.getSnapshot();
+    expect(second.bundle.tasks.map((t) => t.id)).toEqual(["a", "b"]);
+    // Tables nothing touched keep their arrays (no redraw).
+    expect(second.bundle.buckets).toBe(first.bundle.buckets);
+    expect(second.completions).toBe(first.completions);
+
+    // An overlay shows over the collection's row, which stays the server's.
+    const write = store.begin([{ table: "tasks", patch: { id: "a", fields: { title: "Typed" } } }]);
+    expect(titleOf(store, "a")).toBe("Typed");
+    expect((tasks?.get("a") as { title?: string } | undefined)?.title).toBe("Server");
+    write.fail();
+    expect(titleOf(store, "a")).toBe("Server");
+
+    // A delete leaves both.
+    emit({ table: "tasks", kind: "delete", id: "b" });
+    expect(tasks?.has("b")).toBe(false);
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("dispose cleans the collections up and makes none again", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+    const tasks = store.collection("tasks");
+    store.dispose({ persist: false });
+    await tick();
+    expect(tasks?.status).toBe("cleaned-up");
+    expect(store.collection("tasks")).toBeNull();
+    expect(store.getSnapshot().bundle.tasks).toEqual([]);
+  });
+});
+
 describe("one-field rollback (AC12.8)", () => {
   it("a server refusal rolls back that one field; nothing reloads", async () => {
     const server = fakeServer();

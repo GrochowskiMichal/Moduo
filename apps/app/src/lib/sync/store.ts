@@ -1276,6 +1276,16 @@ export class WorkspaceStore {
     return table;
   }
 
+  /**
+   * A table's in-memory collection (TS-3a): the rows the snapshot shows,
+   * before overlays. Read-only for now (TS-3b reads it with live queries;
+   * TS-3c writes through it). Null once disposed.
+   */
+  collection(name: SyncTableName): KernelMirror<AnyRow>["collection"] | null {
+    this.syncMirrors();
+    return this.mirror(name)?.collection ?? null;
+  }
+
   /** The table's collection, made on first use (none once disposed). */
   private mirror(name: SyncTableName): KernelMirror<AnyRow> | null {
     if (this.disposed) return null;
@@ -1302,8 +1312,11 @@ export class WorkspaceStore {
       for (const name of this.tables.keys()) {
         const table = this.table(name);
         if (this.mirroredAt.get(name) === table.revision) continue;
-        this.mirror(name)?.sync();
         this.mirroredAt.set(name, table.revision);
+        // Only the rows that changed (an overlay alone changes none).
+        const touched = table.takeTouched();
+        if (touched === null) continue;
+        this.mirror(name)?.sync(touched === "all" ? undefined : touched);
       }
     } finally {
       this.mirroring = false;

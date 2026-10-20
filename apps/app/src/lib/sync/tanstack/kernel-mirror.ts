@@ -14,8 +14,8 @@ export type KernelMirror<R extends object> = {
   readonly collection: Collection<R, string, SupabaseCollectionUtils<R>>;
   /** The collection's rows, the same map until a change lands in it. */
   rows(): ReadonlyMap<string, R>;
-  /** Take the kernel's difference (the store calls it after changing the kernel). */
-  sync(): void;
+  /** Take the kernel's difference: of `ids`, or of every row (the store calls it after changing the kernel). */
+  sync(ids?: Iterable<string>): void;
   /** Called on every change the collection commits. */
   onChange(fn: () => void): () => void;
   dispose(): void;
@@ -27,7 +27,9 @@ type RawState<R> = { get(key: string): R | undefined; keys(): Iterable<string> }
 /**
  * The collection's rows as stored, not as `state` / `get` hand them out: those
  * add virtual props (`$synced`, `$origin`, …) to a fresh object per read,
- * which would change every row the snapshot holds and redraw it. In the
+ * which would change every row the snapshot holds and redraw it. The objects
+ * are the kernel's, best effort: a kernel row deep-equal to the one held is
+ * no change to the collection, which keeps the older (equal) object. In the
  * kernel's order (arrival), which the snapshot has always had; the collection
  * itself keeps its rows sorted by key. Pinned `@tanstack/db` 0.15.1: re-check
  * `_state` on an upgrade (`kernel-mirror.test.ts` fails if it moves).
@@ -80,8 +82,8 @@ export function mirrorKernel<R extends LandingRow & object>(
       cached ??= rawRows(collection, kernel);
       return cached;
     },
-    sync() {
-      collection.utils.sync();
+    sync(ids) {
+      collection.utils.sync(ids);
     },
     onChange(fn) {
       listeners.add(fn);
@@ -90,7 +92,7 @@ export function mirrorKernel<R extends LandingRow & object>(
     dispose() {
       sub.unsubscribe();
       listeners.clear();
-      void collection.cleanup();
+      collection.cleanup().catch(() => undefined);
     },
   };
 }
