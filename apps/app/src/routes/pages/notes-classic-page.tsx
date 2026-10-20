@@ -67,14 +67,30 @@ import { noteIsPrivate } from "../../features/sharing/rules";
 import { ShareMenu } from "../../features/sharing/share-menu";
 import { useCommentPeople } from "../../features/spine/hooks/use-comment-people";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
-import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
-import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
+import { TasksProvider, useTaskCommands } from "../../features/tasks/tasks-context";
+import { ContextTaskDetailPanel } from "../../features/tasks/ui/context-task-detail-panel";
 import { type CaptureSource, useCaptureSource } from "../../lib/capture-source";
 import type { EntityRef } from "../../lib/entity-links";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 export function NotesClassicPage() {
+  // Task lines read the Tasks context (A4): the provider wraps the whole page.
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={selectedWorkspaceId}
+      modulePermission={modulePermissions.tasks}
+    >
+      <NotesClassicPageBody />
+    </TasksProvider>
+  );
+}
+
+function NotesClassicPageBody() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions, can, members } = useWorkspace();
   const navigate = useNavigate();
@@ -170,11 +186,7 @@ export function NotesClassicPage() {
   // Task lines (NO-5): the Tasks module rides along so lines render live
   // rows, the `/task` picker searches real tasks, and the Task-detail rail
   // edits without leaving /notes.
-  const tasksApi = useTasksModule(runtime, {
-    userId,
-    workspaceId: selectedWorkspaceId,
-    modulePermission: modulePermissions.tasks,
-  });
+  const { load: reloadTasks, deleteTask } = useTaskCommands();
 
   // A task opened from the note shows in the right panel as an item ("← title")
   // on top of the current view — meta click opens it; note switch closes it.
@@ -191,18 +203,17 @@ export function NotesClassicPage() {
       const now = Date.now();
       if (now - lastFocusReload.current < 5000) return;
       lastFocusReload.current = now;
-      void tasksApi.reload();
+      void reloadTasks();
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [tasksApi.reload]);
+  }, [reloadTasks]);
 
   const taskBridge = useNotesTaskBridge({
     runtime,
     workspaceId: selectedWorkspaceId,
     noteId: selectedId,
     noteLabel: displayTitle(selectedNote?.title ?? ""),
-    tasksApi,
     onOpenTaskDetail: setTaskDetailId,
   });
 
@@ -240,7 +251,7 @@ export function NotesClassicPage() {
     runtime,
     workspaceId: selectedWorkspaceId,
     module,
-    deleteTask: tasksApi.deleteTask,
+    deleteTask,
   });
 
   // A shared note dropped under a private one: ask first (the shared dialog),
@@ -619,14 +630,10 @@ export function NotesClassicPage() {
           // onto it links the note to the task, using the page's DndContext.
           <HubDropZone target={{ type: "task", id: detailTask.id }} disabled={!canEdit || degraded}>
             <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
-              <TaskDetailPanel
+              <ContextTaskDetailPanel
                 task={detailTask}
-                buckets={tasksApi.buckets}
-                inbox={tasksApi.inbox}
-                canEdit={tasksApi.canEdit}
                 onRequestCapture={() => {}}
                 onSelectTask={setTaskDetailId}
-                api={tasksApi}
                 runtime={runtime}
                 workspaceId={selectedWorkspaceId}
                 onOpenEntity={handleOpenEntity}

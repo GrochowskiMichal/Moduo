@@ -63,7 +63,13 @@ type Params = {
 /** One empty list for every absent collection (a stable identity for memos). */
 const NO_ROWS: never[] = [];
 
-export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params) {
+/**
+ * Everything the Tasks module builds for one workspace: the store, the stable
+ * commands and the stateful pieces, plus the one big `api` object the pages
+ * still take. `TasksProvider` (`../tasks-context.tsx`) holds it for a page;
+ * `useTasksModule` is the provider-less path and returns only `api`.
+ */
+export function useTasksRoot(baseRuntime: ModuoRuntime | null, params: Params) {
   const { userId, workspaceId, modulePermission = "none", includeTrash = false } = params;
   const canRead = modulePermission !== "none";
   const canEdit = modulePermission === "edit" || modulePermission === "admin";
@@ -266,7 +272,7 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
       });
   }, [loadStamp, canEdit, runtime, workspaceId, store, bumpActivity]);
 
-  return {
+  const api = {
     loading,
     loaded,
     error,
@@ -444,6 +450,14 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
     bulkTag: commands.bulkTag,
     INBOX_BUCKET_NAME,
   };
+  return { api, store, commands, userId, workspaceId, canRead, canEdit };
+}
+
+export type TasksParams = Params;
+
+/** The Tasks module for one workspace, without a provider: the whole `api`. */
+export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params) {
+  return useTasksRoot(baseRuntime, params).api;
 }
 
 export type TasksModuleApi = ReturnType<typeof useTasksModule>;
