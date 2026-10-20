@@ -143,6 +143,11 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-20 · Shortcuts are one typed registry on TanStack Hotkeys (`lib/hotkeys/`): route/surface/panel/modal scopes, narrower scope wins, no capture-phase overrides; duplicate-binding test.
 - 2026-10-20 · TanStack DB/Pacer/Devtools pinned (Devtools dev-only), Virtual 3.19, first-load budget in `apps/app/bundle-budget.json`, `tanstack` import boundary.
 - 2026-10-20 · First load is the anchor pages only: other routes, Lexical, capture parser, date picker and picker fonts are lazy (1,431 → 986 KB gzip JS).
+- 2026-10-20 · `moduleIds: 'compact-hashed'` not added: Rsbuild 2 already sets it in production (byte-identical).
+- 2026-10-20 · Rstest keeps the default pool and jsdom; `vmThreads` (-12%, 3 files break) and `happy-dom` (no gain, 6 files break) rejected.
+- 2026-10-20 · Tailwind builds through `@rsbuild/plugin-tailwindcss` (byte-identical CSS); PostCSS config now only in Storybook.
+- 2026-10-20 · `lightningcss` pin removed (1.32.0); web CSS differs only by whitespace in `calc()`.
+- 2026-10-20 · Type-checking is back on the official `tsc` 7.0.2; `tsc-ts` removed (supersedes the 2026-10-19 entry).
 - 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
 - 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`; jsdom 30.
 - 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.

@@ -74,7 +74,7 @@ Read before working in `.github/`, `scripts/`, `package.json`, `rsbuild.config.t
 - **The worktree guard refuses inline `python3 -c` and `$(…)` edits, and compound commands that name the version-control tool:** write the script to the scratchpad and run it by path; split compound commands. (CV-3)
 
 - **jsdom 30 lets Node's `URL.createObjectURL` show through, and it rejects jsdom's `File`/`Blob`** ("The "obj" argument must be an instance of Blob"). jsdom 28 had none, so tests guarded with `URL.createObjectURL ??= …` silently stopped stubbing. `apps/app/rstest.setup.ts` now installs a browser-like stub (`blob:test/<n>`) for every jsdom test; don't stub it per file.
-- **`tsc-ts` has no `--lsp`.** Keep `typescript` installed: the `ts7-lsp` plugin and editors run `tsc --lsp --stdio`. Only the `typecheck` scripts use `tsc-ts`.
+- **Keep `typescript` installed.** It supplies `tsc` for the `typecheck` scripts and `tsc --lsp --stdio` for the `ts7-lsp` plugin and editors (`tsc-ts` is gone, see the 2026-10-20 toolchain decision).
 
 ## Parallel migrations in the Chat v2 build (Checkpoint 4)
 

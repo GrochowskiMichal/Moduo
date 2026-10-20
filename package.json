@@ -45,7 +45,7 @@
     "build-storybook": "bun run --cwd apps/storybook build",
     "storybook:gen": "cd apps/app && bun ../../scripts/generate-storybook-stories.ts",
     "typecheck": "turbo run typecheck typecheck:root",
-    "typecheck:root": "tsc-ts --noEmit",
+    "typecheck:root": "tsc --noEmit",
     "lint:js": "biome check .",
     "lint:css": "turbo run lint:css",
     "lint:tw": "turbo run lint:tw",
@@ -71,11 +71,7 @@
     "stylelint": "^17.16.0",
     "stylelint-config-standard": "^40.0.0",
     "stylelint-declaration-strict-value": "^1.12.1",
-    "tsc-ts": "0.0.3",
     "turbo": "2.11.7",
     "typescript": "7.0.2"
-  },
-  "resolutions": {
-    "lightningcss": "1.30.1"
   }
 }
