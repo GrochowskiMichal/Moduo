@@ -604,8 +604,8 @@ export class WorkspaceStore {
     if (!copy || this.disposed) return;
     if (copy.v !== CACHE_VERSION) {
       // An older build's copy: its rows may lack fields this build reads, so
-      // they're read again; what waited to sync still goes.
-      this.adoptOutbox(copy.outbox);
+      // they're read again; what waited to sync still goes (first).
+      this.adoptOutbox(copy.outbox, { first: true });
       return;
     }
     for (const t of SYNC_TABLES) {
@@ -615,7 +615,11 @@ export class WorkspaceStore {
     }
     this.restLoaded = copy.restLoaded;
     this.fullReadAt = copy.fullReadAt ?? 0;
-    for (const entry of this.outbox.adopt(copy.outbox)) this.showOutboxEntry(entry);
+    // What this tab queued before the copy was read stays queued (shown once),
+    // behind the copy's older entries.
+    for (const entry of this.outbox.adopt(copy.outbox, { first: true })) {
+      this.showOutboxEntry(entry);
+    }
     const hasRows = [...this.tables.values()].some((t) => t.rows.size > 0);
     if (hasRows) {
       this.fromCache = true;
@@ -681,8 +685,8 @@ export class WorkspaceStore {
 
   private persisting: Promise<void> = Promise.resolve();
   /** Take on what another tab left waiting (sent again safely: same ids). */
-  private adoptOutbox(entries: unknown): void {
-    const joined = this.outbox.adopt(entries);
+  private adoptOutbox(entries: unknown, opts: { first?: boolean } = {}): void {
+    const joined = this.outbox.adopt(entries, opts);
     for (const entry of joined) this.showOutboxEntry(entry);
     if (joined.length > 0) {
       this.changed();
@@ -1662,6 +1666,10 @@ export class WorkspaceStore {
           });
         },
       });
+    } catch (e) {
+      // Something threw while landing an answer: the entry left the outbox;
+      // the next cue (reconnect, return, a new capture) drains the rest.
+      console.warn("[sync] outbox drain stopped", e);
     } finally {
       this.flushing = false;
     }
