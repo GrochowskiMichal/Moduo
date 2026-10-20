@@ -7,7 +7,7 @@ import type { TaskViewScope } from "@contracts/vocabularies";
 import type { FilterCondition } from "../components/ui/filter-model";
 import type { TasksDisplay } from "../features/tasks/display";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
-import { type Db, untypedDb } from "./runtime.db";
+import { type Db, DbError, untypedDb } from "./runtime.db";
 
 type Answer = { data: unknown; error: { code?: string; message?: string } | null };
 
@@ -34,7 +34,7 @@ export type ViewPatch = {
 };
 
 function fail(error: { code?: string; message?: string }): never {
-  throw new Error(error.message ?? "The view didn't save.");
+  throw new DbError({ ...error, message: error.message ?? "The view didn't save." });
 }
 
 function oneView(raw: unknown): TaskView {

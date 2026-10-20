@@ -11,7 +11,13 @@ describe("importsOf", () => {
       '// import { e } from "./e";',
       '/* import { f } from "./f"; */',
     ].join("\n");
-    expect(importsOf(src)).toEqual(["./a", "../b", "@/c", "./side", "./d"]);
+    expect(importsOf(src)).toEqual([
+      { spec: "./a", typeOnly: false },
+      { spec: "../b", typeOnly: true },
+      { spec: "@/c", typeOnly: false },
+      { spec: "./side", typeOnly: false },
+      { spec: "./d", typeOnly: false },
+    ]);
   });
 });
 
@@ -48,6 +54,27 @@ describe("checkFile", () => {
       checkFile("src/features/x/y.ts", 'import type { A } from "../../lib/runtime.web.agents";'),
     ).toEqual([]);
     expect(checkFile("src/features/x/y.test.ts", 'import "../../lib/runtime.web";')).toEqual([]);
+  });
+
+  it("flags values from other runtime implementations and any @supabase package", () => {
+    expect(
+      checkFile(
+        "src/features/f/a.ts",
+        'import { webFocusRuntime } from "../../lib/runtime.focus.web";',
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkFile("src/features/f/a.ts", 'import type { X } from "../../lib/runtime.focus.web";'),
+    ).toEqual([]);
+    expect(
+      checkFile("src/features/f/a.ts", 'import { getRuntime } from "../../lib/runtime";'),
+    ).toEqual([]);
+    expect(
+      checkFile("src/features/f/a.ts", 'import { x } from "@supabase/postgrest-js";'),
+    ).toHaveLength(1);
+    expect(
+      checkFile("src/lib/runtime-helper.ts", 'import { x } from "./runtime.web";'),
+    ).toHaveLength(1);
   });
 
   it("flags lib importing features", () => {

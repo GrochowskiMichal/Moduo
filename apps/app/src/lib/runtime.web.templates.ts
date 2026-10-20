@@ -23,7 +23,7 @@ import {
   templateFromRow,
 } from "../features/tasks/templates/model";
 import type { Truncation } from "./paged-select";
-import { type Db, untypedDb } from "./runtime.db";
+import { type Db, DbError, untypedDb } from "./runtime.db";
 
 /** Everything an apply or a duplicate made, as the store's rows. */
 export type TemplateApplyResult = {
@@ -77,7 +77,7 @@ const LIST_CAP = 500;
 type Answer = { data: unknown; error: { code?: string; message?: string } | null };
 
 function fail(error: { code?: string; message?: string }): never {
-  throw new Error(error.message ?? "That didn't save.");
+  throw new DbError({ ...error, message: error.message ?? "That didn't save." });
 }
 
 function projectCopyFields(input: Omit<ProjectCopyInput, "workspaceId">): Record<string, unknown> {

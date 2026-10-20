@@ -5,7 +5,10 @@
  *
  *   runtime  The Supabase client lives behind the runtime port: only
  *            src/lib/runtime*.ts may import `lib/runtime.web`, `lib/runtime.db`
- *            or `@supabase/supabase-js`. Everyone else calls getRuntime().
+ *            or any `@supabase/*` package, or import values from the other
+ *            runtime implementations (`lib/runtime.focus.web`, …; a type-only
+ *            import is fine). `lib/runtime` and `lib/runtime.types` are the
+ *            port and open to all. Everyone else calls getRuntime().
  *   layers   src/lib/** never imports src/features/**: lib is the layer
  *            features build on, not the other way round.
  *
@@ -24,7 +27,7 @@ import { ALLOW_LAYERS, ALLOW_RUNTIME } from "./check-boundaries.allow";
 export type Violation = { rule: "runtime" | "layers"; file: string; target: string };
 
 const RUNTIME_ONLY = new Set(["src/lib/runtime.web", "src/lib/runtime.db"]);
-const SUPABASE_JS = "@supabase/supabase-js";
+const RUNTIME_PORT = new Set(["src/lib/runtime", "src/lib/runtime.types"]);
 
 const IMPORT_RE = [
   // import x from "a" · import type { x } from "a" · export { x } from "a"
@@ -37,13 +40,17 @@ const IMPORT_RE = [
 
 const toPosix = (p: string) => p.split(path.sep).join("/");
 
-/** Every module specifier a file imports (comments stripped first). */
-export function importsOf(content: string): string[] {
+export type Import = { spec: string; typeOnly: boolean };
+
+/** Every module a file imports (comments stripped first); `typeOnly` for `import type`. */
+export function importsOf(content: string): Import[] {
   const code = content.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  const out: string[] = [];
+  const out: Import[] = [];
   for (const re of IMPORT_RE) {
     re.lastIndex = 0;
-    for (const m of code.matchAll(re)) out.push(m[1]);
+    for (const m of code.matchAll(re)) {
+      out.push({ spec: m[1], typeOnly: /^[\s;}]*(?:import|export)\s+type\s/.test(m[0]) });
+    }
   }
   return out;
 }
@@ -58,15 +65,19 @@ export function resolveSpec(file: string, spec: string): string | null {
 }
 
 const isExempt = (file: string) => /\.(test|spec|stories)\.tsx?$/.test(file);
-const isRuntimeFile = (file: string) => /^src\/lib\/runtime[^/]*\.ts$/.test(file);
+const isRuntimeFile = (file: string) => /^src\/lib\/runtime(?:\.[\w.-]+)?\.ts$/.test(file);
 
 /** The rules one file breaks (`file` is app-relative, posix). */
 export function checkFile(file: string, content: string): Violation[] {
   if (isExempt(file)) return [];
   const out: Violation[] = [];
-  for (const spec of importsOf(content)) {
+  for (const { spec, typeOnly } of importsOf(content)) {
     const target = resolveSpec(file, spec);
-    if (!isRuntimeFile(file) && (spec === SUPABASE_JS || (target && RUNTIME_ONLY.has(target)))) {
+    const runtimeImpl =
+      !!target &&
+      (RUNTIME_ONLY.has(target) ||
+        (!typeOnly && /^src\/lib\/runtime\./.test(target) && !RUNTIME_PORT.has(target)));
+    if (!isRuntimeFile(file) && (spec.startsWith("@supabase/") || runtimeImpl)) {
       out.push({ rule: "runtime", file, target: target ?? spec });
     }
     if (file.startsWith("src/lib/") && target?.startsWith("src/features/")) {

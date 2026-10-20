@@ -22,7 +22,7 @@ import type {
 import { sanitizeTimeBlocks, type TasksTrash, TRASH_DAYS } from "../features/tasks/model";
 import { trashFromRows } from "./bucket-rows";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
-import { type Db, untypedDb } from "./runtime.db";
+import { type Db, DbError, untypedDb } from "./runtime.db";
 import {
   areaRowToModel,
   bucketRowToModel,
@@ -100,8 +100,8 @@ function one<T>(data: unknown, mapOne: (row: unknown) => T): T {
   return mapOne(Array.isArray(data) ? data[0] : data);
 }
 
-function fail(error: { message?: string }): never {
-  throw new Error(error.message ?? "That didn't save.");
+function fail(error: { code?: string; message?: string }): never {
+  throw new DbError({ ...error, message: error.message ?? "That didn't save." });
 }
 
 const PROJECT_KEYS: Record<Exclude<keyof ProjectFields, "archived">, string> = {
@@ -371,7 +371,7 @@ export function createTasksStructure(
      * Make a project (you own it). `id` makes a resend idempotent.
      * `group` is unused since the pre-TV-D10 save went (callers still pass it).
      */
-    createProject(input: {
+    async createProject(input: {
       workspaceId: string;
       id?: string;
       fields: ProjectFields & { name: string };
@@ -391,7 +391,7 @@ export function createTasksStructure(
      * Edit a project's fields (only those given). `fallback` is unused since
      * the pre-TV-D10 save went (callers still pass it).
      */
-    updateProject(input: {
+    async updateProject(input: {
       workspaceId: string;
       projectId: string;
       patch: ProjectFields;
