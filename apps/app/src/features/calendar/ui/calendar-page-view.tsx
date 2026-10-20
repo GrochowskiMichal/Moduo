@@ -33,6 +33,7 @@ import { type CaptureSource, useCaptureSource } from "../../../lib/capture-sourc
 import { asDragPayload } from "../../../lib/drag-payload";
 import { ENTITY_OPEN_EVENT, takeEntityOpenIntent } from "../../../lib/entity-open";
 import { useFocusPrefs } from "../../../lib/focus-prefs";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import { stopFocusWithUndo } from "../../focus/stop-with-undo";
@@ -654,58 +655,37 @@ export function CalendarPageView({
     keysRef.current = { setView, goToday, step, selectedOccurrenceKey, requestDelete };
   });
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target as HTMLElement | null;
+  // Registry bindings in the "calendar" scope (lib/hotkeys); never from a
+  // field. Don't steal keys from open overlays either (menus typeahead on
+  // plain character keys without preventDefault; dialogs own their focus).
+  const inOverlay = (e: KeyboardEvent) =>
+    e.target instanceof Element &&
+    !!e.target.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']");
+  const calendarKey = (run: () => void) => (e: KeyboardEvent) => {
+    if (inOverlay(e)) return false;
+    run();
+  };
+  useAppHotkeys({
+    "calendar.today": calendarKey(() => keysRef.current.goToday()),
+    "calendar.day": calendarKey(() => keysRef.current.setView("day")),
+    "calendar.week": calendarKey(() => keysRef.current.setView("week")),
+    "calendar.prev": calendarKey(() => keysRef.current.step(-1)),
+    "calendar.next": calendarKey(() => keysRef.current.step(1)),
+    // Destructive keys act only from a neutral focus (the grid/body) — never
+    // while an interactive element (a panel row, a toolbar button) holds focus
+    // with a stale chip selection lingering.
+    "calendar.delete": (e) => {
+      if (inOverlay(e)) return false;
       if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable ||
-          // Don't steal keys from open overlays (menus typeahead on plain
-          // character keys without preventDefault; dialogs own their focus).
-          target.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']"))
+        e.target instanceof Element &&
+        e.target.closest("button, [role='button'], a, [tabindex]")
       ) {
-        return;
+        return false;
       }
       const k = keysRef.current;
-      switch (e.key) {
-        case "t":
-        case "T":
-          k.goToday();
-          break;
-        case "d":
-        case "D":
-          k.setView("day");
-          break;
-        case "w":
-        case "W":
-          k.setView("week");
-          break;
-        case "ArrowLeft":
-          k.step(-1);
-          break;
-        case "ArrowRight":
-          k.step(1);
-          break;
-        case "Delete":
-        case "Backspace":
-          // Destructive keys act only from a neutral focus (the grid/body) —
-          // never while an interactive element (a panel row, a toolbar
-          // button) holds focus with a stale chip selection lingering.
-          if (target?.closest("button, [role='button'], a, [tabindex]")) return;
-          k.requestDelete(k.selectedOccurrenceKey);
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+      k.requestDelete(k.selectedOccurrenceKey);
+    },
+  });
 
   const onToggleDone = useCallback(
     (taskId: string) => {

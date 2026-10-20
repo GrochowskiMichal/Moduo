@@ -46,6 +46,7 @@ import {
 import { IconButton } from "../../../components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
+import { HotkeyScope, useAppHotkeys, useFocusWithin } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { bumpNotNow, clearNotNows, readNotNows } from "../../focus/along-the-way";
@@ -510,63 +511,68 @@ export function FocusView({
       hasNow: !!now,
     };
   });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target instanceof Element ? e.target : null;
-      // Ours only while the screen holds focus: never from the sidebar, the
-      // panel, a field, or nowhere at all (⏎ has no Undo).
-      if (!target || !rootRef.current?.contains(target)) return;
-      if (isTypingTarget(target)) return;
-      if (target.closest('[role="menu"],[role="dialog"],[role="listbox"]')) return;
-      const k = keys.current;
-      if (e.shiftKey && e.key.toLowerCase() === "f") {
-        // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
-        const id = target.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
-        if (!id || !k.canEdit) return;
-        e.preventDefault();
+  // Registry bindings in the "focus" scope (lib/hotkeys), live only while the
+  // screen holds focus: never from the sidebar, the panel, a field, or nowhere
+  // at all (⏎ has no Undo).
+  const focusInside = useFocusWithin(rootRef);
+  const ours = (e: KeyboardEvent): Element | null => {
+    const target = e.target instanceof Element ? e.target : null;
+    if (e.repeat || !target || !rootRef.current?.contains(target)) return null;
+    if (target.closest('[role="menu"],[role="dialog"],[role="listbox"]')) return null;
+    return target;
+  };
+  // A focused button keeps its own Enter.
+  const onControl = (target: Element) =>
+    !!target.closest("button,a,[role='button'],[role='checkbox']");
+  useAppHotkeys(
+    {
+      // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
+      "focus.promote": (e) => {
+        const target = ours(e);
+        const k = keys.current;
+        const id = target?.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
+        if (!id || !k.canEdit) return false;
         // A new Now card: whatever was offered between tasks is moot.
         k.dropOffers();
         k.focusOnTask(id);
-        return;
-      }
-      if (e.shiftKey) return;
-      // A focused button keeps its own Enter.
-      const onControl = !!target.closest("button,a,[role='button'],[role='checkbox']");
-      if (k.offer) {
-        // Between tasks the offer holds Now's place: ⏎ takes it (the
-        // Shrink · Move · Let go ask has no ⏎ of its own), Esc declines.
-        const plainTake = k.offer.kind === "break" || !k.offer.ask;
-        if (e.key === "Enter" && !onControl && plainTake) {
-          e.preventDefault();
+      },
+      // Between tasks the offer holds Now's place: ⏎ takes it (the Shrink ·
+      // Move · Let go ask has no ⏎ of its own), Esc declines.
+      "focus.enter": (e) => {
+        const target = ours(e);
+        const k = keys.current;
+        if (!target || onControl(target)) return false;
+        if (k.offer) {
+          if (k.offer.kind !== "break" && k.offer.ask) return false;
           k.takeOffer();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          k.declineOffer();
-        } else if (e.key.toLowerCase() === "c" && k.canEdit) {
-          e.preventDefault();
-          k.onRequestCapture();
+        } else {
+          k.done();
         }
-        return;
-      }
-      if (e.key === "Enter" && !onControl) {
-        e.preventDefault();
-        k.done();
-      } else if (e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        k.skip();
-      } else if (e.key.toLowerCase() === "w" && k.canEdit && k.hasNow) {
-        e.preventDefault();
-        k.openHandOff();
-      } else if (e.key.toLowerCase() === "c" && k.canEdit) {
-        e.preventDefault();
+      },
+      "focus.decline": (e) => {
+        const k = keys.current;
+        if (!ours(e) || !k.offer) return false;
+        e.stopPropagation();
+        k.declineOffer();
+      },
+      "focus.capture": (e) => {
+        const k = keys.current;
+        if (!ours(e) || !k.canEdit) return false;
         k.onRequestCapture();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+      },
+      "focus.skip": (e) => {
+        const k = keys.current;
+        if (!ours(e) || k.offer) return false;
+        k.skip();
+      },
+      "focus.hand-off": (e) => {
+        const k = keys.current;
+        if (!ours(e) || k.offer || !k.canEdit || !k.hasNow) return false;
+        k.openHandOff();
+      },
+    },
+    { enabled: focusInside },
+  );
 
   // The screen takes focus when nothing else holds it: on opening (from the
   // top bar, a reload), and when the button you used goes away (Done on the
@@ -654,100 +660,102 @@ export function FocusView({
     ) : null;
 
   return (
-    <div
-      ref={rootRef}
-      tabIndex={-1}
-      className="flex h-full min-h-0 flex-col outline-none"
-      data-slot="focus-view"
-    >
-      {header}
-      {/* Never sideways (MOD-119): a long word or line stays inside the column. */}
-      <div className="pane-scroll min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
-          {notice && noticeHere ? (
-            <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} />
-          ) : null}
-          {now ? (
-            <>
-              {offer?.kind === "along" ? (
-                <AlongTheWayOffer
-                  key={`along-${offer.task.id}`}
-                  task={offer.task}
-                  projectName={bucketNameById(offer.leavingProjectId)}
-                  projectColor={bucketDotColor(
-                    buckets.find((b) => b.id === offer.leavingProjectId) ?? {},
-                  )}
-                  ask={offer.ask}
-                  onTake={takeOffer}
-                  onNotNow={declineOffer}
-                  onShrink={() => settleOffer("shrink")}
-                  onMove={() => settleOffer("backlog")}
-                  onLetGo={() => settleOffer("wont_do")}
-                />
-              ) : offer?.kind === "break" ? (
-                <BreakOffer
-                  key="break"
-                  minutes={offer.minutes}
-                  long={offer.long}
-                  onTake={takeOffer}
-                  onSkip={declineOffer}
-                />
-              ) : (
-                <NowCard
-                  task={now}
-                  runtime={runtime}
-                  workspaceId={workspaceId}
+    <HotkeyScope scope="focus">
+      <div
+        ref={rootRef}
+        tabIndex={-1}
+        className="flex h-full min-h-0 flex-col outline-none"
+        data-slot="focus-view"
+      >
+        {header}
+        {/* Never sideways (MOD-119): a long word or line stays inside the column. */}
+        <div className="pane-scroll min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
+            {notice && noticeHere ? (
+              <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} />
+            ) : null}
+            {now ? (
+              <>
+                {offer?.kind === "along" ? (
+                  <AlongTheWayOffer
+                    key={`along-${offer.task.id}`}
+                    task={offer.task}
+                    projectName={bucketNameById(offer.leavingProjectId)}
+                    projectColor={bucketDotColor(
+                      buckets.find((b) => b.id === offer.leavingProjectId) ?? {},
+                    )}
+                    ask={offer.ask}
+                    onTake={takeOffer}
+                    onNotNow={declineOffer}
+                    onShrink={() => settleOffer("shrink")}
+                    onMove={() => settleOffer("backlog")}
+                    onLetGo={() => settleOffer("wont_do")}
+                  />
+                ) : offer?.kind === "break" ? (
+                  <BreakOffer
+                    key="break"
+                    minutes={offer.minutes}
+                    long={offer.long}
+                    onTake={takeOffer}
+                    onSkip={declineOffer}
+                  />
+                ) : (
+                  <NowCard
+                    task={now}
+                    runtime={runtime}
+                    workspaceId={workspaceId}
+                    canEdit={canEdit}
+                    bucketNameById={bucketNameById}
+                    onNow={onNow}
+                    timer={timerMode}
+                    countdown={prefs.countdownEstimate}
+                    panelTaskId={panelTaskId}
+                    onOpenTask={onOpenTask}
+                    onStart={start}
+                    onDone={done}
+                    onSkip={skip}
+                    handOffOpen={handOffOpen}
+                    onHandOffOpenChange={setHandOffOpen}
+                    onHandOff={handOff}
+                  />
+                )}
+                <UpNext
+                  upNext={upNext}
                   canEdit={canEdit}
                   bucketNameById={bucketNameById}
-                  onNow={onNow}
-                  timer={timerMode}
-                  countdown={prefs.countdownEstimate}
-                  panelTaskId={panelTaskId}
-                  onOpenTask={onOpenTask}
-                  onStart={start}
-                  onDone={done}
-                  onSkip={skip}
-                  handOffOpen={handOffOpen}
-                  onHandOffOpenChange={setHandOffOpen}
-                  onHandOff={handOff}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={onSelectTask}
+                  dndMode={dndMode}
+                  meeting={meeting}
+                  pace={pace}
+                  arrange={
+                    arrangement.saved >= ARRANGE_MIN_SAVED
+                      ? { saved: arrangement.saved, onArrange: arrange }
+                      : null
+                  }
                 />
-              )}
-              <UpNext
-                upNext={upNext}
-                canEdit={canEdit}
-                bucketNameById={bucketNameById}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={onSelectTask}
-                dndMode={dndMode}
-                meeting={meeting}
-                pace={pace}
-                arrange={
-                  arrangement.saved >= ARRANGE_MIN_SAVED
-                    ? { saved: arrangement.saved, onArrange: arrange }
-                    : null
-                }
-              />
-              {inFlightLine}
-              {doneLine}
-              {doneList}
-            </>
-          ) : (
-            <>
-              {inFlightLine}
-              {doneLine}
-              {doneList}
-              <FocusEmptyState
-                canEdit={canEdit}
-                bucketNameById={bucketNameById}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={onSelectTask}
-                onRequestCapture={onRequestCapture}
-              />
-            </>
-          )}
+                {inFlightLine}
+                {doneLine}
+                {doneList}
+              </>
+            ) : (
+              <>
+                {inFlightLine}
+                {doneLine}
+                {doneList}
+                <FocusEmptyState
+                  canEdit={canEdit}
+                  bucketNameById={bucketNameById}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={onSelectTask}
+                  onRequestCapture={onRequestCapture}
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </HotkeyScope>
   );
 }
 
@@ -1063,10 +1071,4 @@ function FocusSkeleton() {
 /** The first task with a real id (one still saving can't take the clock). */
 function firstReal(list: readonly Task[]): Task | null {
   return list.find((t) => !t.id.startsWith("tmp-")) ?? null;
-}
-
-function isTypingTarget(el: Element): boolean {
-  if (el instanceof HTMLElement && el.isContentEditable) return true;
-  const tag = el.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
 }

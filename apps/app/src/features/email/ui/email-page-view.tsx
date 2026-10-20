@@ -19,6 +19,7 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
@@ -93,16 +94,6 @@ function revealBySelector(selector: string, onDone?: (found: boolean) => void): 
 }
 
 type PanelVariantId = "reader" | "contact" | "detail" | "task";
-
-/** Guard shortcuts from firing while typing or inside an overlay. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return Boolean(el.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']"));
-}
 
 /** One tissue email card for the web read-only view (AC15). Carries the ref +
  * thread ids so a `?thread=` deep link can scroll to it (DF-2). */
@@ -992,74 +983,35 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
     setSelectedThreadId(list[nextIdx].threadId);
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTypingTarget(e.target)) return;
-      const list = scopedRef.current;
-      const curId = selectedIdRef.current;
-      const current = curId ? (list.find((t) => t.threadId === curId) ?? null) : null;
-
-      switch (e.key) {
-        case "j":
-          moveSelection(1);
-          break;
-        case "k":
-          moveSelection(-1);
-          break;
-        case "Enter":
-          if (current) openThread(current);
-          break;
-        case "e":
-          if (current) runArchive(current);
-          break;
-        case "p":
-          if (current) togglePin(current);
-          break;
-        case "#":
-          if (current) runDelete(current);
-          break;
-        case "m":
-          if (current) setMovePopoverOpen(true);
-          break;
-        case "s":
-          if (current) openSnooze(current);
-          break;
-        case "t":
-          if (current) void runConvert(current);
-          break;
-        case "r":
-          if (current) void startReply("reply");
-          break;
-        case "?":
-          setShortcutsOpen(true);
-          break;
-        case "/":
-          searchInputRef.current?.focus();
-          searchInputRef.current?.select();
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-    };
-    // Capture phase so email's own keys — notably `?` for the triage legend —
-    // run BEFORE the bubble-phase global shortcut handler (app-chrome's
-    // useGlobalShortcuts). It preventDefaults what it handles; the global `?`
-    // sheet then sees defaultPrevented and stays closed on /email. All keys here
-    // are already guarded on modifiers + typing targets, so capture is safe.
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [
-    moveSelection,
-    openThread,
-    runArchive,
-    runDelete,
-    openSnooze,
-    runConvert,
-    togglePin,
-    startReply,
-  ]);
+  // Registry bindings in the "email" scope (routes/pages/email-page.tsx turns
+  // it on). Email's own `?` (the triage legend) outranks the app-wide sheet by
+  // scope (`overrides: true`), not by listening in the capture phase (TS-6).
+  // Never from a field; a key a nearer handler claimed is skipped.
+  const currentThread = () => {
+    const curId = selectedIdRef.current;
+    return curId ? (scopedRef.current.find((t) => t.threadId === curId) ?? null) : null;
+  };
+  const withCurrent = (run: (thread: EmailThread) => void) => () => {
+    const current = currentThread();
+    if (current) run(current);
+  };
+  useAppHotkeys({
+    "email.next": () => moveSelection(1),
+    "email.prev": () => moveSelection(-1),
+    "email.open": withCurrent(openThread),
+    "email.archive": withCurrent(runArchive),
+    "email.pin": withCurrent(togglePin),
+    "email.delete": withCurrent(runDelete),
+    "email.move": withCurrent(() => setMovePopoverOpen(true)),
+    "email.snooze": withCurrent(openSnooze),
+    "email.convert": withCurrent((thread) => void runConvert(thread)),
+    "email.reply": withCurrent(() => void startReply("reply")),
+    "email.legend": () => setShortcutsOpen(true),
+    "email.search": () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    },
+  });
 
   const onConnected = useCallback(() => {
     setConnectOpen(false);

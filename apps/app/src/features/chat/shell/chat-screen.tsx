@@ -31,6 +31,7 @@ import {
 } from "@/lib/statuses/model";
 import { usePeopleNow } from "@/lib/statuses/store";
 import { useTimeRegion } from "@/lib/time-region";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import { publicConfig } from "../../../lib/public-config";
 import { catchupStoreFor } from "../catchup/catchup-store";
 import { useCatchupScreen } from "../catchup/catchup-view";
@@ -500,25 +501,24 @@ export function ChatScreen({
     [canStart],
   );
 
-  // ── keyboard ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.altKey || e.metaKey || e.ctrlKey) return;
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      if (document.querySelector("[role='dialog'], [role='menu']")) return;
-      const list = e.shiftKey
-        ? ordered.filter((r) => r.unread || r.channel.id === conversationId)
-        : ordered;
-      if (list.length === 0) return;
-      e.preventDefault();
-      const i = list.findIndex((r) => r.channel.id === conversationId);
-      const d = e.key === "ArrowDown" ? 1 : -1;
-      const next = list[(i + d + list.length) % list.length];
-      if (next) onOpen(next.channel.id);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [ordered, conversationId, onOpen]);
+  // ── keyboard: ⌥↑/⌥↓ walk the conversations, ⌥⇧ only the unread ones ─────
+  // Registry bindings in the "chat" scope (lib/hotkeys).
+  const walk = (dir: 1 | -1, unreadOnly: boolean) => () => {
+    if (document.querySelector("[role='dialog'], [role='menu']")) return false;
+    const list = unreadOnly
+      ? ordered.filter((r) => r.unread || r.channel.id === conversationId)
+      : ordered;
+    if (list.length === 0) return false;
+    const i = list.findIndex((r) => r.channel.id === conversationId);
+    const next = list[(i + dir + list.length) % list.length];
+    if (next) onOpen(next.channel.id);
+  };
+  useAppHotkeys({
+    "chat.prev": walk(-1, false),
+    "chat.next": walk(1, false),
+    "chat.prev-unread": walk(-1, true),
+    "chat.next-unread": walk(1, true),
+  });
 
   // ── writes ────────────────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null);

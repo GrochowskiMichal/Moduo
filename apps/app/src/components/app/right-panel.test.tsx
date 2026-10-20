@@ -59,7 +59,8 @@ function openMenu(name: RegExp | string) {
   return screen.getByRole("menu");
 }
 
-const altDigit = (n: number, target: EventTarget = window) =>
+// Hotkeys listen on document (lib/hotkeys), so keys start inside it.
+const altDigit = (n: number, target: EventTarget = document.body) =>
   act(() => {
     target.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -71,6 +72,13 @@ const altDigit = (n: number, target: EventTarget = window) =>
       }),
     );
   });
+
+/** Esc from inside the panel: the key comes from the focused element. */
+function escapeFrom(el: HTMLElement) {
+  if (el.tabIndex < 0) el.setAttribute("tabindex", "-1");
+  act(() => el.focus());
+  fireEvent.keyDown(el, { key: "Escape" });
+}
 
 describe("the title row names the view and switches it", () => {
   it("shows the active view and its body", () => {
@@ -185,7 +193,7 @@ describe("the ← item stack", () => {
     const onBack = rs.fn();
     renderPanel({ items: [item], onBack });
     fireEvent.click(screen.getByRole("button", { name: "Back to Tasks" }));
-    fireEvent.keyDown(screen.getByText("Task body"), { key: "Escape" });
+    escapeFrom(screen.getByText("Task body"));
     expect(onBack).toHaveBeenCalledTimes(2);
   });
 
@@ -193,6 +201,8 @@ describe("the ← item stack", () => {
     const onBack = rs.fn();
     renderPanel({ items: [item], onBack });
     const body = screen.getByText("Task body");
+    body.setAttribute("tabindex", "-1");
+    act(() => body.focus());
     const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
     event.preventDefault();
     act(() => {
@@ -266,7 +276,7 @@ describe("while a dialog is open over the panel", () => {
     dialog.setAttribute("data-state", "open");
     document.body.appendChild(dialog);
     altDigit(1);
-    fireEvent.keyDown(screen.getByText("Body"), { key: "Escape" });
+    escapeFrom(screen.getByText("Body"));
     dialog.remove();
     expect(onChange).not.toHaveBeenCalled();
     expect(onBack).not.toHaveBeenCalled();
@@ -284,7 +294,7 @@ describe("while a dialog is open over the panel", () => {
       ),
     };
     renderPanel({ items: [item], onBack });
-    fireEvent.keyDown(screen.getByRole("button", { name: "Cancel delete" }), { key: "Escape" });
+    escapeFrom(screen.getByRole("button", { name: "Cancel delete" }));
     expect(onBack).not.toHaveBeenCalled();
   });
 });

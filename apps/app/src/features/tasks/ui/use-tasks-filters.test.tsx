@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { type ReactElement, useState } from "react";
 import type { FilterCondition } from "../../../components/ui/filter-model";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { HotkeyScope } from "../../../lib/hotkeys";
 import type { Assignee } from "../assignees";
 import { makeTask } from "../helpers";
 import type { Bucket, Tag, Task } from "../model";
@@ -76,8 +77,11 @@ const TASKS = [
  * The workspace as the store holds it: the three tasks, and "design" on
  * "Filter chips" (one open task, the menu's count). Nothing queued or blocked.
  */
+// The page turns the "tasks" hotkey scope on (route-tree.tsx); `/` and `f` live there.
 const show = (ui: ReactElement) =>
-  renderWithTasks(ui, { seed: { tasks: TASKS, tags: TAGS, tagLinks: [tagLink("t1", "b")] } });
+  renderWithTasks(<HotkeyScope scope="tasks">{ui}</HotkeyScope>, {
+    seed: { tasks: TASKS, tags: TAGS, tagLinks: [tagLink("t1", "b")] },
+  });
 
 function Harness({
   initial = [] as FilterCondition[],
