@@ -105,6 +105,36 @@ describe("the chat copy and who is signed in", () => {
     expect(copy.metas.get(OWNER)?.outbox).toEqual([]);
   });
 
+  it("kept sends are written back at once on the next sign-in, even when the first sync fails", async () => {
+    const { copy, runtime, sent } = await withWaiting();
+    await wipeChatCopies();
+    await attachChatUser(ME);
+    // Still offline: the store can't boot, and the page may reload before it does.
+    const again = chatStore(runtime, ME, WS);
+    again.acquire();
+    await again.ready();
+    await settle();
+    expect(copy.metas.get(OWNER)?.outbox.map((e) => e.id)).toEqual(sent);
+  });
+
+  it("a send discarded just before signing out doesn't come back", async () => {
+    const { copy, store, sent } = await withWaiting();
+    // The discard's write hasn't landed when the sign-out comes.
+    store.discard(sent[1]!);
+    await wipeChatCopies();
+    expect(copy.metas.get(OWNER)?.outbox.map((e) => e.id)).toEqual([sent[0]]);
+  });
+
+  it("a refused send stays on the device but isn't counted as syncing later", async () => {
+    const { server, store } = await withWaiting();
+    server.offline = false;
+    server.refuse.set("send", { code: "42501", message: "No." });
+    window.dispatchEvent(new Event("online"));
+    await settle(40);
+    expect(store.waitingEntries().every((e) => e.failed)).toBe(true);
+    expect(waitingSyncCount()).toBe(0);
+  });
+
   it("another person signing in cuts the first one's copy down to its waiting sends", async () => {
     const { copy, runtime, store, sent } = await withWaiting();
     await attachChatUser(YOU);

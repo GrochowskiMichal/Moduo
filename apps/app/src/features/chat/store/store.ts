@@ -597,6 +597,11 @@ export class ChatStore {
     return this.refs.acquire();
   }
 
+  /** Outbox ids this store sent or discarded (a sign-out must not keep them). */
+  handledEntryIds(): string[] {
+    return this.outbox.handledIds();
+  }
+
   /** What waits to send, in order (a sign-out keeps it on the device). */
   waitingEntries(): ChatOutboxEntry[] {
     return this.outbox.list();
@@ -730,7 +735,10 @@ export class ChatStore {
       // waiting sends stay.
       this.outbox.adopt(meta.outbox, { first: true });
       await this.copy.deleteWhere((o) => o === this.owner);
+      // Written back at once (a current meta holding only the outbox): the
+      // sends a sign-out kept must survive a reload before the first sync.
       this.metaDirty = true;
+      await this.persistNow();
       return;
     }
     for (const c of meta.channels) this.channels.set(c.id, c);
@@ -2341,7 +2349,7 @@ const copyOf = () => storeOptions.copy ?? chatDeviceCopy();
 function chatCopies(copy: ChatDeviceCopy): OwnedCopies<ChatOutboxEntry> {
   return {
     keys: () => copy.owners(),
-    keepOnlyWaiting: (owner, inMemory) => copy.keepOnlyWaiting(owner, inMemory),
+    keepOnlyWaiting: (owner, inMemory, handled) => copy.keepOnlyWaiting(owner, inMemory, handled),
     deleteWhere: (match) => copy.deleteWhere(match),
     clear: () => copy.clear(),
   };
@@ -2352,8 +2360,10 @@ const people = personLifecycle({
   scopeOf: (store) => store.transport,
   copies: () => chatCopies(copyOf()),
   waiting: (store) => store.waitingEntries(),
-  // A send deleted while on its way is hidden: it isn't "waiting" to anyone.
-  counted: (entry) => !entry.deleted,
+  handled: (store) => store.handledEntryIds(),
+  // The warning says they sync next time: a hidden (deleted) send isn't
+  // waiting, and a refused one needs Retry (it stays on the device all the same).
+  counted: (entry) => !entry.deleted && !entry.failed,
 });
 
 /**
