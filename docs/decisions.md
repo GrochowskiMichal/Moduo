@@ -74,6 +74,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Chat → [decisions/chat.md](decisions/chat.md)
 
+- 2026-10-20 · A sign-out keeps Chat's waiting sends (rows, drafts and sidebar go; the outbox stays under the person's key until they sign in here again); account deletion still wipes everything; "Log out" counts chat's waiting sends → decisions/chat.md
 - 2026-10-16 · CV-21 Agents and MCP tools (agent's choices; five open calls for Maciej, CV21-1…5): the reply switch in Settings → Preferences → Chat, on by default; only the creator turns private access on, any key manager turns it off; announcement channels need the creator to manage them; a key creates a private channel only with the switch on; the creator gets no reply item for their own agent's replies; the post keeps its v1 signature → decisions/chat.md CV21-1…CV21-8
 - 2026-10-16 · CV-20 Custom emoji (agent's choices): names 2–32 with a letter and never a standard shortcode; images under a server-minted upload slot; a JPEG stored as PNG; the picker's "Add emoji…" opens Settings; the export carries only your own emoji; images of removed emoji wait for a purge job → decisions/chat.md CV20-1…CV20-7
 - 2026-10-16 · CV-14 Decisions (agent's choices): marking needs post rights only and any poster may unmark; the Wrap up tick is refused as a whole when the wrapper can't post; Undo of a wrap-up takes back its own decision in one op; a decision follows a moved message; on an item, a linked channel's decisions plus a mentioning conversation's decisions that name it; ⇧D only in the stream → decisions/chat.md CV14-1…CV14-7
@@ -217,6 +218,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-20 · Notes' caches (list, per-note documents, pull cursors) are keyed `person:workspace` and cut down to the outboxes on sign-out or a user switch; caches from before the update are deleted, their queued work stays nobody's → decisions/notes.md
 - 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
 - 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
@@ -272,6 +274,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-20 · Tasks and Chat sync on one kernel (`lib/sync/kernel/`: stamps, idb, delta, landing, overlay, outbox, registry, collection); each caller's missing-stamp rule is named and pinned; Notes uses only its idb opener, network check and person lifecycle → decisions/data.md
 - 2026-10-20 · Runtime guardrails: Supabase client typed from prod (`db:types`), `runRpc`/`runQuery` throw `DbError`, deploy-gap fallbacks deleted for what prod has, `lint:boundaries` keeps Supabase in `lib/runtime*` and `lib` below `features` (stale grandfather entries fail)
 - 2026-10-10 · AT-2: one upload queue takes a file from prepare to finalize, survives restarts and words each refusal as a fact with one action; the task panel shows the strip under the description and takes paste or drop anywhere; desktop drops are plain HTML5 drops.
 - 2026-10-08 · AT-1: attachment bytes go straight to a private bucket under a pending row and are locked once finalized; one ledger per workspace owner counts them (held under the hosted 50 MB upload cap; Maciej: keep 50 MB for now); the trash clock is the server's; a daily `purge-deleted` function empties the trash after 30 days.

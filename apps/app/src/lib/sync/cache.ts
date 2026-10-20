@@ -16,6 +16,8 @@
 // Where IndexedDB is missing (tests, a locked-down browser) there is no copy:
 // the store still works, it just opens from the server.
 
+import { idbOpener, idbRequest } from "./kernel/idb";
+import { isOwnedBy, ownerKey } from "./kernel/registry";
 import type { SyncTableName } from "./types";
 
 /** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept).
@@ -62,14 +64,11 @@ export interface SyncCache {
   deleteWhere(match: (key: string) => boolean): Promise<void>;
 }
 
-export function cacheKey(userId: string, workspaceId: string): string {
-  return `${userId}:${workspaceId}`;
-}
+/** The record key: `<person>:<workspace>` (the kernel's owner key). */
+export const cacheKey = ownerKey;
 
 /** Whether a record key belongs to this person. */
-export function isKeyOf(key: string, userId: string): boolean {
-  return key.startsWith(`${userId}:`);
-}
+export const isKeyOf = isOwnedBy;
 
 /** A copy that lives as long as the page (tests; no IndexedDB). */
 export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspace> } {
@@ -110,62 +109,20 @@ function structuredCloneSafe<T>(value: T): T {
 const DB_NAME = "moduo-sync";
 const STORE = "workspaces";
 
-function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
 /** The device copy in IndexedDB. Any failure reads as "no copy" (never fatal). */
 export function idbCache(factory: IDBFactory): SyncCache {
-  let db: Promise<IDBDatabase> | null = null;
-  /**
-   * Open the database with its store. A database that exists without the
-   * store (opened elsewhere without an upgrade, or left half-made) is opened
-   * again one version up, which creates it: otherwise every write would fail
-   * quietly for good.
-   */
-  const openAt = (version?: number): Promise<IDBDatabase> =>
-    new Promise<IDBDatabase>((resolve, reject) => {
-      const request =
-        version === undefined ? factory.open(DB_NAME) : factory.open(DB_NAME, version);
-      request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains(STORE)) {
-          request.result.createObjectStore(STORE);
-        }
-      };
-      request.onsuccess = () => {
-        const opened = request.result;
-        if (opened.objectStoreNames.contains(STORE)) {
-          // Another tab upgrading must not wait on this one; the next write reopens.
-          opened.onversionchange = () => {
-            opened.close();
-            db = null;
-          };
-          resolve(opened);
-          return;
-        }
-        const next = opened.version + 1;
-        opened.close();
-        openAt(next).then(resolve, reject);
-      };
-      request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error("The device copy is blocked by another tab."));
-    });
-  const open = (): Promise<IDBDatabase> => {
-    db ??= openAt().catch((e) => {
-      db = null;
-      throw e;
-    });
-    return db;
-  };
+  // A database that exists without the store (opened elsewhere without an
+  // upgrade, or left half-made) is opened again one version up (kernel).
+  const db = idbOpener(factory, {
+    name: DB_NAME,
+    stores: { [STORE]: (d) => d.createObjectStore(STORE) },
+  });
   const tx = async (mode: IDBTransactionMode) =>
-    (await open()).transaction(STORE, mode).objectStore(STORE);
+    (await db.open()).transaction(STORE, mode).objectStore(STORE);
   return {
     async read(key) {
       try {
-        const value = (await requestToPromise((await tx("readonly")).get(key))) as
+        const value = (await idbRequest((await tx("readonly")).get(key))) as
           | CachedWorkspace
           | undefined;
         return value && typeof value === "object" ? value : null;
@@ -175,7 +132,7 @@ export function idbCache(factory: IDBFactory): SyncCache {
     },
     async write(key, value) {
       try {
-        await requestToPromise((await tx("readwrite")).put(value, key));
+        await idbRequest((await tx("readwrite")).put(value, key));
       } catch {
         // A full or blocked disk: the copy is a convenience, the server keeps the truth.
       }
@@ -200,7 +157,7 @@ export function idbCache(factory: IDBFactory): SyncCache {
     },
     async keys() {
       try {
-        const keys = (await requestToPromise((await tx("readonly")).getAllKeys())) as IDBValidKey[];
+        const keys = (await idbRequest((await tx("readonly")).getAllKeys())) as IDBValidKey[];
         return keys.filter((key): key is string => typeof key === "string");
       } catch {
         return [];
@@ -208,7 +165,7 @@ export function idbCache(factory: IDBFactory): SyncCache {
     },
     async clear() {
       try {
-        await requestToPromise((await tx("readwrite")).clear());
+        await idbRequest((await tx("readwrite")).clear());
       } catch {
         // Nothing to wipe.
       }
@@ -216,11 +173,11 @@ export function idbCache(factory: IDBFactory): SyncCache {
     async deleteWhere(match) {
       try {
         const store = await tx("readwrite");
-        const keys = (await requestToPromise(store.getAllKeys())) as IDBValidKey[];
+        const keys = (await idbRequest(store.getAllKeys())) as IDBValidKey[];
         await Promise.all(
           keys
             .filter((key) => typeof key !== "string" || match(key))
-            .map((key) => requestToPromise(store.delete(key))),
+            .map((key) => idbRequest(store.delete(key))),
         );
       } catch {
         // Nothing to wipe.
