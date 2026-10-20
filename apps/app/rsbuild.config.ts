@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
+import { pluginTailwindcss } from "@rsbuild/plugin-tailwindcss";
 import { devtools } from "@tanstack/devtools-rspack";
 
 function readLocalEnvValue(name: string): string {
@@ -97,7 +98,7 @@ const appBuild = readBuildId();
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
 
 export default defineConfig({
-  plugins: [pluginReact({ reactCompiler: true })],
+  plugins: [pluginReact({ reactCompiler: true }), pluginTailwindcss()],
   source: {
     entry: {
       index: "./src/main.tsx",
