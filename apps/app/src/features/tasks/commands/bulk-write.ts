@@ -5,19 +5,27 @@
 // file holds the field write (`bulkWrite`); `bulk.ts` the delete, queue,
 // Waiting on and tag ones.
 
-import { legacyTaskStatus, type TaskStatusCategory, taskStatusWord } from "@contracts/vocabularies";
+import { type TaskStatusCategory, taskStatusWord } from "@contracts/vocabularies";
 import { toast } from "sonner";
 import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, WorkspaceStore } from "../../../lib/sync/store";
-import { dueOnToLocalInstant, editableTaskFields, withDueOn } from "../../../lib/task-rows";
+import type { TaskFieldPatch } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import { type BulkRefusal, type BulkWrite, bulkResultText, dueDayOf, tasksWord } from "../bulk";
 import { undoWrite } from "../dnd/drop-write";
 import type { RecurrenceRule, Task } from "../model";
-import { engineZone, recurrenceOnStatusChange } from "../recurrence-engine";
-import { optimisticStatus, statusKeyCategory } from "../statuses";
+import { byIdOf } from "../selectors";
+import { handedOutOfSight, patchOfWrite, planTaskWrite, type WriteRefusal } from "../write-plan";
 import type { TaskCommandsContext, TaskPeers } from "./context";
-import { isTempId, patchOf, type Shared } from "./shared";
+import { NO_EDIT, type Shared } from "./shared";
+
+/** What a selection's toast says of a task that was left out. */
+const REFUSED: Record<WriteRefusal, string | null> = {
+  "no-edit": NO_EDIT,
+  deleted: null,
+  "still-saving": "It’s still saving.",
+  archived: "Its project is archived.",
+};
 
 /** How many tasks' ops are in flight at once. */
 const POOL = 4;
@@ -86,7 +94,7 @@ type Planned = {
   /** The repeat rule the status op carries (advanced on a check-off). */
   statusRecurrence: RecurrenceRule | null | undefined;
   /** Field-level part (tasks_op_update). */
-  fields: ReturnType<typeof editableTaskFields>;
+  fields: TaskFieldPatch;
   moving: boolean;
   queueRows: string[];
   /** The work session a reschedule moves with the task (kept on show until its row comes back). */
@@ -96,8 +104,8 @@ type Planned = {
 type SessionMove = { id: string; fields: { startsAt: string; endsAt: string } };
 
 export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers: TaskPeers) {
-  const { store, runtime, workspaceId, userId, data, bumpActivity } = ctx;
-  const { editBlocked, failed, queueFollowStatus, statusesForBucket } = shared;
+  const { store, runtime, workspaceId, data, bumpActivity } = ctx;
+  const { applyQueueFollow, editBlocked, failed, planContext } = shared;
 
   /** The session a reschedule moves: the one that starts at the task's old time. */
   const movedSession = (write: BulkWrite, before: Task): SessionMove | null => {
@@ -118,8 +126,6 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
     };
   };
 
-  const isArchived = (taskId: string) => isArchivedIn(store, taskId);
-
   /**
    * Save one write per task as one store write: every row shows the change at
    * once; each task's ops go to the server (field edit, occurrence, status,
@@ -136,70 +142,34 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
     const rt = runtime;
     const ws = workspaceId;
     const followers = opts.followers ?? new Set<string>();
-    const now = new Date();
-    const stamp = now.toISOString();
     const lineupBefore = data().myQueueEntries.map((e) => e.taskId);
-    const byId = new Map(data().allTasks.map((t) => [t.id, t]));
+    const byId = byIdOf(data().allTasks);
+    // The rules are `planTaskWrite`'s, as for one task's edit; this side
+    // only runs the ops.
+    const planCtx = planContext();
     const refused = new Map<string, BulkRefusal>();
     const planned: Planned[] = [];
     const changes: OverlayChange[] = [];
     for (const write of writes) {
       const before = byId.get(write.taskId);
-      if (!before || before.deletedAt) continue;
-      if (isTempId(write.taskId)) {
-        refused.set(write.taskId, { title: before.title, message: "It’s still saving." });
+      if (!before) continue;
+      const plan = planTaskWrite(before, patchOfWrite(write), planCtx);
+      if (plan.kind === "noop") continue;
+      if (plan.kind === "refused") {
+        // A deleted task is left out quietly; archived ones are read-only
+        // (TV-U6), and one still saving can't be written yet.
+        const message = REFUSED[plan.reason];
+        if (message) refused.set(write.taskId, { title: before.title, message });
         continue;
       }
-      if (isArchived(write.taskId)) {
-        refused.set(write.taskId, { title: before.title, message: "Its project is archived." });
-        continue;
-      }
-      const category = write.status === undefined ? undefined : statusKeyCategory(write.status);
-      // A status op carries the rule: Undo's own (the one before), else the
-      // check-off advances a repeat's pointer (spec §5d).
-      const statusRecurrence =
-        category === undefined
-          ? undefined
-          : write.recurrence !== undefined
-            ? write.recurrence
-            : (recurrenceOnStatusChange(before, legacyTaskStatus(category), now, engineZone()) ??
-              undefined);
-      const fields = editableTaskFields({
-        parentId: write.parentId,
-        bucketId: write.bucketId,
-        priority: write.priority,
-        sectionId: write.sectionId,
-        teamId: write.teamId,
-        // The place and the rule ride with the status op when there is one.
-        position: category === undefined ? write.position : undefined,
-        dueDate: write.dueDate,
-        recurrence: category === undefined ? write.recurrence : undefined,
-      });
-      const moving = write.bucketId !== undefined && write.bucketId !== before.bucketId;
-      const follow =
-        category !== undefined
-          ? queueFollowStatus(write.taskId, category)
-          : { changes: [], rowIds: [] };
-      const shown: Partial<Task> = {
-        ...fields,
-        ...(write.position !== undefined ? { position: write.position } : {}),
-        ...(write.dueDate !== undefined ? withDueOn({ dueDate: write.dueDate }) : {}),
-        ...(write.occurrenceOn !== undefined
-          ? { dueOn: write.occurrenceOn, dueDate: dueOnToLocalInstant(write.occurrenceOn) }
-          : {}),
-        ...(category !== undefined
-          ? optimisticStatus(
-              before,
-              write.statusId ? { statusId: write.statusId } : { category },
-              statusesForBucket(write.bucketId ?? before.bucketId),
-            )
-          : {}),
-        ...(statusRecurrence !== undefined ? { recurrence: statusRecurrence } : {}),
-        ...(write.assigneeId !== undefined ? { assigneeId: write.assigneeId } : {}),
-        ...(write.scheduledAt !== undefined ? { scheduledAt: write.scheduledAt } : {}),
-        updatedAt: stamp,
-      };
-      changes.push(patchOf(write.taskId, shown), ...follow.changes);
+      // The status op carries the rule: Undo's own (the one before), else the
+      // check-off advances a repeat's pointer (spec §5d); the place and the
+      // rule ride with it. Done, archived or backlog leaves every queue.
+      if (plan.status) applyQueueFollow(write.taskId, plan.queue);
+      // The task, a parent's subtasks shown in the new project at once (the
+      // server carries the ones this person can edit), the queue rows a
+      // status change takes out.
+      changes.push(...plan.overlay);
       // A session moved (the Timeline's hollow point): the session the task
       // shows moves with it at once, as the server moves it (the one that
       // started at the old time), so the row doesn't wait for the echo.
@@ -210,23 +180,14 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
           patch: { id: sessionMove.id, fields: sessionMove.fields },
         });
       }
-      // A parent's subtasks show in the new project at once (the server
-      // carries the ones this person can edit).
-      if (moving) {
-        for (const t of data().allTasks) {
-          if (t.parentId === write.taskId && !t.deletedAt && t.bucketId !== write.bucketId) {
-            changes.push(patchOf(t.id, { bucketId: write.bucketId }));
-          }
-        }
-      }
       planned.push({
         write,
         before,
-        category,
-        statusRecurrence,
-        fields,
-        moving,
-        queueRows: follow.rowIds,
+        category: plan.status?.category,
+        statusRecurrence: plan.status?.recurrence,
+        fields: plan.fields,
+        moving: plan.moving,
+        queueRows: plan.queue.rowIds,
         sessionMove,
       });
     }
@@ -374,21 +335,11 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
     // Someone else's unfiled task handed on into another Inbox is out of my
     // sight now (TV-D13, as `patchTask` does for one).
     const gone: string[] = [];
+    const sight = planContext();
     for (const p of changed) {
       if (p.write.assigneeId === undefined || !assignSaved.has(p.write.taskId)) continue;
       const row = saved.get(p.write.taskId);
-      if (
-        row &&
-        row.bucketId !== p.before.bucketId &&
-        !data().allBuckets.some((b) => b.id === row.bucketId) &&
-        row.creatorId !== userId &&
-        row.assigneeId !== userId
-      ) {
-        gone.push(row.id);
-        for (const t of data().allTasks) {
-          if (t.parentId === row.id && t.bucketId === p.before.bucketId) gone.push(t.id);
-        }
-      }
+      if (row) gone.push(...handedOutOfSight(row, p.before, sight));
     }
     if (gone.length > 0) store.forget("tasks", gone);
     if (landedAny.length > 0) bumpActivity();

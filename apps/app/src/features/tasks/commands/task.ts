@@ -2,24 +2,14 @@
 // op), take, delete and restore, subtasks, a drop's write and its Undo, and
 // blocked-by edges.
 
-import {
-  isBacklogTask,
-  isClosedTask,
-  isOpenTask,
-  legacyTaskStatus,
-  normalizeTaskStatusCategory,
-  taskCategoryOf,
-  taskStatusWord,
-} from "@contracts/vocabularies";
+import { isClosedTask, isOpenTask, taskCategoryOf } from "@contracts/vocabularies";
 import { toast } from "sonner";
-import { editableTaskFields, withDueOn } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
 import { type TaskDropWrite, undoWrite } from "../dnd/drop-write";
 import { bucketEndPosition } from "../dnd/rail-drop";
 import { endPosition, formatScheduled, makeTask, wouldCreateCycle } from "../helpers";
 import type { ActivityEntry, RecurrenceRule, Task, TaskRelation } from "../model";
-import { engineZone, recurrenceOnStatusChange } from "../recurrence-engine";
-import { optimisticStatus, statusKeyCategory } from "../statuses";
+import { handedOutOfSight, patchOfWrite, planTaskWrite, type WritePlan } from "../write-plan";
 import type { NewTaskInput, TaskCommandsContext, TaskPeers } from "./context";
 import { isTempId, NO_EDIT, patchOf, type Shared, STILL_SAVING } from "./shared";
 
@@ -27,13 +17,14 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
   const { store, runtime, workspaceId, userId, data, env, bumpActivity } = ctx;
   const {
     applyOp,
+    applyQueueFollow,
     archivedBlocked,
     editBlocked,
     failed,
+    planContext,
     queueFollowStatus,
     refused,
     sendNewTask,
-    statusesForBucket,
   } = shared;
 
   /** Read again now (a Retry): the store asks the server for what changed. */
@@ -112,101 +103,84 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     });
   };
 
-  const patchTask = (id: string, patch: Partial<Task>) => {
-    const d = data();
-    const canEdit = env().canEdit;
-    const existing = d.allTasks.find((t) => t.id === id);
-    if (!existing || archivedBlocked(id)) return;
-    // A new due date shows its day at once too (as bulk edits do).
-    patch = withDueOn(patch);
-    // A status by category (or a legacy value: the checkbox, Won't do)
-    // shows the project's status for it at once (TV-D9); the server is told
-    // the category, and picks the same one (or keeps one already in it).
-    const explicitStatusId = patch.statusId;
-    if ((patch.status || patch.statusCategory) && explicitStatusId === undefined) {
-      patch = {
-        ...patch,
-        ...optimisticStatus(
-          existing,
-          { category: patch.statusCategory ?? normalizeTaskStatusCategory(patch.status) },
-          statusesForBucket(existing.bucketId),
-        ),
-      };
+  /** Say why a planned write can't start (a deleted task's is quiet). */
+  const sayRefused = (plan: Extract<WritePlan, { kind: "refused" }>) => {
+    if (plan.reason === "no-edit") toast.error(NO_EDIT);
+    else if (plan.reason === "still-saving") toast.error(STILL_SAVING);
+    else if (plan.reason === "archived") {
+      // A task of an archived project is read-only until it's unarchived (TV-U6).
+      toast.error(`Unarchive “${plan.projectName ?? "its project"}” to change its tasks.`);
     }
-    if (patch.status || patch.statusCategory) {
-      peers.offerReminderRestore(
-        existing,
-        patch.statusCategory ?? normalizeTaskStatusCategory(patch.status),
-      );
+  };
+
+  /**
+   * Edit one task: the decision and what shows at once are `planTaskWrite`'s
+   * (the same rules a drop and a bulk write follow); the ops it goes by are
+   * picked here. Answers the plan (null for a task the copy doesn't have), so
+   * a status command can follow up only on a write that started.
+   */
+  const writeTask = (id: string, patch: Partial<Task>): WritePlan | null => {
+    const existing = data().allTasks.find((t) => t.id === id);
+    if (!existing) return null;
+    const planCtx = planContext();
+    const plan = planTaskWrite(existing, patch, planCtx);
+    if (plan.kind === "refused") {
+      sayRefused(plan);
+      return plan;
+    }
+    if (plan.kind === "noop") return plan;
+    const { followUps } = plan;
+    if (plan.status && followUps.restoreReminders) {
+      peers.offerReminderRestore(existing, plan.status.category);
     }
     // Assigning a backlog task or giving it a due date offers to plan it
     // (REPLAN 53): it stays in Backlog unless you say so.
-    if (
-      canEdit &&
-      isBacklogTask(existing) &&
-      patch.statusCategory === undefined &&
-      ((patch.assigneeId != null && patch.assigneeId !== existing.assigneeId) ||
-        (patch.dueDate != null && patch.dueDate !== existing.dueDate))
-    ) {
-      offerMoveToTodo(existing);
+    if (followUps.moveToTodo) offerMoveToTodo(existing);
+    if (followUps.nextOccurrence) {
+      // Quiet, factual mirror — when this comes back (never a wall).
+      // "Done — next: Tomorrow, 9:00 AM" (the one grammar reads "Tomorrow").
+      toast(`Done — next: ${formatScheduled(followUps.nextOccurrence)}`);
     }
-    // Advance-on-done (spec §5d): a status change on a recurring task keeps
-    // the stored nextOccurrence pointer fresh — unless the caller already
-    // patched the rule itself (catch-up / skip pass it explicitly).
-    if (patch.status && patch.recurrence === undefined) {
-      const advanced = recurrenceOnStatusChange(existing, patch.status, new Date(), engineZone());
-      if (advanced) {
-        patch = { ...patch, recurrence: advanced };
-        if (patch.status === "done" && advanced.nextOccurrence) {
-          // Quiet, factual mirror — when this comes back (never a wall).
-          // "Done — next: Tomorrow, 9:00 AM" (the one grammar reads "Tomorrow").
-          toast(`Done — next: ${formatScheduled(advanced.nextOccurrence)}`);
-        }
-      }
-    }
+    const { assigneeId: _assignee, ...shown } = plan.shown;
     // Assignment is an intent op (tasks.assign): the RPC checks the person can
     // take tasks, and the server notifies them. The rest of the patch, if
     // any, saves as usual below.
-    if (patch.assigneeId !== undefined) {
-      const assigneeId = patch.assigneeId;
-      const { assigneeId: _assigned, ...rest } = patch;
+    if (plan.assigneeId !== undefined) {
+      const assigneeId = plan.assigneeId;
       // Someone else's unfiled task handed on into another Inbox (TV-D13,
       // call 20) is out of my sight now: drop it and the steps that went
       // with it, rather than keep them until the next access check.
-      const leaves = (saved: Task) => {
-        const now = data();
-        return saved.bucketId !== existing.bucketId &&
-          !now.allBuckets.some((b) => b.id === saved.bucketId) &&
-          saved.creatorId !== userId &&
-          saved.assigneeId !== userId
-          ? [
-              saved.id,
-              ...now.allTasks
-                .filter((t) => t.parentId === saved.id && t.bucketId === existing.bucketId)
-                .map((t) => t.id),
-            ]
-          : [];
-      };
+      const leaves = (saved: Task) => handedOutOfSight(saved, existing, planContext());
       // An Inbox task assigned and edited in one gesture ("Assign to Mike ·
       // in Bugs", 20a): the edit lands first, then the assignment, so a
       // hand-over can't take the task away before the edit does.
-      const restFields = editableTaskFields(rest);
-      const inInbox = d.allBuckets.find((b) => b.id === existing.bucketId)?.isSystem === true;
-      if (inInbox && Object.keys(restFields).length > 0) {
+      const inInbox = planCtx.bucketsById.get(existing.bucketId)?.isSystem === true;
+      if (inInbox && Object.keys(plan.columns).length > 0) {
+        if (plan.status) applyQueueFollow(id, plan.queue);
+        // The edit answers every row it changed (a move's subtasks too):
+        // settled with the assignment's row in one go.
+        let edited: Task[] = [];
         applyOp(
           id,
-          { ...restFields, assigneeId } as Partial<Task>,
+          plan.shown,
           async () => {
-            await runtime!.tasks.opUpdateTask({
+            edited = await runtime!.tasks.opUpdateTask({
               workspaceId: workspaceId!,
               taskId: id,
-              patch: restFields,
+              patch: plan.columns,
             });
             return runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId });
           },
-          { leaves },
+          {
+            leaves,
+            extra: plan.alongside,
+            forget: plan.queue.rowIds,
+            rows: () => edited,
+            // A refused check-off isn't kept on show in my queue.
+            ...(plan.status ? { onRefused: () => store?.unkeep(id) } : {}),
+          },
         );
-        return;
+        return plan;
       }
       applyOp(
         id,
@@ -214,42 +188,22 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
         () => runtime!.tasks.opAssign({ workspaceId: workspaceId!, taskId: id, assigneeId }),
         { leaves },
       );
-      // Without edit access applyOp has already said so; don't say it twice.
-      if (Object.keys(rest).length === 0 || !canEdit || store?.isOffline()) return;
-      patch = rest;
+      // Offline, applyOp has already said so; don't say it twice.
+      if (Object.keys(plan.columns).length === 0 || store?.isOffline()) return plan;
     }
     // Status changes are an intent op (tasks.set_status): the RPC enforces
     // the invariants server-side and logs attributed activity. Only the
     // status cluster (status / recurrence ride-along / board position) goes
     // that way — plain field edits below are field-level writes (contract §1).
     // A check-off is the one edit that waits on the device when offline.
-    if (
-      patch.status &&
-      Object.keys(patch).every(
-        (k) =>
-          k === "status" ||
-          k === "statusId" ||
-          k === "statusCategory" ||
-          k === "recurrence" ||
-          k === "position",
-      )
-    ) {
-      // By id when the change names a project status, else by category word
-      // (the server keeps a status already in that category).
-      const status =
-        explicitStatusId ??
-        (patch.statusCategory ? taskStatusWord(patch.statusCategory) : patch.status);
-      const recurrence = patch.recurrence;
-      const position = patch.position;
+    if (plan.status && Object.keys(plan.fields).length === 0 && plan.scheduledAt === undefined) {
+      const { status, recurrence, position } = plan.status;
       // Done, archived or backlog leaves every queue on the server (TV-D2);
       // the same write takes it out of the queues shown.
-      const follow =
-        canEdit && !isTempId(id)
-          ? queueFollowStatus(id, patch.statusCategory ?? patch.status)
-          : { changes: [], rowIds: [] };
+      applyQueueFollow(id, plan.queue);
       applyOp(
         id,
-        patch,
+        shown,
         () =>
           runtime!.tasks.opSetStatus({
             workspaceId: workspaceId!,
@@ -259,65 +213,50 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
             position,
           }),
         {
-          extra: follow.changes,
-          forget: follow.rowIds,
+          extra: plan.alongside,
+          forget: plan.queue.rowIds,
           offline: { status, recurrence },
+          // A refused check-off isn't kept on show in my queue.
+          onRefused: () => store?.unkeep(id),
         },
       );
-      return;
+      return plan;
     }
     // A scheduled time on its own is an intent op (tasks.reschedule /
     // tasks.unschedule), so setting it from a row, the panel or a menu lands
     // in the task's trail (TV-P0). The server op checks access and logs.
-    if (Object.keys(patch).length === 1 && "scheduledAt" in patch) {
-      const scheduledAt = patch.scheduledAt ?? null;
-      if ((existing.scheduledAt ?? null) === scheduledAt) return;
-      applyOp(id, { scheduledAt }, () =>
+    if (!plan.status && plan.scheduledAt !== undefined && Object.keys(plan.fields).length === 0) {
+      const scheduledAt = plan.scheduledAt ?? null;
+      if ((existing.scheduledAt ?? null) === scheduledAt) return plan;
+      applyOp(id, shown, () =>
         scheduledAt
           ? runtime!.tasks.opReschedule({ workspaceId: workspaceId!, taskId: id, scheduledAt })
           : runtime!.tasks.opUnschedule({ workspaceId: workspaceId!, taskId: id }),
       );
-      return;
+      return plan;
     }
     // Field-level save (TV-D1): only the changed columns go to the server,
     // so this edit can't put back a field a teammate changed meanwhile.
     // A status shown by category goes to the server as the category (the
     // id picked here is only what shows meanwhile).
-    const fields = editableTaskFields(
-      explicitStatusId === undefined ? { ...patch, statusId: undefined } : patch,
-    );
-    if (Object.keys(fields).length === 0) return;
-    if (isTempId(id)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
-    if (editBlocked() || !store) return;
+    const fields = plan.columns;
+    if (Object.keys(fields).length === 0) return plan;
+    if (editBlocked() || !store) return plan;
+    if (plan.status) applyQueueFollow(id, plan.queue);
     // Moving a parent takes its subtasks along (TV-P0): shown at once for
-    // every subtask, then settled by the server, which carries the ones you
-    // can edit (TV-D8). `bundle.tasks` has the real buckets.
-    const movedChildren =
-      fields.bucketId !== undefined && fields.bucketId !== existing.bucketId
-        ? d.bundle.tasks.filter(
-            (t) =>
-              t.parentId === id &&
-              !t.deletedAt &&
-              !isTempId(t.id) &&
-              t.bucketId !== fields.bucketId,
-          )
-        : [];
-    const stamp = new Date().toISOString();
+    // every subtask (`plan.alongside`), then settled by the server, which
+    // carries the ones you can edit (TV-D8).
     const write = store.begin([
-      patchOf(id, { ...fields, updatedAt: stamp }),
-      ...movedChildren.map((child) => patchOf(child.id, { bucketId: fields.bucketId })),
+      patchOf(id, { ...shown, updatedAt: planCtx.now.toISOString() }),
+      ...plan.alongside,
     ]);
-    const moving = fields.bucketId !== undefined && fields.bucketId !== existing.bucketId;
     void (async () => {
       // A move is one op (TV-D8): the server moves the subtasks with their
       // parent in the same transaction and answers with every row it
       // changed, so each ends on the server's own row. A subtask it didn't
       // carry (one you can't edit) shows where the server has it once this
       // write's own fields go. Any other edit answers with the task alone.
-      const saved = moving
+      const saved = plan.moving
         ? await runtime!.tasks.opUpdateTask({
             workspaceId: workspaceId!,
             taskId: id,
@@ -331,9 +270,19 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
             }),
           ];
       write.settle({ tasks: saved });
+      if (plan.queue.rowIds.length > 0) store.forget("queue", plan.queue.rowIds);
       // Every edit is in the trail now (TV-D8): refresh it.
       bumpActivity();
-    })().catch((e) => refused(write, e));
+    })().catch((e) => {
+      refused(write, e);
+      if (plan.status) store.unkeep(id);
+    });
+    return plan;
+  };
+
+  /** Edit one task (`writeTask`, without its plan). */
+  const patchTask = (id: string, patch: Partial<Task>): void => {
+    writeTask(id, patch);
   };
 
   const deleteTask = (id: string) => {
@@ -489,76 +438,40 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     opts: { recurrence?: RecurrenceRule | null } = {},
   ): Promise<Task | null> => {
     if (editBlocked() || !runtime || !workspaceId || !store) return null;
-    const { taskId, status, assigneeId } = write;
-    if (isTempId(taskId)) {
-      toast.error(STILL_SAVING);
-      return null;
-    }
-    const tasks = data().allTasks;
-    const existing = tasks.find((t) => t.id === taskId);
-    if (!existing || archivedBlocked(taskId)) return null;
+    const { taskId } = write;
+    const existing = data().allTasks.find((t) => t.id === taskId);
+    if (!existing) return null;
     const rt = runtime;
     const ws = workspaceId;
-    const fields = editableTaskFields({
-      parentId: write.parentId,
-      bucketId: write.bucketId,
-      priority: write.priority,
-      sectionId: write.sectionId,
-      teamId: write.teamId,
-      // The place rides with the status op when there is one.
-      position: status === undefined ? write.position : undefined,
-    });
-    const now = new Date();
-    // A status key (Backlog is its own) is saved as its category (TV-D9).
-    const category = status === undefined ? undefined : statusKeyCategory(status);
-    const recurrence =
-      category === undefined
-        ? undefined
-        : opts.recurrence !== undefined
-          ? opts.recurrence
-          : (recurrenceOnStatusChange(existing, legacyTaskStatus(category), now, engineZone()) ??
-            undefined);
-    const followers =
-      write.bucketId !== undefined && write.bucketId !== existing.bucketId
-        ? tasks.filter(
-            (t) =>
-              t.parentId === taskId &&
-              !t.deletedAt &&
-              !isTempId(t.id) &&
-              t.bucketId !== write.bucketId,
-          )
-        : [];
-
-    const stamp = now.toISOString();
-    if (category !== undefined) peers.offerReminderRestore(existing, category);
-    const follow =
-      category !== undefined ? queueFollowStatus(taskId, category) : { changes: [], rowIds: [] };
-    const shown = store.begin([
-      patchOf(taskId, {
-        ...fields,
-        ...(write.position !== undefined ? { position: write.position } : {}),
-        ...(category !== undefined
-          ? optimisticStatus(
-              existing,
-              write.statusId ? { statusId: write.statusId } : { category },
-              statusesForBucket(write.bucketId ?? existing.bucketId),
-            )
+    // `recurrence` replaces the advance a status change would make.
+    const plan = planTaskWrite(
+      existing,
+      {
+        ...patchOfWrite(write),
+        ...(write.status !== undefined && opts.recurrence !== undefined
+          ? { recurrence: opts.recurrence }
           : {}),
-        ...(recurrence !== undefined ? { recurrence } : {}),
-        ...(assigneeId !== undefined ? { assigneeId } : {}),
-        updatedAt: stamp,
-      }),
-      ...followers.map((child) => patchOf(child.id, { bucketId: write.bucketId })),
-      ...follow.changes,
-    ]);
+      },
+      planContext(),
+    );
+    if (plan.kind === "refused") {
+      sayRefused(plan);
+      return null;
+    }
+    if (plan.kind === "noop") return null;
+    const { fields, status, assigneeId } = plan;
+    if (status && plan.followUps.restoreReminders) {
+      peers.offerReminderRestore(existing, status.category);
+    }
+    if (status) applyQueueFollow(taskId, plan.queue);
+    // The task, every subtask following it into another project (done and
+    // Won't do ones too), and the queue rows a status change takes out.
+    const shown = store.begin(plan.overlay);
 
     const saved: Task[] = [];
     try {
       if (Object.keys(fields).length > 0) {
-        if (
-          followers.length > 0 ||
-          (write.bucketId !== undefined && write.bucketId !== existing.bucketId)
-        ) {
+        if (plan.moving) {
           // A move is one op (TV-D8, as `patchTask`): the server carries the
           // subtasks it lets you edit in the same transaction and answers
           // with every row it changed; one you can only view stays where the
@@ -568,15 +481,15 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
           saved.push(await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields }));
         }
       }
-      if (category !== undefined) {
+      if (status) {
         saved.push(
           await rt.tasks.opSetStatus({
             workspaceId: ws,
             taskId,
             // By id when Undo puts a named status back, else the word.
-            status: write.statusId ?? taskStatusWord(category),
-            recurrence,
-            position: write.position,
+            status: status.status,
+            recurrence: status.recurrence,
+            position: status.position,
           }),
         );
       }
@@ -586,10 +499,10 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
       // The last answer for a row is the newest.
       const byId = new Map(saved.map((t) => [t.id, t]));
       shown.settle({ tasks: [...byId.values()] });
-      store.forget("queue", follow.rowIds);
+      store.forget("queue", plan.queue.rowIds);
       bumpActivity();
-      if (status === "done" && opts.recurrence === undefined && recurrence?.nextOccurrence) {
-        toast(`Done — next: ${formatScheduled(recurrence.nextOccurrence)}`);
+      if (plan.followUps.nextOccurrence) {
+        toast(`Done — next: ${formatScheduled(plan.followUps.nextOccurrence)}`);
       }
       return byId.get(taskId) ?? null;
     } catch (e) {
@@ -597,7 +510,7 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
       // the server's again.
       if (saved.length > 0) store.answer({ tasks: saved });
       refused(shown, e);
-      if (category !== undefined) store.unkeep(taskId);
+      if (status) store.unkeep(taskId);
       return null;
     }
   };
@@ -745,6 +658,7 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     claimTask,
     loadActivity,
     createTask,
+    writeTask,
     patchTask,
     deleteTask,
     restoreTask,
