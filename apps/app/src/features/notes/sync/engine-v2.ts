@@ -22,6 +22,11 @@
  * first pull has settled (Lexical's bootstrap writes an empty paragraph into a
  * doc that looks empty at sync time, so an early `sync` raced the remote
  * content), and the session counts as `synced` only once a pull succeeded.
+ *
+ * One person's (Track C4): every cache it reads and writes (the per-note
+ * documents, cursors, outboxes) is keyed `<person>:<workspace>`, and the
+ * engine tracks itself in `people.ts`'s registry, so a sign-out or another
+ * person signing in stops it and cuts their caches down to their outboxes.
  */
 
 import { IndexeddbPersistence } from "y-indexeddb";
@@ -41,12 +46,15 @@ import {
   type DocOutboxEntry,
   deleteDocOutboxEntries,
   deleteMetaOutboxEntries,
+  docDbName,
   enqueueDocUpdate,
   enqueueMetaOp,
   listDocOutboxNoteIds,
   type MetaOutboxEntry,
   type NoteSyncState,
+  type NotesOwner,
   openNotesDb,
+  ownerOf,
   readDocOutbox,
   readMetaOutbox,
   readNoteState,
@@ -62,6 +70,7 @@ import {
   shouldCompact,
   toPushPayload,
 } from "./outbox";
+import { notesEngines } from "./people";
 
 export type NotesSyncStatusV2 = "synced" | "pending" | "offline";
 
@@ -193,12 +202,20 @@ export class NotesSyncEngineV2 {
    * `releasePush`, so a push can never reach the server before its create. */
   private readonly held = new Set<string>();
 
+  /** Whose caches this engine reads and writes (`stopped` once they're wiped). */
+  private readonly owner: NotesOwner;
+  private readonly untrack: () => void;
+
   constructor(
     private readonly runtime: ModuoRuntime | null,
-    private readonly workspaceId: string,
+    readonly workspaceId: string,
     /** Called after a reconnect replay/pull so the meta layer can refresh. */
     private readonly onRemoteMetaChange?: () => void,
+    /** The signed-in person (a story without one keeps its caches under "local"). */
+    readonly userId = "local",
   ) {
+    this.owner = { userId, workspaceId };
+    this.untrack = notesEngines.track(this);
     if (typeof window !== "undefined") {
       const wake = () => {
         if (document.visibilityState !== "visible") return;
@@ -243,7 +260,7 @@ export class NotesSyncEngineV2 {
     for (const s of this.sessions.values()) {
       if (s.memOutbox.length > 0) return true;
     }
-    const ids = await listDocOutboxNoteIds(this.workspaceId);
+    const ids = await listDocOutboxNoteIds(this.owner);
     return ids.length > 0;
   }
 
@@ -259,10 +276,7 @@ export class NotesSyncEngineV2 {
     // Pre-register the typed root BEFORE any update applies (the known
     // text-loss footgun — see the legacy engine + runtime applyCrdtUpdates).
     doc.get("root-v2", Y.XmlElement);
-    const persistence = new IndexeddbPersistence(
-      `moduo:notes-v2:doc:${this.workspaceId}:${noteId}`,
-      doc,
-    );
+    const persistence = new IndexeddbPersistence(docDbName(ownerOf(this.owner), noteId), doc);
     const awareness = new Awareness(doc);
     const listeners = new Map<string, Set<(...args: any[]) => void>>();
     const syncListeners = new Set<(isSynced: boolean) => void>();
@@ -347,7 +361,7 @@ export class NotesSyncEngineV2 {
 
   private async boot(s: NoteSession, markCacheReady: () => void): Promise<void> {
     try {
-      s.state = (await readNoteState(s.noteId)) ?? emptyNoteState(s.noteId);
+      s.state = (await readNoteState(this.owner, s.noteId)) ?? emptyNoteState(s.noteId);
       await s.persistence.whenSynced;
     } catch {
       // cache-less boot is fine
@@ -423,7 +437,7 @@ export class NotesSyncEngineV2 {
       }
       s.state = advanceCursor(s.state, ids, ownRows);
       s.docVersion = res.docVersion;
-      await writeNoteState(s.state);
+      await writeNoteState(this.owner, s.state);
       s.synced = true;
       this.recoveredFromOffline(s);
       if (s.bodyOwed) this.scheduleFlush(s, 0);
@@ -443,9 +457,8 @@ export class NotesSyncEngineV2 {
     // Counter FIRST, entry second — a crash between them leaves a harmless
     // seq gap. The reverse order could reuse a committed seq with different
     // content on reload; the server's dedupe would then silently drop it.
-    await writeNoteState(s.state);
-    const persisted = await enqueueDocUpdate({
-      workspaceId: this.workspaceId,
+    await writeNoteState(this.owner, s.state);
+    const persisted = await enqueueDocUpdate(this.owner, {
       noteId: s.noteId,
       clientSeq: seq,
       updateB64: encodeUint8ToBase64(update),
@@ -491,7 +504,7 @@ export class NotesSyncEngineV2 {
       const clientId = await this.resolveClientId();
       let pushed = false;
       for (;;) {
-        const durable = await readDocOutbox(s.noteId);
+        const durable = await readDocOutbox(this.owner, s.noteId);
         const queue = [...durable, ...s.memOutbox];
         if (queue.length === 0) {
           // Pushes before the first pull went out bodiless: now that the doc
@@ -536,7 +549,7 @@ export class NotesSyncEngineV2 {
           ...s.state,
           updatesSinceCompact: s.state.updatesSinceCompact + res.inserted,
         };
-        await writeNoteState(s.state);
+        await writeNoteState(this.owner, s.state);
       }
       // Only a push that reached the server proves we're back online; an
       // empty flush after a failed pull must not clear the offline dot.
@@ -618,7 +631,7 @@ export class NotesSyncEngineV2 {
       // Our own fold: exact under the server's row lock, so the next live
       // pull doesn't download the snapshot we just wrote.
       if (saved?.docVersion != null) s.docVersion = saved.docVersion;
-      await writeNoteState(s.state);
+      await writeNoteState(this.owner, s.state);
     } catch (e) {
       // Compaction is an optimization — a failure must never lose edits.
       console.warn("[notes-sync] compaction skipped", e);
@@ -705,7 +718,7 @@ export class NotesSyncEngineV2 {
     this.drafts.add(noteId);
     const s = this.sessions.get(noteId);
     if (s) s.memOutbox = [];
-    const queued = await readDocOutbox(noteId).catch(() => []);
+    const queued = await readDocOutbox(this.owner, noteId).catch(() => []);
     const keys = queued.map((e) => e.key).filter((k): k is number => typeof k === "number");
     if (keys.length > 0) await deleteDocOutboxEntries(keys).catch(() => {});
     if (this.status === "pending" && !(await this.hasQueuedUpdates())) this.setStatus("synced");
@@ -772,8 +785,7 @@ export class NotesSyncEngineV2 {
       return "applied";
     } catch (e) {
       if (!isNetworkError(e)) throw e;
-      await enqueueMetaOp({
-        workspaceId: this.workspaceId,
+      await enqueueMetaOp(this.owner, {
         kind,
         args,
         queuedAt: Date.now(),
@@ -792,7 +804,7 @@ export class NotesSyncEngineV2 {
   async wake(): Promise<void> {
     if (this.destroyed) return;
     await this.replayMetaOutbox();
-    const queuedNoteIds = await listDocOutboxNoteIds(this.workspaceId);
+    const queuedNoteIds = await listDocOutboxNoteIds(this.owner);
     const flushes: Promise<void>[] = [];
     for (const id of queuedNoteIds) {
       const s = this.sessions.get(id);
@@ -814,7 +826,7 @@ export class NotesSyncEngineV2 {
     // A meta-only recovery (nothing doc-queued, replay drained) must also
     // clear the offline dot — flush() only heals it when it had work to push.
     if (this.status === "offline") {
-      const metaLeft = await readMetaOutbox(this.workspaceId);
+      const metaLeft = await readMetaOutbox(this.owner);
       if (metaLeft.length === 0 && !(await this.hasQueuedUpdates())) {
         this.setStatus("synced");
       }
@@ -823,7 +835,7 @@ export class NotesSyncEngineV2 {
 
   private async flushOrphanedOutbox(): Promise<void> {
     if (!this.runtime) return;
-    const ids = await listDocOutboxNoteIds(this.workspaceId);
+    const ids = await listDocOutboxNoteIds(this.owner);
     for (const id of ids) {
       if (!this.sessions.has(id)) void this.flushHeadless(id);
     }
@@ -837,7 +849,7 @@ export class NotesSyncEngineV2 {
     try {
       const clientId = await this.resolveClientId();
       for (;;) {
-        const queue = await readDocOutbox(noteId);
+        const queue = await readDocOutbox(this.owner, noteId);
         if (queue.length === 0) break;
         const batch = planPushBatch(queue);
         await this.runtime.notesV2.pushUpdates({
@@ -858,7 +870,7 @@ export class NotesSyncEngineV2 {
     this.replayingMeta = true;
     let replayedAny = false;
     try {
-      const entries = replayOrder(await readMetaOutbox(this.workspaceId));
+      const entries = replayOrder(await readMetaOutbox(this.owner));
       for (const entry of entries) {
         let error: unknown = null;
         try {
@@ -878,8 +890,15 @@ export class NotesSyncEngineV2 {
     if (replayedAny) this.onRemoteMetaChange?.();
   }
 
+  /** Stopped by a sign-in or a sign-out (`persist: false`: its caches are being wiped). */
+  dispose(opts: { persist: boolean }): void {
+    if (!opts.persist) this.owner.stopped = true;
+    void this.destroy();
+  }
+
   async destroy(): Promise<void> {
     this.destroyed = true;
+    this.untrack();
     this.detachWindow?.();
     // A draft nobody typed into dies with the page that opened it.
     await Promise.all([...this.drafts].map((id) => this.discardDraft(id)));

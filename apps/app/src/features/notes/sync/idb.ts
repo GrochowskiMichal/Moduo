@@ -2,20 +2,65 @@
  * Thin promise wrapper over IndexedDB for the Notes v2 sync layer (NO-2).
  *
  * The Y.Doc content itself is persisted by y-indexeddb (one database per
- * note); THIS database holds everything around it:
- *   - `metaCache`   — the last-seen notes bundle per workspace (instant paint
- *                     + desktop offline tree).
+ * note, `docDbName`); THIS database holds everything around it:
+ *   - `metaCache`   — the last-seen notes bundle per person and workspace
+ *                     (instant paint + desktop offline tree).
  *   - `docOutbox`   — queued CRDT updates awaiting push (survive reloads).
- *   - `noteState`   — per-note sync cursor + client_seq counter + compaction
- *                     bookkeeping.
+ *   - `noteState`   — per-note client_seq counter, and per person and
+ *                     workspace the pull cursor + compaction bookkeeping.
  *   - `metaOutbox`  — queued intent ops (create/rename/…) made offline.
+ *
+ * Everything is one person's (Track C4): keyed `<person>:<workspace>` (the
+ * sync kernel's owner key) like Tasks' and Chat's copies, so one browser never
+ * paints a person another's notes. A sign-out or another person signing in
+ * cuts a person's caches down to their outboxes (`people.ts`).
+ *
+ * The client_seq counter stays per note, not per person: the client id is the
+ * device's (`getNotesClientId`), and the server dedupes on (client, seq), so
+ * two people on one device must never reuse a seq. The pull cursor is per
+ * person because it belongs to that person's document cache: a cursor
+ * without its cache would skip content on the next pull.
  *
  * Everything fails SOFT (null / no-op) when IndexedDB is unavailable
  * (tests, SSR) — the engine then behaves like a cache-less client.
  */
 
-const DB_NAME = "moduo-notes-v2";
-const DB_VERSION = 1;
+import { browserIdb, idbOpener } from "../../../lib/sync/kernel/idb";
+import { ownerKey } from "../../../lib/sync/kernel/registry";
+
+export const NOTES_DB_NAME = "moduo-notes-v2";
+/** Every per-note y-indexeddb database starts with this. */
+export const DOC_DB_PREFIX = "moduo:notes-v2:doc:";
+
+/** One note's y-indexeddb database for a person and workspace. */
+export function docDbName(owner: string, noteId: string): string {
+  return `${DOC_DB_PREFIX}${owner}:${noteId}`;
+}
+
+/**
+ * A per-note database name, read back: a person's (`user:ws:note`) or one
+ * from before Track C4 (`ws:note`, nobody's).
+ */
+export function parseDocDbName(
+  name: string,
+): { owner: string; noteId: string } | { legacyWorkspace: string; noteId: string } | null {
+  if (!name.startsWith(DOC_DB_PREFIX)) return null;
+  const parts = name.slice(DOC_DB_PREFIX.length).split(":");
+  if (parts.length === 3 && parts.every(Boolean)) {
+    return { owner: `${parts[0]}:${parts[1]}`, noteId: parts[2]! };
+  }
+  if (parts.length === 2 && parts.every(Boolean)) {
+    return { legacyWorkspace: parts[0]!, noteId: parts[1]! };
+  }
+  return null;
+}
+
+/** Whose caches an engine reads and writes. `stopped`: wiped, write nothing more. */
+export type NotesOwner = { userId: string; workspaceId: string; stopped?: boolean };
+
+export function ownerOf(owner: NotesOwner): string {
+  return ownerKey(owner.userId, owner.workspaceId);
+}
 
 export type NoteSyncState = {
   noteId: string;
@@ -27,8 +72,24 @@ export type NoteSyncState = {
   updatesSinceCompact: number;
 };
 
+/** A person's cursor into a note, with their document cache. */
+export type NoteCursor = { lastPulledUpdateId: number; updatesSinceCompact: number };
+
+/** What `noteState` stores per note. */
+export type NoteStateRow = {
+  noteId: string;
+  nextClientSeq: number;
+  /** By owner key (`<person>:<workspace>`). */
+  cursors?: Record<string, NoteCursor>;
+  /** Before Track C4: the device's one cursor (its document cache was nobody's). */
+  lastPulledUpdateId?: number;
+  updatesSinceCompact?: number;
+};
+
 export type DocOutboxEntry = {
   key?: number; // IDB auto-increment key (present on read)
+  /** Whose edit it is (absent before Track C4: adopted by the next person to sign in). */
+  userId?: string;
   workspaceId: string;
   noteId: string;
   clientSeq: number;
@@ -38,6 +99,7 @@ export type DocOutboxEntry = {
 
 export type MetaOutboxEntry = {
   key?: number;
+  userId?: string;
   workspaceId: string;
   kind:
     | "create"
@@ -55,17 +117,42 @@ export type MetaOutboxEntry = {
   queuedAt: number;
 };
 
-function req<T>(r: IDBRequest<T>): Promise<T> {
+/** An outbox entry's owner key (null: from before Track C4, nobody's yet). */
+export function entryOwner(entry: { userId?: string; workspaceId: string }): string | null {
+  return entry.userId ? ownerKey(entry.userId, entry.workspaceId) : null;
+}
+
+export function req<T>(r: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     r.onsuccess = () => resolve(r.result);
     r.onerror = () => reject(r.error);
   });
 }
 
-let dbPromise: Promise<IDBDatabase | null> | null = null;
+let opener: ReturnType<typeof idbOpener> | null = null;
+
+function notesOpener() {
+  const factory = browserIdb();
+  if (!factory) return null;
+  // A database left without one of its stores is reopened one version up (kernel).
+  opener ??= idbOpener(factory, {
+    name: NOTES_DB_NAME,
+    stores: {
+      metaCache: (db) => db.createObjectStore("metaCache"), // key = owner
+      docOutbox: (db) =>
+        db.createObjectStore("docOutbox", { autoIncrement: true }).createIndex("byNote", "noteId"),
+      noteState: (db) => db.createObjectStore("noteState", { keyPath: "noteId" }),
+      metaOutbox: (db) =>
+        db
+          .createObjectStore("metaOutbox", { autoIncrement: true })
+          .createIndex("byWorkspace", "workspaceId"),
+    },
+  });
+  return opener;
+}
 
 /**
- * Total queued (unsynced) entries across BOTH notes outboxes, all workspaces —
+ * Total queued (unsynced) entries across BOTH notes outboxes, everyone's —
  * the Advanced → "reset local cache" data-loss guard reads this before wiping
  * the notes DBs (DF-19g). Fails soft to 0 when IndexedDB is unavailable.
  */
@@ -76,61 +163,35 @@ export async function countPendingOutbox(): Promise<number> {
 }
 
 /**
- * Close the cached notes DB connection and drop the singleton so a subsequent
+ * Close the cached notes DB connection so a subsequent
  * `indexedDB.deleteDatabase("moduo-notes-v2")` isn't blocked by an open handle
  * (the reset-cache flow calls this right before deleting). The next
  * `openNotesDb()` transparently re-opens.
  */
 export async function closeNotesDb(): Promise<void> {
-  if (!dbPromise) return;
-  const db = await dbPromise.catch(() => null);
-  db?.close();
-  dbPromise = null;
+  await opener?.close();
 }
 
-export function openNotesDb(): Promise<IDBDatabase | null> {
-  if (dbPromise) return dbPromise;
-  dbPromise = new Promise((resolve) => {
-    if (typeof indexedDB === "undefined") {
-      resolve(null);
-      return;
-    }
-    const open = indexedDB.open(DB_NAME, DB_VERSION);
-    open.onupgradeneeded = () => {
-      const db = open.result;
-      if (!db.objectStoreNames.contains("metaCache")) {
-        db.createObjectStore("metaCache"); // key = workspaceId
-      }
-      if (!db.objectStoreNames.contains("docOutbox")) {
-        const store = db.createObjectStore("docOutbox", { autoIncrement: true });
-        store.createIndex("byNote", "noteId");
-      }
-      if (!db.objectStoreNames.contains("noteState")) {
-        db.createObjectStore("noteState", { keyPath: "noteId" });
-      }
-      if (!db.objectStoreNames.contains("metaOutbox")) {
-        const store = db.createObjectStore("metaOutbox", { autoIncrement: true });
-        store.createIndex("byWorkspace", "workspaceId");
-      }
-    };
-    open.onsuccess = () => resolve(open.result);
-    open.onerror = () => resolve(null);
-    open.onblocked = () => resolve(null);
-  });
-  return dbPromise;
+export async function openNotesDb(): Promise<IDBDatabase | null> {
+  try {
+    return (await notesOpener()?.open()) ?? null;
+  } catch {
+    return null;
+  }
 }
 
-async function withStore<T>(
-  name: string,
+export async function withStore<T>(
+  name: string | string[],
   mode: IDBTransactionMode,
-  fn: (store: IDBObjectStore) => Promise<T>,
+  fn: (store: IDBObjectStore, tx: IDBTransaction) => Promise<T>,
   fallback: T,
 ): Promise<T> {
   const db = await openNotesDb();
   if (!db) return fallback;
   try {
     const tx = db.transaction(name, mode);
-    const out = await fn(tx.objectStore(name));
+    const first = Array.isArray(name) ? name[0]! : name;
+    const out = await fn(tx.objectStore(first), tx);
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
       tx.onabort = tx.onerror = () => reject(tx.error);
@@ -141,28 +202,54 @@ async function withStore<T>(
   }
 }
 
+/** Every value of a store or index range, with its primary key. */
+export function readAll<T>(
+  source: IDBObjectStore | IDBIndex,
+  range?: IDBKeyRange,
+): Promise<(T & { key: number })[]> {
+  return new Promise((resolve, reject) => {
+    const out: (T & { key: number })[] = [];
+    const cur = source.openCursor(range);
+    cur.onsuccess = () => {
+      const c = cur.result;
+      if (!c) {
+        resolve(out);
+        return;
+      }
+      out.push({ ...(c.value as T), key: c.primaryKey as number });
+      c.continue();
+    };
+    cur.onerror = () => reject(cur.error);
+  });
+}
+
 // ── metaCache ────────────────────────────────────────────────────────────────
 
 export function readMetaCache(
+  userId: string,
   workspaceId: string,
 ): Promise<{ notes: unknown[]; savedAt: number } | null> {
   return withStore(
     "metaCache",
     "readonly",
     async (s) => {
-      const v = await req(s.get(workspaceId));
-      return (v as any) ?? null;
+      const v = await req(s.get(ownerKey(userId, workspaceId)));
+      return (v as { notes: unknown[]; savedAt: number } | undefined) ?? null;
     },
     null,
   );
 }
 
-export function writeMetaCache(workspaceId: string, notes: unknown[]): Promise<void> {
+export function writeMetaCache(
+  userId: string,
+  workspaceId: string,
+  notes: unknown[],
+): Promise<void> {
   return withStore(
     "metaCache",
     "readwrite",
     async (s) => {
-      await req(s.put({ notes, savedAt: Date.now() }, workspaceId));
+      await req(s.put({ notes, savedAt: Date.now() }, ownerKey(userId, workspaceId)));
     },
     undefined,
   );
@@ -170,24 +257,66 @@ export function writeMetaCache(workspaceId: string, notes: unknown[]): Promise<v
 
 // ── noteState ────────────────────────────────────────────────────────────────
 
-export function readNoteState(noteId: string): Promise<NoteSyncState | null> {
+/** The engine's view of a stored row: the note's counter with this owner's cursor. */
+export function stateFor(
+  row: NoteStateRow | null,
+  noteId: string,
+  owner: string,
+): NoteSyncState | null {
+  if (!row) return null;
+  const cursor = row.cursors?.[owner];
+  return {
+    noteId,
+    nextClientSeq: row.nextClientSeq,
+    lastPulledUpdateId: cursor?.lastPulledUpdateId ?? 0,
+    updatesSinceCompact: cursor?.updatesSinceCompact ?? 0,
+  };
+}
+
+/** A stored row with this owner's state written in (other owners' cursors kept). */
+export function withState(
+  row: NoteStateRow | null,
+  state: NoteSyncState,
+  owner: string,
+): NoteStateRow {
+  return {
+    noteId: state.noteId,
+    nextClientSeq: state.nextClientSeq,
+    cursors: {
+      ...stripLegacy(row)?.cursors,
+      [owner]: {
+        lastPulledUpdateId: state.lastPulledUpdateId,
+        updatesSinceCompact: state.updatesSinceCompact,
+      },
+    },
+  };
+}
+
+/** A row without the device-wide cursor from before Track C4 (its cache may be gone). */
+export function stripLegacy(row: NoteStateRow | null): NoteStateRow | null {
+  if (!row) return null;
+  const { lastPulledUpdateId: _l, updatesSinceCompact: _u, ...rest } = row;
+  return rest;
+}
+
+export function readNoteState(owner: NotesOwner, noteId: string): Promise<NoteSyncState | null> {
   return withStore(
     "noteState",
     "readonly",
-    async (s) => {
-      const v = await req(s.get(noteId));
-      return (v as NoteSyncState) ?? null;
-    },
+    async (s) =>
+      stateFor(((await req(s.get(noteId))) as NoteStateRow) ?? null, noteId, ownerOf(owner)),
     null,
   );
 }
 
-export function writeNoteState(state: NoteSyncState): Promise<void> {
+export function writeNoteState(owner: NotesOwner, state: NoteSyncState): Promise<void> {
+  if (owner.stopped) return Promise.resolve();
   return withStore(
     "noteState",
     "readwrite",
     async (s) => {
-      await req(s.put(state));
+      const row = ((await req(s.get(state.noteId))) as NoteStateRow | undefined) ?? null;
+      await req(s.put(withState(row, state, ownerOf(owner))));
     },
     undefined,
   );
@@ -198,39 +327,30 @@ export function writeNoteState(state: NoteSyncState): Promise<void> {
 /** Returns false when the entry could NOT be persisted (IndexedDB missing or
  * failing) — the caller must fall back to an in-memory queue, never assume
  * durability. */
-export function enqueueDocUpdate(entry: DocOutboxEntry): Promise<boolean> {
+export function enqueueDocUpdate(
+  owner: NotesOwner,
+  entry: Omit<DocOutboxEntry, "userId" | "workspaceId">,
+): Promise<boolean> {
+  if (owner.stopped) return Promise.resolve(false);
   return withStore(
     "docOutbox",
     "readwrite",
     async (s) => {
-      await req(s.add(entry));
+      await req(s.add({ ...entry, userId: owner.userId, workspaceId: owner.workspaceId }));
       return true;
     },
     false,
   );
 }
 
-export function readDocOutbox(noteId: string): Promise<DocOutboxEntry[]> {
+/** A note's queued updates of this person (another person's on this device wait for them). */
+export function readDocOutbox(owner: NotesOwner, noteId: string): Promise<DocOutboxEntry[]> {
   return withStore(
     "docOutbox",
     "readonly",
     async (s) => {
-      const idx = s.index("byNote");
-      const out: DocOutboxEntry[] = [];
-      await new Promise<void>((resolve, reject) => {
-        const cur = idx.openCursor(IDBKeyRange.only(noteId));
-        cur.onsuccess = () => {
-          const c = cur.result;
-          if (!c) {
-            resolve();
-            return;
-          }
-          out.push({ ...(c.value as DocOutboxEntry), key: c.primaryKey as number });
-          c.continue();
-        };
-        cur.onerror = () => reject(cur.error);
-      });
-      return out;
+      const all = await readAll<DocOutboxEntry>(s.index("byNote"), IDBKeyRange.only(noteId));
+      return all.filter((e) => e.userId === owner.userId);
     },
     [],
   );
@@ -248,14 +368,15 @@ export function deleteDocOutboxEntries(keys: number[]): Promise<void> {
   );
 }
 
-/** Note ids that still have queued updates (wake-up flush after a reload). */
-export function listDocOutboxNoteIds(workspaceId: string): Promise<string[]> {
+/** Note ids that still have this person's queued updates (wake-up flush after a reload). */
+export function listDocOutboxNoteIds(owner: NotesOwner): Promise<string[]> {
   return withStore(
     "docOutbox",
     "readonly",
     async (s) => {
       const all = (await req(s.getAll())) as DocOutboxEntry[];
-      return [...new Set(all.filter((e) => e.workspaceId === workspaceId).map((e) => e.noteId))];
+      const mine = ownerOf(owner);
+      return [...new Set(all.filter((e) => entryOwner(e) === mine).map((e) => e.noteId))];
     },
     [],
   );
@@ -263,38 +384,31 @@ export function listDocOutboxNoteIds(workspaceId: string): Promise<string[]> {
 
 // ── metaOutbox ───────────────────────────────────────────────────────────────
 
-export function enqueueMetaOp(entry: MetaOutboxEntry): Promise<void> {
+export function enqueueMetaOp(
+  owner: NotesOwner,
+  entry: Omit<MetaOutboxEntry, "userId" | "workspaceId">,
+): Promise<void> {
+  if (owner.stopped) return Promise.resolve();
   return withStore(
     "metaOutbox",
     "readwrite",
     async (s) => {
-      await req(s.add(entry));
+      await req(s.add({ ...entry, userId: owner.userId, workspaceId: owner.workspaceId }));
     },
     undefined,
   );
 }
 
-export function readMetaOutbox(workspaceId: string): Promise<MetaOutboxEntry[]> {
+export function readMetaOutbox(owner: NotesOwner): Promise<MetaOutboxEntry[]> {
   return withStore(
     "metaOutbox",
     "readonly",
     async (s) => {
-      const idx = s.index("byWorkspace");
-      const out: MetaOutboxEntry[] = [];
-      await new Promise<void>((resolve, reject) => {
-        const cur = idx.openCursor(IDBKeyRange.only(workspaceId));
-        cur.onsuccess = () => {
-          const c = cur.result;
-          if (!c) {
-            resolve();
-            return;
-          }
-          out.push({ ...(c.value as MetaOutboxEntry), key: c.primaryKey as number });
-          c.continue();
-        };
-        cur.onerror = () => reject(cur.error);
-      });
-      return out;
+      const all = await readAll<MetaOutboxEntry>(
+        s.index("byWorkspace"),
+        IDBKeyRange.only(owner.workspaceId),
+      );
+      return all.filter((e) => e.userId === owner.userId);
     },
     [],
   );
