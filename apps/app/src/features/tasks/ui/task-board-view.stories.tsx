@@ -6,7 +6,8 @@ import {
   BUCKETS,
   bucketNameById,
   INBOX,
-  stubApi,
+  StoryTasks,
+  storySeed,
   TASKS,
   TeamWorkspace,
 } from "./tasks-stories-fixtures";
@@ -86,23 +87,22 @@ const BACKLOG: Task[] = [1, 2, 3].map((k) => ({
 }));
 const PROJECT_TASKS = [...APP_TASKS, ...BACKLOG];
 
-const projectApi = stubApi(PROJECT_TASKS, {
-  statuses: APP_STATUSES,
-  statusById: new Map(APP_STATUSES.map((s) => [s.id, s])),
-  statusesForBucket: (id: string) => (id === "b-app" ? APP_STATUSES : []),
-  sections: SECTIONS,
-});
+/** The project's statuses (its own set, TV-D9) and sections, as the store reads them. */
+const projectSeed = storySeed(PROJECT_TASKS, { statuses: APP_STATUSES, sections: SECTIONS });
 
 const meta = {
   title: "Tasks/TaskBoardView",
   component: TaskBoardView,
   parameters: { layout: "fullscreen" },
   decorators: [
-    (Story) => (
+    // The Tasks context the Board reads (A4): a story's `tasksSeed`, else the shared one.
+    (Story, { id, parameters }) => (
       <TeamWorkspace>
-        <div className="h-[560px] bg-card p-4">
-          <Story />
-        </div>
+        <StoryTasks key={id} seed={parameters.tasksSeed}>
+          <div className="h-[560px] bg-card p-4">
+            <Story />
+          </div>
+        </StoryTasks>
       </TeamWorkspace>
     ),
   ],
@@ -120,7 +120,6 @@ const meta = {
     onRequestCapture: () => {},
     selectedTaskId: "review",
     onSelectTask: () => {},
-    api: stubApi(),
   },
   render: (args) => <Interactive {...args} />,
 } satisfies Meta<typeof TaskBoardView>;
@@ -154,8 +153,8 @@ export const ProjectStatuses: Story = {
     selection: "b-app",
     selectedTaskId: null,
     onAddStatus: () => {},
-    api: projectApi,
   },
+  parameters: { tasksSeed: projectSeed },
 };
 
 /** Grouped by section (22a): No section first, then the weeks, "+ Add
@@ -163,15 +162,18 @@ export const ProjectStatuses: Story = {
  *  section (MOD-148). */
 export const BySection: Story = {
   args: { ...ProjectStatuses.args, boardGroupBy: "section" },
+  parameters: ProjectStatuses.parameters,
 };
 
 /** Lanes by assignee (call 85): one level, each lane folds. */
 export const LanesByAssignee: Story = {
   args: { ...ProjectStatuses.args, lanes: "assignee" },
+  parameters: ProjectStatuses.parameters,
 };
 
 /** Display → Rows: Detailed (the handle, a second line) and Description preview (AC7.4). */
 export const DetailedWithDescription: Story = {
+  parameters: ProjectStatuses.parameters,
   args: {
     ...ProjectStatuses.args,
     rows: "detailed",

@@ -1,11 +1,10 @@
 // What the plan view is handed, and the small things every part of it shares.
 
 import type { ModuoRuntime } from "../../../../lib/runtime.types";
-import type { TasksModuleApi } from "../../hooks/use-tasks-module";
+import { useTasksSelector, useTasksStatus } from "../../tasks-context";
 import type { ListExtraGroup } from "../list-extensions";
 
 export type TasksPlanViewProps = {
-  api: TasksModuleApi;
   workspaceId: string;
   /** Spine runtime — powers the task detail panel's linked-entity hub (DF-8). */
   runtime: ModuoRuntime | null;
@@ -55,9 +54,15 @@ export function removeLS(workspaceId: string, part: string): void {
   }
 }
 
-/** The props, with their defaults, and the module's four most-read fields. */
-export function planBase(props: TasksPlanViewProps) {
-  const { canEdit, buckets, inbox, tasks } = props.api;
+/**
+ * The props, with their defaults, and the module's four most-read fields
+ * (read from the page's `TasksProvider`).
+ */
+export function usePlanBase(props: TasksPlanViewProps) {
+  const { canEdit } = useTasksStatus();
+  const buckets = useTasksSelector((d) => d.buckets);
+  const inbox = useTasksSelector((d) => d.inbox);
+  const tasks = useTasksSelector((d) => d.liveTasks);
   return {
     ...props,
     urlViewId: props.urlViewId ?? null,
@@ -69,4 +74,4 @@ export function planBase(props: TasksPlanViewProps) {
   };
 }
 
-export type PlanBase = ReturnType<typeof planBase>;
+export type PlanBase = ReturnType<typeof usePlanBase>;

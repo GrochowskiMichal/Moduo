@@ -13,12 +13,16 @@ import type { TaskLayout } from "../../display";
 import type { Bucket } from "../../model";
 import { commitProjectDrop } from "../../project-order";
 import { projectOrderDrop } from "../../sidebar";
+import { useTaskCommands, useTasksSelector, useTasksUserId } from "../../tasks-context";
 import { parseCollapsedSections } from "../bucket-rail";
 import type { PlanBase } from "./plan-base";
 import { EMPTY_IDS, readLS, removeLS } from "./plan-base";
 
 export function usePlanChrome(c: PlanBase) {
-  const { api, workspaceId, canEdit, buckets } = c;
+  const { workspaceId, canEdit, buckets } = c;
+  const userId = useTasksUserId();
+  const areas = useTasksSelector((d) => d.areas);
+  const { moveBucketToArea } = useTaskCommands();
   // The workspace-wide view from before layouts were per scope: a scope
   // that doesn't remember a layout yet starts with it.
   const [legacyLayout] = useState<TaskLayout>(() => {
@@ -40,7 +44,7 @@ export function usePlanChrome(c: PlanBase) {
   // Sidebar groups you collapsed (Pinned and each area) stay collapsed,
   // remembered per person on this device (REPLAN 29e; Customize and Pin
   // follow the person everywhere, in preferences).
-  const collapseKey = `collapsedGroups:${api.currentUserId ?? "anon"}`;
+  const collapseKey = `collapsedGroups:${userId ?? "anon"}`;
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() =>
     parseCollapsedSections(readLS(workspaceId, collapseKey)),
   );
@@ -76,12 +80,12 @@ export function usePlanChrome(c: PlanBase) {
   // it the drop does nothing).
   const moveProject = useCallback(
     (activeId: string, overId: string) => {
-      const drop = projectOrderDrop(buckets, api.areas, projectOrder, activeId, overId, canEdit);
+      const drop = projectOrderDrop(buckets, areas, projectOrder, activeId, overId, canEdit);
       if (!drop) return;
       // A refused area move takes the new order back with it.
-      void commitProjectDrop(workspaceId, drop, (areaId) => api.moveBucketToArea(activeId, areaId));
+      void commitProjectDrop(workspaceId, drop, (areaId) => moveBucketToArea(activeId, areaId));
     },
-    [buckets, api.areas, api.moveBucketToArea, projectOrder, canEdit, workspaceId],
+    [buckets, areas, moveBucketToArea, projectOrder, canEdit, workspaceId],
   );
   // A project's id, or a saved view's `view:<id>` (TV-U8).
   const togglePin = useCallback(

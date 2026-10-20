@@ -4,7 +4,7 @@
 // a command don't re-run on every change.
 
 import { describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -18,7 +18,7 @@ rs.mock("../../../lib/undo-toast", () => ({
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const BUCKET = {
   id: "b1",
@@ -69,14 +69,16 @@ function fakeRuntime(tasks: Task[]) {
 describe("command identity", () => {
   it("a write landing changes the data, not the commands", async () => {
     const fake = fakeRuntime([task("t1")]);
-    const hook = renderHook(() =>
-      useTasksModule(fake.runtime, { userId: "u1", workspaceId: "w1", modulePermission: "edit" }),
-    );
+    const hook = renderTasksHook(fake.runtime, {
+      userId: "u1",
+      workspaceId: "w1",
+      modulePermission: "edit",
+    });
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     const before = hook.result.current;
 
     act(() => {
-      before.patchTask("t1", { title: "Renamed" });
+      before.commands.patchTask("t1", { title: "Renamed" });
     });
     await waitFor(() => expect(fake.api.updateTask).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -85,28 +87,30 @@ describe("command identity", () => {
 
     const after = hook.result.current;
     expect(after.tasks).not.toBe(before.tasks);
-    expect(after.patchTask).toBe(before.patchTask);
-    expect(after.setTaskStatus).toBe(before.setTaskStatus);
-    expect(after.addToQueue).toBe(before.addToQueue);
-    expect(after.createBucket).toBe(before.createBucket);
-    expect(after.bulkWrite).toBe(before.bulkWrite);
+    expect(after.commands.patchTask).toBe(before.commands.patchTask);
+    expect(after.commands.setTaskStatus).toBe(before.commands.setTaskStatus);
+    expect(after.commands.addToQueue).toBe(before.commands.addToQueue);
+    expect(after.commands.createBucket).toBe(before.commands.createBucket);
+    expect(after.commands.bulkWrite).toBe(before.commands.bulkWrite);
   });
 
   it("a command called after a write reads the store as it is now", async () => {
     const fake = fakeRuntime([task("t1")]);
-    const hook = renderHook(() =>
-      useTasksModule(fake.runtime, { userId: "u1", workspaceId: "w1", modulePermission: "edit" }),
-    );
+    const hook = renderTasksHook(fake.runtime, {
+      userId: "u1",
+      workspaceId: "w1",
+      modulePermission: "edit",
+    });
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     const first = hook.result.current;
 
     act(() => {
-      first.patchTask("t1", { title: "Renamed" });
+      first.commands.patchTask("t1", { title: "Renamed" });
     });
     await waitFor(() =>
       expect(hook.result.current.tasks.find((t) => t.id === "t1")?.title).toBe("Renamed"),
     );
     // The same (first render's) function sees the renamed row: no stale closure.
-    expect(first.focusRefOf("t1")?.title).toBe("Renamed");
+    expect(first.commands.focusRefOf("t1")?.title).toBe("Renamed");
   });
 });

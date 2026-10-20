@@ -7,7 +7,7 @@ import { tasksDisplayDefaults } from "../display";
 import { makeTask } from "../helpers";
 import type { Area, Bucket, Section, Task, TaskSession } from "../model";
 import { TaskTimelineView } from "./task-timeline-view";
-import { bucket, INBOX, stubApi, TeamWorkspace } from "./tasks-stories-fixtures";
+import { bucket, INBOX, StoryTasks, storySeed, TeamWorkspace } from "./tasks-stories-fixtures";
 
 // The Timeline (TV-TL1, REPLAN 67–71): the prototype's two frames (round-2a
 // frames 4 and 5) as stories — All at Quarter, one project row per project
@@ -143,13 +143,13 @@ const SESSIONS: TaskSession[] = [
   },
 ];
 
-function api(tasks: Task[] = TASKS) {
-  return stubApi(tasks, {
+/** What the store reads for the Timeline: the projects, their areas, sections and sessions. */
+function seedFor(tasks: Task[] = TASKS) {
+  return storySeed(tasks, {
+    buckets: [INBOX, ...PROJECTS],
     areas: AREAS,
     sections: SECTIONS,
     sessions: SESSIONS,
-    archivedBuckets: [],
-    currentUserId: "u1",
   });
 }
 
@@ -173,27 +173,30 @@ function Harness({
   // The page's one drag context (the No date view's drop needs it, TV-TL2).
   return (
     <TeamWorkspace>
-      <DndContext>
-        <TaskTimelineView
-          tasks={scoped}
-          scopeTitle={scope === "all" ? "All" : (PROJECTS.find((p) => p.id === scope)?.name ?? "")}
-          selection={scope}
-          view="timeline"
-          onViewChange={() => {}}
-          buckets={PROJECTS}
-          inbox={INBOX}
-          canEdit={canEdit}
-          onRequestCapture={() => {}}
-          selectedTaskId={selected}
-          onSelectTask={setSelected}
-          api={api(tasks)}
-          workspaceId="w1"
-          display={display}
-          onDisplayChange={setDisplay}
-          completed={display.completed}
-          stayingIds={new Set()}
-        />
-      </DndContext>
+      <StoryTasks seed={seedFor(tasks)}>
+        <DndContext>
+          <TaskTimelineView
+            tasks={scoped}
+            scopeTitle={
+              scope === "all" ? "All" : (PROJECTS.find((p) => p.id === scope)?.name ?? "")
+            }
+            selection={scope}
+            view="timeline"
+            onViewChange={() => {}}
+            buckets={PROJECTS}
+            inbox={INBOX}
+            canEdit={canEdit}
+            onRequestCapture={() => {}}
+            selectedTaskId={selected}
+            onSelectTask={setSelected}
+            workspaceId="w1"
+            display={display}
+            onDisplayChange={setDisplay}
+            completed={display.completed}
+            stayingIds={new Set()}
+          />
+        </DndContext>
+      </StoryTasks>
     </TeamWorkspace>
   );
 }

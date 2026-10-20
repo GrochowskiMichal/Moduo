@@ -22,12 +22,17 @@ import {
 } from "../../dnd/rail-drop";
 import { type CaptureSeed, seededProject } from "../../filters";
 import { todayStr } from "../../helpers";
-import type { TasksModuleApi } from "../../hooks/use-tasks-module";
 import { useTaskImport } from "../../importers/ui/use-task-import";
 import type { GroupAdd } from "../../list-group-add";
 import { type Bucket, isDrifted } from "../../model";
 import { inViewOrder } from "../../selection";
 import { projectOpenWork } from "../../sidebar";
+import {
+  useFrontierFor,
+  useOpenTrashRef,
+  useTaskCommands,
+  useTasksSelector,
+} from "../../tasks-context";
 import { useTemplateActions } from "../../templates/ui/use-template-actions";
 import {
   TEMPLATES_SELECTION,
@@ -43,7 +48,6 @@ import type { PlanScopeCtx } from "./use-plan-scope";
 
 export function usePlanActions(c: PlanScopeCtx) {
   const {
-    api,
     workspaceId,
     runtime,
     onUrlTaskIdChange,
@@ -80,6 +84,26 @@ export function usePlanActions(c: PlanScopeCtx) {
     filtering,
     scopeTasks,
   } = c;
+  // What the plan does reads and writes the Tasks module (A4); these are the
+  // store's own commands (the views get the guarded ones, see the layout).
+  const {
+    addToQueue,
+    archiveBucket,
+    bulkQueue,
+    bulkWrite,
+    dropTask,
+    focusOnTask: focusOnTaskCommand,
+    removeFromQueue,
+    setProjectState,
+    toggleQueue,
+  } = useTaskCommands();
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const allAreas = useTasksSelector((d) => d.areas);
+  const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
+  const frontierFor = useFrontierFor();
+  const openTrashRef = useOpenTrashRef();
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const allSections = useTasksSelector((d) => d.sections);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the views write viewOrderRef as they draw; it's read, never a cue
   const bulkIds = useMemo(
     () =>
@@ -93,7 +117,6 @@ export function usePlanActions(c: PlanScopeCtx) {
   );
   // The bottom bar's row, its keys and pickers while several are selected.
   const bulk = useBulkActions({
-    api,
     ids: bulkIds,
     canEdit: canEdit && !archivedProject,
     bucketNameById,
@@ -151,7 +174,6 @@ export function usePlanActions(c: PlanScopeCtx) {
   // a new view from the Views header's + (MOD-142), `?view=` links and
   // onboarding's seeded views.
   const savedViews = useSavedViews({
-    api,
     workspaceId,
     userId: currentUserId,
     place,
@@ -244,23 +266,19 @@ export function usePlanActions(c: PlanScopeCtx) {
   // (never a wall). Removing from the queue always goes straight through.
   const guardedToggleQueue = useCallback(
     (id: string) => {
-      if (
-        !api.queuedTaskIds.has(id) &&
-        api.blockedTaskIds.has(id) &&
-        api.frontierFor(id).length > 0
-      ) {
+      if (!queuedTaskIds.has(id) && blockedTaskIds.has(id) && frontierFor(id).length > 0) {
         setFrontierOfferTaskId(id);
         return;
       }
-      api.toggleQueue(id);
+      toggleQueue(id);
     },
-    [api, setFrontierOfferTaskId],
+    [queuedTaskIds, blockedTaskIds, frontierFor, toggleQueue, setFrontierOfferTaskId],
   );
   // "Focus on this" (⇧F, the menus, the panel's ▶; call 31) away from Focus
   // says where the session went, with a way there. In Focus the card shows it.
   const focusOnTask = useCallback(
     (id: string) => {
-      const started = api.focusOnTask(id);
+      const started = focusOnTaskCommand(id);
       if (started && selection !== "today") {
         const title = tasks.find((t) => t.id === id)?.title || "Untitled";
         toast(`Focusing on “${title}”`, {
@@ -270,12 +288,7 @@ export function usePlanActions(c: PlanScopeCtx) {
       }
       return started;
     },
-    [api, selection, tasks, openFocus],
-  );
-  // The views see the guarded toggle through an otherwise-unchanged api facade.
-  const viewApi = useMemo<TasksModuleApi>(
-    () => ({ ...api, toggleQueue: guardedToggleQueue, focusOnTask }),
-    [api, guardedToggleQueue, focusOnTask],
+    [focusOnTaskCommand, selection, tasks, openFocus],
   );
 
   const frontierOfferTask = useMemo(
@@ -283,8 +296,8 @@ export function usePlanActions(c: PlanScopeCtx) {
     [frontierOfferTaskId, tasks],
   );
   const frontierOffer = useMemo(
-    () => (frontierOfferTaskId ? api.frontierFor(frontierOfferTaskId) : []),
-    [frontierOfferTaskId, api],
+    () => (frontierOfferTaskId ? frontierFor(frontierOfferTaskId) : []),
+    [frontierOfferTaskId, frontierFor],
   );
 
   // ── TV-U4: rail drop targets ──────────────────────────────────────────────
@@ -296,8 +309,8 @@ export function usePlanActions(c: PlanScopeCtx) {
   // and every drop that saved offers Undo.
   const taskById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const railCtx = useMemo(
-    () => ({ queuedTaskIds: api.queuedTaskIds, currentUserId, inboxId: inbox?.id ?? null }),
-    [api.queuedTaskIds, currentUserId, inbox],
+    () => ({ queuedTaskIds: queuedTaskIds, currentUserId, inboxId: inbox?.id ?? null }),
+    [queuedTaskIds, currentUserId, inbox],
   );
   const railAccepts = useCallback(
     (target: RailDropTarget, taskId: string) => {
@@ -320,16 +333,16 @@ export function usePlanActions(c: PlanScopeCtx) {
         if (action.kind === "queue") {
           // A drop only ever adds (the bar's Q is the toggle); blocked ones are
           // added and named, as "Queue anyway" would.
-          api.bulkQueue(bulkIds, { mode: "add" });
+          bulkQueue(bulkIds, { mode: "add" });
           return;
         }
         const write: TaskDropWrite =
           action.kind === "move"
             ? { taskId: task.id, bucketId: action.bucketId }
             : { taskId: task.id, assigneeId: action.userId };
-        const writes = multiDropWrites(write, task, bulkIds, api.tasks);
+        const writes = multiDropWrites(write, task, bulkIds, tasks);
         if (writes.length === 0) return;
-        void api.bulkWrite(writes, {
+        void bulkWrite(writes, {
           label: (n) =>
             action.kind === "move"
               ? `Moved ${tasksWord(n)} to ${bucketNameById(action.bucketId)}`
@@ -340,7 +353,7 @@ export function usePlanActions(c: PlanScopeCtx) {
       switch (action.kind) {
         case "move": {
           const parent = task.parentId ? (taskById.get(task.parentId) ?? null) : null;
-          void api.dropTask(
+          void dropTask(
             projectMoveWrite(task, action.bucketId, parent),
             `Moved to ${bucketNameById(action.bucketId)}`,
           );
@@ -349,52 +362,65 @@ export function usePlanActions(c: PlanScopeCtx) {
         case "queue": {
           // A blocked task opens the frontier offer (its own explicit choice).
           const blocked =
-            api.blockedTaskIds.has(action.taskId) && api.frontierFor(action.taskId).length > 0;
+            blockedTaskIds.has(action.taskId) && frontierFor(action.taskId).length > 0;
           if (blocked) {
             guardedToggleQueue(action.taskId);
             return;
           }
-          api.addToQueue(action.taskId, "end", () =>
+          addToQueue(action.taskId, "end", () =>
             undoToast("Added to Focus", {
-              onUndo: () => api.removeFromQueue(action.taskId),
+              onUndo: () => removeFromQueue(action.taskId),
             }),
           );
           return;
         }
         case "assign-me":
-          void api.dropTask(
-            { taskId: action.taskId, assigneeId: action.userId },
-            "Assigned to you",
-          );
+          void dropTask({ taskId: action.taskId, assigneeId: action.userId }, "Assigned to you");
           return;
       }
     },
-    [canEdit, taskById, railCtx, api, bucketNameById, guardedToggleQueue, multiSelect.ids, bulkIds],
+    [
+      canEdit,
+      taskById,
+      railCtx,
+      bulkQueue,
+      tasks,
+      bulkWrite,
+      dropTask,
+      blockedTaskIds,
+      frontierFor,
+      addToQueue,
+      removeFromQueue,
+      bucketNameById,
+      guardedToggleQueue,
+      multiSelect.ids,
+      bulkIds,
+    ],
   );
 
   // A project's Archive… asks first only when it still has open work
   // (REPLAN 78); otherwise it archives at once, with Undo.
   const requestArchive = useCallback(
     (bucket: Bucket) => {
-      if (projectOpenWork(api.tasks, bucket.id).open.length === 0) {
-        api.archiveBucket(bucket.id, { kind: "keep" });
+      if (projectOpenWork(tasks, bucket.id).open.length === 0) {
+        archiveBucket(bucket.id, { kind: "keep" });
         return;
       }
       setProjectDialog({ kind: "archive", bucket, open: true });
     },
-    [api, setProjectDialog],
+    [tasks, archiveBucket, setProjectDialog],
   );
   // A project's state from its overview (TV-U16): Done with open work asks
   // first, like Archive (REPLAN 78); Active and On hold just save.
   const requestProjectState = useCallback(
     (bucket: Bucket, state: ProjectState) => {
-      if (state === "done" && projectOpenWork(api.tasks, bucket.id).open.length > 0) {
+      if (state === "done" && projectOpenWork(tasks, bucket.id).open.length > 0) {
         setProjectDialog({ kind: "done", bucket, open: true });
         return;
       }
-      api.setProjectState(bucket.id, state);
+      setProjectState(bucket.id, state);
     },
-    [api, setProjectDialog],
+    [tasks, setProjectState, setProjectDialog],
   );
   const checkProjectAccess = useCallback(
     async (projectId: string) =>
@@ -403,11 +429,11 @@ export function usePlanActions(c: PlanScopeCtx) {
   );
   // The delete toast's "Recently deleted" link (REPLAN 98).
   useEffect(() => {
-    api.openTrashRef.current = () => setSelection(TRASH_SELECTION);
+    openTrashRef.current = () => setSelection(TRASH_SELECTION);
     return () => {
-      api.openTrashRef.current = null;
+      openTrashRef.current = null;
     };
-  }, [api.openTrashRef, setSelection]);
+  }, [openTrashRef, setSelection]);
 
   // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
   // page, and what a copy settles into the shared store in one step.
@@ -421,9 +447,9 @@ export function usePlanActions(c: PlanScopeCtx) {
     isAdmin: canManageWorkspace,
     active: selection === TEMPLATES_SELECTION,
     buckets,
-    areas: api.areas,
-    sections: api.sections,
-    tasks: api.tasks,
+    areas: allAreas,
+    sections: allSections,
+    tasks: tasks,
     onOpenProject: setSelection,
     onOpenTask: (id) => onUrlTaskIdChange(id),
   });
@@ -436,9 +462,9 @@ export function usePlanActions(c: PlanScopeCtx) {
     userId: currentUserId,
     canEdit,
     buckets,
-    sections: api.sections,
+    sections: allSections,
     tasks,
-    archivedTasks: api.archivedTasks,
+    archivedTasks: archivedTasks,
     onOpenProject: setSelection,
   });
   return {
@@ -458,7 +484,6 @@ export function usePlanActions(c: PlanScopeCtx) {
     openCapture,
     guardedToggleQueue,
     focusOnTask,
-    viewApi,
     frontierOfferTask,
     frontierOffer,
     taskById,

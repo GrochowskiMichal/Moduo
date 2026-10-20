@@ -3,7 +3,7 @@ import { useCallback, useMemo } from "react";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import type { TasksSearch } from "../../features/tasks/search";
-import { TasksProvider, useTasksApi } from "../../features/tasks/tasks-context";
+import { TasksProvider } from "../../features/tasks/tasks-context";
 import { TasksPlanView } from "../../features/tasks/ui/tasks-plan-view";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -12,7 +12,7 @@ export function TasksPage() {
   const { runtime, userId } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
   // One Tasks root for the page (A4): everything under it reads the module
-  // through the provider, the views that still take the whole api included.
+  // through the provider's narrow hooks.
   return (
     <TasksProvider
       runtime={runtime}
@@ -88,8 +88,6 @@ function TasksPageBody() {
     [navigate],
   );
 
-  const api = useTasksApi();
-
   const canRender = useMemo(
     () =>
       !!runtime &&
@@ -122,7 +120,6 @@ function TasksPageBody() {
 
   return (
     <TasksPlanView
-      api={api}
       workspaceId={selectedWorkspaceId as string}
       runtime={runtime}
       urlTaskId={urlTaskId}

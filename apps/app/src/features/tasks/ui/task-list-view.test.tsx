@@ -14,6 +14,8 @@ rs.mock("../assignees", () => ({
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { Bucket, Task } from "../model";
+import { FakeTasksProvider, fakeTasksRuntime, queueEntry } from "../testing/fake-tasks";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskListView } from "./task-list-view";
 
 beforeAll(() => {
@@ -73,18 +75,14 @@ const inbox: Bucket = {
   deletedAt: null,
 };
 
-/** The real list over three tasks; `queue` renders the reorderable Queue. */
-function renderList({ queue = false }: { queue?: boolean } = {}) {
+/**
+ * The real list over three tasks; `queue` renders the reorderable Queue (all
+ * three in my line-up). The store holds the same tasks; the commands the
+ * tests watch are spies.
+ */
+async function renderList({ queue = false }: { queue?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta"), task("c", "Gamma")];
   const api = {
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set(queue ? ["a", "b", "c"] : []),
-    queueClaims: new Map(),
-    subtasksByParent: new Map(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set(),
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     focusOnTask: rs.fn(() => true),
@@ -113,12 +111,18 @@ function renderList({ queue = false }: { queue?: boolean } = {}) {
           onSelectTask={setSelected}
           reorderable={queue}
           onReorder={() => {}}
-          api={api as never}
         />
       </TooltipProvider>
     );
   }
-  render(<Harness />);
+  await renderWithTasks(<Harness />, {
+    seed: {
+      tasks,
+      queue: queue ? tasks.map((t) => queueEntry(t.id, "u1", { workspaceId: "w" })) : [],
+    },
+    workspaceId: "w",
+    commands: api,
+  });
   return { api, grid: screen.getByRole("grid") };
 }
 
@@ -134,7 +138,7 @@ const liftedAnything = () => /Picked up/.test(document.body.textContent ?? "");
 
 describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   it("Queue: Space on a row's queue toggle stays that button's — no keyboard drag, no list action", async () => {
-    const { api } = renderList({ queue: true });
+    const { api } = await renderList({ queue: true });
     await wait();
     const toggle = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Remove from Focus"]')!;
     toggle.focus();
@@ -148,7 +152,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   });
 
   it("bucket list: Enter on a row's check-off stays that button's", async () => {
-    const { api } = renderList();
+    const { api } = await renderList();
     await wait();
     const checkOff = rowOf("Gamma").querySelector<HTMLElement>('[aria-label="Mark as done"]')!;
     checkOff.focus();
@@ -162,7 +166,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   });
 
   it("⇧F is Focus on this for the selected row (call 31, TV-F7)", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await wait();
     expect(selectedTitle()).toBe("Alpha");
     fireEvent.keyDown(grid, { key: "F", code: "KeyF", shiftKey: true });
@@ -171,7 +175,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   });
 
   it("a list key pressed on a row button hands focus back, so Space then completes the selected row", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await wait();
     expect(selectedTitle()).toBe("Alpha");
     // Chromium leaves focus on a clicked button.
@@ -188,7 +192,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   });
 
   it("a mouse click on a row button hands focus back to the list, like desktop; keyboard activation doesn't", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await wait();
     const checkOff = rowOf("Gamma").querySelector<HTMLElement>('[aria-label="Mark as done"]')!;
 
@@ -205,7 +209,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   });
 
   it("leaves ⌘K, ⌘⇧K and ⌘C to the app and the OS", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await wait();
     grid.focus();
 
@@ -220,7 +224,7 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
   });
 
   it("keys typed in a row's due popover never reach the list", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await wait();
     grid.focus();
     fireEvent.keyDown(grid, { key: "d", code: "KeyD" });
@@ -241,19 +245,9 @@ describe("TaskListView keys (tasks-v2 Q1-1, Q1-2)", () => {
 
 // TV-P0 (tasks-v3 AC1.5): the list's states besides rows.
 describe("TaskListView states (TV-P0)", () => {
-  function renderStates(opts: { loaded: boolean; filterActive?: boolean }) {
+  async function renderStates(opts: { loaded: boolean; filterActive?: boolean }) {
     const onClearFilters = rs.fn();
-    const api = {
-      loaded: opts.loaded,
-      tasks: [],
-      queuedTaskIds: new Set(),
-      queueClaims: new Map(),
-      subtasksByParent: new Map(),
-      subtaskProgressByTask: new Map(),
-      tagsByTask: new Map(),
-      blockedTaskIds: new Set(),
-    };
-    render(
+    const ui = (
       <TooltipProvider>
         <TaskListView
           tasks={[]}
@@ -271,28 +265,41 @@ describe("TaskListView states (TV-P0)", () => {
           onSelectTask={() => {}}
           filterActive={opts.filterActive}
           onClearFilters={onClearFilters}
-          api={api as never}
         />
-      </TooltipProvider>,
+      </TooltipProvider>
     );
+    if (opts.loaded) {
+      await renderWithTasks(ui, { workspaceId: "w" });
+    } else {
+      // The first read hasn't answered yet: a store still loading.
+      const { runtime } = fakeTasksRuntime(
+        {},
+        { tasks: { syncRead: () => new Promise(() => {}) } },
+      );
+      render(
+        <FakeTasksProvider runtime={runtime} workspaceId="w">
+          {ui}
+        </FakeTasksProvider>,
+      );
+    }
     return { onClearFilters };
   }
 
-  it("shows a skeleton before the first load, never an empty message", () => {
-    renderStates({ loaded: false });
+  it("shows a skeleton before the first load, never an empty message", async () => {
+    await renderStates({ loaded: false });
     expect(screen.getByRole("status", { name: "Loading tasks" })).toBeTruthy();
     expect(screen.queryByText(/Nothing here yet|No tasks/)).toBeNull();
   });
 
-  it("an empty filter says “No tasks match”, and Clear filters clears it", () => {
-    const { onClearFilters } = renderStates({ loaded: true, filterActive: true });
+  it("an empty filter says “No tasks match”, and Clear filters clears it", async () => {
+    const { onClearFilters } = await renderStates({ loaded: true, filterActive: true });
     expect(screen.getByText("No tasks match")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onClearFilters).toHaveBeenCalledTimes(1);
   });
 
-  it("an empty scope names it and teaches capture", () => {
-    renderStates({ loaded: true });
+  it("an empty scope names it and teaches capture", async () => {
+    await renderStates({ loaded: true });
     expect(screen.getByText("No tasks in Work")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Add a task" })).toBeTruthy();
     expect(screen.queryByText("Nothing here yet")).toBeNull();
@@ -315,7 +322,7 @@ describe("the list's focus on load (MOD-121)", () => {
   afterEach(() => hasFocus.mockRestore());
 
   it("takes focus quietly, and j/k still move the selection", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await wait();
     expect(document.activeElement).toBe(grid);
     expect(quiet(grid)).toBe(true);
@@ -332,7 +339,7 @@ describe("the list's focus on load (MOD-121)", () => {
   });
 
   it("a lone modifier leaves it quiet; the list's own ⌘ keys don't", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await wait();
     fireEvent.keyDown(grid, { key: "Meta", code: "MetaLeft", metaKey: true });
     fireEvent.keyDown(grid, { key: "Shift", code: "ShiftLeft", shiftKey: true });
@@ -343,7 +350,7 @@ describe("the list's focus on load (MOD-121)", () => {
   });
 
   it("rings as usual once focus has left and come back", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await wait();
     act(() => grid.blur());
     expect(quiet(grid)).toBe(false);
@@ -352,7 +359,7 @@ describe("the list's focus on load (MOD-121)", () => {
   });
 
   it("stays quiet while the window is away (another app), so coming back rings nothing", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await wait();
     hasFocus.mockReturnValue(false);
     fireEvent.blur(grid);
@@ -360,7 +367,7 @@ describe("the list's focus on load (MOD-121)", () => {
   });
 
   it("ends the quiet focus when a row's button takes focus (the list's own blur)", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await wait();
     const checkOff = rowOf("Beta").querySelector<HTMLElement>('[aria-label="Mark as done"]')!;
     act(() => checkOff.focus());
@@ -371,7 +378,7 @@ describe("the list's focus on load (MOD-121)", () => {
     const field = document.createElement("input");
     document.body.append(field);
     field.focus();
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await wait();
     expect(document.activeElement).toBe(field);
     expect(quiet(grid)).toBe(false);

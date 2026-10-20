@@ -6,6 +6,12 @@ import { Button } from "../../../../components/ui/button";
 import { boardFoldKey } from "../../folds";
 import { PRIVATE_PROJECT_LABEL } from "../../model";
 import { projectOpenWork } from "../../sidebar";
+import {
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksTrash,
+} from "../../tasks-context";
 import { ArchivedProjectBanner, ArchivedProjectsView } from "../archived-projects-view";
 import { ARCHIVED_SELECTION, TEMPLATES_SELECTION, TRASH_SELECTION } from "../bucket-rail";
 import { FocusView } from "../focus-view";
@@ -15,12 +21,10 @@ import { TaskDetailPanel } from "../task-detail-panel";
 import { TaskFullPage } from "../task-full-page";
 import { TaskListView } from "../task-list-view";
 import { TaskTimelineView } from "../task-timeline-view";
-
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function PlanBody({ c }: { c: PlanController }) {
   const {
-    api,
     workspaceId,
     runtime,
     canEdit,
@@ -43,7 +47,6 @@ export function PlanBody({ c }: { c: PlanController }) {
     bulk,
     scopeTitle,
     openCapture,
-    viewApi,
     templateActions,
     offersTemplates,
     setListShowsNothing,
@@ -69,6 +72,11 @@ export function PlanBody({ c }: { c: PlanController }) {
     goToPage,
     viewName,
   } = c;
+  const { deleteForever, load: reload, restoreFromTrash, unarchiveBucket } = useTaskCommands();
+  const { error, loading } = useTasksStatus();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const trash = useTasksTrash();
 
   // Focus is its own screen in the centre (TV-F7); the rails stay.
   // Archived projects and Recently deleted open from the sidebar's ⋯ (98).
@@ -77,27 +85,26 @@ export function PlanBody({ c }: { c: PlanController }) {
       templateActions.page
     ) : selection === TRASH_SELECTION ? (
       <RecentlyDeletedView
-        trash={api.trash}
+        trash={trash}
         bucketName={(id) => {
           const name = bucketNameById(id);
           return name === PRIVATE_PROJECT_LABEL ? null : name;
         }}
         canEdit={canEdit}
-        onRestore={(target, label) => void api.restoreFromTrash(target, { label })}
-        onDeleteForever={api.deleteForever}
+        onRestore={(target, label) => void restoreFromTrash(target, { label })}
+        onDeleteForever={deleteForever}
       />
     ) : selection === ARCHIVED_SELECTION ? (
       <ArchivedProjectsView
-        projects={api.archivedBuckets}
-        openCountByProject={(id) => projectOpenWork(api.archivedTasks, id).open.length}
+        projects={archivedBuckets}
+        openCountByProject={(id) => projectOpenWork(archivedTasks, id).open.length}
         canEdit={canEdit}
         onOpen={setSelection}
-        onUnarchive={(id) => void api.unarchiveBucket(id)}
+        onUnarchive={(id) => void unarchiveBucket(id)}
         onDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
       />
     ) : selection === "today" ? (
       <FocusView
-        api={viewApi}
         workspaceId={workspaceId}
         runtime={runtime}
         canEdit={canEdit}
@@ -175,23 +182,18 @@ export function PlanBody({ c }: { c: PlanController }) {
     );
 
   // The hosted Supabase project may not have the tasks tables yet (web only).
-  const notMigrated = /schema cache|could not find the table|does not exist/i.test(api.error ?? "");
+  const notMigrated = /schema cache|could not find the table|does not exist/i.test(error ?? "");
   const center = (
     <div className="flex h-full min-h-0 flex-col">
-      {api.error ? (
+      {error ? (
         <div className="mb-3 flex shrink-0 items-start justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
           <span className="min-w-0 flex-1 font-sans text-muted-foreground">
             {notMigrated
               ? "Tasks aren’t set up on this database yet — apply the Supabase migrations, or use the desktop app."
-              : `Couldn’t load tasks: ${api.error}`}
+              : `Couldn’t load tasks: ${error}`}
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={api.loading}
-            onClick={() => void api.reload()}
-          >
-            {api.loading ? "Retrying…" : "Retry"}
+          <Button size="sm" variant="outline" disabled={loading} onClick={() => void reload()}>
+            {loading ? "Retrying…" : "Retry"}
           </Button>
         </div>
       ) : null}
@@ -199,7 +201,7 @@ export function PlanBody({ c }: { c: PlanController }) {
         <ArchivedProjectBanner
           project={archivedProject}
           canEdit={canEdit}
-          onUnarchive={() => void api.unarchiveBucket(archivedProject.id)}
+          onUnarchive={() => void unarchiveBucket(archivedProject.id)}
         />
       ) : null}
       <div className="min-h-0 flex-1">{body}</div>
@@ -220,7 +222,7 @@ export function PlanBody({ c }: { c: PlanController }) {
         task={fullPageTask}
         buckets={buckets}
         // A task of an archived project stays read-only here too (TV-U6).
-        canEdit={canEdit && !api.archivedTasks.some((t) => t.id === fullPageTask.id)}
+        canEdit={canEdit && !archivedTasks.some((t) => t.id === fullPageTask.id)}
         onRequestCapture={openCapture}
         onSelectTask={setSelectedTaskId}
         onOpenTask={openTaskInPanel}

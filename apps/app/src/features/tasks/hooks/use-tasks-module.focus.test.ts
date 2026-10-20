@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { createElement, type ReactNode, useEffect } from "react";
 
 import { DEFAULT_FOCUS_PREFS, type FocusPrefs } from "../../../lib/focus-prefs";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -18,7 +18,8 @@ import { blankRecord, parseRecord } from "../../focus/engine-core";
 import { createFocusTimeSink } from "../../focus/time-sink";
 import { makeTask } from "../helpers";
 import type { Task, TasksModuleBundle, TaskTimeResult, TrackTimeInput } from "../model";
-import { useTasksModule } from "./use-tasks-module";
+import { TasksProvider } from "../tasks-context";
+import { renderTasksHook, useTasksProbe } from "../testing/tasks-hook";
 
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
@@ -125,13 +126,11 @@ async function mounted(
   opts: { fail?: () => boolean; permission?: "view" | "edit" } = {},
 ) {
   const fake = fakeServer(rows, { fail: opts.fail });
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, {
-      userId: USER,
-      workspaceId: WS,
-      modulePermission: opts.permission ?? "edit",
-    }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: USER,
+    workspaceId: WS,
+    modulePermission: opts.permission ?? "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { hook, ...fake };
 }
@@ -150,7 +149,7 @@ beforeEach(() => {
 describe("time corrections (D3-3)", () => {
   it("typing a total sends the total, not a difference", async () => {
     const { hook, trackTime, server } = await mounted([task("t1", 100)]);
-    act(() => hook.result.current.setTimeSpent("t1", 1800));
+    act(() => hook.result.current.commands.setTimeSpent("t1", 1800));
     await waitFor(() => expect(server.get("t1")?.timeSpentSeconds).toBe(1800));
     expect(trackTime).toHaveBeenCalledWith({
       workspaceId: WS,
@@ -163,16 +162,17 @@ describe("time corrections (D3-3)", () => {
 
   it("took longer adds one adjustment and its Undo removes exactly that one", async () => {
     const { hook, trackTime, server, runtime } = await mounted([task("t1", 100)]);
-    let adjustment: Awaited<ReturnType<typeof hook.result.current.logTimeAdjustment>> = null;
+    let adjustment: Awaited<ReturnType<typeof hook.result.current.commands.logTimeAdjustment>> =
+      null;
     await act(async () => {
-      adjustment = await hook.result.current.logTimeAdjustment("t1", 900);
+      adjustment = await hook.result.current.commands.logTimeAdjustment("t1", 900);
     });
     expect(adjustment).toEqual({ entryId: "e1", seconds: 900 });
     expect(server.get("t1")?.timeSpentSeconds).toBe(1000);
     // Someone's focus lands in between; the Undo takes only the adjustment back.
     await shellSink(runtime, WS)("t1", 60, ctx("k-1"));
     await act(async () => {
-      hook.result.current.undoTimeAdjustment("t1", adjustment as never);
+      hook.result.current.commands.undoTimeAdjustment("t1", adjustment as never);
     });
     await waitFor(() => expect(server.get("t1")?.timeSpentSeconds).toBe(160));
     expect(trackTime).toHaveBeenLastCalledWith({
@@ -201,8 +201,8 @@ describe("time writes in order", () => {
     let first: Promise<unknown> = Promise.resolve();
     let second: Promise<unknown> = Promise.resolve();
     await act(async () => {
-      first = hook.result.current.logTimeAdjustment("t1", 300);
-      second = hook.result.current.logTimeAdjustment("t1", 300);
+      first = hook.result.current.commands.logTimeAdjustment("t1", 300);
+      second = hook.result.current.commands.logTimeAdjustment("t1", 300);
       await Promise.resolve();
     });
     expect(sent).toEqual([300]); // the second waits for the first
@@ -236,9 +236,9 @@ function shellSink(runtime: ModuoRuntime, workspaceId: string) {
 }
 
 // The sink registered per selected workspace (the shell does it for the
-// workspace switcher's choice), with Tasks open.
+// workspace switcher's choice), with Tasks open (its provider: `wiredTasks`).
 function useWiredSink(runtime: ModuoRuntime, workspaceId: string) {
-  const api = useTasksModule(runtime, { userId: USER, workspaceId, modulePermission: "edit" });
+  const api = useTasksProbe();
   useEffect(
     () => registerFocusFlushSink(workspaceId, shellSink(runtime, workspaceId)),
     [runtime, workspaceId],
@@ -247,6 +247,19 @@ function useWiredSink(runtime: ModuoRuntime, workspaceId: string) {
     if (!api.loading) flushFocusSession();
   }, [api.loading]);
   return api;
+}
+
+/** Tasks open on the workspace `selected.ws` names (the switcher flips it). */
+function wiredTasks(runtime: ModuoRuntime, selected: { ws: string }) {
+  return function WiredTasks({ children }: { children: ReactNode }) {
+    return createElement(TasksProvider, {
+      runtime,
+      userId: USER,
+      workspaceId: selected.ws,
+      modulePermission: "edit",
+      children,
+    });
+  };
 }
 
 function memoryStorage() {
@@ -308,11 +321,14 @@ describe("the focus sink across workspaces and tabs", () => {
     const { runtime, server } = fakeServer([task("t-w1", 0, "ws-1"), task("t-w2", 100, "ws-2")], {
       delayList: 20,
     });
+    const selected = { ws: "ws-1" };
     const hook = renderHook(({ ws }) => useWiredSink(runtime, ws), {
       initialProps: { ws: "ws-1" },
+      wrapper: wiredTasks(runtime, selected),
     });
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
     // The workspace switcher flips the id; nothing remounts.
+    selected.ws = "ws-2";
     hook.rerender({ ws: "ws-2" });
     await waitFor(() => expect(server.get("t-w2")?.timeSpentSeconds).toBe(700));
     expect(parseRecord(localStorage.getItem(KEY))?.credits["t-w2"]).toBeUndefined();
@@ -325,9 +341,11 @@ describe("the focus sink across workspaces and tabs", () => {
     const { runtime, server, trackTime } = fakeServer([task("t1", 0)], {
       loseAnswer: () => lose,
     });
-    const tab = renderHook(() =>
-      useTasksModule(runtime, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
-    );
+    const tab = renderTasksHook(runtime, {
+      userId: USER,
+      workspaceId: WS,
+      modulePermission: "edit",
+    });
     await settle();
     const engine = openTab(memoryStorage(), "a");
     engine.registerSink(WS, shellSink(runtime, WS));
@@ -358,16 +376,12 @@ describe("the focus sink across workspaces and tabs", () => {
   it("a tab that takes over the clock adds to the other tab's saves", async () => {
     rs.useFakeTimers();
     const { runtime: rtA, server } = fakeServer([task("t1", 0)]);
-    const tabA = renderHook(() =>
-      useTasksModule(rtA, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
-    );
+    const tabA = renderTasksHook(rtA, { userId: USER, workspaceId: WS, modulePermission: "edit" });
     // Tab B loaded the same row, and won't see A's saves (no live updates yet).
     const rtB = {
       tasks: { ...rtA.tasks, list: rs.fn(() => Promise.resolve(bundleOf([task("t1", 0)]))) },
     } as unknown as ModuoRuntime;
-    const tabB = renderHook(() =>
-      useTasksModule(rtB, { userId: USER, workspaceId: WS, modulePermission: "edit" }),
-    );
+    const tabB = renderTasksHook(rtB, { userId: USER, workspaceId: WS, modulePermission: "edit" });
     await settle();
     const storage = memoryStorage();
     const a = openTab(storage, "a");

@@ -6,6 +6,7 @@ import { taskLinkId } from "../../../../lib/task-handle";
 import { looksLikeHandle } from "../../../spine/grammar";
 import { handleLinkStep, resolveTasksDeepLink } from "../../search";
 import { backstopPick } from "../../selection";
+import { useTasksSelector, useTasksStatus } from "../../tasks-context";
 import { ARCHIVED_SELECTION, TEMPLATES_SELECTION, TRASH_SELECTION } from "../bucket-rail";
 import type { DeepLinkWorld } from "./deep-link";
 import type { PlanActionsCtx } from "./use-plan-actions";
@@ -13,7 +14,6 @@ import { useTaskDeepLink } from "./use-task-deep-link";
 
 export function usePlanCursor(c: PlanActionsCtx) {
   const {
-    api,
     urlTaskId,
     onUrlTaskIdChange,
     canEdit,
@@ -41,13 +41,15 @@ export function usePlanCursor(c: PlanActionsCtx) {
     scopeIdSet,
     taskById,
   } = c;
+  const { error, loading, restLoaded } = useTasksStatus();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
   // Resolve the selected task live from the bundle so the rail follows edits and
   // empties when the task is deleted. A task of an archived project (opened
   // from Archived projects, or found by search) opens too, read-only (TV-U6).
   const selectedArchivedTask = useMemo(
-    () =>
-      selectedTaskId ? (api.archivedTasks.find((t) => t.id === selectedTaskId) ?? null) : null,
-    [selectedTaskId, api.archivedTasks],
+    () => (selectedTaskId ? (archivedTasks.find((t) => t.id === selectedTaskId) ?? null) : null),
+    [selectedTaskId, archivedTasks],
   );
   const selectedTask = useMemo(
     () =>
@@ -81,7 +83,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
   // the detail panel's subtask list) even from another bucket.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the List writes viewOrderRef in its layout effect; read, never a cue
   useEffect(() => {
-    if (api.loading || inboundPending) return;
+    if (loading || inboundPending) return;
     // Focus shows more than its line-up (the Now task's subtasks, today's
     // scheduled tasks), and its screen picks Now itself: a task stays selected
     // while it exists (TV-F7).
@@ -110,7 +112,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
     });
     if (pick !== undefined) setSelectedTaskId(pick);
   }, [
-    api.loading,
+    loading,
     inboundPending,
     place,
     view,
@@ -135,28 +137,28 @@ export function usePlanCursor(c: PlanActionsCtx) {
   // What a link can open: live tasks and projects, and archived ones (TV-U16).
   const linkable = useMemo(
     () => ({
-      tasks: api.archivedTasks.length > 0 ? [...tasks, ...api.archivedTasks] : tasks,
-      buckets: api.archivedBuckets.length > 0 ? [...buckets, ...api.archivedBuckets] : buckets,
+      tasks: archivedTasks.length > 0 ? [...tasks, ...archivedTasks] : tasks,
+      buckets: archivedBuckets.length > 0 ? [...buckets, ...archivedBuckets] : buckets,
       inboxId,
     }),
-    [tasks, buckets, inboxId, api.archivedTasks, api.archivedBuckets],
+    [tasks, buckets, inboxId, archivedTasks, archivedBuckets],
   );
   const selectedLinkId = selectedTaskId
     ? taskLinkId(taskKey, { id: selectedTaskId, number: selectedTask?.number })
     : null;
   const linkWorld = useMemo<DeepLinkWorld>(
     () => ({
-      ready: !api.loading && !api.error,
-      restLoaded: api.restLoaded,
+      ready: !loading && !error,
+      restLoaded: restLoaded,
       handleStep: (id) =>
         looksLikeHandle(id)
-          ? handleLinkStep(id, { tasks: linkable.tasks, taskKey, restLoaded: api.restLoaded })
+          ? handleLinkStep(id, { tasks: linkable.tasks, taskKey, restLoaded: restLoaded })
           : null,
       target: (id) => resolveTasksDeepLink(id, linkable),
       inScope: (taskId) => scopeTasksAll.some((t) => t.id === taskId),
       canLookup: referenceStore !== null,
     }),
-    [api.loading, api.error, api.restLoaded, linkable, taskKey, scopeTasksAll, referenceStore],
+    [loading, error, restLoaded, linkable, taskKey, scopeTasksAll, referenceStore],
   );
   const lookupHandle = useMemo(
     () => (referenceStore ? (handle: string) => referenceStore.lookupHandle(handle) : null),
@@ -167,7 +169,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
     onUrlTaskIdChange,
     world: linkWorld,
     lookup: lookupHandle,
-    loaded: !api.loading,
+    loaded: !loading,
     selectedTaskId,
     selectedLinkId,
     onPrivate: setPrivateLinkId,
@@ -202,7 +204,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new link (`urlTaskId`) is the cue; the target rides a ref
   useEffect(() => {
     const id = scrollTargetRef.current;
-    if (!id || api.loading) return;
+    if (!id || loading) return;
     scrollTargetRef.current = null;
     let tries = 0;
     const reveal = () => {
@@ -214,7 +216,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
       if (++tries < 24) requestAnimationFrame(reveal);
     };
     requestAnimationFrame(reveal);
-  }, [api.loading, urlTaskId]);
+  }, [loading, urlTaskId]);
   return {
     ...c,
     selectedArchivedTask,

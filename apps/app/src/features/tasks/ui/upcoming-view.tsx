@@ -7,7 +7,7 @@
 
 import { isOpenTask } from "@contracts/vocabularies";
 import { ChevronDown } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import {
@@ -21,10 +21,15 @@ import { formatDay } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { daysLeftInWeek } from "../day-buckets";
 import { todayStr } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type GroupAddState, groupAddState } from "../list-group-add";
 import type { Task } from "../model";
 import { changePatternRule, engineZone } from "../recurrence-engine";
+import {
+  useTaskCommands,
+  useTasksReader,
+  useTasksSelector,
+  useTasksUserId,
+} from "../tasks-context";
 import {
   dropDayFor,
   inUpcoming,
@@ -43,11 +48,6 @@ import { nowOn, useToday } from "../use-today";
 import { DayPickerDialog } from "./day-picker-dialog";
 import type { ListGrouping } from "./list-extensions";
 import { RepeatMoveDialog } from "./repeat-move-dialog";
-
-type UpcomingApi = Pick<
-  TasksModuleApi,
-  "tasks" | "teamMembers" | "patchTask" | "scheduleTaskAt" | "moveOccurrence" | "currentUserId"
->;
 
 /** What's waiting on the person: the repeat question, or a day to pick. */
 type Pending =
@@ -68,12 +68,10 @@ function nextWeek(now: Date): string {
 }
 
 export function useUpcomingView({
-  api,
   canEdit,
   inboxId,
   projectIds,
 }: {
-  api: UpcomingApi;
   canEdit: boolean;
   inboxId: string | null;
   /** The sidebar's project order (Upcoming's last tie-break). */
@@ -87,25 +85,25 @@ export function useUpcomingView({
   dialogs: ReactNode;
 } {
   const today = useToday();
-  const me = api.currentUserId ?? null;
+  const me = useTasksUserId() ?? null;
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const teamMembers = useTasksSelector((d) => d.teamMembers);
   const myTeams = useMemo(
-    () => new Set(api.teamMembers.filter((m) => m.userId === me).map((m) => m.teamId)),
-    [api.teamMembers, me],
+    () => new Set(teamMembers.filter((m) => m.userId === me).map((m) => m.teamId)),
+    [teamMembers, me],
   );
   const scope = useMemo(() => {
     const now = nowOn(today);
-    return api.tasks.filter((t) => inUpcoming(t, { me, myTeams }, now));
-  }, [api.tasks, me, myTeams, today]);
+    return tasks.filter((t) => inUpcoming(t, { me, myTeams }, now));
+  }, [tasks, me, myTeams, today]);
   const scopeIds = useMemo(() => new Set(scope.map((t) => t.id)), [scope]);
 
-  // The newest API and tasks for the writes (they run from toasts and dialogs).
-  const latest = useRef(api);
-  useLayoutEffect(() => {
-    latest.current = api;
-  });
+  // The newest tasks for the writes (they run from toasts and dialogs).
+  const writer = useTaskCommands();
+  const read = useTasksReader();
   const current = useCallback(
-    (id: string) => latest.current.tasks.find((t) => t.id === id) ?? null,
-    [],
+    (id: string) => read().liveTasks.find((t) => t.id === id) ?? null,
+    [read],
   );
 
   /**
@@ -116,7 +114,6 @@ export function useUpcomingView({
   const moveTasks = useCallback(
     (tasks: readonly Task[], day: string, choice: "one" | "pattern" = "one") => {
       const now = new Date();
-      const writer = latest.current;
       const undos: Array<() => void> = [];
       for (const task of tasks) {
         const write = moveToDay(task, day);
@@ -137,7 +134,7 @@ export function useUpcomingView({
             // Still the rule and the day this move made (the server works the
             // rule's pointer out again, so compare the pattern, not the JSON).
             if (!now2 || now2.recurrence?.rrule !== rule.rrule || !stillMoved(now2, write)) return;
-            latest.current.patchTask(
+            writer.patchTask(
               task.id,
               write.kind === "due"
                 ? { recurrence: ruleBefore, dueDate: before.dueDate }
@@ -152,7 +149,7 @@ export function useUpcomingView({
           );
           undos.push(() => {
             if (!back || !stillMoved(current(task.id), write)) return;
-            latest.current.moveOccurrence(
+            writer.moveOccurrence(
               task.id,
               write.kind === "due"
                 ? { dueOn: back }
@@ -163,13 +160,13 @@ export function useUpcomingView({
           writer.patchTask(task.id, { dueDate: write.dueDate });
           undos.push(() => {
             if (!stillMoved(current(task.id), write)) return;
-            latest.current.patchTask(task.id, { dueDate: before.dueDate });
+            writer.patchTask(task.id, { dueDate: before.dueDate });
           });
         } else {
           writer.scheduleTaskAt(task.id, write.scheduledAt);
           undos.push(() => {
             if (!stillMoved(current(task.id), write) || !before.scheduledAt) return;
-            latest.current.scheduleTaskAt(task.id, before.scheduledAt);
+            writer.scheduleTaskAt(task.id, before.scheduledAt);
           });
         }
       }
@@ -183,7 +180,7 @@ export function useUpcomingView({
         },
       });
     },
-    [current],
+    [current, writer],
   );
 
   const [pending, setPending] = useState<Pending | null>(null);

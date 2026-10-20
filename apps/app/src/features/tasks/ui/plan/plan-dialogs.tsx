@@ -3,19 +3,19 @@
 
 import { restoreNavFocus } from "../../../../components/ui/nav-row";
 import { projectDeleteSummary, projectOpenWork } from "../../sidebar";
+import { useTaskCommands, useTasksSelector, useTasksUserId } from "../../tasks-context";
 import { ArchiveProjectDialog, DeleteBucketDialog } from "../delete-bucket-dialog";
 import { DriftTriageDialog } from "../drift-triage-dialog";
 import { FrontierOfferDialog } from "../frontier-offer-dialog";
 import { StatusesDialog } from "../statuses-dialog";
 import { TasksWelcomeDialog } from "../tasks-welcome-dialog";
-
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function PlanDialogs({ c }: { c: PlanController }) {
   const {
-    api,
     canEdit,
     buckets,
+    tasks,
     projectDialog,
     setProjectDialog,
     triageBucketId,
@@ -41,6 +41,21 @@ export function PlanDialogs({ c }: { c: PlanController }) {
     templateActions,
     taskImport,
   } = c;
+  const {
+    addToQueue,
+    archiveBucket,
+    archiveTask,
+    createStatus,
+    deleteBucket,
+    deleteStatus,
+    rescheduleScheduledAt,
+    setProjectState,
+    unscheduleTask,
+    updateStatus,
+  } = useTaskCommands();
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const moduleUserId = useTasksUserId();
+  const statuses = useTasksSelector((d) => d.statuses);
   return (
     <>
       {upcoming.dialogs}
@@ -49,14 +64,14 @@ export function PlanDialogs({ c }: { c: PlanController }) {
       <StatusesDialog
         open={statusesEditor !== null}
         projectName={statusesEditor?.projectId ? bucketNameById(statusesEditor.projectId) : null}
-        statuses={api.statuses.filter((s) => s.projectId === (statusesEditor?.projectId ?? null))}
+        statuses={statuses.filter((s) => s.projectId === (statusesEditor?.projectId ?? null))}
         canEdit={canEdit}
         addingTo={statusesEditor?.addingTo ?? null}
         onCreate={(category, name) =>
-          api.createStatus(statusesEditor?.projectId ?? null, category, name)
+          createStatus(statusesEditor?.projectId ?? null, category, name)
         }
-        onUpdate={api.updateStatus}
-        onDelete={api.deleteStatus}
+        onUpdate={updateStatus}
+        onDelete={deleteStatus}
         onClose={() => setStatusesEditor(null)}
       />
       <DeleteBucketDialog
@@ -65,9 +80,9 @@ export function PlanDialogs({ c }: { c: PlanController }) {
         summary={
           projectDialog
             ? projectDeleteSummary(
-                [...api.tasks, ...api.archivedTasks],
+                [...tasks, ...archivedTasks],
                 projectDialog.bucket.id,
-                api.currentUserId,
+                moduleUserId,
               )
             : { moving: 0, toYou: 0, finished: 0 }
         }
@@ -75,7 +90,7 @@ export function PlanDialogs({ c }: { c: PlanController }) {
         onConfirm={(bucket) => {
           // Pinned shows live projects only: a deleted one leaves it, a
           // refused delete or a Restore keeps (or brings back) its pin.
-          api.deleteBucket(bucket.id);
+          deleteBucket(bucket.id);
           // A saved view of it goes too (its place is gone).
           if (place === bucket.id) setSelection("inbox");
         }}
@@ -88,23 +103,19 @@ export function PlanDialogs({ c }: { c: PlanController }) {
         bucket={projectDialog?.kind === "done" ? projectDialog.bucket : null}
         open={projectDialog?.kind === "done" && projectDialog.open}
         intent="done"
-        openCount={
-          projectDialog ? projectOpenWork(api.tasks, projectDialog.bucket.id).open.length : 0
-        }
+        openCount={projectDialog ? projectOpenWork(tasks, projectDialog.bucket.id).open.length : 0}
         projects={buckets}
-        onConfirm={(bucket, openTasks) => api.setProjectState(bucket.id, "done", openTasks)}
+        onConfirm={(bucket, openTasks) => setProjectState(bucket.id, "done", openTasks)}
         onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
       />
       <ArchiveProjectDialog
         bucket={projectDialog?.kind === "archive" ? projectDialog.bucket : null}
         open={projectDialog?.kind === "archive" && projectDialog.open}
-        openCount={
-          projectDialog ? projectOpenWork(api.tasks, projectDialog.bucket.id).open.length : 0
-        }
+        openCount={projectDialog ? projectOpenWork(tasks, projectDialog.bucket.id).open.length : 0}
         projects={buckets}
         checkAccess={checkProjectAccess}
         onConfirm={(bucket, openTasks) => {
-          api.archiveBucket(bucket.id, openTasks);
+          archiveBucket(bucket.id, openTasks);
           if (place === bucket.id) setSelection("inbox");
         }}
         onClose={() => setProjectDialog((prev) => (prev ? { ...prev, open: false } : prev))}
@@ -118,9 +129,9 @@ export function PlanDialogs({ c }: { c: PlanController }) {
         bucketName={triageBucketId ? bucketNameById(triageBucketId) : ""}
         tasks={driftTasks}
         canEdit={canEdit}
-        onReschedule={(id, days) => api.rescheduleScheduledAt(id, days)}
-        onArchive={api.archiveTask}
-        onIgnore={api.unscheduleTask}
+        onReschedule={(id, days) => rescheduleScheduledAt(id, days)}
+        onArchive={archiveTask}
+        onIgnore={unscheduleTask}
         onCloseAutoFocus={(event) =>
           restoreNavFocus(event, railNavRef.current, triageFromRef.current)
         }
@@ -134,9 +145,9 @@ export function PlanDialogs({ c }: { c: PlanController }) {
         task={frontierOfferTask}
         frontier={frontierOffer}
         bucketNameById={bucketNameById}
-        onQueueTask={api.addToQueue}
+        onQueueTask={addToQueue}
         onQueueAnyway={() => {
-          if (frontierOfferTaskId) api.addToQueue(frontierOfferTaskId);
+          if (frontierOfferTaskId) addToQueue(frontierOfferTaskId);
         }}
       />
       <TasksWelcomeDialog welcome={welcome} />

@@ -5,7 +5,7 @@
 // Inbox's "assign and edit" sends the status as its category word.
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -34,7 +34,7 @@ rs.mock("sonner", () => {
 });
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const ME = "u1";
 
@@ -167,9 +167,11 @@ function fakeRuntime(tasks: Task[], queue: TaskQueueEntry[] = []) {
 
 async function mount(tasks: Task[], queue: TaskQueueEntry[] = []) {
   const fake = fakeRuntime(tasks, queue);
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, { userId: ME, workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: ME,
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
@@ -181,11 +183,11 @@ beforeEach(() => {
   toasts.errors = [];
 });
 
-describe("useTasksModule: one task's write follows the planner (A3)", () => {
+describe("Tasks: one task's write follows the planner (A3)", () => {
   it("a status sent with another field takes the task out of my queue, and it stays out", async () => {
     const { api, hook } = await mount([task("t1")], [queueRow("t1")]);
     await waitFor(() => expect(hook.result.current.queuedTaskIds.has("t1")).toBe(true));
-    act(() => hook.result.current.patchTask("t1", { status: "done", title: "Shipped" }));
+    act(() => hook.result.current.commands.patchTask("t1", { status: "done", title: "Shipped" }));
     // Shown at once: the same write takes it out of the queue.
     expect(hook.result.current.queuedTaskIds.has("t1")).toBe(false);
     await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1));
@@ -205,9 +207,9 @@ describe("useTasksModule: one task's write follows the planner (A3)", () => {
     const parent = task("a2", { bucketId: "x" });
     const child = task("a2c", { bucketId: "x", parentId: "a2" });
     const { api, hook } = await mount([repeating, parent, child]);
-    act(() => hook.result.current.toggleDone(repeating));
-    act(() => hook.result.current.toggleDone(parent));
-    act(() => hook.result.current.markDone("a2"));
+    act(() => hook.result.current.commands.toggleDone(repeating));
+    act(() => hook.result.current.commands.toggleDone(parent));
+    act(() => hook.result.current.commands.markDone("a2"));
     await tick();
     expect(toasts.errors).toEqual([
       "Unarchive “X” to change its tasks.",
@@ -222,11 +224,11 @@ describe("useTasksModule: one task's write follows the planner (A3)", () => {
   it("a check-off of a task still saving says so once and finishes nothing", async () => {
     const { api, hook } = await mount([]);
     act(() => {
-      void hook.result.current.createTask({ bucketId: "p1", title: "New" });
+      void hook.result.current.commands.createTask({ bucketId: "p1", title: "New" });
     });
     const tempId = hook.result.current.tasks.find((t) => t.title === "New")?.id ?? "";
     expect(tempId.startsWith("tmp-")).toBe(true);
-    act(() => hook.result.current.markDone(tempId));
+    act(() => hook.result.current.commands.markDone(tempId));
     await tick();
     expect(toasts.errors).toEqual(["Still saving that task — try again in a moment."]);
     expect(toasts.notes.map((n) => n.msg)).toEqual([]);
@@ -242,7 +244,7 @@ describe("useTasksModule: one task's write follows the planner (A3)", () => {
     const { api, hook, reschedule } = await mount([backlog]);
     let done: Promise<string[]> = Promise.resolve([]);
     act(() => {
-      done = hook.result.current.bulkWrite(
+      done = hook.result.current.commands.bulkWrite(
         [{ taskId: "b1", scheduledAt: "2026-11-12T09:00:00.000Z" }],
         {
           label: (n) => `Moved ${n}`,
@@ -267,7 +269,7 @@ describe("useTasksModule: one task's write follows the planner (A3)", () => {
   it("the Inbox's assign-and-edit sends the status as its category word, not a picked id", async () => {
     const inboxTask = task("i1", { bucketId: "inbox", statusId: "d-todo" });
     const { api, hook } = await mount([inboxTask]);
-    act(() => hook.result.current.patchTask("i1", { assigneeId: "u2", status: "done" }));
+    act(() => hook.result.current.commands.patchTask("i1", { assigneeId: "u2", status: "done" }));
     // Shown at once with the default set's Done.
     expect(hook.result.current.tasks.find((t) => t.id === "i1")).toMatchObject({
       assigneeId: "u2",
