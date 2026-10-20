@@ -16,6 +16,7 @@ import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-i
 import { wipeChatCopies } from "../../chat/store/store";
 import { forgetFocusUser } from "../../focus/engine";
 import { forgetRunUser } from "../../focus/run";
+import { wipeNotesCopies } from "../../notes/sync/people";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { forgetCaptureDrafts } from "../../tasks/capture/capture-draft";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
@@ -117,6 +118,7 @@ export function AccountSection() {
           // to send it to).
           void wipeSyncCopies({ keepWaiting: false });
           void wipeChatCopies({ keepWaiting: false });
+          void wipeNotesCopies({ keepWaiting: false });
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

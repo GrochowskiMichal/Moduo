@@ -93,6 +93,17 @@ export class StoreRegistry<S extends RegisteredStore> {
     return this.byScope.get(scope)?.get(workspaceId) ?? null;
   }
 
+  /**
+   * Count a store its owner made (not through `get`), so a sign-in or
+   * sign-out reaches it; the returned function forgets it.
+   */
+  track(store: S): () => void {
+    this.every.add(store);
+    return () => {
+      this.every.delete(store);
+    };
+  }
+
   /** Every running store. */
   all(): S[] {
     return [...this.every];

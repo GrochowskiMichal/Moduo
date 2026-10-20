@@ -71,9 +71,9 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const fireRefresh = useCallback(() => refreshRef.current(), []);
   const engine = useMemo(() => {
     if (!ready) return null;
-    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh);
+    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh, userId!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, runtime, workspaceId, fireRefresh]);
+  }, [ready, runtime, workspaceId, userId, fireRefresh]);
 
   useEffect(() => {
     if (!engine) return;
@@ -115,14 +115,14 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       setTruncated(bundle.truncated);
       setLoadError(null);
       setLoading(false);
-      void writeMetaCache(workspaceId!, bundle.notes);
+      void writeMetaCache(userId!, workspaceId!, bundle.notes);
     } catch (e) {
       if (reqRef.current !== req) return;
       // Outage: keep whatever is painted (cache), surface quietly.
       setLoadError(e instanceof Error ? e.message : "Couldn't load notes.");
       setLoading(false);
     }
-  }, [ready, runtime, workspaceId, withFavorites]);
+  }, [ready, runtime, userId, workspaceId, withFavorites]);
   refreshRef.current = () => void load();
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     // Guarded on "a server bundle has RESOLVED", not on load() having merely
     // started — load() bumps reqRef synchronously, so the old guard never let
     // the cache paint at all (offline boot rendered an empty list).
-    void readMetaCache(workspaceId!).then((cached) => {
+    void readMetaCache(userId!, workspaceId!).then((cached) => {
       if (cancelled || !cached || serverLoadedRef.current) return;
       if (notesRef.current.length === 0 && cached.notes.length > 0) {
         setNotes((cached.notes as any[]).map((n) => n as Note));
