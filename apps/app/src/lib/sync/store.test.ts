@@ -605,6 +605,34 @@ describe("offline: captures and check-offs (default g)", () => {
     release();
   });
 
+  it("a capture queued before the copy is read shows once and is sent once, with the copy's", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const first = makeStore(server);
+    await settled(first.store);
+    server.goOffline();
+    first.store.wentOffline();
+    first.store.enqueue({ kind: "create", id: "op-old", task: task("old", { title: "Old" }) });
+    first.release();
+    await first.store.whenPersisted();
+    first.store.dispose();
+
+    // The next store queues a capture before it was ever held (no copy read yet).
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache: first.cache,
+      timing: { persistMs: 0, throttleMs: 0 },
+    });
+    store.enqueue({ kind: "create", id: "op-new", task: task("new", { title: "New" }) });
+    await store.whenPersisted();
+    server.goOnline();
+    const release = store.acquire();
+    await settled(store);
+    expect(store.getSnapshot().pending).toBe(0);
+    expect(server.created.map((t) => t.id).sort()).toEqual(["new", "old"]);
+    expect(store.getSnapshot().bundle.tasks.filter((t) => t.id === "new")).toHaveLength(1);
+    release();
+  });
+
   it("queue on the device and flush in order on reconnect, without duplicates", async () => {
     const server = fakeServer();
     server.tables.tasks = [task("a", { updatedAt: at(5) })];

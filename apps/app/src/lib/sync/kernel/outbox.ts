@@ -92,15 +92,16 @@ export class Outbox<E extends OutboxEntryBase> {
 
   /**
    * Take on entries from the device copy (this tab's start, or another tab's
-   * waiting entries): those this tab doesn't hold or handled join the end.
+   * waiting entries): those this tab doesn't hold or handled join the end
+   * (or the front, `first`).
    * Returns the ones that joined.
    */
-  adopt(stored: unknown): E[] {
+  adopt(stored: unknown, opts: { first?: boolean } = {}): E[] {
     const joined = this.othersWaiting(stored);
-    for (const entry of joined) {
-      this.entries.push(entry);
-      this.adopted.add(entry.id);
-    }
+    for (const entry of joined) this.adopted.add(entry.id);
+    // `first`: the device copy's entries are older than any this tab queued
+    // before it read the copy (a start-up race): they go first.
+    this.entries = opts.first ? [...joined, ...this.entries] : [...this.entries, ...joined];
     return joined;
   }
 
