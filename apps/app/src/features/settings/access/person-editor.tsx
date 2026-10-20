@@ -1,7 +1,7 @@
 import { Crown, RotateCcw, UserMinus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
+import { PersonAvatar } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -35,14 +35,7 @@ import {
   type WorkspaceRoleDef,
 } from "../../workspaces/access";
 import type { WorkspaceMember } from "../../workspaces/types";
-import {
-  ExplainStrip,
-  firstName,
-  friendlyError,
-  PaneHeader,
-  PersonAvatar,
-  SaveBar,
-} from "./access-ui";
+import { ExplainStrip, firstName, friendlyError, PaneHeader, SaveBar } from "./access-ui";
 import { useDepartureSummary } from "./departure";
 import {
   PermissionMatrix,
@@ -188,7 +181,9 @@ export function PersonEditor({
   return (
     <div className="flex flex-col gap-5">
       <PaneHeader
-        leading={<PersonAvatar name={name} avatarUrl={member.avatarUrl} size="default" />}
+        leading={
+          <PersonAvatar name={name} id={member.userId} src={member.avatarUrl} size="default" />
+        }
         title={
           <>
             <span className="truncate">{name}</span>

@@ -115,6 +115,7 @@ import { type PlanHeaderControls, type PlanView, PlanViewHeader } from "./plan-v
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
 import { useTaskFileDrop } from "./row-drop";
 import { type FactsSource, taskFactsOf, useRowActions, waitingLabelsOf } from "./row-facts";
+import { isViewKeyTarget, runSharedRowKey, stepLabel, stepPosition } from "./row-keys";
 import { type SortColumn, TaskListHeader } from "./task-list-header";
 import {
   AddSectionLine,
@@ -124,7 +125,7 @@ import {
   ShowMoreLine,
 } from "./task-list-parts";
 import { CompletedLine } from "./task-meta";
-import { activateGlyph, type RowCommand, TaskRow } from "./task-row";
+import { type RowCommand, TaskRow } from "./task-row";
 import { TaskListSkeleton, TasksEmptyScope, TasksNoMatch } from "./task-view-states";
 import type { MultiSelect } from "./use-task-selection";
 import { VirtualStack } from "./virtual-stack";
@@ -1208,16 +1209,9 @@ export function TaskListView({
         refuseReorder();
         return;
       }
-      const siblings = siblingsOf(task);
-      const neighbour = siblings[siblings.findIndex((t) => t.id === task.id) + delta];
-      if (!neighbour) return;
-      const position = positionNextTo(
-        allTasks,
-        { id: neighbour.id, edge: delta < 0 ? "before" : "after" },
-        task.id,
-      );
+      const position = stepPosition(allTasks, siblingsOf(task), task, delta);
       if (position === null) return;
-      drop({ taskId: task.id, position }, task, delta < 0 ? "Moved up" : "Moved down");
+      drop({ taskId: task.id, position }, task, stepLabel(delta));
     },
     [dragOrder, refuseReorder, siblingsOf, allTasks, drop, nestedIds],
   );
@@ -1237,7 +1231,7 @@ export function TaskListView({
       const from = ids.indexOf(task.id);
       const to = from + delta;
       if (from < 0 || to < 0 || to >= ids.length) return;
-      reorderQueueWithUndo(ids, arrayMove(ids, from, to), delta < 0 ? "Moved up" : "Moved down");
+      reorderQueueWithUndo(ids, arrayMove(ids, from, to), stepLabel(delta));
     },
     [reorderable, groups, reorderQueueWithUndo],
   );
@@ -1269,12 +1263,7 @@ export function TaskListView({
       // The view's own keys first (Upcoming's ⌥←/→, the Inbox's triage keys,
       // TV-U15): only from the list itself, never a field or a row's portaled
       // surface (React bubbles those here too).
-      if (
-        onViewKey &&
-        e.target instanceof Node &&
-        e.currentTarget.contains(e.target) &&
-        !(e.target instanceof HTMLElement && e.target.closest("input, textarea, [contenteditable]"))
-      ) {
+      if (onViewKey && isViewKeyTarget(e)) {
         const selectedNow = visibleTasks.find((t) => t.id === selectedId) ?? null;
         if (onViewKey(e, selectedNow)) {
           e.preventDefault();
@@ -1290,6 +1279,22 @@ export function TaskListView({
       // button Chromium focused on click, a title) hands focus back to the
       // list, so the next Space/Enter acts on the selected row, not that button.
       if (e.target !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
+      if (
+        runSharedRowKey(action, e, {
+          selectedTask,
+          canEdit,
+          multiSelect,
+          order: visibleOrder,
+          actions,
+          onOpenTask,
+          startEdit: setEditingId,
+          setCommand,
+          toggleQueue,
+          deleteTask,
+        })
+      ) {
+        return;
+      }
       switch (action) {
         case "next":
           e.preventDefault();
@@ -1300,43 +1305,6 @@ export function TaskListView({
           e.preventDefault();
           multiSelect?.clear();
           move(-1);
-          return;
-        case "extend-next":
-        case "extend-prev":
-          if (!multiSelect) return;
-          e.preventDefault();
-          multiSelect.extend(action === "extend-next" ? 1 : -1, visibleOrder);
-          return;
-        case "select-all":
-          if (!multiSelect) return;
-          e.preventDefault();
-          multiSelect.selectAll(visibleOrder);
-          return;
-        case "clear-selection":
-          if (multiSelect?.clear()) e.preventDefault();
-          return;
-        case "toggle-done":
-          // The status icon's click (default k): finish, or reopen a closed one.
-          if (!selectedTask || !canEdit) return;
-          e.preventDefault();
-          activateGlyph(selectedTask, actions);
-          return;
-        case "open":
-          if (!selectedTask) return;
-          // A host with no full page (a story) keeps ⏎ as edit.
-          if (onOpenTask) {
-            e.preventDefault();
-            onOpenTask(selectedTask.id);
-            return;
-          }
-          if (!canEdit) return;
-          e.preventDefault();
-          setEditingId(selectedTask.id);
-          return;
-        case "edit":
-          if (!selectedTask || !canEdit) return;
-          e.preventDefault();
-          setEditingId(selectedTask.id);
           return;
         case "capture":
           e.preventDefault();
@@ -1349,13 +1317,6 @@ export function TaskListView({
           if (!selectedTask || !canEdit) return;
           e.preventDefault();
           setCommand({ taskId: selectedTask.id, kind: action });
-          return;
-        case "queue":
-          // Queue/unqueue the selected task (Round D: `q` is the queue key — was
-          // `t` from when the queue was "Today"; the rename makes `q` canonical).
-          if (!selectedTask || !canEdit) return;
-          e.preventDefault();
-          toggleQueue(selectedTask.id);
           return;
         case "focus-on":
           // ⇧F: on top of Up next, with the one clock (call 31).
@@ -1381,11 +1342,6 @@ export function TaskListView({
             e.preventDefault();
             setSelectedId(selectedTask.parentId);
           }
-          return;
-        case "delete":
-          if (!selectedTask || !canEdit) return;
-          e.preventDefault();
-          deleteTask(selectedTask.id);
           return;
         // The Queue keeps its own line-up: these keys are the lists' (TV-U4).
         case "nest":
