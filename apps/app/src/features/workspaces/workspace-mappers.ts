@@ -26,7 +26,7 @@ export function storageKey(userId: string): string {
 /**
  * DB `workspace_members.role` uses {owner,admin,member,viewer}; the app uses
  * {owner,admin,editor,viewer}. Map `member` → `editor` on the way in (the write
- * side maps `editor` → `member` in runtime.web `toMemberRole`). Missing/unknown
+ * side maps `editor` → `member` in `toMemberRole` below). Missing/unknown
  * → least privilege. DF-24.
  */
 export function normalizeMemberRole(role: unknown): WorkspaceRole {

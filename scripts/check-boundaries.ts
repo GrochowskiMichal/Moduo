@@ -4,7 +4,8 @@
  * Run from apps/app, like lint:tw.
  *
  *   runtime  The Supabase client lives behind the runtime port: only
- *            src/lib/runtime*.ts may import `lib/runtime.web`, `lib/runtime.db`
+ *            src/lib/runtime*.ts may import `lib/runtime.web*` (the client is
+ *            `lib/runtime.web.client`), `lib/runtime.db`
  *            or any `@supabase/*` package, or import values from the other
  *            runtime implementations (`lib/runtime.focus.web`, …; a type-only
  *            import is fine). `lib/runtime` and `lib/runtime.types` are the
@@ -30,7 +31,11 @@ import { ALLOW_LAYERS, ALLOW_RUNTIME } from "./check-boundaries.allow";
 
 export type Violation = { rule: "runtime" | "layers" | "tanstack"; file: string; target: string };
 
-const RUNTIME_ONLY = new Set(["src/lib/runtime.web", "src/lib/runtime.db"]);
+const RUNTIME_ONLY = new Set([
+  "src/lib/runtime.web",
+  "src/lib/runtime.web.client",
+  "src/lib/runtime.db",
+]);
 const RUNTIME_PORT = new Set(["src/lib/runtime", "src/lib/runtime.types"]);
 
 const TANSTACK_DB = /^@tanstack\/(?:react-)?db(?:\/|$)/;
@@ -124,7 +129,7 @@ export function compare(
 
 const FIX: Record<Violation["rule"], string> = {
   runtime:
-    "Only src/lib/runtime*.ts may talk to Supabase. Call getRuntime() (src/lib/runtime.ts) and, if the method is missing, add it to the port (lib/runtime.types.ts) and implement it in runtime.web.ts.",
+    "Only src/lib/runtime*.ts may talk to Supabase. Call getRuntime() (src/lib/runtime.ts) and, if the method is missing, add it to that module port (lib/runtime.types.<module>.ts) and implement it in lib/runtime.web.<module>.ts.",
   layers:
     "src/lib must not import src/features. Move the shared code down into src/lib (as timestampMicros moved to lib/sync/stamps.ts), or have the feature pass it in.",
   tanstack:

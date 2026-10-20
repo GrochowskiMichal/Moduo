@@ -36,7 +36,7 @@ const defaultDeps: EmojiStoreDeps = {
   live: (workspaceId, onRow) => {
     let stop: (() => void) | null = null;
     let cancelled = false;
-    void import("@/lib/runtime.web").then(({ supabaseClient }) => {
+    void import("@/lib/runtime.web.client").then(({ supabaseClient }) => {
       if (cancelled) return;
       seq += 1;
       // Inserts and updates only: a removal is an update (soft delete), so it

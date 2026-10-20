@@ -9,7 +9,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
-import { supabaseClient } from "@/lib/runtime.web";
+import { supabaseClient } from "@/lib/runtime.web.client";
 
 let paused: ReadonlySet<string> = new Set();
 let loadedFor: string | null = null;

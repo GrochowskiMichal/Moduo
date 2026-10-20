@@ -13,7 +13,7 @@ const h = rs.hoisted(() => ({
   getSession: rs.fn(),
 }));
 
-rs.mock("../../lib/runtime.web", () => ({
+rs.mock("../../lib/runtime.web.client", () => ({
   supabaseClient: { functions: { invoke: h.invoke }, auth: { getSession: h.getSession } },
 }));
 

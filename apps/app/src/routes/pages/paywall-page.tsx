@@ -18,7 +18,7 @@ import {
   TRIAL_DAYS_NO_CARD,
   TRIAL_DAYS_WITH_CARD,
 } from "@/features/billing/plans";
-import { supabaseClient } from "@/lib/runtime.web";
+import { supabaseClient } from "@/lib/runtime.web.client";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 

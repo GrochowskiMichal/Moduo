@@ -9,7 +9,7 @@ import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { supabaseClient } from "../../../lib/runtime.web";
+import { supabaseClient } from "../../../lib/runtime.web.client";
 import { useWorkspace } from "../../workspaces/workspace-context";
 import { busyIdsFromJson, DEFAULT_BUSY_IDS, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
