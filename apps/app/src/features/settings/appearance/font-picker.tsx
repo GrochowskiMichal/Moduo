@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import type { Font } from "../../../lib/appearance";
+import { loadPickerFonts } from "../../../lib/picker-fonts";
 
 import { AppearancePickerRow } from "./picker-row";
 
@@ -19,6 +21,10 @@ type Props = {
 };
 
 export function FontPicker({ value, onChange }: Props) {
+  // The previews render every face: fetch the picker-only ones.
+  useEffect(() => {
+    void loadPickerFonts();
+  }, []);
   return (
     <AppearancePickerRow
       title="Font"

@@ -26,7 +26,7 @@ import type { TaskRefResolver } from "../../focus/run";
 import { toggleFocusPause, useFocusTimer } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { Reference } from "../../spine/references/ui/reference";
 import { pillReading } from "../focus-screen";

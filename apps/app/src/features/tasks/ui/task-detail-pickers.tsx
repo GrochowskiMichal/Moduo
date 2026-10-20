@@ -26,11 +26,11 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
-import { Calendar } from "../../../components/ui/calendar";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
   DatePickerPanel,
   formatTimeText,
+  LazyCalendar,
   TimeInput,
   useDateDraft,
 } from "../../../components/ui/date-field";
@@ -1293,7 +1293,7 @@ function CustomRepeat({
         </Select>
         {spec.end.kind === "until" ? (
           // In place, not a popover inside this one (it would lose its clicks).
-          <Calendar
+          <LazyCalendar
             mode="single"
             aria-label="Last day"
             selected={new Date(`${spec.end.day}T12:00:00`)}
