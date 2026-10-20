@@ -145,8 +145,8 @@ import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { createTasksViews } from "./runtime.web.views";
-import { deltaCursor } from "./sync/delta-cursor";
-import { timestampMicros } from "./sync/stamps";
+import { deltaCursor } from "./sync/kernel/delta";
+import { timestampMicros } from "./sync/kernel/stamps";
 import type {
   AccessChange,
   SyncAccessResult,

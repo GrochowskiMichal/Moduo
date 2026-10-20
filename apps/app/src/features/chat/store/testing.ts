@@ -3,7 +3,7 @@
 // keyset pages, deltas by `updated_at`, the access check, resends by id) and a
 // switch for the network. Not imported by the app.
 
-import { timestampMicros } from "../../../lib/sync/stamps";
+import { micros } from "../../../lib/sync/kernel/stamps";
 import type {
   ChatCatchupItem,
   ChatChannel,
@@ -20,7 +20,7 @@ import type {
 import type { ChatLiveEvent, ChatLiveSource } from "../realtime";
 import { compareKeys, keyOf } from "./keys";
 
-const us = (stamp: string) => timestampMicros(stamp) ?? 0;
+const us = (stamp: string) => micros(stamp, 0);
 
 export const WS = "00000000-0000-4000-8000-0000000000ff";
 export const ME = "00000000-0000-4000-8000-000000000001";

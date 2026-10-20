@@ -67,8 +67,8 @@ import {
   isKeyOf,
   type SyncCache,
 } from "./cache";
+import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError } from "./network";
-import { isNewer, stampMinus } from "./stamps";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -2122,13 +2122,6 @@ function sameTruncations(a: readonly Truncation[], b: readonly Truncation[]): bo
 
 function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
-}
-
-/** The newer of two server stamps (either may be missing). */
-function newestOf(a: string | null, b: string | null): string | null {
-  if (!a) return b;
-  if (!b) return a;
-  return isNewer(b, a) ? b : a;
 }
 
 // ── One store per person and workspace ──────────────────────────────────────
