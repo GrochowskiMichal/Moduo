@@ -89,6 +89,7 @@ import {
   updatedLabel,
 } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
+import { byIdOf } from "../selectors";
 import { statusNameOf } from "../statuses";
 import { nowOn, useMinuteTick, useToday } from "../use-today";
 import {
@@ -440,7 +441,7 @@ export function TaskListView({
   // so subtask-free lists look exactly as before.
   const expandSlot = nestedIds.size > 0;
   // Parent titles for subtasks rendered flat (Today, or parent out of scope).
-  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const taskById = byIdOf(api.tasks);
   const parentTitleFor = (task: Task): string | null => {
     if (!task.parentId || nestedIds.has(task.id)) return null;
     const parent = taskById.get(task.parentId);

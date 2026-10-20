@@ -44,14 +44,10 @@ import { type TaskDropWrite, undoWrite } from "../dnd/drop-write";
 import { bucketEndPosition } from "../dnd/rail-drop";
 import {
   betweenPositions,
-  blockedTaskIds as computeBlockedTaskIds,
-  subtasksByParent as computeSubtasksByParent,
   endPosition,
   formatScheduled,
-  frontierTasks,
   makeTask,
   type NewTaskFields,
-  subtaskProgress,
   wouldCreateCycle,
 } from "../helpers";
 import { subtasksToFinish } from "../home";
@@ -60,7 +56,6 @@ import {
   type Area,
   type Bucket,
   INBOX_BUCKET_NAME,
-  isDrifted,
   type ProjectStatus,
   type QueuePlacement,
   type RecurrenceRule,
@@ -85,16 +80,41 @@ import { clientCopyClears } from "../project-overview";
 import {
   alsoInLabel,
   applyQueueMoves,
-  claimsByTask,
   endOfQueue,
   movedPosition,
-  openQueueCount,
-  queueEntriesOf,
   queueMove,
   queueMoves,
-  queueTasks,
 } from "../queue";
 import { engineZone, recurrenceOnStatusChange, skipOccurrencePatch } from "../recurrence-engine";
+import {
+  allBucketsOf,
+  allTasksOf,
+  archivedBucketsOf,
+  archivedTasksOf,
+  areasOfBundle,
+  blockedTaskIdsOf,
+  blockersByTaskOf,
+  dependentsByTaskOf,
+  driftCountByBucketOf,
+  frontierOf,
+  inboxOf,
+  liveBucketsOf,
+  liveTasksOf,
+  myQueueEntriesOf,
+  openTaskCountByBucketOf,
+  queueClaimsOf,
+  queueCountOf,
+  queuedTaskIdsOf,
+  queuedTasksOf,
+  statusByIdOf,
+  statusesForBucketOf,
+  statusesOfBundle,
+  subtaskProgressByTaskOf,
+  subtasksByParentOf,
+  taskCountByBucketOf,
+  userBucketsOf,
+  workspaceQueueRowsOf,
+} from "../selectors";
 import {
   areaMoveAfter,
   projectDeletePlan,
@@ -108,8 +128,8 @@ import {
   optimisticStatus,
   type StatusTarget,
   statusKeyCategory,
-  statusSetFor,
 } from "../statuses";
+import { useToday } from "../use-today";
 import { useBulkOps } from "./use-bulk-ops";
 import { useViewOps } from "./use-view-ops";
 
@@ -137,10 +157,6 @@ export type ArchiveOpenTasks =
   | { kind: "keep" }
   | { kind: "wont_do" }
   | { kind: "move"; projectId: string };
-
-function byPosition<T extends { position: string }>(a: T, b: T): number {
-  return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
-}
 
 /** Optimistic placeholder id, not yet a real server uuid. */
 const isTempId = (id: string) => id.startsWith("tmp-");
@@ -183,16 +199,10 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   // Archived projects and their tasks ride apart in the store's bundle, so
   // every other surface skips them (TV-U6). Lookups here see both: an
   // archive's Undo edits tasks that are still archived.
-  const archivedBucketRows = bundle.archivedBuckets ?? NO_ROWS;
-  const archivedTaskRows = bundle.archivedTasks ?? NO_ROWS;
-  const allBuckets = useMemo(
-    () => (archivedBucketRows.length ? [...bundle.buckets, ...archivedBucketRows] : bundle.buckets),
-    [bundle.buckets, archivedBucketRows],
-  );
-  const allTasks = useMemo(
-    () => (archivedTaskRows.length ? [...bundle.tasks, ...archivedTaskRows] : bundle.tasks),
-    [bundle.tasks, archivedTaskRows],
-  );
+  // Derived data comes from the shared selectors (`../selectors`), cached on
+  // the store's row arrays: every page that shows this workspace shares them.
+  const allBuckets = allBucketsOf(bundle);
+  const allTasks = allTasksOf(bundle);
 
   // ── drops (TV-U4) ───────────────────────────────────────────────────────────
   /** The rows as they are now, for a save or an Undo that runs later. */
@@ -286,158 +296,50 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   // bundle (the write shows on every surface at once). Archived ones and
   // their tasks ride apart (TV-U6): out of the sidebar, every list, count and
   // queue, shown under Archived projects and found by search.
-  const liveBuckets = useMemo(() => bundle.buckets.filter((b) => !b.deletedAt), [bundle.buckets]);
+  const liveBuckets = liveBucketsOf(bundle.buckets);
   // Your own Inbox (a teammate's may be visible too).
-  const inbox = useMemo(
-    () =>
-      liveBuckets.find((b) => b.isSystem && b.ownerId === userId) ??
-      liveBuckets.find((b) => b.isSystem) ??
-      null,
-    [liveBuckets, userId],
-  );
-  const liveTasks = useMemo(
-    () =>
-      bundle.tasks
-        .filter((t) => !t.deletedAt)
-        .slice()
-        .sort(byPosition),
-    [bundle.tasks],
-  );
+  const inbox = inboxOf(bundle.buckets, userId);
+  const liveTasks = liveTasksOf(bundle.tasks);
   /** Archived projects, position-sorted (Archived projects). */
-  const archivedBuckets = useMemo(
-    () =>
-      archivedBucketRows
-        .filter((b) => !b.deletedAt)
-        .slice()
-        .sort(byPosition),
-    [archivedBucketRows],
-  );
+  const archivedBuckets = archivedBucketsOf(bundle.archivedBuckets ?? NO_ROWS);
   /** Tasks of archived projects: only an opened archived project and search show them. */
-  const archivedTasks = useMemo(
-    () =>
-      archivedTaskRows
-        .filter((t) => !t.deletedAt)
-        .slice()
-        .sort(byPosition),
-    [archivedTaskRows],
-  );
+  const archivedTasks = archivedTasksOf(bundle.archivedTasks ?? NO_ROWS);
   /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
-  const buckets = useMemo(
-    () =>
-      liveBuckets
-        .filter((b) => !b.isSystem)
-        .slice()
-        .sort(byPosition),
-    [liveBuckets],
-  );
+  const buckets = userBucketsOf(bundle.buckets);
   /** The workspace's areas you can see, in sidebar order (TV-D10). */
-  const areas = useMemo(
-    () => (bundle.areas ?? NO_ROWS).slice().sort((a, b) => a.position - b.position),
-    [bundle.areas],
-  );
+  const areas = areasOfBundle(bundle);
 
   // ── statuses (TV-D9) ─────────────────────────────────────────────────────────
   /** Every status this reader can see: the workspace default set and each
    *  visible project's (REPLAN 53a). */
-  const statuses = useMemo(() => bundle.statuses ?? [], [bundle.statuses]);
-  const statusById = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses]);
-  const bucketById = useMemo(() => new Map(allBuckets.map((b) => [b.id, b])), [allBuckets]);
+  const statuses = statusesOfBundle(bundle);
+  const statusById = statusByIdOf(statuses);
   /** The statuses a project's tasks use (the Inbox: the workspace default). */
   const statusesForBucket = useCallback(
-    (bucketId: string): ProjectStatus[] => statusSetFor(statuses, bucketById.get(bucketId)),
-    [statuses, bucketById],
+    (bucketId: string): ProjectStatus[] => statusesForBucketOf(statuses, allBuckets, bucketId),
+    [statuses, allBuckets],
   );
 
-  /** Open (To do / In progress) tasks per project: the sidebar counts. Backlog
-   *  sits out (TV-D9). */
-  const openTaskCountByBucket = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const t of liveTasks) {
-      if (!isOpenTask(t)) continue;
-      counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
-    }
-    return counts;
-  }, [liveTasks]);
+  /** Open (To do / In progress) tasks per project: the sidebar counts. */
+  const openTaskCountByBucket = openTaskCountByBucketOf(liveTasks);
+  /** Every task a bucket's own list shows: the delete-bucket confirm's count. */
+  const taskCountByBucket = taskCountByBucketOf(liveTasks);
 
-  /** Every task a bucket's own list shows (open + done, not archived) — the
-   * count the delete-bucket confirm and its toast quote. */
-  const taskCountByBucket = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const t of liveTasks) {
-      if (t.status === "archived") continue;
-      counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
-    }
-    return counts;
-  }, [liveTasks]);
-
-  // ── subtasks (one level) ─────────────────────────────────────────────────────
-  /** Live, non-archived children keyed by parent id (position order). Archived
-   * is terminal — out of open lists and the n/m mirror. Unresolvable parents
-   * are ignored — those tasks read as top-level (children are never lost). */
-  const subtasksByParent = useMemo(
-    () => computeSubtasksByParent(liveTasks.filter((t) => t.status !== "archived")),
-    [liveTasks],
-  );
-
-  /** Quiet n/m per parent — the ambient progress mirror on rows/cards/panel. */
-  const subtaskProgressByTask = useMemo(() => {
-    const map = new Map<string, { done: number; total: number }>();
-    for (const [parentId, children] of subtasksByParent) {
-      map.set(parentId, subtaskProgress(children));
-    }
-    return map;
-  }, [subtasksByParent]);
-
-  // ── blocked-by dependencies (spec §5c) ───────────────────────────────────────
-  /** Computed blocked state (drift pattern): tasks with ≥1 live, open blocker. */
-  const blockedIds = useMemo(
-    () => computeBlockedTaskIds(liveTasks, bundle.taskRelations),
-    [liveTasks, bundle.taskRelations],
-  );
-
-  /** Live blocker tasks per blocked task (the detail panel's "Blocked by"). */
-  const blockersByTask = useMemo(() => {
-    const byId = new Map(liveTasks.map((t) => [t.id, t]));
-    const map = new Map<string, Task[]>();
-    for (const rel of bundle.taskRelations) {
-      const blocker = byId.get(rel.blockerTaskId);
-      if (!blocker) continue; // inert edge — blocker deleted
-      const list = map.get(rel.blockedTaskId);
-      if (list) list.push(blocker);
-      else map.set(rel.blockedTaskId, [blocker]);
-    }
-    return map;
-  }, [liveTasks, bundle.taskRelations]);
-
-  /** Live dependent tasks per blocker (the read-only "Blocks" reverse list). */
-  const dependentsByTask = useMemo(() => {
-    const byId = new Map(liveTasks.map((t) => [t.id, t]));
-    const map = new Map<string, Task[]>();
-    for (const rel of bundle.taskRelations) {
-      const dependent = byId.get(rel.blockedTaskId);
-      if (!dependent) continue;
-      const list = map.get(rel.blockerTaskId);
-      if (list) list.push(dependent);
-      else map.set(rel.blockerTaskId, [dependent]);
-    }
-    return map;
-  }, [liveTasks, bundle.taskRelations]);
-
+  // ── subtasks (one level) and blocked-by dependencies (spec §5c) ──────────────
+  const subtasksByParent = subtasksByParentOf(liveTasks);
+  const subtaskProgressByTask = subtaskProgressByTaskOf(liveTasks);
+  const blockedIds = blockedTaskIdsOf(liveTasks, bundle.taskRelations);
+  const blockersByTask = blockersByTaskOf(liveTasks, bundle.taskRelations);
+  const dependentsByTask = dependentsByTaskOf(liveTasks, bundle.taskRelations);
   /** The unblocked frontier of a task — "what's actually next" (spec §5c). */
   const frontierFor = useCallback(
-    (taskId: string) => frontierTasks(taskId, liveTasks, bundle.taskRelations),
+    (taskId: string) => frontierOf(liveTasks, bundle.taskRelations, taskId),
     [liveTasks, bundle.taskRelations],
   );
 
-  /** Soft, ambient per-bucket drift counts (scheduled-and-passed, still open). */
-  const driftCountByBucket = useMemo(() => {
-    const now = new Date();
-    const counts = new Map<string, number>();
-    for (const t of liveTasks) {
-      if (isDrifted(t, now)) counts.set(t.bucketId, (counts.get(t.bucketId) ?? 0) + 1);
-    }
-    return counts;
-  }, [liveTasks]);
+  /** Soft, ambient per-bucket drift counts; rolls over at midnight. */
+  const today = useToday();
+  const driftCountByBucket = driftCountByBucketOf(liveTasks, today);
 
   // ── tags (workspace-level, cross-cutting) ────────────────────────────────────
   // Read from the shared workspace tag store (TV-T1), which the shared store
@@ -470,37 +372,24 @@ export function useTasksModule(baseRuntime: ModuoRuntime | null, params: Params)
   // Each person has their own Queue, not tied to a date (tasks-v2 §2). Rows of
   // other people are claims ("In Mike's queue"). The store keeps one
   // workspace's rows, so another workspace's never show here.
-  const liveQueueRows = useMemo(
-    () => queueRows.filter((e) => e.workspaceId === workspaceId),
-    [queueRows, workspaceId],
-  );
+  const liveQueueRows = workspaceQueueRowsOf(queueRows, workspaceId);
   /** My line-up, in order (what the server holds, plus optimistic edits). */
-  const myQueueEntries = useMemo(
-    () => queueEntriesOf(liveQueueRows, userId),
-    [liveQueueRows, userId],
-  );
-  const queuedTaskIds = useMemo(
-    () => new Set(myQueueEntries.map((e) => e.taskId)),
-    [myQueueEntries],
-  );
+  const myQueueEntries = myQueueEntriesOf(liveQueueRows, userId);
+  const queuedTaskIds = queuedTaskIdsOf(myQueueEntries);
   /** My line-up as it is now, for a queue op called later than its render
    *  (a drop's Undo runs seconds after the drop's closure was made). */
   const myQueueRef = useRef(myQueueEntries);
   myQueueRef.current = myQueueEntries;
   /** Who else has each task queued (user ids, earliest first). */
-  const queueClaims = useMemo(() => claimsByTask(liveQueueRows, userId), [liveQueueRows, userId]);
+  const queueClaims = queueClaimsOf(liveQueueRows, userId);
   /** My queue's tasks in order, with the ones I just completed still in place. */
-  const queuedTasks = useMemo(
-    () =>
-      queueTasks(
-        myQueueEntries,
-        keptRows.filter((e) => e.workspaceId === workspaceId),
-        liveTasks,
-      ),
-    [myQueueEntries, keptRows, workspaceId, liveTasks],
+  const queuedTasks = queuedTasksOf(
+    myQueueEntries,
+    workspaceQueueRowsOf(keptRows, workspaceId),
+    liveTasks,
   );
   /** The rail's Queue count: my open queued tasks. */
-  const queueCount = useMemo(() => openQueueCount(queuedTasks), [queuedTasks]);
+  const queueCount = queueCountOf(queuedTasks);
 
   // Names for the "Also in Mike's queue" note. Read without `useWorkspace` so
   // the hook still works where no workspace provider is mounted (tests).

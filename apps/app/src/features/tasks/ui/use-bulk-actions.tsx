@@ -39,6 +39,7 @@ import { LEVEL_OPTIONS, todayStr } from "../helpers";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { PriorityLevel, Task } from "../model";
 import { engineZone } from "../recurrence-engine";
+import { byIdOf } from "../selectors";
 import { bucketDotColor } from "../sidebar";
 import { CATEGORY_LABELS, statusesByCategory } from "../statuses";
 import { AssigneeAvatar } from "./assignee-avatar";
@@ -111,7 +112,7 @@ export function useBulkActions({
   const { assignees, byId } = useAssignees();
   const tasks = useMemo(() => {
     if (!multi) return [];
-    const map = new Map(api.tasks.map((t) => [t.id, t]));
+    const map = byIdOf(api.tasks);
     return ids.map((id) => map.get(id)).filter((t): t is Task => !!t);
   }, [multi, ids, api.tasks]);
 

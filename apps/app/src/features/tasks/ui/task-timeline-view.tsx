@@ -43,6 +43,7 @@ import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../displa
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskRelation } from "../model";
 import { PRIVATE_PROJECT_LABEL } from "../model";
+import { byIdOf } from "../selectors";
 import { contradictions } from "../timeline-deps";
 import { fitZoom } from "../timeline-drag";
 import {
@@ -696,7 +697,7 @@ export function TaskTimelineView({
 
   // ── Dependencies (70, 68b) ──────────────────────────────────────────────
   // Only the reader's own copy: a relation to a task they can't see draws nothing.
-  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const taskById = byIdOf(api.tasks);
   const relations = api.taskRelations ?? NO_RELATIONS;
   const depMode = display.timelineDeps ?? "selected";
   const lateMarks = useMemo(

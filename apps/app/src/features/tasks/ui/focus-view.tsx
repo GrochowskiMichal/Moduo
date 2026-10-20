@@ -85,6 +85,7 @@ import {
 } from "../focus-screen";
 import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
+import { byIdOf } from "../selectors";
 import { bucketDotColor } from "../sidebar";
 import { AlongTheWayOffer, BreakOffer } from "./focus-between";
 import { FocusEmptyState } from "./focus-empty-state";
@@ -154,7 +155,7 @@ export function FocusView({
   const rootRef = useRef<HTMLDivElement>(null);
   const me = api.currentUserId;
 
-  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const taskById = byIdOf(api.tasks);
   // A session in this workspace (here or on another of my devices).
   const here = focus.active && focus.workspaceId === workspaceId;
   const sessionTask = here && focus.taskId ? (taskById.get(focus.taskId) ?? null) : null;
