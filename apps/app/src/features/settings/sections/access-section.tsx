@@ -1,7 +1,6 @@
 import { Lock, Plus, UserPlus } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-
-import { TeamMark } from "../../../components/ui/avatar";
+import { PersonAvatar, TeamMark } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -17,7 +16,6 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { ShareDefaultsPanel } from "../../sharing/share-defaults-panel";
 import { countOverrides, type WorkspaceRoleDef } from "../../workspaces/access";
-import { PersonAvatar } from "../access/access-ui";
 import { InvitePanel } from "../access/invite-panel";
 import { memberLabel, PersonEditor } from "../access/person-editor";
 import { RoleEditor, type RoleEditorTarget } from "../access/role-editor";
@@ -237,7 +235,12 @@ export function AccessSection() {
                     onSelect={() => select({ kind: "person", id: member.id })}
                     trailing={isOwnerRow ? "Owner" : n > 0 ? `${n} exc.` : null}
                   >
-                    <PersonAvatar name={memberLabel(member)} avatarUrl={member.avatarUrl} />
+                    <PersonAvatar
+                      name={memberLabel(member)}
+                      id={member.userId}
+                      src={member.avatarUrl}
+                      size="sm"
+                    />
                     <span className="truncate">
                       {memberLabel(member)}
                       {member.userId === userId ? (

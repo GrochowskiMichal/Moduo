@@ -44,15 +44,18 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  overlayClassName,
   style,
   onInteractOutside,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
+  /** Tunes the scrim behind this dialog (e.g. a heavier one for Settings). */
+  overlayClassName?: string;
 }) {
   return (
     <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

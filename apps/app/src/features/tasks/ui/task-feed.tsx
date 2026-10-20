@@ -45,11 +45,11 @@ import { useReferences } from "../../spine/references/context";
 import { referencesInText } from "../../spine/references/text";
 import { useCommentReactions } from "../../spine/ui/comment-reactions";
 import {
+  CommentAvatar,
   CommentBody,
   CommentCard,
   CommentComposer,
   type ComposerTeam,
-  PersonAvatar,
 } from "../../spine/ui/comments-panel";
 import { activityActorName, activityLine } from "../activity";
 import {
@@ -418,7 +418,7 @@ function FeedEvent({
   children: React.ReactNode;
 }) {
   return (
-    <FeedLine avatar={<PersonAvatar person={person} app={app} />} time={time} timeTitle={title}>
+    <FeedLine avatar={<CommentAvatar person={person} app={app} />} time={time} timeTitle={title}>
       {children}
     </FeedLine>
   );

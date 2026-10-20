@@ -16,9 +16,15 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { Dialog as DialogPrimitive } from "radix-ui";
 import { type ComponentType, useEffect, useState } from "react";
 
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../../components/ui/dialog";
 import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
@@ -169,101 +175,76 @@ export function SettingsModal() {
   };
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay
-          className={cn(
-            "fixed inset-0 transition-opacity",
-            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
-            "data-[state=open]:animate-in data-[state=open]:fade-in-0",
-            isAppearance ? "bg-background/65" : "bg-background/85",
-          )}
-          style={{ zIndex: "var(--z-overlay)" }}
-        />
-        <DialogPrimitive.Content
-          aria-describedby={undefined}
-          onInteractOutside={(e) => {
-            // An Undo toast raised in Settings (a team's delete, TV-D13) is
-            // pressed without closing Settings, like the kit's Dialog does.
-            if (e.target instanceof Element && e.target.closest("[data-sonner-toaster]")) {
-              e.preventDefault();
-            }
-          }}
-          className={cn(
-            "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-            "w-[min(92vw,1040px)] h-[min(80vh,720px)]",
-            "grid grid-cols-[220px_minmax(0,1fr)] overflow-hidden outline-none",
-            "rounded-xl border border-border bg-card text-card-foreground",
-            "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-            "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-          )}
-          style={{
-            zIndex: "var(--z-dialog)",
-            boxShadow: "var(--shadow-overlay)",
-          }}
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        overlayClassName={isAppearance ? "bg-background/65" : "bg-background/85"}
+        className={cn(
+          "w-[min(92vw,1040px)] max-w-none h-[min(80vh,720px)] gap-0 p-0",
+          "grid-cols-[220px_minmax(0,1fr)] overflow-hidden",
+        )}
+      >
+        <DialogTitle className="sr-only">Settings</DialogTitle>
+        <DialogDescription className="sr-only">
+          Customize appearance, account, billing, workspace, integrations, and preferences.
+        </DialogDescription>
+
+        <Tabs
+          value={section}
+          onValueChange={(value) => setSection(value as SettingsSectionId)}
+          orientation="vertical"
+          className="contents"
         >
-          <DialogPrimitive.Title className="sr-only">Settings</DialogPrimitive.Title>
-          <DialogPrimitive.Description className="sr-only">
-            Customize appearance, account, billing, workspace, integrations, and preferences.
-          </DialogPrimitive.Description>
-
-          <Tabs
-            value={section}
-            onValueChange={(value) => setSection(value as SettingsSectionId)}
-            orientation="vertical"
-            className="contents"
+          <nav
+            aria-label="Settings sections"
+            className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
           >
-            <nav
-              aria-label="Settings sections"
-              className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto border-r border-border bg-muted/40 p-3"
-            >
-              <div className="flex items-center justify-between px-2 pt-1">
-                <Eyebrow>Settings</Eyebrow>
-                <DialogPrimitive.Close
-                  className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  aria-label="Close settings"
-                >
-                  <X className="size-4" />
-                </DialogPrimitive.Close>
-              </div>
-
-              {SETTINGS_GROUPS.map((group) => (
-                <div key={group.label} className="flex flex-col gap-1">
-                  <Eyebrow className="px-3">{group.label}</Eyebrow>
-                  <TabsList
-                    variant="default"
-                    aria-label={group.label}
-                    className="rounded-none bg-transparent p-0 gap-1"
-                  >
-                    {group.ids.map((id) => {
-                      const { label, icon: Icon } = SECTION_BY_ID[id];
-                      return (
-                        <TabsTrigger
-                          key={id}
-                          value={id}
-                          className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground hover:bg-state-hover hover:text-foreground data-[state=active]:bg-state-active data-[state=active]:text-foreground data-[state=active]:shadow-none"
-                          style={{ height: "var(--row-h)" }}
-                        >
-                          <Icon className="size-4" aria-hidden />
-                          <span>{label}</span>
-                        </TabsTrigger>
-                      );
-                    })}
-                  </TabsList>
-                </div>
-              ))}
-            </nav>
-
-            <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
-              {SECTIONS.map(({ id, Component }) => (
-                <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
-                  {id === section ? <SettingsSectionView section={Component} /> : null}
-                </TabsContent>
-              ))}
+            <div className="flex items-center justify-between px-2 pt-1">
+              <Eyebrow>Settings</Eyebrow>
+              <DialogClose
+                className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                aria-label="Close settings"
+              >
+                <X className="size-4" />
+              </DialogClose>
             </div>
-          </Tabs>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+
+            {SETTINGS_GROUPS.map((group) => (
+              <div key={group.label} className="flex flex-col gap-1">
+                <Eyebrow className="px-3">{group.label}</Eyebrow>
+                <TabsList
+                  variant="default"
+                  aria-label={group.label}
+                  className="rounded-none bg-transparent p-0 gap-1"
+                >
+                  {group.ids.map((id) => {
+                    const { label, icon: Icon } = SECTION_BY_ID[id];
+                    return (
+                      <TabsTrigger
+                        key={id}
+                        value={id}
+                        className="flex items-center justify-start gap-2 rounded-md px-3 font-sans text-sm font-normal text-muted-foreground hover:bg-state-hover hover:text-foreground data-[state=active]:bg-state-active data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                        style={{ height: "var(--row-h)" }}
+                      >
+                        <Icon className="size-4" aria-hidden />
+                        <span>{label}</span>
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+              </div>
+            ))}
+          </nav>
+
+          <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
+            {SECTIONS.map(({ id, Component }) => (
+              <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
+                {id === section ? <SettingsSectionView section={Component} /> : null}
+              </TabsContent>
+            ))}
+          </div>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 }
