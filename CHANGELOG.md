@@ -5,6 +5,12 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.2.4 · 2026-10-20
+
+### Improved
+
+- Reliability improvements.
+
 ## 1.2.3 · 2026-10-20
 
 ### Fixed
