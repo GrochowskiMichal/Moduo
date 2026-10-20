@@ -145,8 +145,7 @@ import { createReferencePreviews } from "./runtime.web.previews";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { createTasksViews } from "./runtime.web.views";
-import { deltaCursor } from "./sync/delta-cursor";
-import { timestampMicros } from "./sync/stamps";
+import { deltaCursor, keysetAfter, newestStamp } from "./sync/kernel/delta";
 import type {
   AccessChange,
   SyncAccessResult,
@@ -4523,9 +4522,6 @@ const SYNC_SOURCES: Record<SyncTableName, SyncSource> = {
 /** How many ids one `id=in.(…)` read carries (a URL stays well under its limit). */
 const IDS_PER_READ = 150;
 
-/** A value PostgREST reads whole inside `or=(…)` (timestamps carry `:` and `+`). */
-const pgrstQuoted = (value: string) => `"${value.replace(/["\\]/g, "\\$&")}"`;
-
 /**
  * Page a query by key up to `cap` rows: by `id` (a first load), or by
  * (`updated_at`, `id`) (a delta). `build` makes the filtered query afresh each
@@ -4552,10 +4548,8 @@ async function readByKey(args: {
       if (last) q = q.gt(key, last.id);
       q = q.order(key);
     } else {
-      if (last) {
-        const at = pgrstQuoted(last.updatedAt);
-        q = q.or(`${stamp}.gt.${at},and(${stamp}.eq.${at},${key}.gt.${last.id})`);
-      }
+      // Keyset: the page after the last (stamp, key) read (kernel/delta.ts).
+      if (last) q = q.or(keysetAfter(stamp, key, { stamp: last.updatedAt, key: last.id }));
       q = q.order(stamp).order(key);
     }
     const { data, error } = await q.limit(want);
@@ -4664,15 +4658,8 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
   if (res.error) throw new DbError(res.error);
   const liveRows: unknown[] = [];
   const deleted: string[] = [];
-  let maxUpdatedAt: string | null = null;
-  let maxMicros = Number.NEGATIVE_INFINITY;
+  const maxUpdatedAt = newestStamp(res.rows, (row) => row?.updated_at);
   for (const row of res.rows) {
-    const stamp = typeof row?.updated_at === "string" ? row.updated_at : null;
-    const micros = timestampMicros(stamp);
-    if (stamp && micros !== null && micros > maxMicros) {
-      maxMicros = micros;
-      maxUpdatedAt = stamp;
-    }
     if (row?.deleted_at) {
       if (typeof row.id === "string") deleted.push(row.id);
     } else {
