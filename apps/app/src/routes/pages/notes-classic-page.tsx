@@ -46,6 +46,7 @@ import {
   scrollEditorToHeading,
   scrollEditorToQuote,
 } from "../../features/notes/shell/editor-dom";
+import { SharingQuestionDialog } from "../../features/notes/shell/sharing-question-dialog";
 import { displayTitle } from "../../features/notes/title";
 import {
   buildNoteSections,
@@ -70,7 +71,6 @@ import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
 import { type CaptureSource, useCaptureSource } from "../../lib/capture-source";
 import type { EntityRef } from "../../lib/entity-links";
-import { supabaseClient } from "../../lib/runtime.web";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
@@ -243,6 +243,17 @@ export function NotesClassicPage() {
     deleteTask: tasksApi.deleteTask,
   });
 
+  // A shared note dropped under a private one: ask first (the shared dialog),
+  // then move. "Match the new parent" rides the same server op as the move.
+  type SharingQuestion = { noteId: string; parentId: string; position: string };
+  const [sharingQuestion, setSharingQuestionState] = useState<SharingQuestion | null>(null);
+  // The dialog can answer twice (the button, then its own close); the ref
+  // makes the second answer a no-op.
+  const questionRef = useRef<SharingQuestion | null>(null);
+  const setSharingQuestion = useCallback((q: SharingQuestion | null) => {
+    questionRef.current = q;
+    setSharingQuestionState(q);
+  }, []);
   const onDropRow = useCallback(
     (dragId: string, targetId: string, zone: DropZone) => {
       const drop = resolveDrop(notes, dragId, targetId, zone, {
@@ -252,17 +263,21 @@ export function NotesClassicPage() {
       if (!drop) return; // self/cycle/unknown — quiet no-op
       // A sub-note moved to the top level keeps everyone's access: the server
       // freezes what its parent gave it (NR-1, notes__keep_access_on_reroot).
-      const parentPrivate = drop.parentId ? noteIsPrivate(drop.parentId, notes) : false;
-      const keepSharing =
-        parentPrivate &&
-        !noteIsPrivate(dragId, notes) &&
-        !window.confirm("This note will sit under a private note. Make it private too?");
-      module.moveNote(dragId, drop.parentId, drop.position);
-      if (parentPrivate && !keepSharing && !noteIsPrivate(dragId, notes)) {
-        void supabaseClient.rpc("share_op_follow_parent", { p_note_id: dragId });
+      if (drop.parentId && noteIsPrivate(drop.parentId, notes) && !noteIsPrivate(dragId, notes)) {
+        setSharingQuestion({ noteId: dragId, parentId: drop.parentId, position: drop.position });
+        return;
       }
+      void module.moveNote(dragId, drop.parentId, drop.position);
     },
-    [notes, module],
+    [notes, module, setSharingQuestion],
+  );
+  const answerSharing = useCallback(
+    (match: boolean) => {
+      const q = questionRef.current;
+      setSharingQuestion(null);
+      if (q) void module.moveNote(q.noteId, q.parentId, q.position, { followParent: match });
+    },
+    [module, setSharingQuestion],
   );
 
   const canRender = Boolean(
@@ -672,6 +687,7 @@ export function NotesClassicPage() {
           .filter((n) => !n.parentId && !n.deletedAt)
           .map((n) => n.position)}
       />
+      <SharingQuestionDialog open={sharingQuestion !== null} onAnswer={answerSharing} />
     </>
   );
 }

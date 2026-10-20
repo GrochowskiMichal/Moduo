@@ -71,6 +71,8 @@ export const notesModuleManifest: ModuleManifest = {
         p_note_id: "the note uuid",
         p_parent_id: "new parent uuid, or null for a root",
         p_position: "fractional position among the new siblings (optional)",
+        p_follow_parent:
+          "true: also follow the new parent's sharing, in the same transaction (optional, default false)",
       },
     },
     {

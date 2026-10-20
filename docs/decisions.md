@@ -243,6 +243,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Contacts → [decisions/contacts.md](decisions/contacts.md)
 
+- 2026-10-20 · Contact company ↔ works-at link kept in step by DB triggers for every writer (app, MCP, import, Links); one company per contact (a new works-at link replaces the old); supersedes FX-9's client dual-write → decisions/contacts.md
 - 2026-07-02 · Fix pack FX-9 landed (drag-to-link on /contacts) — Wave 1.5 complete.
 - 2026-07-02 · Fix pack FX-8 landed (single-select custom fields).
 - 2026-07-02 · Fix pack FX-4–FX-7 landed (card wins · relation sanity + People · entry modal · company parity).

@@ -22,7 +22,6 @@ export const ALLOW_RUNTIME: readonly string[] = [
   "src/features/settings/access/chat-rights-section.tsx",
   "src/features/settings/sections/account-section.tsx",
   "src/features/settings/sections/billing-section.tsx",
-  "src/features/sharing/follow-parent.ts",
   "src/features/sharing/share-defaults-panel.tsx",
   "src/features/sharing/share-menu.tsx",
   "src/features/tasks/assignees.ts",
@@ -36,7 +35,6 @@ export const ALLOW_RUNTIME: readonly string[] = [
   "src/lib/notices/pauses.ts",
   "src/lib/statuses/api.ts",
   "src/lib/statuses/live.ts",
-  "src/routes/pages/notes-classic-page.tsx",
   "src/routes/pages/paywall-page.tsx",
 ];
 

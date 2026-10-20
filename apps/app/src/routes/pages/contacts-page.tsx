@@ -344,17 +344,14 @@ export function ContactsPage() {
   async function submitNewContact(values: ContactFormValues, opts: { addAnother: boolean }) {
     // Resolve the chosen company: an existing id, or create one (FX-6 AC9).
     let companyId: string | null = null;
-    let companyLabel: string | null = null;
     if (values.company && "id" in values.company) {
       companyId = values.company.id;
-      companyLabel = values.company.name;
     } else if (values.company && "createName" in values.company) {
       const co = await runtime!.contacts.createCompany({
         workspaceId: ws,
         name: values.company.createName,
       });
       companyId = co.id;
-      companyLabel = co.name;
     }
 
     const created = await runtime!.contacts.createContact({
@@ -367,10 +364,10 @@ export function ContactsPage() {
       status: values.status,
     });
 
-    // The contact now exists — the enrichment steps (extra emails/phones, the
-    // canonical works-at edge) are best-effort: a hiccup here must NOT throw the
-    // whole submit (that would leave a created contact behind + the user retries
-    // → a duplicate). Surface a soft toast and keep the created contact.
+    // The contact now exists, with its works-at link (the server makes it with
+    // the company). The extra emails/phones are best-effort: a hiccup here must
+    // NOT throw the whole submit (that would leave a created contact behind +
+    // the user retries → a duplicate). Surface a soft toast and keep it.
     try {
       // Multi-value paste: patch the full email/phone lists onto the new contact.
       if (values.emails.length > 1 || values.phones.length > 1) {
@@ -381,19 +378,6 @@ export function ContactsPage() {
             emails: channelsFromValues(values.emails),
             phones: channelsFromValues(values.phones),
           },
-        });
-      }
-      // The canonical works-at edge (mirrors setCompany's dual-write) so a
-      // contact with a company always has the spine link, not just the FK.
-      if (companyId) {
-        await runtime!.contacts.link({
-          workspaceId: ws,
-          contact: { type: "contact", id: created.id },
-          target: { type: "company", id: companyId },
-          relationKind: "works-at",
-          origin: "manual",
-          targetLabel: companyLabel ?? undefined,
-          targetIcon: "building-2",
         });
       }
     } catch (err) {
@@ -490,44 +474,19 @@ export function ContactsPage() {
       toast("Already linked");
       return;
     }
-    void (async () => {
-      const created = await createLinkWithToast({
-        runtime,
-        workspaceId,
-        source: payload,
-        target,
-        onChanged: () => reloadFocus({ type: target.entityType, id: target.entityId }),
-      });
-      // A person↔company works-at drop also sets the denormalized company_id FK
-      // (mirrors setCompany's dual-write) so the contact's header company chip
-      // reflects it, not just the spine edge. Best-effort — the link already exists.
-      if (created?.relationKind === "works-at") {
-        const contactId =
-          payload.entityType === "contact"
-            ? payload.entityId
-            : target.entityType === "contact"
-              ? target.entityId
-              : null;
-        const companyId =
-          payload.entityType === "company"
-            ? payload.entityId
-            : target.entityType === "company"
-              ? target.entityId
-              : null;
-        if (contactId && companyId) {
-          try {
-            await runtime.contacts.updateContact({
-              workspaceId,
-              contactId,
-              setCompany: { companyId },
-            });
-            reloadFocus({ type: "contact", id: contactId });
-          } catch {
-            /* the link is what matters; the FK is a convenience */
-          }
-        }
+    // A person↔company works-at link also sets the contact's company: the
+    // server keeps the two in step, in the same operation.
+    void createLinkWithToast({
+      runtime,
+      workspaceId,
+      source: payload,
+      target,
+      onChanged: () => reloadFocus({ type: target.entityType, id: target.entityId }),
+    }).then((created) => {
+      if (created?.relationKind === "works-at" && payload.entityType === "contact") {
+        reloadFocus({ type: "contact", id: payload.entityId });
       }
-    })();
+    });
   }
 
   function addPersonToCompany(company: { id: string; name: string }) {
@@ -567,21 +526,11 @@ export function ContactsPage() {
       } else {
         return;
       }
-      // The company goes first: the server refuses one you can't open, and then
-      // no works-at link is left behind.
+      // One call: the server moves the works-at link with the company.
       await runtime!.contacts.updateContact({
         workspaceId: ws,
         contactId,
         setCompany: { companyId: companyRef.id },
-      });
-      await runtime!.contacts.link({
-        workspaceId: ws,
-        contact: { type: "contact", id: contactId },
-        target: companyRef,
-        relationKind: "works-at",
-        origin: "manual",
-        targetLabel: label,
-        targetIcon: "building-2",
       });
       reload();
       toast("Company set", { description: label });
@@ -597,22 +546,7 @@ export function ContactsPage() {
     if (!companyId) return;
     const label = companyNameFor(companyId);
     try {
-      // The dual-write in reverse (gotchas §Drag-to-link): drop the canonical
-      // works-at edge(s) AND the denormalized FK, or the chip resurrects.
-      const links = await runtime!.spine.listLinks({
-        workspaceId: ws,
-        entityType: "contact",
-        entityId: contact.id,
-      });
-      const workAt = links.filter(
-        (l) =>
-          l.relationKind === "works-at" &&
-          ((l.sourceType === "company" && l.sourceId === companyId) ||
-            (l.targetType === "company" && l.targetId === companyId)),
-      );
-      await Promise.all(
-        workAt.map((l) => runtime!.spine.deleteLink({ workspaceId: ws, linkId: l.id })),
-      );
+      // One call: the server removes the works-at link with the company.
       await runtime!.contacts.updateContact({
         workspaceId: ws,
         contactId: contact.id,
@@ -623,16 +557,6 @@ export function ContactsPage() {
         description: label ?? undefined,
         onUndo: () => {
           void (async () => {
-            // Same dual-write as Set company; the link create is idempotent.
-            await runtime!.contacts.link({
-              workspaceId: ws,
-              contact: { type: "contact", id: contact.id },
-              target: { type: "company", id: companyId },
-              relationKind: "works-at",
-              origin: "manual",
-              targetLabel: label ?? undefined,
-              targetIcon: "building-2",
-            });
             await runtime!.contacts.updateContact({
               workspaceId: ws,
               contactId: contact.id,
