@@ -12,6 +12,7 @@ import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
 import { useKeepInMenuBar } from "./lib/keep-in-menu-bar";
 import { startNewVersionCheck } from "./lib/new-version-check";
 import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
+import { useShowWindowAfterFirstCommit } from "./lib/show-window";
 import { router } from "./router";
 import "./global.css";
 
@@ -54,6 +55,12 @@ function ConfirmBeforeQuit() {
   return null;
 }
 
+// Desktop-only: reveal the window, created hidden, once React has committed.
+function ShowWindow() {
+  useShowWindowAfterFirstCommit();
+  return null;
+}
+
 // The TanStack Devtools panel, in development builds only: production never
 // reaches the import, so the bundler drops it (scripts/check-bundle-size.ts guards the size).
 // Not under automation (Playwright sets navigator.webdriver; its trigger used to
@@ -73,6 +80,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <Toaster />
     <PreferencesSync />
     <ConfirmBeforeQuit />
+    <ShowWindow />
     {TanStackDevtoolsPanel ? (
       <Suspense fallback={null}>
         <TanStackDevtoolsPanel />

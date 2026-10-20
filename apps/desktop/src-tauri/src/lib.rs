@@ -132,6 +132,12 @@ fn perform_one_time_auth_v3_reset(
 /// Routing ⌘Q through a custom item lets `on_menu_event` honour the toggle. DF-19f-quit.
 const QUIT_MENU_ID: &str = "moduo-quit";
 
+/// The main window is created hidden (`visible: false`) and the webview shows it after
+/// React's first commit (`apps/app/src/lib/show-window.ts`), so launch never flashes a
+/// blank frame. If the webview never gets there (a crashed bundle, a stale build without
+/// the hook), show it anyway after this delay.
+const WINDOW_SHOW_FALLBACK: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Build the application menu. On macOS this mirrors `tauri::menu::Menu::default` (v2.11)
 /// EXACTLY — same App/File/Edit/View/Window/Help structure so Copy/Paste/Undo/Fullscreen/
 /// Minimize/etc. and their shortcuts keep working — EXCEPT the App menu's Quit is a custom
@@ -442,53 +448,40 @@ pub fn run() {
                 Err(err) => eprintln!("[tray] not available: {err}"),
             }
             commands::email::bootstrap_idle_workers(app.handle());
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(WINDOW_SHOW_FALLBACK).await;
+                if let Some(window) = handle.get_webview_window("main") {
+                    if !window.is_visible().unwrap_or(true) {
+                        let _ = window.show();
+                    }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::auth_set_cloud_session,
-            commands::auth::auth_get_local_auth_state,
-            commands::auth::auth_generate_mnemonic,
-            commands::auth::auth_register_local_mnemonic,
-            commands::auth::auth_unlock_with_mnemonic,
-            commands::auth::auth_forgot_reset_local,
-            commands::auth::auth_refresh_session,
-            commands::auth::auth_get_session,
-            commands::auth::auth_sign_out,
-            commands::auth::auth_get_local_identity,
-            commands::auth::auth_rotate_device_keys,
-            commands::auth::auth_try_auto_unlock,
-            commands::auth::auth_set_pin,
-            commands::auth::auth_unlock_with_pin,
-            commands::auth::auth_remove_pin,
-            commands::auth::auth_update_display_name,
-            commands::auth::auth_get_stored_mnemonic,
-            commands::auth::auth_accept_supabase_session,
-            commands::workspace::workspace_list_local,
-            commands::workspace::workspace_create_local,
-            commands::workspace::workspace_rename_local,
-            commands::workspace::workspace_leave_local,
-            commands::workspace::workspace_soft_delete_local,
-            commands::workspace::workspace_issue_invite,
-            commands::workspace::workspace_join_invite,
-            commands::workspace::workspace_list_members,
-            commands::workspace::workspace_list_invites,
-            commands::workspace::workspace_update_invite,
-            commands::workspace::workspace_revoke_invite,
-            commands::workspace::workspace_update_member_permissions,
-            commands::workspace::workspace_list_notifications,
-            commands::workspace::workspace_mark_notification_read,
-            commands::workspace::workspace_mark_all_notifications_read,
             commands::notes::notes_list,
             commands::notes::notes_get_doc_state,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_list,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_seed_inbox,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_upsert_bucket,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_delete_bucket,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_upsert_task,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_delete_task,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_upsert_tag,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_delete_tag,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_attach_tag,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_detach_tag,
             commands::migration::migration_import_legacy,
             commands::local_store::local_store_get,
@@ -522,7 +515,6 @@ pub fn run() {
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_google_publish_booking_token,
             commands::calendar::calendar_outlook_oauth_start,
-            commands::calendar::calendar_apple_oauth_start,
             commands::calendar::calendar_google_events_sync,
             commands::calendar::calendar_outlook_events_sync,
             commands::caldav::calendar_caldav_discover,
