@@ -592,6 +592,9 @@ export class WorkspaceStore {
     this.stop(opts);
     this.disposed = true;
     this.listeners.clear();
+    // Empty the kernel tables first: a cleaned-up collection can be started
+    // again (a late subscriber) and would mirror whatever they still held.
+    for (const table of this.tables.values()) table.forget([...table.rows.keys()]);
     for (const mirror of this.mirrors.values()) mirror.dispose();
     this.mirrors.clear();
     this.mirroredAt.clear();
@@ -1312,11 +1315,10 @@ export class WorkspaceStore {
       for (const name of this.tables.keys()) {
         const table = this.table(name);
         if (this.mirroredAt.get(name) === table.revision) continue;
-        this.mirroredAt.set(name, table.revision);
         // Only the rows that changed (an overlay alone changes none).
         const touched = table.takeTouched();
-        if (touched === null) continue;
-        this.mirror(name)?.sync(touched === "all" ? undefined : touched);
+        if (touched !== null) this.mirror(name)?.sync(touched === "all" ? undefined : touched);
+        this.mirroredAt.set(name, table.revision);
       }
     } finally {
       this.mirroring = false;

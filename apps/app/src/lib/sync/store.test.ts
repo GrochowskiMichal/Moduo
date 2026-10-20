@@ -463,6 +463,10 @@ describe("TS-3a: the snapshot comes from the collections", () => {
     store.dispose({ persist: false });
     await tick();
     expect(tasks?.status).toBe("cleaned-up");
+    // A late subscriber restarts it: it must come back empty.
+    const late = tasks?.subscribeChanges(() => undefined, { includeInitialState: true });
+    expect(tasks?.size).toBe(0);
+    late?.unsubscribe();
     expect(store.collection("tasks")).toBeNull();
     expect(store.getSnapshot().bundle.tasks).toEqual([]);
   });
