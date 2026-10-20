@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly MODUO_TARGET?: string;
   /** App version (package.json) — set at build time by rsbuild.config.ts */
   readonly MODUO_VERSION?: string;
+  /** "0" keeps the dev-only TanStack Devtools off. */
+  readonly MODUO_DEVTOOLS?: string;
   /** Build id (short git SHA, or "dev") — set at build time by rsbuild.config.ts */
   readonly MODUO_BUILD?: string;
   /** Stripe — set in .env.local */

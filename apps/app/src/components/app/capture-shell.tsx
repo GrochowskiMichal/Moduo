@@ -26,6 +26,7 @@ import {
   captureTypeForDigit,
 } from "../../lib/capture-registry";
 import { getCaptureSource } from "../../lib/capture-source";
+import { HotkeyScope, useAppHotkeys } from "../../lib/hotkeys";
 import { isMacPlatform, onShortcut } from "../../lib/shortcuts";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
@@ -161,19 +162,17 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   );
 
   // ⌘1–7 while open: switch the type, never the module behind the capture.
-  useEffect(() => {
-    if (!open || typeof window === "undefined") return;
-    const isMac = isMacPlatform();
-    const onKey = (event: KeyboardEvent) => {
-      const digit = captureDigitKey(event, isMac);
-      if (digit === null) return;
-      event.preventDefault();
-      event.stopPropagation();
-      pick(captureTypeForDigit(digit, visibleModules, types));
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [open, pick, visibleModules, types]);
+  // The modal scope (see the HotkeyScope below) outranks the global ⌘1–7.
+  useAppHotkeys(
+    {
+      "capture.type": (event) => {
+        const digit = captureDigitKey(event, isMacPlatform());
+        if (digit === null) return false;
+        pick(captureTypeForDigit(digit, visibleModules, types));
+      },
+    },
+    { enabled: open },
+  );
 
   if (!active) return null;
   const ActiveIcon = active.icon;
@@ -231,57 +230,59 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
-        showCloseButton={false}
-        aria-describedby="capture-shell-description"
-        className="top-[12%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
-        // Radix reads Esc first (a document capture listener): the body's menu
-        // or recognition takes it before the capture closes, and the key then
-        // stops here so the editor doesn't act on it twice (gotchas/ui.md).
-        onEscapeKeyDown={(event) => {
-          if (escapeRef.current?.()) {
-            event.preventDefault();
-            event.stopPropagation();
-          }
-        }}
-        onCloseAutoFocus={(event) => {
-          const target = returnFocusRef.current;
-          if (target?.isConnected) {
-            event.preventDefault();
-            target.focus();
-          }
-        }}
-      >
-        <DialogTitle className="sr-only">Capture</DialogTitle>
-        <DialogDescription id="capture-shell-description" className="sr-only">
-          {`Capture a ${active.label.toLowerCase()}. ${isMac ? "⌘" : "Ctrl"} plus a module's number switches what you capture.`}
-        </DialogDescription>
-        {active.ownsHeader ? null : (
-          <div className="flex items-center gap-1 px-2 pt-2">
-            {typeChip}
-            <span className="text-muted-foreground" aria-hidden>
-              ·
-            </span>
-            <span className="px-1 font-display text-base text-muted-foreground">
-              {active.destination}
-            </span>
-          </div>
-        )}
-        {/* A fresh body per open and per type: what it shows comes from the
+    <HotkeyScope scope="modal" enabled={open}>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          showCloseButton={false}
+          aria-describedby="capture-shell-description"
+          className="top-[12%] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-xl"
+          // Radix reads Esc first (a document capture listener): the body's menu
+          // or recognition takes it before the capture closes, and the key then
+          // stops here so the editor doesn't act on it twice (gotchas/ui.md).
+          onEscapeKeyDown={(event) => {
+            if (escapeRef.current?.()) {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }}
+          onCloseAutoFocus={(event) => {
+            const target = returnFocusRef.current;
+            if (target?.isConnected) {
+              event.preventDefault();
+              target.focus();
+            }
+          }}
+        >
+          <DialogTitle className="sr-only">Capture</DialogTitle>
+          <DialogDescription id="capture-shell-description" className="sr-only">
+            {`Capture a ${active.label.toLowerCase()}. ${isMac ? "⌘" : "Ctrl"} plus a module's number switches what you capture.`}
+          </DialogDescription>
+          {active.ownsHeader ? null : (
+            <div className="flex items-center gap-1 px-2 pt-2">
+              {typeChip}
+              <span className="text-muted-foreground" aria-hidden>
+                ·
+              </span>
+              <span className="px-1 font-display text-base text-muted-foreground">
+                {active.destination}
+              </span>
+            </div>
+          )}
+          {/* A fresh body per open and per type: what it shows comes from the
             draft and the request, never from a body still closing. */}
-        <div key={`${active.type}:${context.openId}`} ref={bodyRef} className="motion-view">
-          <Body
-            draft={draft}
-            onDraftChange={setDraft}
-            writable={writable(active)}
-            onDone={() => setOpen(false)}
-            context={context}
-            typeChip={active.ownsHeader ? typeChip : undefined}
-            registerEscape={registerEscape}
-          />
-        </div>
-      </DialogContent>
-    </Dialog>
+          <div key={`${active.type}:${context.openId}`} ref={bodyRef} className="motion-view">
+            <Body
+              draft={draft}
+              onDraftChange={setDraft}
+              writable={writable(active)}
+              onDone={() => setOpen(false)}
+              context={context}
+              typeChip={active.ownsHeader ? typeChip : undefined}
+              registerEscape={registerEscape}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </HotkeyScope>
   );
 }

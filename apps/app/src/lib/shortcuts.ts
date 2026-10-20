@@ -1,10 +1,15 @@
 import { useEffect } from "react";
 
+import { type AppHotkeyHandlers, type HotkeyId, isMacPlatform, useAppHotkeys } from "./hotkeys";
+
+export { isMacPlatform };
+
 /**
- * Global keyboard shortcuts. The hook installed in app-chrome.tsx fires
- * custom DOM events; each feature listens for the events it cares about
- * (palette, notifications, workspace switcher, etc.) and toggles its own
- * state. This keeps shortcut wiring out of every component's hot path.
+ * Global keyboard shortcuts. The keys themselves live in the hotkey registry
+ * (lib/hotkeys/registry.ts, scope "global"); the hook installed in
+ * app-chrome.tsx fires custom DOM events, and each feature listens for the
+ * events it cares about (palette, notifications, workspace switcher, etc.).
+ * This list is what the shortcut sheet and hints display.
  *
  * Esc-to-close is delegated to Radix primitives (Dialog, Sheet, Popover,
  * DropdownMenu) and is not handled here.
@@ -30,12 +35,10 @@ export type ShortcutId =
 export type ShortcutEntry = {
   id: ShortcutId;
   label: string;
-  /** Mac key combo for display + matching (e.g. "⌘K"). */
+  /** Mac key combo for display (e.g. "⌘K"). */
   mac: string;
-  /** Non-mac key combo for display + matching (e.g. "Ctrl K"). */
+  /** Non-mac key combo for display (e.g. "Ctrl K"). */
   other: string;
-  /** Predicate that returns true when a keydown matches this shortcut. */
-  match: (event: KeyboardEvent, isMac: boolean) => boolean;
 };
 
 export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
@@ -44,11 +47,6 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     label: "Command palette",
     mac: "⌘K",
     other: "Ctrl K",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      !event.shiftKey &&
-      !event.altKey &&
-      event.key.toLowerCase() === "k",
   },
   {
     // The app's capture (components/app/capture-shell.tsx, SH-1): opens as a
@@ -59,22 +57,12 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     label: "Quick capture",
     mac: "⌘⇧K",
     other: "Ctrl Shift K",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      event.shiftKey &&
-      !event.altKey &&
-      event.key.toLowerCase() === "k",
   },
   {
     id: "new-item",
     label: "New item",
     mac: "⌘N",
     other: "Ctrl N",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      !event.shiftKey &&
-      !event.altKey &&
-      event.key.toLowerCase() === "n",
   },
   {
     // Global capture (Wave-3 Notes AC1): a fresh note from anywhere.
@@ -82,58 +70,35 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     label: "New note",
     mac: "⌘⇧N",
     other: "Ctrl Shift N",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      event.shiftKey &&
-      !event.altKey &&
-      event.key.toLowerCase() === "n",
   },
   {
     id: "settings",
     label: "Settings",
     mac: "⌘,",
     other: "Ctrl ,",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      !event.shiftKey &&
-      !event.altKey &&
-      event.key === ",",
   },
   {
     id: "workspace-switcher",
     label: "Workspace switcher",
     mac: "⌘⇧W",
     other: "Ctrl Shift W",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "w",
   },
   {
     id: "notifications",
     label: "Notifications",
     mac: "⌘/",
     other: "Ctrl /",
-    match: (event, isMac) =>
-      (isMac ? event.metaKey : event.ctrlKey) &&
-      !event.shiftKey &&
-      !event.altKey &&
-      event.key === "/",
   },
   {
     // App-wide keyboard-shortcuts help sheet. On most layouts Shift+/ resolves to
     // `event.key === "?"`, but some layouts / synthetic key events deliver
-    // `key === "/"` with shiftKey set — accept both. No modifier gate beyond
-    // ruling out ⌘/Ctrl/Alt (nothing else claims a bare Shift+/). A page that
-    // wants its own `?` (email's triage legend) claims it in the CAPTURE phase so
-    // it beats this bubble-phase global handler — see gotchas.
+    // `key === "/"` with shiftKey set — the registry's Shift+/ accepts both. A
+    // page that wants its own `?` (email's triage legend) binds it in its route
+    // scope with `overrides: true`, and the narrower scope wins (TS-6).
     id: "help",
     label: "Keyboard shortcuts",
     mac: "?",
     other: "?",
-    match: (event) =>
-      !event.metaKey &&
-      !event.ctrlKey &&
-      !event.altKey &&
-      (event.key === "?" || (event.shiftKey && event.key === "/")),
   },
   // Module shortcuts ⌘1..⌘7 navigate to the Nth visible module tab in the
   // top bar. The count matches the max number of visible tabs (7 with Chat;
@@ -149,11 +114,6 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
       label: `Module ${digit}`,
       mac: `⌘${digit}`,
       other: `Ctrl ${digit}`,
-      match: (event, isMac) =>
-        (isMac ? event.metaKey : event.ctrlKey) &&
-        !event.shiftKey &&
-        !event.altKey &&
-        event.key === digit,
     }),
   ),
 ];
@@ -164,50 +124,24 @@ export function shortcutEvent(id: ShortcutId): string {
   return `${SHORTCUT_EVENT_PREFIX}${id}`;
 }
 
-export function isMacPlatform(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return navigator.platform?.toLowerCase().includes("mac") ?? false;
-}
-
 export function formatShortcut(entry: ShortcutEntry, isMac = isMacPlatform()): string {
   return isMac ? entry.mac : entry.other;
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  if ((el as HTMLElement & { isContentEditable?: boolean }).isContentEditable) return true;
-  const tag = el.tagName?.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
-}
-
-/** Mount on AppChrome to dispatch shortcut events globally. */
+/**
+ * Mount on AppChrome to dispatch shortcut events globally. Each registry
+ * binding in the "global" scope fires its `moduo:shortcut:<id>` event; a page
+ * that binds the same key in its own scope wins it (email's `?`), and a key a
+ * nearer handler already claimed (`defaultPrevented`) never reaches here.
+ */
 export function useGlobalShortcuts(): void {
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const isMac = isMacPlatform();
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      // The palette + capture shortcuts fire even from inputs so search and
-      // quick-capture work anywhere (both are explicit ⌘ combos, never a
-      // text-editing key). New-note doesn't fire from editable targets —
-      // otherwise the user typing "n" in a Lexical editor would create a note.
-      const targetEditable = isEditableTarget(event.target);
-      const firesFromEditable = (id: ShortcutId) => id === "palette" || id === "capture";
-
-      for (const entry of SHORTCUTS) {
-        if (!entry.match(event, isMac)) continue;
-        if (targetEditable && !firesFromEditable(entry.id)) continue;
-        event.preventDefault();
-        window.dispatchEvent(new CustomEvent(shortcutEvent(entry.id)));
-        return;
-      }
+  const handlers: AppHotkeyHandlers = {};
+  for (const entry of SHORTCUTS) {
+    handlers[entry.id satisfies HotkeyId] = () => {
+      window.dispatchEvent(new CustomEvent(shortcutEvent(entry.id)));
     };
-
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }
+  useAppHotkeys(handlers);
 }
 
 /** Listen for a single shortcut event. Returns the cleanup function. */

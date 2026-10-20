@@ -56,8 +56,12 @@ function ConfirmBeforeQuit() {
 
 // The TanStack Devtools panel, in development builds only: production never
 // reaches the import, so the bundler drops it (scripts/check-bundle-size.ts guards the size).
+// Not under automation (Playwright sets navigator.webdriver; its trigger used to
+// sit over toast buttons), and off with MODUO_DEVTOOLS=0.
 const TanStackDevtoolsPanel =
-  process.env.NODE_ENV === "development"
+  process.env.NODE_ENV === "development" &&
+  import.meta.env.MODUO_DEVTOOLS !== "0" &&
+  !(typeof navigator !== "undefined" && navigator.webdriver)
     ? lazy(() => import("./lib/devtools/tanstack-devtools"))
     : null;
 

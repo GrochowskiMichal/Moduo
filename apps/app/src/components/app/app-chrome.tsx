@@ -34,6 +34,7 @@ import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { WhatsNewOnLaunch } from "../../features/whats-new/whats-new-on-launch";
 import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
 import {
   formatShortcut,
@@ -210,38 +211,16 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
   }, [isHomeRoute]);
 
-  useEffect(() => {
-    if (!runtime || typeof window === "undefined") return;
-
-    const isMac =
-      typeof navigator !== "undefined" &&
-      (navigator.platform?.toLowerCase().includes("mac") ||
-        navigator.userAgent?.toLowerCase().includes("mac os"));
-
-    const isEditableTarget = (target: EventTarget | null) => {
-      const el = target as HTMLElement | null;
-      if (!el) return false;
-      if ((el as HTMLElement & { isContentEditable?: boolean }).isContentEditable) return true;
-      const tag = el.tagName?.toLowerCase();
-      return tag === "input" || tag === "textarea" || tag === "select";
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (isEditableTarget(event.target)) return;
-
-      const key = event.key.toLowerCase();
-      const shouldToggle =
-        (isMac && event.metaKey && event.ctrlKey && key === "f") || (!isMac && key === "f11");
-
-      if (!shouldToggle) return;
-      event.preventDefault();
-      void runtime.window.toggleFullscreen();
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [runtime]);
+  // ⌃⌘F on a Mac, F11 elsewhere (registry: `fullscreen`). Not from fields.
+  useAppHotkeys(
+    {
+      fullscreen: () => {
+        if (!runtime) return false;
+        void runtime.window.toggleFullscreen();
+      },
+    },
+    { enabled: !!runtime },
+  );
 
   // The host listener for the spine's deep-link event (FX-1 AC1). Every linked
   // row, entity-ref chip, and dashboard widget dispatches `moduo:entity:open`;

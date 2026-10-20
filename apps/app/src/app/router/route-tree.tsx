@@ -13,6 +13,7 @@ import { validateEmailSearch } from "../../features/email/url-search";
 import { validateNotesSearch } from "../../features/notes/search";
 import { validateAuthSearch } from "../../features/settings/delete-account";
 import { validateTasksSearch } from "../../features/tasks/search";
+import { withHotkeyScope } from "../../lib/hotkeys";
 import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
@@ -147,7 +148,7 @@ const homeRoute = createRoute({
     const target = consumeLandingRedirect(location.pathname, location.searchStr);
     if (target) throw redirect({ to: target, replace: true });
   },
-  component: HomePage,
+  component: withHotkeyScope("home", HomePage),
 });
 
 const legacyGridRoute = createRoute({
@@ -162,14 +163,17 @@ const legacyGridRoute = createRoute({
 const notesRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/notes",
-  component: lazyRouteComponent(() => import("../../routes/pages/notes-page"), "NotesPage"),
+  component: withHotkeyScope(
+    "notes",
+    lazyRouteComponent(() => import("../../routes/pages/notes-page"), "NotesPage"),
+  ),
   validateSearch: validateNotesSearch,
 });
 
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: TasksPage,
+  component: withHotkeyScope("tasks", TasksPage),
   // URL-held task selection (?id=) — deep links + refresh keep it (DF-1).
   validateSearch: validateTasksSearch,
 });
@@ -179,7 +183,10 @@ const tasksRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/calendar",
-  component: lazyRouteComponent(() => import("../../routes/pages/calendar-page"), "CalendarPage"),
+  component: withHotkeyScope(
+    "calendar",
+    lazyRouteComponent(() => import("../../routes/pages/calendar-page"), "CalendarPage"),
+  ),
   // `?event=` deep link → navigate to the event's day + select + open detail (DF-2).
   validateSearch: validateCalendarSearch,
 });
@@ -193,7 +200,10 @@ const mindmapRoute = createRoute({
 const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
-  component: lazyRouteComponent(() => import("../../routes/pages/email-page"), "EmailPage"),
+  component: withHotkeyScope(
+    "email",
+    lazyRouteComponent(() => import("../../routes/pages/email-page"), "EmailPage"),
+  ),
   // `?thread=` deep link → select + scroll the thread (desktop) / tissue card (web) (DF-2).
   validateSearch: validateEmailSearch,
 });
@@ -203,14 +213,20 @@ const emailRoute = createRoute({
 const chatRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/chat",
-  component: lazyRouteComponent(() => import("../../routes/pages/chat-page"), "ChatPage"),
+  component: withHotkeyScope(
+    "chat",
+    lazyRouteComponent(() => import("../../routes/pages/chat-page"), "ChatPage"),
+  ),
   validateSearch: validateChatSearch,
 });
 
 const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/contacts",
-  component: lazyRouteComponent(() => import("../../routes/pages/contacts-page"), "ContactsPage"),
+  component: withHotkeyScope(
+    "contacts",
+    lazyRouteComponent(() => import("../../routes/pages/contacts-page"), "ContactsPage"),
+  ),
   // URL-held selection + palette action (fix pack FX-1 AC1/AC2).
   validateSearch: validateContactsSearch,
 });

@@ -37,6 +37,7 @@ import type {
   FilterOption,
 } from "../../../components/ui/filter-model";
 import { NavRowDot } from "../../../components/ui/nav-row";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import type { Assignee } from "../assignees";
@@ -286,51 +287,33 @@ export function taskFilterDimensions(input: {
     }));
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el?.tagName) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
-}
-
 /**
  * `/` opens search and `f` opens Filter, from anywhere on the page except a
- * text field, a dialog or an open menu. Bubble phase, after the list's own
- * keys; a modified key (⌘/ is notifications) or Shift (`?` is the shortcuts
- * sheet) is never ours.
+ * text field, a dialog or an open menu. Registry bindings in the "tasks"
+ * scope (lib/hotkeys): bubble phase on document, after the list's own keys; a
+ * modified key (⌘/ is notifications) or Shift (`?` is the shortcuts sheet)
+ * never matches them.
  */
 function useToolbarKeys(enabled: boolean, onSearch: () => void, onFilter: () => void) {
-  const handlers = useRef({ onSearch, onFilter });
-  useEffect(() => {
-    handlers.current = { onSearch, onFilter };
-  });
-  useEffect(() => {
-    if (!enabled) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) {
-        return;
-      }
-      if (isTypingTarget(e.target)) return;
-      if (
-        e.target instanceof Element &&
-        e.target.closest(
-          '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot="popover-content"]',
-        )
-      ) {
-        return;
-      }
-      if (e.key === "/") {
-        e.preventDefault();
-        handlers.current.onSearch();
-      } else if (e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        handlers.current.onFilter();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [enabled]);
+  // An open overlay (a menu's typeahead, a dialog) keeps its plain keys.
+  const overlayFocused = (event: KeyboardEvent) =>
+    event.target instanceof Element &&
+    !!event.target.closest(
+      '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot="popover-content"]',
+    );
+  useAppHotkeys(
+    {
+      "tasks.search": (event) => {
+        if (event.repeat || overlayFocused(event)) return false;
+        onSearch();
+      },
+      "tasks.filter": (event) => {
+        if (event.repeat || overlayFocused(event)) return false;
+        onFilter();
+      },
+    },
+    { enabled },
+  );
 }
 
 export type TasksFilterControls = {

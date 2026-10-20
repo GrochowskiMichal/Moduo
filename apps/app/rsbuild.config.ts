@@ -109,6 +109,8 @@ export default defineConfig({
       "import.meta.env.PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
       "import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.MODUO_TARGET": JSON.stringify(target),
+      // MODUO_DEVTOOLS=0 keeps the dev-only TanStack Devtools off (main.tsx).
+      "import.meta.env.MODUO_DEVTOOLS": JSON.stringify(process.env.MODUO_DEVTOOLS ?? "1"),
       "import.meta.env.MODUO_VERSION": JSON.stringify(appVersion),
       "import.meta.env.MODUO_BUILD": JSON.stringify(appBuild),
       "import.meta.env.PUBLIC_STRIPE_PUBLISHABLE_KEY": JSON.stringify(stripePublishableKey),
