@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-20 · One state machine decides what an `?id=` in the address bar is (PV-B2, DF-1, MOD-28)
+
+- **`deepLinkReducer` (`ui/plan/deep-link.ts`) replaces six guard refs and four effects; `useTaskDeepLink` carries out its commands** → `ui/plan/use-task-deep-link.ts`, `tasks-plan-view.tsx`
+  - Who: agent, Track B of the 2026-10-20 structure plan (approved by Mike); revisitable.
+  - Decision: phases `idle | awaitingLoad | awaitingHandle | resolved | failed`; events `urlChanged` (with the entity-open "take me there" mark), `evaluate` (the bundle changed), `handleResolved` / `handleFailed`, `retry`, `cursorMoved`, `mirrorWritten`; commands `openTask` (with its scope snap), `openPlace`, `gone`, `lookup`, `follow`. The backstop, the 250 ms mirror and the default place act only while the machine is `idle` or `resolved` (`linkSettled`). A render whose address bar is newer than the last event reads it as waiting already (`deepLinkAt`), so every effect in the arrival flush holds, as `inboundPending` did.
+  - Kept as it was: the cursor is React state; the mirror's debounce and its handle rewrite; a failed lookup is asked again every 30 s or when back online, and dropped when you pick another task; the entity-open mark is now taken when the address bar changes rather than when the link is applied (the app chrome sets it right before navigating).
+  - Why: `processedUrlIdRef`, `selfWroteUrlIdRef`, `handlePendingRef`, `handleRetryIntentRef`, `latestUrlIdRef` and `selectionAtFailRef` were kept in step by effect order and comments; each race is now a reducer test.
+
 ## 2026-10-20 · The plan view's place lives in the address bar (PV-B1, DF-1)
 
 - **`?place=` is the only source of the place open in Tasks; the task cursor stays React state** → `resolveEntryPlace` / `remembersPlace` (`default-view.ts`), `ui/plan/use-plan-place.ts`, `validateTasksSearch` (`search.ts`), `routes/pages/tasks-page.tsx`

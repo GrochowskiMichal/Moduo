@@ -40,11 +40,7 @@ import {
   targetAccepts,
 } from "../../../lib/drag-payload";
 import type { EntityRef } from "../../../lib/entity-links";
-import {
-  ENTITY_OPEN_EVENT,
-  markEntityOpenIntent,
-  takeEntityOpenIntent,
-} from "../../../lib/entity-open";
+import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import {
   currentPreferences,
   type TasksSidebarHideable,
@@ -138,7 +134,7 @@ import {
 } from "../panel-views";
 import { commitProjectDrop } from "../project-order";
 import { handleLabel } from "../row-layout";
-import { handleLinkStep, lookupHandleLink, resolveTasksDeepLink } from "../search";
+import { handleLinkStep, resolveTasksDeepLink } from "../search";
 import { backstopPick, inViewOrder } from "../selection";
 import {
   projectDeleteSummary,
@@ -172,7 +168,9 @@ import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import { InFlightPanel } from "./in-flight-panel";
 import { useInboxView } from "./inbox-view";
 import type { ListExtraGroup } from "./list-extensions";
+import type { DeepLinkWorld } from "./plan/deep-link";
 import { usePlanPlace } from "./plan/use-plan-place";
+import { useDeepLinkMachine, useTaskDeepLink } from "./plan/use-task-deep-link";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
 import { ProjectPanel } from "./project-panel";
 import { RecentlyDeletedView } from "./recently-deleted-view";
@@ -218,11 +216,6 @@ type Props = {
   urlPlace?: string | null;
   onUrlPlaceChange: (place: string) => void;
 };
-
-// The selection→URL mirror writes only at rest (see the mirror effect).
-const URL_MIRROR_DEBOUNCE_MS = 250;
-// A handle link whose lookup failed is asked again this often (MOD-28).
-const HANDLE_RETRY_MS = 30_000;
 
 const EMPTY_IDS: readonly string[] = [];
 const NO_OP = () => {};
@@ -376,54 +369,18 @@ export function TasksPlanView({
   // The order the List or the Board shows now (they write it as they draw):
   // the Inbox's cursor after a triage, and a selection's order.
   const viewOrderRef = useRef<readonly string[]>([]);
-  // DF-1 — URL sync bookkeeping. Selection is STATE mirrored into the URL —
-  // not URL-derived like notes NO-3 — because this selection is a j/k
-  // key-repeat cursor: it must not ride the router on every press, and WebKit
-  // hard-throttles history.replaceState (~100/30s), so the mirror below is
-  // debounced. Two refs discriminate who an id in the URL came from:
-  // `processedUrlIdRef` marks ids this component already honored,
-  // `selfWroteUrlIdRef` marks ids the mirror wrote itself. A `urlTaskId`
-  // matching neither is an INBOUND deep link (widget row, contact rollup, note
-  // chip, notification, refresh, back/forward). Two refs, not one: the
-  // mirror's write commits to the router async, so a single marker would get
-  // clobbered while the URL still holds the previous id — and background
-  // bundle churn in that window would re-apply the OLD id as a fake deep
-  // link. While an inbound id awaits its post-load apply, the selection
-  // backstops must not steal it and the mirror must not overwrite it — all
-  // gate on `inboundPending` (computed at render, so every effect in the
-  // arrival flush sees the same verdict).
-  const processedUrlIdRef = useRef<string | null>(null);
-  const selfWroteUrlIdRef = useRef<string | null>(null);
+  // DF-1 — the cursor is STATE mirrored into the URL (not URL-derived like
+  // notes NO-3): it's a j/k key-repeat cursor that mustn't ride the router on
+  // every press, and WebKit hard-throttles history.replaceState (~100/30s).
+  // Which id in the URL is a link and which is the mirror's own write, a
+  // handle's lookup and its retry, are one state machine (`plan/deep-link.ts`).
+  // While a link waits, the backstop, the mirror and the default place hold
+  // (`inboundPending`, read at render so every effect in the flush agrees).
+  const deepLink = useDeepLinkMachine(urlTaskId);
+  const inboundPending = !deepLink.settled;
   const scrollTargetRef = useRef<string | null>(null);
-  // A handle deep link (`?id=MOD-142`, RF-1) being looked up, and the URL's
-  // latest id (the lookup is dropped if the URL moved on meanwhile).
-  const handlePendingRef = useRef<string | null>(null);
-  // A handle whose lookup failed (offline, a server error, MOD-28): it stays
-  // in the URL, unprocessed, and is asked again when the connection comes
-  // back or every half minute; its "take me there" mark is kept meanwhile.
-  const [handleFailed, setHandleFailed] = useState<string | null>(null);
-  const [handleRetry, setHandleRetry] = useState(0);
-  const handleRetryIntentRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!handleFailed) return;
-    const again = () => setHandleRetry((n) => n + 1);
-    const id = window.setTimeout(again, HANDLE_RETRY_MS);
-    window.addEventListener("online", again);
-    return () => {
-      window.clearTimeout(id);
-      window.removeEventListener("online", again);
-    };
-  }, [handleFailed]);
-  const latestUrlIdRef = useRef(urlTaskId);
-  useLayoutEffect(() => {
-    latestUrlIdRef.current = urlTaskId;
-  });
   const taskKey = useContext(WorkspaceContext)?.selectedWorkspace?.taskKey ?? null;
   const referenceStore = useReferenceStore();
-  const inboundPending =
-    urlTaskId !== null &&
-    processedUrlIdRef.current !== urlTaskId &&
-    selfWroteUrlIdRef.current !== urlTaskId;
   // One-shot reveal request for the List view: expand a collapsed group ONCE
   // for a deep-link target — ordinary selection fallbacks never touch
   // collapse state (a group the user closes stays closed).
@@ -1420,18 +1377,14 @@ export function TasksPlanView({
   ]);
 
   // ── DF-1: URL-held selection ─────────────────────────────────────────────────
-  // Inbound apply — honor a deep-link target once the bundle is CLEANLY loaded
-  // (a failed fetch leaves an empty bundle with api.error set; resolving
-  // against that would wrongly strip a valid id — hold until Retry succeeds).
-  // A fresh external open (marked by the app-chrome listener) gets the full
-  // "take me there" treatment: plan mode. Filters and search are never
-  // cleared (they're saved per scope): the target stays listed past them
-  // while it's selected (`keepTaskId`, TV-U2). A mirrored id arriving back on
-  // refresh/back-forward restores the selection quietly and keeps the user's
-  // mode. Scope snaps to the
-  // task's bucket unless the current scope already shows it. A bucket id (a
-  // `project` link) scopes the rail; a stale or archived id clears quietly and
-  // the backstop above picks the default (AC: no crash).
+  // An inbound link is honored once the bundle is CLEANLY loaded (a failed
+  // read waits for Retry); `plan/deep-link.ts` decides, this page carries it
+  // out. Filters and search are never cleared (they're saved per scope): the
+  // target stays listed past them while it's selected (`keepTaskId`, TV-U2).
+  // The place snaps to the task's project unless it already shows it; a
+  // project link opens that place; a stale id clears quietly and the backstop
+  // above picks the default (AC: no crash). The URL names the task by its
+  // handle when it has one (`?id=MOD-142`, MOD-28).
   // What a link can open: live tasks and projects, and archived ones (TV-U16).
   const linkable = useMemo(
     () => ({
@@ -1441,147 +1394,58 @@ export function TasksPlanView({
     }),
     [tasks, buckets, inboxId, api.archivedTasks, api.archivedBuckets],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `handleRetry` asks a failed handle lookup again
-  useEffect(() => {
-    if (api.loading || api.error) return;
-    if (!urlTaskId) {
-      processedUrlIdRef.current = null;
-      return;
-    }
-    if (processedUrlIdRef.current === urlTaskId) return;
-    if (selfWroteUrlIdRef.current === urlTaskId) {
-      processedUrlIdRef.current = urlTaskId;
-      return;
-    }
-    // Done, Won't do and Backlog tasks arrive after the open ones (the shared
-    // store, TV-D11a): a link to one waits for them before it reads as gone.
-    // A handle too (MOD-28: refresh, back and forward arrive as one now).
-    const handleStep = looksLikeHandle(urlTaskId)
-      ? handleLinkStep(urlTaskId, { tasks: linkable.tasks, taskKey, restLoaded: api.restLoaded })
-      : null;
-    if (
-      handleStep
-        ? handleStep.kind === "wait"
-        : !api.restLoaded && resolveTasksDeepLink(urlTaskId, linkable).kind === "none"
-    ) {
-      return;
-    }
-    processedUrlIdRef.current = urlTaskId;
-    // A link whose lookup failed keeps its "take me there" mark for the retry.
-    const external = takeEntityOpenIntent(urlTaskId) || handleRetryIntentRef.current === urlTaskId;
-    handleRetryIntentRef.current = null;
-    setHandleFailed(null);
-    // A handle (`?id=MOD-142`, RF-1): find its task (here, archived projects'
-    // too, else on the server, which knows the old keys), then follow the
-    // task's own id, keeping a "take me there" mark. A handle the server says
-    // you can't open is a "Private item"; one it couldn't look up (offline)
-    // stays in the URL and is asked again, never dropped (MOD-28).
-    if (handleStep) {
-      const handle = urlTaskId;
-      handlePendingRef.current = handle;
-      const follow = (id: string | null) => {
-        if (handlePendingRef.current !== handle) return;
-        handlePendingRef.current = null;
-        if (latestUrlIdRef.current !== handle) return;
-        if (!id) {
-          if (external) setPrivateLinkId(handle);
-          onUrlTaskIdChange(null);
-          return;
-        }
-        if (external) markEntityOpenIntent(id);
-        onUrlTaskIdChange(id);
-      };
-      if (handleStep.kind === "task") follow(handleStep.taskId);
-      // Outside the app shell there's no lookup: what's loaded is all there is.
-      else if (!referenceStore) follow(null);
-      else
-        void lookupHandleLink(handle, (h) => referenceStore.lookupHandle(h)).then((answer) => {
-          if (answer.kind !== "failed") {
-            follow(answer.kind === "task" ? answer.taskId : null);
-            return;
-          }
-          if (handlePendingRef.current !== handle) return;
-          handlePendingRef.current = null;
-          if (processedUrlIdRef.current === handle) processedUrlIdRef.current = null;
-          if (external) handleRetryIntentRef.current = handle;
-          setHandleFailed(handle);
-        });
-      return;
-    }
-    // Won't do tasks open too: the selected one stays in scope with Reopen
-    // (see `keptArchivedId`). A task in a project you can't see opens in All.
-    // An archived project's task opens too, in its project, read-only (search
-    // finds it, labelled "Archived": REPLAN 78, TV-U16).
-    const target = resolveTasksDeepLink(urlTaskId, linkable);
-    if (target.kind === "none") {
-      // A link someone followed (a notification, a chip) to a task you can't
-      // open says so, never lands on another task (AC1.10). A stale id that
-      // only comes back on refresh or back/forward clears quietly.
-      if (external) setPrivateLinkId(urlTaskId);
-      onUrlTaskIdChange(null);
-      return;
-    }
-    setPrivateLinkId(null);
-    if (target.kind === "bucket") {
-      setSelection(target.scope);
-      // Hand the URL to the backstop's fresh pick — the mirror must not
-      // re-publish the previous scope's selection over the project link.
-      setSelectedTaskId(null);
-      return;
-    }
-    if (!scopeTasksAll.some((t) => t.id === target.taskId)) setSelection(target.scope);
-    setSelectedTaskId(target.taskId);
-    setRevealRequest((prev) => ({ id: target.taskId, seq: (prev?.seq ?? 0) + 1 }));
-    scrollTargetRef.current = target.taskId;
-  }, [
-    api.loading,
-    api.error,
-    api.restLoaded,
-    urlTaskId,
-    linkable,
-    scopeTasksAll,
-    onUrlTaskIdChange,
-    taskKey,
-    referenceStore,
-    handleRetry,
-  ]);
-  // Picking a task while a failed handle link waits lets the link go: you
-  // moved on, and a later answer mustn't pull the selection back (MOD-28).
-  const selectionAtFailRef = useRef(selectedTaskId);
-  useEffect(() => {
-    if (!handleFailed) {
-      selectionAtFailRef.current = selectedTaskId;
-      return;
-    }
-    if (selectedTaskId === selectionAtFailRef.current) return;
-    processedUrlIdRef.current = handleFailed;
-    handleRetryIntentRef.current = null;
-    setHandleFailed(null);
-  }, [handleFailed, selectedTaskId]);
-
-  // Mirror selection → URL (replace) so refresh keeps it. Trailing-debounced:
-  // the URL only needs to be right at rest, and WebKit throttles
-  // history.replaceState (~100 calls/30s) — an undebounced j/k key-repeat
-  // cursor would trip a SecurityError in the desktop webview. Suspended while
-  // an inbound id awaits apply — never overwrite a target before honoring it
-  // (a handle being looked up included). The URL names the task by its
-  // handle when it has one (`?id=MOD-142`, MOD-28), else by its id; a link
-  // that arrived by id (an old link, a notification, a chip) is rewritten to
-  // the handle once it's selected, and the apply above reads the handle back
-  // as the mirror's own write (`selfWroteUrlIdRef`), never as a new link.
   const selectedLinkId = selectedTaskId
     ? taskLinkId(taskKey, { id: selectedTaskId, number: selectedTask?.number })
     : null;
-  useEffect(() => {
-    if (api.loading || inboundPending || handlePendingRef.current) return;
-    if (selectedLinkId === (urlTaskId ?? null)) return;
-    const handle = window.setTimeout(() => {
-      if (handlePendingRef.current) return;
-      selfWroteUrlIdRef.current = selectedLinkId;
-      onUrlTaskIdChange(selectedLinkId);
-    }, URL_MIRROR_DEBOUNCE_MS);
-    return () => window.clearTimeout(handle);
-  }, [api.loading, inboundPending, selectedLinkId, urlTaskId, onUrlTaskIdChange]);
+  const linkWorld = useMemo<DeepLinkWorld>(
+    () => ({
+      ready: !api.loading && !api.error,
+      restLoaded: api.restLoaded,
+      handleStep: (id) =>
+        looksLikeHandle(id)
+          ? handleLinkStep(id, { tasks: linkable.tasks, taskKey, restLoaded: api.restLoaded })
+          : null,
+      target: (id) => resolveTasksDeepLink(id, linkable),
+      inScope: (taskId) => scopeTasksAll.some((t) => t.id === taskId),
+      canLookup: referenceStore !== null,
+    }),
+    [api.loading, api.error, api.restLoaded, linkable, taskKey, scopeTasksAll, referenceStore],
+  );
+  const lookupHandle = useMemo(
+    () => (referenceStore ? (handle: string) => referenceStore.lookupHandle(handle) : null),
+    [referenceStore],
+  );
+  useTaskDeepLink(deepLink, {
+    urlTaskId,
+    onUrlTaskIdChange,
+    world: linkWorld,
+    lookup: lookupHandle,
+    loaded: !api.loading,
+    selectedTaskId,
+    selectedLinkId,
+    onPrivate: setPrivateLinkId,
+    onApply: (command) => {
+      if (command.kind === "gone") {
+        // A link someone followed (a notification, a chip) to a task you
+        // can't open says so, never lands on another task (AC1.10). A stale
+        // id that only comes back on refresh or back/forward clears quietly.
+        if (command.external) setPrivateLinkId(command.id);
+        return;
+      }
+      setPrivateLinkId(null);
+      if (command.kind === "openPlace") {
+        setSelection(command.place);
+        // Hand the URL to the backstop's fresh pick — the mirror must not
+        // re-publish the previous scope's selection over the project link.
+        setSelectedTaskId(null);
+        return;
+      }
+      if (command.snapTo) setSelection(command.snapTo);
+      setSelectedTaskId(command.taskId);
+      setRevealRequest((prev) => ({ id: command.taskId, seq: (prev?.seq ?? 0) + 1 }));
+      scrollTargetRef.current = command.taskId;
+    },
+  });
 
   // Reveal the deep-linked row/card/bar once it exists in the DOM — the scope
   // snap, a collapsed group's reveal, and a nested subtask's parent
