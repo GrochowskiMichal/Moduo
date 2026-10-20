@@ -42,7 +42,7 @@
 import { toast } from "sonner";
 import type { AgentSession } from "../../features/spine/agent-session";
 import { applyLiveTags, seedTags } from "../../features/tags/store";
-import { isNewer, type LiveChange, stampMinus } from "../../features/tasks/live";
+import type { LiveChange } from "../../features/tasks/live";
 import type {
   RecurrenceRule,
   Task,
@@ -68,6 +68,7 @@ import {
   type SyncCache,
 } from "./cache";
 import { browserOffline, isNetworkError } from "./network";
+import { isNewer, stampMinus } from "./stamps";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────

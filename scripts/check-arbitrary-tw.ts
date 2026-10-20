@@ -8,7 +8,9 @@
  * docs/DESIGN_RULES.md (token surface). Allowed: the sanctioned `[var(--token)]`
  * escape hatch, and one-off *geometry* (top-/left-/h-/w-/translate-/inset-[…])
  * which is never a design-system property. Paths in IGNORED_PATHS are skipped
- * (the curated legacy backlog). Exits non-zero on hits.
+ * (the curated legacy backlog); an entry that points to a missing file or to
+ * one with no violations left fails the gate, so the list only shrinks.
+ * Exits non-zero on hits or stale entries.
  *
  * Also runs the text rules (scripts/check-text-rules.ts, DS-6): text is never
  * rotated (call 46a), and small caps never carry people's words (call 40).
@@ -106,52 +108,23 @@ const IGNORED_PATHS: string[] = [
   // Legacy baseline: files that still hold pre-foundation arbitrary
   // Tailwind values. Each is queued for its own per-feature brief; the
   // CI gate enforces "no new violations in clean files" without blocking
-  // on legacy. Remove an entry when its feature brief lands.
-  "src/features/brainstorm/ui/brainstorm-workspace.tsx",
-  "src/features/brainstorm/ui/visual-templates/framework-poster.tsx",
-  "src/features/brainstorm/ui/visual-templates/swot-visual.tsx",
-  "src/features/dashboard/ui/dashboard-grid.tsx",
-  "src/features/dashboard/ui/grid-workspace.tsx",
-  "src/features/dashboard/ui/widget-container.tsx",
-  "src/features/dashboard/ui/widgets-panel.tsx",
-  "src/features/dashboard/ui/widgets/clock-widget.tsx",
-  "src/features/dashboard/ui/widgets/countdown-widget.tsx",
-  "src/features/dashboard/ui/widgets/crypto-widget.tsx",
-  "src/features/dashboard/ui/widgets/hydration-widget.tsx",
-  "src/features/dashboard/ui/widgets/job-tracker-widget.tsx",
-  "src/features/dashboard/ui/widgets/notes-widget.tsx",
+  // on legacy. The gate fails on an entry whose file is gone or clean, so
+  // remove it as soon as its feature brief lands.
   "src/features/dashboard/ui/widgets/pomodoro-widget.tsx",
-  "src/features/dashboard/ui/widgets/stock-widget.tsx",
   "src/features/dashboard/ui/widgets/tasks-widget.tsx",
-  "src/features/dashboard/ui/widgets/todo-list-widget.tsx",
-  "src/features/dashboard/ui/widgets/weather-widget.tsx",
-  "src/features/dashboard/ui/widgets/widget-shell.tsx",
   "src/features/mindmap/ui/edge-style-menu.tsx",
   "src/features/mindmap/ui/mindmap-empty-state.tsx",
   "src/features/mindmap/ui/components/mindmap-relations.tsx",
   "src/features/mindmap/ui/components/mindmap-toolbar.tsx",
   "src/features/mindmap/ui/custom-node.tsx",
   "src/features/mindmap/ui/mindmap-workspace.tsx",
-  "src/features/plan/ui/calendar-view.tsx",
-  "src/features/plan/ui/kanban-task-context-modal.tsx",
-  "src/features/plan/ui/kanban-view.tsx",
-  "src/features/plan/ui/link-view.tsx",
-  "src/features/plan/ui/list-view.tsx",
-  "src/features/plan/ui/plan-nav.tsx",
-  "src/features/plan/ui/plan-workspace.tsx",
-  "src/features/plan/ui/project-settings-panel.tsx",
-  "src/features/plan/ui/task-details-view.tsx",
-  "src/features/tasks/ui/tasks-gantt.tsx",
-  "src/features/templates/ui/templates-editor.tsx",
-  "src/features/templates/ui/templates-preview.tsx",
 
   // Hardcoded color CONSTANTS / defaults (not Tailwind classes) surfaced when
   // the gate's color coverage was widened. Deferred to the curated label-color
-  // palette work (an open question in docs/DESIGN_SYSTEM.md) + the per-feature briefs
-  // for mindmap (legacy) and calendar (not built yet).
+  // palette work (an open question in docs/DESIGN_SYSTEM.md) + the mindmap
+  // brief (legacy).
   "src/features/mindmap/ui/components/mindmap-mini-map.tsx",
   "src/features/mindmap/ui/types.ts",
-  "src/features/calendar/hooks/use-slot-bookings-sync.ts",
 ];
 
 const PROJECT_ROOT = process.cwd();
@@ -164,6 +137,13 @@ function toPosix(p: string): string {
 function isIgnored(relPath: string): boolean {
   const posix = toPosix(relPath);
   return IGNORED_PATHS.some((prefix) => posix === prefix || posix.startsWith(`${prefix}/`));
+}
+
+/** IGNORED_PATHS entries that cover no file with a violation (gone, or cleaned up). */
+function staleIgnores(filesWithHits: string[], ignored: string[] = IGNORED_PATHS): string[] {
+  return ignored.filter(
+    (prefix) => !filesWithHits.some((f) => f === prefix || f.startsWith(`${prefix}/`)),
+  );
 }
 
 async function walk(dir: string): Promise<string[]> {
@@ -213,15 +193,29 @@ async function main() {
   const files = await walk(SRC_ROOT);
   const allHits: Hit[] = [];
 
+  const ignoredWithHits = new Set<string>();
   for (const file of files) {
     const rel = toPosix(path.relative(PROJECT_ROOT, file));
-    if (isIgnored(rel)) continue;
     const content = await fs.readFile(file, "utf8");
     const hits = scanFile(content, rel);
+    if (isIgnored(rel)) {
+      if (hits.length) ignoredWithHits.add(rel);
+      continue;
+    }
     allHits.push(...hits);
   }
 
+  const stale = staleIgnores([...ignoredWithHits]);
+  if (stale.length) {
+    console.error("lint:tw — stale entries in IGNORED_PATHS (file gone, or no violations left):");
+    for (const entry of stale) console.error(`  ${entry}`);
+    console.error(
+      "lint:tw — delete these lines from IGNORED_PATHS in scripts/check-arbitrary-tw.ts.",
+    );
+  }
+
   if (allHits.length === 0) {
+    if (stale.length) process.exit(1);
     console.log("lint:tw — no arbitrary Tailwind values found in design-system surface.");
     return;
   }
@@ -261,7 +255,7 @@ async function main() {
 
 // Exported so the patterns are unit-testable (src/components/design-lint.test.ts)
 // — a silently-broken regex here reads exactly like a clean codebase.
-export { type Hit, isIgnored, PATTERNS, scanFile };
+export { type Hit, IGNORED_PATHS, isIgnored, PATTERNS, scanFile, staleIgnores };
 
 // `import.meta.main` under Bun (how `lint:tw` runs); the argv fallback keeps the
 // gate alive under any runner that lacks it. A silent no-op here would report a

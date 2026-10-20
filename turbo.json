@@ -22,6 +22,9 @@
     "lint:tw": {
       "outputs": []
     },
+    "lint:boundaries": {
+      "outputs": []
+    },
     "lint:css": {
       "outputs": []
     },

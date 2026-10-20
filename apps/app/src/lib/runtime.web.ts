@@ -70,17 +70,16 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/util
 import type { NotificationItem } from "../features/spine/notifications";
 import { type RecentLinkItem, shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
-import { timestampMicros } from "../features/tasks/live";
-import {
-  type ActivityEntry,
-  type Bucket,
-  type ProjectStatus,
-  type Task,
-  type TaskQueueEntry,
-  type TaskRelation,
-  type TaskTimeResult,
-  type TimeBlockMap,
-  type TrackTimeInput,
+import type {
+  ActivityEntry,
+  Bucket,
+  ProjectStatus,
+  Task,
+  TaskQueueEntry,
+  TaskRelation,
+  TaskTimeResult,
+  TimeBlockMap,
+  TrackTimeInput,
 } from "../features/tasks/model";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
 import {
@@ -146,6 +145,7 @@ import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { createTasksViews } from "./runtime.web.views";
 import { deltaCursor } from "./sync/delta-cursor";
+import { timestampMicros } from "./sync/stamps";
 import type {
   AccessChange,
   SyncAccessResult,

@@ -3,7 +3,7 @@
 // keyset pages, deltas by `updated_at`, the access check, resends by id) and a
 // switch for the network. Not imported by the app.
 
-import { timestampMicros } from "../../tasks/live";
+import { timestampMicros } from "../../../lib/sync/stamps";
 import type {
   ChatCatchupItem,
   ChatChannel,

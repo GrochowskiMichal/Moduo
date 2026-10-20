@@ -11,6 +11,7 @@
     "build:desktop": "MODUO_TARGET=desktop rsbuild build",
     "typecheck": "tsc-ts --noEmit",
     "lint:tw": "bun ../../scripts/check-arbitrary-tw.ts",
+    "lint:boundaries": "bun ../../scripts/check-boundaries.ts",
     "lint:css": "stylelint \"src/**/*.css\"",
     "test": "rstest",
     "test:watch": "rstest --watch"
