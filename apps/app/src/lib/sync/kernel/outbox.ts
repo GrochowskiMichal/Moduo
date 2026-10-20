@@ -85,6 +85,11 @@ export class Outbox<E extends OutboxEntryBase> {
     return this.handled.has(id);
   }
 
+  /** Every id this tab sent or dropped (a sign-out's cut-down copy must not bring one back). */
+  handledIds(): string[] {
+    return [...this.handled];
+  }
+
   /** Whether it came from the device copy (another tab may have sent it). */
   isAdopted(id: string): boolean {
     return this.adopted.has(id);
@@ -158,7 +163,8 @@ export async function drainOutbox<E extends OutboxEntryBase, R>(
     before?(entry: E): Promise<"send" | "skip" | "stop"> | "send" | "skip" | "stop";
     send(entry: E): Promise<SendOutcome<R>>;
     isNetwork(error: unknown): boolean;
-    sent(entry: E, value: R): void;
+    /** `wasQueued`: it was still in the outbox when its answer came (an echo may have taken it first). */
+    sent(entry: E, value: R, wasQueued: boolean): void;
     refused(entry: E, error: unknown): void;
     offline(entry: E, error: unknown): void;
   },
@@ -173,8 +179,8 @@ export async function drainOutbox<E extends OutboxEntryBase, R>(
     if (!run.running()) return;
     const res = await run.send(entry);
     if (res.ok) {
-      outbox.remove(entry.id);
-      run.sent(entry, res.value);
+      const wasQueued = outbox.remove(entry.id) !== undefined;
+      run.sent(entry, res.value, wasQueued);
       continue;
     }
     if (run.isNetwork(res.error)) {

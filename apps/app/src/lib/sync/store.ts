@@ -76,7 +76,13 @@ import {
 import { createSyncedCollection, type SyncedCollection } from "./kernel/collection";
 import { Backoff, drainOutbox, Outbox } from "./kernel/outbox";
 import { openWrite } from "./kernel/overlay";
-import { type OwnedCopies, personLifecycle, refcount, StoreRegistry } from "./kernel/registry";
+import {
+  type OwnedCopies,
+  personLifecycle,
+  refcount,
+  StoreRegistry,
+  waitingEverywhere,
+} from "./kernel/registry";
 import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError } from "./network";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
@@ -500,6 +506,11 @@ export class WorkspaceStore {
   /** What waits to sync, in order (a sign-out keeps it on the device). */
   waitingEntries(): OutboxEntry[] {
     return this.outbox.list();
+  }
+
+  /** Outbox ids this store sent or dropped (a sign-out must not keep them). */
+  handledEntryIds(): string[] {
+    return this.outbox.handledIds();
   }
 
   /** Whether a capture is waiting in the outbox under this task id. */
@@ -1994,7 +2005,7 @@ export function findWorkspaceStore(
 function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
   return {
     keys: () => cache.keys(),
-    async keepOnlyWaiting(key, inMemory) {
+    async keepOnlyWaiting(key, inMemory, handled) {
       let kept = 0;
       await cache.update(key, (stored) => {
         const outbox: OutboxEntry[] = [];
@@ -2006,7 +2017,7 @@ function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
         for (const entry of stack) {
           if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
           seen.add(entry.id);
-          outbox.push(entry);
+          if (!handled.has(entry.id)) outbox.push(entry);
         }
         kept = outbox.length;
         return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
@@ -2023,6 +2034,7 @@ const people = personLifecycle({
   scopeOf: (store) => store.runtime.tasks,
   copies: () => taskCopies(storeOptions.cache ?? deviceCache()),
   waiting: (store) => store.waitingEntries(),
+  handled: (store) => store.handledEntryIds(),
 });
 
 /**
@@ -2051,9 +2063,12 @@ export function wipeSyncCopies(opts: { keepWaiting?: boolean } = {}): Promise<vo
   return people.wipe(opts);
 }
 
-/** How many writes wait to sync in the running stores (a sign-out warns first). */
+/**
+ * How many writes wait to sync in every running store, Tasks' and Chat's (a
+ * sign-out warns first; both keep theirs on the device).
+ */
 export function waitingSyncCount(): number {
-  return people.waitingCount();
+  return waitingEverywhere();
 }
 
 /**
