@@ -4,12 +4,8 @@
 // answers with every row it made (the project, its statuses and sections,
 // the tasks, their tag links and dependencies), so the shared store settles
 // the whole copy in one step.
-//
-// A database before the migration reads as "no templates", and the writes
-// say what's missing instead of failing quietly.
 
 import type { StarterTemplate } from "@contracts/vocabularies";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Bucket,
   ProjectStatus,
@@ -27,7 +23,7 @@ import {
   templateFromRow,
 } from "../features/tasks/templates/model";
 import type { Truncation } from "./paged-select";
-import { isMissingFunctionError, isMissingTableError } from "./task-rows";
+import { type Db, untypedDb } from "./runtime.db";
 
 /** Everything an apply or a duplicate made, as the store's rows. */
 export type TemplateApplyResult = {
@@ -80,10 +76,7 @@ const LIST_CAP = 500;
 
 type Answer = { data: unknown; error: { code?: string; message?: string } | null };
 
-function fail(error: { code?: string; message?: string }, fn: string, what: string): never {
-  if (isMissingFunctionError(error, fn)) {
-    throw new Error(`${what} needs a newer server. Try again after the update.`);
-  }
+function fail(error: { code?: string; message?: string }): never {
   throw new Error(error.message ?? "That didn't save.");
 }
 
@@ -111,14 +104,15 @@ export function applyTaskTemplateFields(
 }
 
 export function createTasksTemplates(
-  client: SupabaseClient,
+  client: Db,
   deps: {
     /** The op's answer (raw rows per store table) as the store's rows. */
     mapAnswer: (raw: unknown) => TemplateApplyResult;
   },
 ) {
   async function listKind(workspaceId: string, kind: TemplateKind): Promise<Template[]> {
-    const { data, error } = (await client
+    // TABLE[kind] picks the table at run time, so these reads are untyped.
+    const { data, error } = (await untypedDb(client)
       .from(TABLE[kind])
       .select(TEMPLATE_COLUMNS)
       .eq("workspace_id", workspaceId)
@@ -126,19 +120,16 @@ export function createTasksTemplates(
       .order("name", { ascending: true })
       .order("id", { ascending: true })
       .limit(LIST_CAP)) as Answer;
-    if (error) {
-      if (isMissingTableError(error, TABLE[kind]) || error.code === "42703") return [];
-      throw new Error(error.message ?? "Couldn't read the templates.");
-    }
+    if (error) throw new Error(error.message ?? "Couldn't read the templates.");
     return (Array.isArray(data) ? data : []).flatMap((row) => {
       const t = templateFromRow(row, kind);
       return t ? [t] : [];
     });
   }
 
-  async function rpc(name: string, args: Record<string, unknown>, what: string): Promise<unknown> {
-    const { data, error } = (await client.rpc(name, args)) as Answer;
-    if (error) fail(error, name, what);
+  async function rpc(name: string, args: Record<string, unknown>): Promise<unknown> {
+    const { data, error } = (await untypedDb(client).rpc(name, args)) as Answer;
+    if (error) fail(error);
     return data;
   }
 
@@ -162,7 +153,7 @@ export function createTasksTemplates(
       const out: TemplateWithBody[] = [];
       const truncated: Truncation[] = [];
       for (const kind of ["task", "project"] as const) {
-        const { data, error } = (await client
+        const { data, error } = (await untypedDb(client)
           .from(TABLE[kind])
           .select(`${TEMPLATE_COLUMNS},body`)
           .eq("workspace_id", workspaceId)
@@ -170,10 +161,7 @@ export function createTasksTemplates(
           .order("name", { ascending: true })
           .order("id", { ascending: true })
           .limit(LIST_CAP)) as Answer;
-        if (error) {
-          if (isMissingTableError(error, TABLE[kind])) continue;
-          throw new Error(error.message ?? "Couldn't read the templates.");
-        }
+        if (error) throw new Error(error.message ?? "Couldn't read the templates.");
         const rows = Array.isArray(data) ? data : [];
         if (rows.length >= LIST_CAP) {
           truncated.push({ scope: `${kind} templates`, shown: rows.length, total: null });
@@ -192,17 +180,14 @@ export function createTasksTemplates(
       kind: TemplateKind;
       id: string;
     }): Promise<TemplateWithBody | null> {
-      const { data, error } = (await client
+      const { data, error } = (await untypedDb(client)
         .from(TABLE[input.kind])
         .select(`${TEMPLATE_COLUMNS},body`)
         .eq("workspace_id", input.workspaceId)
         .eq("id", input.id)
         .is("deleted_at", null)
         .maybeSingle()) as Answer;
-      if (error) {
-        if (isMissingTableError(error, TABLE[input.kind])) return null;
-        throw new Error(error.message ?? "Couldn't read the template.");
-      }
+      if (error) throw new Error(error.message ?? "Couldn't read the template.");
       const t = templateFromRow(data, input.kind);
       if (!t) return null;
       return { ...t, body: templateBodyOf((data as { body?: unknown }).body, input.kind) };
@@ -210,18 +195,14 @@ export function createTasksTemplates(
 
     /**
      * May you copy this project or task (Duplicate, Save as template)? Copying
-     * needs Edit on it (D15-11). A server before that rule answers yes (it
-     * decides on the copy itself).
+     * needs Edit on it (D15-11).
      */
     async canCopyTemplateSource(input: { kind: TemplateKind; id: string }): Promise<boolean> {
       const { data, error } = (await client.rpc("templates_can_copy", {
         p_kind: input.kind,
         p_id: input.id,
       })) as Answer;
-      if (error) {
-        if (isMissingFunctionError(error, "templates_can_copy")) return true;
-        throw new Error(error.message ?? "Couldn't check access.");
-      }
+      if (error) throw new Error(error.message ?? "Couldn't check access.");
       return data === true;
     },
 
@@ -235,11 +216,11 @@ export function createTasksTemplates(
       const fields: Record<string, unknown> = {};
       if (input.id) fields.id = input.id;
       if (input.name?.trim()) fields.name = input.name.trim();
-      const data = await rpc(
-        "task_templates_op_save",
-        { p_workspace_id: input.workspaceId, p_task_id: input.taskId, p_fields: fields },
-        "Saving a template",
-      );
+      const data = await rpc("task_templates_op_save", {
+        p_workspace_id: input.workspaceId,
+        p_task_id: input.taskId,
+        p_fields: fields,
+      });
       const t = templateFromRow(data, "task");
       if (!t) throw new Error("The template saved, but its answer couldn't be read.");
       return t;
@@ -255,11 +236,11 @@ export function createTasksTemplates(
       const fields: Record<string, unknown> = {};
       if (input.id) fields.id = input.id;
       if (input.name?.trim()) fields.name = input.name.trim();
-      const data = await rpc(
-        "project_templates_op_save",
-        { p_workspace_id: input.workspaceId, p_project_id: input.projectId, p_fields: fields },
-        "Saving a template",
-      );
+      const data = await rpc("project_templates_op_save", {
+        p_workspace_id: input.workspaceId,
+        p_project_id: input.projectId,
+        p_fields: fields,
+      });
       const t = templateFromRow(data, "project");
       if (!t) throw new Error("The template saved, but its answer couldn't be read.");
       return t;
@@ -275,11 +256,10 @@ export function createTasksTemplates(
       id: string;
       starter: StarterTemplate;
     }): Promise<Template> {
-      const data = await rpc(
-        "project_templates_op_starter",
-        { p_workspace_id: input.workspaceId, p_fields: { id: input.id, starter: input.starter } },
-        "Adding a starter template",
-      );
+      const data = await rpc("project_templates_op_starter", {
+        p_workspace_id: input.workspaceId,
+        p_fields: { id: input.id, starter: input.starter },
+      });
       const t = templateFromRow(data, "project");
       if (!t) throw new Error("The template saved, but its answer couldn't be read.");
       return t;
@@ -292,16 +272,12 @@ export function createTasksTemplates(
       id: string;
       patch: TemplatePatch;
     }): Promise<TemplateWithBody> {
-      const data = await rpc(
-        "templates_op_update",
-        {
-          p_workspace_id: input.workspaceId,
-          p_kind: input.kind,
-          p_template_id: input.id,
-          p_patch: input.patch,
-        },
-        "Changing a template",
-      );
+      const data = await rpc("templates_op_update", {
+        p_workspace_id: input.workspaceId,
+        p_kind: input.kind,
+        p_template_id: input.id,
+        p_patch: input.patch,
+      });
       const t = templateFromRow(data, input.kind);
       if (!t) throw new Error("The template saved, but its answer couldn't be read.");
       return { ...t, body: templateBodyOf((data as { body?: unknown }).body, input.kind) };
@@ -309,15 +285,11 @@ export function createTasksTemplates(
 
     /** "From template…" for a task: the task and its subtasks, in one op. */
     async applyTaskTemplate(input: ApplyTaskTemplateInput): Promise<TemplateApplyResult> {
-      const data = await rpc(
-        "task_templates_op_apply",
-        {
-          p_workspace_id: input.workspaceId,
-          p_template_id: input.templateId,
-          p_fields: applyTaskTemplateFields(input),
-        },
-        "Making tasks from a template",
-      );
+      const data = await rpc("task_templates_op_apply", {
+        p_workspace_id: input.workspaceId,
+        p_template_id: input.templateId,
+        p_fields: applyTaskTemplateFields(input),
+      });
       return deps.mapAnswer(data);
     },
 
@@ -325,15 +297,11 @@ export function createTasksTemplates(
     async applyProjectTemplate(
       input: ProjectCopyInput & { templateId: string },
     ): Promise<TemplateApplyResult> {
-      const data = await rpc(
-        "project_templates_op_apply",
-        {
-          p_workspace_id: input.workspaceId,
-          p_template_id: input.templateId,
-          p_fields: projectCopyFields(input),
-        },
-        "Making a project from a template",
-      );
+      const data = await rpc("project_templates_op_apply", {
+        p_workspace_id: input.workspaceId,
+        p_template_id: input.templateId,
+        p_fields: projectCopyFields(input),
+      });
       return deps.mapAnswer(data);
     },
 
@@ -341,15 +309,11 @@ export function createTasksTemplates(
     async duplicateProject(
       input: ProjectCopyInput & { projectId: string },
     ): Promise<TemplateApplyResult> {
-      const data = await rpc(
-        "projects_op_duplicate",
-        {
-          p_workspace_id: input.workspaceId,
-          p_project_id: input.projectId,
-          p_fields: projectCopyFields(input),
-        },
-        "Duplicating a project",
-      );
+      const data = await rpc("projects_op_duplicate", {
+        p_workspace_id: input.workspaceId,
+        p_project_id: input.projectId,
+        p_fields: projectCopyFields(input),
+      });
       return deps.mapAnswer(data);
     },
   };

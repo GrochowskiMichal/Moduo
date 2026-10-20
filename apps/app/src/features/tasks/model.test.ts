@@ -9,13 +9,11 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   dueOnToLocalInstant,
-  isMissingTvD9FieldError,
   localDayOf,
   taskCreateOpInput,
   taskPatchToColumns,
   taskPatchToOpFields,
   taskRowToModel,
-  withoutTvD9Fields,
 } from "../../lib/task-rows";
 import { groupPanelTasks } from "../calendar/panel";
 import { stripItems } from "../calendar/strip";
@@ -305,13 +303,7 @@ describe("rows: statuses, completion and the due date (TV-D9)", () => {
     expect(taskCreateOpInput(backlog("n", { dueDate: day })).due_on).toBe("2026-11-20");
   });
 
-  it("falls back to the old fields on a database before TV-D9", () => {
-    expect(isMissingTvD9FieldError({ message: 'Tasks have no field "due_on".' })).toBe(true);
-    expect(isMissingTvD9FieldError({ message: "Task not found in this workspace." })).toBe(false);
-    expect(withoutTvD9Fields({ due_on: "2026-11-20", status: "backlog", status_id: "x" })).toEqual({
-      due_date: dueOnToLocalInstant("2026-11-20"),
-      status: "todo",
-    });
+  it("the raw column write keeps only the legacy status", () => {
     expect(taskPatchToColumns({ statusCategory: "wont_do", statusId: "x" }, "now")).toEqual({
       status: "archived",
       updated_at: "now",

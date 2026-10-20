@@ -4,9 +4,6 @@
 // and the person's import runs (the data export; TV-U18's "Undo this import").
 // Sessions themselves reach the app through the shared store
 // (`agent_sessions`, RLS); these are what the store doesn't carry.
-//
-// A database before the migration reads as "no agent work, no imports", and
-// the writes say what's missing instead of failing quietly.
 
 import {
   type ImportEntityType,
@@ -14,10 +11,10 @@ import {
   normalizeImportEntityType,
   normalizeImportRowAction,
 } from "@contracts/vocabularies";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentSession } from "../features/spine/agent-session";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
-import { agentSessionRowToModel, isMissingFunctionError, isMissingTableError } from "./task-rows";
+import { type Db, DbError, type Json, runRpc, untypedDb } from "./runtime.db";
+import { agentSessionRowToModel } from "./task-rows";
 
 /** A session as `tasks_agent_sessions` answers it: with its summary when it's yours. */
 export type AgentSessionDetail = AgentSession & { mine: boolean; summary: string | null };
@@ -57,8 +54,6 @@ export type ImportRunCounts = {
   sectionsCreated: number;
 };
 
-const NOT_READY = "Agent work isn't available on this server yet.";
-
 /** The export reads every run (a person makes few) and every row they made. */
 const IMPORT_RUNS_CAP = 2000;
 const IMPORT_ROWS_CAP = 100000;
@@ -70,11 +65,10 @@ type Row = Record<string, unknown>;
 /**
  * One of your own tables read in full, in pages past the server's 1,000-row
  * answers, ordered by a unique column so pages never skip or repeat; a read
- * cut at `cap` says so. A table the database doesn't have yet reads as
- * `missing`.
+ * cut at `cap` says so.
  */
 async function pagedRows(
-  client: SupabaseClient,
+  client: Db,
   table: string,
   opts: {
     scope: string;
@@ -84,9 +78,10 @@ async function pagedRows(
     /** Unique column to page by (default `id`). */
     orderBy?: string;
   },
-): Promise<{ rows: Row[]; truncation: Truncation | null; missing: boolean }> {
+): Promise<{ rows: Row[]; truncation: Truncation | null }> {
   const build = (head?: { count: "exact"; head: true }) => {
-    let q = client.from(table).select(opts.select, head);
+    // The table is the caller's pick, so this read is untyped (runtime.db.ts).
+    let q = untypedDb(client).from(table).select(opts.select, head);
     for (const [col, value] of Object.entries(opts.filter)) q = q.eq(col, value);
     return q;
   };
@@ -105,15 +100,12 @@ async function pagedRows(
     },
     keyOf: (row) => String(row[opts.orderBy ?? "id"]),
   });
-  if (res.error) {
-    if (isMissingTableError(res.error, table)) return { rows: [], truncation: null, missing: true };
-    throw new Error(res.error.message);
-  }
-  return { rows: res.rows, truncation: res.truncation, missing: false };
+  if (res.error) throw new DbError(res.error);
+  return { rows: res.rows, truncation: res.truncation };
 }
 
 export function createTasksAgents(
-  client: SupabaseClient,
+  client: Db,
   deps: {
     /** The signed-in person's id (the export reads their own sessions). */
     userId: () => Promise<string | null>;
@@ -125,14 +117,12 @@ export function createTasksAgents(
       workspaceId: string;
       taskId: string;
     }): Promise<AgentSessionDetail[]> {
-      const { data, error } = await client.rpc("tasks_agent_sessions", {
-        p_workspace_id: input.workspaceId,
-        p_task_id: input.taskId,
-      });
-      if (error) {
-        if (isMissingFunctionError(error, "tasks_agent_sessions")) return [];
-        throw new Error(error.message);
-      }
+      const data = await runRpc(
+        client.rpc("tasks_agent_sessions", {
+          p_workspace_id: input.workspaceId,
+          p_task_id: input.taskId,
+        }),
+      );
       return (Array.isArray(data) ? data : []).map((raw) => {
         const row = raw as Record<string, unknown>;
         return {
@@ -148,14 +138,12 @@ export function createTasksAgents(
       workspaceId: string;
       sessionId: string;
     }): Promise<AgentSession> {
-      const { data, error } = await client.rpc("tasks_op_agent_session_post", {
-        p_workspace_id: input.workspaceId,
-        p_session_id: input.sessionId,
-      });
-      if (error)
-        throw new Error(
-          isMissingFunctionError(error, "tasks_op_agent_session_post") ? NOT_READY : error.message,
-        );
+      const data = await runRpc(
+        client.rpc("tasks_op_agent_session_post", {
+          p_workspace_id: input.workspaceId,
+          p_session_id: input.sessionId,
+        }),
+      );
       return agentSessionRowToModel(data);
     },
 
@@ -164,35 +152,23 @@ export function createTasksAgents(
       workspaceId: string;
       sessionId: string;
     }): Promise<AgentSession> {
-      const { data, error } = await client.rpc("tasks_op_agent_session_dismiss", {
-        p_workspace_id: input.workspaceId,
-        p_session_id: input.sessionId,
-      });
-      if (error)
-        throw new Error(
-          isMissingFunctionError(error, "tasks_op_agent_session_dismiss")
-            ? NOT_READY
-            : error.message,
-        );
+      const data = await runRpc(
+        client.rpc("tasks_op_agent_session_dismiss", {
+          p_workspace_id: input.workspaceId,
+          p_session_id: input.sessionId,
+        }),
+      );
       return agentSessionRowToModel(data);
     },
 
     /** "Show your agent work to teammates" (off by default). */
     async getAgentWork(): Promise<boolean> {
-      const { data, error } = await client.rpc("user_agent_work");
-      if (error) {
-        if (isMissingFunctionError(error, "user_agent_work")) return false;
-        throw new Error(error.message);
-      }
+      const data = await runRpc(client.rpc("user_agent_work"));
       return data === true;
     },
 
     async setAgentWork(show: boolean): Promise<boolean> {
-      const { data, error } = await client.rpc("user_op_set_agent_work", { p_show: show });
-      if (error)
-        throw new Error(
-          isMissingFunctionError(error, "user_op_set_agent_work") ? NOT_READY : error.message,
-        );
+      const data = await runRpc(client.rpc("user_op_set_agent_work", { p_show: show }));
       return data === true;
     },
 
@@ -213,7 +189,6 @@ export function createTasksAgents(
         select: "*",
         filter: { workspace_id: workspaceId, user_id: userId },
       });
-      if (read.missing) return { sessions: [], truncated: [] };
       const sessions = read.rows
         .map(agentSessionRowToModel)
         .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
@@ -250,7 +225,6 @@ export function createTasksAgents(
         select: "id, source, label, started_at, finished_at, undone_at, key_id",
         filter: { workspace_id: workspaceId },
       });
-      if (read.missing) return { imports: [], truncated: [] };
       const runs = [...read.rows].sort((a, b) =>
         String(a.started_at) < String(b.started_at) ? 1 : -1,
       );
@@ -301,15 +275,13 @@ export function createTasksAgents(
       source: string;
       label: string;
     }): Promise<{ id: string }> {
-      const { data, error } = await client.rpc("imports_op_begin", {
-        p_workspace_id: input.workspaceId,
-        p_source: input.source,
-        p_label: input.label,
-      });
-      if (error)
-        throw new Error(
-          isMissingFunctionError(error, "imports_op_begin") ? NOT_READY : error.message,
-        );
+      const data = await runRpc(
+        client.rpc("imports_op_begin", {
+          p_workspace_id: input.workspaceId,
+          p_source: input.source,
+          p_label: input.label,
+        }),
+      );
       return { id: String((data as Row | null)?.id ?? "") };
     },
 
@@ -319,12 +291,13 @@ export function createTasksAgents(
       importId: string;
       project: { id: string; name: string; description?: string };
     }): Promise<{ id: string; name: string }> {
-      const { data, error } = await client.rpc("imports_op_project_create", {
-        p_workspace_id: input.workspaceId,
-        p_import_id: input.importId,
-        p_project: input.project,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        client.rpc("imports_op_project_create", {
+          p_workspace_id: input.workspaceId,
+          p_import_id: input.importId,
+          p_project: input.project,
+        }),
+      );
       const row = (data ?? {}) as Row;
       return {
         id: String(row.id ?? input.project.id),
@@ -339,13 +312,14 @@ export function createTasksAgents(
       projectId: string;
       section: { id: string; name: string };
     }): Promise<{ id: string }> {
-      const { error } = await client.rpc("imports_op_section_create", {
-        p_workspace_id: input.workspaceId,
-        p_import_id: input.importId,
-        p_project_id: input.projectId,
-        p_section: input.section,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        client.rpc("imports_op_section_create", {
+          p_workspace_id: input.workspaceId,
+          p_import_id: input.importId,
+          p_project_id: input.projectId,
+          p_section: input.section,
+        }),
+      );
       return { id: input.section.id };
     },
 
@@ -359,15 +333,16 @@ export function createTasksAgents(
       task: Record<string, unknown>;
       tags?: string[];
     }): Promise<{ action: "created" | "updated" | "existing"; id: string }> {
-      const { data, error } = await client.rpc("tasks_op_create_with", {
-        p_workspace_id: input.workspaceId,
-        p_task: input.task,
-        p_with: {
-          import_id: input.importId,
-          ...(input.tags?.length ? { tags: input.tags } : {}),
-        },
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        client.rpc("tasks_op_create_with", {
+          p_workspace_id: input.workspaceId,
+          p_task: input.task as Json,
+          p_with: {
+            import_id: input.importId,
+            ...(input.tags?.length ? { tags: input.tags } : {}),
+          },
+        }),
+      );
       const row = (data ?? {}) as Row;
       const action = row.action === "updated" || row.action === "existing" ? row.action : "created";
       return { action, id: String((row.task as Row | undefined)?.id ?? input.task.id ?? "") };
@@ -375,11 +350,12 @@ export function createTasksAgents(
 
     /** Finish a run (`imports_op_finish`): what it made, counted by the server. */
     async finishImport(input: { workspaceId: string; importId: string }): Promise<ImportRunCounts> {
-      const { data, error } = await client.rpc("imports_op_finish", {
-        p_workspace_id: input.workspaceId,
-        p_import_id: input.importId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        client.rpc("imports_op_finish", {
+          p_workspace_id: input.workspaceId,
+          p_import_id: input.importId,
+        }),
+      );
       const r = (data ?? {}) as Row;
       return {
         tasksCreated: num(r.tasks_created),
@@ -391,14 +367,12 @@ export function createTasksAgents(
 
     /** "Undo this import" (TV-U18 puts it in the app). */
     async undoImport(input: { workspaceId: string; importId: string }): Promise<ImportUndoResult> {
-      const { data, error } = await client.rpc("imports_op_undo", {
-        p_workspace_id: input.workspaceId,
-        p_import_id: input.importId,
-      });
-      if (error)
-        throw new Error(
-          isMissingFunctionError(error, "imports_op_undo") ? NOT_READY : error.message,
-        );
+      const data = await runRpc(
+        client.rpc("imports_op_undo", {
+          p_workspace_id: input.workspaceId,
+          p_import_id: input.importId,
+        }),
+      );
       const r = (data ?? {}) as Record<string, unknown>;
       return {
         tasksRemoved: num(r.tasks_removed),
