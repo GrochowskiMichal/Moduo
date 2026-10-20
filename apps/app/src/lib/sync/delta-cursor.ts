@@ -6,7 +6,7 @@
 // stamp and the other stream's end is never read (the keyset trap of
 // docs/gotchas/supabase.md, "A delta read by `updated_at` loses rows…").
 
-import { timestampMicros } from "../../features/tasks/live";
+import { timestampMicros } from "./stamps";
 
 type Stream = {
   /** The stream's stamps, in the order it was read (ascending). */

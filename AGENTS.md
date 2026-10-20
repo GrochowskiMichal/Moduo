@@ -78,7 +78,7 @@ Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, 
 
 - `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
 - **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), `bun run local:reset` to test a migration, `bun run env:cloud` to go back. **Releasing to prod is `/ship` only** (release PR + `vX.Y.Z` tag; `guard-release.sh` blocks tags and prod workflows started any other way); migrations and Edge Functions stay manual and `/ship` stops until they are applied: [docs/release.md](./docs/release.md). See [docs/local-dev.md](./docs/local-dev.md).
-- `bun run verify` = typecheck + Biome + lint:tw + lint:css + tests, run through Turborepo across every workspace: **the block-done gate**. It covers no Rust: see `apps/desktop/src-tauri/AGENTS.md`.
+- `bun run verify` = typecheck + Biome + lint:tw + lint:boundaries (only `lib/runtime*` talks to Supabase; `lib` never imports `features`) + lint:css + tests, run through Turborepo across every workspace: **the block-done gate**. It covers no Rust: see `apps/desktop/src-tauri/AGENTS.md`.
 - `bun run test` (all suites) · `bun run --cwd apps/app test <path>` (one app test) · `bun run e2e`
 - **Workspaces** (Bun + Turborepo; run every root script from the root): `apps/app` (`@moduo/app`, the Rsbuild SPA) · `apps/desktop` (`@moduo/desktop`, Tauri: `src-tauri/` inside, the CLI runs from `apps/desktop`) · `apps/landing` · `apps/storybook` · `supabase/` (`@moduo/backend`, function and contract tests) · `e2e/` (`@moduo/e2e`, Playwright). `scripts/` and `tools/` are root tooling.
 

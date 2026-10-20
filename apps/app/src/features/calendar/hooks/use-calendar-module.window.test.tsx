@@ -62,7 +62,9 @@ afterEach(() => {
 async function settled(result: { current: CalendarModuleApi }) {
   await waitFor(() => expect(result.current.loading).toBe(false));
   await act(async () => {
-    await Promise.allSettled(rs.mocked(supabaseClient.rpc).mock.results.map((r) => r.value));
+    // Cast past the typed client's rpc overloads (too deep to infer here).
+    const rpc = supabaseClient.rpc as unknown as ReturnType<typeof rs.fn>;
+    await Promise.allSettled(rpc.mock.results.map((r) => r.value));
   });
 }
 
@@ -482,7 +484,7 @@ describe("useCalendarModule — busy overlay", () => {
   /** Hold every busy RPC open, to settle by hand. */
   function holdBusy(): Held[] {
     const held: Held[] = [];
-    rs.mocked(supabaseClient.rpc).mockImplementation(
+    (supabaseClient.rpc as unknown as ReturnType<typeof rs.fn>).mockImplementation(
       (() => new Promise<BusyReply>((resolve, reject) => held.push({ resolve, reject }))) as never,
     );
     return held;

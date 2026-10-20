@@ -4,7 +4,7 @@
 // boundary: CV-0 spike 2's gotcha). Ids are uuids: Postgres orders them
 // bytewise, which for lowercase text is the string order.
 
-import { stampMinus, timestampMicros } from "../../tasks/live";
+import { stampMinus, timestampMicros } from "../../../lib/sync/stamps";
 import type { ChatKey, ChatMessage } from "../model";
 
 const micros = (at: string) => timestampMicros(at) ?? 0;

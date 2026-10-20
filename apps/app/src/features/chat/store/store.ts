@@ -39,7 +39,7 @@
 import { currentPreferences } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { browserOffline } from "../../../lib/sync/network";
-import { timestampMicros } from "../../tasks/live";
+import { timestampMicros } from "../../../lib/sync/stamps";
 import type { ChatFileGate } from "../files/gate";
 import type {
   ChatChannel,

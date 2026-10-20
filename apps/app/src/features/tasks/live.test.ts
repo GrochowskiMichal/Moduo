@@ -1,15 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import type { ModuoRuntime } from "../../lib/runtime.types";
+import { isNewer, timestampMicros } from "../../lib/sync/stamps";
 import { makeTask } from "./helpers";
 import {
-  isNewer,
   type LiveChange,
   LiveGate,
   mergeBundle,
   mergeQueue,
   parseLiveChange,
   swapTemp,
-  timestampMicros,
   trackTaskCalls,
 } from "./live";
 import type { Task, TaskQueueEntry, TasksModuleBundle } from "./model";

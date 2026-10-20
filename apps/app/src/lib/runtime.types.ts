@@ -404,7 +404,7 @@ export type ModuoRuntime = {
 
   workspace: {
     getProfile(userId: string): Promise<{
-      data: { plan_tier?: string; display_name?: string; avatar_url?: string } | null;
+      data: { plan_tier?: string; display_name?: string; avatar_url?: string | null } | null;
       error: any;
     }>;
     list(): Promise<any[]>;

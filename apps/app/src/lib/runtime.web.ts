@@ -45,6 +45,7 @@ import {
 } from "@contracts/vocabularies";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import * as Y from "yjs";
+import type { Database } from "@/types/supabase";
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
 import { defaultCalendarWindow } from "../features/calendar/window";
 import type {
@@ -69,18 +70,16 @@ import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../features/notes/util
 import type { NotificationItem } from "../features/spine/notifications";
 import { type RecentLinkItem, shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
-import { timestampMicros } from "../features/tasks/live";
-import {
-  type ActivityEntry,
-  type Bucket,
-  type ProjectStatus,
-  sanitizeTimeBlocks,
-  type Task,
-  type TaskQueueEntry,
-  type TaskRelation,
-  type TaskTimeResult,
-  type TimeBlockMap,
-  type TrackTimeInput,
+import type {
+  ActivityEntry,
+  Bucket,
+  ProjectStatus,
+  Task,
+  TaskQueueEntry,
+  TaskRelation,
+  TaskTimeResult,
+  TimeBlockMap,
+  TrackTimeInput,
 } from "../features/tasks/model";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";
 import {
@@ -110,6 +109,16 @@ import {
 import { publicConfig } from "./public-config";
 import { createRequestCache } from "./request-cache";
 import { webChatRuntime } from "./runtime.chat.web";
+import {
+  DbError,
+  type Json,
+  jsonObject,
+  type RpcArgs,
+  runQuery,
+  runRpc,
+  type TableInsert,
+  untypedDb,
+} from "./runtime.db";
 import { webFocusRuntime } from "./runtime.focus.web";
 import type {
   AttachmentRecord,
@@ -137,6 +146,7 @@ import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { createTasksViews } from "./runtime.web.views";
 import { deltaCursor } from "./sync/delta-cursor";
+import { timestampMicros } from "./sync/stamps";
 import type {
   AccessChange,
   SyncAccessResult,
@@ -155,10 +165,7 @@ import {
   bucketRowToModel,
   commentMarkRowToModel,
   editableTaskFields,
-  isMissingColumnError,
   isMissingFunctionError,
-  isMissingTableError,
-  isMissingTvD9FieldError,
   projectStatusRowToModel,
   sectionRowToModel,
   sortQueueEntries,
@@ -167,10 +174,7 @@ import {
   tagRowToModel,
   taskCompletionRowToModel,
   taskCreateOpInput,
-  taskCreateRow,
-  taskCreateRowLegacy,
   taskCyclesFromJson,
-  taskPatchToColumns,
   taskPatchToOpFields,
   taskQueueRowToModel,
   taskReminderRowToModel,
@@ -184,8 +188,6 @@ import {
   teamRowToModel,
   timeReportRowToModel,
   trackTimeExtras,
-  withFieldFallback,
-  withoutTvD9Fields,
 } from "./task-rows";
 import { timeRegionPatchToRow, timeRegionRowToModel } from "./time-region";
 import { AttachmentOpError, parseOpDetail } from "./uploads/errors";
@@ -202,10 +204,14 @@ const SUPABASE_PUBLISHABLE_KEY: string =
 // scrub of a leftover token fragment runs from main.tsx, before the router.
 // Below the minimum client build every write is refused here (TV-D8); reads and
 // sign-in pass. See lib/min-build.ts.
-export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: SUPABASE_AUTH_OPTIONS,
-  global: { fetch: readOnlyFetch((...args) => fetch(...args)) },
-});
+export const supabaseClient: SupabaseClient<Database> = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: SUPABASE_AUTH_OPTIONS,
+    global: { fetch: readOnlyFetch((...args) => fetch(...args)) },
+  },
+);
 
 // ── Boot-time read coalescer (DF-12) ─────────────────────────────────────────────
 // One cold launch used to fire `/auth/v1/user` ×8 (every user-scoped runtime method
@@ -486,10 +492,6 @@ export const webCapabilities: RuntimeCapabilities = {
 /** TV-D10's structure reads and ops (runtime.web.structure.ts). */
 const tasksStructure = createTasksStructure(supabaseClient, {
   userId: async () => (await getAuthedUser())?.id ?? null,
-  upsertBucketLegacy: (bucket) => upsertBucketRow(bucket),
-  deleteProjectLegacy: (workspaceId, projectId) => legacyDeleteBucket(workspaceId, projectId),
-  getTimeBlocksLegacy: (workspaceId) => getWorkspaceTimeBlocks(workspaceId),
-  setTimeBlocksLegacy: (workspaceId, blocks) => setWorkspaceTimeBlocks(workspaceId, blocks),
 });
 
 /** TV-D16's agent work and import runs (runtime.web.agents.ts). */
@@ -760,12 +762,13 @@ export const webRuntime: ModuoRuntime = {
         const row = await bootReads.read(
           `profile:${userId}`,
           async () => {
-            const { data, error } = await supabaseClient
-              .from("profiles")
-              .select("plan_tier, display_name, avatar_url")
-              .eq("id", userId)
-              .single();
-            if (error) throw error;
+            const data = await runQuery(
+              supabaseClient
+                .from("profiles")
+                .select("plan_tier, display_name, avatar_url")
+                .eq("id", userId)
+                .single(),
+            );
             return data ?? null;
           },
           PROFILE_TTL_MS,
@@ -776,88 +779,89 @@ export const webRuntime: ModuoRuntime = {
       }
     },
     async list() {
-      const { data, error } = await supabaseClient
-        .from("workspaces")
-        .select("*, workspace_members(*)")
-        .is("deleted_at", null);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient.from("workspaces").select("*, workspace_members(*)").is("deleted_at", null),
+      );
       return data ?? [];
     },
     async create(name) {
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
-      const { data, error } = await supabaseClient
-        .from("workspaces")
-        .insert({ name, owner_id: user.id })
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("workspaces")
+          // task_key is filled by the workspaces_task_key_insert trigger.
+          .insert({ name, owner_id: user.id } as TableInsert<"workspaces">)
+          .select()
+          .single(),
+      );
       return data;
     },
     async rename(workspaceId, name) {
-      const { data, error } = await supabaseClient
-        .from("workspaces")
-        .update({ name })
-        .eq("id", workspaceId)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient.from("workspaces").update({ name }).eq("id", workspaceId).select().single(),
+      );
       return data;
     },
     async updateBranding(workspaceId, branding) {
-      const { data, error } = await supabaseClient
-        .from("workspaces")
-        .update({ icon: branding.icon, logo_url: branding.logoUrl })
-        .eq("id", workspaceId)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("workspaces")
+          .update({ icon: branding.icon, logo_url: branding.logoUrl })
+          .eq("id", workspaceId)
+          .select()
+          .single(),
+      );
       return data;
     },
     async setTaskKey(workspaceId, key) {
-      const { data, error } = await supabaseClient.rpc("workspace_op_set_task_key", {
-        p_workspace_id: workspaceId,
-        p_key: key,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("workspace_op_set_task_key", {
+          p_workspace_id: workspaceId,
+          p_key: key,
+        }),
+      );
       const row = (data ?? {}) as { task_key?: string; task_key_aliases?: string[] };
       return { taskKey: row.task_key ?? key, taskKeyAliases: row.task_key_aliases ?? [] };
     },
     async leave(workspaceId) {
       const user = await getAuthedUser();
       if (!user) throw new Error("Not authenticated");
-      const { error } = await supabaseClient
-        .from("workspace_members")
-        .delete()
-        .eq("workspace_id", workspaceId)
-        .eq("user_id", user.id);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient
+          .from("workspace_members")
+          .delete()
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", user.id),
+      );
     },
     async softDelete(workspaceId) {
-      const { error } = await supabaseClient
-        .from("workspaces")
-        .update({ deleted_at: new Date().toISOString() })
-        .eq("id", workspaceId);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient
+          .from("workspaces")
+          .update({ deleted_at: new Date().toISOString() })
+          .eq("id", workspaceId),
+      );
     },
     async issueInvite(workspaceId, email, role, modulePermissions, roleId, sharePayload) {
       const user = await getAuthedUser();
-      const { data, error } = await supabaseClient
-        .from("workspace_invites")
-        .insert({
-          workspace_id: workspaceId,
-          created_by: user?.id,
-          email,
-          role,
-          // PERM-1: the role id wins; the DB trigger rewrites `role` to its tier.
-          ...(roleId ? { role_id: roleId } : {}),
-          permissions_notes: modulePermissions?.notes ?? "write",
-          permissions_tasks: modulePermissions?.tasks ?? "write",
-          ...(sharePayload ? { share_payload: sharePayload } : {}),
-        })
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("workspace_invites")
+          .insert({
+            workspace_id: workspaceId,
+            created_by: user?.id,
+            email,
+            role,
+            // PERM-1: the role id wins; the DB trigger rewrites `role` to its tier.
+            ...(roleId ? { role_id: roleId } : {}),
+            permissions_notes: modulePermissions?.notes ?? "write",
+            permissions_tasks: modulePermissions?.tasks ?? "write",
+            ...(sharePayload ? { share_payload: sharePayload } : {}),
+          })
+          .select()
+          .single(),
+      );
       return data;
     },
     async joinInvite(token) {
@@ -881,109 +885,114 @@ export const webRuntime: ModuoRuntime = {
       return data;
     },
     async listMembers(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("workspace_members")
-        .select("*, profiles(*)")
-        .eq("workspace_id", workspaceId);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("workspace_members")
+          .select("*, profiles(*)")
+          .eq("workspace_id", workspaceId),
+      );
       return data ?? [];
     },
     async listInvites(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("workspace_invites")
-        .select("*")
-        .eq("workspace_id", workspaceId);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient.from("workspace_invites").select("*").eq("workspace_id", workspaceId),
+      );
       return data ?? [];
     },
     async updateInvite(inviteId, role, modulePermissions, roleId) {
-      const { error } = await supabaseClient
-        .from("workspace_invites")
-        .update({
-          role,
-          ...(roleId ? { role_id: roleId } : {}),
-          permissions_notes: modulePermissions?.notes ?? "write",
-          permissions_tasks: modulePermissions?.tasks ?? "write",
-        })
-        .eq("id", inviteId);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient
+          .from("workspace_invites")
+          .update({
+            role,
+            ...(roleId ? { role_id: roleId } : {}),
+            permissions_notes: modulePermissions?.notes ?? "write",
+            permissions_tasks: modulePermissions?.tasks ?? "write",
+          })
+          .eq("id", inviteId),
+      );
     },
     async revokeInvite(inviteId) {
-      const { error } = await supabaseClient
-        .from("workspace_invites")
-        .update({ status: "revoked" })
-        .eq("id", inviteId);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient.from("workspace_invites").update({ status: "revoked" }).eq("id", inviteId),
+      );
     },
     async updateMemberPermissions(memberId, role, modulePermissions) {
       // Managing ANOTHER member's row can't be a client-direct write (the base
       // workspace_members RLS is own-row) — route through the hierarchy-enforcing
       // op, which also blocks an admin from managing admins. Send the DB
       // vocabulary (editor→member, view/edit/admin→read/write).
-      const { error } = await supabaseClient.rpc("workspace_op_set_member_role", {
-        p_member_id: memberId,
-        p_role: toMemberRole(role),
-        p_perm_notes: toMemberPerm(modulePermissions?.notes),
-        p_perm_tasks: toMemberPerm(modulePermissions?.tasks),
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("workspace_op_set_member_role", {
+          p_member_id: memberId,
+          p_role: toMemberRole(role),
+          p_perm_notes: toMemberPerm(modulePermissions?.notes),
+          p_perm_tasks: toMemberPerm(modulePermissions?.tasks),
+        }),
+      );
     },
     async transferOwnership(memberId) {
       // Owner-only; promotes the target to owner and demotes the caller to admin
       // (SECURITY DEFINER, since it rewrites workspaces.owner_id). Needed by the
       // account-deletion flow — an owner hands off before deleting.
-      const { error } = await supabaseClient.rpc("workspace_op_transfer_ownership", {
-        p_member_id: memberId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("workspace_op_transfer_ownership", {
+          p_member_id: memberId,
+        }),
+      );
     },
     async listRoles(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("workspace_roles")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .order("position")
-        .order("id");
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("workspace_roles")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .order("position")
+          .order("id"),
+      );
       return data ?? [];
     },
     async upsertRole(input) {
-      const { data, error } = await supabaseClient.rpc("workspace_op_role_upsert", {
-        p_workspace_id: input.workspaceId,
-        p_role_id: input.roleId,
-        p_name: input.name,
-        p_description: input.description,
-        p_permissions: input.permissions,
-        p_read_only: input.readOnly,
-        p_expected_updated_at: input.expectedUpdatedAt,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("workspace_op_role_upsert", {
+          p_workspace_id: input.workspaceId,
+          p_role_id: input.roleId,
+          p_name: input.name,
+          p_description: input.description,
+          p_permissions: input.permissions,
+          p_read_only: input.readOnly,
+          p_expected_updated_at: input.expectedUpdatedAt,
+        }),
+      );
       return Array.isArray(data) ? data[0] : data;
     },
     async deleteRole(roleId, reassignTo) {
-      const { error } = await supabaseClient.rpc("workspace_op_role_delete", {
-        p_role_id: roleId,
-        p_reassign_to: reassignTo,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("workspace_op_role_delete", {
+          p_role_id: roleId,
+          p_reassign_to: reassignTo,
+        }),
+      );
     },
     async setMemberAccess(memberId, roleId, overrides) {
-      const { data, error } = await supabaseClient.rpc("workspace_op_set_member_access", {
-        p_member_id: memberId,
-        p_role_id: roleId,
-        p_overrides: overrides,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("workspace_op_set_member_access", {
+          p_member_id: memberId,
+          p_role_id: roleId,
+          p_overrides: overrides,
+        }),
+      );
       return Array.isArray(data) ? data[0] : data;
     },
     async removeMember(memberId) {
       // The base workspace_members write-RLS is own-row (only `leave` self-deletes),
       // so ejecting another member needs a SECURITY DEFINER op that checks the
       // caller is owner/admin and refuses to remove an owner or yourself. DF-24.
-      const { error } = await supabaseClient.rpc("workspace_op_remove_member", {
-        p_member_id: memberId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("workspace_op_remove_member", {
+          p_member_id: memberId,
+        }),
+      );
     },
     inviteUrl(token) {
       // Mirror notesV2.publishedUrl: web origin is correct wherever served;
@@ -1040,7 +1049,7 @@ export const webRuntime: ModuoRuntime = {
       if (error?.code === "42703" || error?.code === "42501")
         ({ data, error } = await list(`${columns}, expires_at`));
       if (error?.code === "42703") ({ data, error } = await list(columns));
-      if (error) throw new Error(error.message);
+      if (error) throw new DbError(error);
       return ((data ?? []) as unknown as Array<Record<string, any>>).map((row) => ({
         id: row.id,
         workspaceId: row.workspace_id,
@@ -1055,13 +1064,14 @@ export const webRuntime: ModuoRuntime = {
       }));
     },
     async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
-      const { data, error } = await supabaseClient.rpc("workspace_api_keys_create", {
-        p_workspace_id: workspaceId,
-        p_name: name,
-        p_scopes: scopes,
-        ...(expiresInDays != null ? { p_expires_in_days: expiresInDays } : {}),
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("workspace_api_keys_create", {
+          p_workspace_id: workspaceId,
+          p_name: name,
+          p_scopes: scopes,
+          ...(expiresInDays != null ? { p_expires_in_days: expiresInDays } : {}),
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("Key creation returned nothing.");
       return {
@@ -1084,7 +1094,7 @@ export const webRuntime: ModuoRuntime = {
       });
       // Not on this server yet (CV-21's migration): no switches to show.
       if (error?.code === "PGRST202") return [];
-      if (error) throw new Error(error.message);
+      if (error) throw new DbError(error);
       return ((data ?? []) as Array<{ id?: unknown; name?: unknown }>)
         .filter((r) => typeof r.id === "string")
         .map((r) => ({ id: r.id as string, name: typeof r.name === "string" ? r.name : "A key" }));
@@ -1098,7 +1108,7 @@ export const webRuntime: ModuoRuntime = {
         if (error.code === "PGRST202") {
           throw new Error("Private channels for keys aren't available on this server yet.");
         }
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       return data === true;
     },
@@ -1115,13 +1125,12 @@ export const webRuntime: ModuoRuntime = {
             "Changing a key's access isn't available on this server yet. Create a new key instead.",
           );
         }
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       return (data ?? {}) as Record<string, string>;
     },
     async revokeApiKey(keyId) {
-      const { error } = await supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: keyId });
-      if (error) throw new Error(error.message);
+      await runRpc(supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: keyId }));
     },
     getMcpEndpoint() {
       return `${SUPABASE_URL}/functions/v1/moduo-mcp`;
@@ -1132,13 +1141,14 @@ export const webRuntime: ModuoRuntime = {
   // widget on web; the redb import reads through the tauri implementation.
   notes: {
     async list(workspaceId) {
-      const { data, error } = await supabaseClient
-        .from("notes")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null)
-        .order("position");
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("notes")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .order("position"),
+      );
       return data ?? [];
     },
     async getDocState(_workspaceId, noteId) {
@@ -1189,7 +1199,7 @@ export const webRuntime: ModuoRuntime = {
       const { res, tier } = await selectFirstDeployedTier(tiers, query);
       // Degrade ONLY on the deploy gap (missing v2 columns = 42703). An
       // outage/auth error must surface as an error, not an empty module.
-      if (res.error) throw new Error(res.error.message);
+      if (res.error) throw new DbError(res.error);
       return {
         notes: mapKnownRows(res.rows, mapNoteRow),
         // Only the legacy column set (the last tier) means the v2 ops are missing.
@@ -1225,7 +1235,7 @@ export const webRuntime: ModuoRuntime = {
       if (updRes.error && (updRes.error as { code?: string }).code === "42703") {
         updRes = await readLog("id, client_id, client_seq, update_b64");
       }
-      if (updRes.error) throw new Error(updRes.error.message);
+      if (updRes.error) throw new DbError(updRes.error);
       const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
 
       // Every snapshot change (compaction, seed) bumps doc_version, so an
@@ -1249,7 +1259,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("workspace_id", workspaceId)
         .single();
       if (noteRes.error) {
-        if (noteRes.error.code !== "42703") throw new Error(noteRes.error.message);
+        if (noteRes.error.code !== "42703") throw new DbError(noteRes.error);
         // Pre-migration there is no doc_version column — degrade to the
         // legacy snapshot-only shape rather than breaking the open note.
         const legacy = await supabaseClient
@@ -1258,7 +1268,7 @@ export const webRuntime: ModuoRuntime = {
           .eq("id", noteId)
           .eq("workspace_id", workspaceId)
           .single();
-        if (legacy.error) throw new Error(legacy.error.message);
+        if (legacy.error) throw new DbError(legacy.error);
         return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
       }
       return {
@@ -1269,25 +1279,27 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async create({ workspaceId, id, parentId, title, position, icon }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_create", {
-        p_workspace_id: workspaceId,
-        p_id: id ?? null,
-        p_parent_id: parentId ?? null,
-        p_title: title ?? "",
-        p_position: position ?? "",
-        p_icon: icon ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_create", {
+          p_workspace_id: workspaceId,
+          p_id: id ?? null,
+          p_parent_id: parentId ?? null,
+          p_title: title ?? "",
+          p_position: position ?? "",
+          p_icon: icon ?? null,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_create"));
     },
 
     async rename({ workspaceId, noteId, title }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_rename", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_title: title,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_rename", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+          p_title: title,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_rename"));
     },
 
@@ -1299,46 +1311,50 @@ export const webRuntime: ModuoRuntime = {
         p_position: position ?? "",
       };
       // p_follow_parent goes only when asked, so a plain move works on a
-      // database without it.
+      // database without it. Not in prod's types until 20261020141000 ships:
+      // untyped until then, then `bun run db:types` and drop untypedDb.
       const follow = Boolean(followParent && parentId);
-      const { data, error } = await supabaseClient.rpc(
+      const { data, error } = await untypedDb(supabaseClient).rpc(
         "notes_op_move",
         follow ? { ...args, p_follow_parent: true } : args,
       );
       if (!error) return mapNoteRow(firstRow(data, "notes_op_move"));
-      if (!follow || !isMissingFunctionError(error, "notes_op_move"))
-        throw new Error(error.message);
+      if (!follow || !isMissingFunctionError(error, "notes_op_move")) throw new DbError(error);
       // Before the migration: the move, then the sharing change, in order.
-      const moved = await supabaseClient.rpc("notes_op_move", args);
-      if (moved.error) throw new Error(moved.error.message);
+      const moved = await runRpc(supabaseClient.rpc("notes_op_move", args));
       const shared = await supabaseClient.rpc("share_op_follow_parent", { p_note_id: noteId });
       if (shared.error)
-        throw new Error(`Moved, but couldn't change who can see it: ${shared.error.message}`);
+        throw new DbError({
+          ...shared.error,
+          message: `Moved, but couldn't change who can see it: ${shared.error.message}`,
+        });
       return {
-        ...mapNoteRow(firstRow(moved.data, "notes_op_move")),
+        ...mapNoteRow(firstRow(moved, "notes_op_move")),
         shareMode: "inherit",
         workspaceShared: false,
       };
     },
 
     async setMeta({ workspaceId, noteId, patch }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_set_meta", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_patch: patch,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_set_meta", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+          p_patch: patch,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_set_meta"));
     },
 
     async fileNote({ workspaceId, noteId, inInbox, position }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_file", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_in_inbox: inInbox,
-        p_position: position ?? "",
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_file", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+          p_in_inbox: inInbox,
+          p_position: position ?? "",
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_file"));
     },
 
@@ -1352,7 +1368,7 @@ export const webRuntime: ModuoRuntime = {
       if (error) {
         // Deploy gap (table not created yet) → no favorites, never a wall.
         if (isAnyTableMissing(error)) return [];
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       return mapKnownRows(data ?? [], (raw) => {
         const r = requireRow(noteFavoriteRowSchema, raw, "note favorite");
@@ -1361,49 +1377,56 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async setFavorite({ workspaceId, noteId, value, position }) {
-      const { error } = await supabaseClient.rpc("notes_op_set_favorite", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_value: value,
-        p_position: position ?? null,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("notes_op_set_favorite", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+          p_value: value,
+          p_position: position ?? null,
+        }),
+      );
     },
 
     async duplicate({ workspaceId, sourceNoteId, position }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_duplicate", {
-        p_workspace_id: workspaceId,
-        p_source_note_id: sourceNoteId,
-        p_position: position ?? "",
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_duplicate", {
+          p_workspace_id: workspaceId,
+          p_source_note_id: sourceNoteId,
+          p_position: position ?? "",
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_duplicate"));
     },
 
     async archive({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_archive", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_archive", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_archive"));
     },
 
     async unarchive({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_unarchive", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_unarchive", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_unarchive"));
     },
 
     async trash({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_trash", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_trash", {
+            p_workspace_id: workspaceId,
+            p_note_id: noteId,
+          }),
+        ),
+      );
       return {
         trashedIds: (data?.trashed_ids ?? []) as string[],
         count: Number(data?.count ?? 0),
@@ -1411,11 +1434,14 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async restore({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_restore", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_restore", {
+            p_workspace_id: workspaceId,
+            p_note_id: noteId,
+          }),
+        ),
+      );
       return {
         restoredIds: (data?.restored_ids ?? []) as string[],
         count: Number(data?.count ?? 0),
@@ -1423,11 +1449,14 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async purge({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_purge", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_purge", {
+            p_workspace_id: workspaceId,
+            p_note_id: noteId,
+          }),
+        ),
+      );
       return { count: Number(data?.count ?? 0) };
     },
 
@@ -1439,27 +1468,29 @@ export const webRuntime: ModuoRuntime = {
           p_workspace_id: workspaceId,
         });
         if (error) return { count: 0 };
-        return { count: Number(data?.count ?? 0) };
+        return { count: Number(jsonObject(data).count ?? 0) };
       } catch {
         return { count: 0 };
       }
     },
 
     async publish({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_publish", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_publish", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_publish"));
     },
 
     async unpublish({ workspaceId, noteId }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_unpublish", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notes_op_unpublish", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+        }),
+      );
       return mapNoteRow(firstRow(data, "notes_op_unpublish"));
     },
 
@@ -1486,7 +1517,7 @@ export const webRuntime: ModuoRuntime = {
       // never wall), like listMeta/search.
       if (error) {
         if (error.code === "42703") return [];
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       return (Array.isArray(data) ? data : []).map((r: any) => ({
         id: r.id as string,
@@ -1499,15 +1530,18 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async pushUpdates({ workspaceId, noteId, clientId, updates, bodyText, bodyMd }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_apply_updates", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_client_id: clientId,
-        p_updates: updates,
-        p_body_text: bodyText ?? null,
-        p_body_md: bodyMd ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_apply_updates", {
+            p_workspace_id: workspaceId,
+            p_note_id: noteId,
+            p_client_id: clientId,
+            p_updates: updates,
+            p_body_text: bodyText ?? null,
+            p_body_md: bodyMd ?? null,
+          }),
+        ),
+      );
       return {
         inserted: Number(data?.inserted ?? 0),
         duplicates: Number(data?.duplicates ?? 0),
@@ -1524,16 +1558,19 @@ export const webRuntime: ModuoRuntime = {
       bodyMd,
       expectedDocVersion,
     }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_save_snapshot", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_snapshot_b64: snapshotB64,
-        p_upto_update_id: uptoUpdateId,
-        p_body_text: bodyText ?? null,
-        p_body_md: bodyMd ?? null,
-        p_expected_doc_version: expectedDocVersion ?? undefined,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_save_snapshot", {
+            p_workspace_id: workspaceId,
+            p_note_id: noteId,
+            p_snapshot_b64: snapshotB64,
+            p_upto_update_id: uptoUpdateId,
+            p_body_text: bodyText ?? null,
+            p_body_md: bodyMd ?? null,
+            p_expected_doc_version: expectedDocVersion ?? undefined,
+          }),
+        ),
+      );
       return {
         folded: Number(data?.folded ?? 0),
         docVersion: Number(data?.doc_version ?? 0),
@@ -1542,14 +1579,17 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async seedDoc({ workspaceId, noteId, docStateB64, bodyText, bodyMd }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_seed_doc", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_doc_state_b64: docStateB64,
-        p_body_text: bodyText ?? null,
-        p_body_md: bodyMd ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_seed_doc", {
+            p_workspace_id: workspaceId,
+            p_note_id: noteId,
+            p_doc_state_b64: docStateB64,
+            p_body_text: bodyText ?? null,
+            p_body_md: bodyMd ?? null,
+          }),
+        ),
+      );
       return {
         seeded: Boolean(data?.seeded),
         reason: (data?.reason as string | undefined) ?? null,
@@ -1593,11 +1633,14 @@ export const webRuntime: ModuoRuntime = {
         // Omitted (undefined → dropped by JSON) lets the server decide.
         inInbox: r.inInbox,
       }));
-      const { data, error } = await supabaseClient.rpc("notes_op_import", {
-        p_workspace_id: workspaceId,
-        p_rows: payload,
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("notes_op_import", {
+            p_workspace_id: workspaceId,
+            p_rows: payload,
+          }),
+        ),
+      );
       return {
         imported: Number(data?.imported ?? 0),
         skipped: Number(data?.skipped ?? 0),
@@ -1605,12 +1648,13 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async mention({ workspaceId, noteId, mentionedUserIds }) {
-      const { error } = await supabaseClient.rpc("notes_op_mention", {
-        p_workspace_id: workspaceId,
-        p_note_id: noteId,
-        p_mentioned_user_ids: mentionedUserIds,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("notes_op_mention", {
+          p_workspace_id: workspaceId,
+          p_note_id: noteId,
+          p_mentioned_user_ids: mentionedUserIds,
+        }),
+      );
     },
 
     async search({ workspaceId, query, limit }) {
@@ -1627,7 +1671,7 @@ export const webRuntime: ModuoRuntime = {
       // degrade to no results rather than an error, like listMeta.
       if (error) {
         if (error.code === "42703") return [];
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       return (Array.isArray(data) ? data : []).map((r: any) => ({
         id: r.id as string,
@@ -1647,7 +1691,7 @@ export const webRuntime: ModuoRuntime = {
         .in("id", ids);
       if (error) {
         if (error.code === "42703") return [];
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       return (Array.isArray(data) ? data : []).map((r: any) => ({
         id: r.id as string,
@@ -1701,7 +1745,7 @@ export const webRuntime: ModuoRuntime = {
           .maybeSingle();
         if (!res.error) return res.data ? prefsRowToModel(res.data) : null;
         const missing = missingOptionalPrefsDomain(res.error);
-        if (!missing) throw new Error(res.error.message);
+        if (!missing) throw new DbError(res.error);
         optionalPrefsAvailable[missing] = false; // deploy gap — column not applied yet
       }
       return null;
@@ -1740,12 +1784,12 @@ export const webRuntime: ModuoRuntime = {
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await supabaseClient
           .from("user_preferences")
-          .upsert(buildRow(), { onConflict: "user_id" })
+          .upsert(buildRow() as TableInsert<"user_preferences">, { onConflict: "user_id" })
           .select(prefsSelectCols())
           .single();
         if (!res.error) return prefsRowToModel(res.data);
         const missing = missingOptionalPrefsDomain(res.error);
-        if (!missing) throw new Error(res.error.message);
+        if (!missing) throw new DbError(res.error);
         optionalPrefsAvailable[missing] = false; // deploy gap — retry without that domain
       }
       return null;
@@ -1753,7 +1797,9 @@ export const webRuntime: ModuoRuntime = {
     async setDomain(domain, value, updatedAt) {
       const user = await getAuthedUser();
       if (!user) return null;
-      const { data, error } = await supabaseClient.rpc("prefs_op_set", {
+      // Not in prod's types until 20261020140000 ships: untyped until then,
+      // then `bun run db:types` and drop untypedDb.
+      const { data, error } = await untypedDb(supabaseClient).rpc("prefs_op_set", {
         p_domain: domain,
         p_value: value ?? {},
         p_updated_at: updatedAt,
@@ -1763,30 +1809,21 @@ export const webRuntime: ModuoRuntime = {
       if (isMissingFunctionError(error, "prefs_op_set")) {
         return webRuntime.preferences.set(prefsDomainPatch(domain, value, updatedAt));
       }
-      throw new Error(error.message);
+      throw new DbError(error);
     },
     async setTimeZone(timeZone) {
-      const { error } = await supabaseClient.rpc("user_op_set_time_zone", {
-        p_time_zone: timeZone,
-      });
-      // Before TV-D8's migration there is nothing to save it in.
-      if (error && !isMissingFunctionError(error, "user_op_set_time_zone")) {
-        throw new Error(error.message);
-      }
+      await runRpc(supabaseClient.rpc("user_op_set_time_zone", { p_time_zone: timeZone }));
     },
     async getTimeRegion() {
-      const { data, error } = await supabaseClient.rpc("user_time_region");
-      // Before TV-D14's migration there is no Time & region to read.
-      if (isMissingFunctionError(error, "user_time_region")) return null;
-      if (error) throw new Error(error.message);
+      const data = await runRpc(supabaseClient.rpc("user_time_region"));
       return data ? timeRegionRowToModel(data) : null;
     },
     async setTimeRegion(patch) {
-      const { data, error } = await supabaseClient.rpc("user_op_set_time_region", {
-        p_patch: timeRegionPatchToRow(patch),
-      });
-      if (isMissingFunctionError(error, "user_op_set_time_region")) return null;
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("user_op_set_time_region", {
+          p_patch: timeRegionPatchToRow(patch) as Json,
+        }),
+      );
       return data ? timeRegionRowToModel(data) : null;
     },
     async getMinBuild() {
@@ -1804,32 +1841,34 @@ export const webRuntime: ModuoRuntime = {
     async get(workspaceId) {
       const user = await getAuthedUser();
       if (!user) return null;
-      const { data, error } = await supabaseClient
-        .from("dashboard_layouts")
-        .select("layout_data, updated_at")
-        .eq("user_id", user.id)
-        .eq("workspace_id", workspaceId)
-        .eq("layout_key", DASHBOARD_LAYOUT_KEY)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("dashboard_layouts")
+          .select("layout_data, updated_at")
+          .eq("user_id", user.id)
+          .eq("workspace_id", workspaceId)
+          .eq("layout_key", DASHBOARD_LAYOUT_KEY)
+          .maybeSingle(),
+      );
       if (!data) return null;
-      const row = data as { layout_data: DashboardLayout; updated_at: string };
+      const row = data as unknown as { layout_data: DashboardLayout; updated_at: string };
       return { layout: row.layout_data, updatedAt: row.updated_at };
     },
     async save({ workspaceId, layout, updatedAt }) {
       const user = await getAuthedUser();
       if (!user) return;
-      const { error } = await supabaseClient.from("dashboard_layouts").upsert(
-        {
-          user_id: user.id,
-          workspace_id: workspaceId,
-          layout_key: DASHBOARD_LAYOUT_KEY,
-          layout_data: layout,
-          updated_at: updatedAt,
-        },
-        { onConflict: "user_id,workspace_id,layout_key" },
+      await runQuery(
+        supabaseClient.from("dashboard_layouts").upsert(
+          {
+            user_id: user.id,
+            workspace_id: workspaceId,
+            layout_key: DASHBOARD_LAYOUT_KEY,
+            layout_data: layout as unknown as Json,
+            updated_at: updatedAt,
+          },
+          { onConflict: "user_id,workspace_id,layout_key" },
+        ),
       );
-      if (error) throw new Error(error.message);
     },
   },
 
@@ -1852,7 +1891,7 @@ export const webRuntime: ModuoRuntime = {
         if (res.error.code === "42P01" || res.error.code === "PGRST205") {
           return { attachments: [], truncation: null };
         }
-        throw new Error(res.error.message);
+        throw new DbError(res.error);
       }
       return { attachments: mapKnownRows(res.rows, mapAttachmentRow), truncation: res.truncation };
     },
@@ -1869,10 +1908,7 @@ export const webRuntime: ModuoRuntime = {
         .order("created_at")
         .order("id")
         .limit(500);
-      if (error) {
-        if (isMissingTableError(error, "attachments")) return [];
-        throw new Error(error.message);
-      }
+      if (error) throw new DbError(error);
       return mapKnownRows(data ?? [], mapAttachmentRow);
     },
 
@@ -1924,22 +1960,16 @@ export const webRuntime: ModuoRuntime = {
 
     async abandon(id) {
       const { error } = await supabaseClient.rpc("attachments_op_abandon", { p_id: id });
-      // A database before AT-3 has no such op: the 24 h sweep frees it there.
-      if (!error || isMissingFunctionError(error, "attachments_op_abandon")) return;
+      if (!error) return;
       const code = (error.message ?? "").trim();
       if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
       throw new Error(error.message ?? "Couldn't let the upload go.");
     },
 
     async largest(workspaceId, limit = 50) {
-      const { data, error } = await supabaseClient.rpc("attachments_largest", {
-        p_workspace_id: workspaceId,
-        p_limit: limit,
-      });
-      if (error) {
-        if (isMissingFunctionError(error, "attachments_largest")) return [];
-        throw new Error(error.message);
-      }
+      const data = await runRpc(
+        supabaseClient.rpc("attachments_largest", { p_workspace_id: workspaceId, p_limit: limit }),
+      );
       return mapKnownRows((data ?? []) as unknown[], mapLargestAttachmentRow);
     },
 
@@ -1950,7 +1980,7 @@ export const webRuntime: ModuoRuntime = {
       if (error) {
         const code = (error.message ?? "").trim();
         if (/^[a-z_]+$/.test(code)) throw new AttachmentOpError(code, parseOpDetail(error.details));
-        throw new Error(error.message);
+        throw new DbError(error);
       }
       const r = (data ?? {}) as Record<string, unknown>;
       const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -1991,12 +2021,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("user_id", user.id)
         .eq("workspace_id", workspaceId)
         .order("position", { ascending: true });
-      // The habits table is deploy-gated — a missing relation degrades to [] (a
-      // widget must never wall), like notesV2.recent's 42703 guard.
-      if (error) {
-        if (isAnyTableMissing(error)) return [];
-        throw new Error(error.message);
-      }
+      if (error) throw new DbError(error);
       return mapKnownRows(data, mapHabitRow);
     },
     async upsert({ id, workspaceId, name, emoji, position }) {
@@ -2011,24 +2036,25 @@ export const webRuntime: ModuoRuntime = {
         position,
         updated_at: new Date().toISOString(),
       };
-      const { data, error } = await supabaseClient
-        .from("habits")
-        .upsert(row)
-        .select("id, workspace_id, name, emoji, position, checks, created_at, updated_at")
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("habits")
+          .upsert(row)
+          .select("id, workspace_id, name, emoji, position, checks, created_at, updated_at")
+          .single(),
+      );
       return mapHabitRow(data);
     },
     async setChecks({ id, checks }) {
-      const { error } = await supabaseClient
-        .from("habits")
-        .update({ checks, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient
+          .from("habits")
+          .update({ checks, updated_at: new Date().toISOString() })
+          .eq("id", id),
+      );
     },
     async remove(id) {
-      const { error } = await supabaseClient.from("habits").delete().eq("id", id);
-      if (error) throw new Error(error.message);
+      await runQuery(supabaseClient.from("habits").delete().eq("id", id));
     },
   },
 
@@ -2174,7 +2200,7 @@ export const webRuntime: ModuoRuntime = {
     async listModule(workspaceId) {
       try {
         const live = (table: string) => (opts?: SelectOpts) =>
-          supabaseClient
+          untypedDb(supabaseClient)
             .from(table)
             .select("*", opts)
             .eq("workspace_id", workspaceId)
@@ -2216,24 +2242,26 @@ export const webRuntime: ModuoRuntime = {
       status,
       unreadCount,
     }) {
-      const { data, error } = await supabaseClient.rpc("email_op_account_upsert", {
-        p_workspace_id: workspaceId,
-        p_provider: provider,
-        p_address: address,
-        p_signature_html: signatureHtml ?? null,
-        p_color: color ?? null,
-        p_status: status ?? null,
-        p_unread_count: unreadCount ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_account_upsert", {
+          p_workspace_id: workspaceId,
+          p_provider: provider,
+          p_address: address,
+          p_signature_html: signatureHtml ?? null,
+          p_color: color ?? null,
+          p_status: status ?? null,
+          p_unread_count: unreadCount ?? null,
+        }),
+      );
       return emailAccountRowToModel(firstRow(data, "email_op_account_upsert"));
     },
     async removeAccountRef({ workspaceId, accountId }) {
-      const { error } = await supabaseClient.rpc("email_op_account_remove", {
-        p_workspace_id: workspaceId,
-        p_account_id: accountId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("email_op_account_remove", {
+          p_workspace_id: workspaceId,
+          p_account_id: accountId,
+        }),
+      );
     },
     async upsertRef({
       workspaceId,
@@ -2246,79 +2274,87 @@ export const webRuntime: ModuoRuntime = {
       snippet,
       sentAt,
     }) {
-      const { data, error } = await supabaseClient.rpc("email_op_ref_upsert", {
-        p_workspace_id: workspaceId,
-        p_thread_key: threadKey,
-        p_account_id: accountId ?? null,
-        p_message_key: messageKey ?? null,
-        p_from_addr: fromAddr ?? null,
-        p_from_name: fromName ?? null,
-        p_subject: subject ?? "",
-        p_snippet: snippet ?? "",
-        p_sent_at: sentAt ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_ref_upsert", {
+          p_workspace_id: workspaceId,
+          p_thread_key: threadKey,
+          p_account_id: accountId ?? null,
+          p_message_key: messageKey ?? null,
+          p_from_addr: fromAddr ?? null,
+          p_from_name: fromName ?? null,
+          p_subject: subject ?? "",
+          p_snippet: snippet ?? "",
+          p_sent_at: sentAt ?? null,
+        }),
+      );
       return emailRefRowToModel(firstRow(data, "email_op_ref_upsert"));
     },
     async snooze({ workspaceId, refId, snoozeUntil }) {
-      const { data, error } = await supabaseClient.rpc("email_op_snooze", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-        p_snooze_until: snoozeUntil,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_snooze", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+          p_snooze_until: snoozeUntil,
+        }),
+      );
       return emailRefRowToModel(firstRow(data, "email_op_snooze"));
     },
     async unsnooze({ workspaceId, refId }) {
-      const { data, error } = await supabaseClient.rpc("email_op_unsnooze", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_unsnooze", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+        }),
+      );
       return emailRefRowToModel(firstRow(data, "email_op_unsnooze"));
     },
     async snoozeDue({ workspaceId, refId }) {
-      const { data, error } = await supabaseClient.rpc("email_op_snooze_due", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_snooze_due", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+        }),
+      );
       return emailRefRowToModel(firstRow(data, "email_op_snooze_due"));
     },
     async followUp({ workspaceId, refId, followUpAt }) {
-      const { data, error } = await supabaseClient.rpc("email_op_follow_up", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-        p_follow_up_at: followUpAt,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_follow_up", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+          p_follow_up_at: followUpAt,
+        }),
+      );
       return emailRefRowToModel(firstRow(data, "email_op_follow_up"));
     },
     async clearFollowUp({ workspaceId, refId }) {
-      const { data, error } = await supabaseClient.rpc("email_op_clear_follow_up", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_clear_follow_up", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+        }),
+      );
       return emailRefRowToModel(firstRow(data, "email_op_clear_follow_up"));
     },
     async followUpDue({ workspaceId, refId }) {
-      const { data, error } = await supabaseClient.rpc("email_op_follow_up_due", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_follow_up_due", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+        }),
+      );
       // Returns SQL NULL (→ no row) when there's nothing to do; not an error.
       // Guard on row.id too (the all-NULL-composite gotcha) like deleteLink does.
       const row = Array.isArray(data) ? data[0] : data;
       return row?.id ? emailRefRowToModel(row) : null;
     },
     async removeRef({ workspaceId, refId }) {
-      const { error } = await supabaseClient.rpc("email_op_ref_remove", {
-        p_workspace_id: workspaceId,
-        p_ref_id: refId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("email_op_ref_remove", {
+          p_workspace_id: workspaceId,
+          p_ref_id: refId,
+        }),
+      );
     },
     async linkThread({
       workspaceId,
@@ -2331,18 +2367,19 @@ export const webRuntime: ModuoRuntime = {
       targetLabel,
       targetIcon,
     }) {
-      const { data, error } = await supabaseClient.rpc("email_op_link", {
-        p_workspace_id: workspaceId,
-        p_thread_id: threadId,
-        p_target_type: targetType,
-        p_target_id: targetId,
-        p_relation_kind: relationKind ?? "references",
-        p_origin: origin ?? "manual",
-        p_thread_label: threadLabel ?? null,
-        p_target_label: targetLabel ?? null,
-        p_target_icon: targetIcon ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("email_op_link", {
+          p_workspace_id: workspaceId,
+          p_thread_id: threadId,
+          p_target_type: targetType,
+          p_target_id: targetId,
+          p_relation_kind: relationKind ?? "references",
+          p_origin: origin ?? "manual",
+          p_thread_label: threadLabel ?? null,
+          p_target_label: targetLabel ?? null,
+          p_target_icon: targetIcon ?? null,
+        }),
+      );
       return firstRow(data, "email_op_link");
     },
   },
@@ -2424,40 +2461,44 @@ export const webRuntime: ModuoRuntime = {
       }
     },
     async createEvent({ workspaceId, title, startsAt, endsAt, allDay, rrule, description }) {
-      const { data, error } = await supabaseClient.rpc("calendar_op_event_create", {
-        p_workspace_id: workspaceId,
-        p_title: title,
-        p_starts_at: startsAt,
-        p_ends_at: endsAt,
-        p_all_day: allDay ?? false,
-        p_rrule: rrule ?? null,
-        p_description: description ?? "",
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("calendar_op_event_create", {
+          p_workspace_id: workspaceId,
+          p_title: title,
+          p_starts_at: startsAt,
+          p_ends_at: endsAt,
+          p_all_day: allDay ?? false,
+          p_rrule: rrule ?? null,
+          p_description: description ?? "",
+        }),
+      );
       return calendarEventRowToModel(firstRow(data, "calendar_op_event_create"));
     },
     async updateEvent({ workspaceId, eventId, patch }) {
-      const { data, error } = await supabaseClient.rpc("calendar_op_event_update", {
-        p_workspace_id: workspaceId,
-        p_event_id: eventId,
-        p_patch: patch,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("calendar_op_event_update", {
+          p_workspace_id: workspaceId,
+          p_event_id: eventId,
+          p_patch: patch,
+        }),
+      );
       return calendarEventRowToModel(firstRow(data, "calendar_op_event_update"));
     },
     async removeEvent({ workspaceId, eventId }) {
-      const { error } = await supabaseClient.rpc("calendar_op_event_delete", {
-        p_workspace_id: workspaceId,
-        p_event_id: eventId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("calendar_op_event_delete", {
+          p_workspace_id: workspaceId,
+          p_event_id: eventId,
+        }),
+      );
     },
     async restoreEvent({ workspaceId, eventId }) {
-      const { data, error } = await supabaseClient.rpc("calendar_op_event_restore", {
-        p_workspace_id: workspaceId,
-        p_event_id: eventId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("calendar_op_event_restore", {
+          p_workspace_id: workspaceId,
+          p_event_id: eventId,
+        }),
+      );
       return calendarEventRowToModel(firstRow(data, "calendar_op_event_restore"));
     },
     async upsertAccount({
@@ -2487,25 +2528,33 @@ export const webRuntime: ModuoRuntime = {
       // null too, so omitting is equivalent AND keeps OAuth callers (who pass
       // `?? null` in the house style) working against a pre-migration database.
       if (syncToken != null) args.p_sync_token = syncToken;
-      const { data, error } = await supabaseClient.rpc("calendar_op_account_upsert", args);
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc(
+          "calendar_op_account_upsert",
+          args as RpcArgs<"calendar_op_account_upsert">,
+        ),
+      );
       return calendarAccountRowToModel(firstRow(data, "calendar_op_account_upsert"));
     },
     async removeAccount({ workspaceId, accountId }) {
-      const { error } = await supabaseClient.rpc("calendar_op_account_remove", {
-        p_workspace_id: workspaceId,
-        p_account_id: accountId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("calendar_op_account_remove", {
+          p_workspace_id: workspaceId,
+          p_account_id: accountId,
+        }),
+      );
     },
     async mirrorEvents({ workspaceId, accountId, events, deletedExternalIds }) {
-      const { data, error } = await supabaseClient.rpc("calendar_op_mirror_events", {
-        p_workspace_id: workspaceId,
-        p_account_id: accountId,
-        p_events: events,
-        p_deleted_external_ids: deletedExternalIds ?? [],
-      });
-      if (error) throw new Error(error.message);
+      const data = jsonObject(
+        await runRpc(
+          supabaseClient.rpc("calendar_op_mirror_events", {
+            p_workspace_id: workspaceId,
+            p_account_id: accountId,
+            p_events: events,
+            p_deleted_external_ids: deletedExternalIds ?? [],
+          }),
+        ),
+      );
       return {
         upserted: Number(data?.upserted ?? 0),
         removed: Number(data?.removed ?? 0),
@@ -2540,13 +2589,13 @@ export const webRuntime: ModuoRuntime = {
       // and that must not stop them reading the shared buckets.
       await ensureWebInbox(workspaceId).catch(() => null);
       const live = (table: string) => (opts?: SelectOpts) =>
-        supabaseClient
+        untypedDb(supabaseClient)
           .from(table)
           .select("*", opts)
           .eq("workspace_id", workspaceId)
           .is("deleted_at", null);
       const all = (table: string) => (opts?: SelectOpts) =>
-        supabaseClient.from(table).select("*", opts).eq("workspace_id", workspaceId);
+        untypedDb(supabaseClient).from(table).select("*", opts).eq("workspace_id", workspaceId);
       const [bucketsRes, tasksRes, tagsRes, linksRes, relationsRes, statusesRes, structure] =
         await Promise.all([
           selectCapped<any>({
@@ -2585,7 +2634,7 @@ export const webRuntime: ModuoRuntime = {
         ]);
       const firstError =
         bucketsRes.error || tasksRes.error || tagsRes.error || linksRes.error || relationsRes.error;
-      if (firstError) throw new Error(firstError.message);
+      if (firstError) throw new DbError(firstError);
       return {
         // Archived projects come too: the shared store sets them apart (TV-U6).
         buckets: mapKnownRows(bucketsRes.rows, bucketRowToModel),
@@ -2640,32 +2689,35 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async createStatus({ workspaceId, projectId, category, name }) {
-      const { data, error } = await supabaseClient.rpc("project_statuses_op_create", {
-        p_workspace_id: workspaceId,
-        p_project_id: projectId,
-        p_category: category,
-        p_name: name,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("project_statuses_op_create", {
+          p_workspace_id: workspaceId,
+          p_project_id: projectId,
+          p_category: category,
+          p_name: name,
+        }),
+      );
       return mapKnownRows(data, projectStatusRowToModel);
     },
 
     async updateStatus({ workspaceId, statusId, patch }) {
-      const { data, error } = await supabaseClient.rpc("project_statuses_op_update", {
-        p_workspace_id: workspaceId,
-        p_status_id: statusId,
-        p_patch: patch,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("project_statuses_op_update", {
+          p_workspace_id: workspaceId,
+          p_status_id: statusId,
+          p_patch: patch,
+        }),
+      );
       return mapKnownRows(data, projectStatusRowToModel);
     },
 
     async deleteStatus({ workspaceId, statusId }) {
-      const { data, error } = await supabaseClient.rpc("project_statuses_op_delete", {
-        p_workspace_id: workspaceId,
-        p_status_id: statusId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("project_statuses_op_delete", {
+          p_workspace_id: workspaceId,
+          p_status_id: statusId,
+        }),
+      );
       const answer = (data ?? {}) as {
         moved?: unknown;
         moved_to?: unknown;
@@ -2739,11 +2791,7 @@ export const webRuntime: ModuoRuntime = {
             .is("deleted_at", null),
         order: (q) => q.order("completed_at").order("id"),
       });
-      if (res.error) {
-        if (isMissingTableError(res.error, "task_completions"))
-          return { completions: [], truncated: [] };
-        throw new Error(res.error.message);
-      }
+      if (res.error) throw new DbError(res.error);
       return {
         completions: mapKnownRows(res.rows, taskCompletionRowToModel),
         truncated: collectTruncations(res.truncation),
@@ -2752,29 +2800,14 @@ export const webRuntime: ModuoRuntime = {
 
     async deleteTask({ workspaceId, taskId }) {
       // The edit op deletes and promotes the subtasks in one go (TV-D8).
-      const op = await supabaseClient.rpc("tasks_op_update", {
-        p_workspace_id: workspaceId,
-        p_task_id: taskId,
-        p_patch: { deleted_at: new Date().toISOString() },
-      });
-      if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
-      if (!isMissingFunctionError(op.error, "tasks_op_update")) throw new Error(op.error.message);
-      // Before TV-D8's migration. Remove in TV-D7.
-      const now = new Date().toISOString();
-      const { data, error } = await supabaseClient
-        .from("tasks")
-        .update({ deleted_at: now, updated_at: now })
-        .eq("id", taskId)
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
-      // Deleting a parent promotes its subtasks to top-level (never lose work).
-      await supabaseClient
-        .from("tasks")
-        .update({ parent_id: null, updated_at: now })
-        .eq("parent_id", taskId)
-        .is("deleted_at", null);
-      return taskRowToModel(data);
+      const data = await runRpc(
+        supabaseClient.rpc("tasks_op_update", {
+          p_workspace_id: workspaceId,
+          p_task_id: taskId,
+          p_patch: { deleted_at: new Date().toISOString() },
+        }),
+      );
+      return taskRowToModel(Array.isArray(data) ? data[0] : data);
     },
 
     async upsertTag(tag) {
@@ -2807,7 +2840,7 @@ export const webRuntime: ModuoRuntime = {
             })
             .select()
             .single();
-      if (error) throw new Error(error.message);
+      if (error) throw new DbError(error);
       return tagRowToModel(data);
     },
 
@@ -2815,12 +2848,13 @@ export const webRuntime: ModuoRuntime = {
       const now = new Date().toISOString();
       // Tags are deleted softly, and the server takes a deleted tag off
       // everything it was on, items this person can't edit included.
-      const { data, error } = await supabaseClient
-        .from("tags")
-        .update({ deleted_at: now, updated_at: now })
-        .eq("id", tagId)
-        .select("id");
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("tags")
+          .update({ deleted_at: now, updated_at: now })
+          .eq("id", tagId)
+          .select("id"),
+      );
       // An update the server's rules filter out matches no row and no error.
       if (!data?.length) throw new Error("You can't delete this tag.");
       // Already gone on a server with that rule; kept for one without it.
@@ -2837,29 +2871,31 @@ export const webRuntime: ModuoRuntime = {
         .eq("entity_id", entityId)
         .maybeSingle();
       if (existing) return tagLinkRowToModel(existing);
-      const { data, error } = await supabaseClient
-        .from("tag_links")
-        .insert({
-          workspace_id: workspaceId,
-          tag_id: tagId,
-          entity_type: entityType,
-          entity_id: entityId,
-        })
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("tag_links")
+          .insert({
+            workspace_id: workspaceId,
+            tag_id: tagId,
+            entity_type: entityType,
+            entity_id: entityId,
+          })
+          .select()
+          .single(),
+      );
       return tagLinkRowToModel(data);
     },
 
     async detachTag({ workspaceId, tagId, entityType, entityId }) {
-      const { error } = await supabaseClient
-        .from("tag_links")
-        .delete()
-        .eq("workspace_id", workspaceId)
-        .eq("tag_id", tagId)
-        .eq("entity_type", entityType)
-        .eq("entity_id", entityId);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient
+          .from("tag_links")
+          .delete()
+          .eq("workspace_id", workspaceId)
+          .eq("tag_id", tagId)
+          .eq("entity_type", entityType)
+          .eq("entity_id", entityId),
+      );
     },
 
     async listEntityTags({ workspaceId, entityType, entityId }) {
@@ -2888,7 +2924,7 @@ export const webRuntime: ModuoRuntime = {
           .eq("entity_id", entityId),
       ]);
       const firstError = tagsRes.error || linksRes.error;
-      if (firstError) throw new Error(firstError.message);
+      if (firstError) throw new DbError(firstError);
       return {
         tags: mapKnownRows(tagsRes.rows, tagRowToModel),
         links: mapKnownRows(linksRes.data, tagLinkRowToModel),
@@ -2925,7 +2961,7 @@ export const webRuntime: ModuoRuntime = {
         }),
       ]);
       const firstError = tagsRes.error || linksRes.error;
-      if (firstError) throw new Error(firstError.message);
+      if (firstError) throw new DbError(firstError);
       return {
         tags: mapKnownRows(tagsRes.rows, tagRowToModel),
         links: mapKnownRows(linksRes.rows, tagLinkRowToModel),
@@ -2943,26 +2979,28 @@ export const webRuntime: ModuoRuntime = {
         .eq("blocked_task_id", blockedTaskId)
         .maybeSingle();
       if (existing) return taskRelationRowToModel(existing);
-      const { data, error } = await supabaseClient
-        .from("task_relations")
-        .insert({
-          workspace_id: workspaceId,
-          blocker_task_id: blockerTaskId,
-          blocked_task_id: blockedTaskId,
-        })
-        .select()
-        .single();
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("task_relations")
+          .insert({
+            workspace_id: workspaceId,
+            blocker_task_id: blockerTaskId,
+            blocked_task_id: blockedTaskId,
+          })
+          .select()
+          .single(),
+      );
       return taskRelationRowToModel(data);
     },
 
     async deleteTaskRelation({ workspaceId, relationId }) {
-      const { error } = await supabaseClient
-        .from("task_relations")
-        .delete()
-        .eq("workspace_id", workspaceId)
-        .eq("id", relationId);
-      if (error) throw new Error(error.message);
+      await runQuery(
+        supabaseClient
+          .from("task_relations")
+          .delete()
+          .eq("workspace_id", workspaceId)
+          .eq("id", relationId),
+      );
     },
 
     // Each person's own since TV-D10 (user_preferences.task_time_blocks); the
@@ -3009,13 +3047,7 @@ export const webRuntime: ModuoRuntime = {
           supabaseClient.from("task_queue").select("*", opts).eq("workspace_id", workspaceId),
         order: (q) => q.order("user_id").order("position").order("id"),
       });
-      // Until the migration reaches the database there are no queues: an
-      // empty list keeps every surface working (the old commit columns still
-      // drive the queue until TV-D4).
-      if (res.error) {
-        if (isMissingTableError(res.error, "task_queue")) return [];
-        throw new Error(res.error.message);
-      }
+      if (res.error) throw new DbError(res.error);
       return sortQueueEntries(mapKnownRows(res.rows, taskQueueRowToModel));
     },
 
@@ -3065,25 +3097,21 @@ export const webRuntime: ModuoRuntime = {
           p_ended_at: input.endedAt ?? null,
           p_client_key: input.key ?? null,
           p_entry_id: input.entryId ?? null,
-          // TV-D14: sent only when used, so a database before it still takes
-          // every older save.
+          // TV-D14: sent only when used.
           ...trackTimeExtras(input),
         })
         .abortSignal(AbortSignal.timeout(TIME_WRITE_TIMEOUT_MS));
-      // Until the migration reaches the database there are no entries: write
-      // the old total column, as builds before TV-D3 did. Remove in TV-D7.
-      if (isMissingFunctionError(error, "tasks_op_track_time")) return trackTimeLegacy(input);
-      if (error) throw new Error(error.message);
+      if (error) throw new DbError(error);
       return taskTimeAnswerToModel(Array.isArray(data) ? data[0] : data);
     },
 
     async listTimeTotals(workspaceId, since) {
-      const { data, error } = await supabaseClient.rpc("tasks_time_totals", {
-        p_workspace_id: workspaceId,
-        p_since: since ?? null,
-      });
-      if (isMissingFunctionError(error, "tasks_time_totals")) return [];
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("tasks_time_totals", {
+          p_workspace_id: workspaceId,
+          p_since: since ?? null,
+        }),
+      );
       return mapKnownRows(Array.isArray(data) ? data : [], taskTimeTotalsRowToModel);
     },
 
@@ -3100,9 +3128,7 @@ export const webRuntime: ModuoRuntime = {
         .order("created_at", { ascending: false })
         .order("id")
         .limit(MY_TIME_ENTRIES_CAP);
-      // Before TV-D14's migration the entries have no day or note to show.
-      if (error && (error.code === "42703" || error.code === "42P01")) return [];
-      if (error) throw new Error(error.message);
+      if (error) throw new DbError(error);
       return mapKnownRows(Array.isArray(data) ? data : [], taskTimeEntryRowToModel);
     },
 
@@ -3133,12 +3159,7 @@ export const webRuntime: ModuoRuntime = {
         },
         keyOf: (row) => String(row.id),
       });
-      if (res.error) {
-        if (res.error.code === "42703" || res.error.code === "42P01") {
-          return { entries: [], truncated: [] };
-        }
-        throw new Error(res.error.message);
-      }
+      if (res.error) throw new DbError(res.error);
       return {
         entries: mapKnownRows(res.rows, taskTimeEntryRowToModel),
         truncated: collectTruncations(res.truncation),
@@ -3168,12 +3189,7 @@ export const webRuntime: ModuoRuntime = {
         },
         keyOf: (row) => String(row.entry_id),
       });
-      if (res.error) {
-        if (isMissingFunctionError(res.error, "tasks_time_report")) {
-          return { rows: [], truncated: false };
-        }
-        throw new Error(res.error.message);
-      }
+      if (res.error) throw new DbError(res.error);
       return {
         rows: mapKnownRows(res.rows, timeReportRowToModel),
         truncated: res.truncation !== null,
@@ -3191,20 +3207,11 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async opAssign({ workspaceId, taskId, assigneeId }) {
-      const { data, error } = await supabaseClient.rpc("tasks_op_assign", {
+      return taskOpRpc("tasks_op_assign", {
         p_workspace_id: workspaceId,
         p_task_id: taskId,
         p_assignee_id: assigneeId,
       });
-      // Until the TV-D1 migration reaches the database there is no op, and
-      // owner_id is the assignee: write that instead. Remove in TV-D7.
-      if (isMissingFunctionError(error, "tasks_op_assign")) {
-        return updateTaskRowLegacyOwner(taskId, assigneeId);
-      }
-      if (error) throw new Error(error.message);
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row) throw new Error("The operation returned nothing.");
-      return taskRowToModel(row);
     },
 
     opClaim({ workspaceId, taskId }) {
@@ -3247,11 +3254,12 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async taskHistory({ workspaceId, taskId }) {
-      const { data, error } = await supabaseClient.rpc("tasks_op_history", {
-        p_workspace_id: workspaceId,
-        p_task_id: taskId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("tasks_op_history", {
+          p_workspace_id: workspaceId,
+          p_task_id: taskId,
+        }),
+      );
       return taskCyclesFromJson(data);
     },
 
@@ -3261,16 +3269,17 @@ export const webRuntime: ModuoRuntime = {
       // keeps the URL short.
       const out: Array<{ taskId: string; label: string }> = [];
       for (let i = 0; i < taskIds.length; i += 100) {
-        const { data, error } = await supabaseClient
-          .from("module_activity")
-          .select("entity_id, actor_label")
-          .eq("workspace_id", workspaceId)
-          .eq("module", "tasks")
-          .eq("entity_type", "task")
-          .eq("op", "tasks.create")
-          .eq("actor_type", "api_key")
-          .in("entity_id", taskIds.slice(i, i + 100));
-        if (error) throw new Error(error.message);
+        const data = await runQuery(
+          supabaseClient
+            .from("module_activity")
+            .select("entity_id, actor_label")
+            .eq("workspace_id", workspaceId)
+            .eq("module", "tasks")
+            .eq("entity_type", "task")
+            .eq("op", "tasks.create")
+            .eq("actor_type", "api_key")
+            .in("entity_id", taskIds.slice(i, i + 100)),
+        );
         for (const row of (data ?? []) as Array<{
           entity_id: string;
           actor_label: string | null;
@@ -3283,28 +3292,30 @@ export const webRuntime: ModuoRuntime = {
 
     async mentionInTask({ workspaceId, taskId, userIds }) {
       if (userIds.length === 0) return 0;
-      const { data, error } = await supabaseClient.rpc("tasks_op_mention", {
-        p_workspace_id: workspaceId,
-        p_task_id: taskId,
-        p_user_ids: userIds,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("tasks_op_mention", {
+          p_workspace_id: workspaceId,
+          p_task_id: taskId,
+          p_user_ids: userIds,
+        }),
+      );
       return typeof data === "number" ? data : 0;
     },
 
     async opCatchUp({ workspaceId, items }) {
-      const { data, error } = await supabaseClient.rpc("tasks_op_catch_up", {
-        p_workspace_id: workspaceId,
-        p_items: items.map((i) => ({
-          task_id: i.taskId,
-          kind: i.kind,
-          status: i.status ?? null,
-          scheduled_at: i.scheduledAt ?? null,
-          recurrence: i.recurrence,
-          clear_commit: i.clearCommit ?? false,
-        })),
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("tasks_op_catch_up", {
+          p_workspace_id: workspaceId,
+          p_items: items.map((i) => ({
+            task_id: i.taskId,
+            kind: i.kind,
+            status: i.status ?? null,
+            scheduled_at: i.scheduledAt ?? null,
+            recurrence: i.recurrence,
+            clear_commit: i.clearCommit ?? false,
+          })),
+        }),
+      );
       return mapKnownRows(data, taskRowToModel);
     },
 
@@ -3320,8 +3331,7 @@ export const webRuntime: ModuoRuntime = {
         .eq("entity_type", entityType)
         .eq("entity_id", entityId);
       if (module) q = q.eq("module", module);
-      const { data, error } = await q.order("created_at", { ascending: false }).limit(limit ?? 50);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(q.order("created_at", { ascending: false }).limit(limit ?? 50));
       return mapKnownRows(data, activityRowToModel);
     },
   },
@@ -3334,17 +3344,18 @@ export const webRuntime: ModuoRuntime = {
     async listLinks({ workspaceId, entityType, entityId }) {
       // entityType/entityId are app-owned tokens (type slugs + uuids), not user
       // input — safe to interpolate into the PostgREST `.or()` filter below.
-      const { data, error } = await supabaseClient
-        .from("entity_links")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null)
-        .or(
-          `and(source_type.eq.${entityType},source_id.eq.${entityId}),` +
-            `and(target_type.eq.${entityType},target_id.eq.${entityId})`,
-        )
-        .order("created_at", { ascending: false });
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("entity_links")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .or(
+            `and(source_type.eq.${entityType},source_id.eq.${entityId}),` +
+              `and(target_type.eq.${entityType},target_id.eq.${entityId})`,
+          )
+          .order("created_at", { ascending: false }),
+      );
       return mapKnownRows(data, entityLinkRowToModel);
     },
 
@@ -3359,43 +3370,46 @@ export const webRuntime: ModuoRuntime = {
       targetLabel,
       targetIcon,
     }) {
-      const { data, error } = await supabaseClient.rpc("links_op_create", {
-        p_workspace_id: workspaceId,
-        p_source_type: source.type,
-        p_source_id: source.id,
-        p_target_type: target.type,
-        p_target_id: target.id,
-        p_relation_kind: relationKind ?? "references",
-        p_origin: origin ?? "manual",
-        p_source_label: sourceLabel ?? null,
-        p_source_icon: sourceIcon ?? null,
-        p_target_label: targetLabel ?? null,
-        p_target_icon: targetIcon ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("links_op_create", {
+          p_workspace_id: workspaceId,
+          p_source_type: source.type,
+          p_source_id: source.id,
+          p_target_type: target.type,
+          p_target_id: target.id,
+          p_relation_kind: relationKind ?? "references",
+          p_origin: origin ?? "manual",
+          p_source_label: sourceLabel ?? null,
+          p_source_icon: sourceIcon ?? null,
+          p_target_label: targetLabel ?? null,
+          p_target_icon: targetIcon ?? null,
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The link operation returned nothing.");
       return entityLinkRowToModel(row);
     },
 
     async setLinkKind({ workspaceId, linkId, relationKind }) {
-      const { data, error } = await supabaseClient.rpc("links_op_set_kind", {
-        p_workspace_id: workspaceId,
-        p_link_id: linkId,
-        p_relation_kind: relationKind,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("links_op_set_kind", {
+          p_workspace_id: workspaceId,
+          p_link_id: linkId,
+          p_relation_kind: relationKind,
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The link operation returned nothing.");
       return entityLinkRowToModel(row);
     },
 
     async deleteLink({ workspaceId, linkId }) {
-      const { data, error } = await supabaseClient.rpc("links_op_delete", {
-        p_workspace_id: workspaceId,
-        p_link_id: linkId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("links_op_delete", {
+          p_workspace_id: workspaceId,
+          p_link_id: linkId,
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       // The op returns SQL NULL when the link never existed; guard the id too
       // in case an all-NULL composite ever slips through serialization.
@@ -3415,22 +3429,16 @@ export const webRuntime: ModuoRuntime = {
           .maybeSingle();
         handle = handleWithCurrentKey(handle, ws?.task_key ?? null, ws?.task_key_aliases ?? []);
       }
-      const run = (withHandle: boolean) => {
-        let q = supabaseClient
-          .from("entities")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .is("deleted_at", null);
-        if (trimmed && handle && withHandle) {
-          q = q.or(`label.ilike.%${trimmed}%,handle.ilike.${handle}`);
-        } else if (trimmed) q = q.ilike("label", `%${trimmed}%`);
-        if (types && types.length) q = q.in("entity_type", types);
-        return q.order("label").limit(limit ?? 20);
-      };
-      let { data, error } = await run(true);
-      // Before TV-D8's migration the registry has no handles.
-      if (isMissingColumnError(error, "handle")) ({ data, error } = await run(false));
-      if (error) throw new Error(error.message);
+      let q = supabaseClient
+        .from("entities")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .is("deleted_at", null);
+      if (trimmed && handle) {
+        q = q.or(`label.ilike.%${trimmed}%,handle.ilike.${handle}`);
+      } else if (trimmed) q = q.ilike("label", `%${trimmed}%`);
+      if (types?.length) q = q.in("entity_type", types);
+      const data = await runQuery(q.order("label").limit(limit ?? 20));
       return mapKnownRows(data, entityRecordRowToModel);
     },
 
@@ -3439,12 +3447,13 @@ export const webRuntime: ModuoRuntime = {
       // entity_id is a uuid (effectively unique across types) — query by id then
       // filter to the exact (type,id) pairs requested. Includes tombstones.
       const ids = Array.from(new Set(refs.map((r) => r.id)));
-      const { data, error } = await supabaseClient
-        .from("entities")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .in("entity_id", ids);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("entities")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .in("entity_id", ids),
+      );
       const wanted = new Set(refs.map((r) => `${r.type}:${r.id}`));
       return mapKnownRows(data, entityRecordRowToModel).filter((rec) =>
         wanted.has(`${rec.type}:${rec.id}`),
@@ -3452,12 +3461,13 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async tombstoneEntity({ workspaceId, entityType, entityId }) {
-      const { error } = await supabaseClient.rpc("entities_op_tombstone", {
-        p_workspace_id: workspaceId,
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("entities_op_tombstone", {
+          p_workspace_id: workspaceId,
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+        }),
+      );
     },
 
     // ── Comments + notifications (block CT-5) ────────────────────────────────
@@ -3490,33 +3500,35 @@ export const webRuntime: ModuoRuntime = {
             p_entity_label: entityLabel ?? null,
             p_entity_icon: entityIcon ?? null,
           });
-      if (error) throw new Error(error.message);
+      if (error) throw new DbError(error);
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
     },
 
     async resolveCommentThread({ workspaceId, noteId, anchorId, resolved }) {
-      const { error } = await supabaseClient.rpc("comments_op_resolve", {
-        p_workspace_id: workspaceId,
-        p_entity_id: noteId,
-        p_anchor_id: anchorId,
-        p_resolved: resolved,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("comments_op_resolve", {
+          p_workspace_id: workspaceId,
+          p_entity_id: noteId,
+          p_anchor_id: anchorId,
+          p_resolved: resolved,
+        }),
+      );
     },
 
     async getCommentExcerpts({ workspaceId, commentIds }) {
       const ids = [...new Set(commentIds)].slice(0, 200);
       if (ids.length === 0) return [];
       // RLS: only comments on items the reader can still see.
-      const { data, error } = await supabaseClient
-        .from("comments")
-        .select("id, body")
-        .eq("workspace_id", workspaceId)
-        .in("id", ids)
-        .is("deleted_at", null);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("comments")
+          .select("id, body")
+          .eq("workspace_id", workspaceId)
+          .in("id", ids)
+          .is("deleted_at", null),
+      );
       return (data ?? []).map((r) => ({
         id: String(r.id),
         excerpt: String(r.body ?? "").slice(0, 140),
@@ -3524,43 +3536,40 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async listComments({ workspaceId, entityType, entityId }) {
-      // `*`, not a column list: author_kind / author_label arrive with
-      // 20261008123000, and naming them would fail this read until it applies.
-      // The reactions ride along (TV-U13); a database before 20261013100000
-      // has no such table, so the thread is read without them there.
-      const read = (select: string) =>
+      // The reactions ride along (TV-U13).
+      const data = await runQuery(
         supabaseClient
           .from("comments")
-          .select(select)
+          .select("*, comment_reactions(user_id, reaction)")
           .eq("workspace_id", workspaceId)
           .eq("entity_type", entityType)
           .eq("entity_id", entityId)
           .is("deleted_at", null)
-          .order("created_at", { ascending: true });
-      let { data, error } = await read("*, comment_reactions(user_id, reaction)");
-      if (error && isMissingReactionsError(error)) ({ data, error } = await read("*"));
-      if (error) throw new Error(error.message);
+          .order("created_at", { ascending: true }),
+      );
       return mapKnownRows(data, commentRowToModel);
     },
 
     // ── Comment edit / delete / reactions (TV-U13) ───────────────────────────
     async editComment({ commentId, body, mentionedUserIds }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_edit", {
-        p_comment_id: commentId,
-        p_body: body,
-        p_mentioned_user_ids: mentionedUserIds ?? [],
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("comments_op_edit", {
+          p_comment_id: commentId,
+          p_body: body,
+          p_mentioned_user_ids: mentionedUserIds ?? [],
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
     },
 
     async deleteComment({ commentId }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_delete", {
-        p_comment_id: commentId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("comments_op_delete", {
+          p_comment_id: commentId,
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
@@ -3568,120 +3577,131 @@ export const webRuntime: ModuoRuntime = {
 
     async mentionTeams({ commentId, teamIds }) {
       if (teamIds.length === 0) return;
-      const { error } = await supabaseClient.rpc("comments_op_mention_teams", {
-        p_comment_id: commentId,
-        p_team_ids: teamIds,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("comments_op_mention_teams", {
+          p_comment_id: commentId,
+          p_team_ids: teamIds,
+        }),
+      );
     },
 
     async restoreComment({ commentId }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_restore", {
-        p_comment_id: commentId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("comments_op_restore", {
+          p_comment_id: commentId,
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) throw new Error("The comment operation returned nothing.");
       return commentRowToModel(row);
     },
 
     async reactToComment({ commentId, reaction, on }) {
-      const { data, error } = await supabaseClient.rpc("comments_op_react", {
-        p_comment_id: commentId,
-        p_reaction: reaction,
-        p_on: on,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("comments_op_react", {
+          p_comment_id: commentId,
+          p_reaction: reaction,
+          p_on: on,
+        }),
+      );
       return reactionMarks(Array.isArray(data) ? data : []);
     },
 
     async listNotifications({ workspaceId, limit }) {
-      const { data, error } = await supabaseClient.rpc("notifications_list", {
-        p_workspace_id: workspaceId,
-        p_limit: limit ?? 50,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("notifications_list", {
+          p_workspace_id: workspaceId,
+          p_limit: limit ?? 50,
+        }),
+      );
       return mapKnownRows(data, notificationRowToModel);
     },
 
     async pushSubscribe({ endpoint, p256dh, auth, userAgent }) {
-      const { error } = await supabaseClient.rpc("push_op_subscribe", {
-        p_endpoint: endpoint,
-        p_p256dh: p256dh,
-        p_auth: auth,
-        p_user_agent: userAgent ?? null,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("push_op_subscribe", {
+          p_endpoint: endpoint,
+          p_p256dh: p256dh,
+          p_auth: auth,
+          p_user_agent: userAgent ?? null,
+        }),
+      );
     },
 
     async pushUnsubscribe({ endpoint }) {
-      const { error } = await supabaseClient.rpc("push_op_unsubscribe", { p_endpoint: endpoint });
-      if (error) throw new Error(error.message);
+      await runRpc(supabaseClient.rpc("push_op_unsubscribe", { p_endpoint: endpoint }));
     },
 
     async markNotificationRead({ workspaceId, activityId }) {
-      const { error } = await supabaseClient.rpc("notifications_op_mark_read", {
-        p_workspace_id: workspaceId,
-        p_activity_id: activityId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("notifications_op_mark_read", {
+          p_workspace_id: workspaceId,
+          p_activity_id: activityId,
+        }),
+      );
     },
 
     async markAllNotificationsRead({ workspaceId }) {
-      const { error } = await supabaseClient.rpc("notifications_op_mark_all_read", {
-        p_workspace_id: workspaceId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("notifications_op_mark_all_read", {
+          p_workspace_id: workspaceId,
+        }),
+      );
     },
 
     async dismissNotification({ workspaceId, activityId }) {
-      const { error } = await supabaseClient.rpc("notifications_op_dismiss", {
-        p_workspace_id: workspaceId,
-        p_activity_id: activityId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("notifications_op_dismiss", {
+          p_workspace_id: workspaceId,
+          p_activity_id: activityId,
+        }),
+      );
     },
 
     async undismissNotification({ workspaceId, activityId }) {
-      const { error } = await supabaseClient.rpc("notifications_op_undismiss", {
-        p_workspace_id: workspaceId,
-        p_activity_id: activityId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("notifications_op_undismiss", {
+          p_workspace_id: workspaceId,
+          p_activity_id: activityId,
+        }),
+      );
     },
 
     // ── Deterministic auto-suggested links (block CT-6) ──────────────────────
     async suggestLinks({ workspaceId, entityType, entityId, limit }) {
-      const { data, error } = await supabaseClient.rpc("links_suggest", {
-        p_workspace_id: workspaceId,
-        p_entity_type: entityType,
-        p_entity_id: entityId,
-        p_limit: limit ?? 25,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("links_suggest", {
+          p_workspace_id: workspaceId,
+          p_entity_type: entityType,
+          p_entity_id: entityId,
+          p_limit: limit ?? 25,
+        }),
+      );
       return mapKnownRows(data, linkSuggestionRowToModel);
     },
 
     async declineSuggestion({ workspaceId, source, target }) {
-      const { error } = await supabaseClient.rpc("links_op_decline_suggestion", {
-        p_workspace_id: workspaceId,
-        p_source_type: source.type,
-        p_source_id: source.id,
-        p_target_type: target.type,
-        p_target_id: target.id,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("links_op_decline_suggestion", {
+          p_workspace_id: workspaceId,
+          p_source_type: source.type,
+          p_source_id: source.id,
+          p_target_type: target.type,
+          p_target_id: target.id,
+        }),
+      );
     },
 
     async recentLinks({ workspaceId, limit }) {
-      const { data, error } = await supabaseClient
-        .from("entity_links")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(limit ?? 20);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("entity_links")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(limit ?? 20),
+      );
       const links = mapKnownRows(data, entityLinkRowToModel);
       // One batched registry lookup for every endpoint (no N fan-out).
       const ids = Array.from(new Set(links.flatMap((l) => [l.sourceId, l.targetId])));
@@ -3692,7 +3712,7 @@ export const webRuntime: ModuoRuntime = {
           .select("*")
           .eq("workspace_id", workspaceId)
           .in("entity_id", ids);
-        if (res.error) throw new Error(res.error.message);
+        if (res.error) throw new DbError(res.error);
         records = mapKnownRows(res.data, entityRecordRowToModel);
       }
       const byKey = new Map(records.map((r) => [`${r.type}:${r.id}`, r]));
@@ -3743,8 +3763,8 @@ export const webRuntime: ModuoRuntime = {
           order: (q) => q.order("position").order("id"),
         }),
       ]);
-      if (contactsRes.error) throw new Error(contactsRes.error.message);
-      if (companiesRes.error) throw new Error(companiesRes.error.message);
+      if (contactsRes.error) throw new DbError(contactsRes.error);
+      if (companiesRes.error) throw new DbError(companiesRes.error);
       // Field defs are additive — degrade to none if the v2 migration isn't deployed yet.
       const fieldDefs = defsRes.error ? [] : mapKnownRows(defsRes.rows, contactFieldDefRowToModel);
       return {
@@ -3769,69 +3789,75 @@ export const webRuntime: ModuoRuntime = {
       status,
       notesInline,
     }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_create", {
-        p_workspace_id: workspaceId,
-        p_name: name,
-        p_email: email ?? null,
-        p_phone: phone ?? null,
-        p_title: title ?? null,
-        p_company_id: companyId ?? null,
-        p_status: status ?? "",
-        p_notes_inline: notesInline ?? "",
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_create", {
+          p_workspace_id: workspaceId,
+          p_name: name,
+          p_email: email ?? null,
+          p_phone: phone ?? null,
+          p_title: title ?? null,
+          p_company_id: companyId ?? null,
+          p_status: status ?? "",
+          p_notes_inline: notesInline ?? "",
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_create"));
     },
 
     async setContactDetails({ workspaceId, contactId, patch }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_set_details", {
-        p_workspace_id: workspaceId,
-        p_contact_id: contactId,
-        p_patch: patch,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_set_details", {
+          p_workspace_id: workspaceId,
+          p_contact_id: contactId,
+          p_patch: patch,
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_set_details"));
     },
 
     async setFavorite({ workspaceId, contactId, value }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_set_favorite", {
-        p_workspace_id: workspaceId,
-        p_contact_id: contactId,
-        p_value: value,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_set_favorite", {
+          p_workspace_id: workspaceId,
+          p_contact_id: contactId,
+          p_value: value,
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_set_favorite"));
     },
 
     async setCompanyDetails({ workspaceId, companyId, patch }) {
-      const { data, error } = await supabaseClient.rpc("companies_op_set_details", {
-        p_workspace_id: workspaceId,
-        p_company_id: companyId,
-        p_patch: patch,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("companies_op_set_details", {
+          p_workspace_id: workspaceId,
+          p_company_id: companyId,
+          p_patch: patch,
+        }),
+      );
       return companyRowToModel(firstRow(data, "companies_op_set_details"));
     },
 
     async addFieldDef({ workspaceId, key, label, type, options, position }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_add_field_def", {
-        p_workspace_id: workspaceId,
-        p_key: key,
-        p_label: label ?? key,
-        p_type: type ?? "text",
-        p_options: options ?? [],
-        p_position: position ?? 0,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_add_field_def", {
+          p_workspace_id: workspaceId,
+          p_key: key,
+          p_label: label ?? key,
+          p_type: type ?? "text",
+          p_options: options ?? [],
+          p_position: position ?? 0,
+        }),
+      );
       return contactFieldDefRowToModel(firstRow(data, "contacts_op_add_field_def"));
     },
 
     async deleteFieldDef({ workspaceId, fieldId }) {
-      const { error } = await supabaseClient.rpc("contacts_op_delete_field_def", {
-        p_workspace_id: workspaceId,
-        p_field_id: fieldId,
-      });
-      if (error) throw new Error(error.message);
+      await runRpc(
+        supabaseClient.rpc("contacts_op_delete_field_def", {
+          p_workspace_id: workspaceId,
+          p_field_id: fieldId,
+        }),
+      );
     },
 
     async updateContact({
@@ -3844,53 +3870,57 @@ export const webRuntime: ModuoRuntime = {
       notesInline,
       setCompany,
     }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_update", {
-        p_workspace_id: workspaceId,
-        p_contact_id: contactId,
-        p_name: name ?? null,
-        p_email: email ?? null,
-        p_phone: phone ?? null,
-        p_title: title ?? null,
-        p_notes_inline: notesInline ?? null,
-        p_set_company: setCompany !== undefined,
-        p_company_id: setCompany?.companyId ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_update", {
+          p_workspace_id: workspaceId,
+          p_contact_id: contactId,
+          p_name: name ?? null,
+          p_email: email ?? null,
+          p_phone: phone ?? null,
+          p_title: title ?? null,
+          p_notes_inline: notesInline ?? null,
+          p_set_company: setCompany !== undefined,
+          p_company_id: setCompany?.companyId ?? null,
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_update"));
     },
 
     async setStatus({ workspaceId, contactId, status }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_set_status", {
-        p_workspace_id: workspaceId,
-        p_contact_id: contactId,
-        p_status: status,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_set_status", {
+          p_workspace_id: workspaceId,
+          p_contact_id: contactId,
+          p_status: status,
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_set_status"));
     },
 
     async createCompany({ workspaceId, name, domains, website, notesInline }) {
-      const { data, error } = await supabaseClient.rpc("companies_op_create", {
-        p_workspace_id: workspaceId,
-        p_name: name,
-        p_domains: domains ?? [],
-        p_website: website ?? null,
-        p_notes_inline: notesInline ?? "",
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("companies_op_create", {
+          p_workspace_id: workspaceId,
+          p_name: name,
+          p_domains: domains ?? [],
+          p_website: website ?? null,
+          p_notes_inline: notesInline ?? "",
+        }),
+      );
       return companyRowToModel(firstRow(data, "companies_op_create"));
     },
 
     async updateCompany({ workspaceId, companyId, name, domains, website, notesInline }) {
-      const { data, error } = await supabaseClient.rpc("companies_op_update", {
-        p_workspace_id: workspaceId,
-        p_company_id: companyId,
-        p_name: name ?? null,
-        p_domains: domains ?? null,
-        p_website: website ?? null,
-        p_notes_inline: notesInline ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("companies_op_update", {
+          p_workspace_id: workspaceId,
+          p_company_id: companyId,
+          p_name: name ?? null,
+          p_domains: domains ?? null,
+          p_website: website ?? null,
+          p_notes_inline: notesInline ?? null,
+        }),
+      );
       return companyRowToModel(firstRow(data, "companies_op_update"));
     },
 
@@ -3904,65 +3934,71 @@ export const webRuntime: ModuoRuntime = {
       targetLabel,
       targetIcon,
     }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_link", {
-        p_workspace_id: workspaceId,
-        p_contact_type: contact.type,
-        p_contact_id: contact.id,
-        p_target_type: target.type,
-        p_target_id: target.id,
-        p_relation_kind: relationKind ?? "references",
-        p_origin: origin ?? "manual",
-        p_contact_label: contactLabel ?? null,
-        p_target_label: targetLabel ?? null,
-        p_target_icon: targetIcon ?? null,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_link", {
+          p_workspace_id: workspaceId,
+          p_contact_type: contact.type,
+          p_contact_id: contact.id,
+          p_target_type: target.type,
+          p_target_id: target.id,
+          p_relation_kind: relationKind ?? "references",
+          p_origin: origin ?? "manual",
+          p_contact_label: contactLabel ?? null,
+          p_target_label: targetLabel ?? null,
+          p_target_icon: targetIcon ?? null,
+        }),
+      );
       return entityLinkRowToModel(firstRow(data, "contacts_op_link"));
     },
 
     async unlink({ workspaceId, linkId }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_unlink", {
-        p_workspace_id: workspaceId,
-        p_link_id: linkId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_unlink", {
+          p_workspace_id: workspaceId,
+          p_link_id: linkId,
+        }),
+      );
       const row = Array.isArray(data) ? data[0] : data;
       return row?.id ? entityLinkRowToModel(row) : null;
     },
 
     async deleteContact({ workspaceId, contactId }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_delete", {
-        p_workspace_id: workspaceId,
-        p_contact_id: contactId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_delete", {
+          p_workspace_id: workspaceId,
+          p_contact_id: contactId,
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_delete"));
     },
 
     async restoreContact({ workspaceId, contactId }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_restore", {
-        p_workspace_id: workspaceId,
-        p_contact_id: contactId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_restore", {
+          p_workspace_id: workspaceId,
+          p_contact_id: contactId,
+        }),
+      );
       return contactRowToModel(firstRow(data, "contacts_op_restore"));
     },
 
     async deleteCompany({ workspaceId, companyId }) {
-      const { data, error } = await supabaseClient.rpc("companies_op_delete", {
-        p_workspace_id: workspaceId,
-        p_company_id: companyId,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("companies_op_delete", {
+          p_workspace_id: workspaceId,
+          p_company_id: companyId,
+        }),
+      );
       return companyRowToModel(firstRow(data, "companies_op_delete"));
     },
 
     async importContacts({ workspaceId, rows }) {
-      const { data, error } = await supabaseClient.rpc("contacts_op_import", {
-        p_workspace_id: workspaceId,
-        p_rows: rows,
-      });
-      if (error) throw new Error(error.message);
+      const data = await runRpc(
+        supabaseClient.rpc("contacts_op_import", {
+          p_workspace_id: workspaceId,
+          p_rows: rows,
+        }),
+      );
       const r = (data ?? {}) as {
         created?: number;
         merged?: number;
@@ -3978,24 +4014,26 @@ export const webRuntime: ModuoRuntime = {
     },
 
     async needsAttention({ workspaceId }) {
-      const { data, error } = await supabaseClient
-        .from("contacts")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("contacts")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null),
+      );
       const contacts = mapKnownRows(data, contactRowToModel);
       const overdue = await loadOverdueFollowups(workspaceId);
       return selectNeedsAttention({ contacts, overdue, now: new Date() });
     },
 
     async reconnect({ workspaceId }) {
-      const { data, error } = await supabaseClient
-        .from("contacts")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null);
-      if (error) throw new Error(error.message);
+      const data = await runQuery(
+        supabaseClient
+          .from("contacts")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .is("deleted_at", null),
+      );
       const contacts = mapKnownRows(data, contactRowToModel);
       // Last-touch proxy = the contact's updated_at (the cheap signal; CO-2 deferral).
       const lastTouch: Record<string, string | null> = {};
@@ -4028,13 +4066,14 @@ function localToday(): string {
  * — no per-contact fan-out. Open tasks only (done/archived excluded).
  */
 async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowup[]> {
-  const { data: links, error } = await supabaseClient
-    .from("entity_links")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("relation_kind", "follow-up")
-    .is("deleted_at", null);
-  if (error) throw new Error(error.message);
+  const links = await runQuery(
+    supabaseClient
+      .from("entity_links")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .eq("relation_kind", "follow-up")
+      .is("deleted_at", null),
+  );
 
   const taskToContact = new Map<string, string>();
   for (const l of links ?? []) {
@@ -4049,13 +4088,14 @@ async function loadOverdueFollowups(workspaceId: string): Promise<OverdueFollowu
 
   // Whole rows (a handful): the date and category columns exist only from
   // TV-D9 on, and naming one a database doesn't have fails the read.
-  const { data: tasks, error: tErr } = await supabaseClient
-    .from("tasks")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .in("id", taskIds)
-    .is("deleted_at", null);
-  if (tErr) throw new Error(tErr.message);
+  const tasks = await runQuery(
+    supabaseClient
+      .from("tasks")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .in("id", taskIds)
+      .is("deleted_at", null),
+  );
 
   // The due date is a date since TV-D9 (due_on, the same for everyone). A row
   // from before it has only the timestamptz (stored from local midnight →
@@ -4145,8 +4185,7 @@ function emailRefRowToModel(raw: unknown): EmailThreadRef {
 
 /** Call a single-task intent-op RPC and map the returned row. */
 async function taskOpRpc(fn: string, args: Record<string, unknown>): Promise<Task> {
-  const { data, error } = await supabaseClient.rpc(fn, args);
-  if (error) throw new Error(error.message);
+  const data = await runRpc(untypedDb(supabaseClient).rpc(fn, args));
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("The operation returned nothing.");
   return taskRowToModel(row);
@@ -4159,53 +4198,9 @@ const MY_TIME_ENTRIES_CAP = 200;
 /** Entries one time report reads (TV-D14); a longer one says it was cut. */
 const TIME_REPORT_CAP = 20_000;
 
-/**
- * Tracked time on a database without TV-D3's entries: read the task's total and
- * write the new one into the old column (only that column). Not safe against
- * resends or a concurrent writer, like every build before TV-D3. Remove in TV-D7.
- */
-async function trackTimeLegacy(input: TrackTimeInput): Promise<TaskTimeResult> {
-  const answer = (status: TaskTimeResult["status"], total: number | null): TaskTimeResult => ({
-    status,
-    taskId: input.taskId,
-    entryId: null,
-    totalSeconds: total,
-    mySeconds: null,
-    myWaitingSeconds: null,
-  });
-  const { data: row, error: readError } = await supabaseClient
-    .from("tasks")
-    .select("time_spent_seconds")
-    .eq("id", input.taskId)
-    .eq("workspace_id", input.workspaceId)
-    .maybeSingle();
-  if (readError) throw new Error(readError.message);
-  if (!row) return answer("gone", null);
-  const current = Number(row.time_spent_seconds ?? 0);
-  const seconds = Math.round(input.seconds ?? 0);
-  let total: number;
-  if (input.action === "waiting") return answer("noop", current);
-  if (input.action === "set_total") total = seconds;
-  else if (input.action === "undo") total = current - seconds;
-  else total = current + seconds;
-  total = Math.max(0, total);
-  if (total === current) return answer("noop", current);
-  const { data: saved, error } = await supabaseClient
-    .from("tasks")
-    .update({ time_spent_seconds: total })
-    .eq("id", input.taskId)
-    .eq("workspace_id", input.workspaceId)
-    .select("time_spent_seconds")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!saved) return answer("gone", null);
-  return answer("saved", Number(saved.time_spent_seconds ?? total));
-}
-
 /** Call a tasks_op_queue_* RPC: each returns the caller's queue, in order. */
 async function queueOpRpc(fn: string, args: Record<string, unknown>): Promise<TaskQueueEntry[]> {
-  const { data, error } = await supabaseClient.rpc(fn, args);
-  if (error) throw new Error(error.message);
+  const data = await runRpc(untypedDb(supabaseClient).rpc(fn, args));
   return sortQueueEntries(mapKnownRows(Array.isArray(data) ? data : [], taskQueueRowToModel));
 }
 
@@ -4259,37 +4254,9 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
     // Lost a create race (unique partial index) — re-read the winner.
     const { data: again } = await find();
     if (again) return bucketRowToModel(again);
-    throw new Error(error.message);
+    throw new DbError(error);
   }
   return bucketRowToModel(data);
-}
-
-/** The workspace's time blocks, the pre-TV-D10 way (one row per workspace). */
-async function getWorkspaceTimeBlocks(workspaceId: string): Promise<TimeBlockMap> {
-  const { data, error } = await supabaseClient
-    .from("task_time_blocks")
-    .select("blocks")
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  return sanitizeTimeBlocks(data?.blocks);
-}
-
-async function setWorkspaceTimeBlocks(
-  workspaceId: string,
-  blocks: TimeBlockMap,
-): Promise<TimeBlockMap> {
-  const clean = sanitizeTimeBlocks(blocks);
-  const { data, error } = await supabaseClient
-    .from("task_time_blocks")
-    .upsert(
-      { workspace_id: workspaceId, blocks: clean, updated_at: new Date().toISOString() },
-      { onConflict: "workspace_id" },
-    )
-    .select("blocks")
-    .single();
-  if (error) throw new Error(error.message);
-  return sanitizeTimeBlocks(data?.blocks);
 }
 
 /** The pre-TV-D10 project save (also the "bucket" alias). */
@@ -4326,7 +4293,7 @@ async function upsertBucketRow(bucket: Bucket): Promise<Bucket> {
         })
         .select()
         .single();
-  if (error) throw new Error(error.message);
+  if (error) throw new DbError(error);
   return bucketRowToModel(data);
 }
 
@@ -4348,11 +4315,7 @@ async function listWorkspaceStatuses(
         .is("deleted_at", null),
     order: (q) => q.order("position").order("id"),
   });
-  if (res.error) {
-    if (isMissingTableError(res.error, "project_statuses"))
-      return { statuses: [], truncation: null };
-    throw new Error(res.error.message);
-  }
+  if (res.error) throw new DbError(res.error);
   return { statuses: mapKnownRows(res.rows, projectStatusRowToModel), truncation: res.truncation };
 }
 
@@ -4624,8 +4587,9 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
   };
   // No client retries: the store tries again itself, and a lost network must
   // read as "Offline" at once rather than after seconds of backoff.
+  // `source.table` is picked at run time, so these reads are untyped (runtime.db.ts).
   const base = () => {
-    let q = supabaseClient
+    let q = untypedDb(supabaseClient)
       .from(source.table)
       .select(source.select)
       .eq("workspace_id", input.workspaceId)
@@ -4639,7 +4603,7 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
       scope: source.scope,
       cap: source.cap,
       build: (opts?: SelectOpts) => {
-        let q = supabaseClient
+        let q = untypedDb(supabaseClient)
           .from(source.table)
           .select(source.select, opts)
           .eq("workspace_id", input.workspaceId)
@@ -4649,10 +4613,7 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
       },
       order: source.order ?? ((q) => q.order("id")),
     });
-    if (res.error) {
-      if (isMissingTableError(res.error, source.table)) return empty;
-      throw new Error(res.error.message);
-    }
+    if (res.error) throw new DbError(res.error);
     return { ...empty, rows: mapKnownRows(res.rows, source.map), truncated: res.truncation };
   }
 
@@ -4660,10 +4621,8 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
   const live = (q: any) => (source.tombstones ? q : q.is("deleted_at", null));
 
   // A hard-delete table's changes: rows stamped since, plus its tombstones.
-  // A database before TV-D11b's migration has neither: read it whole.
   if (source.tombstones && input.since && !input.ids) {
-    const changed = await readTombstonedChanges(source, input.workspaceId, input.since);
-    if (changed) return changed;
+    return readTombstonedChanges(source, input.workspaceId, input.since);
   }
 
   // Rows the access check found you can see now (shared with you since):
@@ -4673,53 +4632,36 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
     for (let i = 0; i < input.ids.length; i += IDS_PER_READ) {
       const chunk = input.ids.slice(i, i + IDS_PER_READ);
       const { data, error } = await live(base().in("id", chunk)).limit(PGRST_MAX_ROWS);
-      if (error) {
-        if (isMissingTableError(error, source.table)) return empty;
-        throw new Error(error.message);
-      }
+      if (error) throw new DbError(error);
       rows.push(...((data ?? []) as any[]));
     }
     return { ...empty, rows: mapKnownRows(rows, source.map) };
   }
 
-  // Tasks' first load comes in two parts (open first); a database before
-  // TV-D9 has no category, so its open part goes by the status word.
-  const partFilter = (q: any, byCategory: boolean) => {
+  // Tasks' first load comes in two parts (open first).
+  const partFilter = (q: any) => {
     if (input.table !== "tasks" || !input.part || input.since) return q;
-    const col = byCategory ? "status_category" : "status";
+    const col = "status_category";
     const open = `(${OPEN_CATEGORIES.join(",")})`;
     return input.part === "open"
       ? q.in(col, [...OPEN_CATEGORIES])
       : q.or(`${col}.is.null,${col}.not.in.${open}`);
   };
-  const run = (byCategory: boolean) =>
-    readByKey({
-      by: input.since && !source.tombstones ? "updated_at" : "id",
-      cap: input.since
-        ? Math.max(source.cap, READ_CAPS.syncDelta)
-        : input.table === "tasks" && input.part === "rest"
-          ? READ_CAPS.closedTasks
-          : source.cap,
-      scope: source.scope,
-      build: () => {
-        const q =
-          input.since && !source.tombstones ? base().gte("updated_at", input.since) : live(base());
-        return partFilter(q, byCategory);
-      },
-    });
-  let res = await run(true);
-  if (
-    res.error &&
-    input.table === "tasks" &&
-    input.part &&
-    isMissingColumnError(res.error, "status_category")
-  ) {
-    res = await run(false);
-  }
-  if (res.error) {
-    if (isMissingTableError(res.error, source.table)) return empty;
-    throw new Error(res.error.message);
-  }
+  const res = await readByKey({
+    by: input.since && !source.tombstones ? "updated_at" : "id",
+    cap: input.since
+      ? Math.max(source.cap, READ_CAPS.syncDelta)
+      : input.table === "tasks" && input.part === "rest"
+        ? READ_CAPS.closedTasks
+        : source.cap,
+    scope: source.scope,
+    build: () => {
+      const q =
+        input.since && !source.tombstones ? base().gte("updated_at", input.since) : live(base());
+      return partFilter(q);
+    },
+  });
+  if (res.error) throw new DbError(res.error);
   const liveRows: unknown[] = [];
   const deleted: string[] = [];
   let maxUpdatedAt: string | null = null;
@@ -4742,8 +4684,6 @@ async function syncReadTable(input: SyncReadInput): Promise<SyncReadResult<unkno
     deleted,
     maxUpdatedAt,
     truncated: res.truncation,
-    // Changes were asked of a table this database can't read changes of.
-    ...(source.tombstones && input.since ? { whole: true } : {}),
   };
 }
 
@@ -4755,35 +4695,34 @@ async function syncIdsOf(workspaceId: string, table: SyncTableName): Promise<Syn
     cap: READ_CAPS.syncIds,
     scope: source.scope,
     build: () => {
-      let q = supabaseClient.from(source.table).select("id").eq("workspace_id", workspaceId);
+      let q = untypedDb(supabaseClient)
+        .from(source.table)
+        .select("id")
+        .eq("workspace_id", workspaceId);
       if (!source.tombstones) q = q.is("deleted_at", null);
       if (source.filter) q = source.filter(q);
       return q;
     },
   });
-  if (res.error) {
-    if (isMissingTableError(res.error, source.table)) return { ids: [], complete: false };
-    throw new Error(res.error.message);
-  }
+  if (res.error) throw new DbError(res.error);
   return { ids: res.rows.map((r) => String(r.id)), complete: res.truncation === null };
 }
 
 /**
  * Changes of a hard-delete table (TV-D11b): rows stamped since `since`, keyset
- * paged, plus the ids its deletes left in `sync_tombstones`. Null when this
- * database has no stamps or tombstones for it yet (the caller reads it whole).
+ * paged, plus the ids its deletes left in `sync_tombstones`.
  */
 async function readTombstonedChanges(
   source: SyncSource,
   workspaceId: string,
   since: string,
-): Promise<SyncReadResult<unknown> | null> {
+): Promise<SyncReadResult<unknown>> {
   const rows = await readByKey({
     by: "updated_at",
     cap: Math.max(source.cap, READ_CAPS.syncDelta),
     scope: source.scope,
     build: () => {
-      let q = supabaseClient
+      let q = untypedDb(supabaseClient)
         .from(source.table)
         .select(source.select)
         .eq("workspace_id", workspaceId)
@@ -4793,11 +4732,7 @@ async function readTombstonedChanges(
       return q;
     },
   });
-  if (rows.error) {
-    if (isMissingColumnError(rows.error, "updated_at")) return null;
-    if (isMissingTableError(rows.error, source.table)) return null;
-    throw new Error(rows.error.message);
-  }
+  if (rows.error) throw new DbError(rows.error);
   const graves = await readByKey({
     by: "updated_at",
     stampColumn: "deleted_at",
@@ -4813,10 +4748,7 @@ async function readTombstonedChanges(
         .gte("deleted_at", since)
         .retry(false),
   });
-  if (graves.error) {
-    if (isMissingTableError(graves.error, "sync_tombstones")) return null;
-    throw new Error(graves.error.message);
-  }
+  if (graves.error) throw new DbError(graves.error);
   // Where the next read starts: a stream cut at its ceiling holds it back.
   const maxUpdatedAt = deltaCursor(
     { stamps: rows.rows.map((r) => r?.updated_at), cut: rows.truncation !== null },
@@ -4842,7 +4774,6 @@ async function readAccessChanges(
   workspaceId: string,
   since: string | null,
 ): Promise<SyncAccessResult> {
-  const none: SyncAccessResult = { changes: [], maxChangedAt: null, supported: false };
   if (since === null) {
     const { data, error } = await supabaseClient
       .from("access_changes")
@@ -4851,10 +4782,7 @@ async function readAccessChanges(
       .order("changed_at", { ascending: false })
       .limit(1)
       .retry(false);
-    if (error) {
-      if (isMissingTableError(error, "access_changes")) return none;
-      throw new Error(error.message);
-    }
+    if (error) throw new DbError(error);
     const stamp = (data as Array<{ changed_at?: unknown }> | null)?.[0]?.changed_at;
     return {
       changes: [],
@@ -4878,10 +4806,7 @@ async function readAccessChanges(
         .gte("changed_at", since)
         .retry(false),
   });
-  if (res.error) {
-    if (isMissingTableError(res.error, "access_changes")) return none;
-    throw new Error(res.error.message);
-  }
+  if (res.error) throw new DbError(res.error);
   const changes: AccessChange[] = [];
   let maxChangedAt: string | null = null;
   for (const row of res.rows as Array<Record<string, unknown>>) {
@@ -4907,10 +4832,7 @@ async function searchTasksOnServer(
   const { data, error } = await supabaseClient
     .rpc("tasks_search", { p_workspace_id: workspaceId, p_query: query, p_limit: limit })
     .retry(false);
-  if (error) {
-    if (isMissingFunctionError(error, "tasks_search")) return { ids: [], supported: false };
-    throw new Error(error.message);
-  }
+  if (error) throw new DbError(error);
   const ids = ((data ?? []) as Array<string | { id?: unknown }>)
     .map((row) => (typeof row === "string" ? row : typeof row?.id === "string" ? row.id : null))
     .filter((id): id is string => id !== null);
@@ -4928,73 +4850,16 @@ async function opUpdateTaskRows(
   taskId: string,
   patch: TaskFieldPatch,
 ): Promise<Task[]> {
-  // A database before TV-D10 / TV-D9 (the merge-before-apply window) refuses
-  // the newer fields: retry without them. Remove in TV-D7.
-  const { data, error } = await withFieldFallback(taskPatchToOpFields(patch), (fields) =>
+  const data = await runRpc(
     supabaseClient.rpc("tasks_op_update", {
       p_workspace_id: workspaceId,
       p_task_id: taskId,
-      p_patch: fields,
+      p_patch: taskPatchToOpFields(patch) as Json,
     }),
   );
-  if (!error) {
-    const rows = mapKnownRows(data, taskRowToModel);
-    if (!rows.length) throw new Error("The task edit returned nothing.");
-    return rows;
-  }
-  if (!isMissingFunctionError(error, "tasks_op_update")) throw new Error(error.message);
-  return [await updateTaskRow(taskId, patch)];
-}
-
-/** A field-level task edit: only the changed columns go to the server (TV-D1). */
-async function updateTaskRow(taskId: string, patch: TaskFieldPatch): Promise<Task> {
-  const { data, error } = await supabaseClient
-    .from("tasks")
-    .update(taskPatchToColumns(patch, new Date().toISOString()))
-    .eq("id", taskId)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return taskRowToModel(data);
-}
-
-/** Assign the pre-TV-D1 way (owner_id), for a database the migration hasn't reached. */
-async function updateTaskRowLegacyOwner(taskId: string, assigneeId: string | null): Promise<Task> {
-  const { data, error } = await supabaseClient
-    .from("tasks")
-    .update({ owner_id: assigneeId, updated_at: new Date().toISOString() })
-    .eq("id", taskId)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return taskRowToModel(data);
-}
-
-/**
- * The project delete from before TV-U6, for a database its migration hasn't
- * reached: live tasks move to the caller's Inbox, then the project is
- * soft-deleted. The only task write left outside the ops; remove in TV-D7.
- */
-async function legacyDeleteBucket(workspaceId: string, bucketId: string): Promise<void> {
-  const { data: bucket } = await supabaseClient
-    .from("buckets")
-    .select("is_system")
-    .eq("id", bucketId)
-    .maybeSingle();
-  if (!bucket) return;
-  if (bucket.is_system) throw new Error("The Inbox can't be deleted.");
-  const inbox = await ensureWebInbox(workspaceId);
-  const now = new Date().toISOString();
-  await supabaseClient
-    .from("tasks")
-    .update({ bucket_id: inbox.id, updated_at: now })
-    .eq("bucket_id", bucketId)
-    .is("deleted_at", null);
-  const { error } = await supabaseClient
-    .from("buckets")
-    .update({ deleted_at: now, updated_at: now })
-    .eq("id", bucketId);
-  if (error) throw new Error(error.message);
+  const rows = mapKnownRows(data, taskRowToModel);
+  if (!rows.length) throw new Error("The task edit returned nothing.");
+  return rows;
 }
 
 /**
@@ -5030,36 +4895,13 @@ async function createTaskRow(task: Task): Promise<Task> {
     createdAt: task.createdAt || now,
     updatedAt: now,
   };
-  const input = taskCreateOpInput(created);
-  // A database before TV-D10 / TV-D9 (the merge-before-apply window)
-  // refuses the newer fields: retry without them. Remove in TV-D7.
-  const op = await withFieldFallback(input, (fields) =>
+  const data = await runRpc(
     supabaseClient.rpc("tasks_op_create", {
       p_workspace_id: task.workspaceId,
-      p_task: fields,
+      p_task: taskCreateOpInput(created) as Json,
     }),
   );
-  if (!op.error) return taskRowToModel(Array.isArray(op.data) ? op.data[0] : op.data);
-  if (!isMissingFunctionError(op.error, "tasks_op_create")) throw new Error(op.error.message);
-  // Before TV-D8's migration: the direct insert. Remove in TV-D7.
-  const user = await getAuthedUser();
-  const actorId = user?.id ?? null;
-  let { data, error } = await supabaseClient
-    .from("tasks")
-    .upsert(taskCreateRow(created, actorId), { onConflict: "id" })
-    .select()
-    .single();
-  // Until the TV-D1 migration reaches the database there is no
-  // assignee_id, and owner_id still holds the assignee. Remove in TV-D7.
-  if (isMissingColumnError(error, "assignee_id")) {
-    ({ data, error } = await supabaseClient
-      .from("tasks")
-      .upsert(taskCreateRowLegacy(created, actorId), { onConflict: "id" })
-      .select()
-      .single());
-  }
-  if (error) throw new Error(error.message);
-  return taskRowToModel(data);
+  return taskRowToModel(Array.isArray(data) ? data[0] : data);
 }
 
 /**
@@ -5182,15 +5024,6 @@ function reactionMarks(rows: readonly unknown[]): CommentReactionMark[] {
     if (typeof row.user_id === "string" && reaction) out.push({ userId: row.user_id, reaction });
   }
   return out;
-}
-
-/** PostgREST's answer when the comments read names `comment_reactions` before
- *  20261013100000 made it (no relationship, or no table). */
-function isMissingReactionsError(error: { code?: string; message?: string }): boolean {
-  return (
-    (error.code === "PGRST200" || error.code === "PGRST205" || error.code === "42P01") &&
-    (error.message ?? "").includes("comment_reactions")
-  );
 }
 
 /** A `notifications_list` row → the normalized NotificationItem the reducer groups. */
