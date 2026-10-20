@@ -276,6 +276,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-20 · TS-2: `supabaseCollectionOptions()` mirrors a kernel `SyncedCollection` into an in-memory TanStack DB collection (Realtime first and buffered, seed then `markReady`, kernel delta, kernel landing; no persistence plugin, the kernel writes the IDB copy; `sendChanges` hook for TS-3c) → decisions/data.md
 - 2026-10-20 · Tasks and Chat sync on one kernel (`lib/sync/kernel/`: stamps, idb, delta, landing, overlay, outbox, registry, collection); each caller's missing-stamp rule is named and pinned; Notes uses only its idb opener, network check and person lifecycle → decisions/data.md
 - 2026-10-20 · Runtime guardrails: Supabase client typed from prod (`db:types`), `runRpc`/`runQuery` throw `DbError`, deploy-gap fallbacks deleted for what prod has, `lint:boundaries` keeps Supabase in `lib/runtime*` and `lib` below `features` (stale grandfather entries fail)
 - 2026-10-10 · AT-2: one upload queue takes a file from prepare to finalize, survives restarts and words each refusal as a fact with one action; the task panel shows the strip under the description and takes paste or drop anywhere; desktop drops are plain HTML5 drops.
