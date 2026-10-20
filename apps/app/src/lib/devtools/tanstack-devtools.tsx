@@ -8,5 +8,7 @@ import { hotkeysDevtoolsPlugin } from "@tanstack/react-hotkeys-devtools";
 const plugins = [hotkeysDevtoolsPlugin()];
 
 export default function TanStackDevtoolsPanel() {
-  return <TanStackDevtools plugins={plugins} />;
+  // Middle-left: the bottom corners hold the toaster (bottom-right) and the
+  // bottom bar's panel toggles; the top-left holds the workspace switcher.
+  return <TanStackDevtools plugins={plugins} config={{ position: "middle-left" }} />;
 }
