@@ -3,6 +3,13 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=wtoonrvuqumihpkbvwvs"
+    },
+    "moduo": {
+      "type": "http",
+      "url": "https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp",
+      "headers": {
+        "Authorization": "Bearer ${MODUO_MCP_KEY:-}"
+      }
     }
   }
 }
