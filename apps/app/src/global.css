@@ -9,21 +9,25 @@
    Token strings reference "Geist" and "Fraunces" (see tokens.css §9), but the
    @fontsource packages declare them as "Geist Sans" and "Fraunces Variable".
    The bridge @font-face rules below register the same files under the names
-   tokens.css expects, so design-system fonts resolve without editing tokens. */
-@import "@fontsource/geist-sans/400.css";
-@import "@fontsource/geist-sans/500.css";
-@import "@fontsource/geist-sans/600.css";
-@import "@fontsource/geist-sans/700.css";
-@import "@fontsource/geist-mono/400.css";
-@import "@fontsource/geist-mono/500.css";
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
-@import "@fontsource/source-serif-pro/400.css";
-@import "@fontsource/source-serif-pro/600.css";
-@import "@fontsource/cal-sans/400.css";
-@import "@fontsource-variable/fraunces/index.css";
+   tokens.css expects, so design-system fonts resolve without editing tokens.
+   Only the subsets we render are imported (per-subset files, not the
+   all-scripts index): Geist ships latin only; Geist Mono adds latin-ext. Inter's
+   latin-ext stays here as Geist's fallback for Polish and other accented
+   letters. The picker-only faces (Inter latin, Source Serif, Cal Sans,
+   Fraunces) live in styles/fonts-picker.css, loaded by lib/picker-fonts.ts
+   when chosen or when the font picker opens. */
+@import "@fontsource/geist-sans/latin-400.css";
+@import "@fontsource/geist-sans/latin-500.css";
+@import "@fontsource/geist-sans/latin-600.css";
+@import "@fontsource/geist-sans/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-ext-400.css";
+@import "@fontsource/geist-mono/latin-500.css";
+@import "@fontsource/geist-mono/latin-ext-500.css";
+@import "@fontsource/inter/latin-ext-400.css";
+@import "@fontsource/inter/latin-ext-500.css";
+@import "@fontsource/inter/latin-ext-600.css";
+@import "@fontsource/inter/latin-ext-700.css";
 
 html,
 body,
@@ -89,14 +93,6 @@ body {
   src: url("@fontsource/geist-sans/files/geist-sans-latin-700-normal.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Fraunces";
-  src: url("@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2") format("woff2-variations");
-  font-style: normal;
-  font-weight: 100 900;
   font-display: swap;
 }
 

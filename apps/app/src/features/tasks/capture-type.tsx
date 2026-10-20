@@ -4,17 +4,38 @@
 // destination, the "From:" chip): features/tasks/capture/task-capture.tsx.
 
 import { CheckSquare } from "lucide-react";
-import type { CaptureTypeDef } from "../../lib/capture-registry";
+import { lazy, Suspense } from "react";
+import type { CaptureBodyProps, CaptureTypeDef } from "../../lib/capture-registry";
 import { attachCaptureFiles } from "../attachments/capture";
 import { CAPTURE_ROUTES, canWriteRoute } from "../spine/capture-command";
 import { registerCaptureAttachments, registerCaptureTemplates } from "./capture/capture-hooks";
-import { TaskCaptureBody } from "./capture/task-capture";
 import { taskTemplatesForCapture } from "./templates/capture-provider";
 
 // TV-D15: `/template` and More → Template… (shown once the runtime has templates).
 registerCaptureTemplates(taskTemplatesForCapture);
 // AT-3: files pasted or dropped on a capture attach once the task exists.
 registerCaptureAttachments(attachCaptureFiles);
+
+// The body (Lexical title editor, chrono-node parser) is its own async chunk,
+// off the first load. It is warmed once the app is idle so ⌘⇧K still opens
+// straight into a typing-ready line.
+const loadTaskCapture = () => import("./capture/task-capture");
+const LazyTaskCaptureBody = lazy(() =>
+  loadTaskCapture().then((m) => ({ default: m.TaskCaptureBody })),
+);
+if (typeof window !== "undefined") {
+  const warm = () => void loadTaskCapture();
+  if ("requestIdleCallback" in window) window.requestIdleCallback(warm, { timeout: 4000 });
+  else setTimeout(warm, 2000);
+}
+
+function TaskCaptureBody(props: CaptureBodyProps) {
+  return (
+    <Suspense fallback={<div className="h-24" aria-busy="true" />}>
+      <LazyTaskCaptureBody {...props} />
+    </Suspense>
+  );
+}
 
 const TASK_ROUTE = CAPTURE_ROUTES.find((r) => r.target === "task");
 

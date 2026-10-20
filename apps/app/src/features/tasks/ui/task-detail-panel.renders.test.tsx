@@ -114,6 +114,9 @@ async function openPanel() {
       runtime: { tasks: { updateTask } },
     },
   );
+  // The description editor is lazy (Lexical is its own chunk): let it mount
+  // before counting redraws.
+  await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull());
   return { ...view, seen, updateTask };
 }
 

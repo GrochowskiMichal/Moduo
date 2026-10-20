@@ -17,27 +17,13 @@ import {
   X,
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, lazy, Suspense, useEffect, useState } from "react";
 
 import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
 import { cn } from "../../lib/utils";
 
-import { AboutSection } from "./sections/about-section";
-import { AccessSection } from "./sections/access-section";
-import { AccountSection } from "./sections/account-section";
-import { AdvancedSection } from "./sections/advanced-section";
-import { ApiKeysSection } from "./sections/api-keys-section";
-import { AppearanceSection } from "./sections/appearance-section";
-import { BillingSection } from "./sections/billing-section";
-import { ChatSection } from "./sections/chat-section";
-import { FocusSection } from "./sections/focus-section";
-import { IntegrationsSection } from "./sections/integrations-section";
-import { PreferencesSection } from "./sections/preferences-section";
-import { StorageSection } from "./sections/storage-section";
-import { TimeRegionSection } from "./sections/time-region-section";
-import { WorkspaceSection } from "./sections/workspace-section";
 import {
   clearPendingOpenSettings,
   isSettingsSectionId,
@@ -48,6 +34,51 @@ import {
   type SettingsOpenDetail,
   type SettingsSectionId,
 } from "./settings-events";
+
+// Sections load on first open (each is its own async chunk), so the modal's
+// weight (fflate, billing, access) stays off the first-load bundle.
+const AboutSection = lazy(() =>
+  import("./sections/about-section").then((m) => ({ default: m.AboutSection })),
+);
+const AccessSection = lazy(() =>
+  import("./sections/access-section").then((m) => ({ default: m.AccessSection })),
+);
+const AccountSection = lazy(() =>
+  import("./sections/account-section").then((m) => ({ default: m.AccountSection })),
+);
+const AdvancedSection = lazy(() =>
+  import("./sections/advanced-section").then((m) => ({ default: m.AdvancedSection })),
+);
+const ApiKeysSection = lazy(() =>
+  import("./sections/api-keys-section").then((m) => ({ default: m.ApiKeysSection })),
+);
+const AppearanceSection = lazy(() =>
+  import("./sections/appearance-section").then((m) => ({ default: m.AppearanceSection })),
+);
+const BillingSection = lazy(() =>
+  import("./sections/billing-section").then((m) => ({ default: m.BillingSection })),
+);
+const ChatSection = lazy(() =>
+  import("./sections/chat-section").then((m) => ({ default: m.ChatSection })),
+);
+const FocusSection = lazy(() =>
+  import("./sections/focus-section").then((m) => ({ default: m.FocusSection })),
+);
+const IntegrationsSection = lazy(() =>
+  import("./sections/integrations-section").then((m) => ({ default: m.IntegrationsSection })),
+);
+const PreferencesSection = lazy(() =>
+  import("./sections/preferences-section").then((m) => ({ default: m.PreferencesSection })),
+);
+const StorageSection = lazy(() =>
+  import("./sections/storage-section").then((m) => ({ default: m.StorageSection })),
+);
+const TimeRegionSection = lazy(() =>
+  import("./sections/time-region-section").then((m) => ({ default: m.TimeRegionSection })),
+);
+const WorkspaceSection = lazy(() =>
+  import("./sections/workspace-section").then((m) => ({ default: m.WorkspaceSection })),
+);
 
 type SectionEntry = {
   id: SettingsSectionId;
@@ -228,7 +259,11 @@ export function SettingsModal() {
             <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
                 <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
-                  {id === section ? <Component /> : null}
+                  {id === section ? (
+                    <Suspense fallback={null}>
+                      <Component />
+                    </Suspense>
+                  ) : null}
                 </TabsContent>
               ))}
             </div>
