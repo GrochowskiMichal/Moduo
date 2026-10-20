@@ -121,6 +121,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-20 · Desktop shell trimmed: 33 dead commands removed (`tasks_module_*` kept under `lite`), release `opt-level = "s"` (14.2 → 10.8 MB, unwinding kept), window hidden until React's first commit, macOS 14 floor + Safari 17 desktop targets; rustls switch deferred (no live IMAP creds).
 - 2026-10-19 · Release builds use `lto`, `codegen-units = 1` and `strip`: 28 MB → 15 MB.
 - 2026-10-19 · Desktop download links go to the update server's `latest/` redirect (current manifest version, Windows falls back to the last version with an installer), ignoring rollout and kill switch; the GitHub bridges stay frozen.
 - 2026-10-19 · REL-5: Mac updater bundles are per-arch (darwin-aarch64, darwin-x86_64), each .app notarized as a zip; the website .dmg stays universal; the darwin-universal transition key and its fallback were dropped after production 1.2.1.
