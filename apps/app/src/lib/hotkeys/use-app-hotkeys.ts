@@ -52,13 +52,22 @@ export function runHotkey(def: HotkeyDef, handler: HotkeyHandler, event: Keyboar
  * own handlers (React delegates to the root, below `document`), and the scope
  * from the registry decides which binding wins a shared key.
  */
-export function useAppHotkeys(handlers: AppHotkeyHandlers, options: { enabled?: boolean } = {}) {
+export function useAppHotkeys(
+  handlers: AppHotkeyHandlers,
+  options: {
+    enabled?: boolean;
+    /** Overrides the registry's `inInputs` for this call site (Chat's panel keys). */
+    inInputs?: boolean;
+  } = {},
+) {
   const enabled = options.enabled ?? true;
   const isMac = isMacPlatform();
   const definitions: UseHotkeyDefinition[] = [];
   for (const [id, handler] of Object.entries(handlers) as [HotkeyId, HotkeyHandler | undefined][]) {
     if (!handler) continue;
-    const def: HotkeyDef = HOTKEYS[id];
+    const registered: HotkeyDef = HOTKEYS[id];
+    const def: HotkeyDef =
+      options.inInputs === undefined ? registered : { ...registered, inInputs: options.inInputs };
     for (const key of keysFor(def, isMac)) {
       definitions.push({
         hotkey: key as Hotkey,

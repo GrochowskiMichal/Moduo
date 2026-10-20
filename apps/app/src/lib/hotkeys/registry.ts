@@ -118,10 +118,31 @@ export const HOTKEYS = {
   "focus.promote": { scope: "focus", label: "Make it the Now card", keys: ["Shift+F"] },
 
   // ── chat ───────────────────────────────────────────────────────────────────
-  "chat.prev": { scope: "chat", label: "Previous conversation", keys: ["Alt+ArrowUp"] },
-  "chat.next": { scope: "chat", label: "Next conversation", keys: ["Alt+ArrowDown"] },
-  "chat.prev-unread": { scope: "chat", label: "Previous unread", keys: ["Alt+Shift+ArrowUp"] },
-  "chat.next-unread": { scope: "chat", label: "Next unread", keys: ["Alt+Shift+ArrowDown"] },
+  // ⌥↑/⌥↓ walk conversations from the composer too (chat-keys.spec.ts).
+  "chat.prev": {
+    scope: "chat",
+    label: "Previous conversation",
+    keys: ["Alt+ArrowUp"],
+    inInputs: true,
+  },
+  "chat.next": {
+    scope: "chat",
+    label: "Next conversation",
+    keys: ["Alt+ArrowDown"],
+    inInputs: true,
+  },
+  "chat.prev-unread": {
+    scope: "chat",
+    label: "Previous unread",
+    keys: ["Alt+Shift+ArrowUp"],
+    inInputs: true,
+  },
+  "chat.next-unread": {
+    scope: "chat",
+    label: "Next unread",
+    keys: ["Alt+Shift+ArrowDown"],
+    inInputs: true,
+  },
   "catchup.down": { scope: "catchup", label: "Next item", keys: ["ArrowDown"] },
   "catchup.up": { scope: "catchup", label: "Previous item", keys: ["ArrowUp"] },
   "catchup.leave": { scope: "catchup", label: "Leave Catch up", keys: ["Escape"] },

@@ -1629,6 +1629,7 @@ export function ChatScreen({
   ) : channel ? (
     <RightPanel
       module="chat"
+      viewKeysInFields
       views={{
         details: () => (
           <DetailsView

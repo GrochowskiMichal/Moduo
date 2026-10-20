@@ -67,6 +67,8 @@ type Props = {
   /** Drops every item before a view switch. Without it, `onBack` runs once per item, so its
    *  state update must be functional (pop from the latest stack). */
   onClearItems?: () => void;
+  /** ⌥1–9 work from a field too (Chat: its key map says anywhere in Chat). */
+  viewKeysInFields?: boolean;
 };
 
 /**
@@ -116,6 +118,7 @@ export function RightPanel({
   items = [],
   onBack,
   onClearItems,
+  viewKeysInFields = false,
 }: Props) {
   const listed = panelViewsFor(module, (id) => Boolean(views[id]));
   const active = listed.find((v) => v.id === activeId) ?? listed[0];
@@ -132,17 +135,20 @@ export function RightPanel({
   // that doesn't hold the panel is open.
   const rootRef = useRef<HTMLDivElement>(null);
   const focusInside = useFocusWithin(rootRef);
-  useAppHotkeys({
-    "panel.view": (event) => {
-      const root = rootRef.current;
-      if (!root || overlayOver(root)) return false;
-      const n = panelShortcutNumber(event);
-      const view = n === null ? undefined : listed[n - 1];
-      if (!view) return false;
-      if (item) clearItems(items, onBack, onClearItems);
-      if (view.id !== active?.id) onChange(view.id);
+  useAppHotkeys(
+    {
+      "panel.view": (event) => {
+        const root = rootRef.current;
+        if (!root || overlayOver(root)) return false;
+        const n = panelShortcutNumber(event);
+        const view = n === null ? undefined : listed[n - 1];
+        if (!view) return false;
+        if (item) clearItems(items, onBack, onClearItems);
+        if (view.id !== active?.id) onChange(view.id);
+      },
     },
-  });
+    { inInputs: viewKeysInFields },
+  );
   useAppHotkeys(
     {
       "panel.back": () => {
