@@ -46,6 +46,13 @@ export type SupabaseCollectionOptions<R extends LandingRow & object> = {
   seed: () => Promise<CollectionCopy | null>;
   /** Open Realtime for the table; called before the first read. */
   subscribe: (handlers: LiveHandlers<R>) => LiveSubscription;
+  /**
+   * How long the first read waits for Realtime to subscribe (default 5 s).
+   * Past it, or if subscribing fails, the read runs anyway: events from before
+   * the join may be missed until the next catch-up, but the rows never wait on
+   * a WebSocket.
+   */
+  liveReadyTimeoutMs?: number;
   /** A read error that means this person lost access: the rows go. */
   isAccessLoss?: (error: unknown) => boolean;
   /** The held rows changed (the store schedules its device-copy write). */
@@ -77,6 +84,18 @@ export function changedFields<R extends object>(
   return params.transaction.mutations
     .filter((m) => m.type === "update" && Object.keys(m.changes ?? {}).length > 0)
     .map((m) => ({ id: String(m.key), changes: m.changes as Record<string, unknown> }));
+}
+
+/** Realtime's join, bounded: a failed or slow join never holds the first read back. */
+async function waitForLive(ready: Promise<void>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    ready.catch(() => undefined),
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms);
+    }),
+  ]);
+  clearTimeout(timer);
 }
 
 export function supabaseCollectionOptions<R extends LandingRow & object>(
@@ -113,7 +132,9 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
     loseAccess() {
       losses += 1;
       emptyKernel();
-      run?.clear();
+      // No live run: the store still rewrites its copy without the rows.
+      if (run) run.clear();
+      else opts.onChange?.();
     },
   };
 
@@ -127,7 +148,8 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         let stopped = false;
         let ready = false;
         let buffering = true;
-        const buffer: { rows: R[]; deleted: string[] } = { rows: [], deleted: [] };
+        // Held in arrival order: a delete then a re-insert of one id stays inserted.
+        const buffer: Array<{ rows: R[]; deleted: string[] }> = [];
         // What this run wrote, by reference: a kernel row that is the same object is unchanged.
         const written = new Map<string, R>();
 
@@ -180,18 +202,18 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         };
         const flush = () => {
           buffering = false;
-          landLive(buffer.rows.splice(0), buffer.deleted.splice(0));
+          for (const event of buffer.splice(0)) landLive(event.rows, event.deleted);
         };
 
         const live = opts.subscribe({
           rows: (rows) => {
             if (stopped) return;
-            if (buffering) buffer.rows.push(...rows);
+            if (buffering) buffer.push({ rows, deleted: [] });
             else landLive(rows, []);
           },
           deleted: (ids) => {
             if (stopped) return;
-            if (buffering) buffer.deleted.push(...ids);
+            if (buffering) buffer.push({ rows: [], deleted: ids });
             else landLive([], ids);
           },
         });
@@ -206,19 +228,25 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         const catchUp = (): Promise<void> => {
           reading ??= (async () => {
             const lossesBefore = losses;
-            try {
-              await kernel.readChanges(Date.now());
+            // Settles the read either way: access lost meanwhile drops what it
+            // landed; otherwise pages already landed show (and the cursor saves).
+            const settle = () => {
               if (stopped) return;
               if (losses !== lossesBefore) {
-                // Access went while this read was out: whatever it landed goes too.
                 emptyKernel();
                 clear();
                 return;
               }
               mirror();
-              // The cursor moved even when no row did: the copy keeps it.
               opts.onChange?.();
+            };
+            try {
+              await kernel.readChanges(Date.now());
+              settle();
+              // A first read that failed earlier left `error`: a good one makes it ready.
+              markReadyOnce();
             } catch (error) {
+              settle();
               if (stopped) return;
               if (opts.isAccessLoss?.(error)) utils.loseAccess();
               else throw error;
@@ -231,15 +259,17 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         run = { diff, clear, catchUp };
 
         const start = async () => {
+          const lossesBefore = losses;
           // A device copy that can't be read is no copy: the server answers.
           const copy = await opts.seed().catch(() => null);
           if (stopped) return;
-          if (copy) {
+          // Access lost while the copy was read: its rows are not this person's any more.
+          if (copy && losses === lossesBefore) {
             kernel.restore(copy);
             mirror();
             markReadyOnce();
           }
-          await live.ready;
+          await waitForLive(live.ready, opts.liveReadyTimeoutMs ?? 5_000);
           if (stopped) return;
           try {
             await catchUp();

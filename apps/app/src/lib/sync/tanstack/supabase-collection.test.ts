@@ -49,6 +49,7 @@ function harness(opts: {
   answers?: Array<Promise<CollectionRead<Row>> | Error>;
   sendChanges?: (c: ChangedFields[]) => Promise<Row[]>;
   isAccessLoss?: (e: unknown) => boolean;
+  liveReadyTimeoutMs?: number;
 }) {
   const reads: (string | null)[] = [];
   const answers = opts.answers ?? [Promise.resolve(read([]))];
@@ -89,6 +90,7 @@ function harness(opts: {
     },
     isAccessLoss: opts.isAccessLoss,
     sendChanges: opts.sendChanges,
+    liveReadyTimeoutMs: opts.liveReadyTimeoutMs,
     onChange: () => {
       changes += 1;
     },
@@ -218,7 +220,7 @@ describe("supabaseCollectionOptions", () => {
     expect(h.rows()).toEqual([]);
   });
 
-  it("sign-out stops it: Realtime closes and a late read or event writes nothing", async () => {
+  it("sign-out stops it: Realtime closes and a late read or event reaches neither collection nor copy", async () => {
     const answer = deferred<CollectionRead<Row>>();
     const h = harness({
       copy: { rows: [{ id: "a", updatedAt: at(1), v: 1 }], cursor: at(1) },
@@ -230,10 +232,14 @@ describe("supabaseCollectionOptions", () => {
     const live = h.live();
     await h.collection.cleanup();
     expect(h.closed()).toBe(true);
+    const changesAtStop = h.changes();
     answer.resolve(read([{ id: "b", updatedAt: at(2), v: 1 }]));
     live.rows([{ id: "c", updatedAt: at(3), v: 1 }]);
     await tick();
     expect(h.collection.size).toBe(0);
+    // The store is never told to write the copy again (the registry drops its kernel).
+    expect(h.changes()).toBe(changesAtStop);
+    expect(h.kernel.rows.has("c")).toBe(false);
   });
 
   it("a user switch: the first person's late read never reaches the next person's collection", async () => {
@@ -356,5 +362,68 @@ describe("supabaseCollectionOptions", () => {
     expect(sent).toEqual([[{ id: "a", changes: { v: 5 } }]]);
     expect(h.kernel.rows.get("a")?.updatedAt).toBe(at(2));
     expect(h.rows()).toEqual(["a:5"]);
+  });
+  it("a first read that failed with no copy turns ready once catchUp succeeds", async () => {
+    const h = harness({
+      answers: [new Error("offline"), Promise.resolve(read([{ id: "a", updatedAt: at(1), v: 1 }]))],
+    });
+    h.collection.startSyncImmediate();
+    h.subscribed.resolve();
+    await tick();
+    await tick();
+    expect(h.collection.status).toBe("error");
+    await h.collection.utils.catchUp();
+    expect(h.collection.status).toBe("ready");
+    expect(h.rows()).toEqual(["a:1"]);
+  });
+
+  it("a Realtime join that fails or never comes doesn't hold the read or the live events", async () => {
+    const failed = harness({
+      answers: [Promise.resolve(read([{ id: "a", updatedAt: at(1), v: 1 }]))],
+    });
+    failed.collection.startSyncImmediate();
+    failed.subscribed.reject(new Error("CHANNEL_ERROR"));
+    await failed.collection.toArrayWhenReady();
+    failed.live().rows([{ id: "a", updatedAt: at(5), v: 5 }]);
+    expect(failed.rows()).toEqual(["a:5"]);
+
+    const silent = harness({
+      answers: [Promise.resolve(read([{ id: "b", updatedAt: at(1), v: 1 }]))],
+      liveReadyTimeoutMs: 5,
+    });
+    silent.collection.startSyncImmediate();
+    await silent.collection.toArrayWhenReady();
+    expect(silent.rows()).toEqual(["b:1"]);
+  });
+
+  it("a delta that only re-sends the lookback's rows changes nothing in the collection", async () => {
+    const same = { id: "a", updatedAt: at(1), v: 1 };
+    const h = harness({
+      copy: { rows: [same], cursor: at(1) },
+      answers: [Promise.resolve(read([same]))],
+    });
+    h.collection.startSyncImmediate();
+    await tick();
+    let events = 0;
+    h.collection.subscribeChanges((changes) => {
+      events += changes.length;
+    });
+    h.subscribed.resolve();
+    await tick();
+    await tick();
+    expect(events).toBe(0);
+  });
+
+  it("losing access while the copy is read keeps its rows out; with no run the copy is rewritten", async () => {
+    const h = harness({ copy: { rows: [{ id: "a", updatedAt: at(1), v: 1 }], cursor: at(1) } });
+    const before = h.changes();
+    h.collection.utils.loseAccess();
+    expect(h.changes()).toBe(before + 1);
+    h.collection.startSyncImmediate();
+    h.collection.utils.loseAccess();
+    h.subscribed.resolve();
+    await tick();
+    await tick();
+    expect(h.rows()).toEqual([]);
   });
 });
