@@ -16,6 +16,7 @@ import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-i
 import { wipeChatCopies } from "../../chat/store/store";
 import { forgetFocusUser } from "../../focus/engine";
 import { forgetRunUser } from "../../focus/run";
+import { wipeNotesCopies } from "../../notes/sync/people";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { forgetCaptureDrafts } from "../../tasks/capture/capture-draft";
 import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
@@ -112,10 +113,12 @@ export function AccountSection() {
           forgetFocusUser(userId);
           forgetRunUser(userId);
           forgetCaptureDrafts(userId);
-          // The Tasks device copy (TV-D11a): the account is gone, so is its copy
-          // (what still waited to sync too: there is no account to send it to).
+          // The Tasks and Chat device copies (TV-D11a, CV-3): the account is gone,
+          // so is its copy (what still waited to sync too: there is no account
+          // to send it to).
           void wipeSyncCopies({ keepWaiting: false });
-          void wipeChatCopies();
+          void wipeChatCopies({ keepWaiting: false });
+          void wipeNotesCopies({ keepWaiting: false });
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

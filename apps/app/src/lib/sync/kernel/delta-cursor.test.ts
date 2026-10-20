@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import { deltaCursor } from "./delta-cursor";
+import { deltaCursor } from "./delta";
 
 const at = (minute: number) => `2026-10-11T10:${String(minute).padStart(2, "0")}:00.000000+00:00`;
 

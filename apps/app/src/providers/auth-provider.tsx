@@ -12,6 +12,7 @@ import { forgetChatPresence } from "../features/chat/store/react";
 import { attachChatUser, wipeChatCopies } from "../features/chat/store/store";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachRunUser } from "../features/focus/run";
+import { attachNotesUser, wipeNotesCopies } from "../features/notes/sync/people";
 import { attachTagUser } from "../features/tags/store";
 import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
 import { clearTemplates } from "../features/tasks/templates/templates-store";
@@ -205,6 +206,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // refresh token dies, and offline captures must survive that.
         void wipeSyncCopies();
         void wipeChatCopies();
+        // Notes' caches too (queued edits and ops stay, as above).
+        void wipeNotesCopies();
         // Chat's remembered searches are the person's words too (CV-19).
         forgetSearches();
         forgetRememberedWorkspaces();
@@ -238,6 +241,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void attachSyncUser(sessionUserId);
     // Chat's device copy is one person's too (CV-3).
     void attachChatUser(sessionUserId);
+    // And Notes' caches (Track C4).
+    void attachNotesUser(sessionUserId);
     // Another person's kept capture drafts go too (TV-U14).
     if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
     // The push worker shows a notice's words only to who's signed in (TV-D12).
@@ -263,6 +268,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     // sign in here again (Settings warns before this).
     void wipeSyncCopies();
     void wipeChatCopies();
+    void wipeNotesCopies();
     forgetSearches();
     forgetChatPresence();
     forgetRememberedWorkspaces();

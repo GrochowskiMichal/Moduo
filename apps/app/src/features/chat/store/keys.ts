@@ -4,10 +4,10 @@
 // boundary: CV-0 spike 2's gotcha). Ids are uuids: Postgres orders them
 // bytewise, which for lowercase text is the string order.
 
-import { stampMinus, timestampMicros } from "../../../lib/sync/stamps";
+import { micros as stampMicros } from "../../../lib/sync/kernel/stamps";
 import type { ChatKey, ChatMessage } from "../model";
 
-const micros = (at: string) => timestampMicros(at) ?? 0;
+const micros = (at: string) => stampMicros(at, 0);
 
 export function keyOf(m: Pick<ChatMessage, "createdAt" | "id">): ChatKey {
   return { at: m.createdAt, id: m.id };
@@ -29,18 +29,6 @@ export function sortableAt(at: string): string {
   return String(micros(at)).padStart(17, "0");
 }
 
-/** The later of two stamps by the server's clock (null loses). */
-export function laterStamp(a: string | null, b: string | null): string | null {
-  if (!a) return b;
-  if (!b) return a;
-  return micros(b) > micros(a) ? b : a;
-}
-
-/** A server stamp moved back by `ms`, keeping its microseconds (the delta's lookback). */
-export { stampMinus };
-
-/** Whether `incoming` is a newer version than `held` by the server's stamp. */
-export function isNewerRow(incoming: ChatMessage, held: ChatMessage | undefined): boolean {
-  if (!held) return true;
-  return micros(incoming.updatedAt) > micros(held.updatedAt);
-}
+/** A server stamp moved back by `ms`, keeping its microseconds (the delta's lookback). The
+ *  stamp rule (an unknown stamp is the epoch) lives in the kernel with every caller's pick. */
+export { isNewerRow, laterStamp, stampMinus } from "../../../lib/sync/kernel/stamps";
