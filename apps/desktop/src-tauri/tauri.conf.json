@@ -6,7 +6,8 @@
   "build": {
     "beforeBuildCommand": "bun run --cwd ../app build:desktop",
     "devUrl": "http://localhost:8081",
-    "frontendDist": "../../app/dist"
+    "frontendDist": "../../app/dist",
+    "removeUnusedCommands": true
   },
   "app": {
     "windows": [
