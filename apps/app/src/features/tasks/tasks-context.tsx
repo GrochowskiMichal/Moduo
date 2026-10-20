@@ -25,6 +25,9 @@
 //   stateful pieces (Recently deleted, its link, saved views).
 // - `TaskCommandsOverride`: a host's own take on a few commands for what is
 //   under it (the Tasks page guards Focus with the blocked-by offer).
+// - `useLandingLag()`, `TasksHeld`, `TasksLagged`: a page's secondary parts
+//   (the rail, the right panel) draw the landing of the data one frame after
+//   the centre's rows (TS-R1).
 //
 // With the React Compiler on, each hook returns what useSyncExternalStore
 // hands it, never a read of the store beside it (docs/gotchas/ui.md, RF-1).
@@ -32,12 +35,16 @@
 import {
   createContext,
   type MutableRefObject,
+  memo,
   type ReactNode,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
+import { afterPaint } from "../../lib/after-paint";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { EMPTY_SNAPSHOT, type StoreSnapshot, type WorkspaceStore } from "../../lib/sync/store";
 import { entityKey, useTagView } from "../tags/store";
@@ -77,6 +84,8 @@ const TrashContext = createContext<TrashScope | null>(null);
 const ViewOpsContext = createContext<ViewOps | null>(null);
 /** Bumped after every op that saved: the detail panel's trail re-reads on it. */
 const ActivityContext = createContext(0);
+/** A snapshot the subtree reads instead of the store's live one (`TasksLagged`). */
+const LaggedContext = createContext<StoreSnapshot | null>(null);
 
 type ProviderProps = {
   runtime: ModuoRuntime | null;
@@ -178,12 +187,55 @@ export function useTaskCommands(): TaskCommands {
  */
 export function useTasksSelector<T>(select: (data: TasksData, snap: StoreSnapshot) => T): T {
   const { store, userId, workspaceId } = useTasksScope();
+  const lagged = useContext(LaggedContext);
   const read = () => {
-    const snap = store ? store.getSnapshot() : EMPTY_SNAPSHOT;
+    const snap = lagged ?? (store ? store.getSnapshot() : EMPTY_SNAPSHOT);
     return select(tasksDataOf(snap, userId, workspaceId), snap);
   };
-  return useSyncExternalStore(store ? store.subscribe : noSubscribe, read, read);
+  // Under `TasksLagged` the snapshot comes down through context: no subscription.
+  return useSyncExternalStore(store && !lagged ? store.subscribe : noSubscribe, read, read);
 }
+
+const snapshotOf = (_: TasksData, snap: StoreSnapshot) => snap;
+
+/**
+ * Draw a page's secondary parts (the rail, the panel) one frame after the
+ * data lands (TS-R1). Wrap each in `TasksHeld hold={hold}` around
+ * `TasksLagged snapshot={snapshot}`. Until the data has landed they read the
+ * page's snapshot through context (no subscription of their own); in the
+ * render where the device copy or the first read lands, `hold` keeps their
+ * last output, so the centre's rows paint alone; right after that frame they
+ * draw, and from then on read the store live (`snapshot` null), so they never
+ * trail an edit, a selection or a switch.
+ */
+export function useLandingLag(): { snapshot: StoreSnapshot | null; hold: boolean } {
+  const live = useTasksSelector(snapshotOf);
+  const [landed, setLanded] = useState(false);
+  const hold = live.loaded && !landed;
+  useEffect(() => {
+    if (hold) return afterPaint(() => setLanded(true));
+  }, [hold]);
+  return { snapshot: landed ? null : live, hold };
+}
+
+/** Its subtree reads the Tasks data from `snapshot` (from `useLandingLag`). */
+export function TasksLagged({
+  snapshot,
+  children,
+}: {
+  snapshot: StoreSnapshot | null;
+  children: ReactNode;
+}) {
+  return <LaggedContext.Provider value={snapshot}>{children}</LaggedContext.Provider>;
+}
+
+/** Keeps its last output while `hold` (see `useLandingLag`). */
+export const TasksHeld = memo(
+  function TasksHeld({ children }: { hold: boolean; children: ReactNode }) {
+    return children;
+  },
+  (_, next) => next.hold,
+);
 
 /**
  * One live task (as `api.tasks.find` finds it: not deleted, not in an

@@ -18,9 +18,24 @@
 //   dragged: dnd-kit loses a draggable that unmounts mid-drag).
 // - `scrollTo`: bring an item into view (keyboard moves, a deep link), drawn
 //   or not; `seq` asks again for the same item.
+// - First paint (TS-R1): a short stack that arrives with more than a screen of
+//   items draws the first screenful at once and the rest right after that
+//   frame paints, so a warm open paints its rows before the off-screen ones
+//   are built. Once drawn whole it stays whole: later changes never drop rows
+//   (an edit, a focused row below the fold). A new `paintKey` (another place
+//   in the same List) starts over: its rows are all new anyway.
 
 import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
-import { type ReactNode, type RefObject, useCallback, useEffect, useReducer, useRef } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { afterPaint } from "../../../lib/after-paint";
 import { cn } from "../../../lib/utils";
 
 /** Below this many items a stack draws them all (they fit a screen or two). */
@@ -53,10 +68,24 @@ type Props<T> = {
    * below it.
    */
   scrollMargin?: number;
+  /** What the stack shows (a place): a new one draws its first screen first again. */
+  paintKey?: string;
   className?: string;
 };
 
 const NO_INDEXES: readonly number[] = [];
+
+/** How many items fill the window by their estimates (at least one). */
+function firstScreen<T>(items: readonly T[], estimateSize: (item: T, index: number) => number) {
+  const room = typeof window === "undefined" ? Number.POSITIVE_INFINITY : window.innerHeight;
+  let height = 0;
+  let count = 0;
+  while (count < items.length && height < room) {
+    height += estimateSize(items[count] as T, count);
+    count++;
+  }
+  return Math.max(count, 1);
+}
 
 export function VirtualStack<T>({
   items,
@@ -73,6 +102,7 @@ export function VirtualStack<T>({
   overscan = 8,
   virtualizeFrom = VIRTUALIZE_FROM,
   scrollMargin = 0,
+  paintKey,
   className,
 }: Props<T>) {
   const virtual = items.length >= virtualizeFrom;
@@ -133,10 +163,23 @@ export function VirtualStack<T>({
     virtualizer.scrollToIndex(index, { align: scrollTo.align ?? "auto" });
   }, [scrollTo, virtual, items, itemKey, virtualizer]);
 
+  // Short stacks: the first screen now, the rest after it paints (see above).
+  const [whole, setWhole] = useState(false);
+  const [paintedKey, setPaintedKey] = useState(paintKey);
+  if (paintKey !== paintedKey) {
+    setPaintedKey(paintKey);
+    setWhole(false);
+  }
+  const head = virtual || whole ? items.length : firstScreen(items, estimateSize);
+  const partial = head < items.length;
+  useEffect(() => {
+    if (partial) return afterPaint(() => setWhole(true));
+  }, [partial]);
+
   if (!virtual) {
     return (
       <div className={cn("flex flex-col", gapClassName, className)}>
-        {items.map((item, index) => {
+        {(partial ? items.slice(0, head) : items).map((item, index) => {
           const sticky = stickyIndexes.includes(index);
           return (
             <div

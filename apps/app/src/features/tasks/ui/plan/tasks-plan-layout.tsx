@@ -8,7 +8,14 @@ import { truncationNotice } from "../../../../components/app/truncation-notice";
 import { type ReferenceHost, ReferenceHostProvider } from "../../../spine/references/context";
 import { referenceKey } from "../../../spine/references/kinds";
 import type { ReferenceRef } from "../../../spine/references/types";
-import { TaskCommandsOverride, useTaskCommands, useTasksSelector } from "../../tasks-context";
+import {
+  TaskCommandsOverride,
+  TasksHeld,
+  TasksLagged,
+  useLandingLag,
+  useTaskCommands,
+  useTasksSelector,
+} from "../../tasks-context";
 
 import { PlanBody } from "./plan-body";
 import { PlanDialogs } from "./plan-dialogs";
@@ -82,6 +89,10 @@ export function TasksPlanLayout({ c }: { c: PlanController }) {
     [pushPanel, referenceStore, canEdit, markDone, patchTask, createTask],
   );
 
+  // The rail and the panel draw the landing of the data one frame after the
+  // centre's rows (TS-R1).
+  const { snapshot, hold } = useLandingLag();
+
   return (
     <TaskCommandsOverride commands={pageCommands}>
       <ReferenceHostProvider host={referenceHost}>
@@ -89,9 +100,21 @@ export function TasksPlanLayout({ c }: { c: PlanController }) {
           <FeaturePanelsShell
             feature="tasks"
             notice={truncationNotice(truncated)}
-            left={<PlanRail c={c} />}
+            left={
+              <TasksHeld hold={hold}>
+                <TasksLagged snapshot={snapshot}>
+                  <PlanRail c={c} />
+                </TasksLagged>
+              </TasksHeld>
+            }
             center={<PlanBody c={c} />}
-            right={<PlanPanels c={c} />}
+            right={
+              <TasksHeld hold={hold}>
+                <TasksLagged snapshot={snapshot}>
+                  <PlanPanels c={c} />
+                </TasksLagged>
+              </TasksHeld>
+            }
           />
         </PlanDndHost>
         <PlanDialogs c={c} />
