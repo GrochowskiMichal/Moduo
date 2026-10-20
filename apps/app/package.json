@@ -9,7 +9,7 @@
     "preview": "MODUO_TARGET=web rsbuild preview --host 127.0.0.1 --port 8081",
     "build": "MODUO_TARGET=web rsbuild build",
     "build:desktop": "MODUO_TARGET=desktop rsbuild build",
-    "typecheck": "tsc-ts --noEmit",
+    "typecheck": "tsc --noEmit",
     "lint:tw": "bun ../../scripts/check-arbitrary-tw.ts",
     "lint:boundaries": "bun ../../scripts/check-boundaries.ts",
     "lint:css": "stylelint \"src/**/*.css\"",
