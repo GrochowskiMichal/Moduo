@@ -546,7 +546,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **TS-3c — Tasks writes as collection transactions patching only `changes`; kernel outbox kept; overlay code deleted** · deps: TS-3b · validator
 - [ ] **TS-4 — Chat on in-memory collections (paged from the per-row IDB copy, hold-failed outbox kept)** · deps: TS-3c, SK-C3
 - [ ] **TS-5 — Contacts, Calendar, Notes metadata as collections with delta** · deps: TS-2, SK-C4
-- [ ] **TS-6 — Hotkeys: `@tanstack/react-hotkeys` registry, scopes, conflict test, migration of `useGlobalShortcuts`** · deps: TS-1 (parallel with TS-2…5)
+- [x] **TS-6 — Hotkeys: `@tanstack/react-hotkeys` registry, scopes, conflict test, migration of `useGlobalShortcuts`** · 2026-10-20 · `lib/hotkeys/` (registry + `useAppHotkeys` + scopes), Hotkeys devtools panel
 - [ ] **TS-7 — Cleanup (store plumbing, selectors), decisions, gotchas, data-layers/architecture docs** · deps: TS-3c, TS-4, TS-5, TS-6
 - [ ] **TS-8 — Optional: SQLite persistence (OPFS web, plugin-sql desktop, offline-transactions) only after a second spike beats 514 ms warm open** · deps: TS-7
 
