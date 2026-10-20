@@ -13,7 +13,11 @@
  * Everything is one person's (Track C4): keyed `<person>:<workspace>` (the
  * sync kernel's owner key) like Tasks' and Chat's copies, so one browser never
  * paints a person another's notes. A sign-out or another person signing in
- * cuts a person's caches down to their outboxes (`people.ts`).
+ * cuts a person's caches down to their outboxes (`people.ts`), and from that
+ * moment nothing is written or sent for them (`mayWrite`). Queued entries from
+ * before Track C4 carry no person: they stay as they were, sent by whoever
+ * opens their workspace (the old behaviour), and no sign-out or switch
+ * removes them.
  *
  * The client_seq counter stays per note, not per person: the client id is the
  * device's (`getNotesClientId`), and the server dedupes on (client, seq), so
@@ -53,6 +57,22 @@ export function parseDocDbName(
     return { legacyWorkspace: parts[0]!, noteId: parts[1]! };
   }
   return null;
+}
+
+/**
+ * Who is signed in, as the auth shell last said (undefined: not said yet).
+ * A null session doesn't change it (it isn't a sign-out); a sign-out sets null.
+ */
+let signedIn: string | null | undefined;
+
+/** `undefined`: back to "not said yet" (tests). */
+export function setNotesSignedIn(userId: string | null | undefined): void {
+  signedIn = userId;
+}
+
+/** Whether anything may be written or sent for this person now. */
+export function mayWrite(userId: string): boolean {
+  return signedIn === undefined || signedIn === userId;
 }
 
 /** Whose caches an engine reads and writes. `stopped`: wiped, write nothing more. */
@@ -245,6 +265,8 @@ export function writeMetaCache(
   workspaceId: string,
   notes: unknown[],
 ): Promise<void> {
+  // A load that answers after the person signed out (or someone else in) writes nothing.
+  if (!mayWrite(userId)) return Promise.resolve();
   return withStore(
     "metaCache",
     "readwrite",
@@ -281,7 +303,10 @@ export function withState(
 ): NoteStateRow {
   return {
     noteId: state.noteId,
-    nextClientSeq: state.nextClientSeq,
+    // Never backwards: another engine on this note (a tab, another person on
+    // this device) may have taken seqs since; a reused seq is dropped by the
+    // server's dedupe on (client, seq).
+    nextClientSeq: Math.max(row?.nextClientSeq ?? 0, state.nextClientSeq),
     cursors: {
       ...stripLegacy(row)?.cursors,
       [owner]: {
@@ -309,8 +334,13 @@ export function readNoteState(owner: NotesOwner, noteId: string): Promise<NoteSy
   );
 }
 
+/** Whether an engine may still write or send for its owner. */
+export function ownerLive(owner: NotesOwner): boolean {
+  return !owner.stopped && mayWrite(owner.userId);
+}
+
 export function writeNoteState(owner: NotesOwner, state: NoteSyncState): Promise<void> {
-  if (owner.stopped) return Promise.resolve();
+  if (!ownerLive(owner)) return Promise.resolve();
   return withStore(
     "noteState",
     "readwrite",
@@ -331,7 +361,7 @@ export function enqueueDocUpdate(
   owner: NotesOwner,
   entry: Omit<DocOutboxEntry, "userId" | "workspaceId">,
 ): Promise<boolean> {
-  if (owner.stopped) return Promise.resolve(false);
+  if (!ownerLive(owner)) return Promise.resolve(false);
   return withStore(
     "docOutbox",
     "readwrite",
@@ -343,6 +373,12 @@ export function enqueueDocUpdate(
   );
 }
 
+/** Queued entries an owner sends: theirs, and those from before Track C4 (nobody's) in their workspace. */
+function sendsFor(owner: NotesOwner, e: { userId?: string; workspaceId: string }): boolean {
+  if (e.workspaceId !== owner.workspaceId) return false;
+  return !e.userId || e.userId === owner.userId;
+}
+
 /** A note's queued updates of this person (another person's on this device wait for them). */
 export function readDocOutbox(owner: NotesOwner, noteId: string): Promise<DocOutboxEntry[]> {
   return withStore(
@@ -350,7 +386,7 @@ export function readDocOutbox(owner: NotesOwner, noteId: string): Promise<DocOut
     "readonly",
     async (s) => {
       const all = await readAll<DocOutboxEntry>(s.index("byNote"), IDBKeyRange.only(noteId));
-      return all.filter((e) => e.userId === owner.userId);
+      return all.filter((e) => sendsFor(owner, e));
     },
     [],
   );
@@ -375,8 +411,7 @@ export function listDocOutboxNoteIds(owner: NotesOwner): Promise<string[]> {
     "readonly",
     async (s) => {
       const all = (await req(s.getAll())) as DocOutboxEntry[];
-      const mine = ownerOf(owner);
-      return [...new Set(all.filter((e) => entryOwner(e) === mine).map((e) => e.noteId))];
+      return [...new Set(all.filter((e) => sendsFor(owner, e)).map((e) => e.noteId))];
     },
     [],
   );
@@ -388,7 +423,7 @@ export function enqueueMetaOp(
   owner: NotesOwner,
   entry: Omit<MetaOutboxEntry, "userId" | "workspaceId">,
 ): Promise<void> {
-  if (owner.stopped) return Promise.resolve();
+  if (!ownerLive(owner)) return Promise.resolve();
   return withStore(
     "metaOutbox",
     "readwrite",
@@ -408,7 +443,7 @@ export function readMetaOutbox(owner: NotesOwner): Promise<MetaOutboxEntry[]> {
         s.index("byWorkspace"),
         IDBKeyRange.only(owner.workspaceId),
       );
-      return all.filter((e) => e.userId === owner.userId);
+      return all.filter((e) => sendsFor(owner, e));
     },
     [],
   );

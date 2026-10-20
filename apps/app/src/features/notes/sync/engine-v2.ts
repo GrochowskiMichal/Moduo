@@ -54,6 +54,7 @@ import {
   type NoteSyncState,
   type NotesOwner,
   openNotesDb,
+  ownerLive,
   ownerOf,
   readDocOutbox,
   readMetaOutbox,
@@ -391,7 +392,7 @@ export class NotesSyncEngineV2 {
   /** Pull the snapshot + log since our cursor and merge into the live doc.
    * Always safe: Yjs application is idempotent and order-independent. */
   private async pull(s: NoteSession): Promise<number> {
-    if (!this.runtime || s.destroyed) return 0;
+    if (!this.runtime || s.destroyed || !ownerLive(this.owner)) return 0;
     try {
       const res = await this.runtime.notesV2.pullDoc({
         workspaceId: this.workspaceId,
@@ -493,7 +494,9 @@ export class NotesSyncEngineV2 {
   }
 
   private async flush(s: NoteSession): Promise<void> {
-    if (!this.runtime || s.destroyed) return;
+    // Stopped (signed out, someone else signed in): nothing goes out under
+    // another person's session, not even what this engine still holds.
+    if (!this.runtime || s.destroyed || !ownerLive(this.owner)) return;
     if (this.drafts.has(s.noteId) || this.held.has(s.noteId)) return;
     if (s.flushing) {
       s.dirty = true;
@@ -504,6 +507,7 @@ export class NotesSyncEngineV2 {
       const clientId = await this.resolveClientId();
       let pushed = false;
       for (;;) {
+        if (!ownerLive(this.owner)) return;
         const durable = await readDocOutbox(this.owner, s.noteId);
         const queue = [...durable, ...s.memOutbox];
         if (queue.length === 0) {
@@ -601,7 +605,7 @@ export class NotesSyncEngineV2 {
    * then would DELETE log rows this doc never absorbed (global data loss;
    * another client may still read them fine). */
   private async compact(s: NoteSession): Promise<void> {
-    if (!this.runtime || s.destroyed) return;
+    if (!this.runtime || s.destroyed || !ownerLive(this.owner)) return;
     if (s.compactVeto) return;
     try {
       await this.pull(s);
@@ -849,6 +853,7 @@ export class NotesSyncEngineV2 {
     try {
       const clientId = await this.resolveClientId();
       for (;;) {
+        if (!ownerLive(this.owner)) return;
         const queue = await readDocOutbox(this.owner, noteId);
         if (queue.length === 0) break;
         const batch = planPushBatch(queue);
@@ -866,12 +871,13 @@ export class NotesSyncEngineV2 {
   }
 
   private async replayMetaOutbox(): Promise<void> {
-    if (!this.runtime || this.replayingMeta) return;
+    if (!this.runtime || this.replayingMeta || !ownerLive(this.owner)) return;
     this.replayingMeta = true;
     let replayedAny = false;
     try {
       const entries = replayOrder(await readMetaOutbox(this.owner));
       for (const entry of entries) {
+        if (!ownerLive(this.owner)) break;
         let error: unknown = null;
         try {
           await this.callMetaOp(entry.kind, entry.args);
@@ -898,12 +904,13 @@ export class NotesSyncEngineV2 {
 
   async destroy(): Promise<void> {
     this.destroyed = true;
-    this.untrack();
     this.detachWindow?.();
     // A draft nobody typed into dies with the page that opened it.
     await Promise.all([...this.drafts].map((id) => this.discardDraft(id)));
     const ids = [...this.sessions.keys()];
     await Promise.all(ids.map((id) => this.closeNote(id)));
     this.statusListeners.clear();
+    // Tracked until it's quiet: a switch during teardown still stops it.
+    this.untrack();
   }
 }

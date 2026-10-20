@@ -50,6 +50,16 @@ describe("a note's sync state", () => {
     expect(stateFor(afterB, "n", "user-c:ws-1")?.lastPulledUpdateId).toBe(0);
   });
 
+  it("never moves the seq counter backwards (another engine may have taken seqs since)", () => {
+    const stored = { noteId: "n", nextClientSeq: 12, cursors: {} };
+    const written = withState(
+      stored,
+      { noteId: "n", nextClientSeq: 7, lastPulledUpdateId: 1, updatesSinceCompact: 0 },
+      A,
+    );
+    expect(written.nextClientSeq).toBe(12);
+  });
+
   it("never lends the device-wide cursor from before Track C4 to anyone", () => {
     const legacy = {
       noteId: "n",

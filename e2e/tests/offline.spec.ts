@@ -198,3 +198,81 @@ test("AC12.2 — a capture and a check-off made offline wait, then sync in order
   await expectFound(page, captured, 1);
   expect(await tasksTitled(captured)).toHaveLength(1);
 });
+
+/** The device copy's record for this person and workspace, as stored. */
+function readCopy(page: Page) {
+  return page.evaluate(
+    (key) =>
+      new Promise<{ v: number; rows: number; outbox: string[] } | null>((resolve) => {
+        const open = indexedDB.open("moduo-sync");
+        open.onupgradeneeded = () => open.transaction?.abort();
+        open.onerror = () => resolve(null);
+        open.onsuccess = () => {
+          const db = open.result;
+          if (!db.objectStoreNames.contains("workspaces")) {
+            db.close();
+            return resolve(null);
+          }
+          const get = db.transaction("workspaces").objectStore("workspaces").get(key);
+          get.onerror = () => resolve(null);
+          get.onsuccess = () => {
+            const rec = get.result;
+            db.close();
+            if (!rec) return resolve(null);
+            const tables = Object.values(rec.tables ?? {}) as { rows: unknown[] }[];
+            resolve({
+              v: rec.v,
+              rows: tables.reduce((n, t) => n + (t.rows?.length ?? 0), 0),
+              outbox: (rec.outbox ?? []).map(
+                (e: { task?: { title: string } }) => e.task?.title ?? "",
+              ),
+            });
+          };
+        };
+      }),
+    `${dev.user.id}:${ws.id}`,
+  );
+}
+
+test("Track C — a capture made offline survives a sign-out and syncs after signing back in", async ({
+  page,
+  context,
+}) => {
+  const seeded = await createTask(`Anchor ${tag}`);
+  const captured = `Captured before sign-out ${tag}`;
+  await openInbox(page, seeded.id);
+  await expect(page.getByRole("button", { name: seeded.title })).toBeVisible({ timeout: 20_000 });
+  await waitForDeviceCopy(page, seeded.title);
+
+  await context.setOffline(true);
+  await page.keyboard.press("ControlOrMeta+Shift+K");
+  const line = page.getByRole("dialog").getByRole("textbox").first();
+  await line.fill(captured);
+  await line.press("Enter");
+  await expect(page.getByText("Waiting to sync · Inbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  // Settings → Account → Log out: it says what hasn't synced, then signs out anyway.
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("moduo:settings:open", { detail: { section: "account" } }),
+    ),
+  );
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page.getByText(/hasn't synced yet|haven't synced yet/)).toBeVisible();
+  await page.getByRole("button", { name: "Log out anyway" }).click();
+
+  // The copy lost its rows and kept the capture, under this person's key.
+  await expect
+    .poll(() => readCopy(page), { timeout: 15_000 })
+    .toEqual({ v: 0, rows: 0, outbox: [captured] });
+  expect(await tasksTitled(captured)).toHaveLength(0);
+
+  // Back online, signed in again: the capture goes, once.
+  await context.setOffline(false);
+  await signInPage(page, dev, ws.id);
+  await page.goto(`/tasks?id=${seeded.id}`);
+  await expect(page.getByRole("navigation", { name: "Location" })).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => (await tasksTitled(captured)).length, { timeout: 20_000 }).toBe(1);
+  await expectFound(page, captured, 1);
+});

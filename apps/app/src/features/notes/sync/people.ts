@@ -10,21 +10,21 @@
  *     takes the outboxes too.
  *   - A workspace no longer on the list takes its caches and outboxes.
  *
- * Before Track C4 the caches were keyed by workspace only, nobody's. The
- * first person to sign in after the update adopts them (`adoptLegacy`): they
- * were the one reading them already, and from then on every person's are
- * their own and wiped on a switch. A document cache moves under its new name
- * (copied through Yjs) together with its cursor; a cursor whose document
- * cache can't be found is dropped (the next pull reads the note whole).
+ * Before Track C4 the caches were keyed by workspace only, nobody's. On
+ * every sign-in they go (`forgetLegacy`): the notes lists, the per-note
+ * documents and the one device-wide cursor. They are caches (the next open
+ * reads each note whole from the server); handing them to whoever signs in
+ * first would show them a previous person's notes. What waited to sync then
+ * carries no person and stays as it was: sent by whoever opens its workspace.
+ *
+ * A sign-out or a switch stops the engines at once (synchronously, before the
+ * React tree tears down), so a disposed engine never sends a person's edits
+ * under the next person's session; the caches go after.
  */
-
-import { IndexeddbPersistence } from "y-indexeddb";
-import * as Y from "yjs";
 
 import { browserIdb } from "../../../lib/sync/kernel/idb";
 import {
   type OwnedCopies,
-  ownerKey,
   personLifecycle,
   StoreRegistry,
 } from "../../../lib/sync/kernel/registry";
@@ -39,6 +39,7 @@ import {
   parseDocDbName,
   readAll,
   req,
+  setNotesSignedIn,
   stripLegacy,
   withStore,
 } from "./idb";
@@ -162,7 +163,14 @@ const copies: OwnedCopies<never> = {
       ["metaCache", "docOutbox", "noteState", "metaOutbox"],
       "readwrite",
       async (_s, tx) => {
-        for (const name of ["metaCache", "docOutbox", "metaOutbox"]) tx.objectStore(name).clear();
+        tx.objectStore("metaCache").clear();
+        // Everyone's queued work goes, but not what predates Track C4 (nobody's).
+        for (const name of ["docOutbox", "metaOutbox"]) {
+          const store = tx.objectStore(name);
+          for (const e of await readAll<DocOutboxEntry | MetaOutboxEntry>(store)) {
+            if (e.userId) store.delete(e.key);
+          }
+        }
         // The seq counters stay: the device's client id outlives the account.
         const state = tx.objectStore("noteState");
         for (const row of (await req(state.getAll())) as NoteStateRow[]) {
@@ -183,101 +191,71 @@ const people = personLifecycle({
   waiting: () => [] as never[],
 });
 
-/** Copy one y-indexeddb document to a new database name (through Yjs). */
-async function copyDocDb(from: string, to: string): Promise<boolean> {
-  const doc = new Y.Doc();
-  try {
-    const source = new IndexeddbPersistence(from, doc);
-    await source.whenSynced;
-    // The target stores the whole state on its first sync.
-    const target = new IndexeddbPersistence(to, doc);
-    await target.whenSynced;
-    await Promise.all([source.destroy(), target.destroy()]);
-    return true;
-  } catch {
-    return false;
-  } finally {
-    doc.destroy();
-  }
-}
-
 /**
- * Make what Notes kept before Track C4 this person's: the notes lists, the
- * queued edits and ops, and each document cache with its cursor. Safe to run
- * on every sign-in: once adopted, nothing is nobody's.
+ * Forget what Notes cached before Track C4 (nobody's): the notes lists, the
+ * per-note documents and the device-wide cursors. Queued work stays. Safe to
+ * run on every sign-in: after the first, there is nothing left.
  */
-export async function adoptLegacy(userId: string): Promise<void> {
-  const moved = new Map<string, string>(); // noteId → owner, for documents moved with their cursor
+export async function forgetLegacy(): Promise<void> {
   for (const name of await docDatabases()) {
     const parsed = parseDocDbName(name);
-    if (!parsed || !("legacyWorkspace" in parsed)) continue;
-    const owner = ownerKey(userId, parsed.legacyWorkspace);
-    if (await copyDocDb(name, docDbName(owner, parsed.noteId))) {
-      moved.set(parsed.noteId, owner);
-      await deleteDatabase(name);
-    }
+    if (parsed && "legacyWorkspace" in parsed) await deleteDatabase(name);
   }
   await withStore(
-    ["metaCache", "docOutbox", "noteState", "metaOutbox"],
+    ["metaCache", "noteState"],
     "readwrite",
     async (_s, tx) => {
       const lists = tx.objectStore("metaCache");
-      const keys = (await req(lists.getAllKeys())).filter(
-        (k): k is string => typeof k === "string" && !k.includes(":"),
-      );
-      for (const ws of keys) {
-        const value = await req(lists.get(ws));
-        lists.put(value, ownerKey(userId, ws));
-        lists.delete(ws);
-      }
-      for (const name of ["docOutbox", "metaOutbox"]) {
-        const store = tx.objectStore(name);
-        for (const e of await readAll<DocOutboxEntry | MetaOutboxEntry>(store)) {
-          if (e.userId) continue;
-          const { key, ...entry } = e;
-          store.put({ ...entry, userId }, key);
-        }
+      for (const k of await req(lists.getAllKeys())) {
+        if (typeof k === "string" && !k.includes(":")) lists.delete(k);
       }
       const state = tx.objectStore("noteState");
       for (const row of (await req(state.getAll())) as NoteStateRow[]) {
         if (row.lastPulledUpdateId === undefined && row.updatesSinceCompact === undefined) continue;
-        const owner = moved.get(row.noteId);
-        const next = stripLegacy(row)!;
-        if (owner) {
-          next.cursors = {
-            ...next.cursors,
-            [owner]: {
-              lastPulledUpdateId: row.lastPulledUpdateId ?? 0,
-              updatesSinceCompact: row.updatesSinceCompact ?? 0,
-            },
-          };
-        }
-        state.put(next);
+        state.put(stripLegacy(row));
       }
     },
     undefined,
   );
 }
 
+/** Stop engines now (before anything else of the switch runs). */
+function stopEngines(keep: (engine: NotesSyncEngineV2) => boolean): void {
+  notesEngines.disposeWhere((engine) => engine, keep, false);
+}
+
 let attaching: Promise<void> = Promise.resolve();
 
-/**
- * Who is signed in now (the auth shell calls this on every change). Someone:
- * they adopt what was nobody's, then every other person's caches go (their
- * outboxes stay). Nobody: nothing changes (a null session isn't a sign-out).
- */
-export function attachNotesUser(userId: string | null): Promise<void> {
-  attaching = attaching.then(async () => {
-    if (userId) await adoptLegacy(userId);
-    await people.attachUser(userId);
+/** One lifecycle step after another; a failed one never blocks the next. */
+function chain(step: () => Promise<void>): Promise<void> {
+  attaching = attaching.then(step, step).catch((e) => {
+    console.warn("[notes-sync] cache cleanup failed", e);
   });
   return attaching;
 }
 
+/**
+ * Who is signed in now (the auth shell calls this on every change). Someone:
+ * every other person's engines stop at once, what was nobody's goes, then
+ * every other person's caches go (their outboxes stay). Nobody: nothing
+ * changes (a null session isn't a sign-out).
+ */
+export function attachNotesUser(userId: string | null): Promise<void> {
+  if (userId) {
+    setNotesSignedIn(userId);
+    stopEngines((engine) => engine.userId === userId);
+  }
+  return chain(async () => {
+    if (userId) await forgetLegacy();
+    await people.attachUser(userId);
+  });
+}
+
 /** Signed out: everyone's caches go, the outboxes stay (`keepWaiting: false`: they go too). */
 export function wipeNotesCopies(opts: { keepWaiting?: boolean } = {}): Promise<void> {
-  attaching = attaching.then(() => people.wipe(opts));
-  return attaching;
+  setNotesSignedIn(null);
+  stopEngines(() => false);
+  return chain(() => people.wipe(opts));
 }
 
 /** The person's workspace list came back: caches and outboxes of workspaces not on it go. */
@@ -285,6 +263,5 @@ export function keepNotesWorkspaces(
   userId: string,
   workspaceIds: readonly string[],
 ): Promise<void> {
-  attaching = attaching.then(() => people.keepWorkspaces(userId, workspaceIds));
-  return attaching;
+  return chain(() => people.keepWorkspaces(userId, workspaceIds));
 }
