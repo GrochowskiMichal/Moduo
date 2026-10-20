@@ -16,6 +16,7 @@ effort: high
 - **Never leave work only in the worktree.** A usage limit can end the session mid-turn, so commit and push the task branch after the claim, after the final green `bun run verify`, and before any stop you control (blocker, end of turn). Exception: an unfixed security hole stays a local commit, because the repo is public; say so under **Session**.
 - **Stage explicit paths.** Another session may share the checkout: `git add <file>…`, never `git add -A` or a whole directory.
 - **Use subagents for noisy work** (broad recon, long logs, big reads) so your own context stays lean.
+- **Mirror the block in Moduo, never wait on it.** The [moduo-agent](../moduo-agent/SKILL.md) skill (`tools/claude-plugins/moduo-agent/skills/moduo-agent/SKILL.md`) takes the block's task in the dogfood workspace's Build project and posts status as you go. Without the `moduo` connector or its key every Moduo step is skipped, and the block is built exactly as before.
 
 ## Running unattended
 For an overnight lane the designer starts the session with a goal, so the session keeps going until the block is really done:
@@ -28,7 +29,8 @@ On a Max plan, `/advisor fable` adds Fable 5.1 as an advisor at decision points.
 
 ## Steps
 1. **Select.** Use the block the designer named. Otherwise (`/s2 next`, or no target) open `specs/BUILD_ORDER.md` and take the first `[ ]` block whose dependencies are all ticked **and** that no open PR already claims (`gh pr list --state open --search "<ID>"`). State which block you picked and why. If none is eligible, or the choice is ambiguous, stop and say so.
-2. **Claim.** Set the session title `[<Module> <ID>] <name>` in `.claude/SESSION_TITLE`. On your `t/<owner>/<kebab>` branch, push an empty claim commit (`git commit --allow-empty -m "Claim <ID>"`) and open a **draft PR** into the personal branch titled `[<ID>] <name>`. The draft PR is the claim other sessions check; no ledger edit.
+2. **Claim.** Set the session title `[<Module> <ID>] <name>` in `.claude/SESSION_TITLE`. On your `t/<owner>/<kebab>` branch, push an empty claim commit (`git commit --allow-empty -m "Claim <ID>"`) and open a **draft PR** into the personal branch titled `[<ID>] <name>`. The draft PR is the claim other sessions check; no ledger edit. Then mirror the claim in Moduo: moduo-agent §Pick up (find the block's task in Build by its ID, take it with `tasks_assign me` or `tasks_claim` when it's team-routed, post `working` · step 2 of 7 with the draft PR link).
+2b. **Checkpoints.** At the start of each step from 3 to 7, post one `working` report with its step number (moduo-agent §Checkpoint). A blocker you stop on is a `needs_you` report (§Needs you).
 3. **Load context.** Re-read the block's spec section (behavior, acceptance criteria, tests), `docs/gotchas/<area>.md` for every area you'll touch, and the relevant `docs/decisions/<area>.md`. Keep a short task list only if the block has more than a few acceptance criteria.
 4. **Build.** Reuse the patterns `/s1` found. Write the spec's tests alongside the code: use the `tdd` skill for logic and the `diagnosing-bugs` skill when something fails in a way you don't understand.
 5. **Verify.** Run `bun run verify`; a non-zero exit means not done, so fix and re-run. If you touched `apps/desktop/src-tauri/`, also run `cargo check`, `cargo check --features lite` and `cargo test --lib` there. If the change is observable in the app, live-verify it with the preview tools and the hosted test account (see `docs/gotchas/ui.md`); a visual-snapshot diff means stop and ask, never auto-accept. On the local stack, a user created through the admin API can't sign in with a password: set it with SQL `extensions.crypt()` as `supabase/seed.sql` does (see `docs/local-dev.md` §Tests and the local stack).
@@ -42,5 +44,6 @@ Open with one line: **Status: Built, not landed · Blocked · Not started**, plu
 - **❓ Needs you** *(only if applicable)*: numbered decisions only the designer can take, each with your recommendation.
 - **🔎 Found** *(only if applicable)*: one line each, for anything outside the block; and say here when a commit exists only locally (an unfixed security hole).
 - **⚠ Broke** *(only if applicable)*: what failed and the options.
+- **Session** *(only if applicable)*: "Moduo: off (<reason>)" when the connector was skipped.
 
 Never suppress breakage, a blocker or a needed decision for brevity. Then stop; `/s3` lands the work.
