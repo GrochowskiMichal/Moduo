@@ -5,7 +5,7 @@
 >
 > This doc answers: **where does each kind of data live, who is the source of truth, and what is the target shape every new module must adopt** — especially the *connective-tissue spine* that is Moduo's actual moat. Read it before adding a new module or a new data store.
 
-> ### ⚠ STATUS UPDATE (2026-07-11, refreshed 2026-08-14) — read this before the tables below
+> ### ⚠ STATUS UPDATE (2026-07-11, refreshed 2026-08-14; §1–§2 tables refreshed 2026-10-20) — read this before the tables below
 > This doc was written 2026-06-24 for its **intent and philosophy**, which still hold. Its per-module **status** is several waves stale — where it disagrees with the code, the code wins. **The status of record is [`specs/BUILD_ORDER.md`](../specs/BUILD_ORDER.md).** What actually shipped since:
 > - **43 migrations** (not ~16), all applied to prod as of OPS-1/OPS-2 (2026-07-29); **7+ modules are cloud-first**, not just Tasks.
 > - **The spine is built**, not a "TARGET": central `entities` registry + typed `entity_links` + comments/activity/notifications/suggestions (migrations `20260625…`–`20260627…`).
@@ -30,7 +30,7 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | --- | --- |
 | `apps/app/src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
 | `apps/app/src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
-| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for auth/workspaces/tasks, and Tauri `invoke` for the legacy redb-backed modules (notes, email, calendar, time-tracking, graph). |
+| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for nearly every module (auth, workspaces, tasks, notes, chat, contacts, calendar, dashboard, …), and Tauri `invoke` only for the desktop engines: the email IMAP/SMTP engine, the device key-value store (`localStore`), the legacy time-tracking commands (`tt_*`), integrations, and the one-off import of old redb notes. |
 
 - Desktop mirrors the Supabase session into Rust `AppState` via the `auth_set_cloud_session` command, so Rust-side code can attribute actions to the signed-in user.
 - **Footgun (see memory):** never import a bare `{ runtime }`; always resolve via `getRuntime()`. Grep `./runtime` when auditing lib exports.
@@ -59,14 +59,16 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | User preferences (appearance, focus) | **Supabase** (`user_preferences`) | Supabase | Yes | ✅ prod |
 | MCP connector keys | **Supabase** (`workspace_api_keys`) | Supabase | Yes | ✅ prod |
 | **Notes** | **Supabase** (Yjs update log `note_updates` + snapshot `doc_state`; y-indexeddb local cache) | Supabase | Yes (live via server-sent pulls, NR-7) | ✅ prod; refresh in progress ([specs/notes-refresh.md](../specs/notes-refresh.md)) |
-| **Email** | redb + in-memory cache; Rust IMAP/SMTP engine | redb (local) | No | 🟡 desktop-only, 2/5 |
-| **Calendar** | localStorage + OAuth tokens | local | No | 🟡 logic only, no UI |
-| **Time-tracking** | redb | local | No | 🟡 Rust backend, no UI |
-| **Mindmap** | localStorage | local | No | 🟡 3/5, exploratory |
-| Dashboard widgets | mostly stateless / demo | n/a | No | 🟡 prototype (`/grid` to be replaced) |
-| **Contacts / Finance** | — | — | — | ⚫ not built |
+| **Chat** | **Supabase** (Chat v2: `chat_messages`, conversations, reactions, files) + a device copy in IndexedDB (`moduo-chat`) | Supabase | Yes (Realtime) | ✅ prod |
+| **Contacts** (people, companies) | **Supabase** (`contacts`, `companies`, spine links) | Supabase | Yes | ✅ prod |
+| **Calendar** | **Supabase** (`calendar_accounts`, `calendars`, calendar sets, booking links) + Google and Zoom integrations | Supabase (events from Google) | Yes | ✅ prod |
+| **Email** | Desktop Rust IMAP/SMTP engine with a redb device cache and OS-keychain secrets; cloud `email_refs` link threads into the spine | the mail server; Supabase for links | Links only | 🟡 desktop-only client |
+| **Time tracking** | **Supabase** (`task_time_entries`, totals and reports); legacy `tt_*` desktop commands remain | Supabase | Yes | ✅ prod (on tasks) |
+| **Mindmap** | `runtime.localStore` (localStorage on web, redb KV on desktop) | local | No | 🟡 exploratory, not synced |
+| Dashboard widgets | read the other modules through one shared data context | n/a | — | ✅ prod |
+| **Finance** | — | — | — | ⚫ not built |
 
-**Takeaway:** only Tasks (+ the account/workspace/prefs platform) is genuinely cloud-first today. Everything else is a local-first island or a shell. The alpha plan moves every kept module onto the Supabase-first pattern below.
+**Takeaway (2026-10-20):** every shipped module except the desktop email client and Mindmap is cloud-first on Supabase. Email stays a desktop engine by design (§ Email below); Mindmap is the one local-only island left.
 
 ---
 
