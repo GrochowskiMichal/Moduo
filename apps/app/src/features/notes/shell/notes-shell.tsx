@@ -13,16 +13,6 @@ import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from 
 import { useCallback, useMemo, useState } from "react";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../../components/ui/alert-dialog";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
@@ -45,6 +35,7 @@ import { NoteView } from "./note-view";
 import { NotesRightPanel } from "./notes-right-panel";
 import { NotesSidebar } from "./notes-sidebar";
 import { NotesTopBar } from "./notes-top-bar";
+import { SharingQuestionDialog } from "./sharing-question-dialog";
 import type { FooterView } from "./sidebar-footer-views";
 import { useNotesShell } from "./use-notes-shell";
 import { useShellActions } from "./use-shell-actions";
@@ -358,30 +349,10 @@ export function NotesShell() {
         onOpenChange={(open) => !open && actions.setMoveTarget(null)}
         onPick={actions.pickMoveTarget}
       />
-      <AlertDialog
+      <SharingQuestionDialog
         open={actions.sharingQuestion !== null}
-        onOpenChange={(open) => {
-          // Esc / click-away = keep current access, and the move still happens.
-          if (!open && actions.sharingQuestion) actions.answerSharing(false);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Moving under a private note</AlertDialogTitle>
-            <AlertDialogDescription>
-              This note is shared, and its new parent is private. Who should be able to see it?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => actions.answerSharing(false)}>
-              Keep current access
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => actions.answerSharing(true)}>
-              Match the new parent
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onAnswer={actions.answerSharing}
+      />
     </>
   );
 }

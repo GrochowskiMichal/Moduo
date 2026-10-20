@@ -9,7 +9,9 @@
 //   3. Sync metadata (`moduo.<domain>.sync`): which user the local subset belongs
 //      to, its client logical write time, and a dirty flag for offline writes.
 //
-// Reconciliation is owner-aware last-write-wins per domain. Timestamps are
+// Reconciliation is owner-aware last-write-wins per domain, and the server holds
+// the same rule on every write (`prefs_op_set` keeps the newer stamp), so a
+// device coming back online with an older copy can't overwrite a newer one. Timestamps are
 // compared numerically (Date.parse) because Postgres echoes timestamptz back in
 // a different textual format than the client writes — never compare them as
 // strings. The desktop offline-lite build can later wrap pushDomain with a
@@ -19,9 +21,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { z } from "zod";
 import { createRequestCache } from "./request-cache";
 import { getRuntime, initRuntime } from "./runtime";
-import type { UserPreferences } from "./runtime.types";
+import type { PreferenceDomain, UserPreferences } from "./runtime.types";
 
-export type SyncDomain = "appearance" | "focus" | "calendar" | "email" | "preferences";
+export type SyncDomain = PreferenceDomain;
 
 /** Opaque jsonb payload shape shared across the transport boundary. */
 type Json = Record<string, unknown>;
@@ -150,32 +152,36 @@ function domainValue(
   }
 }
 
-/** Push one domain's syncable subset. Returns false when offline / errored / signed out. */
+/**
+ * What a push came to. The server keeps the newer copy (`prefs_op_set`), so a
+ * push can lose to one saved from another device since: `newer` carries it.
+ */
+export type PushOutcome =
+  | { kind: "saved" }
+  | { kind: "newer"; value: Json; updatedAt: string }
+  | { kind: "failed" };
+
+/** Push one domain's syncable subset. `failed` when offline / errored / signed out. */
 export async function pushDomain(
   domain: SyncDomain,
   value: Json,
   updatedAt: string,
-): Promise<boolean> {
+): Promise<PushOutcome> {
   const rt = getRuntime();
-  if (!rt) return false;
+  if (!rt) return { kind: "failed" };
   try {
-    const patch =
-      domain === "appearance"
-        ? { appearance: value, appearanceUpdatedAt: updatedAt }
-        : domain === "focus"
-          ? { focus: value, focusUpdatedAt: updatedAt }
-          : domain === "calendar"
-            ? { calendar: value, calendarUpdatedAt: updatedAt }
-            : domain === "email"
-              ? { email: value, emailUpdatedAt: updatedAt }
-              : { preferences: value, preferencesUpdatedAt: updatedAt };
-    const res = await rt.preferences.set(patch);
+    const res = await rt.preferences.setDomain(domain, value, updatedAt);
+    if (res === null) return { kind: "failed" }; // signed out
     // A write changed the shared row — drop the cached read so a later domain's
     // reconcile (or the same domain's next read) sees this domain's fresh value.
-    if (res !== null) invalidateCloudPrefs();
-    return res !== null; // null = signed out
+    invalidateCloudPrefs();
+    const saved = domainValue(res, domain);
+    if (saved.value && saved.updatedAt && toMillis(saved.updatedAt) > toMillis(updatedAt)) {
+      return { kind: "newer", value: saved.value, updatedAt: saved.updatedAt };
+    }
+    return { kind: "saved" };
   } catch {
-    return false;
+    return { kind: "failed" };
   }
 }
 
@@ -266,14 +272,17 @@ async function reconcileOnce(opts: {
   const ownedBySelf = meta.userId === userId;
   const anonymous = meta.userId === null;
 
-  const seedFromLocal = async (updatedAt: string) => {
-    const ok = await pushDomain(domain, localValue, updatedAt);
-    setSyncMeta(domain, { userId, updatedAt, dirty: !ok });
-  };
   const adoptCloud = (raw: Json, updatedAt: string) => {
     apply(sanitizeCloud(raw), userId);
     setSyncMeta(domain, { userId, updatedAt, dirty: false });
   };
+  const push = async (value: Json, updatedAt: string) => {
+    const res = await pushDomain(domain, value, updatedAt);
+    // Another device saved a newer copy in between: that one stands.
+    if (res.kind === "newer") adoptCloud(res.value, res.updatedAt);
+    else setSyncMeta(domain, { userId, updatedAt, dirty: res.kind === "failed" });
+  };
+  const seedFromLocal = (updatedAt: string) => push(localValue, updatedAt);
 
   if (hasCloud) {
     if (ownedBySelf && toMillis(meta.updatedAt) > toMillis(cloudUpdatedAt)) {
@@ -290,10 +299,8 @@ async function reconcileOnce(opts: {
   } else {
     // A different prior user's values are in local — don't seed them into this
     // user's fresh row. Reset to defaults and seed those.
-    const updatedAt = nowIso();
     apply(defaults, userId);
-    const ok = await pushDomain(domain, defaults, updatedAt);
-    setSyncMeta(domain, { userId, updatedAt, dirty: !ok });
+    await push(defaults, nowIso());
   }
   return "ok";
 }
@@ -393,10 +400,17 @@ export function useDomainSync(opts: {
     // the account on next sign-in (if it has no cloud copy of its own).
     setSyncMeta(o.domain, { userId: uid, updatedAt, dirty: true });
     if (!uid) return;
-    void pushDomain(o.domain, syncable, updatedAt).then((ok) => {
-      // Only clear dirty if no newer local change has happened since this push.
+    void pushDomain(o.domain, syncable, updatedAt).then((res) => {
+      // Only settle if no newer local change has happened since this push.
       const m = getSyncMeta(o.domain);
-      if (m.updatedAt === updatedAt) setSyncMeta(o.domain, { userId: uid, updatedAt, dirty: !ok });
+      if (m.updatedAt !== updatedAt) return;
+      if (res.kind === "newer") {
+        // Another device saved a newer copy (a clock ahead of ours): it stands.
+        o.apply(o.sanitizeCloud(res.value), uid);
+        setSyncMeta(o.domain, { userId: uid, updatedAt: res.updatedAt, dirty: false });
+      } else {
+        setSyncMeta(o.domain, { userId: uid, updatedAt, dirty: res.kind === "failed" });
+      }
     });
   }, []);
 

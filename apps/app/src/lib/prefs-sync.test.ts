@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
-// A stand-in cloud row + a mock runtime.preferences that records every set() patch
-// and merges it into the row (mimicking the upsert). Hoisted so rs.mock can close
-// over it. The reconcile/push engine talks only to runtime.preferences.get/set.
+// A stand-in cloud row + a mock runtime.preferences that records every write as
+// a patch and merges it into the row the way prefs_op_set does: only when the
+// stamp is newer, or the domain was never saved. Hoisted so rs.mock can close
+// over it. The reconcile/push engine talks only to runtime.preferences.get/setDomain.
 const h = rs.hoisted(() => {
   const emptyRow = () => ({
     appearance: null,
@@ -27,9 +28,18 @@ const h = rs.hoisted(() => {
         if (state.getError) throw state.getError;
         return state.cloud;
       },
-      set: async (patch: Record<string, unknown>) => {
-        state.setPatches.push(patch);
-        state.cloud = { ...(state.cloud ?? emptyRow()), ...patch };
+      setDomain: async (domain: string, value: Record<string, unknown>, updatedAt: string) => {
+        const stampKey = `${domain}UpdatedAt`;
+        state.setPatches.push({ [domain]: value, [stampKey]: updatedAt });
+        const row: Record<string, unknown> = state.cloud ?? emptyRow();
+        const saved = row[domain] as Record<string, unknown> | null;
+        const savedAt = row[stampKey] as string | null;
+        const neverSaved = !saved || Object.keys(saved).length === 0 || !savedAt;
+        if (neverSaved || Date.parse(updatedAt) > Date.parse(savedAt)) {
+          state.cloud = { ...row, [domain]: value, [stampKey]: updatedAt };
+        } else {
+          state.cloud = row;
+        }
         return state.cloud;
       },
     },
@@ -65,8 +75,8 @@ beforeEach(() => {
 describe("preferences domain — prefs-sync routing (DF-19f)", () => {
   it("pushDomain('preferences') writes the preferences column + its timestamp", async () => {
     const ts = nowIso();
-    const ok = await pushDomain("preferences", { landingView: "email" }, ts);
-    expect(ok).toBe(true);
+    const res = await pushDomain("preferences", { landingView: "email" }, ts);
+    expect(res).toEqual({ kind: "saved" });
     expect(h.state.setPatches).toContainEqual({
       preferences: { landingView: "email" },
       preferencesUpdatedAt: ts,
@@ -178,5 +188,63 @@ describe("preferences domain — prefs-sync routing (DF-19f)", () => {
     expect(applied).toEqual([{ landingView: "email" }]);
     expect(h.state.setPatches).toHaveLength(0);
     expect(isDomainReconciled("preferences", "user-D")).toBe(true);
+  });
+  it("pushDomain reports the newer copy when another device saved one since", async () => {
+    h.state.cloud = {
+      ...h.emptyRow(),
+      preferences: { landingView: "email" },
+      preferencesUpdatedAt: "2026-07-12T12:00:00.000Z",
+    };
+    const res = await pushDomain(
+      "preferences",
+      { landingView: "tasks" },
+      "2026-07-11T00:00:00.000Z",
+    );
+    expect(res).toEqual({
+      kind: "newer",
+      value: { landingView: "email" },
+      updatedAt: "2026-07-12T12:00:00.000Z",
+    });
+    expect(h.state.cloud?.preferences).toEqual({ landingView: "email" });
+  });
+
+  it("a reconcile push that loses to a newer copy adopts that copy", async () => {
+    // The read saw an older cloud copy, but a newer one lands before the push.
+    h.state.cloud = {
+      ...h.emptyRow(),
+      preferences: { landingView: "notes" },
+      preferencesUpdatedAt: "2026-07-10T00:00:00.000Z",
+    };
+    const localTs = "2026-07-11T00:00:00.000Z";
+    setSyncMeta("preferences", { userId: "user-E", updatedAt: localTs, dirty: true });
+    const applied: unknown[] = [];
+    const read = h.runtime.preferences.get;
+    h.runtime.preferences.get = async () => {
+      const seen = await read();
+      h.state.cloud = {
+        ...h.emptyRow(),
+        preferences: { landingView: "email" },
+        preferencesUpdatedAt: "2026-07-12T00:00:00.000Z",
+      };
+      return seen;
+    };
+    try {
+      await reconcileDomain({
+        domain: "preferences",
+        userId: "user-E",
+        localValue: { landingView: "contacts" },
+        defaults: { landingView: "home" },
+        sanitizeCloud: (raw) => raw,
+        apply: (v) => applied.push(v),
+      });
+    } finally {
+      h.runtime.preferences.get = read;
+    }
+    expect(applied).toEqual([{ landingView: "email" }]);
+    expect(getSyncMeta("preferences")).toEqual({
+      userId: "user-E",
+      updatedAt: "2026-07-12T00:00:00.000Z",
+      dirty: false,
+    });
   });
 });
