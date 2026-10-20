@@ -728,7 +728,7 @@ export class ChatStore {
     if (meta.v !== CHAT_COPY_VERSION) {
       // An older shape (or a copy a sign-out cut down): its rows go, its
       // waiting sends stay.
-      this.outbox.adopt(meta.outbox);
+      this.outbox.adopt(meta.outbox, { first: true });
       await this.copy.deleteWhere((o) => o === this.owner);
       this.metaDirty = true;
       return;
@@ -741,7 +741,7 @@ export class ChatStore {
     this.cursor = meta.cursor;
     this.accessSince = meta.accessSince;
     this.drafts = { ...meta.drafts };
-    this.outbox.adopt(meta.outbox);
+    this.outbox.adopt(meta.outbox, { first: true });
     if (this.channels.size > 0) {
       this.status = "ready";
       this.fromDevice = true;
