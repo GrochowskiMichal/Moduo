@@ -256,6 +256,9 @@ export type UserPreferences = {
   preferencesUpdatedAt: string | null;
 };
 
+/** One synced domain of `UserPreferences` (a column + its `_updated_at`). */
+export type PreferenceDomain = "appearance" | "focus" | "calendar" | "email" | "preferences";
+
 /** A stored dashboard layout + its client-set LWW timestamp (DB-4). */
 export type StoredDashboardLayout = {
   layout: DashboardLayout;
@@ -553,11 +556,15 @@ export type ModuoRuntime = {
       icon?: string | null;
     }): Promise<NoteV2>;
     rename(input: { workspaceId: string; noteId: string; title: string }): Promise<NoteV2>;
+    /** Reparent/reorder. `followParent`: in the same transaction, the note
+     * drops its own sharing and follows the new parent's ("Match the new
+     * parent"); if that is refused, the move is undone too. */
     move(input: {
       workspaceId: string;
       noteId: string;
       parentId: string | null;
       position: string;
+      followParent?: boolean;
     }): Promise<NoteV2>;
     setMeta(input: {
       workspaceId: string;
@@ -708,6 +715,16 @@ export type ModuoRuntime = {
   preferences: {
     get(): Promise<UserPreferences | null>;
     set(patch: Partial<UserPreferences>): Promise<UserPreferences | null>;
+    /**
+     * Save one domain, last write wins on the server (`prefs_op_set`): it is
+     * written only when `updatedAt` is newer than the saved copy. Answers the
+     * row as saved afterwards, so a caller whose copy lost sees the newer one.
+     */
+    setDomain(
+      domain: PreferenceDomain,
+      value: Record<string, unknown>,
+      updatedAt: string,
+    ): Promise<UserPreferences | null>;
     /**
      * Save the device's time zone for the signed-in person (TV-D8): repeats
      * come back at their midnight. Sent at every sign-in; an unknown zone is

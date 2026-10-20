@@ -353,20 +353,35 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     [engine, workspaceId, patchLocal, guard, afterCreate],
   );
 
+  /** Move a note. `followParent`: it also takes the new parent's sharing, in
+   * the same server operation (all or nothing; a refusal toasts and reloads). */
   const moveNote = useCallback(
-    (noteId: string, parentId: string | null, position: string): Promise<boolean> => {
+    (
+      noteId: string,
+      parentId: string | null,
+      position: string,
+      opts?: { followParent?: boolean },
+    ): Promise<boolean> => {
       if (!engine || !workspaceId) return Promise.resolve(false);
       if (wouldCreateCycle(notesRef.current, noteId, parentId)) return Promise.resolve(false); // quiet no-op
+      const followParent = Boolean(opts?.followParent && parentId);
       // Nesting clears the stored Inbox flag server-side (NR-1 trigger).
       patchLocal(noteId, {
         parentId,
         position,
         ...(parentId ? { inInbox: false } : {}),
+        ...(followParent ? { shareMode: "inherit" as const, workspaceShared: false } : {}),
         updatedAt: new Date().toISOString(),
       });
       return guard(
         afterCreate(noteId, () =>
-          engine.runMetaOp("move", { workspaceId, noteId, parentId, position }),
+          engine.runMetaOp("move", {
+            workspaceId,
+            noteId,
+            parentId,
+            position,
+            ...(followParent ? { followParent } : {}),
+          }),
         ),
       );
     },

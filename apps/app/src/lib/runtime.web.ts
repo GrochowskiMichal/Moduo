@@ -124,6 +124,7 @@ import type {
   LocalAuthState,
   ModuoRuntime,
   OtpSendError,
+  PreferenceDomain,
   RuntimeCapabilities,
   RuntimeSession,
   SpineComment,
@@ -352,6 +353,26 @@ function prefsRowToModel(raw: unknown): UserPreferences {
     preferences: (row.preferences as Record<string, unknown> | null) ?? null,
     preferencesUpdatedAt: row.preferences_updated_at ?? null,
   };
+}
+
+/** The `preferences.set` patch that writes one domain and its stamp. */
+function prefsDomainPatch(
+  domain: PreferenceDomain,
+  value: Record<string, unknown>,
+  updatedAt: string,
+): Partial<UserPreferences> {
+  switch (domain) {
+    case "appearance":
+      return { appearance: value, appearanceUpdatedAt: updatedAt };
+    case "focus":
+      return { focus: value, focusUpdatedAt: updatedAt };
+    case "calendar":
+      return { calendar: value, calendarUpdatedAt: updatedAt };
+    case "email":
+      return { email: value, emailUpdatedAt: updatedAt };
+    case "preferences":
+      return { preferences: value, preferencesUpdatedAt: updatedAt };
+  }
 }
 
 // The optional-prefs deploy-gap machinery (column lists + missing-column
@@ -1270,15 +1291,34 @@ export const webRuntime: ModuoRuntime = {
       return mapNoteRow(firstRow(data, "notes_op_rename"));
     },
 
-    async move({ workspaceId, noteId, parentId, position }) {
-      const { data, error } = await supabaseClient.rpc("notes_op_move", {
+    async move({ workspaceId, noteId, parentId, position, followParent }) {
+      const args = {
         p_workspace_id: workspaceId,
         p_note_id: noteId,
         p_parent_id: parentId ?? null,
         p_position: position ?? "",
-      });
-      if (error) throw new Error(error.message);
-      return mapNoteRow(firstRow(data, "notes_op_move"));
+      };
+      // p_follow_parent goes only when asked, so a plain move works on a
+      // database without it.
+      const follow = Boolean(followParent && parentId);
+      const { data, error } = await supabaseClient.rpc(
+        "notes_op_move",
+        follow ? { ...args, p_follow_parent: true } : args,
+      );
+      if (!error) return mapNoteRow(firstRow(data, "notes_op_move"));
+      if (!follow || !isMissingFunctionError(error, "notes_op_move"))
+        throw new Error(error.message);
+      // Before the migration: the move, then the sharing change, in order.
+      const moved = await supabaseClient.rpc("notes_op_move", args);
+      if (moved.error) throw new Error(moved.error.message);
+      const shared = await supabaseClient.rpc("share_op_follow_parent", { p_note_id: noteId });
+      if (shared.error)
+        throw new Error(`Moved, but couldn't change who can see it: ${shared.error.message}`);
+      return {
+        ...mapNoteRow(firstRow(moved.data, "notes_op_move")),
+        shareMode: "inherit",
+        workspaceShared: false,
+      };
     },
 
     async setMeta({ workspaceId, noteId, patch }) {
@@ -1709,6 +1749,21 @@ export const webRuntime: ModuoRuntime = {
         optionalPrefsAvailable[missing] = false; // deploy gap — retry without that domain
       }
       return null;
+    },
+    async setDomain(domain, value, updatedAt) {
+      const user = await getAuthedUser();
+      if (!user) return null;
+      const { data, error } = await supabaseClient.rpc("prefs_op_set", {
+        p_domain: domain,
+        p_value: value ?? {},
+        p_updated_at: updatedAt,
+      });
+      if (!error) return data ? prefsRowToModel(data) : null;
+      // Before the migration: the plain upsert (an older copy can still win).
+      if (isMissingFunctionError(error, "prefs_op_set")) {
+        return webRuntime.preferences.set(prefsDomainPatch(domain, value, updatedAt));
+      }
+      throw new Error(error.message);
     },
     async setTimeZone(timeZone) {
       const { error } = await supabaseClient.rpc("user_op_set_time_zone", {
