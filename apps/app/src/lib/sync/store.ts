@@ -508,6 +508,11 @@ export class WorkspaceStore {
     return this.outbox.list();
   }
 
+  /** Outbox ids this store sent or dropped (a sign-out must not keep them). */
+  handledEntryIds(): string[] {
+    return this.outbox.handledIds();
+  }
+
   /** Whether a capture is waiting in the outbox under this task id. */
   isQueuedCreate(taskId: string): boolean {
     return this.outbox.some((e) => e.kind === "create" && e.task.id === taskId);
@@ -2000,7 +2005,7 @@ export function findWorkspaceStore(
 function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
   return {
     keys: () => cache.keys(),
-    async keepOnlyWaiting(key, inMemory) {
+    async keepOnlyWaiting(key, inMemory, handled) {
       let kept = 0;
       await cache.update(key, (stored) => {
         const outbox: OutboxEntry[] = [];
@@ -2012,7 +2017,7 @@ function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
         for (const entry of stack) {
           if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
           seen.add(entry.id);
-          outbox.push(entry);
+          if (!handled.has(entry.id)) outbox.push(entry);
         }
         kept = outbox.length;
         return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
@@ -2029,6 +2034,7 @@ const people = personLifecycle({
   scopeOf: (store) => store.runtime.tasks,
   copies: () => taskCopies(storeOptions.cache ?? deviceCache()),
   waiting: (store) => store.waitingEntries(),
+  handled: (store) => store.handledEntryIds(),
 });
 
 /**

@@ -99,12 +99,15 @@ export { isOwnedBy as isOwnerOf, ownerKey } from "../../../lib/sync/kernel/regis
 function mergeWaiting(
   stored: readonly ChatOutboxEntry[] | undefined,
   inMemory: readonly ChatOutboxEntry[],
+  handled: ReadonlySet<string> = new Set(),
 ): ChatOutboxEntry[] {
   const out: ChatOutboxEntry[] = [];
   const seen = new Set<string>();
   for (const entry of [...(Array.isArray(stored) ? stored : []), ...inMemory]) {
     if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
     seen.add(entry.id);
+    // Sent or discarded by a store whose last write may not have landed.
+    if (handled.has(entry.id)) continue;
     out.push(entry);
   }
   return out;
@@ -140,7 +143,11 @@ export interface ChatDeviceCopy {
    * Cut one owner's copy down to its outbox (what it stored plus `inMemory`):
    * its rows, drafts and sidebar go. Answers how many sends stayed.
    */
-  keepOnlyWaiting(owner: string, inMemory: readonly ChatOutboxEntry[]): Promise<number>;
+  keepOnlyWaiting(
+    owner: string,
+    inMemory: readonly ChatOutboxEntry[],
+    handled?: ReadonlySet<string>,
+  ): Promise<number>;
   /** Everything goes (account deletion). */
   clear(): Promise<void>;
   /** The copies whose owner matches go (another person signed in, a workspace left). */
@@ -225,8 +232,8 @@ export function memoryChatCopy(): ChatDeviceCopy & {
         ...new Set([...metas.keys(), ...[...rows].filter(([, m]) => m.size > 0).map(([o]) => o)]),
       ];
     },
-    async keepOnlyWaiting(owner, inMemory) {
-      const outbox = mergeWaiting(metas.get(owner)?.outbox, inMemory);
+    async keepOnlyWaiting(owner, inMemory, handled) {
+      const outbox = mergeWaiting(metas.get(owner)?.outbox, inMemory, handled);
       rows.delete(owner);
       metas.set(owner, clone(waitingOnlyMeta(outbox)));
       return outbox.length;
@@ -392,10 +399,14 @@ export function idbChatCopy(factory: IDBFactory): ChatDeviceCopy {
       try {
         const d = await open();
         const tx = d.transaction([MESSAGES, META], "readonly");
+        const finished = done(tx);
         const owners = new Set<string>();
-        for (const key of await request(tx.objectStore(META).getAllKeys())) {
-          if (typeof key === "string") owners.add(key);
-        }
+        // Both requests go out in this turn: an older WebKit may commit a
+        // transaction that waits on a promise between them.
+        const metaKeys = tx.objectStore(META).getAllKeys();
+        metaKeys.onsuccess = () => {
+          for (const key of metaKeys.result) if (typeof key === "string") owners.add(key);
+        };
         await new Promise<void>((resolve, reject) => {
           const cursor = tx.objectStore(MESSAGES).openKeyCursor();
           cursor.onsuccess = () => {
@@ -409,12 +420,13 @@ export function idbChatCopy(factory: IDBFactory): ChatDeviceCopy {
           };
           cursor.onerror = () => reject(cursor.error);
         });
+        await finished;
         return [...owners];
       } catch {
         return [];
       }
     },
-    async keepOnlyWaiting(owner, inMemory) {
+    async keepOnlyWaiting(owner, inMemory, handled) {
       try {
         const d = await open();
         const tx = d.transaction([MESSAGES, META], "readwrite");
@@ -422,7 +434,11 @@ export function idbChatCopy(factory: IDBFactory): ChatDeviceCopy {
         let kept = 0;
         const get = meta.get(owner);
         get.onsuccess = () => {
-          const outbox = mergeWaiting((get.result as ChatMeta | undefined)?.outbox, inMemory);
+          const outbox = mergeWaiting(
+            (get.result as ChatMeta | undefined)?.outbox,
+            inMemory,
+            handled,
+          );
           kept = outbox.length;
           meta.put(waitingOnlyMeta(outbox), owner);
         };

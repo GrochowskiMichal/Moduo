@@ -115,10 +115,15 @@ export type OwnedCopies<E> = {
   keys(): Promise<string[]>;
   /**
    * Cut one record down to its waiting entries (what it stored plus
-   * `inMemory`, each id once); answers how many stayed. Zero: the caller
-   * deletes the record.
+   * `inMemory`, each id once, never one in `handled`: sent or dropped by a
+   * store whose last write may not have landed); answers how many stayed.
+   * Zero: the caller deletes the record.
    */
-  keepOnlyWaiting(key: string, inMemory: readonly E[]): Promise<number>;
+  keepOnlyWaiting(
+    key: string,
+    inMemory: readonly E[],
+    handled: ReadonlySet<string>,
+  ): Promise<number>;
   deleteWhere(match: (key: string) => boolean): Promise<void>;
   clear(): Promise<void>;
 };
@@ -137,6 +142,9 @@ export type PersonLifecycle = {
 
 const lifecycles = new Set<PersonLifecycle>();
 
+/** What the stores that are stopping hold, by copy key. */
+type Leaving<E> = { waiting: Map<string, readonly E[]>; handled: Map<string, Set<string>> };
+
 /** Waiting entries across every kind of store (a sign-out warns first). */
 export function waitingEverywhere(): number {
   let count = 0;
@@ -149,6 +157,8 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
   scopeOf: (store: S) => object;
   copies: () => OwnedCopies<E>;
   waiting: (store: S) => readonly E[];
+  /** Ids a store sent or dropped (its copy may still list them). */
+  handled?: (store: S) => Iterable<string>;
   /** Counted by `waitingEverywhere` (the sign-out warning). */
   counted?: (entry: E) => boolean;
 }): PersonLifecycle {
@@ -158,27 +168,32 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
     registry.disposeWhere(opts.scopeOf, keep, persist);
 
   /** What each matching running store still has waiting, by its copy's key (some may not be written yet). */
-  const waitingByKey = (match: (store: S) => boolean) => {
-    const byKey = new Map<string, readonly E[]>();
+  const waitingByKey = (match: (store: S) => boolean): Leaving<E> => {
+    const waiting = new Map<string, readonly E[]>();
+    const handled = new Map<string, Set<string>>();
     for (const store of registry.all()) {
       if (!match(store)) continue;
-      const waiting = opts.waiting(store);
-      if (waiting.length > 0) byKey.set(keyOf(store), waiting);
+      const key = keyOf(store);
+      const entries = opts.waiting(store);
+      if (entries.length > 0) waiting.set(key, entries);
+      const done = [...(opts.handled?.(store) ?? [])];
+      if (done.length > 0) handled.set(key, new Set([...(handled.get(key) ?? []), ...done]));
     }
-    return byKey;
+    return { waiting, handled };
   };
 
   /** Cut each matching copy down to what waits; a copy with nothing waiting goes. */
-  const keepOnlyWaiting = async (
-    match: (key: string) => boolean,
-    inMemory: ReadonlyMap<string, readonly E[]>,
-  ) => {
+  const keepOnlyWaiting = async (match: (key: string) => boolean, leaving: Leaving<E>) => {
     const copies = opts.copies();
-    const keys = new Set([...(await copies.keys()), ...inMemory.keys()]);
+    const keys = new Set([...(await copies.keys()), ...leaving.waiting.keys()]);
     const empty = new Set<string>();
     for (const key of keys) {
       if (!match(key)) continue;
-      const kept = await copies.keepOnlyWaiting(key, inMemory.get(key) ?? []);
+      const kept = await copies.keepOnlyWaiting(
+        key,
+        leaving.waiting.get(key) ?? [],
+        leaving.handled.get(key) ?? new Set(),
+      );
       if (kept === 0) empty.add(key);
     }
     if (empty.size > 0) await copies.deleteWhere((key) => empty.has(key));

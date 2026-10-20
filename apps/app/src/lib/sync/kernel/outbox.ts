@@ -85,6 +85,11 @@ export class Outbox<E extends OutboxEntryBase> {
     return this.handled.has(id);
   }
 
+  /** Every id this tab sent or dropped (a sign-out's cut-down copy must not bring one back). */
+  handledIds(): string[] {
+    return [...this.handled];
+  }
+
   /** Whether it came from the device copy (another tab may have sent it). */
   isAdopted(id: string): boolean {
     return this.adopted.has(id);
