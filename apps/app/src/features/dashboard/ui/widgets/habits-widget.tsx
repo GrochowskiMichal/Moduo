@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
-  useDashboardData,
+  useDashboardSource,
 } from "../../context/dashboard-data-context";
 import {
   computeStreak,
@@ -153,7 +153,8 @@ function AddHabit({ onAdd }: { onAdd: (name: string) => void }) {
 }
 
 export function HabitsWidget({ size }: WidgetComponentProps) {
-  const { habits: source, workspaceId } = useDashboardData();
+  const source = useDashboardSource("habits");
+  const workspaceId = useDashboardSource("workspaceId");
   const density = useDensity();
   const today = todayStr();
 

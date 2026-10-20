@@ -1,6 +1,13 @@
-// The Tasks data every surface derives from the shared store's snapshot
-// (TV-D11a), as pure selectors. Each is cached on the identity of its inputs:
-// the store keeps an unchanged table's array between snapshots, so a write to
+// The Tasks data every surface derives across the whole workspace, from the
+// shared store's snapshot (TV-D11a), as pure derivations (`selectors.ts`
+// until TS-3b). They stay plain cached JS rather than TanStack DB live
+// queries: at 10k tasks on @tanstack/db 0.15.1 a whole-workspace live query
+// costs 40–65 ms to build (groupBy ~35 ms, includes ~110 ms) against well
+// under a millisecond here, which a warm open can't afford
+// (docs/decisions/data.md, TS-3b). Per-task reads use narrow indexed live
+// // queries instead (`lib/sync/tanstack/tasks-live.ts`).
+//
+// Each is cached on the identity of its inputs: the store keeps an unchanged table's array between snapshots, so a write to
 // one task recomputes only what reads the tasks, and five pages that show the
 // same workspace share one result instead of each building their own maps.
 //

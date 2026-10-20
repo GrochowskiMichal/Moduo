@@ -1,10 +1,7 @@
-// The shared Tasks selectors: right answers, and one result per input so
+// The shared Tasks derivations: right answers, and one result per input so
 // every page that shows a workspace shares it (no rebuild on a re-render).
 
 import { describe, expect, it } from "@rstest/core";
-
-import { makeTask } from "./helpers";
-import type { Bucket, Task, TaskQueueEntry, TaskRelation } from "./model";
 import {
   blockedTaskIdsOf,
   blockersByTaskOf,
@@ -17,7 +14,9 @@ import {
   queuedTasksOf,
   subtasksByParentOf,
   userBucketsOf,
-} from "./selectors";
+} from "./derived";
+import { makeTask } from "./helpers";
+import type { Bucket, Task, TaskQueueEntry, TaskRelation } from "./model";
 
 function task(id: string, fields: Partial<Task> = {}): Task {
   return {

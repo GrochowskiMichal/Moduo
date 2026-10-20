@@ -60,6 +60,7 @@ import { cn } from "../../../lib/utils";
 import { type Assignee, assigneeLabel, assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { previewAssign, useAssignees } from "../assignees";
 import { dueDayOf } from "../bulk";
+import { statusesForBucketOf } from "../derived";
 import {
   OPTIONAL_PROPERTY_LABELS,
   type OptionalProperty,
@@ -70,7 +71,6 @@ import {
 import { LEVEL_OPTIONS } from "../helpers";
 import type { Bucket, EnergyLevel, PriorityLevel, Task, Team } from "../model";
 import { changePatternRule, engineZone } from "../recurrence-engine";
-import { statusesForBucketOf } from "../selectors";
 import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
 import { useTaskCommands, useTasksSelector, useTaskTags } from "../tasks-context";
 import { type AddPropertyItem, AddPropertyLine } from "./add-property-line";

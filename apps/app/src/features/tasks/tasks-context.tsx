@@ -8,11 +8,13 @@
 //   component that only writes never re-renders on one.
 // - `useTasksSelector(select)`: a slice of the Tasks data (`tasksDataOf` the
 //   store's snapshot; the snapshot itself is the second argument). The
-//   component re-renders only when the slice's identity moves. The selectors
+//   component re-renders only when the slice's identity moves. The derivations
 //   are cached, so `d.inbox`, `d.liveTasks`, `snap.sessions` are stable
 //   between unrelated writes; a selector must never build a new object or
 //   array itself (useSyncExternalStore would loop).
-// - `useTaskById(id)`, `useTasksStatus()`: the two conveniences most surfaces need.
+// - `useTaskById(id)`: one task, from the cached by-id map.
+// - `useSubtasksOf(id)`: a task's subtasks (the panel, the Focus card).
+// - `useTasksStatus()`: loading, error and access.
 // - `useTasksUserId()`, `useTasksActivityStamp()`, `useTaskTags(id)`: who
 //   reads, the trail's refetch cue, and a task's tags (the tag store's).
 // - `useTasksReader()`: the data as it is when a handler runs (a drop's
@@ -40,9 +42,6 @@ import type { ModuoRuntime } from "../../lib/runtime.types";
 import { EMPTY_SNAPSHOT, type StoreSnapshot, type WorkspaceStore } from "../../lib/sync/store";
 import { entityKey, useTagView } from "../tags/store";
 import type { TaskCommands } from "./commands";
-import { type TasksParams, useTasksRoot } from "./hooks/use-tasks-module";
-import type { ViewOps } from "./hooks/use-view-ops";
-import type { ProjectStatus, Tag, Task, TasksTrash } from "./model";
 import {
   byIdOf,
   driftCountByBucketOf,
@@ -52,7 +51,10 @@ import {
   type TasksData,
   tagsByTaskOf,
   tasksDataOf,
-} from "./selectors";
+} from "./derived";
+import { type TasksParams, useTasksRoot } from "./hooks/use-tasks-module";
+import type { ViewOps } from "./hooks/use-view-ops";
+import type { ProjectStatus, Tag, Task, TasksTrash } from "./model";
 import { useToday } from "./use-today";
 
 /** What never changes with the data: the narrow hooks read the store through it. */
@@ -183,9 +185,24 @@ export function useTasksSelector<T>(select: (data: TasksData, snap: StoreSnapsho
   return useSyncExternalStore(store ? store.subscribe : noSubscribe, read, read);
 }
 
-/** One live task (as `api.tasks.find` finds it: not deleted, not in an archived project), or null. */
+/**
+ * One live task (as `api.tasks.find` finds it: not deleted, not in an
+ * archived project), or null. A lookup in the cached by-id map: a live query
+ * by id would need every task mirrored into a collection first (TS-3b).
+ */
 export function useTaskById(id: string | null | undefined): Task | null {
   return useTasksSelector((d) => (id ? (byIdOf(d.liveTasks).get(id) ?? null) : null));
+}
+
+/**
+ * A task's live, non-archived subtasks in position order, from the cached
+ * per-parent map. TS-3b built this as a narrow live query
+ * (`lib/sync/tanstack/tasks-live.ts`) but doesn't wire it: TanStack DB's
+ * query engine and `react-db` add ~59 KB gzip to the first load, past AC9's
+ * cap, for a lookup that is already O(1) here.
+ */
+export function useSubtasksOf(taskId: string): Task[] {
+  return useTasksSelector((d) => d.subtasksByParent.get(taskId) ?? NO_SUBTASKS);
 }
 
 export type TasksStatus = {
@@ -239,6 +256,7 @@ export function useTasksActivityStamp(): number {
 }
 
 const NO_TAGS: Tag[] = [];
+const NO_SUBTASKS: Task[] = [];
 
 /**
  * The workspace's live tags and one task's (name-sorted), from the shared tag

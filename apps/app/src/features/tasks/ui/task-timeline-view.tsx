@@ -39,10 +39,10 @@ import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden } from "../completed";
+import { byIdOf } from "../derived";
 import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../display";
 import type { Bucket, Task, TaskRelation } from "../model";
 import { PRIVATE_PROJECT_LABEL } from "../model";
-import { byIdOf } from "../selectors";
 import {
   useStatusesForBucket,
   useTaskCommands,

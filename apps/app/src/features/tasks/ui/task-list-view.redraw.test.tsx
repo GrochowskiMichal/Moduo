@@ -233,4 +233,23 @@ describe("one edit redraws one row (TV-D11b)", () => {
     expect(draws.people).toContain("u-B");
     expect(draws.people).not.toContain("u-A");
   });
+
+  it("an edit through the store redraws at most 2 of 30 rows (TS-3b, AC3)", async () => {
+    const seed = Array.from({ length: ROWS }, (_, i) => ({
+      ...task(String(i + 1), `Task ${i + 1}`),
+      assigneeId: `u-${i + 1}`,
+    }));
+    const { store, stored } = await renderList(seed);
+    draws.people = [];
+    const t = stored("12") as Task;
+    act(() =>
+      store.answer({
+        tasks: [{ ...t, title: "Edited", updatedAt: "2026-10-02T00:00:00.000Z" }],
+      }),
+    );
+    expect(screen.getByText("Edited")).toBeTruthy();
+    const redrawn = new Set(draws.people.filter((p) => p !== null));
+    expect(redrawn.size).toBeLessThanOrEqual(2);
+    expect(redrawn).toContain("u-12");
+  });
 });

@@ -35,6 +35,7 @@ import {
   effectiveLanes,
 } from "../board-columns";
 import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
+import { byIdOf } from "../derived";
 import {
   type BoardGroupBy,
   type BoardLanes,
@@ -58,7 +59,6 @@ import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
-import { byIdOf } from "../selectors";
 import type { StatusKey } from "../statuses";
 import {
   useStatusesForBucket,

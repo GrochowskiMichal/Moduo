@@ -7,9 +7,9 @@ process.env.TZ = "Europe/Warsaw";
 import { describe, expect, it } from "@rstest/core";
 
 import type { BulkWrite } from "./bulk";
+import { subtasksByParentOf } from "./derived";
 import { makeTask } from "./helpers";
 import type { Bucket, ProjectStatus, RecurrenceRule, Task, TaskQueueEntry } from "./model";
-import { subtasksByParentOf } from "./selectors";
 import {
   childrenByParentOf,
   handedOutOfSight,

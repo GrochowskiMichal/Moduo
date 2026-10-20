@@ -14,9 +14,9 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, PendingWrite, WorkspaceStore } from "../../../lib/sync/store";
 import type { TagContext } from "../../tags/store";
+import { byIdOf, statusesForBucketOf } from "../derived";
 import type { ProjectStatus, RecurrenceRule, Task, TaskQueueEntry, TaskStatus } from "../model";
 import { engineZone } from "../recurrence-engine";
-import { byIdOf, statusesForBucketOf } from "../selectors";
 import { optimisticStatus } from "../statuses";
 import {
   childrenByParentOf,

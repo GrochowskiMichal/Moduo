@@ -31,8 +31,8 @@ import {
   type TaskCommandsContext,
   type TaskCommandsEnv,
 } from "../commands";
+import { allTasksOf, tasksDataOf } from "../derived";
 import type { TasksTrash, TimeBlockMap } from "../model";
-import { allTasksOf, tasksDataOf } from "../selectors";
 import { useViewOps } from "./use-view-ops";
 
 export type { ArchiveOpenTasks, TimeAdjustment, TrashTarget } from "../commands";
@@ -62,7 +62,7 @@ export function useTasksRoot(baseRuntime: ModuoRuntime | null, params: Params) {
   const store = useWorkspaceStore(baseRuntime, userId, workspaceId, canRead);
   const snap = useStoreSnapshot(store);
   const runtime = baseRuntime;
-  // Derived data comes from the shared selectors (`../selectors`), cached on
+  // Derived data comes from the shared derivations (`../derived`), cached on
   // the store's row arrays; the narrow hooks (`../tasks-context.tsx`) and the
   // commands read them, never this root.
 

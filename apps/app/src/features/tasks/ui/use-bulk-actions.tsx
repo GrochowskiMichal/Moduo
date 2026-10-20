@@ -35,10 +35,10 @@ import {
   tasksWord,
 } from "../bulk";
 import { daysLeftInWeek } from "../day-buckets";
+import { byIdOf } from "../derived";
 import { LEVEL_OPTIONS, todayStr } from "../helpers";
 import type { PriorityLevel, Task } from "../model";
 import { engineZone } from "../recurrence-engine";
-import { byIdOf } from "../selectors";
 import { bucketDotColor } from "../sidebar";
 import { CATEGORY_LABELS, statusesByCategory } from "../statuses";
 import {

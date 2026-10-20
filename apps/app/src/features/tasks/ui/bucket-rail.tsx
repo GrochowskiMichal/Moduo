@@ -28,7 +28,15 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { SidebarFooter } from "../../../components/app/sidebar-footer";
 import type { LabelColor } from "../../../components/tag-colors";
 import {
@@ -340,6 +348,64 @@ export function BucketRail({
   };
   const shows = (row: TasksSidebarHideable) => !hidden.has(row);
 
+  // What a project row does, read through a ref so one object serves every
+  // row for the rail's life: a selection change then redraws only the two
+  // rows whose `current` flips (TS-3b: every row redrew on a project switch).
+  const latest = useRef({
+    onSelect,
+    onRenameBucket,
+    onRequestDelete,
+    onRequestArchive,
+    onSetBucketColor,
+    onMoveBucketToArea,
+    onCreateArea,
+    onTogglePin,
+    onCaptureInto,
+    onTriageBucket,
+    onEditStatuses,
+    templates,
+    returnFocus,
+    focusRowSoon,
+  });
+  useLayoutEffect(() => {
+    latest.current = {
+      onSelect,
+      onRenameBucket,
+      onRequestDelete,
+      onRequestArchive,
+      onSetBucketColor,
+      onMoveBucketToArea,
+      onCreateArea,
+      onTogglePin,
+      onCaptureInto,
+      onTriageBucket,
+      onEditStatuses,
+      templates,
+      returnFocus,
+      focusRowSoon,
+    };
+  });
+  const [rowActions] = useState<ProjectRowActions>(() => ({
+    select: (id) => latest.current.onSelect(id),
+    rename: (id, name) => latest.current.onRenameBucket(id, name),
+    remove: (b) => latest.current.onRequestDelete(b),
+    archive: (b) => latest.current.onRequestArchive(b),
+    setColor: (id, color) => latest.current.onSetBucketColor(id, color),
+    setArea: (id, areaId) => latest.current.onMoveBucketToArea(id, areaId),
+    newArea: async (id, name) => {
+      const areaId = await latest.current.onCreateArea(name);
+      if (areaId) latest.current.onMoveBucketToArea(id, areaId);
+    },
+    togglePin: (id) => latest.current.onTogglePin(id),
+    capture: (id) => latest.current.onCaptureInto?.(id),
+    triage: (id) => latest.current.onTriageBucket(id),
+    editStatuses: (id) => latest.current.onEditStatuses?.(id),
+    duplicate: (b) => latest.current.templates?.onDuplicate(b),
+    saveAsTemplate: (b) => latest.current.templates?.onSaveAsTemplate(b),
+    shareClosed: (id, event) => latest.current.returnFocus(id)(event),
+    inputExit: (id) => latest.current.focusRowSoon(id),
+  }));
+
   const projectRow = (bucket: Bucket, opts?: { pinnedCopy?: boolean }) => {
     const row = (drag?: DragSlot) => (
       <ProjectRow
@@ -351,26 +417,12 @@ export function BucketRail({
         canEdit={canEdit}
         areas={areas}
         pinned={pinnedIds.has(bucket.id)}
-        onSelect={() => onSelect(bucket.id)}
-        onRename={(name) => onRenameBucket(bucket.id, name)}
-        onDelete={() => onRequestDelete(bucket)}
-        onArchive={() => onRequestArchive(bucket)}
-        onSetColor={(color) => onSetBucketColor(bucket.id, color)}
-        onSetArea={(areaId) => onMoveBucketToArea(bucket.id, areaId)}
-        onNewArea={async (name) => {
-          const id = await onCreateArea(name);
-          if (id) onMoveBucketToArea(bucket.id, id);
-        }}
-        onTogglePin={() => onTogglePin(bucket.id)}
-        onCapture={canEdit && onCaptureInto ? () => onCaptureInto(bucket.id) : undefined}
-        onTriage={() => onTriageBucket(bucket.id)}
-        onEditStatuses={onEditStatuses ? () => onEditStatuses(bucket.id) : undefined}
-        onDuplicate={templates ? () => templates.onDuplicate(bucket) : undefined}
-        onSaveAsTemplate={templates ? () => templates.onSaveAsTemplate(bucket) : undefined}
-        onShareCloseAutoFocus={returnFocus(bucket.id)}
-        onInputExit={() => focusRowSoon(bucket.id)}
+        actions={rowActions}
+        canCapture={canEdit && !!onCaptureInto}
+        canEditStatuses={!!onEditStatuses}
+        hasTemplates={!!templates}
         dropAccepts={dropAccepts}
-        drag={drag}
+        dragging={drag?.isDragging ?? false}
       />
     );
     return sortable && !opts?.pinnedCopy ? (
@@ -1085,7 +1137,25 @@ function ProjectDndMonitor({ onMove }: { onMove: (activeId: string, overId: stri
   return null;
 }
 
-function ProjectRow({
+type ProjectRowActions = {
+  select: (id: string) => void;
+  rename: (id: string, name: string) => void;
+  remove: (bucket: Bucket) => void;
+  archive: (bucket: Bucket) => void;
+  setColor: (id: string, color: LabelColor) => void;
+  setArea: (id: string, areaId: string | null) => void;
+  newArea: (id: string, name: string) => Promise<void>;
+  togglePin: (id: string) => void;
+  capture: (id: string) => void;
+  triage: (id: string) => void;
+  editStatuses: (id: string) => void;
+  duplicate: (bucket: Bucket) => void;
+  saveAsTemplate: (bucket: Bucket) => void;
+  shareClosed: (id: string, event: Event) => void;
+  inputExit: (id: string) => void;
+};
+
+const ProjectRow = memo(function ProjectRow({
   bucket,
   navId,
   count,
@@ -1094,23 +1164,12 @@ function ProjectRow({
   canEdit,
   areas,
   pinned,
-  onSelect,
-  onRename,
-  onDelete,
-  onArchive,
-  onSetColor,
-  onSetArea,
-  onNewArea,
-  onTogglePin,
-  onCapture,
-  onTriage,
-  onEditStatuses,
-  onDuplicate,
-  onSaveAsTemplate,
-  onShareCloseAutoFocus,
-  onInputExit,
+  actions,
+  canCapture,
+  canEditStatuses,
+  hasTemplates,
   dropAccepts,
-  drag,
+  dragging,
 }: {
   bucket: Bucket;
   navId: string;
@@ -1120,27 +1179,32 @@ function ProjectRow({
   canEdit: boolean;
   areas: Area[];
   pinned: boolean;
-  onSelect: () => void;
-  onRename: (name: string) => void;
-  onDelete: () => void;
-  onArchive: () => void;
-  onSetColor: (color: LabelColor) => void;
-  onSetArea: (areaId: string | null) => void;
-  onNewArea: (name: string) => void;
-  onTogglePin: () => void;
+  /** One object for every row (the rail's), so a row redraws only for its own facts. */
+  actions: ProjectRowActions;
   /** The hover "+": a new task in this project. */
-  onCapture?: () => void;
-  onTriage: () => void;
-  onEditStatuses?: () => void;
+  canCapture: boolean;
+  canEditStatuses: boolean;
   /** Duplicate… and Save as template… (TV-D15). */
-  onDuplicate?: () => void;
-  onSaveAsTemplate?: () => void;
-  onShareCloseAutoFocus: (event: Event) => void;
-  /** The New area input closed by Enter/Esc: focus goes back to the row. */
-  onInputExit: () => void;
+  hasTemplates: boolean;
   dropAccepts?: RailDropAccepts;
-  drag?: DragSlot;
+  dragging: boolean;
 }) {
+  const id = bucket.id;
+  const onSelect = () => actions.select(id);
+  const onRename = (name: string) => actions.rename(id, name);
+  const onDelete = () => actions.remove(bucket);
+  const onArchive = () => actions.archive(bucket);
+  const onSetColor = (color: LabelColor) => actions.setColor(id, color);
+  const onSetArea = (areaId: string | null) => actions.setArea(id, areaId);
+  const onNewArea = (name: string) => void actions.newArea(id, name);
+  const onTogglePin = () => actions.togglePin(id);
+  const onCapture = canCapture ? () => actions.capture(id) : undefined;
+  const onTriage = () => actions.triage(id);
+  const onEditStatuses = canEditStatuses ? () => actions.editStatuses(id) : undefined;
+  const onDuplicate = hasTemplates ? () => actions.duplicate(bucket) : undefined;
+  const onSaveAsTemplate = hasTemplates ? () => actions.saveAsTemplate(bucket) : undefined;
+  const onShareCloseAutoFocus = (event: Event) => actions.shareClosed(id, event);
+  const onInputExit = () => actions.inputExit(id);
   const [sharing, setSharing] = useState(false);
   const [addingArea, setAddingArea] = useState(false);
 
@@ -1243,7 +1307,7 @@ function ProjectRow({
         menu={menu}
         onAdd={onCapture}
         addLabel={`New task in ${bucket.name}`}
-        dragging={drag?.isDragging}
+        dragging={dragging}
       />
       {sharing ? (
         <ProjectShare
@@ -1254,7 +1318,7 @@ function ProjectRow({
       ) : null}
     </div>
   );
-}
+});
 
 /** The Share popover, opened from the row menu and anchored to the row. */
 function ProjectShare({
