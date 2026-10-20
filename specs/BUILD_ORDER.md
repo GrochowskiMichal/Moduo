@@ -534,6 +534,22 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [~] **SK-C3 — Chat store on the kernel; a sign-out keeps waiting messages** · deps: SK-C2 · `t/mike/sync-kernel-chat` (#519, validator's major fixed) · keeps Chat's hold-failed-for-retry outbox; sign-out cuts the chat copy down to its outbox per person (as Tasks since #509).
 - [~] **SK-C4 — Notes on kernel idb, network and registry; per-person notes caches** · deps: SK-C3 · `t/mike/sync-kernel-notes` (#522, validator's majors fixed) · `moduo-notes-v2` and the per-note y-indexeddb databases keyed `user:ws` with a migration; wiped on a user switch.
 
+## TanStack spine — TanStack DB under the stores, Hotkeys · [`specs/tanstack-spine.md`](./tanstack-spine.md)
+
+> Builds on the Sync kernel: the kernel becomes the sync function of TanStack DB collections; the stores' overlay, snapshot and IndexedDB record plumbing is what gets replaced. TS-0 done: in-memory collections over the existing IndexedDB copy; SQLite is optional TS-8. Added 2026-10-20 from the stack audit.
+
+- [x] **TS-0 — Spike: Tasks on TanStack DB** · 2026-10-20 · #529 · switch 200 → 32 ms, search 67 → 37 ms, rows redrawn per edit 130 → 2; OPFS SQLite warm open slower (676 vs 514 ms) → in-memory plan
+- [ ] **TS-1 — Pinned TanStack DB + Pacer + Devtools (dev-only), virtual-core ≥ 3.19 with `anchorTo: 'end'` in Chat, bundle budget, boundary lint** · deps: TS-0
+- [ ] **TS-2 — In-memory Supabase collection adapter on the kernel, seeded from the existing IDB copy** · deps: TS-1, SK-C1 · validator
+- [ ] **TS-3a — Tasks collections behind the `WorkspaceStore` facade (no API change)** · deps: TS-2, SK-C2 · validator
+- [ ] **TS-3b — Tasks consumers on live queries; `selectors.ts` retired; DashboardData split** · deps: TS-3a
+- [ ] **TS-3c — Tasks writes as collection transactions patching only `changes`; kernel outbox kept; overlay code deleted** · deps: TS-3b · validator
+- [ ] **TS-4 — Chat on in-memory collections (paged from the per-row IDB copy, hold-failed outbox kept)** · deps: TS-3c, SK-C3
+- [ ] **TS-5 — Contacts, Calendar, Notes metadata as collections with delta** · deps: TS-2, SK-C4
+- [ ] **TS-6 — Hotkeys: `@tanstack/react-hotkeys` registry, scopes, conflict test, migration of `useGlobalShortcuts`** · deps: TS-1 (parallel with TS-2…5)
+- [ ] **TS-7 — Cleanup (store plumbing, selectors), decisions, gotchas, data-layers/architecture docs** · deps: TS-3c, TS-4, TS-5, TS-6
+- [ ] **TS-8 — Optional: SQLite persistence (OPFS web, plugin-sql desktop, offline-transactions) only after a second spike beats 514 ms warm open** · deps: TS-7
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
