@@ -49,6 +49,8 @@ export class SyncedCollection<R extends LandingRow> {
   cursor: string | null = null;
   truncated: Truncation | null = null;
   private shown: R[] | null = null;
+  /** Bumped by every change to the rows or their overlays (a cache key for views built elsewhere). */
+  revision = 0;
 
   constructor(private readonly opts: CollectionOptions<R>) {
     this.name = opts.name;
@@ -68,6 +70,7 @@ export class SyncedCollection<R extends LandingRow> {
   /** Something changed the rows or their overlays: the next view is built afresh. */
   invalidate(): void {
     this.shown = null;
+    this.revision += 1;
   }
 
   // ── Landing ───────────────────────────────────────────────────────────────

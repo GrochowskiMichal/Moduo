@@ -42,10 +42,17 @@ export type SupabaseCollectionOptions<R extends LandingRow & object> = {
   id: string;
   /** The kernel collection (owned by the store, which also persists its copy). */
   kernel: SyncedCollection<R>;
+  /**
+   * The owner reads, lands and seeds the kernel itself (TS-3a's Tasks store,
+   * whose phases and access checks span tables) and calls `utils.sync` after
+   * each change: the collection only mirrors the kernel. It never reads, never
+   * opens Realtime, and is ready at once with what the kernel holds.
+   */
+  ownerDriven?: boolean;
   /** The kernel's device copy for this person and workspace (null: none yet). */
-  seed: () => Promise<CollectionCopy | null>;
-  /** Open Realtime for the table; called before the first read. */
-  subscribe: (handlers: LiveHandlers<R>) => LiveSubscription;
+  seed?: () => Promise<CollectionCopy | null>;
+  /** Open Realtime for the table; called before the first read (required unless `ownerDriven`). */
+  subscribe?: (handlers: LiveHandlers<R>) => LiveSubscription;
   /**
    * How long the first read waits for Realtime to subscribe (default 5 s).
    * Past it, or if subscribing fails, the read runs anyway: events from before
@@ -199,6 +206,17 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         };
 
         // Live rows land by the kernel's "live" rule in arrival order: the newest per id wins.
+        if (opts.ownerDriven) {
+          run = { diff, clear, catchUp: () => Promise.resolve() };
+          mirror();
+          markReadyOnce();
+          return () => {
+            stopped = true;
+            run = null;
+          };
+        }
+        if (!opts.subscribe) throw new Error(`${opts.id}: subscribe is required`);
+
         const landLive = (rows: R[], deleted: string[]) => {
           kernel.applyRows(rows, "live");
           kernel.forget(deleted);
@@ -266,7 +284,7 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         const start = async () => {
           const lossesBefore = losses;
           // A device copy that can't be read is no copy: the server answers.
-          const copy = await opts.seed().catch(() => null);
+          const copy = opts.seed ? await opts.seed().catch(() => null) : null;
           if (stopped) return;
           // Access lost while the copy was read: its rows are not this person's any more.
           if (copy && losses === lossesBefore) {
