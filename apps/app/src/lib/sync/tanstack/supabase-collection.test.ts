@@ -426,4 +426,19 @@ describe("supabaseCollectionOptions", () => {
     await tick();
     expect(h.rows()).toEqual([]);
   });
+  it("a cold open is ready only after the buffered events land; a late join reads again", async () => {
+    const answer = deferred<CollectionRead<Row>>();
+    const h = harness({ answers: [answer.promise], liveReadyTimeoutMs: 5 });
+    h.collection.startSyncImmediate();
+    await new Promise((r) => setTimeout(r, 10));
+    h.live().rows([{ id: "a", updatedAt: at(3), v: 3 }]);
+    answer.resolve(read([{ id: "a", updatedAt: at(1), v: 1 }]));
+    const first = await h.collection.toArrayWhenReady();
+    expect(first.map((r) => r.v)).toEqual([3]);
+    expect(h.reads.length).toBe(1);
+    h.subscribed.resolve();
+    await tick();
+    await tick();
+    expect(h.reads.length).toBe(2);
+  });
 });

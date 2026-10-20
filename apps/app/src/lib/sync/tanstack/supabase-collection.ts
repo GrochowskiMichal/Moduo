@@ -87,15 +87,19 @@ export function changedFields<R extends object>(
 }
 
 /** Realtime's join, bounded: a failed or slow join never holds the first read back. */
-async function waitForLive(ready: Promise<void>, ms: number): Promise<void> {
+async function waitForLive(ready: Promise<void>, ms: number): Promise<"joined" | "late"> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    ready.catch(() => undefined),
-    new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, ms);
+  const result = await Promise.race([
+    ready.then(
+      () => "joined" as const,
+      () => "joined" as const,
+    ),
+    new Promise<"late">((resolve) => {
+      timer = setTimeout(() => resolve("late"), ms);
     }),
   ]);
   clearTimeout(timer);
+  return result;
 }
 
 export function supabaseCollectionOptions<R extends LandingRow & object>(
@@ -243,8 +247,9 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
             try {
               await kernel.readChanges(Date.now());
               settle();
-              // A first read that failed earlier left `error`: a good one makes it ready.
-              markReadyOnce();
+              // A first read that failed earlier left `error`: a good one makes it ready
+              // (the first run's start path does that itself, after the flush).
+              if (!buffering) markReadyOnce();
             } catch (error) {
               settle();
               if (stopped) return;
@@ -269,8 +274,17 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
             mirror();
             markReadyOnce();
           }
-          await waitForLive(live.ready, opts.liveReadyTimeoutMs ?? 5_000);
+          const joined = await waitForLive(live.ready, opts.liveReadyTimeoutMs ?? 5_000);
           if (stopped) return;
+          // A join that comes after the read: read again to cover the gap between them.
+          if (joined === "late") {
+            live.ready.then(
+              () => {
+                if (!stopped) void catchUp().catch((e) => opts.onError?.(e));
+              },
+              () => undefined,
+            );
+          }
           try {
             await catchUp();
           } finally {

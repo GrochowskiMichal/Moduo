@@ -540,7 +540,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 
 - [x] **TS-0 — Spike: Tasks on TanStack DB** · 2026-10-20 · #529 · switch 200 → 32 ms, search 67 → 37 ms, rows redrawn per edit 130 → 2; OPFS SQLite warm open slower (676 vs 514 ms) → in-memory plan
 - [x] **TS-1 — Pinned TanStack DB + Pacer + Devtools (dev-only), virtual-core ≥ 3.19 with `anchorTo: 'end'` in Chat, bundle budget, boundary lint** · 2026-10-20 · [#531](https://github.com/GrochowskiMichal/Moduo/pull/531) · first-load 992.2 KB gz after #530 (budget 1012 in `apps/app/bundle-budget.json`); chat fling worst frame 83 → 33 ms
-- [x] **TS-2 — In-memory Supabase collection adapter on the kernel, seeded from the existing IDB copy** · 2026-10-20 · [#532](https://github.com/GrochowskiMichal/Moduo/pull/532) · `supabaseCollectionOptions()` mirrors a kernel `SyncedCollection`; 21 characterization tests
+- [x] **TS-2 — In-memory Supabase collection adapter on the kernel, seeded from the existing IDB copy** · 2026-10-20 · [#532](https://github.com/GrochowskiMichal/Moduo/pull/532) · `supabaseCollectionOptions()` mirrors a kernel `SyncedCollection`; 22 characterization tests
 - [ ] **TS-3a — Tasks collections behind the `WorkspaceStore` facade (no API change)** · deps: TS-2, SK-C2 · validator
 - [ ] **TS-3b — Tasks consumers on live queries; `selectors.ts` retired; DashboardData split** · deps: TS-3a
 - [ ] **TS-3c — Tasks writes as collection transactions patching only `changes`; kernel outbox kept; overlay code deleted** · deps: TS-3b · validator
